@@ -336,7 +336,10 @@ private actor StubNotebookProvider: NotebookProviding {
   {
     throw DraftError.notFound
   }
-  func publish(draftID: UUID, accountID: UUID) throws -> DraftSnapshot { throw DraftError.notFound }
+  func publish(
+    draftID: UUID, accountID: UUID, reason: PublishReason,
+    expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
+  ) throws -> DraftSnapshot { throw DraftError.notFound }
   func perform(_ action: NotebookAction, accountID: UUID) throws -> NotebookActionResult {
     throw DraftError.notFound
   }

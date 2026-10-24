@@ -36,7 +36,10 @@ protocol NotebookProviding: Sendable {
   func openDraft(for document: NotebookDocument) async throws -> DraftSnapshot
   func persist(draftID: UUID, accountID: UUID, text: String, generation: UInt64) async throws
     -> DraftSnapshot
-  func publish(draftID: UUID, accountID: UUID) async throws -> DraftSnapshot
+  func publish(
+    draftID: UUID, accountID: UUID, reason: PublishReason,
+    expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
+  ) async throws -> DraftSnapshot
   func localState(accountID: UUID) async throws -> NotebookLocalState
   func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) async throws
   func createDraft(accountID: UUID) async throws -> DraftSnapshot
@@ -145,10 +148,15 @@ actor LiveNotebookProvider: NotebookProviding {
     try await drafts.persist(id: draftID, accountID: accountID, text: text, generation: generation)
   }
 
-  func publish(draftID: UUID, accountID: UUID) async throws -> DraftSnapshot {
+  func publish(
+    draftID: UUID, accountID: UUID, reason: PublishReason,
+    expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
+  ) async throws -> DraftSnapshot {
     let coordinator = await coordinator(accountID: accountID)
     return try await mutationQueue.run {
-      try await coordinator.publish(id: draftID, accountID: accountID)
+      try await coordinator.publish(
+        id: draftID, accountID: accountID, reason: reason,
+        expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
     }
   }
 
@@ -933,8 +941,17 @@ final class NotebookModel {
     return saved
   }
 
-  func publish(draftID: UUID, accountID: UUID) async throws -> DraftSnapshot {
-    try await provider.publish(draftID: draftID, accountID: accountID)
+  func publish(
+    draftID: UUID, accountID: UUID, reason: PublishReason = .manual,
+    expectedGeneration: UInt64? = nil,
+    shouldPublish: @escaping @Sendable () async -> Bool = { true }
+  ) async throws -> DraftSnapshot {
+    guard account?.id == accountID || reason == .manual, pendingAccount == nil else {
+      throw AccountError.accountChanged
+    }
+    return try await provider.publish(
+      draftID: draftID, accountID: accountID, reason: reason,
+      expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
   }
 
   static func librarySnapshot(owned: [Gist], starred: [Gist], account: NotebookAccount)

@@ -1,6 +1,6 @@
 import Foundation
 
-public enum PublishReason: Sendable {
+public enum PublishReason: Equatable, Sendable {
     case manual
     case autosave
     case background
@@ -49,7 +49,8 @@ public actor SyncCoordinator {
     @discardableResult
     public func publish(
         id: UUID, accountID: UUID, reason: PublishReason = .manual,
-        autosaveEnabled: Bool = true
+        autosaveEnabled: Bool = true, expectedGeneration: UInt64? = nil,
+        shouldPublish: @escaping @Sendable () async -> Bool = { true }
     ) async throws -> DraftSnapshot {
         if reason != .manual, !autosaveEnabled {
             return try await store.draft(id: id, accountID: accountID)
@@ -59,6 +60,12 @@ public actor SyncCoordinator {
         try Task.checkCancellation()
         var draft = try await store.draft(id: id, accountID: accountID)
         if case .conflict = draft.state { return draft }
+        try await validatePublication(
+            draft, reason: reason, expectedGeneration: expectedGeneration,
+            shouldPublish: shouldPublish)
+        if reason == .manual, draft.autosavePaused {
+            draft = try await store.resumeAutosave(id: id, accountID: accountID)
+        }
         if draft.gistID == nil, draft.attemptedGeneration != nil {
             try await store.setState(.failed(.creationUncertain), id: id, accountID: accountID)
             throw DraftError.ambiguousCreation
@@ -72,6 +79,9 @@ public actor SyncCoordinator {
                 let remote: String?
                 if remoteGist.files[draft.filename] == nil { remote = nil }
                 else { remote = try await client.content(gist: remoteGist, filename: draft.filename) }
+                try await validatePublication(
+                    draft, reason: reason, expectedGeneration: expectedGeneration,
+                    shouldPublish: shouldPublish)
                 if let attempted = draft.attemptedContent, let generation = draft.attemptedGeneration {
                     if sourceEqual(remote, attempted) {
                         draft = try await store.acknowledge(
@@ -101,6 +111,9 @@ public actor SyncCoordinator {
                     try await store.setState(.conflict(conflict), id: id, accountID: accountID)
                     return try await store.draft(id: id, accountID: accountID)
                 }
+                try await validatePublication(
+                    draft, reason: reason, expectedGeneration: expectedGeneration,
+                    shouldPublish: shouldPublish)
                 try await store.beginAttempt(
                     id: id, accountID: accountID, content: draft.text,
                     generation: draft.generation, remote: remote
@@ -117,6 +130,9 @@ public actor SyncCoordinator {
                     revision: result.revision, generation: draft.generation
                 )
             } else {
+                try await validatePublication(
+                    draft, reason: reason, expectedGeneration: expectedGeneration,
+                    shouldPublish: shouldPublish)
                 try await store.beginAttempt(
                     id: id, accountID: accountID, content: draft.text,
                     generation: draft.generation, remote: nil
@@ -135,6 +151,8 @@ public actor SyncCoordinator {
                 )
             }
 
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             let latest = try await store.draft(id: id, accountID: accountID)
             let state: SaveState
@@ -162,6 +180,21 @@ public actor SyncCoordinator {
             try await store.setState(state, id: id, accountID: accountID)
             throw error
         }
+    }
+
+    private func validatePublication(
+        _ draft: DraftSnapshot, reason: PublishReason, expectedGeneration: UInt64?,
+        shouldPublish: @escaping @Sendable () async -> Bool
+    ) async throws {
+        try Task.checkCancellation()
+        guard reason != .manual else { return }
+        guard !draft.autosavePaused,
+              expectedGeneration == nil || draft.generation == expectedGeneration,
+              await shouldPublish() else { throw CancellationError() }
+        let latest = try await store.draft(id: draft.id, accountID: draft.accountID)
+        guard latest.generation == draft.generation, !latest.autosavePaused,
+              latest.attemptedGeneration == nil else { throw CancellationError() }
+        if case .conflict = latest.state { throw CancellationError() }
     }
 
     public func reconcileCreation(

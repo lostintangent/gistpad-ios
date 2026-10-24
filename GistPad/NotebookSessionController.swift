@@ -25,10 +25,17 @@ final class NotebookSessionController {
   var mode: NoteMode = .reading
   @ObservationIgnored private let notebook: NotebookModel
   @ObservationIgnored private var persistence: Task<Bool, Never>?
+  @ObservationIgnored private var autosaveTask: Task<Void, Never>?
+  @ObservationIgnored private var scheduledAutosave: AutosaveRequest?
+  @ObservationIgnored private var isForeground = false
+  @ObservationIgnored private let autosaveDelay: Duration
   @ObservationIgnored private let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "Document")
 
-  init(document: NotebookDocument, draft: DraftSnapshot, notebook: NotebookModel) {
+  init(
+    document: NotebookDocument, draft: DraftSnapshot, notebook: NotebookModel,
+    autosaveDelay: Duration = .seconds(5)
+  ) {
     var initialDocument = document
     if notebook.account?.id == draft.accountID {
       initialDocument.chrome = notebook.chrome(gist: document.gist, draft: draft)
@@ -36,6 +43,7 @@ final class NotebookSessionController {
     self.document = initialDocument
     self.draft = draft
     self.notebook = notebook
+    self.autosaveDelay = autosaveDelay
     session = DocumentSession(
       documentID: document.id, text: draft.text, generation: draft.generation)
     saveState = NotebookModel.interfaceSaveState(draft.state)
@@ -56,6 +64,55 @@ final class NotebookSessionController {
     document.chrome.access.canEdit && !session.isComposing && !session.writingToolsActive
       && !isPerformingDestructiveAction
       && !isApplyingDurableEdit
+  }
+
+  struct AutosaveRequest: Equatable {
+    let generation: UInt64
+    let eligible: Bool
+  }
+
+  var autosaveRequest: AutosaveRequest {
+    let stateAllowsAutosave: Bool
+    switch draft.state {
+    case .savedLocally, .offline, .reconnect: stateAllowsAutosave = true
+    default: stateAllowsAutosave = false
+    }
+    return AutosaveRequest(
+      generation: session.generation,
+      eligible: autosaveAllowed && !isPublishing && saveState == .savedLocally
+        && stateAllowsAutosave && hasUnpublishedChanges)
+  }
+
+  private var autosaveAllowed: Bool {
+    isForeground && notebook.account?.id == draft.accountID && notebook.pendingAccount == nil
+      && notebook.account?.preferences.isAutoSaveEnabled == true
+      && canMutate && session.textView.markedTextRange == nil
+      && !document.isRecovery && !draft.autosavePaused && draft.attemptedGeneration == nil
+  }
+
+  @discardableResult
+  func updateAutosave(isForeground: Bool) -> Task<Void, Never>? {
+    self.isForeground = isForeground
+    let request = autosaveRequest
+    guard request != scheduledAutosave else { return autosaveTask }
+    scheduledAutosave = request
+    autosaveTask?.cancel()
+    autosaveTask = nil
+    guard request.eligible else { return nil }
+    autosaveTask = Task { [weak self, autosaveDelay] in
+      do {
+        try await Task.sleep(for: autosaveDelay)
+        guard let self, !Task.isCancelled, autosaveRequest == request else { return }
+        autosaveTask = nil
+        await publish(reason: .autosave)
+      } catch is CancellationError {
+        return
+      } catch {
+        self?.logger.error(
+          "Autosave delay failed: \(String(reflecting: type(of: error)), privacy: .public)")
+      }
+    }
+    return autosaveTask
   }
 
   func refreshMetadata(gist: Gist? = nil) async throws {
@@ -225,15 +282,27 @@ final class NotebookSessionController {
     if saveState == .reconnectRequired { saveState = .savedLocally }
   }
 
-  func publish() async {
+  func publish(reason: PublishReason = .manual) async {
     guard canMutate, !isPublishing, !document.isRecovery, saveState.canPublish else { return }
+    if reason != .manual, !autosaveAllowed { return }
+    autosaveTask?.cancel()
+    autosaveTask = nil
     isPublishing = true
     defer { isPublishing = false }
     if let persistence, !(await persistence.value) { return }
-    guard canMutate else { return }
+    guard canMutate, reason == .manual || autosaveAllowed else { return }
+    let expectedGeneration = session.generation
     saveState = .savingToGitHub
     do {
-      let saved = try await notebook.publish(draftID: draft.id, accountID: draft.accountID)
+      let saved = try await notebook.publish(
+        draftID: draft.id, accountID: draft.accountID, reason: reason,
+        expectedGeneration: reason == .manual ? nil : expectedGeneration,
+        shouldPublish: { [weak self] in
+          await MainActor.run {
+            guard let self else { return false }
+            return self.autosaveAllowed && self.session.generation == expectedGeneration
+          }
+        })
       draft = saved
       saveState =
         session.generation == saved.generation
@@ -247,6 +316,8 @@ final class NotebookSessionController {
             document.chrome = notebook.chrome(gist: gist, draft: saved)
           }
           metadataError = nil
+        } catch is CancellationError {
+          saveState = NotebookModel.interfaceSaveState(draft.state)
         } catch {
           logger.error(
             "Saved-note metadata refresh failed: \(String(reflecting: type(of: error)), privacy: .public)"

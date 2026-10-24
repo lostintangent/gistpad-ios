@@ -65,7 +65,9 @@ Search uses cached content and local drafts, supports quoted phrases and `tag:ID
 
 Rename, file creation, stars, pins, archive and confirmed deletion use serialized actions. Tags, membership and pins use the signed-in Supabase profile, while GitHub owns content and stars. Source permissions do not make personal profile tags read-only. Deletion retains unsynced drafts and recovery history. Saved-file links use the GistPad share route and disclose that a secret link exposes the saved GitHub version. Sharing current changes requires explicit Save & Share, or exporting draft text.
 
-Conflict review displays byte-exact source changes, preserves the original, freshly verifies the remote version and applies a chosen draft as one undoable, durable local edit. Review never publishes. Photos use a retained per-draft controller and the same durable edit boundary. Backgrounding finishes queued local persistence only and never publishes to GitHub. Autosave, live Focus navigation and account-switch disposition presentation remain separate integration work, alongside native design review and live-account acceptance.
+Conflict review displays byte-exact source changes, preserves the original, freshly verifies the remote version and applies a chosen draft as one undoable, durable local edit. Review never publishes, and its choice durably pauses autosave until an explicit Save to GitHub. Photos use a retained per-draft controller and the same durable edit boundary.
+
+When the signed-in profile enables autosave, a durable local draft publishes after five quiet foreground seconds. Composition, Writing Tools, recovery, conflicts, uncertain attempts and account switching block it. The coordinator rechecks the accepted generation and foreground policy after its fresh remote read, before any write. Leaving the foreground cancels pending timers. Backgrounding finishes queued local persistence only and never initiates publication. Live Focus navigation and account-switch disposition presentation remain separate integration work, alongside native design review and live-account acceptance.
 
 ## Module ownership
 

@@ -61,6 +61,11 @@ struct LiveNotebookWorkspace: View {
       if notebook.loadedDocument == nil { activeID = nil } else { await activateLoadedDocument() }
     }
     .task(id: searchInput) { await notebook.search() }
+    .onChange(of: autosaveInput, initial: true) {
+      for controller in sessions.values {
+        controller.updateAutosave(isForeground: scenePhase == .active)
+      }
+    }
     .onChange(of: notebook.library.selectedNoteID) { _, selected in
       guard let selected, selected != notebook.loadedDocument?.rowID else { return }
       guard canSwitchDocument else {
@@ -244,6 +249,17 @@ struct LiveNotebookWorkspace: View {
     let query: String
     let tags: Set<String>
     let collection: LibraryCollection
+  }
+
+  private struct AutosaveInput: Equatable {
+    let foreground: Bool
+    let requests: [String: NotebookSessionController.AutosaveRequest]
+  }
+
+  private var autosaveInput: AutosaveInput {
+    AutosaveInput(
+      foreground: scenePhase == .active,
+      requests: sessions.mapValues(\.autosaveRequest))
   }
 
   private func noteActions(_ controller: NotebookSessionController) -> NoteActions {

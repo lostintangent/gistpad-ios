@@ -350,7 +350,10 @@ private actor PhotoNotebookProvider: NotebookProviding {
   func persist(draftID: UUID, accountID: UUID, text: String, generation: UInt64) async throws -> DraftSnapshot {
     try await store.persist(id: draftID, accountID: accountID, text: text, generation: generation)
   }
-  func publish(draftID: UUID, accountID: UUID) throws -> DraftSnapshot {
+  func publish(
+    draftID: UUID, accountID: UUID, reason: PublishReason,
+    expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
+  ) throws -> DraftSnapshot {
     publishCount += 1
     throw DraftError.readOnly
   }

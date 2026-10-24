@@ -9,6 +9,68 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct NotebookSessionTests {
+  @Test func autosavePublishesOnlyADurableQuietForegroundGeneration() async throws {
+    let (controller, provider) = try await makeController(autosave: true)
+    edit(controller, to: "Quiet accepted draft")
+    #expect(await controller.waitForLocalSave())
+    let task = try #require(controller.updateAutosave(isForeground: true))
+    await task.value
+    #expect(await provider.publishCount == 1)
+    #expect(await provider.publicationReasons == [.autosave])
+    #expect(controller.saveState == .savedToGitHub)
+  }
+
+  @Test func autosaveOffAndBackgroundNeverStartPublication() async throws {
+    let (disabled, disabledProvider) = try await makeController(autosave: false)
+    edit(disabled, to: "Keep local")
+    #expect(await disabled.waitForLocalSave())
+    #expect(disabled.updateAutosave(isForeground: true) == nil)
+    #expect(disabled.updateAutosave(isForeground: false) == nil)
+    #expect(await disabledProvider.publishCount == 0)
+
+    let (controller, provider) = try await makeController(autosave: true)
+    edit(controller, to: "Background local draft")
+    #expect(await controller.waitForLocalSave())
+    let pending = try #require(controller.updateAutosave(isForeground: true))
+    #expect(controller.updateAutosave(isForeground: false) == nil)
+    await pending.value
+    #expect(await provider.publishCount == 0)
+    #expect(try await provider.snapshot().text == "Background local draft")
+  }
+
+  @Test func autosaveDefersCompositionWritingToolsAndRecovery() async throws {
+    let (controller, provider) = try await makeController(autosave: true)
+    edit(controller, to: "Accepted text")
+    #expect(await controller.waitForLocalSave())
+    controller.session.textView.setMarkedText(
+      "にほんご", selectedRange: NSRange(location: 4, length: 0))
+    controller.session.textViewDidChangeSelection(controller.session.textView)
+    #expect(controller.updateAutosave(isForeground: true) == nil)
+    controller.session.textView.unmarkText()
+    controller.session.textViewDidChangeSelection(controller.session.textView)
+    controller.session.textViewWritingToolsWillBegin(controller.session.textView)
+    #expect(controller.updateAutosave(isForeground: true) == nil)
+    controller.session.textViewWritingToolsDidEnd(controller.session.textView)
+    #expect(await controller.waitForLocalSave())
+    controller.markRecovery()
+    #expect(controller.updateAutosave(isForeground: true) == nil)
+    #expect(await provider.publishCount == 0)
+  }
+
+  @Test func autosaveCancelsAnOlderPauseAndPublishesOnlyTheLatestText() async throws {
+    let (controller, provider) = try await makeController(autosave: true)
+    edit(controller, to: "First draft")
+    #expect(await controller.waitForLocalSave())
+    let old = try #require(controller.updateAutosave(isForeground: true))
+    edit(controller, to: "Latest draft")
+    #expect(await controller.waitForLocalSave())
+    let latest = try #require(controller.updateAutosave(isForeground: true))
+    await old.value
+    await latest.value
+    #expect(await provider.publishCount == 1)
+    #expect(try await provider.snapshot().baseContent == "Latest draft")
+  }
+
   @Test func restoredGenerationsAndRapidEditsPersistInOrder() async throws {
     let (controller, provider) = try await makeController(generation: 7)
     #expect(controller.session.generation == 7)
@@ -297,7 +359,7 @@ struct NotebookSessionTests {
   }
 
   private func makeController(
-    generation: UInt64 = 0
+    generation: UInt64 = 0, autosave: Bool? = nil
   ) async throws -> (NotebookSessionController, SessionNotebookProvider) {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
@@ -319,14 +381,20 @@ struct NotebookSessionTests {
       draft = try await store.persist(
         id: draft.id, accountID: accountID, text: "Restored local draft", generation: generation)
     }
-    let provider = SessionNotebookProvider(store: store, id: draft.id, accountID: accountID)
+    let provider = SessionNotebookProvider(
+      store: store, id: draft.id, accountID: accountID, autosave: autosave)
     let model = NotebookModel(provider: provider)
+    if autosave != nil { await model.start() }
     let document = NotebookDocument(
       accountID: accountID, gist: gist, filename: "README.md", text: "Base",
       chrome: NoteChrome(
         title: "Session fixture", files: [.init(id: "README.md", filename: "README.md")],
         selectedFileID: "README.md"))
-    return (NotebookSessionController(document: document, draft: draft, notebook: model), provider)
+    return (
+      NotebookSessionController(
+        document: document, draft: draft, notebook: model, autosaveDelay: .milliseconds(30)),
+      provider
+    )
   }
 }
 
@@ -334,23 +402,34 @@ private actor SessionNotebookProvider: NotebookProviding {
   let store: DraftStore
   let id: UUID
   let accountID: UUID
+  let autosave: Bool?
   private(set) var persistedGenerations: [UInt64] = []
   private(set) var publishCount = 0
+  private(set) var publicationReasons: [PublishReason] = []
   private var persistenceFails = false
   private var publicationRejected = false
   private var publicationFailure: SaveState?
   private var publishing: CheckedContinuation<Void, Never>?
   private var publishObserver: CheckedContinuation<Void, Never>?
 
-  init(store: DraftStore, id: UUID, accountID: UUID) {
+  init(store: DraftStore, id: UUID, accountID: UUID, autosave: Bool? = nil) {
     self.store = store
     self.id = id
     self.accountID = accountID
+    self.autosave = autosave
   }
 
-  func cachedAccount() -> NotebookAccount? { nil }
+  func cachedAccount() -> NotebookAccount? {
+    guard let autosave else { return nil }
+    return NotebookAccount(
+      id: accountID, login: "fixture", githubUserID: 1,
+      preferences: .init(metadata: ["isAutoSaveEnabled": .bool(autosave)]))
+  }
   func signIn() throws -> NotebookAccount { throw AccountError.signedOut }
-  func refreshAccount() throws -> NotebookAccount { throw AccountError.signedOut }
+  func refreshAccount() throws -> NotebookAccount {
+    guard let account = cachedAccount() else { throw AccountError.signedOut }
+    return account
+  }
   func gists(accountID: UUID) -> [Gist] { [] }
   func starredGists(accountID: UUID) -> [Gist] { [] }
   func gist(id: String, accountID: UUID) throws -> Gist { throw GitHubClientError.missingFile }
@@ -382,8 +461,13 @@ private actor SessionNotebookProvider: NotebookProviding {
       id: draftID, accountID: accountID, text: text, generation: generation)
   }
 
-  func publish(draftID: UUID, accountID: UUID) async throws -> DraftSnapshot {
+  func publish(
+    draftID: UUID, accountID: UUID, reason: PublishReason,
+    expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
+  ) async throws -> DraftSnapshot {
+    if reason != .manual, !(await shouldPublish()) { throw CancellationError() }
     publishCount += 1
+    publicationReasons.append(reason)
     if publicationRejected { throw DraftError.readOnly }
     if let publicationFailure {
       try await store.setState(publicationFailure, id: draftID, accountID: accountID)
@@ -393,10 +477,12 @@ private actor SessionNotebookProvider: NotebookProviding {
     try await store.beginAttempt(
       id: draftID, accountID: accountID, content: sent.text,
       generation: sent.generation, remote: sent.baseContent)
-    await withCheckedContinuation {
-      publishing = $0
-      publishObserver?.resume()
-      publishObserver = nil
+    if reason == .manual {
+      await withCheckedContinuation {
+        publishing = $0
+        publishObserver?.resume()
+        publishObserver = nil
+      }
     }
     return try await store.acknowledge(
       id: draftID, accountID: accountID, gistID: "synthetic",

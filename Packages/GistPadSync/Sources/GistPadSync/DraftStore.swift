@@ -42,6 +42,7 @@ public struct DraftSnapshot: Equatable, Sendable, Identifiable {
     public let baseRevision: String?
     public let attemptedContent: String?
     public let attemptedGeneration: UInt64?
+    public let autosavePaused: Bool
     public let state: SaveState
 }
 
@@ -104,6 +105,7 @@ final class StoredDraft {
     var baseRevision: String?
     var attemptedContent: String?
     var attemptedGeneration: UInt64?
+    var autosavePaused: Bool = false
     var stateData: Data
 
     init(
@@ -569,7 +571,15 @@ public actor DraftStore {
         draft.generation = generation
         draft.attemptedContent = nil
         draft.attemptedGeneration = nil
+        draft.autosavePaused = true
         draft.stateData = try encode(.savedLocally)
+        try commit()
+        return try snapshot(draft)
+    }
+
+    public func resumeAutosave(id: UUID, accountID: UUID) throws -> DraftSnapshot {
+        let draft = try find(id, accountID: accountID)
+        draft.autosavePaused = false
         try commit()
         return try snapshot(draft)
     }
@@ -595,6 +605,7 @@ public actor DraftStore {
             text: draft.text, generation: draft.generation,
             baseContent: draft.baseContent, baseRevision: draft.baseRevision,
             attemptedContent: draft.attemptedContent, attemptedGeneration: draft.attemptedGeneration,
+            autosavePaused: draft.autosavePaused,
             state: try decode(draft.stateData)
         )
     }
