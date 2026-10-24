@@ -133,6 +133,13 @@
       view.updateViewportInsets(insets)
     }
 
+    func updateViewportView(_ viewport: UIView) {
+      guard let view = textView as? AnchoredTextView else {
+        preconditionFailure("Document sessions require the retained source text view.")
+      }
+      view.updateViewportView(viewport)
+    }
+
     public func apply(_ edit: SourceEdit, generation: UInt64) throws {
       guard canFormat else { throw SourceMutation.MutationError.compositionActive }
       guard self.generation == generation else {
@@ -378,11 +385,20 @@
     private var anchorDelta: CGFloat = 0
     private var restoringAnchor = false
     private var viewportInsets: UIEdgeInsets?
+    private weak var viewportView: UIView?
     private var applyingViewportInsets = false
 
     func updateViewportInsets(_ insets: UIEdgeInsets) {
+      viewportView = nil
       viewportInsets = insets
       applyViewportInsets()
+    }
+
+    func updateViewportView(_ view: UIView) {
+      viewportView = view
+      viewportInsets = nil
+      applyViewportInsets()
+      setNeedsLayout()
     }
 
     override func adjustedContentInsetDidChange() {
@@ -391,11 +407,22 @@
     }
 
     private func applyViewportInsets() {
-      guard !applyingViewportInsets, let viewportInsets else { return }
+      guard !applyingViewportInsets else { return }
+      let target: UIEdgeInsets
+      if let viewportView, window != nil, viewportView.window === window {
+        let viewport = convert(viewportView.bounds, from: viewportView)
+        target = UIEdgeInsets(
+          top: max(0, viewport.minY - bounds.minY), left: 0,
+          bottom: max(0, bounds.maxY - viewport.maxY), right: 0)
+      } else if let viewportInsets {
+        target = viewportInsets
+      } else {
+        return
+      }
       let previous = adjustedContentInset
       var insets = contentInset
-      insets.top = max(0, viewportInsets.top - (previous.top - contentInset.top))
-      insets.bottom = max(0, viewportInsets.bottom - (previous.bottom - contentInset.bottom))
+      insets.top = max(0, target.top - (previous.top - contentInset.top))
+      insets.bottom = max(0, target.bottom - (previous.bottom - contentInset.bottom))
       guard
         abs(insets.top - contentInset.top) > 0.001
           || abs(insets.bottom - contentInset.bottom) > 0.001

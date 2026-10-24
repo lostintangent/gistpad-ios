@@ -74,14 +74,17 @@ struct NotebookLayoutTests {
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
     let host = UIHostingController(
-      rootView: LayoutNoteFixture(session: session, layout: layout, width: 800))
+      rootView: LayoutNoteFixture(session: session, layout: layout, width: 382))
     window.rootViewController = host
     window.makeKeyAndVisible()
     defer { window.isHidden = true }
     try await Task.sleep(for: .milliseconds(250))
     let editor = session.textView
     let preview = try #require(descendants(of: host.view).compactMap { $0 as? WKWebView }.first)
-    let initial = try recordCaretGeometry(editor, in: host.view, named: "initial-800")
+    editor.selectedRange = NSRange(location: 0, length: 0)
+    editor.scrollRangeToVisible(editor.selectedRange)
+    editor.layoutIfNeeded()
+    let initial = try recordCaretGeometry(editor, in: host.view, named: "initial-382")
     #expect(
       initial.caret.minY >= initial.viewport.minY && initial.caret.maxY <= initial.viewport.maxY,
       "The first source line must start below the actual navigation chrome.")
@@ -101,7 +104,7 @@ struct NotebookLayoutTests {
     editor.layoutIfNeeded()
     editor.scrollRangeToVisible(selection)
     editor.layoutIfNeeded()
-    let baseline = try recordCaretGeometry(editor, in: host.view, named: "baseline-800")
+    let baseline = try recordCaretGeometry(editor, in: host.view, named: "baseline-382")
     try #require(
       baseline.caret.minY >= baseline.viewport.minY
         && baseline.caret.maxY <= baseline.viewport.maxY,

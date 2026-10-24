@@ -7,6 +7,34 @@
   @Suite(.serialized)
   @MainActor
   struct SourceViewportTests {
+    @Test func actualViewportDoesNotCountTheKeyboardTwiceAfterTheEditorShrinks() {
+      let session = DocumentSession(documentID: "keyboard-viewport", text: "Keep writing here")
+      let root = UIViewController()
+      let view = session.textView
+      let viewport = UIView()
+      root.view.addSubview(view)
+      root.view.addSubview(viewport)
+      let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+      window.rootViewController = root
+      window.makeKeyAndVisible()
+      defer { window.isHidden = true }
+      view.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+      viewport.frame = CGRect(x: 0, y: 96, width: 390, height: 470)
+      session.updateViewportView(viewport)
+      view.layoutIfNeeded()
+      #expect(abs(view.adjustedContentInset.top - 96) < 0.001)
+      #expect(abs(view.adjustedContentInset.bottom - 34) < 0.001)
+      view.frame.size.height = 300
+      viewport.frame.size.height = 204
+      view.setNeedsLayout()
+      view.layoutIfNeeded()
+      #expect(abs(view.adjustedContentInset.top - 96) < 0.001)
+      #expect(abs(view.adjustedContentInset.bottom) < 0.001)
+      #expect(view.bounds.height - view.adjustedContentInset.top > 200)
+      #expect(session.text == "Keep writing here")
+      #expect(session.generation == 0)
+    }
+
     @Test func measuredInsetsRevealTheFirstLineWithoutChangingTheDocument() {
       let source = "# A visible first line"
       let session = DocumentSession(documentID: "viewport", text: source)
