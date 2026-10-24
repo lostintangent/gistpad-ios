@@ -1,0 +1,8 @@
+.DS_Store
+.playwright-cli/
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcresult/
+PreviewRenderer/node_modules/
