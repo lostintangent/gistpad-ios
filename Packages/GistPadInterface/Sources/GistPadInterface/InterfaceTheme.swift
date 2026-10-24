@@ -3,10 +3,16 @@ import SwiftUI
 
 public enum InterfaceTheme {
     public static let accent = Color("AccentText", bundle: .module)
+    public static let accentFill = Color("AccentFill", bundle: .module)
+    public static let onAccent = Color("OnAccent", bundle: .module)
     public static let selection = Color("SelectedSurface", bundle: .module)
     public static let syntaxMuted = Color("SyntaxMuted", bundle: .module)
     public static let syntaxCode = Color("SyntaxCode", bundle: .module)
-    public static let text = Color(uiColor: .label)
+    public static let text = Color("Ink", bundle: .module)
+    public static let spine = LinearGradient(
+        colors: [Color("SpineTop", bundle: .module), Color("SpineBottom", bundle: .module)],
+        startPoint: .top, endPoint: .bottom
+    )
 }
 
 extension LibraryCollection {
