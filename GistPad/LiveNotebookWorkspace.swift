@@ -63,7 +63,10 @@ struct LiveNotebookWorkspace: View {
 
   var body: some View {
     workspaceSheets
-      .sheet(isPresented: accountSwitchPresented) { accountSwitchSheet }
+      .sheet(isPresented: accountSwitchPresented) {
+        accountSwitchSheet
+          .personalAccent(savedHex: notebook.account?.preferences.accentColor)
+      }
       .confirmationDialog(
         String(localized: "Delete “\(deletionTarget?.title ?? "")” from GitHub?"),
         isPresented: Binding(
@@ -256,7 +259,10 @@ struct LiveNotebookWorkspace: View {
       Text(actionMessage ?? notebook.documentError ?? "")
     }
     .sheet(isPresented: $showingShare) {
-      if let shareURL { NotebookActivitySheet(item: .url(shareURL)) }
+      if let shareURL {
+        NotebookActivitySheet(item: .url(shareURL))
+          .personalAccent(savedHex: notebook.account?.preferences.accentColor)
+      }
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
       if let undo = archiveUndo, notebook.account?.id == undo.accountID {
@@ -281,18 +287,28 @@ struct LiveNotebookWorkspace: View {
     }
     .sheet(item: $sharingTarget) { target in
       NotebookSharingSheet(controller: target.controller, copiesLink: target.copiesLink)
+        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
     }
     .sheet(item: $tagTarget) { target in
       tagEditor(target)
+        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
     }
     .sheet(item: $nameTarget) { target in
       nameEditor(target)
+        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
     }
     .sheet(item: $reviewTarget) { target in
       NotebookConflictReview(controller: target.controller, review: target.review)
+        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
     }
-    .sheet(isPresented: $showingSettings) { settingsSheet }
-    .sheet(isPresented: $showingAddToToday) { AddToTodaySheet() }
+    .sheet(isPresented: $showingSettings) {
+      settingsSheet
+        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
+    }
+    .sheet(isPresented: $showingAddToToday) {
+      AddToTodaySheet()
+        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
+    }
   }
 
   private var settingsSheet: some View {

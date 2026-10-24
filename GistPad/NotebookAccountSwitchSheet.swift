@@ -54,6 +54,7 @@ struct NotebookAccountSwitchSheet: View {
           Button(role: .cancel, action: keepCurrent) {
             Label("Keep Current Notebook", systemImage: "xmark")
           }
+          .tint(.primary)
         }
       }
       .disabled(isWorking)

@@ -66,7 +66,7 @@ struct NotebookSettingsSheet<Appearance: View>: View {
             Text("Saving")
           } footer: {
             Text(
-              "Edits are always kept on this iPhone. When enabled, a 5-second pause or leaving a note saves to GitHub. Leaving the app saves even when this is off.")
+              "Edits are always kept on this iPhone. When enabled, a 5-second pause or leaving a note saves to GitHub. Leaving the app attempts a save even when this is off.")
           }
           Section("Writing") {
             Toggle("Check Spelling", isOn: preference(.isSpellcheckEnabled, default: true))
@@ -99,6 +99,7 @@ struct NotebookSettingsSheet<Appearance: View>: View {
         ToolbarItem(placement: .topBarTrailing) {
           Button(role: .close) { dismiss() }
             .accessibilityLabel("Close Settings")
+            .tint(.primary)
             .disabled(isWorking)
         }
       }

@@ -1,4 +1,5 @@
 #if os(iOS)
+import GistPadAppearance
 import SwiftUI
 
 public struct TagEditor: View {
@@ -12,6 +13,8 @@ public struct TagEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.personalAccent) private var personalAccent
+    @ScaledMetric(relativeTo: .body) private var swatchSize: CGFloat = 12
 
     public init(
         tags: [LibraryTag], selectedTagIDs: Set<String>,
@@ -60,6 +63,7 @@ public struct TagEditor: View {
                     Text("Tags apply to every file in this note.", bundle: .module)
                         .foregroundStyle(.secondary)
                 }
+                .listSectionSeparator(.hidden)
             }
             .listStyle(.plain)
             .navigationTitle(Text("Tags", bundle: .module))
@@ -74,6 +78,7 @@ public struct TagEditor: View {
                     update: { try draft.upsert($0) },
                     delete: { draft.delete(tag) }
                 )
+                .personalAccent(savedHex: personalAccent.savedHex)
             }
             .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
             .presentationDragIndicator(.visible)
@@ -141,7 +146,7 @@ public struct TagEditor: View {
 
     private func tagRow(_ tag: LibraryTag) -> some View {
         HStack(spacing: 12) {
-            TagSwatch(hex: tag.colorHex)
+            TagSwatch(hex: tag.colorHex, size: min(swatchSize, 24))
                 .accessibilityHidden(true)
             Text(verbatim: tag.name)
                 .foregroundStyle(.primary)
@@ -168,6 +173,7 @@ public struct TagEditor: View {
                     if draft.edits.isEmpty { dismiss() } else { confirmingDiscard = true }
                 }
                 .accessibilityLabel(Text("Cancel", bundle: .module))
+                .tint(.primary)
             }
         }
         DefaultToolbarItem(kind: .search, placement: .bottomBar)
@@ -181,6 +187,7 @@ public struct TagEditor: View {
             } else {
                 Button(role: .close) { dismiss() }
                     .accessibilityLabel(Text("Close", bundle: .module))
+                    .tint(.primary)
             }
         }
     }
@@ -270,6 +277,7 @@ private struct TagEditForm: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .cancel) { dismiss() }
                         .accessibilityLabel(Text("Cancel", bundle: .module))
+                        .tint(.primary)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {

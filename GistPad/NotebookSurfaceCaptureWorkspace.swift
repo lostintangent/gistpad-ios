@@ -36,18 +36,10 @@ struct NotebookSurfaceCaptureWorkspace: View {
   @State private var readinessError: String?
   @State private var keyboardHeight: CGFloat = 0
 
-  init(screen: String) {
+  init(screen: String, accent: String? = nil) {
     self.screen = screen
     _path = State(initialValue: [screen])
-    let arguments = ProcessInfo.processInfo.arguments
-    let accent: String
-    if let index = arguments.firstIndex(of: "--capture-accent"),
-      arguments.indices.contains(index + 1)
-    {
-      accent = arguments[index + 1]
-    } else {
-      accent = "#0EA5E9"
-    }
+    let accent = accent ?? LaunchArguments.captureAccent ?? "#0EA5E9"
     _preferences = State(initialValue: Preferences(isAutoSaveEnabled: true, accentColor: accent))
   }
 
@@ -86,6 +78,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
         }
       }
       .background { readinessMarker }
+      .personalAccent(savedHex: preferences.accentColor)
     }
     .alert(
       "Capture Readiness Failed",

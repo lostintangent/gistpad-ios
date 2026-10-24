@@ -1,3 +1,4 @@
+import GistPadInterface
 import GistPadPreview
 import SwiftUI
 
@@ -16,7 +17,7 @@ struct NotebookOpeningView: View {
           } description: {
             Text(renderError)
           } actions: {
-            Button("Retry") {
+            Button("Try Again") {
               self.renderError = nil
               reload += 1
             }
@@ -53,6 +54,7 @@ struct NotebookOpeningView: View {
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
     .background(Color(uiColor: .systemBackground))
+    .tint(InterfaceTheme.accent)
   }
 }
 
@@ -66,7 +68,7 @@ struct NotebookFailedOpeningView: View {
     } description: {
       Text(failure.message)
     } actions: {
-      Button("Retry", action: retry)
+      Button("Try Again", action: retry)
         .frame(minHeight: 44)
         .buttonStyle(.borderedProminent)
         .accessibilityIdentifier("note-open-retry")
@@ -74,5 +76,6 @@ struct NotebookFailedOpeningView: View {
     .navigationTitle(failure.title)
     .navigationSubtitle(failure.filename ?? "")
     .navigationBarTitleDisplayMode(.inline)
+    .tint(InterfaceTheme.accent)
   }
 }

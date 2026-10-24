@@ -1,4 +1,5 @@
 import GistPadEditor
+import GistPadInterface
 import GistPadPreview
 import GistPadPlatform
 import SwiftUI
@@ -68,6 +69,15 @@ struct GistPadApp: App {
     }
   }
 
+  private var sceneAccent: String? {
+    if let notebook { return notebook.account?.preferences.accentColor }
+    #if DEBUG
+      return LaunchArguments.captureAccent
+    #else
+      return nil
+    #endif
+  }
+
   var body: some Scene {
     WindowGroup {
       Group {
@@ -107,11 +117,24 @@ struct GistPadApp: App {
       } message: {
         Text(routeError ?? "")
       }
+      .tint(InterfaceTheme.accent)
+      .background {
+        NotebookSceneAccent(savedHex: sceneAccent)
+          .frame(width: 0, height: 0)
+      }
     }
   }
 }
 
 enum LaunchArguments {
+  static let captureAccent: String? = {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard let index = arguments.firstIndex(of: "--capture-accent"),
+      arguments.indices.contains(index + 1)
+    else { return nil }
+    return arguments[index + 1]
+  }()
+
   static let captureReadingFixture =
     ProcessInfo.processInfo.arguments.contains("--capture-reading-fixture")
 

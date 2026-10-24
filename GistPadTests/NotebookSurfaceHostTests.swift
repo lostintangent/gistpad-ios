@@ -1,3 +1,4 @@
+import GistPadAppearance
 import GistPadInterface
 import GistPadSync
 import SwiftUI
@@ -58,6 +59,76 @@ struct NotebookSurfaceHostTests {
       image,
       named: "\(capture.screen)-466-\(size)-\(capture.dark ? "Dark" : "Light").png",
       as: .png)
+  }
+
+  @Test(arguments: ["settings", "tags", "note-failed"], [false, true])
+  func presentedSurfacesUseTheSavedAccent(screen: String, dark: Bool) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.overrideUserInterfaceStyle = dark ? .dark : .light
+    window.rootViewController = UIHostingController(
+      rootView: NotebookSurfaceCaptureWorkspace(screen: screen, accent: "#FACC15")
+        .environment(\.dynamicTypeSize, .large))
+    window.makeKeyAndVisible()
+    defer {
+      window.rootViewController?.dismiss(animated: false)
+      window.isHidden = true
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(800))
+    window.layoutIfNeeded()
+    let canvas = try #require(
+      screen == "note-failed"
+        ? window.rootViewController?.view
+        : window.rootViewController?.presentedViewController?.view)
+    let bounds = CGRect(
+      origin: .zero,
+      size: CGSize(
+        width: canvas.bounds.width,
+        height: screen == "settings" ? min(440, canvas.bounds.height) : canvas.bounds.height))
+    let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
+      canvas.drawHierarchy(in: canvas.bounds, afterScreenUpdates: true)
+    }
+    let expected = PersonalAccent(savedHex: "#FACC15").roles(traits: canvas.traitCollection).text
+    let pixels = try nativeAccentPixels(in: image, expected: expected)
+    #expect(pixels.personal > 40)
+    #expect(pixels.systemBlue < 20)
+    Attachment.record(
+      image, named: "\(screen)-saved-yellow-\(dark ? "Dark" : "Light").png", as: .png)
+  }
+
+  @Test func sceneAccentUpdatesPresentedControllersAndResetsAfterSignOut() async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let hadOverride = scene.traitOverrides.contains(PersonalAccentTrait.self)
+    let original = scene.traitCollection[PersonalAccentTrait.self]
+    let window = UIWindow(windowScene: scene)
+    let root = UIViewController()
+    window.rootViewController = root
+    window.makeKeyAndVisible()
+    defer {
+      root.dismiss(animated: false)
+      window.isHidden = true
+      if hadOverride {
+        scene.traitOverrides[PersonalAccentTrait.self] = original
+      } else {
+        scene.traitOverrides.remove(PersonalAccentTrait.self)
+      }
+      previous?.makeKeyAndVisible()
+    }
+    let bridge = NotebookSceneAccentView(accent: PersonalAccent(savedHex: "#FACC15"))
+    root.view.addSubview(bridge)
+    let presented = UIViewController()
+    root.present(presented, animated: false)
+    await Task.yield()
+    #expect(presented.traitCollection[PersonalAccentTrait.self].color.hex == "#FACC15")
+    bridge.updateAccent(PersonalAccent(savedHex: "#DB9E47"))
+    #expect(presented.traitCollection[PersonalAccentTrait.self].color.hex == "#DB9E47")
+    bridge.updateAccent(PersonalAccent())
+    #expect(presented.traitCollection[PersonalAccentTrait.self].color == .sky)
   }
 
   @Test func settingsUseSavedValuesAndExposeARejectedChangeWithoutSilentlyAcceptingIt() async throws {
