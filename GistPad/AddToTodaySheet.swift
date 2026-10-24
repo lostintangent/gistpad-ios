@@ -72,7 +72,8 @@ struct AddToTodaySheet: View {
         }
         ToolbarItem(placement: .confirmationAction) {
           if isAdding {
-            ProgressView("Adding to Today")
+            ProgressView()
+              .accessibilityLabel("Adding to Today")
           } else {
             Button(role: .confirm, action: add)
               .accessibilityLabel("Add")
