@@ -177,7 +177,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     private var saveStatus: some View {
         switch saveState {
         case .inMemoryFixture:
-            Label(String(localized: "In-memory fixture. Not saved.", bundle: .module), systemImage: "hammer")
+            Text("In-memory fixture. Not saved.", bundle: .module)
         case .unsaved:
             Label(String(localized: "Not saved yet", bundle: .module), systemImage: "doc")
         case .savedLocally:

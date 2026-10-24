@@ -24,12 +24,14 @@ public struct LibraryActions {
 public struct LibraryView: View {
     @Bindable private var model: LibraryModel
     private let actions: LibraryActions
+    private let footer: Text?
     @State private var showingTags = false
     @State private var tagQuery = ""
 
-    public init(model: LibraryModel, actions: LibraryActions) {
+    public init(model: LibraryModel, actions: LibraryActions, footer: Text? = nil) {
         self.model = model
         self.actions = actions
+        self.footer = footer
     }
 
     public var body: some View {
@@ -75,8 +77,11 @@ public struct LibraryView: View {
                 }
                 if !model.pinnedNotes.isEmpty {
                     Section(String(localized: "Pinned", bundle: .module)) {
-                        ForEach(model.pinnedNotes) { noteRow($0) }
+                        ForEach(model.pinnedNotes) { noteRow($0, showsPin: false) }
                     }
+                }
+                if let footer {
+                    Section {} footer: { footer }
                 }
                 if !model.unpinnedNotes.isEmpty {
                     Section(model.collection.title) {
@@ -185,14 +190,14 @@ public struct LibraryView: View {
         .listRowBackground(Color.clear)
     }
 
-    private func noteRow(_ note: LibraryNote) -> some View {
+    private func noteRow(_ note: LibraryNote, showsPin: Bool = true) -> some View {
         NavigationLink(value: note.id) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(verbatim: note.title)
                         .font(.headline)
                         .lineLimit(2)
-                    if note.isPinned {
+                    if note.isPinned && showsPin {
                         Image(systemName: "pin.fill")
                             .font(.subheadline)
                             .foregroundStyle(InterfaceTheme.accent)
@@ -216,6 +221,7 @@ public struct LibraryView: View {
             }
             .padding(.vertical, 6)
         }
+        .accessibilityValue(note.isPinned ? Text("Pinned", bundle: .module) : Text(""))
         .listRowBackground(model.selectedNoteID == note.id ? InterfaceTheme.selection : nil)
         .contextMenu { rowActions(note) }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {

@@ -72,16 +72,10 @@ struct InterfaceCaptureWorkspace: View {
     var body: some View {
         if supportedState {
             NavigationSplitView(preferredCompactColumn: $compactColumn) {
-                LibraryView(model: library, actions: libraryActions)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        Text(actionMessage ?? "Synthetic library. No account connected.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color(uiColor: .systemBackground))
-                    }
+                LibraryView(
+                    model: library, actions: libraryActions,
+                    footer: Text(actionMessage ?? "Synthetic library. No account connected.")
+                )
             } detail: {
                 NavigationStack {
                     if library.selectedNoteID != nil {
