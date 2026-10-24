@@ -515,7 +515,9 @@ public actor DraftStore {
         text: String, generation: UInt64
     ) throws -> DraftSnapshot {
         let draft = try find(id, accountID: accountID)
-        guard draft.generation == expectedGeneration, generation > expectedGeneration else {
+        guard draft.generation == expectedGeneration,
+              generation > expectedGeneration
+                || (generation == expectedGeneration && sourceEqual(text, draft.text)) else {
             throw DraftError.staleGeneration
         }
         guard case .conflict(let conflict) = try decode(draft.stateData),

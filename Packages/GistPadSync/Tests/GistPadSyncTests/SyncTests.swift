@@ -170,6 +170,66 @@ private func editedDraft(
         #expect(result.state == .savedLocally)
     }
 
+    @Test func keepingIdenticalDraftResolvesOnlyTheBaselineWithoutInventingAnEdit() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let draft = try await editedDraft(store: store, account: account)
+        let client = GitHubClient(session: FakeURLProtocol.session { request in
+            #expect(request.httpMethod == "GET")
+            return FakeResponse(data: try gistData(content: "web version", revision: "revision2"))
+        }) { "fake" }
+        let coordinator = SyncCoordinator(client: client, store: store)
+        _ = try await coordinator.publish(id: draft.id, accountID: account)
+        let result = try await store.resolveConflict(
+            id: draft.id, accountID: account, expectedGeneration: 1, text: "local", generation: 1
+        )
+        #expect(result.text == "local")
+        #expect(result.generation == 1)
+        #expect(result.baseContent == "web version")
+        #expect(result.baseRevision == "revision2")
+        #expect(result.state == .savedLocally)
+        let recovery = try #require(try await store.recoveries(id: draft.id, accountID: account).last)
+        #expect(recovery.local == "local")
+        #expect(recovery.base == "base")
+        #expect(recovery.remote == "web version")
+        #expect(recovery.generation == 1)
+        await #expect(throws: DraftError.unresolvedConflict) {
+            try await store.resolveConflict(
+                id: draft.id, accountID: account, expectedGeneration: 1, text: "local", generation: 1
+            )
+        }
+    }
+
+    @Test func equalConflictGenerationRequiresExactBytesNotCanonicalUnicodeEquality() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let composed = "\u{e9}"
+        let decomposed = "e\u{301}"
+        #expect(composed == decomposed)
+        let draft = try await editedDraft(store: store, account: account, text: composed)
+        try await store.setState(.conflict(DraftConflict(
+            generation: 1, base: "base", local: composed, remote: "remote",
+            remoteRevision: "two", suggestedMerge: nil
+        )), id: draft.id, accountID: account)
+        await #expect(throws: DraftError.staleGeneration) {
+            try await store.resolveConflict(
+                id: draft.id, accountID: account, expectedGeneration: 1, text: decomposed, generation: 1
+            )
+        }
+        #expect(try await store.draft(id: draft.id, accountID: account).text.utf8.elementsEqual(composed.utf8))
+        #expect(try await store.recoveries(id: draft.id, accountID: account).isEmpty)
+        let accepted = try await store.resolveConflict(
+            id: draft.id, accountID: account, expectedGeneration: 1, text: decomposed, generation: 2
+        )
+        #expect(accepted.text.utf8.elementsEqual(decomposed.utf8))
+        #expect(accepted.generation == 2)
+        await #expect(throws: DraftError.staleGeneration) {
+            try await store.resolveConflict(
+                id: draft.id, accountID: account, expectedGeneration: 1, text: decomposed, generation: 1
+            )
+        }
+    }
+
     @Test func ambiguousPatchReconcilesWithoutRepeatingTheWrite() async throws {
         let account = UUID()
         let store = try DraftStore.open(inMemory: true)
