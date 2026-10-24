@@ -50,13 +50,45 @@ The current shell establishes native sidebar collapse and retained editor/previe
 
 **Shapes are related, not identical.** Featured content can use a softly rounded continuous container, around 20 pt with 16-20 pt inner space. Ordinary notes share one inset-grouped list surface. Tags retain their existing smaller rounded labels. System controls own their capsule geometry and concentricity. No heavy shadows, imitation bindings or an outline around every row. [New design system][new-system].
 
-### Color: honor the person, keep the page coherent
+### Color: personal content, neutral controls
 
 **Use a valid saved profile `accentColor`. Use GistPad sky `#0EA5E9` when it is absent.** A stored yellow value is still a saved choice. Do not reinterpret it as missing merely because the web's default is yellow. The original blue icon stays unchanged.
 
-This is based on the real contract in `gistpad.dev/src/features/account/queries.tsx`: the web declares `accentColor`, defaults it to `#facc15`, and saves preference changes to Supabase user metadata. Native currently preserves that key in `Packages/GistPadSync/Sources/GistPadSync/Preferences.swift` but does not consume it. A fixed native yellow or blue theme is not profile support.
+This is based on the real contract in `gistpad.dev/src/features/account/queries.tsx`: the web declares `accentColor`, defaults it to `#facc15`, and saves preference changes to Supabase user metadata. Native preserves that key in `Packages/GistPadSync/Sources/GistPadSync/Preferences.swift` and derives readable appearance roles from it. A fixed native yellow or blue theme is not profile support.
 
-The accent affects actions, selection, the date accent, caret, app-owned interactive marks and authored list markers in Preview. It does not recolor body text, semantic errors, tag colors or the Markdown syntax palette. External prose links retain their underlined semantic link treatment. Sky is the default, not a requirement that every person's notebook stay blue.
+**The user's October 24 accent-restraint request supersedes personal tint on actions, navigation, selection and the caret.** The personal accent is an allowlist, not the app-wide interaction color: Today date treatment, Today task progress and its in-content Start invitation, authored Preview numbers/bullets and existing Preview task checkboxes, plus the actual preference swatch. These small, content-related uses make the notebook personal without making every command compete for attention. Other note progress, pin metadata and selected Library surfaces are neutral. Changing the preference must not change toolbar, menu, sheet or keyboard-tool colors.
+
+Neutral does not mean faint. Enabled commands use primary adaptive foreground, while secondary foreground is for metadata and genuine progress descriptions. Use semantic `.primary` / `UIColor.label` as the neutral role through native control APIs, allowing Liquid Glass to own its material, vibrancy and contrasting foreground. Do not freeze it to black/white, reduce its opacity or draw a replacement glass treatment. Disabled controls keep the native disabled state. Destructive commands keep their system role and red, never the personal accent. Archive is not destructive. [Color][color], [Toolbars][toolbars], [Buttons][buttons].
+
+#### Exact surface roles for the neutral-chrome pass
+
+| Surface | Role and retained behavior |
+| --- | --- |
+| Navigation and top/bottom toolbars | Back, Library/sidebar, Search, Compose, More, Share, Files, manual Save and status/recovery buttons use native monochrome primary foreground. The title/filename chevron stays neutral. Neither symbols nor glass backgrounds receive the saved accent |
+| Edit / Split / Preview | Use `square.and.pencil` for Edit and the simple `eye` for Preview, with unchanged `rectangle.split.2x1` for Split. The two main symbols should differ by silhouette, not tiny details inside a document. Keep exact accessibility names and native neutral selected state. Preserve single glass and the scaled 48-pt segment floor. The whole control keeps its intrinsic width and cannot compress for a long title: the title truncates first. No personal selected segment, accent outline or shrunken symbol |
+| Menus and context menus | Native primary labels/symbols/checkmarks, with system disabled states and destructive red. Pin/Star use their existing filled state and changing labels, not personal color. Non-destructive swipe actions use the system neutral treatment |
+| Sheet chrome and confirmations | Settings, Tags, Photos, accounts, file/rename/link sheets and Add to Today use neutral Close/Cancel/Add/Save controls. A single committing action may retain native prominent styling with a neutral tint and a system-contrasting label. Do not flatten the hierarchy or paint primary ink over a primary-filled button. Native alerts own their role colors, including Cancel |
+| Keyboard accessory | Aa, Lists, Insert, Intelligence, Hide Keyboard and any expanded Bold/Italic targets use primary monochrome ink on the existing native glass. Their menus follow the same rule. No colored sparkles, extra capsule or geometry change |
+| Intelligence sheet | Neutral Ask/Edit/Review picker and action-menu fallback, prompt controls, Generate/Try Again/Apply, citations and Close. Keep Generate/Apply prominent when appropriate, but without personal fill or ink. Progress is native secondary, not an accent animation |
+| Intelligence diff | Unchanged text uses primary. Added words use primary semibold plus an underline. Removed words use secondary plus strikethrough. Retain Before/After labels and real changed-word runs, so no color is needed and no new green/red palette is introduced |
+| Source caret and text selection | Restore standard UIKit text-interaction blue, independent of neutral navigation tint and saved accent. Keep native selection handles/highlight. Do not make the caret label-black/white or use a personal selected-surface fill. Apply the same separation to search and sheet text-entry controls |
+| Source links and tasks | Keep the accepted source syntax palette and underlined link/destination treatment. Unchecked task syntax uses the existing `SourceSyntaxColor.orderedMarker` blue, checked task syntax retains muted ink. No source token follows the personal accent |
+| Library/sidebar selection | Preserve native selected-row behavior and accessibility traits, with a neutral selected surface rather than a personal wash. Featured selected cards use the corresponding semantic neutral selection fill. Keep their text readable in the actual selected state. Pin metadata uses secondary ink |
+| Tags | Preserve each tag's own swatch and tinted label, which represent user content. Selected checkmarks and New Tag/Edit actions use primary neutral ink, not the tag color or personal accent. Keep selected traits, labels and existing targets |
+| Photos and recovery | Summary photo symbol, disclosure chevron, More and Retry/Reconnect/Insert Here/Choose Another use neutral primary ink. Native progress and status descriptions use their semantic secondary role. Keep explicit failure symbols, readable guidance and destructive Remove role |
+| Today and quick capture | Keep the accent on the Today date area, its own task progress and in-page Start action. Scope that tint to content, never the whole Today navigation container. Add to Today is a system-style capture sheet, so its glass controls and Text/Task picker remain neutral |
+| Preview and external links | Keep the approved personal authored list markers and existing content task-checkbox appearance. Prose, rules, Contents controls and links are not newly accented. External links retain their underlined semantic link treatment |
+| Settings and system surfaces | The accent picker shows the real chosen swatch, not a themed Settings page. Switches keep native on/off colors and state, not personal or forced monochrome tint. System share/photo/authentication/Writing Tools surfaces keep their own appearance. Existing Today widgets retain their approved content accent and system rendering modes |
+
+Remove saved-accent inheritance from the app root, workspace/navigation containers, Library/search and sheet roots. Keep the shared account preference and native/preview trait bridge: allowed content still needs live updates. Then apply neutral control roles at the actual control/container scope, while preserving text-entry and switch defaults. Do not replace a global accent with a global foreground override that also recolors tags, links, syntax, destructive actions or native input. Coordinate `DocumentSession` appearance-only changes with its current front-matter/navigation owner.
+
+**Acceptance:** inspect Light/Dark Library, a real note and its open More menu, then Settings, selected Tags, keyboard tools, Intelligence including a marked diff, and Photos recovery. Show that two distinct saved accents, including yellow, change Today/Preview markers but not the chrome. Include selected/disabled states and Increased Contrast. Text entry must retain a visible native caret/selection, switches their state, destructive actions red, and all existing targets/navigation behavior. A flat-color test is not a substitute for the material in context.
+
+#### Apple comparison and evidence boundary
+
+Apple's current iOS 27 guide images show the intended separation. **Notes** has neutral Back/Share/More and bottom editing controls beside colored tags and authored drawing. **Reminders** has neutral Back/More/Search while its Flagged title, flags and one Add action carry orange. **Journal** has neutral Back/Search/More while entry media and one Add action carry color. The shared lesson is quiet navigation, meaningful content color and, when needed, one focal action, not an app-wide tint over every icon. GistPad deliberately goes further for this user's preference: even its prominent chrome actions are neutral. [Notes writing][notes-writing], [Reminders][reminders], [Journal][journal].
+
+These are inspected Apple-published guide images, not a hands-on claim about all states on iOS 27.1 or Duo. The HIG explicitly says small Liquid Glass controls are monochromatic by default, recommends sparse color for genuine emphasis, and recommends reducing tinted toolbar controls. Notes' colored Done example also confirms that neutral navigation is not a claim that Apple never uses a colored primary action. [Color][color], [Toolbars][toolbars].
 
 Derive one shared native/preview role set from the saved RGB value:
 
@@ -64,8 +96,8 @@ Derive one shared native/preview role set from the saved RGB value:
 | --- | --- |
 | `accentText` | Start with the saved color. Find the smallest mix toward black in Light, or white in Dark, that reaches 4.5:1 against the resolved opaque surfaces where it is used. Increased Contrast targets 7:1. Derive each appearance independently |
 | `accentFill` + `onAccent` | Prefer the original opaque fill. Choose black or white foreground by greater contrast. If that pair misses the appearance's text target, minimally adjust the fill toward black or white and choose the nearer passing pair. Do not assume white text works |
-| `selectedSurface` | Composite a restrained accent tint onto the semantic surface and use normal ink, not accent-colored body text. Check the final ink/background contrast. Selection also has its native trait/check, never color alone |
-| System material controls | Supply the appropriate dynamic tint through native APIs and retain the system's material/foreground adaptation. Evaluate the actual material in context, not just a flat swatch |
+| `selectedSurface` | Keep the restrained accent-tinted surface for the Today date treatment. It is no longer the Library/sidebar selection role. Check the final ink/background contrast |
+| System material controls | Use native monochrome adaptation and neutral semantic tint where necessary, not any personal accent role. Preserve role-owned destructive/disabled/confirmation behavior and evaluate the actual material in context |
 
 Use WCAG relative luminance/contrast on final composited colors, not HSB brightness as a proxy. Nontext affordances requiring a visible boundary need 3:1. Test yellow, white, black, saturated colors and missing/invalid values in all four appearances. Preserve the stored hex; readability adaptation must not rewrite the account preference. Invalid data keeps a native fallback and an explicit Settings explanation, not a silent metadata repair. [Color][color], [Adoption][adoption].
 
@@ -161,7 +193,7 @@ These are focused entrances to Today and existing notes, not miniature copies of
 
 At accessibility text sizes, Small uses a compact date and the real remaining-task summary, with the whole widget opening Today. Medium retains one readable interactive task. Do not cap Dynamic Type to preserve a checkbox whose task cannot be identified. Completed task labels use secondary ink alongside the filled check.
 
-Quick capture shows the pinned destination as a localized short date. Keep the native Add to Today navigation bar visible when the input takes focus. Text and Task use quiet, non-inserting prompts and native cancel/confirm roles. The native confirmation toolbar uses the text-role navigation fill, with trait-resolved white ink in Light and black ink in Dark, not the raw-fill on-fill role. Cancellation stays neutral. At accessibility sizes, the kind picker becomes a labeled native menu on one baseline, with at least two scaled writing lines kept above the keyboard. Accessibility and failure presentations use the large detent. Failure dismisses the keyboard, puts the semantic error before the retained input and keeps Add available to retry. Local-save failure explicitly reassures that the text is still here. Other errors use the shared friendly mapping, never raw red diagnostics.
+Quick capture shows the pinned destination as a localized short date. Keep the native Add to Today navigation bar visible when the input takes focus. Text and Task use quiet, non-inserting prompts and native cancel/confirm roles. The native confirmation toolbar now uses neutral prominent styling with the system's contrasting foreground, not either personal accent role. Cancellation stays neutral. At accessibility sizes, the kind picker becomes a labeled native menu on one baseline, with at least two scaled writing lines kept above the keyboard. Accessibility and failure presentations use the large detent. Failure dismisses the keyboard, puts the semantic error before the retained input and keeps Add available to retry. Local-save failure explicitly reassures that the text is still here. Other errors use the shared friendly mapping, never raw red diagnostics.
 
 Interactive checks bind to the displayed date/file and task anchor, never a row index in whichever note is now open. A stale task is not modified and offers Open Today. Locked-device interaction follows system authentication. Missing account/content gets a clear sign-in/open invitation; timeline refresh never creates a note. Widget/control mutations use existing durable-draft behavior, not a separate publication path. [Widget interactivity][widget-interactivity], [Controls][controls].
 
@@ -250,12 +282,14 @@ Research accessed October 24, 2026. Platform facts above come from Apple. GistPa
 [split]: https://developer.apple.com/design/human-interface-guidelines/split-views
 [typography]: https://developer.apple.com/design/human-interface-guidelines/typography
 [color]: https://developer.apple.com/design/human-interface-guidelines/color
+[buttons]: https://developer.apple.com/design/human-interface-guidelines/buttons
 [menus]: https://developer.apple.com/design/human-interface-guidelines/menus
 [search]: https://developer.apple.com/design/human-interface-guidelines/search-fields
 [loading]: https://developer.apple.com/design/human-interface-guidelines/loading
 [progress]: https://developer.apple.com/design/human-interface-guidelines/progress-indicators
 [motion]: https://developer.apple.com/design/human-interface-guidelines/motion
 [notes]: https://support.apple.com/guide/iphone/change-the-notes-view-iph65637affe/ios
+[notes-writing]: https://support.apple.com/guide/iphone/create-and-format-notes-iph1ac0b3a2/27/ios/27
 [reminders]: https://support.apple.com/guide/iphone/use-smart-lists-iphe882772ed/ios
 [journal]: https://support.apple.com/guide/iphone/view-and-search-journal-entries-iph6257be047/ios
 [freeform]: https://support.apple.com/guide/iphone/get-started-with-freeform-iphb86e84e2b/ios
