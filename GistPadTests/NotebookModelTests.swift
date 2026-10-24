@@ -476,6 +476,39 @@ struct NotebookModelTests {
 @Suite(.serialized)
 @MainActor
 struct NotebookNavigationHostTests {
+  @Test func leavingANoteSavesBeforeItsQuietTimerWithoutStealingThePendingSelection() async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount,
+      gists: [
+        try makeGist(id: "a", title: "First note", content: "First note source"),
+        try makeGist(id: "b", title: "Second note", content: "Second note source"),
+      ], cachesContent: false)
+    let host = try await NavigationHost(provider: provider, autosave: true)
+    defer { host.close() }
+    await host.model.open(gistID: "a")
+    try await host.waitUntil { host.editor(text: "First note source") != nil }
+    let editor = try #require(host.editor(text: "First note source"))
+    editor.becomeFirstResponder()
+    editor.selectedRange = .init(location: 0, length: 0)
+    editor.insertText("Local ")
+    try await host.waitUntil { host.model.localDrafts.first?.generation == 1 }
+    await provider.holdRead(id: "b")
+    defer { Task { await provider.releaseRead() } }
+    #expect(!host.model.beginOpeningRow(id: "b"))
+    let opening = Task { await host.model.openRow(id: "b") }
+    await provider.waitForHeldRead()
+    try await host.waitUntil(timeout: .seconds(1)) {
+      host.model.localDrafts.first?.state == .savedToGitHub
+    }
+    #expect(await provider.publicationReasons == [.autosave])
+    #expect(host.model.library.selectedNoteID == "b")
+    #expect(host.model.openingTitle == "Second note")
+    #expect(host.model.presentedDocument == nil)
+    await provider.releaseRead()
+    await opening.value
+    try await host.waitUntil { host.editor(text: "Second note source") != nil }
+  }
+
   @Test func anUncachedSelectionUnmountsThePreviousEditorWhileTheRequestIsStillHeld() async throws {
     let provider = StubNotebookProvider(
       account: fixtureAccount,
@@ -501,8 +534,8 @@ struct NotebookNavigationHostTests {
     #expect(host.model.presentedDocument == nil)
     #expect(host.model.openingTitle == "Second note")
     #expect(host.editor(text: "First note source") == nil)
-    #expect(host.descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title }
-      .contains("Second note"))
+    let navigationTitles = host.descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title }
+    #expect(navigationTitles.contains("Second note"))
     await provider.releaseRead()
     await opening.value
     try await host.waitUntil { host.editor(text: "Second note source") != nil }
@@ -591,7 +624,8 @@ private struct NavigationHost {
   private let suite: String
   private let previousWindow: UIWindow?
 
-  init(provider: StubNotebookProvider) async throws {
+  init(provider: StubNotebookProvider, autosave: Bool = false) async throws {
+    await provider.setAutosaveEnabled(autosave)
     suite = "NotebookNavigationHost-\(UUID())"
     let defaults = try #require(UserDefaults(suiteName: suite))
     let layout = NotebookLayoutPreferences(defaults: defaults)
@@ -603,7 +637,8 @@ private struct NavigationHost {
     window = UIWindow(windowScene: scene)
     window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
     window.rootViewController = UIHostingController(
-      rootView: LiveNotebookWorkspace(notebook: model, layout: layout))
+      rootView: LiveNotebookWorkspace(notebook: model, layout: layout)
+        .environment(\.scenePhase, .active))
     window.makeKeyAndVisible()
     try await waitUntil { model.library.loadState == .ready && model.cachedLibrary != nil }
   }
@@ -617,8 +652,10 @@ private struct NavigationHost {
     descendants.compactMap { $0 as? UITextView }.first { $0.text == text && $0.window === window }
   }
 
-  func waitUntil(_ predicate: @MainActor () -> Bool) async throws {
-    let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+  func waitUntil(
+    timeout: Duration = .seconds(5), _ predicate: @MainActor () -> Bool
+  ) async throws {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
     while !predicate() {
       guard ContinuousClock.now < deadline else {
         Issue.record("The mounted notebook did not reach its expected presentation.")
@@ -670,7 +707,7 @@ private func makeGist(
 }
 
 private actor StubNotebookProvider: NotebookProviding {
-  let account: NotebookAccount
+  private(set) var account: NotebookAccount
   var signInAccount: NotebookAccount
   var notes: [Gist]
   var shouldFail = false
@@ -684,6 +721,7 @@ private actor StubNotebookProvider: NotebookProviding {
   private(set) var localStateReads = 0
   private(set) var todayTargets: [DailyNoteTarget] = []
   private(set) var readIDs: [String] = []
+  private(set) var publicationReasons: [PublishReason] = []
 
   init(account: NotebookAccount, gists: [Gist], cachesContent: Bool = true) {
     self.account = account
@@ -738,7 +776,30 @@ private actor StubNotebookProvider: NotebookProviding {
   func publish(
     draftID: UUID, accountID: UUID, reason: PublishReason,
     expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
-  ) throws -> DraftSnapshot { throw DraftError.notFound }
+  ) async throws -> DraftSnapshot {
+    if reason != .manual, !(await shouldPublish()) { throw CancellationError() }
+    let store = try draftStore()
+    let current = try await store.draft(id: draftID, accountID: accountID)
+    if case .conflict = current.state { return current }
+    publicationReasons.append(reason)
+    try await store.beginAttempt(
+      id: draftID, accountID: accountID, content: current.text,
+      generation: current.generation, remote: current.baseContent)
+    if let index = notes.firstIndex(where: { $0.id == current.gistID }) {
+      let gist = notes[index]
+      var files = gist.files
+      files[current.filename] = GistFile(
+        filename: current.filename, language: "Markdown", content: current.text,
+        truncated: false, rawURL: nil, size: current.text.utf8.count)
+      notes[index] = Gist(
+        id: gist.id, description: gist.description, files: files,
+        updatedAt: gist.updatedAt, createdAt: gist.createdAt,
+        isPublic: gist.isPublic, owner: gist.owner, truncated: gist.truncated, history: gist.history)
+    }
+    return try await store.acknowledge(
+      id: draftID, accountID: accountID, gistID: current.gistID ?? "created-\(draftID)",
+      content: current.text, revision: "synthetic-revision", generation: current.generation)
+  }
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
     if case .inspectRemote(let id, let generation) = action {
       let store = try draftStore()
@@ -799,6 +860,13 @@ private actor StubNotebookProvider: NotebookProviding {
   func setGists(_ gists: [Gist]) { notes = gists }
   func failRequests() { shouldFail = true }
   func setSignInAccount(_ account: NotebookAccount) { signInAccount = account }
+  func setAutosaveEnabled(_ enabled: Bool) {
+    var metadata = account.preferences.metadata
+    metadata["isAutoSaveEnabled"] = .bool(enabled)
+    account = NotebookAccount(
+      id: account.id, login: account.login, githubUserID: account.githubUserID,
+      preferences: .init(metadata: metadata))
+  }
   func holdRead(id: String) { heldID = id }
   func waitForHeldRead() async {
     if heldRead != nil { return }

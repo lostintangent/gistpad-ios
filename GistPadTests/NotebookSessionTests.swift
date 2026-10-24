@@ -75,7 +75,7 @@ struct NotebookSessionTests {
     #expect(controller.saveState == .savedToGitHub)
   }
 
-  @Test func autosaveOffAndBackgroundNeverStartPublication() async throws {
+  @Test func autosaveOffAndLeavingTheForegroundCancelOnlyTheTimer() async throws {
     let (disabled, disabledProvider) = try await makeController(autosave: false)
     edit(disabled, to: "Keep local")
     #expect(await disabled.waitForLocalSave())
@@ -91,6 +91,147 @@ struct NotebookSessionTests {
     await pending.value
     #expect(await provider.publishCount == 0)
     #expect(try await provider.snapshot().text == "Background local draft")
+  }
+
+  @Test func backgroundSavesEveryDurableSessionRegardlessOfAutosavePreference() async throws {
+    let (disabled, disabledProvider) = try await makeController(autosave: false)
+    let (enabled, enabledProvider) = try await makeController(autosave: true)
+    edit(disabled, to: "Publish on hide, with autosave off")
+    edit(enabled, to: "Publish on hide, with autosave on")
+    let disabledIdentity = disabled.session.viewIdentity
+    await NotebookLifecycle.saveOnBackground([disabled, enabled], shouldContinue: { true })
+    #expect(await disabledProvider.publishCount == 1)
+    #expect(await enabledProvider.publishCount == 1)
+    #expect(await disabledProvider.publicationReasons == [.background])
+    #expect(await enabledProvider.publicationReasons == [.background])
+    #expect(try await disabledProvider.snapshot().baseContent == disabled.session.text)
+    #expect(try await enabledProvider.snapshot().baseContent == enabled.session.text)
+    #expect(disabled.saveState == .savedToGitHub)
+    #expect(enabled.saveState == .savedToGitHub)
+    #expect(disabled.session.viewIdentity == disabledIdentity)
+  }
+
+  @Test func leavingANotePublishesImmediatelyOnlyWithAutosaveEnabled() async throws {
+    let (enabled, provider) = try await makeController(autosave: true)
+    edit(enabled, to: "Leaving this note")
+    #expect(await enabled.waitForLocalSave())
+    let timer = try #require(enabled.updateAutosave(isForeground: true))
+    await enabled.publishOnLeavingNote()
+    await timer.value
+    #expect(timer.isCancelled)
+    #expect(await provider.publishCount == 1)
+    #expect(await provider.publicationReasons == [.autosave])
+    #expect(try await provider.snapshot().baseContent == "Leaving this note")
+
+    let (disabled, disabledProvider) = try await makeController(autosave: false)
+    edit(disabled, to: "Retain this local note")
+    #expect(await disabled.waitForLocalSave())
+    disabled.updateAutosave(isForeground: true)
+    await disabled.publishOnLeavingNote()
+    #expect(await disabledProvider.publishCount == 0)
+    #expect(try await disabledProvider.snapshot().text == "Retain this local note")
+  }
+
+  @Test func backgroundSkipsReadOnlyConflictCompositionWritingToolsAndRecovery() async throws {
+    for condition in ["read-only", "conflict", "composition", "writing-tools", "recovery"] {
+      let (controller, provider) = try await makeController(
+        generation: condition == "read-only" ? 1 : 0,
+        autosave: false, isReadOnly: condition == "read-only")
+      if condition != "read-only" {
+        edit(controller, to: "Preserved \(condition) draft")
+        #expect(await controller.waitForLocalSave())
+      }
+      switch condition {
+      case "conflict":
+        await provider.setRemoteContent("Changed on the web")
+        await controller.inspectRemoteChanges()
+        #expect(controller.saveState == .remoteChange)
+      case "composition":
+        controller.session.textView.setMarkedText(
+          "にほんご", selectedRange: NSRange(location: 4, length: 0))
+        controller.session.textViewDidChangeSelection(controller.session.textView)
+      case "writing-tools":
+        controller.session.textViewWritingToolsWillBegin(controller.session.textView)
+      case "recovery": controller.markRecovery()
+      default: break
+      }
+      await NotebookLifecycle.saveOnBackground([controller], shouldContinue: { true })
+      #expect(await provider.publishCount == 0, "Background must defer \(condition).")
+      #expect(try await provider.snapshot().text.isEmpty == false)
+      if condition == "composition" {
+        controller.session.textView.unmarkText()
+        controller.session.textViewDidChangeSelection(controller.session.textView)
+      } else if condition == "writing-tools" {
+        controller.session.textViewWritingToolsDidEnd(controller.session.textView)
+      }
+    }
+  }
+
+  @Test func expiryDuringTheFreshReadStopsTheWriteAndRemainingBackgroundBatch() async throws {
+    let (first, provider) = try await makeController(autosave: false)
+    let (second, secondProvider) = try await makeController(autosave: true)
+    edit(first, to: "First durable draft")
+    edit(second, to: "Second durable draft")
+    let allowance = BackgroundTestAllowance()
+    await provider.holdBeforeValidation()
+    let saving = Task {
+      await NotebookLifecycle.saveOnBackground(
+        [first, second], shouldContinue: { allowance.isActive })
+    }
+    await provider.waitForPublish()
+    allowance.isActive = false
+    saving.cancel()
+    await provider.releasePublish()
+    await saving.value
+    #expect(await provider.publishCount == 0)
+    #expect(await secondProvider.publishCount == 0)
+    #expect(try await provider.snapshot().text == "First durable draft")
+    #expect(try await secondProvider.snapshot().text == "Second durable draft")
+    #expect(first.saveState == .savedLocally)
+    #expect(second.saveState == .savedLocally)
+  }
+
+  @Test func anUnavailableBackgroundLeaseStillFinishesLocalPersistence() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    edit(controller, to: "Save locally even when time is unavailable")
+    await NotebookLifecycle.saveOnBackground([controller], shouldContinue: { false })
+    #expect(await provider.persistedGenerations == [1])
+    #expect(await provider.publishCount == 0)
+    #expect(try await provider.snapshot().text == controller.session.text)
+    #expect(controller.saveState == .savedLocally)
+  }
+
+  @Test func backgroundWaitsForAnExistingSaveThenPublishesNewerTyping() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    edit(controller, to: "Earlier manual save")
+    #expect(await controller.waitForLocalSave())
+    let manual = Task { await controller.publish() }
+    await provider.waitForPublish()
+    edit(controller, to: "Latest accepted source")
+    #expect(await controller.waitForLocalSave())
+    let background = Task {
+      await NotebookLifecycle.saveOnBackground([controller], shouldContinue: { true })
+    }
+    await Task.yield()
+    #expect(await provider.publishCount == 1)
+    await provider.releasePublish()
+    await manual.value
+    await background.value
+    #expect(await provider.publishCount == 2)
+    #expect(await provider.publicationReasons == [.manual, .background])
+    #expect(try await provider.snapshot().baseContent == "Latest accepted source")
+    #expect(controller.session.text == "Latest accepted source")
+  }
+
+  @Test func leaseExpirationCancelsItsOwnerOnceAndInvalidatesPublication() {
+    let lease = NotebookBackgroundLease()
+    var expirations = 0
+    lease.onExpiration = { expirations += 1 }
+    lease.expire()
+    lease.expire()
+    #expect(expirations == 1)
+    #expect(!lease.isActive)
+    #expect(lease.onExpiration == nil)
   }
 
   @Test func autosaveDefersCompositionWritingToolsAndRecovery() async throws {
@@ -420,7 +561,7 @@ struct NotebookSessionTests {
   }
 
   private func makeController(
-    generation: UInt64 = 0, autosave: Bool? = nil
+    generation: UInt64 = 0, autosave: Bool? = nil, isReadOnly: Bool = false
   ) async throws -> (NotebookSessionController, SessionNotebookProvider) {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
@@ -430,7 +571,7 @@ struct NotebookSessionTests {
         """
         {"id":"synthetic","description":"Session fixture","public":false,
         "created_at":"2026-10-23T00:00:00Z","updated_at":"2026-10-23T00:00:00Z",
-        "owner":{"id":1,"login":"fixture"},
+        "owner":{"id":\(isReadOnly ? 99 : 1),"login":"fixture"},
         "files":{"README.md":{"filename":"README.md","content":"Base"}}}
         """.utf8))
     let accountID = UUID()
@@ -457,6 +598,11 @@ struct NotebookSessionTests {
       provider
     )
   }
+}
+
+@MainActor
+private final class BackgroundTestAllowance {
+  var isActive = true
 }
 
 private struct FocusNoteFixture: View {
@@ -491,6 +637,7 @@ private actor SessionNotebookProvider: NotebookProviding {
   private var remoteContent: String? = "Base"
   private var publishing: CheckedContinuation<Void, Never>?
   private var publishObserver: CheckedContinuation<Void, Never>?
+  private var pausesBeforeValidation = false
 
   init(store: DraftStore, id: UUID, accountID: UUID, autosave: Bool? = nil) {
     self.store = store
@@ -552,6 +699,10 @@ private actor SessionNotebookProvider: NotebookProviding {
     draftID: UUID, accountID: UUID, reason: PublishReason,
     expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
   ) async throws -> DraftSnapshot {
+    if pausesBeforeValidation {
+      pausesBeforeValidation = false
+      await pausePublication()
+    }
     if reason != .manual, !(await shouldPublish()) { throw CancellationError() }
     publishCount += 1
     publicationReasons.append(reason)
@@ -565,16 +716,22 @@ private actor SessionNotebookProvider: NotebookProviding {
       id: draftID, accountID: accountID, content: sent.text,
       generation: sent.generation, remote: sent.baseContent)
     if reason == .manual {
-      await withCheckedContinuation {
-        publishing = $0
-        publishObserver?.resume()
-        publishObserver = nil
-      }
+      await pausePublication()
     }
     return try await store.acknowledge(
       id: draftID, accountID: accountID, gistID: "synthetic",
       content: sent.text, revision: "2", generation: sent.generation)
   }
+
+  private func pausePublication() async {
+    await withCheckedContinuation {
+      publishing = $0
+      publishObserver?.resume()
+      publishObserver = nil
+    }
+  }
+
+  func holdBeforeValidation() { pausesBeforeValidation = true }
 
   func snapshot() async throws -> DraftSnapshot {
     try await store.draft(id: id, accountID: accountID)

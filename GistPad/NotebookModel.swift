@@ -1168,11 +1168,14 @@ final class NotebookModel {
     if loadedDocument?.draft?.id == saved.id
       || (loadedDocument?.gist?.id == id && loadedDocument?.filename == saved.filename)
     {
+      let isSelected = library.selectedNoteID == loadedDocument?.rowID
       loadedDocument?.gist = gist
       loadedDocument?.draft = saved
       loadedDocument?.chrome = chrome(gist: gist, draft: saved)
-      library.selectedNoteID = loadedDocument?.rowID
-      try remember(NotebookSelection(gistID: id, filename: saved.filename, draftID: saved.id))
+      if isSelected, openingDocument == nil {
+        library.selectedNoteID = loadedDocument?.rowID
+        try remember(NotebookSelection(gistID: id, filename: saved.filename, draftID: saved.id))
+      }
     }
     return gist
   }

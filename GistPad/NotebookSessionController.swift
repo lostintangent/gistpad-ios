@@ -31,6 +31,7 @@ final class NotebookSessionController {
   @ObservationIgnored private var scheduledAutosave: AutosaveRequest?
   @ObservationIgnored private var isForeground = false
   @ObservationIgnored private var didRequestCreationFocus = false
+  @ObservationIgnored private var publicationWaiters: [CheckedContinuation<Void, Never>] = []
   @ObservationIgnored private let autosaveDelay: Duration
   @ObservationIgnored private let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "Document")
@@ -99,6 +100,17 @@ final class NotebookSessionController {
       && notebook.account?.preferences.isAutoSaveEnabled == true
       && canMutate && session.textView.markedTextRange == nil
       && !document.isRecovery && !draft.autosavePaused && draft.attemptedGeneration == nil
+  }
+
+  private func publicationAllowed(reason: PublishReason) -> Bool {
+    switch reason {
+    case .manual: true
+    case .autosave: autosaveAllowed
+    case .background:
+      notebook.account?.id == draft.accountID && notebook.pendingAccount == nil
+        && !session.isComposing && !session.writingToolsActive
+        && session.textView.markedTextRange == nil && draft.attemptedGeneration == nil
+    }
   }
 
   @discardableResult
@@ -336,15 +348,35 @@ final class NotebookSessionController {
     if saveState == .reconnectRequired { saveState = .savedLocally }
   }
 
-  func publish(reason: PublishReason = .manual) async {
+  func publishOnLeavingNote() async {
+    guard hasUnpublishedChanges else { return }
+    await publish(reason: .autosave)
+  }
+
+  func publish(
+    reason: PublishReason = .manual,
+    shouldContinue: @escaping @MainActor @Sendable () -> Bool = { true }
+  ) async {
+    guard !Task.isCancelled, shouldContinue() else { return }
+    if reason == .background, isPublishing {
+      await withCheckedContinuation { publicationWaiters.append($0) }
+    }
+    guard !Task.isCancelled, shouldContinue(), publicationAllowed(reason: reason) else { return }
+    if reason != .manual, !hasUnpublishedChanges { return }
     guard canMutate, !isPublishing, !document.isRecovery, saveState.canPublish else { return }
-    if reason != .manual, !autosaveAllowed { return }
     autosaveTask?.cancel()
     autosaveTask = nil
     isPublishing = true
-    defer { isPublishing = false }
+    defer {
+      isPublishing = false
+      let waiters = publicationWaiters
+      publicationWaiters = []
+      for waiter in waiters { waiter.resume() }
+    }
     if let persistence, !(await persistence.value) { return }
-    guard canMutate, reason == .manual || autosaveAllowed else { return }
+    guard !Task.isCancelled, shouldContinue(), canMutate, saveState.canPublish,
+      publicationAllowed(reason: reason)
+    else { return }
     let expectedGeneration = session.generation
     saveState = .savingToGitHub
     do {
@@ -354,14 +386,19 @@ final class NotebookSessionController {
         shouldPublish: { [weak self] in
           await MainActor.run {
             guard let self else { return false }
-            return self.autosaveAllowed && self.session.generation == expectedGeneration
+            return shouldContinue() && self.canMutate && !self.document.isRecovery
+              && self.publicationAllowed(reason: reason)
+              && self.session.generation == expectedGeneration
           }
         })
       draft = saved
+      document.draft = saved
+      document.chrome = notebook.chrome(gist: document.gist, draft: saved)
       saveState =
         session.generation == saved.generation
         ? NotebookModel.interfaceSaveState(saved.state) : .unsaved
       if saved.state == .savedToGitHub || saved.state == .savedLocally {
+        if reason == .background, Task.isCancelled || !shouldContinue() { return }
         do {
           let gist = try await notebook.adoptPublication(saved)
           if let gist {
@@ -389,8 +426,10 @@ final class NotebookSessionController {
         }
       }
     } catch {
-      logger.error(
-        "Publishing failed: \(String(reflecting: type(of: error)), privacy: .public)")
+      if !(error is CancellationError) {
+        logger.error(
+          "Publishing failed: \(String(reflecting: type(of: error)), privacy: .public)")
+      }
       do {
         let persisted = try await notebook.draftSnapshot(id: draft.id, accountID: draft.accountID)
         draft = persisted
@@ -399,6 +438,12 @@ final class NotebookSessionController {
           saveState = NotebookModel.interfaceSaveState(persisted.state)
           return
         case .savedLocally, .savedToGitHub:
+          if error is CancellationError {
+            saveState =
+              session.generation == persisted.generation
+              ? NotebookModel.interfaceSaveState(persisted.state) : .unsaved
+            return
+          }
           break
         }
       } catch {

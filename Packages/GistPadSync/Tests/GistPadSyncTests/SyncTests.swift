@@ -282,18 +282,37 @@ private func editedDraft(
         #expect(restored.text == "new note")
     }
 
-    @Test func autosaveOffNeverPublishesOnBackground() async throws {
+    @Test func backgroundSavePublishesEvenWithAutosaveDisabled() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let draft = try await editedDraft(store: store, account: account)
+        let calls = Mutex<[String]>([])
+        let client = GitHubClient(session: FakeURLProtocol.session { request in
+            calls.withLock { $0.append(request.httpMethod ?? "") }
+            return FakeResponse(data: try gistData(
+                content: request.httpMethod == "PATCH" ? "local" : "base"))
+        }) { "fake" }
+        let coordinator = SyncCoordinator(client: client, store: store, mutationInterval: .zero)
+        let result = try await coordinator.publish(
+            id: draft.id, accountID: account, reason: .background, autosaveEnabled: false
+        )
+        #expect(result.state == .savedToGitHub)
+        #expect(result.text == "local")
+        #expect(result.baseContent == "local")
+        #expect(calls.withLock { $0 } == ["GET", "PATCH"])
+    }
+
+    @Test func disabledAutosaveStillSkipsTimedPublication() async throws {
         let account = UUID()
         let store = try DraftStore.open(inMemory: true)
         let draft = try await editedDraft(store: store, account: account)
         let client = GitHubClient(session: FakeURLProtocol.session { _ in
-            Issue.record("Autosave off must not publish in background")
+            Issue.record("Disabled timed autosave must not make a network request.")
             return FakeResponse(status: 500)
         }) { "fake" }
         let coordinator = SyncCoordinator(client: client, store: store)
         let result = try await coordinator.publish(
-            id: draft.id, accountID: account, reason: .background, autosaveEnabled: false
-        )
+            id: draft.id, accountID: account, reason: .autosave, autosaveEnabled: false)
         #expect(result.state == .savedLocally)
         #expect(result.text == "local")
     }

@@ -52,7 +52,7 @@ public actor SyncCoordinator {
         autosaveEnabled: Bool = true, expectedGeneration: UInt64? = nil,
         shouldPublish: @escaping @Sendable () async -> Bool = { true }
     ) async throws -> DraftSnapshot {
-        if reason != .manual, !autosaveEnabled {
+        if reason == .autosave, !autosaveEnabled {
             return try await store.draft(id: id, accountID: accountID)
         }
         await acquire()
@@ -63,7 +63,7 @@ public actor SyncCoordinator {
         try await validatePublication(
             draft, reason: reason, expectedGeneration: expectedGeneration,
             shouldPublish: shouldPublish)
-        if reason == .manual, draft.autosavePaused {
+        if reason != .autosave, draft.autosavePaused {
             draft = try await store.resumeAutosave(id: id, accountID: accountID)
         }
         if draft.gistID == nil, draft.attemptedGeneration != nil {
@@ -151,16 +151,16 @@ public actor SyncCoordinator {
                 )
             }
 
-        } catch is CancellationError {
-            let latest = try await store.draft(id: id, accountID: accountID)
-            if latest.attemptedGeneration != nil {
-                try await store.setState(
-                    .failed(latest.gistID == nil ? .creationUncertain : .publicationUncertain),
-                    id: id, accountID: accountID)
-            }
-            throw CancellationError()
         } catch {
             let latest = try await store.draft(id: id, accountID: accountID)
+            if error is CancellationError || (error as? URLError)?.code == .cancelled {
+                if latest.attemptedGeneration != nil {
+                    try await store.setState(
+                        .failed(latest.gistID == nil ? .creationUncertain : .publicationUncertain),
+                        id: id, accountID: accountID)
+                }
+                throw CancellationError()
+            }
             let state: SaveState
             if latest.gistID == nil, latest.attemptedGeneration != nil {
                 state = .failed(.creationUncertain)
@@ -194,11 +194,12 @@ public actor SyncCoordinator {
     ) async throws {
         try Task.checkCancellation()
         guard reason != .manual else { return }
-        guard !draft.autosavePaused,
+        guard reason != .autosave || !draft.autosavePaused,
               expectedGeneration == nil || draft.generation == expectedGeneration,
               await shouldPublish() else { throw CancellationError() }
         let latest = try await store.draft(id: draft.id, accountID: draft.accountID)
-        guard latest.generation == draft.generation, !latest.autosavePaused,
+        guard latest.generation == draft.generation,
+              reason != .autosave || !latest.autosavePaused,
               latest.attemptedGeneration == nil else { throw CancellationError() }
         if case .conflict = latest.state { throw CancellationError() }
     }

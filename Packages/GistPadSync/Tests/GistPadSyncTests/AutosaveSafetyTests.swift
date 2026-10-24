@@ -4,8 +4,10 @@ import Testing
 @testable import GistPadSync
 
 @Suite struct AutosaveSafetyTests {
-    @Test(arguments: [false, true])
-    func cancellationAfterAnAttemptPreservesExplicitUncertainty(isNew: Bool) async throws {
+    @Test(arguments: [false, true], [PublishReason.manual, .background])
+    func cancellationAfterAnAttemptPreservesExplicitUncertainty(
+        isNew: Bool, reason: PublishReason
+    ) async throws {
         let account = UUID()
         let store = try DraftStore.open(inMemory: true)
         let draft: DraftSnapshot
@@ -24,12 +26,15 @@ import Testing
             return FakeResponse(data: try gistData(content: "base"))
         }) {
             let count = tokens.withLock { $0 += 1; return $0 }
-            if count == (isNew ? 1 : 2) { throw CancellationError() }
+            if count == (isNew ? 1 : 2) {
+                if reason == .background { throw URLError(.cancelled) }
+                throw CancellationError()
+            }
             return "fake"
         }
         let coordinator = SyncCoordinator(client: client, store: store, mutationInterval: .zero)
         await #expect(throws: CancellationError.self) {
-            try await coordinator.publish(id: draft.id, accountID: account)
+            try await coordinator.publish(id: draft.id, accountID: account, reason: reason)
         }
         let retained = try await store.draft(id: draft.id, accountID: account)
         #expect(retained.state == .failed(isNew ? .creationUncertain : .publicationUncertain))
@@ -70,7 +75,30 @@ import Testing
         #expect(try await reopened.draft(id: draft.id, accountID: account).state == .savedLocally)
     }
 
-    @Test func explicitPublicationResumesAutosaveAfterReview() async throws {
+    @Test func cancelledBackgroundReadPreservesLocalStateWithoutAnAttempt() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let draft = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "abc123", filename: "README.md",
+            description: "Note", content: "base", revision: "one")
+        _ = try await store.persist(id: draft.id, accountID: account, text: "local", generation: 1)
+        let client = GitHubClient(session: FakeURLProtocol.session { request in
+            #expect(request.httpMethod == "GET")
+            throw URLError(.cancelled)
+        }) { "fake" }
+        let coordinator = SyncCoordinator(client: client, store: store)
+        await #expect(throws: CancellationError.self) {
+            try await coordinator.publish(
+                id: draft.id, accountID: account, reason: .background, autosaveEnabled: false)
+        }
+        let retained = try await store.draft(id: draft.id, accountID: account)
+        #expect(retained.text == "local")
+        #expect(retained.state == .savedLocally)
+        #expect(retained.attemptedGeneration == nil)
+    }
+
+    @Test(arguments: [PublishReason.manual, .background])
+    func explicitOrBackgroundSaveResumesAutosaveAfterResolvedReview(reason: PublishReason) async throws {
         let account = UUID()
         let store = try DraftStore.open(inMemory: true)
         let draft = try await store.openDraft(
@@ -86,12 +114,13 @@ import Testing
                 content: request.httpMethod == "PATCH" ? "local" : "remote", revision: "two"))
         }) { "fake" }
         let coordinator = SyncCoordinator(client: client, store: store, mutationInterval: .zero)
-        let saved = try await coordinator.publish(id: draft.id, accountID: account, reason: .manual)
+        let saved = try await coordinator.publish(id: draft.id, accountID: account, reason: reason)
         #expect(saved.state == .savedToGitHub)
         #expect(!saved.autosavePaused)
     }
 
-    @Test func compositionOrLifecycleChangeDuringFreshReadBlocksThePatch() async throws {
+    @Test(arguments: [PublishReason.autosave, .background])
+    func compositionOrLifecycleChangeDuringFreshReadBlocksThePatch(reason: PublishReason) async throws {
         let account = UUID()
         let store = try DraftStore.open(inMemory: true)
         let draft = try await store.openDraft(
@@ -108,7 +137,7 @@ import Testing
         let coordinator = SyncCoordinator(client: client, store: store)
         await #expect(throws: CancellationError.self) {
             try await coordinator.publish(
-                id: draft.id, accountID: account, reason: .autosave, expectedGeneration: 1,
+                id: draft.id, accountID: account, reason: reason, expectedGeneration: 1,
                 shouldPublish: { allowed.withLock { $0 } })
         }
         #expect(methods.withLock { $0 } == ["GET"])
@@ -118,7 +147,8 @@ import Testing
         #expect(kept.text == "local")
     }
 
-    @Test func newerGenerationDuringFreshReadIsNotPublishedByAnOlderTimer() async throws {
+    @Test(arguments: [PublishReason.autosave, .background])
+    func newerGenerationDuringFreshReadIsNotPublishedByAnOlderRequest(reason: PublishReason) async throws {
         let account = UUID()
         let store = try DraftStore.open(inMemory: true)
         let draft = try await store.openDraft(
@@ -133,7 +163,7 @@ import Testing
         let coordinator = SyncCoordinator(client: client, store: store)
         await #expect(throws: CancellationError.self) {
             try await coordinator.publish(
-                id: draft.id, accountID: account, reason: .autosave, expectedGeneration: 1)
+                id: draft.id, accountID: account, reason: reason, expectedGeneration: 1)
         }
         #expect(try await store.draft(id: draft.id, accountID: account).text == "newer")
     }

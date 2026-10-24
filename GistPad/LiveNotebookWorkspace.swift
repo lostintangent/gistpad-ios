@@ -83,8 +83,18 @@ struct LiveNotebookWorkspace: View {
       else { return }
       selectRow(selected)
     }
+    .onChange(of: notebook.library.selectedNoteID) { previous, selected in
+      guard previous != selected, let previous,
+        let outgoing = sessions.values.first(where: { $0.document.rowID == previous })
+      else { return }
+      Task { await outgoing.publishOnLeavingNote() }
+    }
+    .onChange(of: activeID) { previous, current in
+      guard previous != current, let previous, let outgoing = sessions[previous] else { return }
+      Task { await outgoing.publishOnLeavingNote() }
+    }
     .onChange(of: scenePhase) { _, phase in
-      if phase == .background { finishLocalPersistence() }
+      if phase == .background { finishBackgroundSaves() }
       if phase == .active {
         Task {
           await notebook.updateCalendar()
@@ -758,13 +768,14 @@ struct LiveNotebookWorkspace: View {
     }
   }
 
-  private func finishLocalPersistence() {
-    let lease = LocalPersistenceLease()
+  private func finishBackgroundSaves() {
+    let lease = NotebookBackgroundLease()
     let documents = Array(sessions.values)
-    Task {
-      for document in documents { _ = await document.waitForLocalSave() }
+    let saving = Task {
+      await NotebookLifecycle.saveOnBackground(documents, shouldContinue: { lease.isActive })
       lease.end()
     }
+    lease.onExpiration = { saving.cancel() }
   }
 
   private func finishAccountPersistence(_ accountID: UUID) async throws {
@@ -788,23 +799,50 @@ private final class NotebookWorkspaceActivity {
 }
 
 @MainActor
-private final class LocalPersistenceLease {
+enum NotebookLifecycle {
+  static func saveOnBackground(
+    _ documents: [NotebookSessionController],
+    shouldContinue: @escaping @MainActor @Sendable () -> Bool
+  ) async {
+    for document in documents { document.updateAutosave(isForeground: false) }
+    for document in documents { _ = await document.waitForLocalSave() }
+    for document in documents {
+      guard !Task.isCancelled, shouldContinue() else { return }
+      await document.publish(reason: .background, shouldContinue: shouldContinue)
+    }
+  }
+}
+
+@MainActor
+final class NotebookBackgroundLease {
   private var identifier = UIBackgroundTaskIdentifier.invalid
+  private var expired = false
+  var onExpiration: (() -> Void)?
+
+  var isActive: Bool { !expired && identifier != .invalid }
 
   init() {
     identifier = UIApplication.shared.beginBackgroundTask(
-      withName: "Finish local draft persistence"
+      withName: "Save notebook changes"
     ) {
       [weak self] in
       Task { @MainActor in
         Logger(subsystem: "dev.gistpad.GistPad", category: "Document")
-          .error("Background time expired before local persistence finished.")
-        self?.end()
+          .info("Background save time expired. Local drafts are retained.")
+        self?.expire()
       }
     }
   }
 
+  func expire() {
+    guard !expired else { return }
+    expired = true
+    onExpiration?()
+    end()
+  }
+
   func end() {
+    onExpiration = nil
     guard identifier != .invalid else { return }
     UIApplication.shared.endBackgroundTask(identifier)
     identifier = .invalid
