@@ -5,8 +5,19 @@ func notebookAccessibilityElement(_ identifier: String, in root: NSObject) -> NS
   var visited = Set<ObjectIdentifier>()
   func find(in object: NSObject) -> NSObject? {
     guard visited.insert(ObjectIdentifier(object)).inserted else { return nil }
-    if (object as? any UIAccessibilityIdentification)?.accessibilityIdentifier == identifier {
+    let candidate: String?
+    if let view = object as? UIView {
+      candidate = view.accessibilityIdentifier
+    } else if let element = object as? UIAccessibilityElement {
+      candidate = element.accessibilityIdentifier
+    } else {
+      candidate = (object as? any UIAccessibilityIdentification)?.accessibilityIdentifier
+    }
+    if candidate == identifier {
       return object
+    }
+    for child in object.accessibilityElements ?? [] {
+      if let child = child as? NSObject, let found = find(in: child) { return found }
     }
     let count = object.accessibilityElementCount()
     if count != NSNotFound, count > 0 {

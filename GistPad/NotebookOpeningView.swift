@@ -5,14 +5,23 @@ struct NotebookOpeningView: View {
   let title: String
   var document: NotebookDocument?
   @State private var renderError: String?
+  @State private var reload = 0
 
   var body: some View {
     Group {
       if let document {
         if let renderError {
-          ContentUnavailableView(
-            "Preview unavailable", systemImage: "exclamationmark.triangle",
-            description: Text(renderError))
+          ContentUnavailableView {
+            Label("Preview unavailable", systemImage: "exclamationmark.triangle")
+          } description: {
+            Text(renderError)
+          } actions: {
+            Button("Retry") {
+              self.renderError = nil
+              reload += 1
+            }
+            .frame(minHeight: 44)
+          }
         } else {
           MarkdownPreviewView(
             document: document.text, documentID: document.id,
@@ -20,6 +29,7 @@ struct NotebookOpeningView: View {
           ) { event in
             if case .failure(let failure) = event { renderError = failure.localizedDescription }
           }
+          .id(reload)
           .allowsHitTesting(false)
           .accessibilityIdentifier("opening-cached-note")
         }
@@ -43,5 +53,25 @@ struct NotebookOpeningView: View {
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
     .background(Color(uiColor: .systemBackground))
+  }
+}
+
+struct NotebookFailedOpeningView: View {
+  let failure: NotebookFailedOpen
+  let retry: () -> Void
+
+  var body: some View {
+    ContentUnavailableView {
+      Label("Couldn't Open Note", systemImage: "exclamationmark.circle")
+    } description: {
+      Text(failure.message)
+    } actions: {
+      Button("Retry", action: retry)
+        .frame(minHeight: 44)
+        .buttonStyle(.borderedProminent)
+        .accessibilityIdentifier("note-open-retry")
+    }
+    .navigationTitle(failure.title)
+    .navigationBarTitleDisplayMode(.inline)
   }
 }

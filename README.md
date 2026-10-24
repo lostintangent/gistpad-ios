@@ -42,6 +42,8 @@ Open `GistPad.xcodeproj` to run interactively. Choose the shared **GistPad** sch
 
 Debug capture launches accept `--capture-screen library|note|editor|focus`. Library and note use a short interface-review fixture and the actual screen package, with populated/empty/error/offline/readonly states. Editor uses the long multilingual source fixture. Focus uses the shared all-syntax renderer fixture. `--long-fixture` also selects the long document outside interface captures. All fixture content is synthetic.
 
+`--capture-screen note-chrome|note-loading|note-failed|settings|settings-signed-out|tags|account` exercises the live native chrome and sheets without an account. Note chrome also accepts `--capture-multi-file`, `--capture-offline` and `--capture-cloud-failure`. Native host checks attach Settings, Tags and account frames for design review. Requested Dynamic Type environments in mounted hosts do not replace actual simulator or device text-size evidence.
+
 The live workspace keeps one native navigation container and a device-local Reading/Edit/Split preference. Split requires at least 640 points of actual detail width. Folding preserves an active edit and the preferred Split arrangement, backed by the same retained source and preview. Real reserved-region and posture acceptance remain device gates.
 
 The native source editor uses the web GitHub theme's Markdown token colors with adaptive Increased Contrast variants. Headings, emphasis, quotations, HTML and ordered markers keep their visible delimiters in the element's color. Code remains monochrome and monospaced. Appearance-only changes resolve dynamic colors without reparsing or changing source, selection or Undo.
@@ -70,6 +72,10 @@ Selecting a note replaces the detail target before asynchronous opening begins. 
 Today's availability, first two source lines and task progress come from account-local metadata, cached content and durable drafts. An empty existing note is not a missing note. An unpublished Today reopens its original local draft without another creation or remote read.
 
 Search uses cached content and local drafts, supports quoted phrases and `tag:ID`, `tag:"Tag name"` or `#TagName`, and reports incomplete/stale coverage. Daily rows route to their exact files and use real task progress when content is available. Intentionally deleted, clean daily files do not return as historical rows. Library refresh never replaces active input.
+
+The note title menu is exclusively for switching and managing files, and appears only on multi-file notes. Rename Note lives in the sectioned More menu, separate from Rename Current File. Healthy save states remain silent. An uncached first open uses redacted native lines, and a failed open retains the requested title with a direct Retry rather than displaying the previous note.
+
+Settings is a native Form reached from the Library account button. Autosave While Writing and Check Spelling use the signed-in profile, and Appearance uses its saved accent color. Failed saves remain explicit. Settings captures the originating account and resets unsaved form/picker state on account changes. Tags use one searchable swatch/name/check list with a single all-files scope footer. Staged edits, failed-save retry and discard confirmation remain intact.
 
 Rename, file creation, stars, pins, archive and confirmed deletion use serialized actions. Tags, membership and pins use the signed-in Supabase profile, while GitHub owns content and stars. Source permissions do not make personal profile tags read-only. Deletion retains unsynced drafts and recovery history. Saved-file links use the GistPad share route and disclose that a secret link exposes the saved GitHub version. Sharing current changes requires explicit Save & Share, or exporting draft text.
 

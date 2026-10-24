@@ -267,6 +267,15 @@ struct NotebookOpeningDocument: Equatable {
   let title: String
 }
 
+struct NotebookFailedOpen: Equatable {
+  let rowID: String
+  let title: String
+  let gistID: String?
+  let filename: String?
+  let draftID: UUID?
+  let message: String
+}
+
 @MainActor @Observable
 final class NotebookModel {
   let library = LibraryModel()
@@ -274,8 +283,10 @@ final class NotebookModel {
   private(set) var pendingAccount: NotebookAccount?
   private(set) var loadedDocument: NotebookDocument?
   private(set) var isSigningIn = false
+  private(set) var isStarting = false
   private(set) var isOpeningDocument = false
   private(set) var openingDocument: NotebookOpeningDocument?
+  private(set) var failedOpen: NotebookFailedOpen?
   private(set) var localDrafts: [DraftSnapshot] = []
   private(set) var cachedLibrary: CachedLibrarySnapshot?
   private(set) var isCreating = false
@@ -309,6 +320,7 @@ final class NotebookModel {
   }
 
   var presentedDocument: NotebookDocument? {
+    if failedOpen != nil { return nil }
     if let openingDocument { return cachedDocument(rowID: openingDocument.rowID) }
     guard let selected = library.selectedNoteID else { return loadedDocument }
     if loadedDocument?.rowID == selected { return loadedDocument }
@@ -331,6 +343,7 @@ final class NotebookModel {
     }
     documentRequest = UUID()
     documentError = nil
+    failedOpen = nil
     if let document = cachedDocument(rowID: id) {
       openingDocument = nil
       isOpeningDocument = false
@@ -424,6 +437,7 @@ final class NotebookModel {
   }
 
   private func present(_ document: NotebookDocument) throws {
+    failedOpen = nil
     loadedDocument = document
     library.selectedNoteID = document.rowID
     if document.isRecovery {
@@ -452,6 +466,9 @@ final class NotebookModel {
   }
 
   func start() async {
+    guard !isStarting else { return }
+    isStarting = true
+    defer { isStarting = false }
     let request = UUID()
     libraryRequest = request
     library.loadState = .loading
@@ -520,6 +537,7 @@ final class NotebookModel {
     self.pendingAccount = nil
     loadedDocument = nil
     openingDocument = nil
+    failedOpen = nil
     localDrafts = []
     cachedLibrary = nil
     documentError = nil
@@ -624,6 +642,7 @@ final class NotebookModel {
     isOpeningDocument = true
     openingDocument = opening(gistID: gistID, rowID: rowID)
     documentError = nil
+    failedOpen = nil
     defer {
       if request == documentRequest {
         isOpeningDocument = false
@@ -636,7 +655,9 @@ final class NotebookModel {
         return
       }
       let gist = try await provider.gist(id: gistID, accountID: account.id)
-      guard request == documentRequest, self.account?.id == account.id, pendingAccount == nil else {
+      guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id,
+        pendingAccount == nil
+      else {
         return
       }
       let filenames = gist.markdownFilenames
@@ -653,7 +674,9 @@ final class NotebookModel {
       guard let selectedFilename else { throw GitHubClientError.missingFile }
       let text = try await provider.content(
         gist: gist, filename: selectedFilename, accountID: account.id)
-      guard request == documentRequest, self.account?.id == account.id, pendingAccount == nil else {
+      guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id,
+        pendingAccount == nil
+      else {
         return
       }
       let owned =
@@ -678,7 +701,7 @@ final class NotebookModel {
     } catch is CancellationError {
       if request == documentRequest { library.selectedNoteID = loadedDocument?.rowID }
     } catch {
-      guard request == documentRequest else { return }
+      guard !Task.isCancelled, request == documentRequest else { return }
       report(error, operation: "open")
       if var local = cachedDocument(gistID: gistID, filename: filename, rowID: rowID) {
         let missingGist: Bool
@@ -700,8 +723,11 @@ final class NotebookModel {
           : Self.message(for: error)
         return
       }
-      documentError = Self.message(for: error)
-      library.selectedNoteID = loadedDocument?.rowID
+      let target = opening(gistID: gistID, rowID: rowID)
+      failedOpen = .init(
+        rowID: target.rowID, title: target.title, gistID: gistID, filename: filename, draftID: nil,
+        message: Self.message(for: error))
+      library.selectedNoteID = target.rowID
     }
   }
 
@@ -710,6 +736,7 @@ final class NotebookModel {
     documentRequest = UUID()
     let request = documentRequest
     isOpeningDocument = true
+    failedOpen = nil
     openingDocument = .init(
       rowID: rowID ?? id.uuidString,
       title: localDrafts.first(where: { $0.id == id })?.description ?? String(localized: "Note"))
@@ -723,7 +750,9 @@ final class NotebookModel {
       if !localDrafts.contains(where: { $0.id == id }) {
         try await reloadLocalState(accountID: account.id)
       }
-      guard request == documentRequest, self.account?.id == account.id, pendingAccount == nil else {
+      guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id,
+        pendingAccount == nil
+      else {
         return
       }
       guard let draft = localDrafts.first(where: { $0.id == id }) else {
@@ -738,9 +767,13 @@ final class NotebookModel {
       }
       if let document = loadedDocument { try present(document) }
     } catch {
-      guard request == documentRequest, self.account?.id == account.id else { return }
+      guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id else { return }
       report(error, operation: "open-local")
-      documentError = Self.message(for: error)
+      failedOpen = .init(
+        rowID: rowID ?? id.uuidString, title: openingDocument?.title ?? String(localized: "Note"),
+        gistID: nil, filename: nil, draftID: id,
+        message: Self.message(for: error))
+      library.selectedNoteID = failedOpen?.rowID
     }
   }
 
@@ -762,6 +795,16 @@ final class NotebookModel {
       await openLocalDraft(id: draftID)
     } else {
       await open(gistID: id)
+    }
+  }
+
+  func retryFailedOpen() async {
+    guard let failedOpen else { return }
+    if let gistID = failedOpen.gistID {
+      await open(
+        gistID: gistID, filename: failedOpen.filename, rowID: failedOpen.rowID)
+    } else if let draftID = failedOpen.draftID {
+      await openLocalDraft(id: draftID, rowID: failedOpen.rowID)
     }
   }
 
@@ -859,6 +902,7 @@ final class NotebookModel {
   func createNote() async {
     guard let account, pendingAccount == nil, !isCreating else { return }
     isCreating = true
+    failedOpen = nil
     documentRequest = UUID()
     let request = documentRequest
     openingDocument = .init(rowID: "new/\(request)", title: String(localized: "Untitled"))
@@ -870,13 +914,14 @@ final class NotebookModel {
     do {
       let draft = try await provider.createDraft(accountID: account.id)
       if self.account?.id == account.id { recordLocalDraft(draft) }
-      guard request == documentRequest, self.account?.id == account.id else { return }
+      guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id else { return }
       var document = NotebookDocument(draft: draft)
       document.opensForEditing = true
       openingDocument = nil
       isOpeningDocument = false
       try present(document)
     } catch {
+      guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id else { return }
       report(error, operation: "create")
       documentError = Self.message(for: error)
     }
@@ -885,6 +930,7 @@ final class NotebookModel {
   func startToday(target: DailyNoteTarget = DailyNoteTarget()) async {
     guard let account, pendingAccount == nil, !isCreating else { return }
     isCreating = true
+    failedOpen = nil
     documentRequest = UUID()
     let request = documentRequest
     openingDocument = .init(rowID: "today/\(request)", title: String(localized: "Today"))
@@ -896,13 +942,15 @@ final class NotebookModel {
     do {
       let today = try await provider.today(accountID: account.id, target: target)
       if self.account?.id == account.id { recordLocalDraft(today.draft) }
-      guard request == documentRequest, self.account?.id == account.id else { return }
+      guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id else { return }
       var document = NotebookDocument(draft: today.draft, gist: today.gist)
       document.opensForEditing = true
       openingDocument = nil
       isOpeningDocument = false
+      failedOpen = nil
       try present(document)
     } catch {
+      guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id else { return }
       report(error, operation: "today")
       documentError = Self.message(for: error)
       do {
@@ -925,6 +973,7 @@ final class NotebookModel {
     documentRequest = UUID()
     openingDocument = nil
     isOpeningDocument = false
+    failedOpen = nil
     documentError = nil
     let daily = cachedLibrary?.owned.first(where: \.isDailyNote)
     let filename = GistConventions.todayFilename()
@@ -995,10 +1044,32 @@ final class NotebookModel {
         id: draft.id.uuidString,
         title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
         updatedAt: local.library?.cachedAt ?? .now,
-        isSecret: true, isDailyNote: draft.description == GistConventions.dailyNotesDescription)
+        isSecret: true, isDailyNote: draft.description == GistConventions.dailyNotesDescription,
+        excerpt: Self.libraryExcerpt(draft.text))
+    }
+    for index in library.snapshot.notes.indices {
+      let id = library.snapshot.notes[index].id
+      guard let gist = local.library?.gists.first(where: { $0.id == id }) else { continue }
+      let filename = gist.isDailyNote ? GistConventions.todayFilename() : gist.defaultMarkdownFilename
+      guard let filename else { continue }
+      let draft = local.drafts.first { $0.gistID == id && $0.filename == filename }
+      let cached = local.library?.content(gist: gist, filename: filename)
+      let text: String?
+      if let draft, draft.state != .savedToGitHub || draft.attemptedGeneration != nil {
+        text = draft.text
+      } else {
+        text = cached ?? draft?.text
+      }
+      library.snapshot.notes[index].excerpt = text.flatMap(Self.libraryExcerpt)
     }
     updateToday()
     await search()
+  }
+
+  private static func libraryExcerpt(_ text: String) -> String? {
+    let excerpt = String(text.prefix(320)).split(whereSeparator: \.isWhitespace)
+      .joined(separator: " ")
+    return excerpt.isEmpty ? nil : String(excerpt.prefix(160))
   }
 
   private func updateToday() {

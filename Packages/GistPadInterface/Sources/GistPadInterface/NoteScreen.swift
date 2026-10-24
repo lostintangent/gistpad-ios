@@ -69,14 +69,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             document.files.count > 1
                 ? document.files.first(where: { $0.id == document.selectedFileID })?.filename ?? "" : ""
         )
-        .toolbarTitleMenu {
-            if showsFiles {
-                fileChoices
-            }
-            if let rename = actions.rename, document.access.canEdit {
-                Button(String(localized: "Rename", bundle: .module), systemImage: "pencil", action: rename)
-            }
-        }
+        .modifier(NoteTitleMenu(isEnabled: document.files.count > 1) { fileChoices })
         .toolbar { noteToolbar }
         .safeAreaBar(edge: .bottom, spacing: 0) {
             if issue != nil {
@@ -186,8 +179,16 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                         }
                         .controlGroupStyle(.compactMenu)
                     }
-                    if showsFiles || actions.focus != nil || actions.find != nil || actions.tags != nil || !document.tags.isEmpty {
+                    if showsFiles || actions.rename != nil || actions.focus != nil || actions.find != nil
+                        || actions.tags != nil || !document.tags.isEmpty || actions.intelligence != nil {
                         Section {
+                            if let rename = actions.rename, document.access.canEdit {
+                                Button(
+                                    String(localized: "Rename Note…", bundle: .module),
+                                    systemImage: "pencil", action: rename
+                                )
+                                .accessibilityIdentifier("note-rename")
+                            }
                             if let tags = actions.tags {
                                 Button(String(localized: "Tags", bundle: .module), systemImage: "tag", action: tags)
                             } else if !document.tags.isEmpty {
@@ -197,17 +198,24 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                                 Menu {
                                     fileChoices
                                 } label: {
-                                    Label(String(localized: "Files in this gist", bundle: .module), systemImage: "doc.on.doc")
+                                    Label(String(localized: "Files", bundle: .module), systemImage: "doc.on.doc")
                                 }
+                            }
+                            if let intelligence = actions.intelligence {
+                                Button(
+                                    String(localized: "Intelligence…", bundle: .module),
+                                    systemImage: "sparkles", action: intelligence
+                                )
+                                .accessibilityIdentifier("note-intelligence")
+                            }
+                            if let find = actions.find, document.access.canEdit {
+                                Button(String(localized: "Find and Replace", bundle: .module), systemImage: "text.magnifyingglass", action: find)
                             }
                             if let focus = actions.focus, document.access.canEdit {
                                 Button(
                                     isSidebarHidden ? String(localized: "Show Library", bundle: .module) : String(localized: "Hide Library", bundle: .module),
                                     systemImage: "sidebar.left", action: focus
                                 )
-                            }
-                            if let find = actions.find, document.access.canEdit {
-                                Button(String(localized: "Find and Replace", bundle: .module), systemImage: "text.magnifyingglass", action: find)
                             }
                         }
                     }
@@ -226,7 +234,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                     }
                     if let delete = actions.delete, document.access.canEdit {
                         Section {
-                            Button(String(localized: "Delete gist", bundle: .module), systemImage: "trash", role: .destructive, action: delete)
+                            Button(String(localized: "Delete Note…", bundle: .module), systemImage: "trash", role: .destructive, action: delete)
                         }
                     }
                 } label: {
@@ -243,6 +251,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
 
     private var hasMoreActions: Bool {
         showsFiles || actions.focus != nil || actions.find != nil || actions.tags != nil || !document.tags.isEmpty
+            || (actions.rename != nil && document.access.canEdit) || actions.intelligence != nil
             || actions.togglePin != nil || actions.toggleStar != nil || actions.share != nil || actions.copyLink != nil
             || actions.openInGitHub != nil || actions.toggleArchive != nil || (actions.delete != nil && document.access.canEdit)
     }
@@ -253,12 +262,14 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(alignment: .leading, spacing: 8) {
                         Label(issue.title, systemImage: issue.symbol)
+                            .accessibilityIdentifier("note-save-issue")
                         HStack(spacing: 16) { recoveryButton; detailsButton(issue.details) }
                     }
                 } else {
                     HStack(spacing: 12) {
                         Label(issue.title, systemImage: issue.symbol)
                             .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("note-save-issue")
                         Spacer(minLength: 0)
                         recoveryButton
                         detailsButton(issue.details)
@@ -268,6 +279,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         }
         .font(.footnote)
         .foregroundStyle(InterfaceTheme.text)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("note-save-state")
         .contentTransition(.opacity)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: saveState)
@@ -310,6 +322,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         case .cloudFailure, .localFailure:
             if let retry = actions.retry {
                 Button(String(localized: "Retry", bundle: .module), action: retry).frame(minHeight: 44)
+                    .accessibilityIdentifier("note-save-retry")
             }
         case .remoteChange:
             if let review = actions.reviewChanges {
@@ -350,7 +363,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     @ViewBuilder
     private var fileChoices: some View {
         let menu = NoteFileMenu(files: document.files)
-        Section(String(localized: "Files in this gist", bundle: .module)) {
+        Section(String(localized: "Files", bundle: .module)) {
             ForEach(menu.years) { year in
                 Menu {
                     ForEach(year.months) { month in
@@ -367,12 +380,18 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             ForEach(menu.otherFiles) { fileChoice($0) }
         }
         if document.access.canEdit && (actions.renameFile != nil || actions.addFile != nil) {
-            Divider()
-            if let rename = actions.renameFile {
-                Button(String(localized: "Rename File", bundle: .module), systemImage: "pencil", action: rename)
-            }
-            if let add = actions.addFile {
-                Button(String(localized: "Add File", bundle: .module), systemImage: "doc.badge.plus", action: add)
+            Section {
+                if let rename = actions.renameFile {
+                    Button(
+                        String(localized: "Rename Current File…", bundle: .module),
+                        systemImage: "pencil", action: rename
+                    )
+                    .accessibilityIdentifier("note-rename-file")
+                }
+                if let add = actions.addFile {
+                    Button(String(localized: "Add File…", bundle: .module), systemImage: "doc.badge.plus", action: add)
+                        .accessibilityIdentifier("note-add-file")
+                }
             }
         }
     }
@@ -411,5 +430,19 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         return format
     }
 
+}
+
+private struct NoteTitleMenu<Items: View>: ViewModifier {
+    let isEnabled: Bool
+    @ViewBuilder var items: () -> Items
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.toolbarTitleMenu(content: items)
+        } else {
+            content
+        }
+    }
 }
 #endif

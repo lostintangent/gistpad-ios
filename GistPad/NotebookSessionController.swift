@@ -59,9 +59,11 @@ final class NotebookSessionController {
     }
     if draft.baseContent == nil { mode = .source }
     session.textView.isEditable = self.document.chrome.access.canEdit
+    applyWritingPreferences()
     session.onSourceChange = { [weak self] text, generation in
       self?.persist(text: text, generation: generation)
     }
+    NotebookPlatformBootstrap.register(self, notebook: notebook)
   }
 
   var canMutate: Bool {
@@ -148,6 +150,12 @@ final class NotebookSessionController {
     if let id = current.gistID, notebook.deletedGistIDs.contains(id) { markRecovery() }
     session.textView.isEditable =
       document.chrome.access.canEdit && !isPerformingDestructiveAction && !isApplyingDurableEdit
+    applyWritingPreferences()
+  }
+
+  private func applyWritingPreferences() {
+    let enabled = notebook.account?.preferences.metadata["isSpellcheckEnabled"]?.boolValue ?? true
+    session.textView.spellCheckingType = enabled ? .yes : .no
   }
 
   func markRecovery() {

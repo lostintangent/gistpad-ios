@@ -1,5 +1,6 @@
 import GistPadEditor
 import GistPadInterface
+import GistPadPlatform
 import GistPadSync
 import OSLog
 import Observation
@@ -7,6 +8,7 @@ import SwiftUI
 
 struct LiveNotebookWorkspace: View {
   @Bindable var notebook: NotebookModel
+  private let routes: NotebookRouteInbox
   @State private var sessions: [String: NotebookSessionController] = [:]
   @State private var photoControllers: [String: NotebookPhotoController] = [:]
   @State private var activity = NotebookWorkspaceActivity()
@@ -24,12 +26,19 @@ struct LiveNotebookWorkspace: View {
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
   @State private var layout = NotebookLayoutPreferences()
   @State private var archiveUndo: NotebookArchiveUndo?
+  @State private var showingSettings = false
+  @State private var showingAddToToday = false
+  @State private var sharedPreviewGistID: String?
   @Environment(\.openURL) private var openURL
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  init(notebook: NotebookModel, layout: NotebookLayoutPreferences = NotebookLayoutPreferences()) {
+  init(
+    notebook: NotebookModel, layout: NotebookLayoutPreferences = NotebookLayoutPreferences(),
+    routes: NotebookRouteInbox = .shared
+  ) {
     self.notebook = notebook
+    self.routes = routes
     _layout = State(initialValue: layout)
   }
 
@@ -63,6 +72,7 @@ struct LiveNotebookWorkspace: View {
           "This deletes every file in the gist. Unsynced local drafts and recovery copies are kept on this iPhone."
         )
       }
+      .personalAccent(savedHex: notebook.account?.preferences.accentColor)
   }
 
   private var navigation: some View {
@@ -73,11 +83,16 @@ struct LiveNotebookWorkspace: View {
     } detail: {
       NavigationStack {
         GeometryReader { geometry in
-          if let document = notebook.presentedDocument {
+          if let failure = notebook.failedOpen {
+            NotebookFailedOpeningView(failure: failure) {
+              Task { await notebook.retryFailedOpen() }
+            }
+          } else if let document = notebook.presentedDocument {
             if let active, active.document.refersToSameFile(as: document) {
               note(active, availableWidth: geometry.size.width)
             } else {
               NotebookOpeningView(title: document.chrome.title, document: document)
+                .id(document.id)
             }
           } else if let title = notebook.openingTitle {
             NotebookOpeningView(title: title)
@@ -92,13 +107,14 @@ struct LiveNotebookWorkspace: View {
     .tint(InterfaceTheme.accent)
   }
 
-  private var workspaceLifecycle: some View {
+  private var workspaceNavigationLifecycle: some View {
     navigation
     .task { await notebook.start() }
     .task(id: notebook.loadedDocument?.id) {
       if notebook.loadedDocument == nil { activeID = nil } else { await activateLoadedDocument() }
     }
     .task(id: searchInput) { await notebook.search() }
+    .task(id: routeReadiness) { await receivePendingRoute() }
     .onChange(of: autosaveInput, initial: true) {
       for controller in sessions.values {
         controller.updateAutosave(isForeground: scenePhase == .active)
@@ -106,7 +122,7 @@ struct LiveNotebookWorkspace: View {
     }
     .onChange(of: notebook.library.selectedNoteID) { _, selected in
       guard let selected, selected != notebook.loadedDocument?.rowID,
-        selected != notebook.openingDocument?.rowID
+        selected != notebook.openingDocument?.rowID, selected != notebook.failedOpen?.rowID
       else { return }
       selectRow(selected)
     }
@@ -120,6 +136,14 @@ struct LiveNotebookWorkspace: View {
       guard previous != current, let previous, let outgoing = sessions[previous] else { return }
       Task { await outgoing.publishOnLeavingNote() }
     }
+    .onChange(of: compactColumn) { previous, current in
+      guard previous != current, current == .sidebar, let outgoing = active else { return }
+      Task { await outgoing.publishOnLeavingNote() }
+    }
+  }
+
+  private var workspaceLifecycle: some View {
+    workspaceNavigationLifecycle
     .onChange(of: scenePhase) { _, phase in
       if phase == .background { finishBackgroundSaves() }
       if phase == .active {
@@ -130,7 +154,17 @@ struct LiveNotebookWorkspace: View {
       }
     }
     .onChange(of: notebook.cachedLibrary?.cachedAt) {
+      NotebookPlatformBootstrap.scheduleRefresh()
       Task { await active?.inspectRemoteChanges() }
+    }
+    .onChange(of: notebook.account, initial: true) {
+      NotebookPlatformBootstrap.scheduleRefresh()
+    }
+    .onChange(of: notebook.pendingAccount?.id) {
+      NotebookPlatformBootstrap.scheduleRefresh()
+    }
+    .onChange(of: notebook.localDrafts) {
+      NotebookPlatformBootstrap.scheduleRefresh()
     }
     .onChange(of: notebook.account?.id) { _, accountID in
       archiveUndo = nil
@@ -204,6 +238,39 @@ struct LiveNotebookWorkspace: View {
     .sheet(item: $reviewTarget) { target in
       NotebookConflictReview(controller: target.controller, review: target.review)
     }
+    .sheet(isPresented: $showingSettings) { settingsSheet }
+    .sheet(isPresented: $showingAddToToday) { AddToTodaySheet() }
+  }
+
+  private var settingsSheet: some View {
+    let account = notebook.account
+    return NotebookSettingsSheet(
+      account: account,
+      savePreference: { key, value in
+        guard let account else { throw AccountError.signedOut }
+        _ = try await execute(.preference(.setBoolean(key, value)), accountID: account.id)
+      },
+      connect: {
+        showingSettings = false
+        Task {
+          await notebook.signIn()
+          if notebook.account?.id == active?.draft.accountID,
+            notebook.pendingAccount == nil, notebook.library.loadState == .ready
+          {
+            active?.didReconnect()
+          }
+        }
+      }
+    ) {
+      PersonalAccentColorRow(
+        savedHex: account?.preferences.accentColor,
+        hasInvalidStoredValue: account?.preferences.hasMalformedAccentColor ?? false
+      ) { hex in
+        guard let account else { throw AccountError.signedOut }
+        _ = try await execute(.preference(.setAccentColor(hex)), accountID: account.id)
+      }
+    }
+    .id(account?.id)
   }
 
   private var accountSwitchPresented: Binding<Bool> {
@@ -242,9 +309,11 @@ struct LiveNotebookWorkspace: View {
       create: { createNote() },
       today: {
         guard canSwitchDocument else { return }
+        sharedPreviewGistID = nil
         Task { await notebook.showToday() }
       })
     actions.select = { selectRow($0) }
+    actions.account = { showingSettings = true }
     actions.reconnect = {
       Task {
         await notebook.signIn()
@@ -311,12 +380,16 @@ struct LiveNotebookWorkspace: View {
   ) -> some View {
     let mode = Binding(
       get: {
-        layout.presentedMode(
+        if let sharedPreviewGistID, sharedPreviewGistID == controller.draft.gistID {
+          return NoteMode.reading
+        }
+        return layout.presentedMode(
           availableWidth: availableWidth, sessionMode: controller.mode,
           isEditing: controller.session.isEditing,
           canEdit: controller.document.chrome.access.canEdit)
       },
       set: {
+        sharedPreviewGistID = nil
         layout.select($0)
         if $0 != .split { controller.mode = $0 }
       })
@@ -374,6 +447,7 @@ struct LiveNotebookWorkspace: View {
           actionMessage = String(localized: "No note with that title is in your library.")
         }
       })
+      .id(controller.session.viewIdentity)
   }
 
   private struct SearchInput: Equatable {
@@ -472,6 +546,7 @@ struct LiveNotebookWorkspace: View {
       }
     }
     actions.find = {
+      sharedPreviewGistID = nil
       controller.mode = .source
       controller.session.presentFind(replacing: true)
     }
@@ -494,6 +569,7 @@ struct LiveNotebookWorkspace: View {
         localized: "Finish composition or Writing Tools before switching notes.")
       return
     }
+    sharedPreviewGistID = nil
     let request = UUID()
     openRequest = request
     Task {
@@ -507,6 +583,7 @@ struct LiveNotebookWorkspace: View {
       notebook.library.selectedNoteID = active?.document.rowID
       return
     }
+    sharedPreviewGistID = nil
     let request = UUID()
     openRequest = request
     let isPrepared = notebook.beginOpeningRow(id: id)
@@ -742,13 +819,81 @@ struct LiveNotebookWorkspace: View {
 
   private func createNote() {
     guard canSwitchDocument else { return }
+    sharedPreviewGistID = nil
     Task { await notebook.createNote() }
   }
 
   private func startToday() {
     guard canSwitchDocument else { return }
+    sharedPreviewGistID = nil
     let target = DailyNoteTarget()
     Task { await notebook.startToday(target: target) }
+  }
+
+  private struct RouteReadiness: Hashable {
+    let requestID: UUID?
+    let accountID: UUID?
+    let isReady: Bool
+    let isEditing: Bool
+  }
+
+  private var routeReadiness: RouteReadiness {
+    RouteReadiness(
+      requestID: routes.pending?.id,
+      accountID: notebook.account?.id,
+      isReady: !notebook.isStarting && !notebook.isSigningIn
+        && notebook.library.loadState != .loading && notebook.pendingAccount == nil
+        && !showingSettings && !showingShare && !showingAddToToday
+        && sharingTarget == nil && tagTarget == nil && nameTarget == nil
+        && deletionTarget == nil && reviewTarget == nil
+        && actionMessage == nil && notebook.documentError == nil,
+      isEditing: active?.session.isComposing == true || active?.session.writingToolsActive == true)
+  }
+
+  private func receivePendingRoute() async {
+    guard routeReadiness.isReady, !routeReadiness.isEditing,
+      let request = routes.pending
+    else { return }
+    if case .library = request.route {
+      compactColumn = .sidebar
+      routes.acknowledge(request.id)
+      return
+    }
+    guard let account = notebook.account else { return }
+    sharedPreviewGistID = nil
+    switch request.route {
+    case .library:
+      break
+    case .today:
+      await notebook.startToday()
+    case .newNote:
+      await notebook.createNote()
+    case .addToToday:
+      showingAddToToday = true
+    case .note(let gistID, let filename, let shared):
+      if shared { sharedPreviewGistID = gistID }
+      await notebook.open(gistID: gistID, filename: filename)
+      guard !Task.isCancelled, routes.pending?.id == request.id else { return }
+      await activateLoadedDocument()
+      if shared {
+        active?.mode = .reading
+        active?.session.textView.resignFirstResponder()
+      }
+    case .draft(let accountID, let draftID):
+      guard accountID == account.id else {
+        actionMessage = "This draft belongs to another GitHub account. Switch accounts to open it."
+        routes.acknowledge(request.id)
+        return
+      }
+      await notebook.openLocalDraft(id: draftID)
+      guard !Task.isCancelled, routes.pending?.id == request.id else { return }
+      await activateLoadedDocument()
+    }
+    guard !Task.isCancelled, routes.pending?.id == request.id else { return }
+    if notebook.presentedDocument != nil || notebook.failedOpen != nil {
+      compactColumn = .detail
+    }
+    routes.acknowledge(request.id)
   }
 
   private var canSwitchDocument: Bool {

@@ -12,31 +12,33 @@ struct NotebookAccountSwitchSheet: View {
   @State private var error: String?
   @State private var backup: NotebookDraftBackup?
   @State private var showingExporter = false
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   var body: some View {
     NavigationStack {
-      List {
+      Form {
         Section {
-          Label(current, systemImage: "person.crop.circle")
-          Label(replacement, systemImage: "arrow.right.circle")
-          Text(
-            "Your drafts stay on this iPhone, isolated to their original GitHub account. Switching never publishes them."
-          )
+          LabeledContent("Current", value: "@\(current)")
+          LabeledContent("Switching to", value: "@\(replacement)")
+        } footer: {
+          Text("Your drafts stay on this iPhone with their original account. Switching never publishes them.")
         }
         Section {
-          Button("Keep Drafts & Switch") {
+          Button("Switch Account") {
             work { try await switchAccount() }
           }
+          .accessibilityIdentifier("account-switch-confirm")
           Button("Export Current Drafts") {
             work {
               backup = NotebookDraftBackup(data: try await export())
               showingExporter = true
             }
           }
+          .accessibilityIdentifier("account-switch-export")
+        } footer: {
           Text(
-            "Reconnect the original account later to return to its drafts. Exporting makes an additional text backup, without changing or deleting anything."
+            "Reconnect the original account to return to its drafts. Export makes an additional backup without changing or deleting anything."
           )
-          .font(.footnote)
         }
         if let error {
           Section {
@@ -55,6 +57,7 @@ struct NotebookAccountSwitchSheet: View {
       }
       .disabled(isWorking)
       .interactiveDismissDisabled(isWorking)
+      .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
       .fileExporter(
         isPresented: $showingExporter, document: backup,
         contentType: .json, defaultFilename: "GistPad-\(current)-drafts"

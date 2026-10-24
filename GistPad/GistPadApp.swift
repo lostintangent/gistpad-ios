@@ -21,6 +21,10 @@ struct GistPadApp: App {
         PhotoCaptureWorkspace()
       } else if let screen = LaunchArguments.captureScreen, ["library", "note"].contains(screen) {
         InterfaceCaptureWorkspace(session: session)
+      } else if let screen = LaunchArguments.captureScreen,
+        NotebookSurfaceCaptureWorkspace.supports(screen)
+      {
+        NotebookSurfaceCaptureWorkspace(screen: screen)
       } else {
         NotebookWorkspace(session: session)
       }

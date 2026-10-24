@@ -11,6 +11,7 @@ public struct TagEditor: View {
     @State private var confirmingDiscard = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     public init(
         tags: [LibraryTag], selectedTagIDs: Set<String>,
@@ -23,23 +24,6 @@ public struct TagEditor: View {
     public var body: some View {
         NavigationStack {
             List {
-                Section {
-                    if selectedTags.isEmpty {
-                        Text(
-                            save == nil && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? String(localized: "No matching tags.", bundle: .module)
-                                : String(localized: "No tags on this note.", bundle: .module)
-                        )
-                            .foregroundStyle(.primary)
-                    } else {
-                        TagLabels(tags: selectedTags)
-                    }
-                } header: {
-                    Text("On this note", bundle: .module).foregroundStyle(InterfaceTheme.text)
-                } footer: {
-                    Text("Tags apply to every file in this gist.", bundle: .module)
-                        .foregroundStyle(InterfaceTheme.text)
-                }
                 if let saveError {
                     Section {
                         Label(String(localized: "Couldn't finish saving tags.", bundle: .module), systemImage: "exclamationmark.circle")
@@ -50,22 +34,27 @@ public struct TagEditor: View {
                     }
                     .foregroundStyle(.primary)
                 }
-                if save != nil {
-                    Section {
-                        ForEach(matchingTags) { tag in editableRow(tag) }
-                        if matchingTags.isEmpty {
-                            Text("No matching tags.", bundle: .module)
+                Section {
+                    ForEach(save == nil ? selectedTags : matchingTags) { tag in
+                        if save == nil {
+                            tagRow(tag)
+                        } else {
+                            editableRow(tag)
                         }
-                    } header: {
-                        Text("All tags", bundle: .module).foregroundStyle(InterfaceTheme.text)
                     }
-                } else {
-                    Section {
-                        Label(String(localized: "Tags are read-only", bundle: .module), systemImage: "eye")
+                    if (save == nil ? selectedTags : matchingTags).isEmpty {
+                        Text(
+                            query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? String(localized: "No tags yet.", bundle: .module)
+                                : String(localized: "No matching tags.", bundle: .module))
+                            .foregroundStyle(.secondary)
                     }
-                    .foregroundStyle(.primary)
+                } footer: {
+                    Text("Tags apply to every file in this note.", bundle: .module)
+                        .foregroundStyle(.secondary)
                 }
             }
+            .listStyle(.plain)
             .navigationTitle(Text("Tags", bundle: .module))
             .navigationBarTitleDisplayMode(.inline)
             .tint(InterfaceTheme.accent)
@@ -80,6 +69,8 @@ public struct TagEditor: View {
                     delete: { draft.delete(tag) }
                 )
             }
+            .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+            .presentationDragIndicator(.visible)
             .confirmationDialog(
                 draft.hasAttemptedChanges
                     ? String(localized: "Close without retrying?", bundle: .module)
@@ -124,20 +115,11 @@ public struct TagEditor: View {
                 draft.selectedTagIDs.insert(tag.id)
             }
         } label: {
-            HStack(spacing: 12) {
-                TagSwatch(hex: tag.colorHex)
-                Text(verbatim: tag.name).foregroundStyle(.primary)
-                Spacer()
-                if draft.selectedTagIDs.contains(tag.id) {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(InterfaceTheme.accent)
-                        .transition(.opacity)
-                }
-            }
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
+            tagRow(tag)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("tag-choice-\(tag.id)")
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
         .accessibilityAddTraits(draft.selectedTagIDs.contains(tag.id) ? .isSelected : [])
         .accessibilityAction(named: Text("Edit tag \(tag.name)", bundle: .module)) { editingTag = tag }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: draft.selectedTagIDs.contains(tag.id))
@@ -148,6 +130,27 @@ public struct TagEditor: View {
             Button(String(localized: "Edit Tag…", bundle: .module), systemImage: "pencil") { editingTag = tag }
                 .tint(InterfaceTheme.accent)
         }
+    }
+
+    private func tagRow(_ tag: LibraryTag) -> some View {
+        HStack(spacing: 12) {
+            TagSwatch(hex: tag.colorHex)
+                .accessibilityHidden(true)
+            Text(verbatim: tag.name)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            if draft.selectedTagIDs.contains(tag.id) {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(InterfaceTheme.accent)
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.vertical, 8)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
     }
 
     @ToolbarContentBuilder
