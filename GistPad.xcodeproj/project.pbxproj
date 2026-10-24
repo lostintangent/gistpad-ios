@@ -12,6 +12,7 @@
 		A0000000000000000000000D /* GistPadInterface in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000056 /* GistPadInterface */; };
 		A0000000000000000000000E /* GistPadSync in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000058 /* GistPadSync */; };
 		A0000000000000000000000F /* GistPadInterface in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000059 /* GistPadInterface */; };
+		B40000000000000000000001 /* GistPadPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = B40000000000000000000051 /* GistPadPlatform */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,7 +41,7 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		A00000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000001 /* GistPadEditor in Frameworks */, A0000000000000000000000B /* GistPadPreview in Frameworks */, A0000000000000000000000D /* GistPadInterface in Frameworks */, A0000000000000000000000E /* GistPadSync in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
+		A00000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000001 /* GistPadEditor in Frameworks */, A0000000000000000000000B /* GistPadPreview in Frameworks */, A0000000000000000000000D /* GistPadInterface in Frameworks */, A0000000000000000000000E /* GistPadSync in Frameworks */, B40000000000000000000001 /* GistPadPlatform in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
 		A00000000000000000000009 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000002 /* GistPadEditor in Frameworks */, A0000000000000000000000F /* GistPadInterface in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
@@ -67,7 +68,7 @@
 			dependencies = ();
 			fileSystemSynchronizedGroups = (A00000000000000000000006 /* GistPad */,);
 			name = GistPad;
-			packageProductDependencies = (A00000000000000000000051 /* GistPadEditor */, A00000000000000000000054 /* GistPadPreview */, A00000000000000000000056 /* GistPadInterface */, A00000000000000000000058 /* GistPadSync */,);
+			packageProductDependencies = (A00000000000000000000051 /* GistPadEditor */, A00000000000000000000054 /* GistPadPreview */, A00000000000000000000056 /* GistPadInterface */, A00000000000000000000058 /* GistPadSync */, B40000000000000000000051 /* GistPadPlatform */,);
 			productName = GistPad;
 			productReference = A00000000000000000000004;
 			productType = "com.apple.product-type.application";
@@ -105,7 +106,7 @@
 			knownRegions = (en, Base,);
 			mainGroup = A00000000000000000000011;
 			minimizedProjectReferenceProxies = 1;
-			packageReferences = (A00000000000000000000050 /* GistPadEditor */, A00000000000000000000053 /* GistPadPreview */, A00000000000000000000055 /* GistPadInterface */, A00000000000000000000057 /* GistPadSync */,);
+			packageReferences = (A00000000000000000000050 /* GistPadEditor */, A00000000000000000000053 /* GistPadPreview */, A00000000000000000000055 /* GistPadInterface */, A00000000000000000000057 /* GistPadSync */, B40000000000000000000050 /* GistPadPlatform */,);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A00000000000000000000012;
 			projectDirPath = "";
@@ -158,6 +159,7 @@
 		}; name = Release; };
 		A00000000000000000000072 = {isa = XCBuildConfiguration; baseConfigurationReference = A0000000000000000000000C; buildSettings = {
 			ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+			CODE_SIGN_ENTITLEMENTS = GistPad/GistPad.entitlements;
 			CODE_SIGN_STYLE = Automatic;
 			CURRENT_PROJECT_VERSION = 1;
 			DEVELOPMENT_TEAM = RHFNBL7EG4;
@@ -179,6 +181,7 @@
 		}; name = Debug; };
 		A00000000000000000000073 = {isa = XCBuildConfiguration; baseConfigurationReference = A0000000000000000000000C; buildSettings = {
 			ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+			CODE_SIGN_ENTITLEMENTS = GistPad/GistPad.entitlements;
 			CODE_SIGN_STYLE = Automatic;
 			CURRENT_PROJECT_VERSION = 1;
 			DEVELOPMENT_TEAM = RHFNBL7EG4;
@@ -231,6 +234,7 @@
 		A00000000000000000000053 /* GistPadPreview */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/GistPadPreview; };
 		A00000000000000000000055 /* GistPadInterface */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/GistPadInterface; };
 		A00000000000000000000057 /* GistPadSync */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/GistPadSync; };
+		B40000000000000000000050 /* GistPadPlatform */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/GistPadPlatform; };
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -240,6 +244,7 @@
 		A00000000000000000000056 /* GistPadInterface */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000055; productName = GistPadInterface; };
 		A00000000000000000000058 /* GistPadSync */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000057; productName = GistPadSync; };
 		A00000000000000000000059 /* GistPadInterface */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000055; productName = GistPadInterface; };
+		B40000000000000000000051 /* GistPadPlatform */ = {isa = XCSwiftPackageProductDependency; package = B40000000000000000000050; productName = GistPadPlatform; };
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A00000000000000000000010 /* Project object */;
