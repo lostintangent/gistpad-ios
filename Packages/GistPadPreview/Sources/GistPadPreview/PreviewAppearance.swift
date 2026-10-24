@@ -1,4 +1,5 @@
 #if os(iOS)
+import OSLog
 import UIKit
 
 struct PreviewAppearance: Equatable {
@@ -13,13 +14,17 @@ struct PreviewAppearance: Equatable {
         self.boldText = boldText ?? UIAccessibility.isBoldTextEnabled
         let dark = traits.userInterfaceStyle == .dark
         colorScheme = dark ? "dark" : "light"
-        let accent = increasedContrast ? (dark ? "#FFE899" : "#573E00") : (dark ? "#F3D26A" : "#765800")
-        let selected = increasedContrast ? (dark ? "#514211" : "#F4E2A3") : (dark ? "#3D351C" : "#F8EFCC")
+        let accent = increasedContrast ? (dark ? "#BAE6FD" : "#075985") : (dark ? "#7DD3FC" : "#0369A1")
+        let fill = increasedContrast ? (dark ? "#7DD3FC" : "#0EA5E9") : (dark ? "#38BDF8" : "#0EA5E9")
+        let selected = increasedContrast ? (dark ? "#134B63" : "#D4EEFC") : (dark ? "#0B3548" : "#E7F6FD")
+        let ink = increasedContrast ? (dark ? "#F8FAFC" : "#0F172A") : (dark ? "#E2E8F0" : "#1E293B")
+        let code = increasedContrast ? (dark ? "#F1F5F9" : "#334155") : (dark ? "#CBD5E1" : "#475569")
         var values = [
             "--gp-page": Self.css(UIColor.systemBackground.resolvedColor(with: traits)),
             "--gp-surface": Self.css(UIColor.secondarySystemBackground.resolvedColor(with: traits)),
             "--gp-surface-raised": Self.css(UIColor.tertiarySystemBackground.resolvedColor(with: traits)),
-            "--gp-text": Self.css(UIColor.label.resolvedColor(with: traits)),
+            "--gp-text": ink,
+            "--gp-syntax-code": code,
             "--gp-text-secondary": Self.css(UIColor.secondaryLabel.resolvedColor(with: traits)),
             "--gp-link": Self.css(UIColor.link.resolvedColor(with: traits)),
             "--gp-separator": Self.css(UIColor.separator.resolvedColor(with: traits)),
@@ -27,6 +32,8 @@ struct PreviewAppearance: Equatable {
             "--gp-error": Self.css(UIColor.systemRed.resolvedColor(with: traits)),
             "--gp-success": Self.css(UIColor.systemGreen.resolvedColor(with: traits)),
             "--gp-accent-text": accent,
+            "--gp-accent-fill": fill,
+            "--gp-on-accent": "#0F172A",
             "--gp-selected-surface": selected
         ]
         let styles: [(String, UIFont.TextStyle)] = [
@@ -34,7 +41,15 @@ struct PreviewAppearance: Equatable {
             ("title3", .title3), ("headline", .headline), ("footnote", .footnote)
         ]
         for (name, style) in styles {
-            let font = UIFont.preferredFont(forTextStyle: style, compatibleWith: traits)
+            var font = UIFont.preferredFont(forTextStyle: style, compatibleWith: traits)
+            if name == "title1" || name == "title2" {
+                if let descriptor = font.fontDescriptor.withDesign(.serif) {
+                    font = UIFont(descriptor: descriptor, size: font.pointSize)
+                } else {
+                    Logger(subsystem: "dev.gistpad.GistPad", category: "MarkdownPreview")
+                        .error("The system serif heading descriptor was unavailable.")
+                }
+            }
             values["--gp-\(name)-size"] = "\(font.pointSize)px"
             values["--gp-\(name)-line-height"] = "\(font.lineHeight)px"
         }

@@ -49,6 +49,9 @@ async (page) => {
         parseFloat(chevron.borderTopWidth) > 0 && chevron.backgroundColor === "rgba(0, 0, 0, 0)",
       realDetails: summary.parentElement.tagName === "DETAILS" && !summary.parentElement.open,
       noPageOverflow: document.documentElement.scrollWidth <= window.innerWidth,
+      headingFamilies: ["h1", "h2"].every((selector) =>
+        getComputedStyle(document.querySelector(selector)).fontFamily.startsWith("ui-serif")) &&
+        getComputedStyle(document.querySelector("h3")).fontFamily.includes("-apple-system"),
     };
   });
   for (const [name, passed] of Object.entries(initial)) {
@@ -78,15 +81,18 @@ async (page) => {
             "--gp-page": dark ? "#000000" : "#ffffff",
             "--gp-surface": dark ? "#1c1c1e" : "#f2f2f7",
             "--gp-surface-raised": dark ? "#2c2c2e" : "#ffffff",
-            "--gp-text": dark ? "#ffffff" : "#000000",
+            "--gp-text": increasedContrast ? (dark ? "#f8fafc" : "#0f172a") : (dark ? "#e2e8f0" : "#1e293b"),
+            "--gp-syntax-code": increasedContrast ? (dark ? "#f1f5f9" : "#334155") : (dark ? "#cbd5e1" : "#475569"),
             "--gp-text-secondary": increasedContrast
               ? (dark ? "#c2c2c6" : "#444447") : (dark ? "rgba(235,235,245,0.6)" : "rgba(60,60,67,0.6)"),
             "--gp-link": dark ? "#64b4ff" : "#005dc2",
             "--gp-separator": dark ? "#38383a" : "#c6c6c8",
             "--gp-boundary": dark ? "#545458" : "#8e8e93",
             "--gp-error": "#ff3b30", "--gp-success": "#34c759",
-            "--gp-accent-text": dark ? "#f3d26a" : "#765800",
-            "--gp-selected-surface": dark ? "#3d351c" : "#f8efcc",
+            "--gp-accent-text": increasedContrast ? (dark ? "#bae6fd" : "#075985") : (dark ? "#7dd3fc" : "#0369a1"),
+            "--gp-accent-fill": increasedContrast ? (dark ? "#7dd3fc" : "#0ea5e9") : (dark ? "#38bdf8" : "#0ea5e9"),
+            "--gp-on-accent": "#0f172a",
+            "--gp-selected-surface": increasedContrast ? (dark ? "#134b63" : "#d4eefc") : (dark ? "#0b3548" : "#e7f6fd"),
             ...Object.fromEntries(["body-size", "body-line-height", "title1-size", "title1-line-height",
               "title2-size", "title2-line-height", "title3-size", "title3-line-height",
               "headline-size", "headline-line-height", "footnote-size", "footnote-line-height", "code-size"]
@@ -120,6 +126,9 @@ async (page) => {
           const authored = getComputedStyle(document.querySelectorAll(".diagram-scroll")[1].querySelector(".attention rect"));
           const current = getComputedStyle(document.querySelector(".calculation-current"));
           const previous = getComputedStyle(document.querySelector(".calculation-previous"));
+          const task = document.querySelector('input[type="checkbox"]:checked');
+          const taskStyle = getComputedStyle(task);
+          const mark = getComputedStyle(task, "::after");
           const resolveColor = (value) => {
             const probe = document.createElement("span");
             probe.style.color = value;
@@ -135,6 +144,10 @@ async (page) => {
             resultColor: current.color === page.color,
             resultSurfaces: current.backgroundColor === resolveColor(page.getPropertyValue("--gp-selected-surface")) &&
               previous.backgroundColor === resolveColor(page.getPropertyValue("--gp-surface")),
+            inkContrast: ratio(page.color, page.backgroundColor) >= 4.5 &&
+              ratio(current.color, current.backgroundColor) >= 4.5,
+            taskContrast: ratio(mark.borderTopColor, taskStyle.backgroundColor) >= 3 &&
+              ratio(taskStyle.borderTopColor, page.backgroundColor) >= 3,
             bodyTables: getComputedStyle(document.querySelector("td")).fontSize === page.fontSize,
             bodyDiagrams: parseFloat(document.querySelector(".diagram-scroll svg").style.width) >
               document.querySelector(".diagram-scroll svg").viewBox.baseVal.width,

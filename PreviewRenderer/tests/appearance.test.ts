@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { validateAppearance } from "../src/appearance";
 
 function nativeAppearance(alpha = "1.0") {
-  const colors = ["page", "surface", "surface-raised", "text", "text-secondary", "link",
-    "separator", "boundary", "error", "success", "accent-text", "selected-surface"];
+  const colors = ["page", "surface", "surface-raised", "text", "syntax-code", "text-secondary", "link",
+    "separator", "boundary", "error", "success", "accent-text", "accent-fill", "on-accent", "selected-surface"];
   const metrics = ["body-size", "body-line-height", "title1-size", "title1-line-height",
     "title2-size", "title2-line-height", "title3-size", "title3-line-height",
     "headline-size", "headline-line-height", "footnote-size", "footnote-line-height", "code-size"];
@@ -30,4 +30,7 @@ test("rejects incomplete or executable appearance values", () => {
   const appearance = nativeAppearance();
   appearance.variables["--gp-page"] = "url(https://example.com)";
   expect(() => validateAppearance(appearance)).toThrow();
+  const incomplete = nativeAppearance();
+  delete incomplete.variables["--gp-syntax-code"];
+  expect(() => validateAppearance(incomplete)).toThrow();
 });

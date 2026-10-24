@@ -1,6 +1,6 @@
 const colorNames = [
-  "page", "surface", "surface-raised", "text", "text-secondary", "link",
-  "separator", "boundary", "error", "success", "accent-text", "selected-surface",
+  "page", "surface", "surface-raised", "text", "syntax-code", "text-secondary", "link",
+  "separator", "boundary", "error", "success", "accent-text", "accent-fill", "on-accent", "selected-surface",
 ];
 const metricNames = [
   "body-size", "body-line-height", "title1-size", "title1-line-height",
