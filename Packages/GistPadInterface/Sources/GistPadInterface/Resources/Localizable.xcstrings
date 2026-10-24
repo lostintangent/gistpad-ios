@@ -4,6 +4,108 @@
     "" : {
 
     },
+    "%lld files" : {
+
+    },
+    "A fresh day" : {
+
+    },
+    "A notebook of your own" : {
+
+    },
+    "A place for your thoughts, backed by your GitHub gists. Sign in to open your notebook." : {
+
+    },
+    "A thought, a list, a little thing worth keeping. Start with your first note." : {
+
+    },
+    "All Notes" : {
+
+    },
+    "Accent Color" : {
+
+    },
+    "Add File…" : {
+
+    },
+    "Choose an opaque RGB color." : {
+
+    },
+    "Clear" : {
+
+    },
+    "Delete Note…" : {
+
+    },
+    "Files" : {
+
+    },
+    "Finished notes stay here when you archive them. You can bring them back anytime." : {
+
+    },
+    "Keep a useful discovery" : {
+
+    },
+    "Intelligence…" : {
+
+    },
+    "Library" : {
+
+    },
+    "Make room for a thought." : {
+
+    },
+    "Markdown notes, backed by your GitHub gists." : {
+
+    },
+    "No notes are available offline yet. Connect to GitHub to load your notebook." : {
+
+    },
+    "Nothing in the archive" : {
+
+    },
+    "No tags yet." : {
+
+    },
+    "One place for the things you notice, the ideas you want to keep, and what comes next." : {
+
+    },
+    "Results" : {
+
+    },
+    "Rename Current File…" : {
+
+    },
+    "Rename Note…" : {
+
+    },
+    "Save Accent Color" : {
+
+    },
+    "Search All Notes" : {
+
+    },
+    "Search titles, filenames and tags. Available cached text is included. All selected tags must match." : {
+
+    },
+    "Settings" : {
+
+    },
+    "Star a gist on GitHub to find it here." : {
+
+    },
+    "Tags apply to every file in this note." : {
+
+    },
+    "Try another search or clear your filters. Notes without cached text can still match by title, filename or tag." : {
+
+    },
+    "Your daily notes will gather here. Begin with today." : {
+
+    },
+    "Your saved color couldn't be read. GistPad Sky is in use until you choose a new color." : {
+
+    },
     "%lld gists have incomplete file lists." : {
 
     },

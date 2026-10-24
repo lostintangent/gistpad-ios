@@ -66,17 +66,25 @@ public struct TagLabels: View {
         TagFlowLayout(layoutDirection: layoutDirection) {
             ForEach(visibleTags) { TagLabel(tag: $0, isSelected: isSelected) }
             if overflow > 0 {
-                Text("+\(overflow)", bundle: .module)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color(uiColor: .secondarySystemBackground), in: .rect(cornerRadius: 8))
+                TagOverflowLabel(count: overflow)
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Tags: \(tags.map(\.name).joined(separator: ", "))", bundle: .module))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    struct TagOverflowLabel: View {
+        let count: Int
+
+        var body: some View {
+            Text("+\(count)", bundle: .module)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(uiColor: .secondarySystemBackground), in: .rect(cornerRadius: 8))
+        }
     }
 
     private var visibleTags: [LibraryTag] { Array(tags.prefix(limit ?? tags.count)) }

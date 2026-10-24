@@ -59,10 +59,33 @@ struct InterfaceCaptureWorkspace: View {
         captureState = state
         supportedState = [
             "populated", "empty", "error", "offline", "readonly", "tag-audit", "today",
-            "tag-editor", "tag-readonly"
+            "tag-editor", "tag-readonly", "search", "no-results", "filtered", "signed-out",
+            "daily", "starred", "archive", "notes", "featured"
         ].contains(state)
         _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
         var snapshot = state == "empty" ? LibrarySnapshot(notes: []) : InterfaceFixtures.library
+        if state != "empty" {
+            snapshot.notes.insert(
+                .init(
+                    id: "small", title: "Small observations", updatedAt: InterfaceFixtures.referenceDate,
+                    isPinned: true, tagIDs: ["ideas"], fileCount: 1,
+                    excerpt: "A notebook can be both quiet and precise."
+                ),
+                at: 1
+            )
+            if let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
+                snapshot.notes[index].fileCount = 2
+                snapshot.notes[index].excerpt = "A quiet place to think, with a precise engine beneath the page."
+            }
+            if let index = snapshot.notes.firstIndex(where: { $0.id == "weekend" }) {
+                snapshot.notes[index].excerpt = "Leave a little room for an unplanned afternoon."
+                snapshot.notes[index].fileCount = 1
+            }
+            if let index = snapshot.notes.firstIndex(where: { $0.id == "words" }) {
+                snapshot.notes[index].excerpt = "A few sentences to return to when a thought needs a starting point."
+                snapshot.notes[index].fileCount = 3
+            }
+        }
         if state == "tag-audit" {
             snapshot = LibrarySnapshot(
                 notes: [
@@ -96,9 +119,28 @@ struct InterfaceCaptureWorkspace: View {
             snapshot: snapshot,
             loadState: state == "error"
                 ? .failed(message: "Synthetic connection failure. No account request was made.")
-                : state == "offline" ? .offline : .ready,
-            today: .init(date: InterfaceFixtures.referenceDate)
+                : state == "offline" ? .offline : state == "signed-out" ? .signedOut : .ready,
+            today: .init(
+                date: InterfaceFixtures.referenceDate,
+                progress: state == "empty" || state == "today" ? nil : .init(completed: 1, total: 3),
+                availability: state == "empty" || state == "today" ? .missing : .existing,
+                excerpt: state == "empty" || state == "today" ? nil : "Keep the thought, not the interface."
+            )
         )
+        switch state {
+        case "daily": model.collection = .dailyNotes
+        case "starred": model.collection = .starred
+        case "archive": model.collection = .archive
+        case "filtered": model.selectedTagIDs = ["ideas"]
+        case "search":
+            model.query = "notebook"
+            model.searchState = .results(
+                notes: snapshot.notes.filter { ["shape", "small"].contains($0.id) },
+                coverage: .init(totalDocuments: snapshot.notes.count, documentsWithCachedContent: 2)
+            )
+        case "no-results": model.query = "No matching synthetic words"
+        default: break
+        }
         model.selectedNoteID = state == "empty" || state == "today" || screen == "library" ? nil : "shape"
         _library = State(initialValue: model)
         _compactColumn = State(initialValue: screen == "library" ? .sidebar : .detail)
@@ -108,10 +150,19 @@ struct InterfaceCaptureWorkspace: View {
     var body: some View {
         if supportedState {
             NavigationSplitView(preferredCompactColumn: $compactColumn) {
-                LibraryView(
-                    model: library, actions: libraryActions,
-                    footer: Text(actionMessage ?? "Synthetic library. No account connected.")
-                )
+                ScrollViewReader { scroll in
+                    LibraryView(
+                        model: library, actions: libraryActions,
+                        footer: Text(actionMessage ?? "Synthetic library. No account connected.")
+                    )
+                    .task {
+                        if captureState == "notes" || captureState == "featured" {
+                            try? await Task.sleep(for: .milliseconds(400))
+                            scroll.scrollTo(captureState == "notes" ? "weekend" : "shape", anchor: .top)
+                            await markReady()
+                        }
+                    }
+                }
             } detail: {
                 NavigationStack {
                     if captureState == "today" {
@@ -146,7 +197,8 @@ struct InterfaceCaptureWorkspace: View {
                 if captureScreen == "library", horizontalSizeClass == .regular, captureState != "empty" {
                     library.selectedNoteID = "shape"
                 }
-                if captureScreen == "library" || captureState == "error" || captureState == "today" {
+                if (captureScreen == "library" && !["notes", "featured"].contains(captureState))
+                    || captureState == "error" || captureState == "today" {
                     await markReady()
                 }
             }
@@ -181,13 +233,17 @@ struct InterfaceCaptureWorkspace: View {
     }
 
     private var libraryActions: LibraryActions {
-        .init {
+        var actions = LibraryActions {
             actionMessage = "Synthetic fixture refreshed. No network request was made."
         } create: {
             actionMessage = "Creating gists is not connected in this in-memory fixture."
         } today: {
             actionMessage = "Today is not connected in this in-memory fixture."
         }
+        actions.reconnect = {
+            actionMessage = "This synthetic invitation does not connect to GitHub."
+        }
+        return actions
     }
 
     private var noteActions: NoteActions {

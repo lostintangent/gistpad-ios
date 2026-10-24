@@ -132,6 +132,15 @@ public final class LibraryModel {
     public var pinnedNotes: [LibraryNote] { matchingNotes.filter(\.isPinned) }
     public var unpinnedNotes: [LibraryNote] { matchingNotes.filter { !$0.isPinned } }
 
+    var showsFeaturedNotes: Bool {
+        guard collection == .gists, !hasFilters else { return false }
+        if case .inactive = searchState { return true }
+        return false
+    }
+
+    var featuredNotes: [LibraryNote] { showsFeaturedNotes ? pinnedNotes : [] }
+    var listedNotes: [LibraryNote] { showsFeaturedNotes ? unpinnedNotes : matchingNotes }
+
     public var openDocumentOutsideFilter: LibraryNote? {
         guard let selectedNoteID,
               !matchingNotes.contains(where: { $0.id == selectedNoteID }) else { return nil }

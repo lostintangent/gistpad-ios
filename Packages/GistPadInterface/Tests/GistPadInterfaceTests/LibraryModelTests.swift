@@ -11,6 +11,36 @@ struct LibraryModelTests {
         #expect(model.unpinnedNotes.map(\.id) == ["weekend", "words", "mixed"])
     }
 
+    @Test func featuredNotesAreDistinctFromTheDefaultScanList() {
+        let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
+        #expect(model.showsFeaturedNotes)
+        #expect(model.featuredNotes.map(\.id) == ["shape"])
+        #expect(model.listedNotes.map(\.id) == ["weekend", "words", "mixed"])
+        let featuredIDs = Set(model.featuredNotes.map(\.id))
+        #expect(model.listedNotes.allSatisfy { !featuredIDs.contains($0.id) })
+    }
+
+    @Test func filtersAndOtherCollectionsUseOneOrdinaryResultList() {
+        let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
+        model.selectedTagIDs = ["design"]
+        #expect(!model.showsFeaturedNotes)
+        #expect(model.featuredNotes.isEmpty)
+        #expect(model.listedNotes.map(\.id) == ["shape"])
+        model.clearFilters()
+        model.collection = .starred
+        #expect(!model.showsFeaturedNotes)
+        #expect(model.listedNotes.map(\.id) == ["starred"])
+    }
+
+    @Test func appSearchNeverCreatesASecondFeaturedResultGroup() {
+        let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
+        let pinned = InterfaceFixtures.library.notes[0]
+        model.searchState = .results(
+            notes: [pinned], coverage: .init(totalDocuments: 1, documentsWithCachedContent: 1))
+        #expect(model.featuredNotes.isEmpty)
+        #expect(model.listedNotes == [pinned])
+    }
+
     @Test func tagsUseANDAndTitleSearchIsLocalized() {
         let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
         model.selectedTagIDs = ["ideas", "design"]
