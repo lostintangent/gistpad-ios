@@ -253,6 +253,72 @@ struct NoteChromeHostTests {
     #expect(containsIdentifier("note-actions", in: window))
   }
 
+  @Test(
+    arguments: [false, true],
+    [UIContentSizeCategory.large, .accessibilityExtraLarge])
+  func regularWidthModePickerKeepsItsNativeIdealSizeAndHitTargets(
+    allowsSplit: Bool, category: UIContentSizeCategory
+  ) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.frame = CGRect(x: 0, y: 0, width: 951, height: 669)
+    window.traitOverrides.horizontalSizeClass = .regular
+    window.traitOverrides.preferredContentSizeCategory = category
+    var actions = NoteActions()
+    actions.find = {}
+    window.rootViewController = UIHostingController(
+      rootView: NavigationStack {
+        NoteScreen(
+          document: .init(
+            title: "A note", files: [.init(id: "README.md", filename: "README.md")],
+            selectedFileID: "README.md"),
+          mode: .constant(allowsSplit ? .split : .reading),
+          saveState: .savedToGitHub, actions: actions, allowsSplit: allowsSplit
+        ) {
+          Text("Source")
+        } preview: {
+          Text("Preview")
+        }
+      }
+      .environment(\.horizontalSizeClass, .regular))
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(300))
+    window.layoutIfNeeded()
+    let picker = try #require(descendants(window).compactMap { $0 as? UISegmentedControl }.first)
+    let ideal = picker.intrinsicContentSize
+    let minimum = UIFontMetrics(forTextStyle: .body).scaledValue(
+      for: 48, compatibleWith: window.traitCollection)
+    let initialWidth = picker.bounds.width
+    #expect(ideal.width > 0)
+    #expect(abs(picker.bounds.width - max(ideal.width, minimum * CGFloat(picker.numberOfSegments))) <= 1)
+    #expect(!picker.apportionsSegmentWidthsByContent)
+    #expect(picker.bounds.height >= 44)
+    #expect(picker.numberOfSegments == (allowsSplit ? 3 : 2))
+    #expect(window.traitCollection.preferredContentSizeCategory == category)
+    #expect(window.bounds.contains(picker.convert(picker.bounds, to: window)))
+    for appearance: UIUserInterfaceStyle in [.dark, .light] {
+      let targets = (0..<max(0, picker.accessibilityElementCount())).compactMap {
+        picker.accessibilityElement(at: $0) as? NSObject
+      }
+      #expect(targets.count == picker.numberOfSegments)
+      for target in targets {
+        #expect(target.accessibilityFrame.width >= 44)
+        #expect(target.accessibilityFrame.height >= 44)
+        #expect(target.accessibilityFrame.width >= minimum - 1)
+      }
+      window.overrideUserInterfaceStyle = appearance
+      try await Task.sleep(for: .milliseconds(300))
+      window.layoutIfNeeded()
+      #expect(abs(picker.bounds.width - initialWidth) <= 1)
+    }
+  }
+
   private func descendants(_ view: UIView) -> [UIView] {
     [view] + view.subviews.flatMap(descendants)
   }

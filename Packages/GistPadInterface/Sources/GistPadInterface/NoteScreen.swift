@@ -14,8 +14,11 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     @State private var showingTags = false
     @State private var showingOfflineExplanation = false
     @State private var saveDetails: String?
+    // Match the native toolbar's settled segment size on its first layout.
+    @ScaledMetric(relativeTo: .body) private var minimumModeSegmentWidth = 48
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var showingSplit: Bool { document.access.canEdit && (isFocused || (allowsSplit && mode == .split)) }
     private var showingSource: Bool { document.access.canEdit && (showingSplit || mode != .reading) }
@@ -125,25 +128,13 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     private var primaryToolbar: some ToolbarContent {
         if document.access.canEdit, !isFocused {
             ToolbarItem(placement: .primaryAction) {
-                Picker(
-                    String(localized: "Note mode", bundle: .module),
-                    selection: Binding(
-                        get: { mode == .split && !allowsSplit ? .source : mode },
-                        set: {
-                            mode = $0
-                            actions.didChangeMode?($0)
-                        }
-                    )
-                ) {
-                    Label(String(localized: "Edit", bundle: .module), systemImage: "square.and.pencil").tag(NoteMode.source)
-                    if allowsSplit {
-                        Label(String(localized: "Split", bundle: .module), systemImage: "rectangle.split.2x1").tag(NoteMode.split)
-                    }
-                    Label(String(localized: "Preview", bundle: .module), systemImage: "doc.richtext").tag(NoteMode.reading)
+                if horizontalSizeClass == .regular {
+                    modePicker
+                        .frame(minWidth: minimumModeSegmentWidth * CGFloat(allowsSplit ? 3 : 2))
+                        .fixedSize(horizontal: true, vertical: false)
+                } else {
+                    modePicker
                 }
-                .pickerStyle(.segmented)
-                .labelStyle(.iconOnly)
-                .accessibilityIdentifier("note-toggle-mode")
             }
             .sharedBackgroundVisibility(.hidden)
         }
@@ -164,6 +155,28 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 .accessibilityIdentifier("note-offline")
             }
         }
+    }
+
+    private var modePicker: some View {
+        Picker(
+            String(localized: "Note mode", bundle: .module),
+            selection: Binding(
+                get: { mode == .split && !allowsSplit ? .source : mode },
+                set: {
+                    mode = $0
+                    actions.didChangeMode?($0)
+                }
+            )
+        ) {
+            Label(String(localized: "Edit", bundle: .module), systemImage: "square.and.pencil").tag(NoteMode.source)
+            if allowsSplit {
+                Label(String(localized: "Split", bundle: .module), systemImage: "rectangle.split.2x1").tag(NoteMode.split)
+            }
+            Label(String(localized: "Preview", bundle: .module), systemImage: "doc.richtext").tag(NoteMode.reading)
+        }
+        .pickerStyle(.segmented)
+        .labelStyle(.iconOnly)
+        .accessibilityIdentifier("note-toggle-mode")
     }
 
     @ToolbarContentBuilder
