@@ -54,12 +54,20 @@
         .alert(
           String(localized: "Couldn't Format Text", bundle: .module),
           isPresented: Binding(
-            get: { actionError != nil },
-            set: { if !$0 { actionError = nil } })
+            get: { actionError != nil || session.inputError != nil },
+            set: {
+              if !$0 {
+                actionError = nil
+                session.inputError = nil
+              }
+            })
         ) {
-          Button(String(localized: "OK", bundle: .module), role: .cancel) { actionError = nil }
+          Button(String(localized: "OK", bundle: .module), role: .cancel) {
+            actionError = nil
+            session.inputError = nil
+          }
         } message: {
-          Text(actionError ?? "")
+          Text(actionError ?? session.inputError ?? "")
         }
     }
 
@@ -98,6 +106,19 @@
           Button(String(localized: "Checklist", bundle: .module), systemImage: "checklist") {
             format(.checklist)
           }
+          Divider()
+          Button(
+            String(localized: "Increase Indent", bundle: .module), systemImage: "increase.indent"
+          ) {
+            indent(outdent: false)
+          }
+          .keyboardShortcut("]", modifiers: .command)
+          Button(
+            String(localized: "Decrease Indent", bundle: .module), systemImage: "decrease.indent"
+          ) {
+            indent(outdent: true)
+          }
+          .keyboardShortcut("[", modifiers: .command)
         } label: {
           Label(String(localized: "Lists", bundle: .module), systemImage: "list.bullet")
             .labelStyle(.iconOnly)
@@ -200,6 +221,15 @@
         documentID: session.documentID, source: session.text, generation: session.generation,
         selection: selection,
         label: String(session.text[range]))
+    }
+
+    private func indent(outdent: Bool) {
+      do {
+        try session.indent(outdent: outdent)
+      } catch {
+        actionError = String(
+          localized: "Finish the current text edit, then select the lines again.", bundle: .module)
+      }
     }
 
     private func find(replacing: Bool) {

@@ -93,6 +93,76 @@
       #expect(!session.isEditing)
     }
 
+    @Test func smartReturnAndURLPasteUseOneNativeUndo() throws {
+      for (source, range, replacement, expected) in [
+        ("- First", NSRange(location: 7, length: 0), "\n", "- First\n- "),
+        ("1. First\n2. Next", NSRange(location: 8, length: 0), "\n", "1. First\n2. \n3. Next"),
+        (
+          "Open note", NSRange(location: 5, length: 4), "https://example.com",
+          "Open [note](https://example.com)"
+        ),
+      ] {
+        let session = DocumentSession(documentID: "typing", text: source)
+        let window = host(session)
+        defer { window.isHidden = true }
+        session.textView.selectedRange = range
+        session.textView.undoManager?.removeAllActions()
+        #expect(
+          !session.textView(
+            session.textView, shouldChangeTextIn: range, replacementText: replacement))
+        #expect(session.text == expected)
+        #expect(session.generation == 1)
+        session.textView.undoManager?.undo()
+        session.textViewDidChange(session.textView)
+        #expect(session.text == source)
+        #expect(session.textView.undoManager?.canUndo == false)
+      }
+    }
+
+    @Test func smartTypingYieldsToCompositionWritingToolsAndProtectedSyntax() {
+      for source in ["```\n- code", "---\n- metadata", "Ordinary prose"] {
+        let session = DocumentSession(documentID: "protected", text: source)
+        let caret = NSRange(location: source.utf16.count, length: 0)
+        #expect(
+          session.textView(session.textView, shouldChangeTextIn: caret, replacementText: "\n"))
+        #expect(session.text == source)
+      }
+      let session = DocumentSession(documentID: "composing", text: "- note")
+      let window = host(session)
+      defer { window.isHidden = true }
+      session.textViewWritingToolsWillBegin(session.textView)
+      #expect(
+        session.textView(
+          session.textView, shouldChangeTextIn: NSRange(location: 6, length: 0),
+          replacementText: "\n"))
+      session.textViewWritingToolsDidEnd(session.textView)
+      session.textView.selectedRange = NSRange(location: 6, length: 0)
+      session.textView.setMarkedText("日本", selectedRange: NSRange(location: 2, length: 0))
+      let transient = session.textView.text
+      #expect(
+        session.textView(
+          session.textView, shouldChangeTextIn: session.textView.selectedRange,
+          replacementText: "\n"))
+      #expect(session.textView.text == transient)
+    }
+
+    @Test func indentAndOutdentRetainSelectionAndNativeUndo() throws {
+      let session = DocumentSession(documentID: "indent", text: "- 日本語\n- next")
+      let window = host(session)
+      defer { window.isHidden = true }
+      let original = session.text
+      session.textView.selectedRange = NSRange(location: 0, length: original.utf16.count)
+      session.textView.undoManager?.removeAllActions()
+      try session.indent(outdent: false)
+      #expect(session.text == "  - 日本語\n  - next")
+      #expect(
+        session.textView.selectedRange == NSRange(location: 2, length: original.utf16.count + 2))
+      session.textView.undoManager?.undo()
+      session.textViewDidChange(session.textView)
+      #expect(session.text == original)
+      #expect(session.textView.undoManager?.canUndo == false)
+    }
+
     private func host(_ session: DocumentSession) -> UIWindow {
       // Package logic tests have no connected UIWindowScene.
       let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))

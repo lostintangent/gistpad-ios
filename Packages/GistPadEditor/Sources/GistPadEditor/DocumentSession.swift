@@ -15,6 +15,7 @@
     public private(set) var isComposing = false
     public private(set) var isEditing = false
     public private(set) var writingToolsActive = false
+    public var inputError: String?
     @ObservationIgnored public let textView: UITextView
     @ObservationIgnored public var onSourceChange: ((String, UInt64) -> Void)?
     @ObservationIgnored private var highlightTask: Task<Void, Never>?
@@ -124,6 +125,38 @@
 
     public func textViewDidChange(_ textView: UITextView) {
       synchronizeText()
+    }
+
+    public func textView(
+      _ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText replacement: String
+    ) -> Bool {
+      guard !isApplyingSourceEdit, !writingToolsActive, textView.isEditable,
+        textView.markedTextRange == nil, !isComposing,
+        textView.findInteraction?.isFindNavigatorVisible != true
+      else { return true }
+      synchronizeText()
+      do {
+        guard
+          let edit = try MarkdownTyping.edit(
+            in: text, selection: range, replacement: replacement, isComposing: isComposing)
+        else { return true }
+        try apply(edit, generation: generation)
+        return false
+      } catch {
+        inputError = String(
+          localized: "The source changed before this edit could be applied. Select the text again.",
+          bundle: .module)
+        return false
+      }
+    }
+
+    public func indent(outdent: Bool) throws {
+      guard canFormat else { throw SourceMutation.MutationError.compositionActive }
+      if let edit = try MarkdownTyping.indent(
+        in: text, selection: textView.selectedRange, outdent: outdent)
+      {
+        try apply(edit, generation: generation)
+      }
     }
 
     public func textViewDidChangeSelection(_ textView: UITextView) {
