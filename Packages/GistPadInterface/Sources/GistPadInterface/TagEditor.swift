@@ -118,10 +118,10 @@ public struct TagEditor: View {
                 Button(
                     draft.hasAttemptedChanges
                         ? String(localized: "Close", bundle: .module)
-                        : String(localized: "Discard changes", bundle: .module),
+                        : String(localized: "Discard Changes", bundle: .module),
                     role: .destructive
                 ) { dismiss() }
-                Button(String(localized: "Keep editing", bundle: .module), role: .cancel) {}
+                Button(String(localized: "Keep Editing", bundle: .module), role: .cancel) {}
             } message: {
                 if draft.hasAttemptedChanges {
                     Text("Some changes may already be saved. Closing does not undo saved changes.", bundle: .module)
@@ -161,7 +161,7 @@ public struct TagEditor: View {
         .captureFrame("tag-choice-\(tag.id)")
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
         .accessibilityAddTraits(draft.selectedTagIDs.contains(tag.id) ? .isSelected : [])
-        .accessibilityAction(named: Text("Edit tag \(tag.name)", bundle: .module)) { editingTag = tag }
+        .accessibilityAction(named: Text("Edit Tag \(tag.name)", bundle: .module)) { editingTag = tag }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: draft.selectedTagIDs.contains(tag.id))
         .contextMenu {
             Button(String(localized: "Edit Tag…", bundle: .module), systemImage: "pencil") { editingTag = tag }
@@ -274,7 +274,7 @@ private struct TagEditForm: View {
                         .autocorrectionDisabled()
                     ColorPicker(String(localized: "Color", bundle: .module), selection: color, supportsOpacity: false)
                     if colorHex != nil {
-                        Button(String(localized: "Use default color", bundle: .module)) { colorHex = nil }
+                        Button(String(localized: "Use Default Color", bundle: .module)) { colorHex = nil }
                     }
                     if let error {
                         Label(error, systemImage: "exclamationmark.circle")
@@ -290,7 +290,7 @@ private struct TagEditForm: View {
                 }
                 if !isNew {
                     Section {
-                        Button(String(localized: "Delete tag", bundle: .module), role: .destructive) {
+                        Button(String(localized: "Delete Tag", bundle: .module), role: .destructive) {
                             confirmingDelete = true
                         }
                     } footer: {
@@ -299,7 +299,7 @@ private struct TagEditForm: View {
                     }
                 }
             }
-            .navigationTitle(Text(isNew ? String(localized: "New tag", bundle: .module) : String(localized: "Edit tag", bundle: .module)))
+            .navigationTitle(Text(isNew ? String(localized: "New Tag", bundle: .module) : String(localized: "Edit Tag", bundle: .module)))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -316,7 +316,7 @@ private struct TagEditForm: View {
                             self.error = error.localizedDescription
                         }
                     }
-                    .accessibilityLabel(Text("Save tag", bundle: .module))
+                    .accessibilityLabel(Text("Save Tag", bundle: .module))
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
@@ -324,7 +324,7 @@ private struct TagEditForm: View {
                 String(localized: "Delete this tag from every note?", bundle: .module),
                 isPresented: $confirmingDelete, titleVisibility: .visible
             ) {
-                Button(String(localized: "Delete tag", bundle: .module), role: .destructive) {
+                Button(String(localized: "Delete Tag", bundle: .module), role: .destructive) {
                     delete()
                     dismiss()
                 }

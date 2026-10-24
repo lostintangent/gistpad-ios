@@ -240,7 +240,7 @@
     "Delete gist" : {
 
     },
-    "Delete tag" : {
+    "Delete Tag" : {
 
     },
     "Delete this tag from every note?" : {
@@ -249,7 +249,7 @@
     "Deleting a tag removes it from every note. Note content is unchanged." : {
 
     },
-    "Discard changes" : {
+    "Discard Changes" : {
 
     },
     "Discard tag changes?" : {
@@ -261,13 +261,13 @@
     "Edit" : {
 
     },
+    "Edit Tag" : {
+
+    },
+    "Edit Tag %@" : {
+
+    },
     "Edit Tag…" : {
-
-    },
-    "Edit tag" : {
-
-    },
-    "Edit tag %@" : {
 
     },
     "Files in this gist" : {
@@ -291,13 +291,13 @@
     "Insert Here" : {
 
     },
-    "Keep editing" : {
+    "Keep Editing" : {
 
     },
     "New note" : {
 
     },
-    "New tag" : {
+    "New Tag" : {
 
     },
     "No matching notes" : {
@@ -387,10 +387,10 @@
     "Review changes" : {
 
     },
-    "Save Tags" : {
+    "Save Tag" : {
 
     },
-    "Save tag" : {
+    "Save Tags" : {
 
     },
     "Save this note to GitHub to upload the photo." : {
@@ -522,7 +522,7 @@
     "Uploading photo..." : {
 
     },
-    "Use default color" : {
+    "Use Default Color" : {
 
     },
     "Your notebook, on GitHub" : {

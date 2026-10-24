@@ -190,6 +190,40 @@ struct NotebookSurfaceHostTests {
     Attachment.record(image, named: "settings-rejected-change.png", as: .png)
   }
 
+  @Test(arguments: [false, true])
+  func signOutUsesAnAlertWithBothActionsAndDoesNotSubmitBeforeConfirmation(accessibility: Bool) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.traitOverrides.preferredContentSizeCategory =
+      accessibility ? .accessibilityExtraLarge : .large
+    var signOutAttempts = 0
+    window.rootViewController = UIHostingController(
+      rootView: NotebookSettingsSheet(
+        account: .init(id: UUID(), login: "octavia", preferences: .init(metadata: [:])),
+        savePreference: { _, _ in }, connect: {}, signOut: { signOutAttempts += 1 }
+      ) {
+        Text("Accent Color")
+      }
+      .captureSignOutConfirmation(true)
+      .environment(\.dynamicTypeSize, accessibility ? .accessibility3 : .large))
+    window.makeKeyAndVisible()
+    defer {
+      window.rootViewController?.dismiss(animated: false)
+      window.isHidden = true
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(500))
+    let alert = try #require(window.rootViewController?.presentedViewController as? UIAlertController)
+    #expect(alert.preferredStyle == .alert)
+    #expect(alert.title == "Sign Out?")
+    #expect(alert.message == "Drafts for @octavia stay on this iPhone. Nothing is published.")
+    #expect(alert.actions.contains { $0.title == "Cancel" && $0.style == .cancel })
+    #expect(alert.actions.contains { $0.title == "Sign Out" && $0.style == .destructive })
+    #expect(signOutAttempts == 0)
+  }
+
   private func descendants(_ view: UIView) -> [UIView] {
     [view] + view.subviews.flatMap(descendants)
   }

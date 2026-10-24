@@ -465,7 +465,7 @@ private final class NotebookSurfaceReadinessController: UIViewController {
               evidence.focusedFieldText = field?.text
               evidence.matchedTagCount = visibleTags.count
             case .newTag, .editTag:
-              let expectedTitle = step == .newTag ? "New tag" : "Edit tag"
+              let expectedTitle = step == .newTag ? "New Tag" : "Edit Tag"
               let bar = descendants(window).compactMap { $0 as? UINavigationBar }.first {
                 $0.topItem?.title == expectedTitle && isVisible($0)
               }
@@ -498,8 +498,11 @@ private final class NotebookSurfaceReadinessController: UIViewController {
               case .signOut:
                 let alert = topController(in: window) as? UIAlertController
                 evidence.confirmationVisible =
-                  alert?.title == "Sign out of @octavia?"
+                  alert?.preferredStyle == .alert
+                  && alert?.title == "Sign Out?"
+                  && alert?.message == "Drafts for @octavia stay on this iPhone. Nothing is published."
                   && alert?.actions.contains(where: { $0.title == "Sign Out" && $0.style == .destructive }) == true
+                  && alert?.actions.contains(where: { $0.title == "Cancel" && $0.style == .cancel }) == true
                   && alert?.viewIfLoaded?.window != nil
                 complete = evidence.confirmationVisible
               default:

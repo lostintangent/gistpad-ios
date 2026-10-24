@@ -112,14 +112,15 @@ struct NotebookSettingsSheet<Appearance: View>: View {
             .disabled(isWorking)
         }
       }
-      .confirmationDialog(
-        "Sign out of @\(account?.login ?? "")?",
-        isPresented: $confirmingSignOut, titleVisibility: .visible
+      .alert(
+        "Sign Out?",
+        isPresented: $confirmingSignOut
       ) {
         Button("Sign Out", role: .destructive, action: confirmSignOut)
         Button("Cancel", role: .cancel) {}
+          .tint(.primary)
       } message: {
-        Text("Unpublished drafts stay on this iPhone. They return when you sign in to this account again. Signing out never publishes them.")
+        Text("Drafts for @\(account?.login ?? "") stay on this iPhone. Nothing is published.")
       }
       .alert(
         errorTitle,
