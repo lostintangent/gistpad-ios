@@ -31,9 +31,11 @@ struct ScrollEdgeCaptureWorkspace: View {
     @State private var mode: NoteMode
     @State private var path = [1]
     @State private var rendered = false
+    @State private var keyboardHeight: CGFloat = 0
     @State private var failure: String?
     private let token: String?
     private let supportedState: Bool
+    private let wantsKeyboard: Bool
 
     init() {
         let arguments = ProcessInfo.processInfo.arguments
@@ -43,8 +45,9 @@ struct ScrollEdgeCaptureWorkspace: View {
             return arguments[index + 1]
         }
         let state = argument("--capture-state") ?? "preview"
-        supportedState = ["preview", "source"].contains(state)
-        _mode = State(initialValue: state == "source" ? .source : .reading)
+        supportedState = ["preview", "source", "source-keyboard"].contains(state)
+        wantsKeyboard = state == "source-keyboard"
+        _mode = State(initialValue: state == "preview" ? .reading : .source)
         token = argument("--capture-ready-token").flatMap { UUID(uuidString: $0) == nil ? nil : $0 }
     }
 
@@ -78,7 +81,8 @@ struct ScrollEdgeCaptureWorkspace: View {
                         .background {
                             ScrollEdgeReadiness(
                                 source: session.textView, mode: mode, previewReady: rendered,
-                                heading: Self.heading, token: token
+                                heading: Self.heading, token: token,
+                                wantsKeyboard: wantsKeyboard, keyboardHeight: keyboardHeight
                             ) { failure = $0 }
                         }
                     }
@@ -90,6 +94,11 @@ struct ScrollEdgeCaptureWorkspace: View {
             }
         }
         .personalAccent(savedHex: nil)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)) { notification in
+            guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+                  let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+            keyboardHeight = scene.coordinateSpace.bounds.intersection(frame).height
+        }
         .alert("Scroll Capture Unavailable", isPresented: Binding(
             get: { failure != nil }, set: { if !$0 { failure = nil } }
         )) {
@@ -117,6 +126,8 @@ private struct ScrollEdgeReadiness: UIViewRepresentable {
     let previewReady: Bool
     let heading: String
     let token: String?
+    let wantsKeyboard: Bool
+    let keyboardHeight: CGFloat
     let failure: @MainActor (String) -> Void
 
     func makeUIView(context: Context) -> ScrollEdgeProbe { ScrollEdgeProbe() }
@@ -124,7 +135,8 @@ private struct ScrollEdgeReadiness: UIViewRepresentable {
     func updateUIView(_ view: ScrollEdgeProbe, context: Context) {
         view.configure(
             source: source, mode: mode, previewReady: previewReady,
-            heading: heading, token: token, failure: failure
+            heading: heading, token: token, wantsKeyboard: wantsKeyboard,
+            keyboardHeight: keyboardHeight, failure: failure
         )
     }
 
@@ -139,6 +151,9 @@ private final class ScrollEdgeProbe: UIView {
     private var previewReady = false
     private var heading = ""
     private var token: String?
+    private var wantsKeyboard = false
+    private var keyboardHeight: CGFloat = 0
+    private var requestedFocus = false
     private var failure: (@MainActor (String) -> Void)?
     private var displayLink: CADisplayLink?
     private var resolvingHeading = false
@@ -160,13 +175,16 @@ private final class ScrollEdgeProbe: UIView {
 
     func configure(
         source: UITextView, mode: NoteMode, previewReady: Bool, heading: String,
-        token: String?, failure: @escaping @MainActor (String) -> Void
+        token: String?, wantsKeyboard: Bool, keyboardHeight: CGFloat,
+        failure: @escaping @MainActor (String) -> Void
     ) {
         self.source = source
         self.mode = mode
         self.previewReady = previewReady
         self.heading = heading
         self.token = token
+        self.wantsKeyboard = wantsKeyboard
+        self.keyboardHeight = keyboardHeight
         self.failure = failure
         startIfAttached()
     }
@@ -196,6 +214,31 @@ private final class ScrollEdgeProbe: UIView {
             return
         }
         guard previewReady || mode == .source else { return }
+        if wantsKeyboard, let source, source.window === window {
+            if !requestedFocus {
+                requestedFocus = true
+                let range = (source.text as NSString).range(of: "## \(heading)")
+                if range.location != NSNotFound { source.selectedRange = NSRange(location: range.location, length: 0) }
+                guard source.becomeFirstResponder() else {
+                    fail("The source editor could not receive keyboard focus.")
+                    return
+                }
+            }
+            guard source.isFirstResponder, keyboardHeight >= 150,
+                  source.inputAccessoryView?.window != nil else { return }
+        }
+        if mode == .source, let source, targetY != nil {
+            let range = (source.text as NSString).range(of: "## \(heading)")
+            if range.location != NSNotFound,
+               let position = source.position(from: source.beginningOfDocument, offset: range.location) {
+                let currentY = source.caretRect(for: position).minY
+                if let headingY, abs(currentY - headingY) > 0.5 {
+                    stableSince = nil
+                    stableFrames = 0
+                    setTarget(currentY, scrollView: source)
+                }
+            }
+        }
         if targetY == nil {
             prepareOffset(in: window)
             return
@@ -291,15 +334,18 @@ private final class ScrollEdgeProbe: UIView {
         let headingWindowY = scrollView.convert(CGPoint(x: 0, y: headingY), to: window).y
         guard abs(window.bounds.width - 466) <= 1,
               sample.frame.minY < navigationFrame.maxY,
-              sample.frame.maxY >= window.bounds.maxY - 1,
+              wantsKeyboard || sample.frame.maxY >= window.bounds.maxY - 1,
               headingWindowY < navigationFrame.maxY,
-              !sourceIsFocused else {
-            fail("The capture requires a 466-point viewport, real bar underlap and a dismissed keyboard.")
+              wantsKeyboard == sourceIsFocused else {
+            fail("The capture requires a 466-point viewport, real bar underlap and the requested keyboard state.")
             return
         }
         do {
+            let accessoryFrame = source?.inputAccessoryView.map {
+                NSCoder.string(for: $0.convert($0.bounds, to: window))
+            } ?? ""
             let data = try JSONSerialization.data(withJSONObject: [
-                "screen": "scroll-edges", "state": mode == .source ? "source" : "preview",
+                "screen": "scroll-edges", "state": wantsKeyboard ? "source-keyboard" : mode == .source ? "source" : "preview",
                 "fixture": "page-in-motion", "token": token,
                 "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
                 "contentSizeCategory": window.traitCollection.preferredContentSizeCategory.rawValue,
@@ -310,7 +356,9 @@ private final class ScrollEdgeProbe: UIView {
                 "navigationBar": NSCoder.string(for: navigationFrame),
                 "navigationBarMaxY": navigationFrame.maxY, "headingWindowY": headingWindowY,
                 "stableFrames": stableFrames, "stableDuration": stableDuration,
-                "keyboardVisible": false,
+                "keyboardVisible": sourceIsFocused && keyboardHeight >= 150,
+                "keyboardHeight": keyboardHeight,
+                "accessoryFrame": accessoryFrame,
             ], options: [.sortedKeys])
             try data.write(
                 to: FileManager.default.temporaryDirectory
