@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import SwiftUI
 import Testing
 import UIKit
 import WebKit
@@ -8,6 +9,54 @@ import WebKit
 @MainActor
 @Suite("Offline WebKit renderer", .serialized)
 struct PreviewWebKitTests {
+    @Test("The native preview applies read-only capability and the soft bottom edge")
+    func nativeReadOnlyHost() async throws {
+        var events: [PreviewEvent] = []
+        let preview = MarkdownPreviewView(
+            document: "- [ ] Read-only task\n", documentID: "read-only", generation: 0,
+            allowsTaskEdits: false
+        ) { events.append($0) }
+        let controller = UIHostingController(rootView: preview)
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        try await waitFor("native read-only preview") {
+            events.contains {
+                if case .rendered(documentID: "read-only", generation: 0) = $0 { return true }
+                return false
+            }
+        }
+        func findWebView(in view: UIView) -> WKWebView? {
+            if let webView = view as? WKWebView { return webView }
+            return view.subviews.lazy.compactMap { findWebView(in: $0) }.first
+        }
+        let webView = try #require(findWebView(in: controller.view))
+        #expect(webView.scrollView.bottomEdgeEffect.style == .soft)
+        let readOnly = try await webView.callAsyncJavaScript(
+            """
+            const input = document.querySelector('input[type=checkbox]');
+            const disabled = input.disabled && input.getAttribute('aria-label') === 'Read-only task: Read-only task';
+            input.click();
+            return disabled;
+            """,
+            arguments: [:], in: nil, contentWorld: .page
+        ) as? Bool
+        #expect(readOnly == true)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(!events.contains {
+            switch $0 {
+            case .taskToggle, .failure: true
+            default: false
+            }
+        })
+    }
+
     @Test("The actual bundled page renders and addresses duplicate tasks")
     func offlineRendering() async throws {
         let markdown = try PreviewFixtures.allSyntax
@@ -31,13 +80,9 @@ struct PreviewWebKitTests {
         webView.navigationDelegate = receiver
         let controller = UIViewController()
         controller.view = webView
-        let window: UIWindow
-        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
-            window = UIWindow(windowScene: scene)
-            window.frame = webView.frame
-        } else {
-            window = UIWindow(frame: webView.frame)
-        }
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = webView.frame
         window.rootViewController = controller
         window.makeKeyAndVisible()
         defer {
@@ -46,7 +91,7 @@ struct PreviewWebKitTests {
             window.isHidden = true
             window.rootViewController = nil
         }
-        try #require(webView.load(URLRequest(url: URL(string: "gistpad-preview://bundle/index.html")!)))
+        _ = try #require(webView.load(URLRequest(url: URL(string: "gistpad-preview://bundle/index.html")!)))
         do {
             try await waitFor("ready message") { receiver.bodies.contains { $0["type"] as? String == "ready" } }
         } catch {
@@ -123,6 +168,59 @@ struct PreviewWebKitTests {
             arguments: [:], in: nil, contentWorld: .page
         ) as? Bool
         #expect(readingPresentation == true)
+        _ = try await webView.callAsyncJavaScript(
+            """
+            const paragraph = document.querySelector('article > p');
+            const range = document.createRange();
+            range.selectNodeContents(paragraph);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            window.previewSelectedText = selection.toString();
+            window.previewParagraph = paragraph;
+            window.gistpadPreview.setTaskEditingEnabled(false);
+            """,
+            arguments: [:], in: nil, contentWorld: .page
+        )
+        var readOnly = false
+        for _ in 0..<100 {
+            readOnly = try await webView.callAsyncJavaScript(
+                """
+                return [...document.querySelectorAll('input[type=checkbox]')].every(input =>
+                    input.disabled && input.getAttribute('aria-label').startsWith('Read-only task: ') &&
+                    getComputedStyle(input).opacity === '1' && getComputedStyle(input.closest('li')).opacity === '1') &&
+                    document.querySelector('article > p') === window.previewParagraph &&
+                    window.getSelection().toString() === window.previewSelectedText;
+                """,
+                arguments: [:], in: nil, contentWorld: .page
+            ) as? Bool == true
+            if readOnly { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(readOnly)
+        _ = try await webView.callAsyncJavaScript(
+            """
+            document.querySelectorAll('input[type=checkbox]')[1].click();
+            window.getSelection().removeAllRanges();
+            """,
+            arguments: [:], in: nil, contentWorld: .page
+        )
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(!receiver.bodies.contains { ["taskToggle", "failure"].contains($0["type"] as? String ?? "") })
+        _ = try await webView.callAsyncJavaScript(
+            "window.gistpadPreview.setTaskEditingEnabled(true);",
+            arguments: [:], in: nil, contentWorld: .page
+        )
+        var editable = false
+        for _ in 0..<100 {
+            editable = try await webView.callAsyncJavaScript(
+                "return !document.querySelectorAll('input[type=checkbox]')[1].disabled;",
+                arguments: [:], in: nil, contentWorld: .page
+            ) as? Bool == true
+            if editable { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(editable)
         _ = try await webView.callAsyncJavaScript(
             "document.querySelectorAll('input[type=checkbox]')[1].click();",
             arguments: [:], in: nil, contentWorld: .page

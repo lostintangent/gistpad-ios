@@ -23,12 +23,15 @@ HTML is sanitized before slug/TOC generation and task annotation. Scripts, forms
 ## Native API
 
 ```swift
-MarkdownPreviewView(document: markdown, documentID: fileID, generation: generation) { event in
+MarkdownPreviewView(document: markdown, documentID: fileID, generation: generation,
+                    allowsTaskEdits: access.canEdit) { event in
     // Route links natively. Apply tasks through the document session and its undo manager.
 }
 ```
 
 Every actionable message includes document identity and a decimal-string UInt64 generation. Tasks carry an NSRange-compatible UTF-16 range, the exact `[ ]` / `[x]` / `[X]` marker and its replacement. Call `edit.validate(in:documentID:generation:)` immediately before applying it. Source offsets come from the parsed task's position, not task text, so duplicate labels are unambiguous. The host validates frame/origin, message sizes, ranges, markers, generation and URL schemes. No credentials or auth/session objects enter WebKit.
+
+`allowsTaskEdits` defaults to true for existing callers. Pass the document's actual edit capability. Access updates do not rerender Markdown or replace selection. Read-only checkboxes stay legible, expose disabled/read-only semantics and never emit edits. The native receiver explicitly discards and logs validated task events already in flight when access is revoked. The WebKit scroll view uses the system's soft bottom edge, matching the native note chrome.
 
 The host resolves semantic colors and text-style metrics from native traits and updates CSS variables separately from Markdown. Appearance changes do not reparse source or replace selection. Dynamic Type, Bold Text, light/dark and increased contrast follow `docs/design-system.md`. The web page's fallback colors are only for standalone browser checks. `WKWebView` is intentionally isolated behind one representable to expose its local resource-scheme handler and validated message/frame boundary. SwiftUI owns the surrounding UI.
 

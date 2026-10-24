@@ -5,6 +5,7 @@ import OSLog
 
 public struct MarkdownPreviewView: UIViewRepresentable {
     private let document: PreviewDocument
+    private let allowsTaskEdits: Bool
     private let onEvent: @MainActor (PreviewEvent) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorSchemeContrast) private var contrast
@@ -15,14 +16,16 @@ public struct MarkdownPreviewView: UIViewRepresentable {
         document: String,
         documentID: String,
         generation: UInt64,
+        allowsTaskEdits: Bool = true,
         onEvent: @escaping @MainActor (PreviewEvent) -> Void
     ) {
         self.document = PreviewDocument(text: document, id: documentID, generation: generation)
+        self.allowsTaskEdits = allowsTaskEdits
         self.onEvent = onEvent
     }
 
     public func makeCoordinator() -> Coordinator {
-        Coordinator(document: document, onEvent: onEvent)
+        Coordinator(document: document, allowsTaskEdits: allowsTaskEdits, onEvent: onEvent)
     }
 
     public func makeUIView(context: Context) -> WKWebView {
@@ -40,6 +43,7 @@ public struct MarkdownPreviewView: UIViewRepresentable {
         webView.scrollView.backgroundColor = .clear
         webView.scrollView.bounces = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.bottomEdgeEffect.style = .soft
         webView.allowsLinkPreview = false
         context.coordinator.webView = webView
         webView.load(URLRequest(url: URL(string: "gistpad-preview://bundle/index.html")!))
@@ -54,7 +58,7 @@ public struct MarkdownPreviewView: UIViewRepresentable {
             $0.preferredContentSizeCategory = dynamicTypeSize.contentSizeCategory
         }
         context.coordinator.appearance = PreviewAppearance(traits: traits, boldText: legibilityWeight == .bold)
-        context.coordinator.update(document)
+        context.coordinator.update(document, allowsTaskEdits: allowsTaskEdits)
     }
 
     public static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
@@ -70,17 +74,21 @@ public struct MarkdownPreviewView: UIViewRepresentable {
         fileprivate var onEvent: @MainActor (PreviewEvent) -> Void
         fileprivate var appearance: PreviewAppearance?
         private var document: PreviewDocument
+        private var allowsTaskEdits: Bool
         private var lastSent: PreviewDocument?
+        private var lastTaskEditing: Bool?
         private var lastAppearance: PreviewAppearance?
         private var ready = false
 
-        fileprivate init(document: PreviewDocument, onEvent: @escaping @MainActor (PreviewEvent) -> Void) {
+        fileprivate init(document: PreviewDocument, allowsTaskEdits: Bool, onEvent: @escaping @MainActor (PreviewEvent) -> Void) {
             self.document = document
+            self.allowsTaskEdits = allowsTaskEdits
             self.onEvent = onEvent
         }
 
-        fileprivate func update(_ document: PreviewDocument) {
+        fileprivate func update(_ document: PreviewDocument, allowsTaskEdits: Bool) {
             self.document = document
+            self.allowsTaskEdits = allowsTaskEdits
             guard ready, let webView else { return }
             do {
                 try document.validate()
@@ -90,6 +98,22 @@ public struct MarkdownPreviewView: UIViewRepresentable {
             } catch {
                 onEvent(.failure(.renderer(error.localizedDescription)))
                 return
+            }
+            if lastTaskEditing != allowsTaskEdits {
+                lastTaskEditing = allowsTaskEdits
+                Task { @MainActor [weak self, weak webView] in
+                    guard let webView, self?.allowsTaskEdits == allowsTaskEdits else { return }
+                    do {
+                        _ = try await webView.callAsyncJavaScript(
+                            "window.gistpadPreview.setTaskEditingEnabled(enabled);",
+                            arguments: ["enabled": allowsTaskEdits],
+                            in: nil, contentWorld: .page
+                        )
+                    } catch {
+                        self?.lastTaskEditing = nil
+                        self?.onEvent(.failure(.webKit(error)))
+                    }
+                }
             }
             if let appearance, appearance != lastAppearance {
                 lastAppearance = appearance
@@ -132,13 +156,16 @@ public struct MarkdownPreviewView: UIViewRepresentable {
                 return
             }
             do {
-                switch try PreviewBridge.decode(message.body, document: document) {
+                switch try PreviewBridge.decode(message.body, document: document, allowsTaskEdits: allowsTaskEdits) {
                 case .ready:
                     ready = true
-                    update(document)
+                    update(document, allowsTaskEdits: allowsTaskEdits)
                 case .obsolete:
                     Logger(subsystem: "dev.gistpad.GistPad", category: "MarkdownPreview")
                         .debug("Discarded a passive preview event from an obsolete document generation.")
+                case .taskEditingUnavailable:
+                    Logger(subsystem: "dev.gistpad.GistPad", category: "MarkdownPreview")
+                        .debug("Discarded a task edit after preview editing became unavailable.")
                 case .event(let event):
                     onEvent(event)
                 }
@@ -167,6 +194,7 @@ public struct MarkdownPreviewView: UIViewRepresentable {
         public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             ready = false
             lastSent = nil
+            lastTaskEditing = nil
             lastAppearance = nil
             onEvent(.failure(.renderer("The preview stopped unexpectedly. Reload the document to recover.")))
             webView.reload()

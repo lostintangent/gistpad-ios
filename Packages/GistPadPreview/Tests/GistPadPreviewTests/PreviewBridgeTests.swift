@@ -72,6 +72,21 @@ struct PreviewBridgeTests {
         }
     }
 
+    @Test("Read-only previews discard in-flight task edits without failing the document")
+    func readOnlyTask() throws {
+        let range = (text as NSString).range(of: "[x]")
+        let body: [String: Any] = [
+            "version": 1, "type": "taskToggle", "documentID": "fixture",
+            "generation": String(UInt64.max),
+            "edit": ["location": range.location, "length": 3,
+                     "expectedMarker": "[x]", "replacementMarker": "[ ]"]
+        ]
+        guard case .taskEditingUnavailable = try PreviewBridge.decode(body, document: document, allowsTaskEdits: false) else {
+            Issue.record("Expected a read-only task edit to be discarded")
+            return
+        }
+    }
+
     @Test("Malformed, oversized and unknown messages are rejected")
     func malformedMessages() {
         for body: [String: Any] in [

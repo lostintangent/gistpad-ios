@@ -17,6 +17,36 @@ async (page) => {
   const checkboxes = page.getByRole("checkbox");
   if (await checkboxes.count() !== 7) throw new Error("Expected seven addressable tasks");
   if (await checkboxes.nth(1).isDisabled()) throw new Error("Duplicate task is not addressable");
+  await page.evaluate(() => {
+    const paragraph = document.querySelector("article > p");
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    window.previewSelectedText = selection.toString();
+    window.previewParagraph = paragraph;
+    window.gistpadPreview.setTaskEditingEnabled(false);
+  });
+  await page.waitForFunction(() => [...document.querySelectorAll("input[type=checkbox]")].every((input) => input.disabled));
+  const readOnly = await page.evaluate(() => {
+    const before = window.previewMessages.length;
+    document.querySelectorAll("input[type=checkbox]")[1].click();
+    return window.previewMessages.length === before &&
+      !window.previewMessages.some((message) => message.type === "taskToggle" || message.type === "failure") &&
+      [...document.querySelectorAll("input[type=checkbox]")].every((input) =>
+        input.getAttribute("aria-label").startsWith("Read-only task: ") &&
+        getComputedStyle(input).opacity === "1" &&
+        getComputedStyle(input.closest("li")).opacity === "1") &&
+      document.querySelector("article > p") === window.previewParagraph &&
+      window.getSelection().toString() === window.previewSelectedText;
+  });
+  if (!readOnly) throw new Error("Read-only task controls changed selection, dimmed text or emitted an edit");
+  await page.evaluate(() => {
+    window.getSelection().removeAllRanges();
+    window.gistpadPreview.setTaskEditingEnabled(true);
+  });
+  await page.waitForFunction(() => !document.querySelectorAll("input[type=checkbox]")[1].disabled);
   await checkboxes.nth(1).click();
   const toggle = await page.evaluate(() => window.previewMessages.findLast((message) => message.type === "taskToggle"));
   if (!toggle || toggle.edit.location !== markdown.indexOf("[x]") ||

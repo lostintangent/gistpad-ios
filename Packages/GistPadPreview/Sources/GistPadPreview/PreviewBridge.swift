@@ -25,6 +25,7 @@ struct PreviewDocument: Equatable, Sendable {
 enum BridgeMessage {
     case ready
     case obsolete
+    case taskEditingUnavailable
     case event(PreviewEvent)
 }
 
@@ -47,7 +48,7 @@ enum PreviewBridge {
         let message: String?
     }
 
-    static func decode(_ body: Any, document: PreviewDocument) throws -> BridgeMessage {
+    static func decode(_ body: Any, document: PreviewDocument, allowsTaskEdits: Bool = true) throws -> BridgeMessage {
         guard JSONSerialization.isValidJSONObject(body) else { throw PreviewFailure.invalidMessage }
         let data = try JSONSerialization.data(withJSONObject: body)
         guard data.count <= 16_384 else { throw PreviewFailure.invalidMessage }
@@ -75,6 +76,7 @@ enum PreviewBridge {
                 replacementMarker: edit.replacementMarker
             )
             try task.validate(in: document.text, documentID: document.id, generation: document.generation)
+            guard allowsTaskEdits else { return .taskEditingUnavailable }
             return .event(.taskToggle(task))
         case "link":
             guard let rawKind = message.kind, let kind = PreviewLink.Kind(rawValue: rawKind),

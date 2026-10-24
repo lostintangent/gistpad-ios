@@ -12,8 +12,9 @@ import rehypeToc from "@gistpad/rehype-toc";
 import Mermaid from "../../../gistpad.dev/src/features/markdown/Mermaid";
 import { taskRangePlugins } from "./tasks";
 import { toString } from "hast-util-to-string";
-import type { PreviewMessage, RenderRequest } from "./protocol";
+import type { PreviewMessage, RenderRequest, TaskEdit } from "./protocol";
 import { useDiagramTheme } from "./diagramTheme";
+import { isTaskEditingEnabled, useTaskEditingEnabled } from "./taskEditing";
 
 const emojis = new Map(
   Object.entries(emojiData.emojis).map(([id, emoji]) => [id, emoji.skins[0]?.native ?? ""]),
@@ -164,17 +165,10 @@ export function Preview({ request }: { request: RenderRequest }) {
         const addressable = typeof location === "number" &&
           (expectedMarker === "[ ]" || expectedMarker === "[x]" || expectedMarker === "[X]") &&
           (replacementMarker === "[ ]" || replacementMarker === "[x]");
-        return (
-          <label className="task-toggle"><input type="checkbox" checked={!!checked} disabled={!addressable}
-            aria-label={`${checked ? "Mark incomplete" : "Mark complete"}: ${String(node?.properties.dataTaskLabel ?? "Task")}`}
-            onChange={() => {
-              if (!addressable) return;
-              send({
-                ...identity(request), type: "taskToggle",
-                edit: { location, length: 3, expectedMarker, replacementMarker },
-              });
-            }} /></label>
-        );
+        const edit: TaskEdit | undefined = addressable
+          ? { location, length: 3, expectedMarker, replacementMarker } : undefined;
+        return <TaskCheckbox checked={!!checked} label={String(node?.properties.dataTaskLabel ?? "Task")}
+          edit={edit} request={request} />;
       },
       pre({ children, node, ...props }) {
         const isDiagram = node?.children.some((child) => child.type === "element" &&
@@ -232,6 +226,22 @@ export function Preview({ request }: { request: RenderRequest }) {
       {request.markdown}
     </ReactMarkdown>
   </article>;
+}
+
+function TaskCheckbox({ checked, label, edit, request }: {
+  checked: boolean; label: string; edit?: TaskEdit; request: RenderRequest;
+}) {
+  const allowsTaskEdits = useTaskEditingEnabled();
+  const editable = allowsTaskEdits && edit !== undefined;
+  const action = !allowsTaskEdits ? "Read-only task" : edit === undefined ? "Unavailable task"
+    : checked ? "Mark incomplete" : "Mark complete";
+  return <label className="task-toggle"><input type="checkbox" checked={checked} disabled={!editable}
+    aria-label={`${action}: ${label}`}
+    onChange={() => {
+      if (edit && isTaskEditingEnabled()) {
+        send({ ...identity(request), type: "taskToggle", edit });
+      }
+    }} /></label>;
 }
 
 function PreviewImage({ src, alt }: { src?: string; alt: string }) {

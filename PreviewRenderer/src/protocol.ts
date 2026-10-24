@@ -44,7 +44,11 @@ export function isRenderRequest(value: unknown): value is RenderRequest {
 
 declare global {
   interface Window {
-    gistpadPreview: { render: (request: unknown) => void; setAppearance: (appearance: unknown) => void };
+    gistpadPreview: {
+      render: (request: unknown) => void;
+      setAppearance: (appearance: unknown) => void;
+      setTaskEditingEnabled: (enabled: unknown) => void;
+    };
     webkit?: {
       messageHandlers?: { gistpadPreview?: { postMessage: (message: PreviewMessage) => void } };
     };
