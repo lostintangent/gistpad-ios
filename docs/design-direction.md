@@ -214,9 +214,13 @@ The surface identifies the note and exact filename before the request, with a qu
 
 Use a native three-action picker in this same surface, not an introductory dashboard. Ask is the initial action. Ask/Edit provides a focused prompt field; Review has one clear Generate action. Request, progress, cancellation and result stay in the same sheet. A compact diff stacks labeled Before/After hunks; a wide review can show them side by side. Added/deleted meaning must survive without color.
 
+**Waiting for a validated answer is an explicit state, not an empty result.** Show the existing small native circular `ProgressView` and secondary Dynamic Type callout as soon as generation starts. Keep the submitted request and an enabled neutral Cancel action. Use the actual engine phase: Preparing this note, Answering, or real numbered parts. Keep the pending group visible in the sheet's usable viewport, including at AX sizes. No empty answer bubble, shimmering placeholder, simulated typing, accent animation, invented percentage or timed slogan is needed. Native indeterminate progress remains the treatment with Reduce Motion; do not repeatedly announce spinner updates.
+
+Ask may hold the entire answer until its prose and citations validate. Keep the same live progress surface through a bounded quality retry, without briefly revealing rejected text, resetting the sheet or suggesting the note has changed. Progressive reveal is optional and may show only already-validated content. Native acceptance must include at least five seconds with **zero answer parts**, cancellation, successful replacement by the answer and a final failure that preserves the request. Measure request-to-first-visible-validated-answer p50/p90 with all preparation and quality retries included, not hidden first-token time. Source review alone does not establish that the pending state remains visible on the actual sheet.
+
 | Action | Result and commitment |
 | --- | --- |
-| Ask | A streamed answer about the whole note, with a way back to referenced source passages. Quotes must match the snapshot. No source mutation or global chat destination |
+| Ask | A validated answer about the whole note, with a way back to referenced source passages. Progressive reveal is optional; quotes must match the snapshot. No source mutation or global chat destination |
 | Edit | Changes across the whole note presented as one reviewable diff. Apply the accepted set as one transaction and one Undo step |
 | Review | Whole-note comments anchored to exact source quotes, with optional replacements the user can apply individually. Comments remain separate from source until Apply |
 
