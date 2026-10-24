@@ -156,6 +156,7 @@
 			VALIDATE_PRODUCT = YES;
 		}; name = Release; };
 		A00000000000000000000072 = {isa = XCBuildConfiguration; baseConfigurationReference = A0000000000000000000000C; buildSettings = {
+			ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 			CODE_SIGN_STYLE = Automatic;
 			CURRENT_PROJECT_VERSION = 1;
 			DEVELOPMENT_TEAM = RHFNBL7EG4;
@@ -176,6 +177,7 @@
 			TARGETED_DEVICE_FAMILY = 1;
 		}; name = Debug; };
 		A00000000000000000000073 = {isa = XCBuildConfiguration; baseConfigurationReference = A0000000000000000000000C; buildSettings = {
+			ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 			CODE_SIGN_STYLE = Automatic;
 			CURRENT_PROJECT_VERSION = 1;
 			DEVELOPMENT_TEAM = RHFNBL7EG4;

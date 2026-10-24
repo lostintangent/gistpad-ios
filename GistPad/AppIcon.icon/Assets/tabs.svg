@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>GistPad index tabs layer</title>
+  <g id="index-tabs" transform="translate(-102.4 -102.4) scale(1.2)">
+    <rect id="coral-tab" x="696" y="276" width="140" height="112" rx="24" fill="#E47D70"/>
+    <rect id="sage-tab" x="696" y="436" width="140" height="112" rx="24" fill="#63B0A2"/>
+    <rect id="violet-tab" x="696" y="596" width="140" height="112" rx="24" fill="#9391CF"/>
+  </g>
+</svg>
