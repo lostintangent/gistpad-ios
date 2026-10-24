@@ -38,6 +38,55 @@ import Testing
         #expect(try await client.gist(id: "abc123") == first)
     }
 
+    @Test func deletingAGistInvalidatesBothListsAndRevalidatesPastTheHTTPCache() async throws {
+        let calls = Mutex<[String: Int]>([:])
+        let session = FakeURLProtocol.session { request in
+            if request.httpMethod == "DELETE" { return FakeResponse(status: 204) }
+            #expect(request.cachePolicy == .reloadIgnoringLocalCacheData)
+            #expect(request.value(forHTTPHeaderField: "Cache-Control") == "no-cache")
+            let count = calls.withLock { calls in
+                let path = request.url?.path ?? ""
+                calls[path, default: 0] += 1
+                return calls[path, default: 0]
+            }
+            #expect(request.value(forHTTPHeaderField: "If-None-Match") == nil)
+            return FakeResponse(
+                headers: ["ETag": "\"list\"", "Cache-Control": "max-age=60"],
+                data: count == 1 ? Data("[".utf8) + (try gistData()) + Data("]".utf8)
+                    : Data("[]".utf8))
+        }
+        let client = GitHubClient(session: session) { "fake" }
+        #expect(try await client.listGists().count == 1)
+        #expect(try await client.listStarredGists().count == 1)
+        try await client.deleteGist(id: "abc123")
+        #expect(try await client.listGists().isEmpty)
+        #expect(try await client.listStarredGists().isEmpty)
+    }
+
+    @Test func anOlderListCannotRefillTheETagCacheAfterAMutation() async throws {
+        let gate = GitHubListReadGate()
+        let calls = Mutex(0)
+        let session = FakeURLProtocol.session { request in
+            if request.httpMethod == "DELETE" { return FakeResponse(status: 204) }
+            let count = calls.withLock { $0 += 1; return $0 }
+            if count == 1 {
+                await gate.hold()
+                return FakeResponse(
+                    headers: ["ETag": "\"before-delete\""],
+                    data: Data("[".utf8) + (try gistData()) + Data("]".utf8))
+            }
+            #expect(request.value(forHTTPHeaderField: "If-None-Match") == nil)
+            return FakeResponse(data: Data("[]".utf8))
+        }
+        let client = GitHubClient(session: session) { "fake" }
+        let olderRead = Task { try await client.listGists() }
+        await gate.waitUntilHeld()
+        try await client.deleteGist(id: "abc123")
+        await gate.release()
+        _ = try await olderRead.value
+        #expect(try await client.listGists().isEmpty)
+    }
+
     @Test func neverSendsCredentialsToPaginationHost() async throws {
         let calls = Mutex(0)
         let session = FakeURLProtocol.session { _ in
@@ -47,6 +96,7 @@ import Testing
                 data: Data("[]".utf8)
             )
         }
+
         let client = GitHubClient(session: session) { "fake" }
         await #expect(throws: GitHubClientError.unsafeURL) { try await client.listGists() }
         #expect(calls.withLock { $0 } == 1)
@@ -178,5 +228,28 @@ import Testing
         await #expect(throws: GitHubClientError.http(status: 404, retryAfter: nil)) {
             try await client.gist(id: "abc123")
         }
+    }
+}
+
+private actor GitHubListReadGate {
+    private var held: CheckedContinuation<Void, Never>?
+    private var observer: CheckedContinuation<Void, Never>?
+
+    func hold() async {
+        await withCheckedContinuation { continuation in
+            held = continuation
+            observer?.resume()
+            observer = nil
+        }
+    }
+
+    func waitUntilHeld() async {
+        if held != nil { return }
+        await withCheckedContinuation { observer = $0 }
+    }
+
+    func release() {
+        held?.resume()
+        held = nil
     }
 }

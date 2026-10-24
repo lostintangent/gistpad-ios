@@ -76,13 +76,18 @@ final class LibraryDeletionUITests: XCTestCase {
     confirmation.tap()
     try await waitUntil("the successfully deleted synthetic gist to leave") { !row.exists }
     XCTAssertTrue(app.descendants(matching: .any)["library-note-a"].firstMatch.exists)
+    app.collectionViews.firstMatch.swipeDown()
+    try await waitUntil("the stale list to keep the deleted row excluded") {
+      !row.exists && app.descendants(matching: .any)["library-note-a"].firstMatch.isHittable
+    }
+    record(app, name: "library-delete-after-stale-refresh-\(dark ? "Dark" : "Light")")
   }
 
   @MainActor
   private func launch(dark: Bool) -> XCUIApplication {
     let app = XCUIApplication(bundleIdentifier: "dev.gistpad.GistPad")
     app.launchArguments = [
-      "--capture-screen", "library-delete",
+      "--capture-screen", "library-delete", "--capture-stale-deletion",
       "--capture-appearance", dark ? "dark" : "light",
       "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL",
     ]

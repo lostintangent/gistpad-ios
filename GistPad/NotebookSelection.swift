@@ -54,6 +54,15 @@ final class NotebookSelectionStore {
     }
   }
 
+  func confirmDeleted(gistIDs: Set<String>, accountID: UUID) {
+    let remaining = deletedGistIDs(accountID: accountID).subtracting(gistIDs)
+    if let defaults {
+      defaults.set(remaining.sorted(), forKey: deletedKey(accountID))
+    } else {
+      deleted[accountID] = remaining
+    }
+  }
+
   private func deletedKey(_ accountID: UUID) -> String {
     "notebook.deleted-gists.\(accountID.uuidString)"
   }

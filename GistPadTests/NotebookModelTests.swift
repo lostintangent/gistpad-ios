@@ -68,6 +68,96 @@ struct NotebookModelTests {
     #expect(model.libraryDeletionTarget(for: "a") == nil)
   }
 
+  @Test(arguments: [false, true])
+  func aStaleListAfterDeletionCannotRestoreTheGistOrItsCachedContent(daily: Bool) async throws {
+    let deleted = try makeGist(
+      id: "a", title: daily ? GistConventions.dailyNotesDescription : "A published note",
+      content: "Deleted source", filename: daily ? GistConventions.todayFilename() : "README.md")
+    let kept = try makeGist(id: "b", title: "Keep this note")
+    let provider = StubNotebookProvider(
+      account: fixtureAccount, gists: [deleted, kept], starred: [deleted])
+    let selections = NotebookSelectionStore()
+    let model = NotebookModel(provider: provider, selections: selections)
+    await model.start()
+    _ = try await model.perform(.delete(gistID: deleted.id))
+    await provider.setListResponses(owned: [deleted, kept], starred: [deleted])
+    await model.refresh()
+    for collection in LibraryCollection.allCases {
+      model.library.collection = collection
+      #expect(model.library.matchingNotes.allSatisfy { $0.id != deleted.id })
+    }
+    #expect(model.library.pinnedNotes.allSatisfy { $0.id != deleted.id })
+    #expect(model.cachedLibrary?.gists.map(\.id) == [kept.id])
+    #expect(try await provider.localState(accountID: fixtureAccount.id).library?.gists.map(\.id)
+      == [kept.id])
+    #expect(model.deletedGistIDs.contains(deleted.id))
+    #expect(selections.deletedGistIDs(accountID: fixtureAccount.id).contains(deleted.id))
+    if daily { #expect(model.library.today.availability == .missing) }
+
+    let restarted = NotebookModel(provider: provider, selections: selections)
+    await restarted.start()
+    #expect(restarted.cachedLibrary?.gists.map(\.id) == [kept.id])
+    #expect(restarted.library.snapshot.notes.allSatisfy { $0.id != deleted.id })
+    await provider.setListResponses(owned: [kept], starred: [])
+    await restarted.refresh()
+    #expect(!restarted.deletedGistIDs.contains(deleted.id))
+    #expect(!selections.deletedGistIDs(accountID: fixtureAccount.id).contains(deleted.id))
+  }
+
+  @Test func aRefreshAlreadyInFlightCannotResurrectASuccessfullyDeletedGist() async throws {
+    let deleted = try makeGist(id: "a", title: "Delete this published note")
+    let kept = try makeGist(id: "b", title: "Keep this note")
+    let provider = StubNotebookProvider(
+      account: fixtureAccount, gists: [deleted, kept], starred: [deleted])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await provider.holdLibraryRead()
+    let refresh = Task { await model.refresh() }
+    await provider.waitForHeldLibraryRead()
+    _ = try await model.perform(.delete(gistID: deleted.id))
+    #expect(model.library.snapshot.notes.map(\.id) == [kept.id])
+    await provider.releaseLibraryRead()
+    await refresh.value
+    #expect(model.library.snapshot.notes.map(\.id) == [kept.id])
+    #expect(model.cachedLibrary?.gists.map(\.id) == [kept.id])
+    #expect(try await provider.localState(accountID: fixtureAccount.id).library?.gists.map(\.id)
+      == [kept.id])
+    #expect(model.deletedGistIDs.contains(deleted.id))
+    #expect(!model.isRefreshingRemote)
+    await model.refresh()
+    #expect(!model.deletedGistIDs.contains(deleted.id))
+  }
+
+  @Test func persistedDeletionsFilterAnOfflineCacheWithoutChangingAnotherAccount() async throws {
+    let suite = "NotebookDeletion-\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let otherAccount = UUID()
+    let selections = NotebookSelectionStore(defaults: defaults)
+    selections.markDeleted(gistID: "a", accountID: fixtureAccount.id)
+    selections.markDeleted(gistID: "a", accountID: otherAccount)
+    let deleted = try makeGist(id: "a", title: "Deleted note")
+    let kept = try makeGist(id: "b", title: "Kept note")
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [deleted, kept])
+    await provider.cacheLibrary(owned: [deleted, kept], starred: [deleted], account: fixtureAccount)
+    await provider.failRequests()
+    let restored = NotebookSelectionStore(defaults: defaults)
+    let model = NotebookModel(provider: provider, selections: restored, remoteReadRetryDelays: [])
+    await model.start()
+    #expect(model.library.snapshot.notes.map(\.id) == [kept.id])
+    #expect(model.cachedLibrary?.gists.map(\.id) == [kept.id])
+    #expect(try await provider.localState(accountID: fixtureAccount.id).library?.gists.map(\.id)
+      == [kept.id])
+    #expect(restored.deletedGistIDs(accountID: fixtureAccount.id) == ["a"])
+    #expect(restored.deletedGistIDs(accountID: otherAccount) == ["a"])
+    restored.confirmDeleted(gistIDs: ["a"], accountID: fixtureAccount.id)
+    #expect(restored.deletedGistIDs(accountID: fixtureAccount.id).isEmpty)
+    #expect(restored.deletedGistIDs(accountID: otherAccount) == ["a"])
+    #expect(NotebookModel.librarySnapshot(
+      owned: [deleted, kept], starred: [deleted], account: fixtureAccount,
+      excluding: ["a"]).notes.map(\.id) == [kept.id])
+  }
+
   @Test(arguments: [Optional<Bool>.none, false, true])
   func sourceUsesTheSavedFrontMatterPreferenceWithoutChangingTheDraft(shown: Bool?) async throws {
     let prefix = "---\nedit:\n  instructions: Preserve source bytes\n---\n\n"
@@ -1846,6 +1936,11 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding {
   var signInAccount: NotebookAccount
   var notes: [Gist]
   var starredNotes: [Gist]
+  private var listedOwned: [Gist]?
+  private var listedStarred: [Gist]?
+  private var holdsLibraryRead = false
+  private var heldLibraryRead: CheckedContinuation<Void, Never>?
+  private var libraryReadObserver: CheckedContinuation<Void, Never>?
   var shouldFail = false
   var heldID: String?
   var heldRead: CheckedContinuation<Void, Never>?
@@ -1919,8 +2014,32 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding {
     if shouldFail { throw URLError(.notConnectedToInternet) }
     return account
   }
-  func gists(accountID: UUID) -> [Gist] { notes }
-  func starredGists(accountID: UUID) -> [Gist] { starredNotes }
+  func gists(accountID: UUID) async -> [Gist] {
+    let result = listedOwned ?? notes
+    if holdsLibraryRead {
+      await withCheckedContinuation { continuation in
+        heldLibraryRead = continuation
+        libraryReadObserver?.resume()
+        libraryReadObserver = nil
+      }
+    }
+    return result
+  }
+  func starredGists(accountID: UUID) -> [Gist] { listedStarred ?? starredNotes }
+  func setListResponses(owned: [Gist], starred: [Gist]) {
+    listedOwned = owned
+    listedStarred = starred
+  }
+  func holdLibraryRead() { holdsLibraryRead = true }
+  func waitForHeldLibraryRead() async {
+    if heldLibraryRead != nil { return }
+    await withCheckedContinuation { libraryReadObserver = $0 }
+  }
+  func releaseLibraryRead() {
+    holdsLibraryRead = false
+    heldLibraryRead?.resume()
+    heldLibraryRead = nil
+  }
   func gist(id: String, accountID: UUID) async throws -> Gist {
     readIDs.append(id)
     if id == heldID {
@@ -1988,6 +2107,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding {
     if case .delete(let id) = action {
       deletedIDs.append(id)
       notes.removeAll { $0.id == id }
+      starredNotes.removeAll { $0.id == id }
       return .deleted(
         gistID: id,
         drafts: try await draftStore().removeCleanDraftsForDeletedGist(

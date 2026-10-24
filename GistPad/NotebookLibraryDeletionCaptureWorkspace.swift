@@ -22,7 +22,11 @@ private actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoPr
   func cachedAccount() -> NotebookAccount? { account }
   func signIn() -> NotebookAccount { account }
   func refreshAccount() -> NotebookAccount { account }
-  func gists(accountID: UUID) throws -> [Gist] { try fixtureGists().filter { $0.id != "shared" } }
+  func gists(accountID: UUID) throws -> [Gist] {
+    try fixtureGists(
+      includeDeleted: ProcessInfo.processInfo.arguments.contains("--capture-stale-deletion")
+    ).filter { $0.id != "shared" }
+  }
   func starredGists(accountID: UUID) throws -> [Gist] {
     try fixtureGists().filter { $0.id == "shared" }
   }
@@ -116,10 +120,10 @@ private actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoPr
     return created
   }
 
-  private func fixtureGists() throws -> [Gist] {
+  private func fixtureGists(includeDeleted: Bool = false) throws -> [Gist] {
     let payload = [
       ("a", "A thought to keep"), ("b", "A finished thought"), ("shared", "A friend's field guide"),
-    ].filter { !deleted.contains($0.0) }.map { id, title -> [String: Any] in
+    ].filter { includeDeleted || !deleted.contains($0.0) }.map { id, title -> [String: Any] in
       [
         "id": id, "description": title, "public": false,
         "updated_at": "2026-10-24T00:00:00Z", "created_at": "2026-10-23T00:00:00Z",

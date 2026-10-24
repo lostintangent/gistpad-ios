@@ -17,6 +17,7 @@ public actor GitHubClient {
     private let token: TokenProvider
     private var cache: [URL: CachedResponse] = [:]
     private var cacheToken: String?
+    private var cacheRevision = UUID()
 
     private struct CachedResponse {
         let data: Data
@@ -131,7 +132,11 @@ public actor GitHubClient {
         )
     }
 
-    public func clearCache() { cache.removeAll(); cacheToken = nil }
+    public func clearCache() {
+        cache.removeAll()
+        cacheToken = nil
+        cacheRevision = UUID()
+    }
 
     private func identifier(_ value: String) throws -> String {
         guard !value.isEmpty,
@@ -202,13 +207,15 @@ public actor GitHubClient {
     private func request(url: URL, method: String = "GET", body: Data? = nil) async throws -> (Data, String?) {
         try validate(url)
         let accessToken = try await token()
-        if cacheToken != accessToken { cache.removeAll(); cacheToken = accessToken }
-        var request = URLRequest(url: url)
+        if cacheToken != accessToken { clearCache(); cacheToken = accessToken }
+        let revision = cacheRevision
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         request.httpMethod = method
         request.httpBody = body
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2026-03-10", forHTTPHeaderField: "X-GitHub-Api-Version")
+        if method == "GET" { request.setValue("no-cache", forHTTPHeaderField: "Cache-Control") }
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         let cached = method == "GET" ? cache[url] : nil
         if let cached { request.setValue(cached.etag, forHTTPHeaderField: "If-None-Match") }
@@ -228,10 +235,11 @@ public actor GitHubClient {
             throw GitHubClientError.http(status: response.statusCode, retryAfter: retry)
         }
         let link = response.value(forHTTPHeaderField: "Link")
-        if method == "GET", let etag = response.value(forHTTPHeaderField: "ETag"), cacheToken == accessToken {
+        if method == "GET", let etag = response.value(forHTTPHeaderField: "ETag"),
+           cacheToken == accessToken, cacheRevision == revision {
             cache[url] = CachedResponse(data: data, etag: etag, link: link)
         } else if method != "GET" {
-            cache.removeAll()
+            clearCache()
         }
         return (data, link)
     }

@@ -122,7 +122,7 @@ extension LiveNotebookProvider {
           id: id, accountID: accountID, expectedFilename: draft.filename,
           filename: draft.filename, description: title))
     }
-    let client = await accounts.githubClient(accountID: accountID)
+    let client = await client(accountID: accountID)
     if case .inspectRemote(let id, let generation) = action {
       let current = try await drafts.draft(id: id, accountID: accountID)
       guard let gistID = current.gistID else { return .review(current) }
