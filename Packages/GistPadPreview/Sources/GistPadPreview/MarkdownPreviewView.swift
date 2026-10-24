@@ -1,6 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import WebKit
+import OSLog
 
 public struct MarkdownPreviewView: UIViewRepresentable {
     private let document: PreviewDocument
@@ -8,6 +9,7 @@ public struct MarkdownPreviewView: UIViewRepresentable {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.legibilityWeight) private var legibilityWeight
 
     public init(
         document: String,
@@ -51,7 +53,7 @@ public struct MarkdownPreviewView: UIViewRepresentable {
             $0.accessibilityContrast = contrast == .increased ? .high : .normal
             $0.preferredContentSizeCategory = dynamicTypeSize.contentSizeCategory
         }
-        context.coordinator.appearance = PreviewAppearance(traits: traits)
+        context.coordinator.appearance = PreviewAppearance(traits: traits, boldText: legibilityWeight == .bold)
         context.coordinator.update(document)
     }
 
@@ -134,6 +136,9 @@ public struct MarkdownPreviewView: UIViewRepresentable {
                 case .ready:
                     ready = true
                     update(document)
+                case .obsolete:
+                    Logger(subsystem: "dev.gistpad.GistPad", category: "MarkdownPreview")
+                        .debug("Discarded a passive preview event from an obsolete document generation.")
                 case .event(let event):
                     onEvent(event)
                 }

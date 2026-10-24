@@ -1,13 +1,15 @@
 {
   "source": "gistpad.dev/src",
-  "adapter": "Function arithmetic evaluation replaced with a non-executable parser",
+  "adapters": [
+    "Function arithmetic evaluation replaced with a non-executable parser",
+    "Mermaid media-query hook bound to the native appearance payload"
+  ],
   "files": {
     "features/markdown/MarkdownPreview.tsx": "216830f3fbe673306ce834d009cbe6765d46ffb0450d439fc394f52c950fd3ac",
     "features/markdown/remarkInlineSyntax.ts": "cf5bd62d871ed07319a97e2cecaa43f3c956036078f9c5a7ac40be3d08f7e613",
     "features/markdown/rehypeToc.ts": "2d985dddcea4279cf7070f0f40ca2c9b66d421ed408470e39b3a981cbdac74b1",
     "features/markdown/Mermaid.tsx": "d217a0acce033b3542426036d991418f46f892ac8ac9e63d9601e77a9ef0469e",
     "features/markdown/index.css": "ac66ff35323518322faa4d6d9e325e438c0c108d1b237991ca13ac3dd4cfbabe",
-    "shared/calculations.ts": "8a99e9e7effd0ae2a14f2b4d7d1d2e3b91f1deb44e6d1251c82b16c46de62b59",
-    "shared/useMediaQuery.ts": "2fee4d912cb0ee571a59773d0438f68826e00f4c08ff80cc3d0a88c9c59b9a8a"
+    "shared/calculations.ts": "8a99e9e7effd0ae2a14f2b4d7d1d2e3b91f1deb44e6d1251c82b16c46de62b59"
   }
 }

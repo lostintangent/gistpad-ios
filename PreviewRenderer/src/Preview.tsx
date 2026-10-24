@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkGithubAlerts from "remark-github-alerts";
@@ -11,7 +11,8 @@ import remarkInlineSyntax from "../../../gistpad.dev/src/features/markdown/remar
 import rehypeToc from "@gistpad/rehype-toc";
 import Mermaid from "../../../gistpad.dev/src/features/markdown/Mermaid";
 import { taskRangePlugins } from "./tasks";
-import type { PreviewMessage, RenderRequest, TaskEdit } from "./protocol";
+import { toString } from "hast-util-to-string";
+import type { PreviewMessage, RenderRequest } from "./protocol";
 
 const emojis = new Map(
   Object.entries(emojiData.emojis).map(([id, emoji]) => [id, emoji.skins[0]?.native ?? ""]),
@@ -25,6 +26,7 @@ const schema = {
     span: [...(defaultSchema.attributes?.span ?? []), "dataSpoiler", "className"],
     div: [...(defaultSchema.attributes?.div ?? []), "className"],
     blockquote: [...(defaultSchema.attributes?.blockquote ?? []), "className"],
+    p: [...(defaultSchema.attributes?.p ?? []), ["className", "markdown-alert-title"]],
     svg: ["viewBox", "width", "height", "fill", "ariaHidden"],
     path: ["d"],
   },
@@ -47,6 +49,29 @@ function Spoiler({ children }: { children: ReactNode }) {
       {revealed ? children : "Reveal spoiler"}
     </button>
   );
+}
+
+type AlertKind = "note" | "tip" | "important" | "warning" | "caution";
+function isAlertKind(value: string): value is AlertKind {
+  return ["note", "tip", "important", "warning", "caution"].includes(value);
+}
+
+function AlertSymbol({ kind }: { kind: AlertKind }) {
+  const outline = (() => {
+    switch (kind) {
+      case "note": return <circle cx="12" cy="12" r="9" />;
+      case "tip": return <path d="M9 18h6m-5 3h4M9 15c0-2-4-3-4-7a7 7 0 0 1 14 0c0 4-4 5-4 7v1H9Z" />;
+      case "important": return <path d="m12 2 10 10-10 10L2 12Z" />;
+      case "warning": return <path d="m12 3 10 18H2Z" />;
+      case "caution": return <path d="M8 2h8l6 6v8l-6 6H8l-6-6V8Z" />;
+    }
+  })();
+  return <svg className="alert-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {outline}
+    {kind === "note"
+      ? <><path d="M12 10v7" /><path d="M12 7h.01" /></>
+      : kind === "tip" ? null : <><path d="M12 8v5" /><path d="M12 17h.01" /></>}
+  </svg>;
 }
 
 export class PreviewErrorBoundary extends Component<
@@ -87,6 +112,17 @@ export function Preview({ request }: { request: RenderRequest }) {
       send({ ...identity(request), type: "link", kind, target });
     };
     return {
+      div({ children, className, node: _, ...props }) {
+        return className?.split(" ").includes("markdown-toc")
+          ? <nav className="markdown-toc" aria-label="Contents"><h2 className="contents-title">Contents</h2>{children}</nav>
+          : <div {...props} className={className}>{children}</div>;
+      },
+      li({ style, node: _, ...props }) {
+        const depth = typeof style?.marginLeft === "string" ? /^([0-5])rem$/.exec(style.marginLeft)?.[1] : undefined;
+        return depth === undefined
+          ? <li {...props} style={style} />
+          : <li {...props} style={{ ...style, marginLeft: 0, paddingInlineStart: `${Number(depth) * 12}px` }} />;
+      },
       a({ href, children, node, ...props }) {
         const wikilink = node?.properties.dataWikilink;
         const bookmark = node?.properties.dataBookmark;
@@ -105,6 +141,7 @@ export function Preview({ request }: { request: RenderRequest }) {
         );
       },
       span({ children, node, ...props }) {
+        if (props.className?.split(" ").includes("octicon")) return null;
         return node?.properties.dataSpoiler !== undefined
           ? <Spoiler>{children}</Spoiler>
           : <span {...props}>{children}</span>;
@@ -114,14 +151,17 @@ export function Preview({ request }: { request: RenderRequest }) {
         const location = node?.properties.dataTaskLocation;
         const expectedMarker = node?.properties.dataTaskExpected;
         const replacementMarker = node?.properties.dataTaskReplacement;
-        const addressable = typeof location === "number" && typeof expectedMarker === "string" && typeof replacementMarker === "string";
+        const addressable = typeof location === "number" &&
+          (expectedMarker === "[ ]" || expectedMarker === "[x]" || expectedMarker === "[X]") &&
+          (replacementMarker === "[ ]" || replacementMarker === "[x]");
         return (
-          <label className="task-toggle"><input type="checkbox" checked={!!checked} disabled={!addressable} aria-label={checked ? "Mark task incomplete" : "Mark task complete"}
+          <label className="task-toggle"><input type="checkbox" checked={!!checked} disabled={!addressable}
+            aria-label={`${checked ? "Mark incomplete" : "Mark complete"}: ${String(node?.properties.dataTaskLabel ?? "Task")}`}
             onChange={() => {
               if (!addressable) return;
               send({
                 ...identity(request), type: "taskToggle",
-                edit: { location, length: 3, expectedMarker, replacementMarker } as TaskEdit,
+                edit: { location, length: 3, expectedMarker, replacementMarker },
               });
             }} /></label>
         );
@@ -133,7 +173,7 @@ export function Preview({ request }: { request: RenderRequest }) {
       },
       code({ children, className, node: _, ...props }) {
         if (className === "language-mermaid") {
-          return <Mermaid content={String(children).trim()} onExpand={() => {}} />;
+          return <NativeDiagram content={String(children).trim()} />;
         }
         if (className === "language-tldraw") {
           return <span className="unsupported">Whiteboards are not supported in GistPad Native.</span>;
@@ -143,8 +183,13 @@ export function Preview({ request }: { request: RenderRequest }) {
       table({ node: _, ...props }) {
         return <div className="table-scroll"><table {...props} /></div>;
       },
-      p({ node: _, ...props }) {
-        return <p {...props} dir="auto" />;
+      p({ children, className, node, ...props }) {
+        const isAlertTitle = className?.split(" ").includes("markdown-alert-title");
+        const kind = node ? toString(node).trim().toLowerCase() : "";
+        return <p {...props} className={className} dir="auto">
+          {isAlertTitle && isAlertKind(kind) && <AlertSymbol kind={kind} />}
+          {children}
+        </p>;
       },
       img({ src, alt }) {
         return <PreviewImage src={typeof src === "string" ? src : undefined} alt={alt ?? ""} />;
@@ -185,4 +230,28 @@ function PreviewImage({ src, alt }: { src?: string; alt: string }) {
   return src && !failed
     ? <img src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
     : <span className="image-unavailable" role="img" aria-label={alt || "Image"}>{alt || "Image"} · unavailable offline</span>;
+}
+
+function NativeDiagram({ content }: { content: string }) {
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const updateScale = () => {
+      const svg = container.current?.querySelector("svg");
+      if (!svg?.viewBox.baseVal.width) return;
+      const bodySize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--gp-body-size"));
+      svg.style.width = `${svg.viewBox.baseVal.width * bodySize / 16}px`;
+      svg.style.maxWidth = "none";
+    };
+    const observer = new MutationObserver(updateScale);
+    observer.observe(container.current!, { childList: true, subtree: true });
+    window.addEventListener("gistpad-preview-appearance", updateScale);
+    updateScale();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("gistpad-preview-appearance", updateScale);
+    };
+  }, []);
+  return <div ref={container} className="diagram-scroll" role="figure" aria-label="Mermaid diagram" tabIndex={0}>
+    <Mermaid content={content} onExpand={() => container.current?.focus()} />
+  </div>;
 }

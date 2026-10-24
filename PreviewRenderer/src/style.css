@@ -57,7 +57,9 @@ li { margin-block: .35em; }
 .contains-task-list { padding-inline-start: .2em; }
 .task-list-item { min-height: 44px; }
 .task-toggle { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; vertical-align: middle; margin-inline: -8px 1px; }
-.task-toggle input { appearance: auto; accent-color: var(--gp-accent-text); width: 22px; height: 22px; margin: 0; }
+.task-toggle input { appearance: none; position: relative; background: transparent; border: 1.75px solid var(--gp-accent-text); border-radius: 5px; width: 22px; height: 22px; margin: 0; }
+.task-toggle input:checked { background: var(--gp-accent-text); }
+.task-toggle input:checked::after { content: ""; position: absolute; left: 6px; top: 2px; width: 6px; height: 12px; border: solid var(--gp-page); border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .task-toggle:has(input:disabled) { opacity: .6; }
 .table-scroll { overflow-x: auto; }
 table { border-collapse: collapse; min-width: 100%; }
@@ -81,6 +83,17 @@ img, svg { max-width: 100%; height: auto; }
 .pl-0 { padding-left: 0; }
 .pl-4 { padding-left: 1rem; }
 .markdown-alert { color: var(--foreground); }
+.markdown-toc { display: block; background: var(--gp-surface); border-radius: 12px; padding: 12px; margin: 0 0 1.25em; }
+.prose .markdown-toc .contents-title { font-size: var(--gp-headline-size); line-height: var(--gp-headline-line-height); margin: 4px 8px 8px; padding: 0; }
+.markdown-toc li { margin: 0; padding: 0; }
+.prose .markdown-toc a { display: flex; align-items: center; min-height: 44px; padding: 8px; border-radius: 6px; color: var(--gp-text); text-decoration: none; word-break: normal; }
+.markdown-toc a:active { background: var(--gp-selected-surface); }
+.markdown-toc a:focus-visible { background: var(--gp-selected-surface); outline-offset: -2px; }
+.markdown-alert .markdown-alert-title { color: var(--gp-text); line-height: var(--gp-headline-line-height); gap: 8px; }
+.alert-symbol { flex: 0 0 auto; width: 1.15em; height: 1.15em; }
+.diagram-scroll { max-width: 100%; overflow-x: auto; margin-block: 1em; }
+.diagram-scroll svg { height: auto; }
+svg text, svg .nodeLabel, svg .nodeLabel *, svg .edgeLabel, svg .edgeLabel * { font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; }
 .prose section.footnotes li { font-size: var(--gp-footnote-size); line-height: var(--gp-footnote-line-height); }
 .markdown-container ::selection { background: revert; color: revert; }
 [data-bold-text="true"] article { font-weight: 600; }

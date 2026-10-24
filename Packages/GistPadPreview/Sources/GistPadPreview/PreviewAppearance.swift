@@ -5,12 +5,14 @@ struct PreviewAppearance: Equatable {
     let variables: [String: String]
     let increasedContrast: Bool
     let boldText: Bool
+    let colorScheme: String
 
     @MainActor
-    init(traits: UITraitCollection) {
+    init(traits: UITraitCollection, boldText: Bool? = nil) {
         increasedContrast = traits.accessibilityContrast == .high
-        boldText = UIAccessibility.isBoldTextEnabled
+        self.boldText = boldText ?? UIAccessibility.isBoldTextEnabled
         let dark = traits.userInterfaceStyle == .dark
+        colorScheme = dark ? "dark" : "light"
         let accent = increasedContrast ? (dark ? "#FFE899" : "#573E00") : (dark ? "#F3D26A" : "#765800")
         let selected = increasedContrast ? (dark ? "#514211" : "#F4E2A3") : (dark ? "#3D351C" : "#F8EFCC")
         var values = [
@@ -41,7 +43,7 @@ struct PreviewAppearance: Equatable {
     }
 
     var arguments: [String: Any] {
-        ["variables": variables, "increasedContrast": increasedContrast, "boldText": boldText]
+        ["variables": variables, "increasedContrast": increasedContrast, "boldText": boldText, "colorScheme": colorScheme]
     }
 
     private static func css(_ color: UIColor) -> String {

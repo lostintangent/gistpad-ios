@@ -90,4 +90,16 @@ struct PreviewBridgeTests {
     func fixture() throws {
         #expect(try PreviewFixtures.allSyntax.contains("Duplicate task"))
     }
+
+    @Test("Late layout notifications do not become document errors")
+    func lateLayoutMessage() throws {
+        let body: [String: Any] = [
+            "version": 1, "type": "height", "documentID": "previous-document",
+            "generation": "1", "height": 300
+        ]
+        guard case .obsolete = try PreviewBridge.decode(body, document: document) else {
+            Issue.record("Expected an obsolete layout notification")
+            return
+        }
+    }
 }

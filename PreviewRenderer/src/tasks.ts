@@ -1,6 +1,7 @@
 import type { Root as MarkdownRoot } from "mdast";
 import type { Root as HTMLRoot, Element } from "hast";
 import { visit } from "unist-util-visit";
+import { toString } from "hast-util-to-string";
 import type { TaskEdit } from "./protocol";
 
 export function taskRangePlugins(markdown: string) {
@@ -36,6 +37,9 @@ export function taskRangePlugins(markdown: string) {
               child.properties.dataTaskLocation = edit!.location;
               child.properties.dataTaskExpected = edit!.expectedMarker;
               child.properties.dataTaskReplacement = edit!.replacementMarker;
+              child.properties.dataTaskLabel = node.children
+                .filter((child) => child.type !== "element" || (child.tagName !== "ul" && child.tagName !== "ol"))
+                .map((child) => toString(child)).join("").trim();
               return true;
             }
             if (annotate(child)) return true;

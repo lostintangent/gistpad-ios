@@ -24,6 +24,7 @@ struct PreviewDocument: Equatable, Sendable {
 
 enum BridgeMessage {
     case ready
+    case obsolete
     case event(PreviewEvent)
 }
 
@@ -60,6 +61,7 @@ enum PreviewBridge {
         if message.type == "ready" { return .ready }
         guard message.documentID == document.id,
               message.generation == String(document.generation) else {
+            if ["height", "rendered", "failure"].contains(message.type) { return .obsolete }
             throw PreviewFailure.staleDocument
         }
         switch message.type {

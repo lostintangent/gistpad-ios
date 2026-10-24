@@ -1,0 +1,23 @@
+# Duo capture matrix
+
+Use one current simulator build and a synthetic fixture for every surface review.
+
+```sh
+scripts/capture-matrix.sh --screen library --state populated
+```
+
+The command installs `DerivedData/Build/Products/Debug-iphonesimulator/GistPad.app`, records build/device metadata and display enumeration, and captures cover/open x light/dark x Large/AX3. It defaults to the dedicated **iPhone Duo Capture** (`AE581093-5B22-4E8D-8632-A3ADFBBE25FF`), not the engineer's test device. `--contrast both` adds eight increased-contrast captures. It restores the simulator's appearance, contrast and content-size preferences on exit. It does not erase application data or change a hardware device.
+
+`simctl` exposes `primary` (cover) and `primary-1` (inner), but has no public fold/posture command in Xcode 27.1. The script therefore pauses for an actual posture change in Device Hub before each group. Select the Capture Duo in Device Hub's sidebar, then use its **Closed** or **Open** posture button. Capturing a different framebuffer alone is not evidence that the app adapted to that posture.
+
+For background automation, supply an absolute `--posture-hook` executable accepting the simulator UDID and `cover`/`open`, or run one already-configured pose with `--pose cover --posture-ready`. The caller is responsible for verifying the posture. Never label a resized window or inactive framebuffer as a folded/open app.
+
+## App route contract
+
+The app receives `--capture-screen NAME --capture-state NAME` on each launch. Capture routes must be debug-only, use synthetic content and avoid connecting to an account. Library, note and editor routes should preserve the same deterministic fixture. Relevant empty/error/sheet states are separate named fixture states. Unknown routes must show an explicit diagnostic rather than silently opening a default screen.
+
+Launches restart the app to make each capture independent. Do not run against an active editing session. A real keyboard and continuity sequence are separate requirements where relevant.
+
+Library and note routes also receive a unique `--capture-ready-token`. The Debug fixture records that token in the app's temporary container only after the Library appears or WebKit reports a completed render. The script waits up to 45 seconds and fails without a screenshot if readiness is absent. This prevents a cold, blank WebKit view from silently becoming evidence. A preview error is itself a ready error surface and remains recorded in the readiness JSON. Other routes use the configured settling interval and still require inspection.
+
+Evidence contains `matrix.tsv`, `build.txt`, `displays.txt`, `settings-before.txt`, readiness JSON and individually named PNGs. Submit the PNGs as channel attachments. Inspect them for correct route, active screen, fixture, keyboard and clipping before asking for Designer sign-off. The capture command does not itself certify accessibility, continuity, frame time, physical fold behavior or design approval.

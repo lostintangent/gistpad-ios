@@ -9,12 +9,13 @@ const metricNames = [
 ];
 
 export function validateAppearance(value: unknown): asserts value is {
-  variables: Record<string, string>; increasedContrast: boolean; boldText: boolean;
+  variables: Record<string, string>; increasedContrast: boolean; boldText: boolean; colorScheme: "light" | "dark";
 } {
   if (!value || typeof value !== "object") throw new TypeError("Invalid preview appearance");
-  const data = value as { variables?: Record<string, unknown>; increasedContrast?: unknown; boldText?: unknown };
+  const data = value as { variables?: Record<string, unknown>; increasedContrast?: unknown; boldText?: unknown; colorScheme?: unknown };
   if (!data.variables || typeof data.variables !== "object" ||
-      typeof data.increasedContrast !== "boolean" || typeof data.boldText !== "boolean") {
+      typeof data.increasedContrast !== "boolean" || typeof data.boldText !== "boolean" ||
+      (data.colorScheme !== "light" && data.colorScheme !== "dark")) {
     throw new TypeError("Invalid preview appearance");
   }
   for (const name of [...colorNames, ...metricNames]) {
@@ -35,4 +36,7 @@ export function setAppearance(value: unknown) {
   }
   document.documentElement.dataset.contrast = value.increasedContrast ? "increased" : "normal";
   document.documentElement.dataset.boldText = value.boldText ? "true" : "false";
+  document.documentElement.dataset.colorScheme = value.colorScheme;
+  document.documentElement.style.colorScheme = value.colorScheme;
+  window.dispatchEvent(new Event("gistpad-preview-appearance"));
 }

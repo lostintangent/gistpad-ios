@@ -32,6 +32,7 @@ async (page) => {
   await page.getByRole("button", { name: "Ideas", exact: true }).click();
   await page.getByRole("link", { name: "the link", exact: true }).click();
   await page.getByRole("button", { name: "Reveal spoiler", exact: true }).click();
+  await page.getByRole("navigation", { name: "Contents", exact: true }).getByRole("link", { name: "Connections", exact: true }).click();
   await page.route(`${base}/Web/csp-probe.js`, (route) => route.fulfill({
     contentType: "application/javascript",
     body: 'try { new Function("return 1")(); window.previewEvalBlocked = false; } catch (error) { window.previewEvalBlocked = error instanceof EvalError; }',
@@ -46,8 +47,15 @@ async (page) => {
       calculations: document.querySelector("article").textContent.includes("$15.00"),
       noPageOverflow: document.documentElement.scrollWidth <= window.innerWidth,
       toc: document.querySelectorAll(".markdown-toc a").length >= 6,
+      outline: Array.from(document.querySelectorAll(".markdown-toc a")).every((anchor) =>
+        anchor.getBoundingClientRect().height >= 44 &&
+        getComputedStyle(anchor).textDecorationLine === "none" &&
+        getComputedStyle(anchor).color === getComputedStyle(document.querySelector("article")).color),
+      anchor: window.previewMessages.some((message) => message.type === "link" && message.kind === "anchor" && message.target === "connections"),
+      alertSymbols: document.querySelectorAll(".markdown-alert-title > svg.alert-symbol[aria-hidden=true]").length === 5,
       footnotes: document.querySelectorAll("[data-footnote-ref]").length === 1,
       taskTarget: document.querySelector(".task-toggle").getBoundingClientRect().height >= 44,
+      dataImage: Array.from(document.images).some((image) => image.src.startsWith("data:image/png") && image.naturalWidth === 1),
     };
   });
   for (const [name, passed] of Object.entries(checks)) {

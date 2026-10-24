@@ -1,0 +1,103 @@
+import Auth
+import Foundation
+
+public typealias MetadataValue = AnyJSON
+
+public struct Preferences: Codable, Equatable, Sendable {
+    public let metadata: [String: MetadataValue]
+
+    public init(metadata: [String: MetadataValue]) { self.metadata = metadata }
+
+    public var isAutoSaveEnabled: Bool { metadata["isAutoSaveEnabled"]?.boolValue ?? true }
+    public var pinnedGists: [String] {
+        metadata["pinnedGists"]?.arrayValue?.compactMap(\.stringValue) ?? []
+    }
+    public var tags: [String: MetadataValue] { metadata["tags"]?.objectValue ?? [:] }
+    public var gistTags: [String: [String]] {
+        (metadata["gistTags"]?.objectValue ?? [:]).mapValues {
+            $0.arrayValue?.compactMap(\.stringValue) ?? []
+        }
+    }
+}
+
+public enum PreferenceError: Error, Equatable, Sendable {
+    case invalidShape(String)
+    case invalidIdentifier
+    case unknownTag
+    case operationInProgress
+}
+
+public enum BooleanPreference: String, Sendable {
+    case isAutoSaveEnabled, showDiffs, showFrontmatter, showLineNumbers, isSpellcheckEnabled
+    case pasteImagesAsHtml, showArchivedGists, showStarredGists, showInlineComments
+    case showFormattingToolbar
+}
+
+public enum PreferenceOperation: Sendable {
+    case setBoolean(BooleanPreference, Bool)
+    case setPinned(gistID: String, pinned: Bool)
+    case upsertTag(id: String, name: String, color: String)
+    case deleteTag(id: String)
+    case setTag(gistID: String, tagID: String, included: Bool)
+
+    public func changes(in metadata: [String: MetadataValue]) throws -> [String: MetadataValue] {
+        switch self {
+        case .setBoolean(let preference, let value):
+            return [preference.rawValue: .bool(value)]
+        case .setPinned(let gistID, let pinned):
+            try requireID(gistID)
+            var pins = try strings(metadata["pinnedGists"], key: "pinnedGists")
+            if pinned, !pins.contains(gistID) { pins.append(gistID) }
+            if !pinned { pins.removeAll { $0 == gistID } }
+            return ["pinnedGists": .array(pins.map(MetadataValue.string))]
+        case .upsertTag(let id, let name, let color):
+            try requireID(id)
+            var tags = try object(metadata["tags"], key: "tags")
+            var tag = try object(tags[id], key: "tags.\(id)")
+            tag["name"] = .string(name)
+            tag["color"] = .string(color)
+            tags[id] = .object(tag)
+            return ["tags": .object(tags)]
+        case .deleteTag(let id):
+            try requireID(id)
+            var tags = try object(metadata["tags"], key: "tags")
+            var gistTags = try object(metadata["gistTags"], key: "gistTags")
+            tags.removeValue(forKey: id)
+            for (gist, value) in gistTags {
+                let ids = try strings(value, key: "gistTags.\(gist)").filter { $0 != id }
+                if ids.isEmpty { gistTags.removeValue(forKey: gist) }
+                else { gistTags[gist] = .array(ids.map(MetadataValue.string)) }
+            }
+            return ["tags": .object(tags), "gistTags": .object(gistTags)]
+        case .setTag(let gistID, let tagID, let included):
+            try requireID(gistID)
+            try requireID(tagID)
+            let tags = try object(metadata["tags"], key: "tags")
+            guard !included || tags[tagID] != nil else { throw PreferenceError.unknownTag }
+            var gistTags = try object(metadata["gistTags"], key: "gistTags")
+            var ids = try strings(gistTags[gistID], key: "gistTags.\(gistID)")
+            if included, !ids.contains(tagID) { ids.append(tagID) }
+            if !included { ids.removeAll { $0 == tagID } }
+            if ids.isEmpty { gistTags.removeValue(forKey: gistID) }
+            else { gistTags[gistID] = .array(ids.map(MetadataValue.string)) }
+            return ["gistTags": .object(gistTags)]
+        }
+    }
+
+    private func requireID(_ value: String) throws {
+        guard !value.isEmpty else { throw PreferenceError.invalidIdentifier }
+    }
+
+    private func object(_ value: MetadataValue?, key: String) throws -> [String: MetadataValue] {
+        guard let value else { return [:] }
+        guard case .object(let result) = value else { throw PreferenceError.invalidShape(key) }
+        return result
+    }
+
+    private func strings(_ value: MetadataValue?, key: String) throws -> [String] {
+        guard let value else { return [] }
+        guard case .array(let values) = value,
+              values.allSatisfy({ $0.stringValue != nil }) else { throw PreferenceError.invalidShape(key) }
+        return values.compactMap(\.stringValue)
+    }
+}

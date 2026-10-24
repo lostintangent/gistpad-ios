@@ -14,7 +14,6 @@ const sourceFiles = [
   "features/markdown/Mermaid.tsx",
   "features/markdown/index.css",
   "shared/calculations.ts",
-  "shared/useMediaQuery.ts",
 ];
 
 function webSourceAdapter(): Plugin {
@@ -34,7 +33,10 @@ function webSourceAdapter(): Plugin {
         source: JSON.stringify(
           {
             source: "gistpad.dev/src",
-            adapter: "Function arithmetic evaluation replaced with a non-executable parser",
+            adapters: [
+              "Function arithmetic evaluation replaced with a non-executable parser",
+              "Mermaid media-query hook bound to the native appearance payload",
+            ],
             files: Object.fromEntries(
               sourceFiles.map((file) => [
                 file,
@@ -55,6 +57,7 @@ export default defineConfig({
   base: "./",
   resolve: {
     alias: {
+      "@/shared/useMediaQuery": resolve(root, "src/useNativeAppearance.ts"),
       "@": resolve(web, "src"),
       "@web": resolve(web, "src"),
       "@gistpad/rehype-toc": resolve(web, "src/features/markdown/rehypeToc.ts"),

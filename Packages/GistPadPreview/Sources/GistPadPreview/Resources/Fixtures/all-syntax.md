@@ -53,6 +53,15 @@ flowchart LR
 > [!WARNING]
 > Secret gist links can be read by anyone who has the link.
 
+> [!TIP]
+> Capture a thought before polishing it.
+
+> [!IMPORTANT]
+> Saved on this iPhone and saved to GitHub are different states.
+
+> [!CAUTION]
+> Review a proposed edit before applying it.
+
 | Feature | Status |
 | --- | --- |
 | Tables | Ready |

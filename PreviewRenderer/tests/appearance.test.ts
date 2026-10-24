@@ -14,6 +14,7 @@ function nativeAppearance(alpha = "1.0") {
     ]),
     boldText: false,
     increasedContrast: false,
+    colorScheme: "light",
   };
 }
 

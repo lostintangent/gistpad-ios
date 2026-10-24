@@ -1,0 +1,210 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Account" : {
+
+    },
+    "Add File" : {
+
+    },
+    "All selected tags must match." : {
+
+    },
+    "All selected tags must match. Tags apply to the whole gist." : {
+
+    },
+    "Archive" : {
+
+    },
+    "Check GitHub" : {
+
+    },
+    "Check save status" : {
+
+    },
+    "Clear filters" : {
+
+    },
+    "Clear tag filters" : {
+
+    },
+    "Collection" : {
+
+    },
+    "Continue with GitHub" : {
+
+    },
+    "Copy Link" : {
+
+    },
+    "Couldn't save on this iPhone. Keep the editor open." : {
+
+    },
+    "Couldn't update from GitHub." : {
+
+    },
+    "Create a gist" : {
+
+    },
+    "Daily Notes" : {
+
+    },
+    "Done" : {
+
+    },
+    "Edit" : {
+
+    },
+    "Files in this gist" : {
+
+    },
+    "Filter by tags" : {
+
+    },
+    "GistPad" : {
+
+    },
+    "Gists" : {
+
+    },
+    "GitHub returned an incomplete note. Editing is unavailable to protect the original." : {
+
+    },
+    "In-memory fixture. Not saved." : {
+
+    },
+    "New gist" : {
+
+    },
+    "No gists here yet" : {
+
+    },
+    "No matching gists" : {
+
+    },
+    "Not saved yet" : {
+
+    },
+    "Offline. Showing notes on this iPhone." : {
+
+    },
+    "Open document" : {
+
+    },
+    "Open in GitHub" : {
+
+    },
+    "Pin" : {
+
+    },
+    "Pinned" : {
+
+    },
+    "Preview" : {
+
+    },
+    "Read-only gist" : {
+
+    },
+    "Reconnect GitHub" : {
+
+    },
+    "Reconnect your account to see your gists, tags and pins. Local drafts stay on this iPhone." : {
+
+    },
+    "Rename" : {
+
+    },
+    "Retry" : {
+
+    },
+    "Review changes" : {
+
+    },
+    "Save to GitHub" : {
+
+    },
+    "Saved on this iPhone" : {
+
+    },
+    "Saved on this iPhone. Couldn't save to GitHub." : {
+
+    },
+    "Saved on this iPhone. GitHub couldn't confirm the last save." : {
+
+    },
+    "Saved on this iPhone. GitHub may already have created this gist. Check GitHub before trying again." : {
+
+    },
+    "Saved on this iPhone. Publishing is unavailable." : {
+
+    },
+    "Saved on this iPhone. Reconnect GitHub to publish changes." : {
+
+    },
+    "Saved to GitHub" : {
+
+    },
+    "Saving to GitHub" : {
+
+    },
+    "Search tags" : {
+
+    },
+    "Search titles" : {
+
+    },
+    "Share" : {
+
+    },
+    "Source & Preview" : {
+
+    },
+    "Star" : {
+
+    },
+    "Starred" : {
+
+    },
+    "Start today's note" : {
+
+    },
+    "Tag filters applied" : {
+
+    },
+    "Tags" : {
+
+    },
+    "Tags: %@" : {
+
+    },
+    "This note changed elsewhere." : {
+
+    },
+    "Today" : {
+
+    },
+    "Try another title or clear your tag filters." : {
+
+    },
+    "Unarchive" : {
+
+    },
+    "Unpin" : {
+
+    },
+    "Unstar" : {
+
+    },
+    "Updating from GitHub" : {
+
+    },
+    "Your notebook, on GitHub" : {
+
+    },
+    "Your notes will appear in this collection." : {
+
+    }
+  },
+  "version" : "1.0"
+}
