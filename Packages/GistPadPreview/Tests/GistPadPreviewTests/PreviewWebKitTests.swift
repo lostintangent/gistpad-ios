@@ -255,6 +255,7 @@ struct PreviewWebKitTests {
                         $0.userInterfaceStyle = style
                         $0.accessibilityContrast = contrast
                         $0.preferredContentSizeCategory = size
+                        $0[PersonalAccentTrait.self] = PersonalAccent(savedHex: size == .large ? nil : "#FACC15")
                     }
                     let appearance = PreviewAppearance(traits: traits)
                     let selectionPreserved = try await webView.callAsyncJavaScript(
@@ -496,6 +497,7 @@ struct PreviewWebKitTests {
                         $0.userInterfaceStyle = style
                         $0.accessibilityContrast = contrast
                         $0.preferredContentSizeCategory = size
+                        $0[PersonalAccentTrait.self] = PersonalAccent(savedHex: size == .large ? nil : "#FACC15")
                     }
                     let appearance = PreviewAppearance(traits: traits)
                     _ = try await webView.callAsyncJavaScript(
@@ -513,11 +515,10 @@ struct PreviewWebKitTests {
                             const parse = color => color.match(/[\\d.]+/g).map(Number);
                             const styles = getComputedStyle(document.documentElement);
                             const surface = parse(styles.getPropertyValue('--gp-surface')).slice(0, 3);
-                            const secondary = parse(styles.getPropertyValue('--gp-text-secondary'));
-                            const stroke = secondary.slice(0, 3).map((value, index) =>
-                                Math.round(value * (secondary[3] ?? 1) + surface[index] * (1 - (secondary[3] ?? 1))));
+                            const theme = JSON.parse(diagrams[0].dataset.nativeTheme);
                             return parse(getComputedStyle(rect).fill).slice(0, 3).join() === surface.join() &&
-                                parse(getComputedStyle(rect).stroke).slice(0, 3).join() === stroke.join();
+                                parse(getComputedStyle(rect).stroke).slice(0, 3).join() === theme.stroke.join() &&
+                                parse(getComputedStyle(diagrams[0].querySelector('.flowchart-link')).stroke).join() === theme.edge.join();
                             """,
                             arguments: [:], in: nil, contentWorld: .page
                         ) as? Bool == true
@@ -581,6 +582,13 @@ struct PreviewWebKitTests {
                             summary.getBoundingClientRect().height >= 44 && summaryStyle.fontWeight === '600' && summaryStyle.columnGap === '8px',
                             ratio(node.stroke, node.fill) >= 3 && ratio(node.stroke, styles.backgroundColor) >= 3,
                             ratio(arrow.fill, styles.backgroundColor) >= 3 && ratio(edge.stroke, styles.backgroundColor) >= 3,
+                            node.rx === '10px' && node.ry === '10px' && node.strokeWidth === '1px',
+                            document.querySelectorAll('.diagram-scroll')[1].querySelector('.node polygon') !== null,
+                            edge.stroke === resolveColor(styles.getPropertyValue('--gp-accent-text')) &&
+                                getComputedStyle(document.querySelector('.text-blue-500')).color === resolveColor(styles.getPropertyValue('--gp-accent-text')),
+                            getComputedStyle(document.querySelector('.diagram-scroll .nodeLabel')).color === styles.color,
+                            Math.abs(document.querySelector('.markdown-toc').nextElementSibling.getBoundingClientRect().top -
+                                document.querySelector('.markdown-toc').getBoundingClientRect().bottom - 28 * parseFloat(styles.fontSize) / 17) < 1,
                             authored.fill === 'rgb(255, 240, 204)' && authored.stroke === 'rgb(118, 88, 0)',
                             current.backgroundColor === resolveColor(styles.getPropertyValue('--gp-selected-surface')) &&
                                 previous.backgroundColor === resolveColor(styles.getPropertyValue('--gp-surface')),

@@ -39,19 +39,36 @@ function resolvedTheme() {
   const read = (name: string, backdrop: RGB) => color(styles.getPropertyValue(name).trim(), backdrop, dark);
   const surface = read("--gp-surface", page);
   const text = read("--gp-text", surface);
-  const stroke = read("--gp-text-secondary", surface);
-  if (contrastRatio(stroke, surface) < 3 || contrastRatio(stroke, page) < 3) {
-    throw new RangeError("Native diagram strokes do not meet the required 3:1 contrast.");
+  const separator = read("--gp-separator", surface);
+  const edge = read("--gp-accent-text", page);
+  const passes = (candidate: RGB) => [surface, page].every((background) => contrastRatio(candidate, background) >= 3);
+  const mix = (amount: number): RGB => {
+    const channel = (index: number) => Math.round(separator[index] * (1 - amount) + text[index] * amount);
+    return [channel(0), channel(1), channel(2)];
+  };
+  let stroke = separator;
+  if (!passes(stroke)) {
+    if (!passes(text)) throw new RangeError("Native diagram ink cannot establish an accessible boundary.");
+    let lower = 0;
+    let upper = 1;
+    for (let index = 0; index < 32; index++) {
+      const middle = (lower + upper) / 2;
+      if (passes(mix(middle))) upper = middle;
+      else lower = middle;
+    }
+    stroke = mix(upper);
   }
-  return { dark, page, surface, text, stroke };
+  if (!passes(edge)) throw new RangeError("Native diagram edges do not meet the required 3:1 contrast.");
+  return { dark, page, surface, text, stroke, edge };
 }
 
 const hex = (color: RGB) => "#" + color.map((value) => value.toString(16).padStart(2, "0")).join("");
 
-export function nativeDiagramTheme(): Pick<MermaidConfig, "theme" | "themeVariables"> {
-  const { dark, page, surface, text, stroke } = resolvedTheme();
+export function nativeDiagramTheme(): Pick<MermaidConfig, "theme" | "themeVariables" | "themeCSS"> {
+  const { dark, page, surface, text, stroke, edge } = resolvedTheme();
   return {
     theme: "base",
+    themeCSS: ".node > rect:not([rx]):not([ry]) { rx: 10px; ry: 10px; }",
     themeVariables: {
       darkMode: dark,
       background: hex(page),
@@ -67,19 +84,19 @@ export function nativeDiagramTheme(): Pick<MermaidConfig, "theme" | "themeVariab
       tertiaryColor: hex(surface),
       tertiaryTextColor: hex(text),
       tertiaryBorderColor: hex(stroke),
-      lineColor: hex(stroke),
+      lineColor: hex(edge),
       textColor: hex(text),
       mainBkg: hex(surface),
       nodeBorder: hex(stroke),
       clusterBkg: hex(surface),
       clusterBorder: hex(stroke),
       edgeLabelBackground: hex(page),
-      defaultLinkColor: hex(stroke),
-      arrowheadColor: hex(stroke),
+      defaultLinkColor: hex(edge),
+      arrowheadColor: hex(edge),
       actorBorder: hex(stroke),
-      actorLineColor: hex(stroke),
+      actorLineColor: hex(edge),
       actorTextColor: hex(text),
-      signalColor: hex(stroke),
+      signalColor: hex(edge),
       signalTextColor: hex(text),
       activationBorderColor: hex(stroke),
       labelBoxBorderColor: hex(stroke),

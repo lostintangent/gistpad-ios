@@ -62,6 +62,8 @@ async (page) => {
         Math.abs(parseFloat(getComputedStyle(document.querySelector("h2")).marginTop) - 28) < .1 &&
         Math.abs(parseFloat(getComputedStyle(document.querySelector("h2")).marginBottom) - 10) < .1 &&
         Math.abs(parseFloat(getComputedStyle(document.querySelector("h3")).marginTop) - 24) < .1,
+      contentsHeadingGap: Math.abs(document.querySelector(".markdown-toc").nextElementSibling.getBoundingClientRect().top -
+        document.querySelector(".markdown-toc").getBoundingClientRect().bottom - 28) < .1,
     };
   });
   for (const [name, passed] of Object.entries(initial)) {
@@ -99,7 +101,7 @@ async (page) => {
             "--gp-page": dark ? "#000000" : "#ffffff",
             "--gp-surface": dark ? "#1c1c1e" : "#f2f2f7",
             "--gp-surface-raised": dark ? "#2c2c2e" : "#ffffff",
-            "--gp-text": increasedContrast ? (dark ? "#f8fafc" : "#0f172a") : (dark ? "#e2e8f0" : "#1e293b"),
+            "--gp-text": dark ? "#ffffff" : "#000000",
             "--gp-syntax-code": increasedContrast ? (dark ? "#f1f5f9" : "#334155") : (dark ? "#cbd5e1" : "#475569"),
             "--gp-text-secondary": increasedContrast
               ? (dark ? "#c2c2c6" : "#444447") : (dark ? "rgba(235,235,245,0.6)" : "rgba(60,60,67,0.6)"),
@@ -107,8 +109,10 @@ async (page) => {
             "--gp-separator": dark ? "#38383a" : "#c6c6c8",
             "--gp-boundary": dark ? "#545458" : "#8e8e93",
             "--gp-error": "#ff3b30", "--gp-success": "#34c759",
-            "--gp-accent-text": increasedContrast ? (dark ? "#bae6fd" : "#075985") : (dark ? "#7dd3fc" : "#0369a1"),
-            "--gp-accent-fill": increasedContrast ? (dark ? "#7dd3fc" : "#0ea5e9") : (dark ? "#38bdf8" : "#0ea5e9"),
+            "--gp-accent-text": bodySize === 36 ? (dark ? "#facc15" : "#665200")
+              : increasedContrast ? (dark ? "#bae6fd" : "#075985") : (dark ? "#7dd3fc" : "#0369a1"),
+            "--gp-accent-fill": bodySize === 36 ? "#facc15"
+              : increasedContrast ? (dark ? "#7dd3fc" : "#0ea5e9") : (dark ? "#38bdf8" : "#0ea5e9"),
             "--gp-on-accent": "#0f172a",
             "--gp-selected-surface": increasedContrast ? (dark ? "#134b63" : "#d4eefc") : (dark ? "#0b3548" : "#e7f6fd"),
             ...Object.fromEntries(["body-size", "body-line-height", "title1-size", "title1-line-height",
@@ -118,14 +122,16 @@ async (page) => {
           },
         };
         await page.evaluate((payload) => window.gistpadPreview.setAppearance(payload), payload);
-        await page.waitForFunction(({ dark, increasedContrast }) => {
+        await page.waitForFunction(({ dark }) => {
+          const diagram = document.querySelector(".diagram-scroll");
           const node = document.querySelector(".diagram-scroll .node rect");
           if (!node) return false;
-          const expectedStroke = increasedContrast ? (dark ? "rgb(194, 194, 198)" : "rgb(68, 68, 71)")
-            : (dark ? "rgb(152, 152, 159)" : "rgb(133, 133, 139)");
+          const theme = JSON.parse(diagram.dataset.nativeTheme);
+          const expectedStroke = `rgb(${theme.stroke.join(", ")})`;
           return getComputedStyle(node).fill === (dark ? "rgb(28, 28, 30)" : "rgb(242, 242, 247)") &&
-            getComputedStyle(node).stroke === expectedStroke;
-        }, { dark, increasedContrast });
+            getComputedStyle(node).stroke === expectedStroke &&
+            getComputedStyle(diagram.querySelector(".flowchart-link")).stroke === `rgb(${theme.edge.join(", ")})`;
+        }, { dark });
         const checks = await page.evaluate(() => {
           const parse = (value) => value.match(/[\d.]+/g).slice(0, 3).map(Number);
           const luminance = (rgb) => rgb.map((value) => {
@@ -158,6 +164,13 @@ async (page) => {
           return {
             neutralContrast: ratio(node.stroke, node.fill) >= 3 && ratio(node.stroke, page.backgroundColor) >= 3,
             arrows: ratio(arrow.fill, page.backgroundColor) >= 3 && ratio(edge.stroke, page.backgroundColor) >= 3,
+            roundedRectangles: node.rx === "10px" && node.ry === "10px" && node.strokeWidth === "1px",
+            shapeMeaning: document.querySelectorAll(".diagram-scroll")[1].querySelector(".node polygon") !== null,
+            personalAccent: edge.stroke === resolveColor(page.getPropertyValue("--gp-accent-text")) &&
+              getComputedStyle(document.querySelector(".text-blue-500")).color === resolveColor(page.getPropertyValue("--gp-accent-text")),
+            labelInk: getComputedStyle(document.querySelector(".diagram-scroll .nodeLabel")).color === page.color &&
+              getComputedStyle(document.querySelector("h1")).color === page.color &&
+              getComputedStyle(document.querySelector("h2")).color === page.color,
             authored: authored.fill === "rgb(255, 240, 204)" && authored.stroke === "rgb(118, 88, 0)",
             resultColor: current.color === page.color,
             resultSurfaces: current.backgroundColor === resolveColor(page.getPropertyValue("--gp-selected-surface")) &&

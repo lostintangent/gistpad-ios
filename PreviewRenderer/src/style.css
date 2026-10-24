@@ -1,7 +1,7 @@
 :root {
   color-scheme: light dark;
   --gp-page: light-dark(#fff, #000);
-  --gp-text: light-dark(#1e293b, #e2e8f0);
+  --gp-text: light-dark(#000, #fff);
   --gp-syntax-code: light-dark(#475569, #cbd5e1);
   --gp-text-secondary: light-dark(#636366, #aeaeb2);
   --gp-surface: light-dark(#f2f2f7, #1c1c1e);
@@ -101,12 +101,12 @@ img, svg { max-width: 100%; height: auto; }
 .calculation-current { background: var(--gp-selected-surface); font-weight: 600; margin-inline-start: 4px; }
 .calculation-previous { background: var(--gp-surface); font-weight: 400; }
 .font-bold { font-weight: 700; }
-.text-blue-500 { color: var(--primary); }
+.text-blue-500 { color: var(--gp-accent-text); }
 .list-none { list-style: none; }
 .pl-0 { padding-left: 0; }
 .pl-4 { padding-left: 1rem; }
 .markdown-alert { color: var(--foreground); }
-.markdown-toc { background: var(--gp-surface); border-radius: 12px; padding: 4px 12px; margin: 0 0 1.25em; }
+.markdown-toc { display: block; width: fit-content; max-width: 100%; background: var(--gp-surface); border-radius: 12px; padding: 4px 12px; margin: 0; }
 .prose .markdown-toc > summary { font: 600 var(--gp-headline-size)/var(--gp-headline-line-height) -apple-system, BlinkMacSystemFont, sans-serif; }
 .markdown-toc[open] { padding-bottom: 12px; }
 .markdown-toc li { margin: 0; padding: 0; }
@@ -125,7 +125,7 @@ svg text, svg .nodeLabel, svg .nodeLabel *, svg .edgeLabel, svg .edgeLabel * { f
 [data-contrast="increased"] .markdown-alert { border-inline-start-width: 4px; }
 @media (prefers-contrast: more) {
   :root:not([data-contrast]) {
-    --gp-text: light-dark(#0f172a, #f8fafc);
+    --gp-text: light-dark(#000, #fff);
     --gp-syntax-code: light-dark(#334155, #f1f5f9);
     --gp-text-secondary: var(--gp-text);
     --gp-accent-text: light-dark(#075985, #bae6fd);

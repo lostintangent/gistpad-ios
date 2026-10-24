@@ -16,13 +16,12 @@ struct PreviewAppearance: Equatable {
         let dark = traits.userInterfaceStyle == .dark
         colorScheme = dark ? "dark" : "light"
         let accent = traits[PersonalAccentTrait.self].roles(traits: traits)
-        let ink = increasedContrast ? (dark ? "#F8FAFC" : "#0F172A") : (dark ? "#E2E8F0" : "#1E293B")
         let code = increasedContrast ? (dark ? "#F1F5F9" : "#334155") : (dark ? "#CBD5E1" : "#475569")
         var values = [
             "--gp-page": Self.css(UIColor.systemBackground.resolvedColor(with: traits)),
             "--gp-surface": Self.css(UIColor.secondarySystemBackground.resolvedColor(with: traits)),
             "--gp-surface-raised": Self.css(UIColor.tertiarySystemBackground.resolvedColor(with: traits)),
-            "--gp-text": ink,
+            "--gp-text": Self.css(UIColor.label.resolvedColor(with: traits)),
             "--gp-syntax-code": code,
             "--gp-text-secondary": Self.css(UIColor.secondaryLabel.resolvedColor(with: traits)),
             "--gp-link": Self.css(UIColor.link.resolvedColor(with: traits)),

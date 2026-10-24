@@ -28,6 +28,7 @@ The deliberate styling below must remain distinct from the neutral defaults.
 ```mermaid
 flowchart LR
   A[Needs attention]:::attention --> B[Reviewed]
+  B --> C{Keep?}
   classDef attention fill:#fff0cc,stroke:#765800,color:#231b08
 ```
 

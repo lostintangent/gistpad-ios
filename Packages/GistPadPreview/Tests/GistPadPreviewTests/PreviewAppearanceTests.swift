@@ -8,14 +8,7 @@ import GistPadAppearance
 struct PreviewAppearanceTests {
     @Test("The preview uses shared personal accent roles without recoloring the reading ink")
     func contentPalette() {
-        let expected = [
-            ["#1E293B", "#475569"],
-            ["#E2E8F0", "#CBD5E1"],
-            ["#0F172A", "#334155"],
-            ["#F8FAFC", "#F1F5F9"]
-        ]
-        let roles = ["--gp-text", "--gp-syntax-code"]
-        for (index, colors) in expected.enumerated() {
+        for (index, code) in ["#475569", "#CBD5E1", "#334155", "#F1F5F9"].enumerated() {
             for savedHex in [nil, "#FACC15", "#FFFFFF", "#000000", "#FF00FF", "invalid"] {
                 let traits = UITraitCollection {
                     $0.userInterfaceStyle = index % 2 == 0 ? .light : .dark
@@ -24,7 +17,12 @@ struct PreviewAppearanceTests {
                 }
                 let appearance = PreviewAppearance(traits: traits)
                 let shared = PersonalAccent(savedHex: savedHex).roles(traits: traits)
-                #expect(roles.compactMap { appearance.variables[$0] } == colors)
+                let label = UIColor.label.resolvedColor(with: traits)
+                var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+                #expect(label.getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+                #expect(appearance.variables["--gp-text"] ==
+                    "rgba(\(Int((red * 255).rounded())),\(Int((green * 255).rounded())),\(Int((blue * 255).rounded())),\(alpha))")
+                #expect(appearance.variables["--gp-syntax-code"] == code)
                 #expect(appearance.variables["--gp-accent-text"] == shared.text.hex)
                 #expect(appearance.variables["--gp-accent-fill"] == shared.fill.hex)
                 #expect(appearance.variables["--gp-on-accent"] == shared.onFill.hex)
