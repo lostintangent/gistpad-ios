@@ -3,7 +3,7 @@ set -euo pipefail
 
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DEVICE="${CAPTURE_DEVICE:-AE581093-5B22-4E8D-8632-A3ADFBBE25FF}"
+DEVICE="${CAPTURE_DEVICE:-D121BF28-CFCF-4020-802D-2C81D38F12E2}"
 APP="$ROOT/DerivedData/Build/Products/Debug-iphonesimulator/GistPad.app"
 SCREEN=""
 STATE="populated"
@@ -24,7 +24,7 @@ The app receives --capture-screen NAME --capture-state STATE.
 Use only synthetic capture fixtures, never an active account or document.
 
   --app PATH             Built simulator .app (default: DerivedData build)
-  --device UDID          Duo simulator (default: CAPTURE_DEVICE or Capture Duo)
+  --device UDID          Already-booted Duo (default: CAPTURE_DEVICE or shared Duo)
   --screen NAME          App capture route, such as library, note, or editor
   --state NAME           Synthetic fixture state (default: populated)
   --capture-reading-fixture  Focused Markdown reading fixture (note route only)
@@ -94,7 +94,7 @@ BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.pli
 OUTPUT="${OUTPUT:-$ROOT/DerivedData/Captures/$(date -u +%Y%m%dT%H%M%SZ)-$SCREEN-$STATE}"
 [ ! -e "$OUTPUT" ] || fail "Output already exists. Choose a new directory: $OUTPUT"
 mkdir -p "$OUTPUT"
-xcrun simctl bootstatus "$DEVICE" -b
+xcrun simctl bootstatus "$DEVICE"
 xcrun simctl io "$DEVICE" enumerate > "$OUTPUT/displays.txt"
 grep -q 'Device Name: primary-1' "$OUTPUT/displays.txt" || fail "The selected simulator does not expose both Duo displays"
 xcrun simctl install "$DEVICE" "$APP"

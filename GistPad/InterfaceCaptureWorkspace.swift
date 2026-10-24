@@ -216,7 +216,8 @@ struct InterfaceCaptureWorkspace: View {
         ZStack {
             MarkdownPreviewView(
                 document: activeSession.text, documentID: activeSession.documentID,
-                generation: activeSession.generation, onEvent: handlePreviewEvent
+                generation: activeSession.generation, allowsTaskEdits: chrome.access.canEdit,
+                onEvent: handlePreviewEvent
             )
             .id("\(activeSession.documentID)-\(previewReload)")
             .accessibilityHidden(previewError != nil)

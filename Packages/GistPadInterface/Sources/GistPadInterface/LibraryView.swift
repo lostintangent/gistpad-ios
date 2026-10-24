@@ -38,8 +38,8 @@ public struct LibraryView: View {
 
     public var body: some View {
         adaptiveList
-            .listSectionMargins(.top, 12)
-            .listSectionMargins(.bottom, 4)
+            .listSectionMargins(.top, 8)
+            .listSectionMargins(.bottom, 0)
             .environment(\.defaultMinListHeaderHeight, 0)
             .navigationTitle("GistPad")
             .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 400)
