@@ -269,6 +269,9 @@
 
     public func highlight() {
       guard textView.markedTextRange == nil && !writingToolsActive else { return }
+      let source = textView as? AnchoredTextView
+      let readingAnchor = source?.beginAttributeUpdate()
+      defer { source?.endAttributeUpdate(readingAnchor) }
       let storage = textView.textStorage
       let bodyFont = UIFont.preferredFont(
         forTextStyle: .body, compatibleWith: textView.traitCollection)
@@ -397,6 +400,11 @@
   }
 
   private final class AnchoredTextView: UITextView {
+    struct ReadingAnchor {
+      let offset: Int
+      let delta: CGFloat
+    }
+
     var sourceInteractionActive = false
     private var previousWidth: CGFloat = 0
     private var previousHeight: CGFloat = 0
@@ -406,6 +414,27 @@
     private var viewportInsets: UIEdgeInsets?
     private weak var viewportView: UIView?
     private var applyingViewportInsets = false
+
+    func beginAttributeUpdate() -> ReadingAnchor? {
+      guard window != nil, !isFirstResponder, !sourceInteractionActive, !restoringAnchor,
+        bounds.width > 0, previousWidth > 0, abs(previousWidth - bounds.width) < 1
+      else { return nil }
+      restoringAnchor = true
+      return ReadingAnchor(offset: readingOffset, delta: anchorDelta)
+    }
+
+    func endAttributeUpdate(_ anchor: ReadingAnchor?) {
+      guard let anchor else { return }
+      // Attribute invalidation can replace exact offscreen geometry with TextKit estimates.
+      if let manager = textLayoutManager, let range = manager.textContentManager?.documentRange {
+        manager.ensureLayout(for: range)
+      }
+      super.layoutSubviews()
+      if let position = position(from: beginningOfDocument, offset: anchor.offset) {
+        setVerticalContentOffset(caretRect(for: position).minY - anchor.delta)
+      }
+      restoringAnchor = false
+    }
 
     func updateViewportInsets(_ insets: UIEdgeInsets) {
       viewportView = nil
@@ -550,6 +579,7 @@
 
     override func layoutSubviews() {
       applyViewportInsets()
+      let needsInitialAnchor = previousWidth == 0
       if sourceInteractionActive {
         // Writing Tools owns inline animations and scrolling until its session finishes.
         super.layoutSubviews()
@@ -585,7 +615,7 @@
       previousWidth = bounds.width
       previousHeight = bounds.height
       restoringAnchor = false
-      rememberReadingAnchor()
+      if needsInitialAnchor { rememberReadingAnchor() }
     }
 
     private func setVerticalContentOffset(_ y: CGFloat) {

@@ -95,7 +95,10 @@ extension EditorContinuityTests {
     #expect(session.selection == session.textView.selectedRange)
   }
 
-  @Test func readingAnchorSurvivesWritingToolsCompletionAndSubsequentReflow() async throws {
+  @Test(arguments: [false, true])
+  func readingAnchorSurvivesWritingToolsCompletionAndSubsequentReflow(
+    waitForDecoration: Bool
+  ) async throws {
     let source = try EditorFixture.markdown()
     let session = DocumentSession(documentID: "test", text: source)
     let window = try host(session)
@@ -116,6 +119,18 @@ extension EditorContinuityTests {
     try #require(offset > 0)
     let originalY =
       session.textView.caretRect(for: position).minY - session.textView.contentOffset.y
+    let identity = ObjectIdentifier(session.textView)
+    let selection = session.textView.selectedRange
+    if waitForDecoration {
+      try await Task.sleep(for: .milliseconds(150))
+      let decorated = try #require(
+        session.textView.position(from: session.textView.beginningOfDocument, offset: offset))
+      #expect(
+        abs(session.textView.caretRect(for: decorated).minY
+          - session.textView.contentOffset.y - originalY)
+          <= session.textView.caretRect(for: decorated).height,
+        "The deferred Writing Tools decoration must preserve the completed reading position.")
+    }
     for width in [900.0, 360.0, 700.0, 402.0] {
       session.textView.frame.size.width = width
       session.textView.layoutIfNeeded()
@@ -127,7 +142,14 @@ extension EditorContinuityTests {
       let nextLine = try #require(session.textView.position(from: restored, in: .down, offset: 1))
       let lineHeight = session.textView.caretRect(for: nextLine).minY - caret.minY
       try #require(lineHeight > 0)
-      #expect(abs(caret.minY - session.textView.contentOffset.y - originalY) <= lineHeight)
+      let scale = session.textView.traitCollection.displayScale
+      let drift = abs(caret.minY - session.textView.contentOffset.y - originalY)
+      #expect(
+        (drift * scale).rounded() <= (lineHeight * scale).rounded(),
+        "Width \(width), anchor \(offset), original Y \(originalY), current Y \(caret.minY - session.textView.contentOffset.y)")
+      #expect(ObjectIdentifier(session.textView) == identity)
+      #expect(session.textView.selectedRange == selection)
+      #expect(session.generation == 0)
       #expect(session.text.utf8.elementsEqual(source.utf8))
     }
   }
