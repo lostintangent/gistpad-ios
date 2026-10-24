@@ -53,6 +53,44 @@ public struct PhotoAttachment: Equatable, Identifiable, Sendable {
         default: false
         }
     }
+
+    var failureExplanation: String? {
+        switch phase {
+        case .failed(let message, _), .localFailure(let message), .preparationFailed(let message): message
+        default: nil
+        }
+    }
+}
+
+struct PhotoAttachmentSection: Identifiable, Sendable {
+    let id: UUID
+    private(set) var attachments: [PhotoAttachment]
+
+    var sharedFailureExplanation: String? {
+        attachments.count > 1 ? attachments.first?.failureExplanation : nil
+    }
+
+    static func grouping(_ attachments: [PhotoAttachment]) -> [Self] {
+        var sections: [Self] = []
+        var failureSections: [String: Int] = [:]
+        for attachment in attachments {
+            if let explanation = attachment.failureExplanation {
+                if let index = failureSections[explanation] {
+                    sections[index].attachments.append(attachment)
+                } else {
+                    failureSections[explanation] = sections.count
+                    sections.append(Self(id: attachment.id, attachments: [attachment]))
+                }
+            } else if let last = sections.indices.last,
+                sections[last].attachments.first?.failureExplanation == nil
+            {
+                sections[last].attachments.append(attachment)
+            } else {
+                sections.append(Self(id: attachment.id, attachments: [attachment]))
+            }
+        }
+        return sections
+    }
 }
 
 #if os(iOS)
@@ -203,7 +241,7 @@ public struct PhotoAttachmentShelf: View {
             .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             if !showsStatus, attachments.contains(where: \.hasFailure) {
-                Image(systemName: "exclamationmark.circle")
+                Image(systemName: "exclamationmark.circle.fill")
                     .foregroundStyle(.primary)
                     .accessibilityHidden(true)
             }
@@ -240,9 +278,23 @@ public struct PhotoAttachmentDetails: View {
     public var body: some View {
         NavigationStack {
             List {
-                ForEach(attachments) { attachment in
-                    PhotoAttachmentRow(attachment: attachment, action: action, remove: remove)
-                        .padding(.vertical, 8)
+                ForEach(PhotoAttachmentSection.grouping(attachments)) { section in
+                    Section {
+                        ForEach(section.attachments) { attachment in
+                            PhotoAttachmentRow(
+                                attachment: attachment,
+                                showsExplanation: section.sharedFailureExplanation == nil,
+                                action: action, remove: remove)
+                                .padding(.vertical, 8)
+                        }
+                    } footer: {
+                        if let explanation = section.sharedFailureExplanation {
+                            Text(explanation)
+                                .font(.subheadline)
+                                .foregroundStyle(Color(uiColor: .secondaryLabel))
+                                .accessibilityIdentifier("photo-shared-guidance-\(section.id)")
+                        }
+                    }
                 }
             }
             .overlay {
@@ -270,6 +322,7 @@ public struct PhotoAttachmentDetails: View {
 
 private struct PhotoAttachmentRow: View {
     let attachment: PhotoAttachment
+    let showsExplanation: Bool
     let action: (UUID, PhotoAttachmentAction) -> Void
     let remove: (UUID) -> Void
 
@@ -313,11 +366,11 @@ private struct PhotoAttachmentRow: View {
                     Text(status(attachment.phase)).font(.subheadline)
                         .foregroundStyle(.primary)
                 }
-                if let detail = detail(attachment.phase) {
-                    Text(detail).font(.subheadline).foregroundStyle(.primary)
+                if showsExplanation, let detail = attachment.failureExplanation {
+                    Text(detail).font(.subheadline).foregroundStyle(Color(uiColor: .secondaryLabel))
                 }
                 if let guidance = attachment.guidance {
-                    Text(guidance).font(.subheadline).foregroundStyle(.primary)
+                    Text(guidance).font(.subheadline).foregroundStyle(Color(uiColor: .secondaryLabel))
                 }
                 if let recovery = attachment.action {
                     if case .failed(_, .some) = attachment.phase {
@@ -344,7 +397,7 @@ private struct PhotoAttachmentRow: View {
         case .offline: String(localized: "Saved on this iPhone. Waiting for connection.", bundle: .module)
         case .reconnect: String(localized: "Reconnect to upload", bundle: .module)
         case .ready: String(localized: "Photo ready", bundle: .module)
-        case .failed: String(localized: "Couldn't upload photo", bundle: .module)
+        case .failed: String(localized: "Couldn't upload", bundle: .module)
         case .localFailure: String(localized: "Couldn't save this photo on this iPhone", bundle: .module)
         case .preparationFailed: String(localized: "Couldn't prepare this photo.", bundle: .module)
         }
@@ -363,13 +416,6 @@ private struct PhotoAttachmentRow: View {
         switch phase {
         case .preparing, .uploading, .checking: true
         default: false
-        }
-    }
-
-    private func detail(_ phase: PhotoAttachmentPhase) -> String? {
-        switch phase {
-        case .failed(let message, _), .localFailure(let message), .preparationFailed(let message): message
-        default: nil
         }
     }
 

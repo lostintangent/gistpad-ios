@@ -36,4 +36,30 @@ import Testing
         #expect(!photos[5].hasFailure)
         #expect(!photos[6].hasFailure)
     }
+
+    @Test func identicalFailureGuidanceAppearsOnceWithoutLosingDistinctReasons() {
+        let first = PhotoAttachment(id: UUID(), phase: .failed(message: "Kept on this iPhone"))
+        let distinct = PhotoAttachment(id: UUID(), phase: .failed(message: "Reconnect GitHub"))
+        let repeated = PhotoAttachment(id: UUID(), phase: .failed(message: "Kept on this iPhone"))
+        let sections = PhotoAttachmentSection.grouping([first, distinct, repeated])
+        #expect(sections.count == 2)
+        #expect(sections[0].attachments.map(\.id) == [first.id, repeated.id])
+        #expect(sections[0].sharedFailureExplanation == "Kept on this iPhone")
+        #expect(sections[1].attachments == [distinct])
+        #expect(sections[1].sharedFailureExplanation == nil)
+        #expect(sections[1].attachments.first?.failureExplanation == "Reconnect GitHub")
+    }
+
+    @Test func ordinaryStatusesKeepTheirOrderAndNeverGainFailureFooters() {
+        let photos: [PhotoAttachment] = [
+            .init(id: UUID(), phase: .preparing),
+            .init(id: UUID(), phase: .offline),
+            .init(id: UUID(), phase: .ready),
+        ]
+        let sections = PhotoAttachmentSection.grouping(photos)
+        #expect(sections.count == 1)
+        #expect(sections[0].attachments == photos)
+        #expect(sections[0].sharedFailureExplanation == nil)
+        #expect(PhotoAttachmentSection.grouping([]).isEmpty)
+    }
 }

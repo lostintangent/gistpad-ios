@@ -277,11 +277,11 @@ extension NotebookPhotoTests {
       await fixture.photos.receivePickedData(fixture.bytes)
       fixture.photos.isShowingPicker = false
     }
-    if let last = fixture.photos.attachments.last {
+    for attachment in fixture.photos.attachments {
       _ = try await fixture.store.setImageUploadState(
-        .failed(.network), id: last.id, accountID: fixture.accountID)
-      await fixture.photos.reload()
+        .failed(.network), id: attachment.id, accountID: fixture.accountID)
     }
+    await fixture.photos.reload()
     #expect(fixture.photos.attachments.count == photoCount)
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -359,7 +359,7 @@ extension NotebookPhotoTests {
     #expect(visibleShelfHeight >= 44 && visibleShelfHeight + 16 <= (accessibility ? 180 : 128))
     #expect(shelf == nil, "The disclosure summary must not introduce a nested scroll view.")
     #expect(summary.accessibilityLabel?.contains("\(photoCount)") == true)
-    #expect(summary.accessibilityValue == "1 couldn't upload")
+    #expect(summary.accessibilityValue == "\(photoCount) couldn't upload")
     let expectedAccent = accent.roles(traits: window.traitCollection).text
     let summaryImage = try #require(image.cgImage?.cropping(to: summaryFrame.applying(
       CGAffineTransform(scaleX: image.scale, y: image.scale))))

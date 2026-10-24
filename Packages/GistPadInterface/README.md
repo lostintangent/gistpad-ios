@@ -32,6 +32,8 @@ Save labels are assertions about real persistence. In-memory and unsaved states 
 
 Disclosure and recovery use one native `UIButton` target each, with scaled SwiftUI labels in `UIHostingConfiguration`. The label is not a second accessibility element. Native enabled/highlighted states and primary actions belong to the control, while the SwiftUI label retains the adaptive summary and personal-accent styling.
 
+Identical failure explanations share one section footer instead of repeating in every row. Sections follow the first matching photo and retain photo order within each reason. Distinct explanations remain with their photos. Status stays primary, detail/guidance uses explicit semantic `secondaryLabel` without additional opacity, and each recovery retains the personal accent. The compact issue symbol is filled, while accessibility retains the exact failure count.
+
 `InterfaceFixtures` and SwiftUI previews use synthetic data. The debug capture workspace accepts `--capture-accent #FACC15` to apply the real shared accent bridge without an account, and records the supplied accent in its readiness metadata. Use `--capture-screen library --capture-state search-active --capture-ready-token <UUID>` for actual-app active Search. Readiness requires both the query field's first responder and an onscreen keyboard frame, recorded as `searchFocused` and `searchKeyboardVisible`. It never fabricates readiness when a hardware keyboard keeps the software keyboard hidden. The native String Catalog and four-appearance color assets live in the package resource bundle. `scripts/capture-matrix.sh` and `docs/capture-matrix.md` define the shared review workflow. No screen is production-approved until Designer reviews the required Duo evidence.
 
 ```sh
