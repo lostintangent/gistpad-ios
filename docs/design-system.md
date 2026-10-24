@@ -340,6 +340,8 @@ Use SwiftUI `sensoryFeedback` where appropriate, with state that represents the 
 
 Remove the footer, its container, padding and reserved inset for `unsaved`, `savedLocally`, `savingToGitHub` and `savedToGitHub`; do not leave an empty strip. Local durability and GitHub publication remain separate internally, but the editor does not narrate that pipeline. Do not add autosave spinners, success receipts or generic read-only labels to the healthy writing/reading edge.
 
+Routine remote-check/connection status follows the canonical shared native footer policy in [design-direction.md](design-direction.md). When the writing keyboard covers that slot, remove the occluded control from accessibility traversal and restore the unresolved status after dismissal. Do not move it into the keyboard accessory or add a floating overlay. This does not hide or weaken the explicit save-safety notices below.
+
 Hide Save to GitHub when autosave is effectively enabled. Keep manual Save available when the preference is off, after a publication failure, and while a conflict-reviewed draft's durable `autosavePaused` requires explicit publication. The effective flag must reflect that pause rather than the profile preference alone. Hiding the control never changes publication policy.
 
 Known offline status with unpublished edits gets one quiet `icloud.slash` toolbar glyph. Its accessible label is **Offline. Changes haven't reached GitHub.** Tapping explains that changes are kept locally and eligible autosave resumes online while the app is open. Offline with nothing pending stays silent.
