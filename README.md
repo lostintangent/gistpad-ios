@@ -1,6 +1,6 @@
 # GistPad Native
 
-A personal, native iPhone notebook backed by GitHub Gists. **M2 integration in progress:** the normal app opens the connected Library and native read/edit screens, with local drafts and explicit GitHub saving. Live sign-in and the approved scratch-gist round trip remain unverified gates. Debug captures and test hosts use clearly labeled synthetic fixtures without account access.
+A personal, native iPhone notebook backed by GitHub Gists. **M3 integration in progress:** the connected Library and native editor now include durable creation, metadata actions, cached search, saved-file sharing and local conflict review. Live sign-in and the approved scratch-gist round trip remain unverified gates. Debug captures and test hosts use clearly labeled synthetic fixtures without account access.
 
 ## Requirements
 
@@ -59,7 +59,13 @@ The opt-in **GistPadFoldProbe** test scheme keeps a programmatic Japanese marked
 
 For manual continuity testing, edit the long fixture, begin Japanese composition, change Duo posture, toggle Library/Focus, and undo. The footer's editor UUID must not change. Confirm the source text and selection, not only the picture. Actual Japanese IME, keyboard/handwriting input, Writing Tools and hardware fold behavior remain device gates.
 
-The connected app preserves one source session per account/gist/file and serializes each local draft generation before acknowledging a device save. Library refresh never replaces active input. Backgrounding finishes queued local persistence only and does not publish to GitHub. New-gist/Today creation, conflict review and the full daily-driver workflows are still being connected.
+The connected app preserves one source session per durable draft and serializes each local generation before acknowledging a device save. It restores the last account-scoped note/file, otherwise opens an existing Today, otherwise shows a dated landing with an explicit Start action. Launching and changing display posture never create or publish a note. New notes begin as durable local drafts, without a synthetic remote gist. Missing remote notes keep recoverable local text.
+
+Search uses cached content and local drafts, supports quoted phrases and `tag:ID`, `tag:"Tag name"` or `#TagName`, and reports incomplete/stale coverage. Daily rows route to their exact files and use real task progress when content is available. Intentionally deleted, clean daily files do not return as historical rows. Library refresh never replaces active input.
+
+Rename, file creation, stars, pins, archive and confirmed deletion use serialized actions. Tags, membership and pins use the signed-in Supabase profile, while GitHub owns content and stars. Source permissions do not make personal profile tags read-only. Deletion retains unsynced drafts and recovery history. Saved-file links use the GistPad share route and disclose that a secret link exposes the saved GitHub version. Sharing current changes requires explicit Save & Share, or exporting draft text.
+
+Conflict review displays byte-exact source changes, preserves the original, freshly verifies the remote version and applies a chosen draft as one undoable, durable local edit. Review never publishes. Photos use a retained per-draft controller and the same durable edit boundary. Backgrounding finishes queued local persistence only and never publishes to GitHub. Autosave, live Focus navigation and account-switch disposition presentation remain separate integration work, alongside native design review and live-account acceptance.
 
 ## Module ownership
 

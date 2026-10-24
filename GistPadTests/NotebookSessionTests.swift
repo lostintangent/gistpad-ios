@@ -1,4 +1,5 @@
 import Foundation
+import GistPadEditor
 import GistPadInterface
 import Testing
 
@@ -88,6 +89,208 @@ struct NotebookSessionTests {
     #expect(!controller.saveState.canPublish)
   }
 
+  @Test func durableInsertionIsOneNativeUndoAndNeverPublishes() async throws {
+    let (controller, provider) = try await makeController()
+    let window = try EditorContinuityTests().host(controller.session)
+    defer { window.isHidden = true }
+    let identity = ObjectIdentifier(controller.session.textView)
+    let command = SharedDraftCommand(
+      accountID: controller.draft.accountID, draftID: controller.draft.id,
+      expectedGeneration: 0,
+      edit: .init(
+        location: 4, length: 0, expectedText: "",
+        replacement: "\n![Image](https://example.test/image.png)"))
+    try await controller.applyDurableEdit(command) {
+      try await provider.store.apply(command)
+    }
+    #expect(controller.session.text == "Base\n![Image](https://example.test/image.png)")
+    #expect(controller.session.generation == 1)
+    #expect(ObjectIdentifier(controller.session.textView) == identity)
+    #expect(controller.session.textView.undoManager?.canUndo == true)
+    controller.session.textView.undoManager?.undo()
+    #expect(controller.session.text == "Base")
+    #expect(await controller.waitForLocalSave())
+    #expect(try await provider.snapshot().text == "Base")
+    #expect(await provider.publishCount == 0)
+  }
+
+  @Test func aFailedDurableCommitLeavesSourceSelectionAndGenerationUntouched() async throws {
+    let (controller, _) = try await makeController()
+    controller.session.textView.selectedRange = NSRange(location: 2, length: 1)
+    let selection = controller.session.textView.selectedRange
+    let command = SharedDraftCommand(
+      accountID: controller.draft.accountID, draftID: controller.draft.id,
+      expectedGeneration: 0,
+      edit: .init(location: 4, length: 0, expectedText: "", replacement: " changed"))
+    await #expect(throws: URLError.self) {
+      try await controller.applyDurableEdit(command) { throw URLError(.cannotWriteToFile) }
+    }
+    #expect(controller.session.text == "Base")
+    #expect(controller.session.generation == 0)
+    #expect(controller.session.textView.selectedRange == selection)
+    #expect(controller.session.textView.isEditable)
+  }
+
+  @Test func staleDurableCommandsCannotReplaceNewerTyping() async throws {
+    let (controller, provider) = try await makeController()
+    let command = SharedDraftCommand(
+      accountID: controller.draft.accountID, draftID: controller.draft.id,
+      expectedGeneration: 0,
+      edit: .init(location: 4, length: 0, expectedText: "", replacement: " changed"))
+    edit(controller, to: "Newer 日本語")
+    #expect(await controller.waitForLocalSave())
+    await #expect(throws: DraftError.staleGeneration) {
+      try await controller.applyDurableEdit(command) {
+        try await provider.store.apply(command)
+      }
+    }
+    #expect(controller.session.text == "Newer 日本語")
+    #expect(try await provider.snapshot().text == "Newer 日本語")
+  }
+
+  @Test func recoveryEditsStayLocalAndCannotRecreateADeletedGist() async throws {
+    let (controller, provider) = try await makeController()
+    controller.markRecovery()
+    edit(controller, to: "A recoverable local edit")
+    #expect(await controller.waitForLocalSave())
+    #expect(!controller.saveState.canPublish)
+    await controller.publish()
+    #expect(await provider.publishCount == 0)
+    #expect(try await provider.snapshot().text == "A recoverable local edit")
+  }
+
+  @Test func destructiveActionsLockInputUntilLocalPersistenceFinishes() async throws {
+    let (controller, provider) = try await makeController()
+    edit(controller, to: "Finish this local generation first")
+    try controller.beginDestructiveAction()
+    #expect(!controller.session.textView.isEditable)
+    #expect(!controller.canMutate)
+    #expect(await controller.waitForLocalSave())
+    #expect(try await provider.snapshot().text == "Finish this local generation first")
+    controller.endDestructiveAction()
+    #expect(controller.session.textView.isEditable)
+    #expect(controller.canMutate)
+  }
+
+  @Test func publishedLinksUseGistPadsShareRouteAndKeepLocalChangesSeparate() async throws {
+    let (controller, _) = try await makeController()
+    let links = try #require(try controller.savedLinks())
+    #expect(links.shareURL.absoluteString == "https://gistpad.dev/#/share/synthetic/README.md")
+    #expect(links.githubURL.absoluteString == "https://gist.github.com/synthetic")
+    #expect(links.isSecret)
+    #expect(!controller.hasUnpublishedChanges)
+    edit(controller, to: "Not published")
+    #expect(controller.hasUnpublishedChanges)
+    #expect(await controller.waitForLocalSave())
+    #expect(try controller.savedLinks()?.hasUnpublishedChanges == true)
+  }
+
+  @Test func sourceDiffsDistinguishUnicodeNormalizationAndMissingFiles() {
+    let lines = NotebookDiffLine.changes(from: "cafe\u{301}", to: "caf\u{e9}")
+    #expect(lines.count == 2)
+    #expect(lines[0].isAddition == false)
+    #expect(lines[0].text.utf8.elementsEqual("cafe\u{301}".utf8))
+    #expect(lines[1].isAddition)
+    let missing = NotebookDiffLine.changes(from: nil, to: "A newly created file")
+    #expect(missing.count == 1)
+    #expect(missing[0].isAddition)
+  }
+
+  @Test func keepingMyReviewedDraftDoesNotCreateAFakeGenerationOrUndo() async throws {
+    let (controller, provider) = try await makeController(generation: 1)
+    _ = try await provider.introduceConflict(remote: "From GitHub")
+    try await controller.refreshMetadata()
+    let window = try EditorContinuityTests().host(controller.session)
+    defer { window.isHidden = true }
+    let undo = try #require(controller.session.textView.undoManager)
+    undo.removeAllActions()
+    let original = controller.session.text
+    try await controller.commitMutation(
+      .init(
+        range: NSRange(location: 0, length: original.utf16.count), expected: original,
+        replacement: original),
+      expectedGeneration: 1
+    ) {
+      try await provider.store.resolveConflict(
+        id: controller.draft.id, accountID: controller.draft.accountID,
+        expectedGeneration: 1, text: original, generation: 1)
+    }
+    #expect(controller.session.generation == 1)
+    #expect(!undo.canUndo)
+    #expect(controller.saveState == .savedLocally)
+    #expect(
+      try await provider.store.recoveries(
+        id: controller.draft.id, accountID: controller.draft.accountID
+      ).count == 1)
+    #expect(await provider.publishCount == 0)
+  }
+
+  @Test func adoptingAReviewedVersionIsOneRecoverableLocalUndo() async throws {
+    let (controller, provider) = try await makeController(generation: 1)
+    _ = try await provider.introduceConflict(remote: "From GitHub 日本語")
+    try await controller.refreshMetadata()
+    let window = try EditorContinuityTests().host(controller.session)
+    defer { window.isHidden = true }
+    let original = controller.session.text
+    try await controller.commitMutation(
+      .init(
+        range: NSRange(location: 0, length: original.utf16.count), expected: original,
+        replacement: "From GitHub 日本語"),
+      expectedGeneration: 1
+    ) {
+      try await provider.store.resolveConflict(
+        id: controller.draft.id, accountID: controller.draft.accountID,
+        expectedGeneration: 1, text: "From GitHub 日本語", generation: 2)
+    }
+    #expect(controller.session.text == "From GitHub 日本語")
+    #expect(controller.saveState == .savedLocally)
+    #expect(await provider.publishCount == 0)
+    controller.session.textView.undoManager?.undo()
+    #expect(controller.session.text == original)
+    #expect(await controller.waitForLocalSave())
+    #expect(try await provider.snapshot().text == original)
+  }
+
+  @Test func staleReviewCannotOverwriteNewerSource() async throws {
+    let (controller, provider) = try await makeController(generation: 1)
+    _ = try await provider.introduceConflict(remote: "From GitHub")
+    try await controller.refreshMetadata()
+    let old = try controller.reviewContext()
+    edit(controller, to: "A newer local choice")
+    #expect(await controller.waitForLocalSave())
+    #expect(!old.matches(controller.draft))
+    await #expect(throws: NotebookActionError.staleReview) {
+      try await controller.applyReview(old, text: "From GitHub")
+    }
+    #expect(controller.session.text == "A newer local choice")
+    #expect(controller.draft.state != .savedToGitHub)
+    #expect(await provider.publishCount == 0)
+  }
+
+  @Test func persistedPublicationUncertaintyIsNotLostToAGenericNetworkError() async throws {
+    let (controller, provider) = try await makeController(generation: 1)
+    await provider.failPublication(with: .failed(.publicationUncertain))
+    await controller.publish()
+    #expect(controller.saveState == .publicationUncertain)
+    #expect(controller.draft.state == .failed(.publicationUncertain))
+    #expect(!controller.saveState.canPublish)
+  }
+
+  @Test func writingToolsBlocksDurableInsertionsBeforeTheirCommit() async throws {
+    let (controller, provider) = try await makeController()
+    controller.session.textViewWritingToolsWillBegin(controller.session.textView)
+    defer { controller.session.textViewWritingToolsDidEnd(controller.session.textView) }
+    let command = SharedDraftCommand(
+      accountID: controller.draft.accountID, draftID: controller.draft.id,
+      expectedGeneration: 0,
+      edit: .init(location: 4, length: 0, expectedText: "", replacement: " image"))
+    await #expect(throws: SourceMutation.MutationError.compositionActive) {
+      try await controller.applyDurableEdit(command) { try await provider.store.apply(command) }
+    }
+    #expect(controller.session.text == "Base")
+    #expect(try await provider.snapshot().generation == 0)
+  }
+
   private func edit(_ controller: NotebookSessionController, to text: String) {
     controller.session.textView.text = text
     controller.session.textViewDidChange(controller.session.textView)
@@ -135,6 +338,7 @@ private actor SessionNotebookProvider: NotebookProviding {
   private(set) var publishCount = 0
   private var persistenceFails = false
   private var publicationRejected = false
+  private var publicationFailure: SaveState?
   private var publishing: CheckedContinuation<Void, Never>?
   private var publishObserver: CheckedContinuation<Void, Never>?
 
@@ -157,6 +361,18 @@ private actor SessionNotebookProvider: NotebookProviding {
     try await snapshot()
   }
 
+  func localState(accountID: UUID) async throws -> NotebookLocalState {
+    NotebookLocalState(library: nil, drafts: try await store.drafts(accountID: accountID))
+  }
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) {}
+  func createDraft(accountID: UUID) throws -> DraftSnapshot { throw DraftError.notFound }
+  func today(accountID: UUID, target: DailyNoteTarget) throws -> TodayNote {
+    throw DraftError.notFound
+  }
+  func perform(_ action: NotebookAction, accountID: UUID) throws -> NotebookActionResult {
+    throw DraftError.notFound
+  }
+
   func persist(
     draftID: UUID, accountID: UUID, text: String, generation: UInt64
   ) async throws -> DraftSnapshot {
@@ -169,6 +385,10 @@ private actor SessionNotebookProvider: NotebookProviding {
   func publish(draftID: UUID, accountID: UUID) async throws -> DraftSnapshot {
     publishCount += 1
     if publicationRejected { throw DraftError.readOnly }
+    if let publicationFailure {
+      try await store.setState(publicationFailure, id: draftID, accountID: accountID)
+      throw URLError(.timedOut)
+    }
     let sent = try await snapshot()
     try await store.beginAttempt(
       id: draftID, accountID: accountID, content: sent.text,
@@ -199,4 +419,14 @@ private actor SessionNotebookProvider: NotebookProviding {
 
   func failPersistence() { persistenceFails = true }
   func rejectPublication() { publicationRejected = true }
+  func failPublication(with state: SaveState) { publicationFailure = state }
+  func introduceConflict(remote: String?) async throws -> DraftSnapshot {
+    let current = try await snapshot()
+    try await store.setState(
+      .conflict(
+        .init(
+          generation: current.generation, base: current.baseContent, local: current.text,
+          remote: remote, remoteRevision: "2", suggestedMerge: nil)), id: id, accountID: accountID)
+    return try await snapshot()
+  }
 }
