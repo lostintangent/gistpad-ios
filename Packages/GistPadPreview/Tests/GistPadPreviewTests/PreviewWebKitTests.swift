@@ -405,6 +405,11 @@ struct PreviewWebKitTests {
                             probe.remove();
                             return resolved;
                         };
+                        const table = document.querySelectorAll('.table-scroll')[1];
+                        const pageOffset = window.scrollX;
+                        table.scrollLeft = table.scrollWidth;
+                        const scrolledLocally = table.scrollLeft > 100 && window.scrollX === pageOffset;
+                        table.scrollLeft = 0;
                         return [
                             [...document.querySelectorAll('.calculation-result')].map(node => node.textContent).join('|') === '$15.00|$15.00|$17.00',
                             document.querySelector('.calculation-current').getAttribute('aria-label') === 'Current result: $15.00',
@@ -419,6 +424,7 @@ struct PreviewWebKitTests {
                             }),
                             [...document.querySelectorAll('table th')].slice(0, 3).map(cell => getComputedStyle(cell).textAlign).join('|') === 'left|center|right',
                             [...document.querySelectorAll('.table-scroll')].some(table => table.scrollWidth > table.clientWidth + 100),
+                            scrolledLocally,
                             [...document.querySelectorAll('table')[1].querySelectorAll('th')].every(cell => {
                                 const style = getComputedStyle(cell);
                                 return cell.getBoundingClientRect().height <= parseFloat(style.lineHeight) +
