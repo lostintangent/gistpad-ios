@@ -242,7 +242,7 @@ public struct TodayWidgetView: View {
                     .font(compact ? .title3 : .title2)
                     .foregroundStyle(accent)
                     .contentTransition(.symbolEffect(.replace))
-                    .frame(minWidth: compact ? 28 : 32)
+                    .frame(minWidth: compact ? 28 : 32, alignment: .leading)
                 Text(task.title)
                     .font(compact ? .caption : .subheadline)
                     .foregroundStyle(task.isCompleted ? .secondary : .primary)

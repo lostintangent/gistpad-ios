@@ -31,7 +31,7 @@ struct AddToTodaySheet: View {
     }
     if state == "error" {
       sheet._errorMessage = State(
-        initialValue: NotebookModel.message(for: NotebookEditError.localPersistenceFailed))
+        initialValue: Self.message(for: NotebookEditError.localPersistenceFailed))
     }
     return sheet
   }
@@ -40,10 +40,24 @@ struct AddToTodaySheet: View {
   var body: some View {
     NavigationStack {
       Form {
+        if let errorMessage {
+          Section {
+            Label {
+              VStack(alignment: .leading, spacing: 4) {
+                Text("Couldn't Add to Today").font(.headline)
+                Text(errorMessage).foregroundStyle(.secondary)
+              }
+            } icon: {
+              Image(systemName: "exclamationmark.circle")
+            }
+            .foregroundStyle(.primary)
+            .accessibilityIdentifier("today-capture-error")
+          }
+        }
         Section {
           TextEditor(text: $text)
             .font(.body)
-            .frame(minHeight: max(140, writingLineHeight * 2 + 16))
+            .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? writingLineHeight * 2 + 16 : 140)
             .focused($isFocused)
             .overlay(alignment: .topLeading) {
               if text.isEmpty {
@@ -58,26 +72,16 @@ struct AddToTodaySheet: View {
             .accessibilityLabel(asTask ? Text("Task to add to Today") : Text("Text to add to Today"))
             .accessibilityIdentifier("today-capture-input")
           if dynamicTypeSize.isAccessibilitySize {
-            kindPicker.pickerStyle(.menu)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+              Text("Add as").accessibilityHidden(true)
+              Spacer(minLength: 0)
+              kindPicker.labelsHidden().pickerStyle(.menu)
+            }
           } else {
             kindPicker.pickerStyle(.segmented)
           }
         } header: {
           destinationDate
-        }
-        if let errorMessage {
-          Section {
-            Label {
-              VStack(alignment: .leading, spacing: 4) {
-                Text("Couldn't Add to Today").font(.headline)
-                Text(errorMessage).foregroundStyle(.secondary)
-              }
-            } icon: {
-              Image(systemName: "exclamationmark.circle")
-            }
-            .foregroundStyle(.primary)
-            .accessibilityIdentifier("today-capture-error")
-          }
         }
       }
       .navigationTitle("Add to Today")
@@ -94,7 +98,11 @@ struct AddToTodaySheet: View {
             ProgressView()
               .accessibilityLabel("Adding to Today")
           } else {
-            Button(role: .confirm, action: add)
+            Button(role: .confirm, action: add) {
+              Image(systemName: "checkmark")
+                .foregroundStyle(InterfaceTheme.onAccent)
+            }
+              .tint(InterfaceTheme.accentFill)
               .accessibilityLabel("Add")
               .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
               .accessibilityIdentifier("today-capture-add")
@@ -105,7 +113,8 @@ struct AddToTodaySheet: View {
       .interactiveDismissDisabled(isAdding)
       .task { isFocused = errorMessage == nil }
     }
-    .presentationDetents([.medium, .large])
+    .presentationDetents(
+      dynamicTypeSize.isAccessibilitySize || errorMessage != nil ? [.large] : [.medium, .large])
     .tint(InterfaceTheme.accent)
   }
 
@@ -143,9 +152,19 @@ struct AddToTodaySheet: View {
         NotebookRouteInbox.shared.submit(destination)
         dismiss()
       } catch {
-        errorMessage = NotebookModel.message(for: error)
+        errorMessage = Self.message(for: error)
+        isFocused = false
         isAdding = false
       }
     }
+  }
+
+  private static func message(for error: Error) -> String {
+    if let editError = error as? NotebookEditError,
+      case .localPersistenceFailed = editError
+    {
+      return String(localized: "Your text is still here. Tap Add to try again.")
+    }
+    return NotebookModel.message(for: error)
   }
 }
