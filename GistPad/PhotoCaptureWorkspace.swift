@@ -49,7 +49,7 @@
               return
             } catch {
               self.fixture = nil
-              failure = "The photo capture couldn't finish preparing."
+              failure = error.localizedDescription
             }
           }
         } else if let failure {
@@ -63,7 +63,7 @@
       .task {
         guard fixture == nil, failure == nil else { return }
         do { fixture = try await PhotoCaptureFixture.make() } catch {
-          failure = "The isolated local photo fixture couldn't be created."
+          failure = error.localizedDescription
         }
       }
     }
@@ -102,11 +102,18 @@
         "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
         "contentSizeCategory": textView.traitCollection.preferredContentSizeCategory.rawValue,
         "sourceFocused": textView.isFirstResponder,
+        "photoCount": photos.displayedAttachments.count,
+        "lastPhotoHasRecoveryAction": photos.displayedAttachments.last?.action != nil,
       ]
       if captureState == "notice-end" || captureState == "multiple-end" {
         let scroll = try await scrollToEnd(in: window)
         readiness["scrollOffset"] = scroll.contentOffset.y
         readiness["scrollContentHeight"] = scroll.contentSize.height
+        readiness["scrollViewportHeight"] =
+          scroll.bounds.height - scroll.adjustedContentInset.top
+          - scroll.adjustedContentInset.bottom
+        readiness["keyboardHeight"] = window.keyboardLayoutGuide.layoutFrame.height
+        readiness["sourceFocused"] = textView.isFirstResponder
         readiness["scrollEndVisible"] =
           scroll.contentOffset.y + scroll.bounds.height - scroll.adjustedContentInset.bottom
           >= scroll.contentSize.height - 1
@@ -135,28 +142,114 @@
     }
 
     private func scrollToEnd(in window: UIWindow) async throws -> UIScrollView {
-      for _ in 0..<50 {
-        if let scroll = descendants(of: window).compactMap({ $0 as? UIScrollView }).first(where: {
-          let visibleHeight =
-            $0.bounds.height - $0.adjustedContentInset.top - $0.adjustedContentInset.bottom
-          return $0 !== session.session.textView && !$0.isHidden && $0.alpha > 0
-            && visibleHeight > 0 && $0.contentSize.height > visibleHeight
-            && (captureState == "notice-end" || visibleHeight <= 181)
-        }) {
-          let bottom =
-            scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom
-          scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: bottom), animated: false)
-          try await Task.sleep(for: .milliseconds(200))
-          guard abs(scroll.contentOffset.y - bottom) < 1 else { throw ImageUploadError.targetChanged }
-          return scroll
+      let clock = ContinuousClock()
+      let deadline = clock.now.advanced(by: .seconds(12))
+      var previous: ScrollSample?
+      var stableSince: ContinuousClock.Instant?
+      var stableSamples = 0
+      while clock.now < deadline {
+        try Task.checkCancellation()
+        window.layoutIfNeeded()
+        if let scroll = captureScroll(in: window) {
+          let sample = ScrollSample(scroll: scroll, window: window, source: session.session.textView)
+          let shelfReady =
+            captureState != "multiple-end"
+            || (sample.viewportHeight <= 181 && sample.sourceFocused && sample.keyboardHeight >= 150)
+          if abs(sample.offset.y - sample.bottom) > 0.5 {
+            scroll.setContentOffset(
+              CGPoint(x: sample.offset.x, y: sample.bottom), animated: false)
+            stableSamples = 0
+            stableSince = nil
+          } else if shelfReady, sample == previous {
+            stableSamples += 1
+            if stableSamples >= 20, let stableSince,
+              stableSince.duration(to: clock.now) >= .milliseconds(350)
+            {
+              return scroll
+            }
+          } else {
+            stableSamples = 0
+            stableSince = clock.now
+          }
+          previous = sample
+        } else {
+          previous = nil
+          stableSamples = 0
+          stableSince = nil
         }
-        try await Task.sleep(for: .milliseconds(100))
+        try await Task.sleep(for: .milliseconds(16))
       }
-      throw ImageUploadError.targetChanged
+      throw PhotoCaptureFailure.scrollDidNotSettle
+    }
+
+    private func captureScroll(in window: UIWindow) -> UIScrollView? {
+      var root: UIView? =
+        captureState == "multiple-end" ? session.session.textView.superview : window
+      while let container = root {
+        let candidates = descendants(of: container).compactMap { $0 as? UIScrollView }.filter {
+          let height =
+            $0.bounds.height - $0.adjustedContentInset.top - $0.adjustedContentInset.bottom
+          return $0 !== session.session.textView && height > 0
+            && $0.contentSize.height > height && isVisible($0, in: window)
+        }
+        if candidates.count == 1 { return candidates[0] }
+        if candidates.count > 1 { return nil }
+        root = container.superview
+      }
+      return nil
+    }
+
+    private func isVisible(_ view: UIView, in window: UIWindow) -> Bool {
+      var ancestor: UIView? = view
+      while let current = ancestor {
+        guard !current.isHidden, current.alpha > 0 else { return false }
+        if current === window { return true }
+        ancestor = current.superview
+      }
+      return false
+    }
+
+    private struct ScrollSample: Equatable {
+      let scrollID: ObjectIdentifier
+      let offset: CGPoint
+      let contentSize: CGSize
+      let frame: CGRect
+      let insets: UIEdgeInsets
+      let viewportHeight: CGFloat
+      let bottom: CGFloat
+      let keyboardHeight: CGFloat
+      let sourceFocused: Bool
+
+      @MainActor
+      init(scroll: UIScrollView, window: UIWindow, source: UITextView) {
+        scrollID = ObjectIdentifier(scroll)
+        offset = scroll.contentOffset
+        contentSize = scroll.contentSize
+        frame = scroll.convert(scroll.bounds, to: window)
+        insets = scroll.adjustedContentInset
+        viewportHeight = scroll.bounds.height - insets.top - insets.bottom
+        bottom = max(-insets.top, contentSize.height - scroll.bounds.height + insets.bottom)
+        keyboardHeight = window.keyboardLayoutGuide.layoutFrame.height
+        sourceFocused = source.isFirstResponder
+      }
     }
 
     private func descendants(of view: UIView) -> [UIView] {
       view.subviews.flatMap { [$0] + descendants(of: $0) }
+    }
+
+    private enum PhotoCaptureFailure: LocalizedError {
+      case scrollDidNotSettle
+      case recoveryActionUnavailable
+
+      var errorDescription: String? {
+        switch self {
+        case .scrollDidNotSettle:
+          "The photo scroll viewport, content end or required source keyboard didn't settle within 12 seconds."
+        case .recoveryActionUnavailable:
+          "The three-photo fixture couldn't prepare its synthetic failure and Retry action."
+        }
+      }
     }
 
     var actions: NoteActions {
@@ -217,6 +310,9 @@
       session.session.textView.selectedRange = NSRange(location: text.utf16.count, length: 0)
       let configuration = URLSessionConfiguration.ephemeral
       configuration.protocolClasses = [OfflinePhotoCaptureProtocol.self]
+      if ["multiple", "multiple-end"].contains(state) {
+        configuration.httpAdditionalHeaders = ["X-GistPad-Capture-Failure": "retry"]
+      }
       let storage = try ImageStorageClient(
         publishableKey: "sb_publishable_capture", session: URLSession(configuration: configuration)
       ) { "synthetic-capture" }
@@ -269,6 +365,11 @@
           photos.isShowingPicker = false
           await photos.receivePickedData(bytes)
         }
+        if ["multiple", "multiple-end"].contains(state) {
+          guard photos.displayedAttachments.count == 3,
+            photos.displayedAttachments.last?.action == .retry
+          else { throw PhotoCaptureFailure.recoveryActionUnavailable }
+        }
       default: break
       }
       return PhotoCaptureFixture(
@@ -280,7 +381,10 @@
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-      client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+      let code: URLError.Code =
+        request.value(forHTTPHeaderField: "X-GistPad-Capture-Failure") == "retry"
+        ? .badServerResponse : .notConnectedToInternet
+      client?.urlProtocol(self, didFailWithError: URLError(code))
     }
     override func stopLoading() {}
   }
