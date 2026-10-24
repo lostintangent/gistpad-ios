@@ -39,7 +39,7 @@
           }
           .task {
             if !fixture.photos.isShowingNotice, !fixture.photos.isShowingPicker {
-              session.session.textView.becomeFirstResponder()
+              session.session.requestFocusAtEnd()
             }
           }
         } else if let failure {

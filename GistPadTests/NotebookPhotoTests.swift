@@ -299,11 +299,19 @@ struct NotebookPhotoLayoutProbe {
     try await Task.sleep(for: .milliseconds(150))
     #expect(abs(shelf.contentOffset.y - bottom) < 1)
     record(window, named: "\(prefix)-shelf-bottom")
-    let visibleSourceHeight =
-      editor.bounds.height - editor.adjustedContentInset.top - editor.adjustedContentInset.bottom
+    var visibleSourceTop = editor.bounds.minY + editor.adjustedContentInset.top
+    for bar in views.compactMap({ $0 as? UINavigationBar }) where !bar.isHidden && bar.alpha > 0 {
+      let rect = bar.convert(bar.bounds, to: editor)
+      if rect.intersects(editor.bounds) {
+        visibleSourceTop = max(visibleSourceTop, rect.maxY)
+      }
+    }
+    let visibleSourceHeight = max(
+      0, editor.bounds.maxY - editor.adjustedContentInset.bottom - visibleSourceTop)
     let twoLines = (editor.font?.lineHeight ?? UIFont.preferredFont(forTextStyle: .body).lineHeight) * 2
     Attachment.record(
-      "source viewport: \(visibleSourceHeight) pt, two lines: \(twoLines) pt, "
+      "source unobscured viewport: \(visibleSourceHeight) pt, top: \(visibleSourceTop) pt, "
+        + "two lines: \(twoLines) pt, "
         + "shelf viewport: \(visibleShelfHeight) pt, bounds: \(shelf.bounds.height) pt, "
         + "content: \(shelf.contentSize.height) pt, "
         + "scroll bottom: \(shelf.contentOffset.y) pt",
