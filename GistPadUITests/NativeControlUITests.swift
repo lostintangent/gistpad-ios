@@ -172,12 +172,22 @@ final class NativeControlUITests: XCTestCase {
 
   @MainActor
   func testNativeSegmentTargetsAcrossTitlesAndAppearances() async throws {
-    try await checkSegmentMatrix(accessibility: false)
+    try await checkSegmentMatrix(accessibility: false, wide: false)
   }
 
   @MainActor
   func testNativeSegmentTargetsAcrossTitlesAndAppearancesAtAccessibilitySize() async throws {
-    try await checkSegmentMatrix(accessibility: true)
+    try await checkSegmentMatrix(accessibility: true, wide: false)
+  }
+
+  @MainActor
+  func testNativeWideSegmentTargetsAcrossTitlesAndAppearances() async throws {
+    try await checkSegmentMatrix(accessibility: false, wide: true)
+  }
+
+  @MainActor
+  func testNativeWideSegmentTargetsAcrossTitlesAndAppearancesAtAccessibilitySize() async throws {
+    try await checkSegmentMatrix(accessibility: true, wide: true)
   }
 
   @MainActor
@@ -250,9 +260,7 @@ final class NativeControlUITests: XCTestCase {
   }
 
   @MainActor
-  private func checkSegmentMatrix(accessibility: Bool) async throws {
-    let originalOrientation = XCUIDevice.shared.orientation
-    defer { XCUIDevice.shared.orientation = originalOrientation }
+  private func checkSegmentMatrix(accessibility: Bool, wide: Bool) async throws {
     let titles = [
       (state: "mode-short", title: "A note"),
       (
@@ -265,7 +273,7 @@ final class NativeControlUITests: XCTestCase {
     let minimum = UIFontMetrics(forTextStyle: .body).scaledValue(
       for: 48, compatibleWith: UITraitCollection(preferredContentSizeCategory: category))
     for appearance in ["light", "dark"] {
-      for split in [false, true] {
+      for split in wide ? [false, true] : [false] {
         var baselineWidth: CGFloat?
         for title in titles {
           let app = launch(
@@ -273,18 +281,16 @@ final class NativeControlUITests: XCTestCase {
             appearance: appearance,
             extraArguments: ["--capture-multi-file"] + (split ? ["--capture-split"] : []))
           defer { app.terminate() }
-          XCUIDevice.shared.orientation = split ? .landscapeLeft : .portrait
           let window = app.windows.firstMatch
           do {
-            try await waitUntil("the actual \(split ? "landscape" : "portrait") viewport") {
-              split ? window.frame.width > window.frame.height
-                : window.frame.height > window.frame.width
+            try await waitUntil("the actual \(wide ? "unfolded" : "folded") Duo viewport") {
+              abs(window.frame.width - (wide ? 951 : 466)) <= 1
+                && abs(window.frame.height - (wide ? 669 : 678)) <= 1
             }
           } catch {
-            record(app, name: "native-mode-viewport-\(split ? "wide" : "folded")")
+            record(app, name: "native-mode-viewport-\(wide ? "unfolded" : "folded")")
             throw error
           }
-          if split { XCTAssertGreaterThanOrEqual(window.frame.width, 640) }
           let picker = app.segmentedControls["note-toggle-mode"]
           let labels = split ? ["Edit", "Split", "Preview"] : ["Edit", "Preview"]
           try await waitUntil("every native mode target") {
@@ -313,7 +319,7 @@ final class NativeControlUITests: XCTestCase {
           XCTAssertLessThanOrEqual(titleButton.frame.maxX, picker.frame.minX + 1)
           record(
             app,
-            name: "native-\(title.state)-\(split ? "three" : "two")-\(accessibility ? "AX3" : "Large")-\(appearance)")
+            name: "native-\(title.state)-\(wide ? "unfolded" : "folded")-\(split ? "three" : "two")-\(accessibility ? "AX3" : "Large")-\(appearance)")
         }
       }
     }
