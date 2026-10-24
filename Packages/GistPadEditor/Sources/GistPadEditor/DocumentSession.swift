@@ -33,6 +33,7 @@
       textView.font = .preferredFont(forTextStyle: .body)
       textView.adjustsFontForContentSizeCategory = true
       textView.backgroundColor = .systemBackground
+      textView.tintColor = UIColor(InterfaceTheme.accent)
       textView.textContainerInset = UIEdgeInsets(top: 24, left: 20, bottom: 40, right: 20)
       textView.alwaysBounceVertical = true
       textView.bottomEdgeEffect.style = .soft
@@ -209,13 +210,13 @@
       storage.setAttributes(
         [
           .font: bodyFont,
-          .foregroundColor: UIColor.label,
+          .foregroundColor: UIColor(InterfaceTheme.text),
         ], range: NSRange(location: 0, length: storage.length))
       for span in MarkdownSyntax.spans(in: textView.text) {
         let attributes: [NSAttributedString.Key: Any]
         switch span.kind {
         case .heading:
-          attributes = [.foregroundColor: UIColor.label, .font: headingFont]
+          attributes = [.foregroundColor: UIColor(InterfaceTheme.text), .font: headingFont]
         case .code:
           attributes = [
             .foregroundColor: UIColor(InterfaceTheme.syntaxCode),
@@ -239,7 +240,7 @@
       }
       textView.typingAttributes = [
         .font: bodyFont,
-        .foregroundColor: UIColor.label,
+        .foregroundColor: UIColor(InterfaceTheme.text),
       ]
       highlightedTraits = textView.traitCollection
     }

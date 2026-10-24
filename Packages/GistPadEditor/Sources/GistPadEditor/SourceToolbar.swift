@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+  import GistPadInterface
   import UIKit
 
   @MainActor
@@ -30,6 +31,7 @@
       self.actions = actions
       super.init()
       toolbar.autoresizingMask = [.flexibleWidth]
+      toolbar.tintColor = UIColor(InterfaceTheme.accent)
       toolbar.accessibilityIdentifier = "editor-keyboard-bar"
     }
 

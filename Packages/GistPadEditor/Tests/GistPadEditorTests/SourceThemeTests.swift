@@ -9,7 +9,8 @@
   @MainActor
   struct SourceThemeTests {
     @Test func themeKeepsBodySizedHeadingsMonospacedCodeAndUnchangedSource() throws {
-      let source = "---\ntitle: Note\n---\n# Heading\n`code`\n- [ ] Open\n- [x] Done\n"
+      let source =
+        "---\ntitle: Note\n---\n# Heading\nPlain prose [link](https://example.com)\n`code`\n- [ ] Open\n- [x] Done\n"
       for size in [UIContentSizeCategory.large, .accessibilityExtraLarge] {
         for appearance in [UIUserInterfaceStyle.light, .dark] {
           for contrast in [UIAccessibilityContrast.normal, .high] {
@@ -43,6 +44,9 @@
             #expect(code.fontDescriptor.symbolicTraits.contains(.traitMonoSpace))
             #expect(metadata.fontDescriptor.symbolicTraits.contains(.traitMonoSpace))
             for (text, expected) in [
+              ("Heading", UIColor(InterfaceTheme.text)),
+              ("Plain", UIColor(InterfaceTheme.text)),
+              ("link", UIColor.link),
               ("code", UIColor(InterfaceTheme.syntaxCode)),
               ("title", UIColor(InterfaceTheme.syntaxMuted)),
               ("[ ]", UIColor(InterfaceTheme.accent)),
