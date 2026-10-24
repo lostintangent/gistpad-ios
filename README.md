@@ -63,6 +63,8 @@ The connected app preserves one source session per durable draft and serializes 
 
 Ordinary multi-file notes follow the web default: the newest file in a consistently dated Markdown series, otherwise `README.md`, otherwise the first supported file. Explicit file selection is preserved. Daily Notes remains an intentional exception: its default is today's file, never an older-day fallback.
 
+Today's availability, first two source lines and task progress come from account-local metadata, cached content and durable drafts. An empty existing note is not a missing note. An unpublished Today reopens its original local draft without another creation or remote read.
+
 Search uses cached content and local drafts, supports quoted phrases and `tag:ID`, `tag:"Tag name"` or `#TagName`, and reports incomplete/stale coverage. Daily rows route to their exact files and use real task progress when content is available. Intentionally deleted, clean daily files do not return as historical rows. Library refresh never replaces active input.
 
 Rename, file creation, stars, pins, archive and confirmed deletion use serialized actions. Tags, membership and pins use the signed-in Supabase profile, while GitHub owns content and stars. Source permissions do not make personal profile tags read-only. Deletion retains unsynced drafts and recovery history. Saved-file links use the GistPad share route and disclose that a secret link exposes the saved GitHub version. Sharing current changes requires explicit Save & Share, or exporting draft text.

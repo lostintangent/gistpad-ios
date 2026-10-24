@@ -747,18 +747,12 @@ final class NotebookModel {
   func showToday() async {
     documentRequest = UUID()
     documentError = nil
-    guard let daily = cachedLibrary?.owned.first(where: \.isDailyNote) else {
-      loadedDocument = nil
-      library.selectedNoteID = nil
-      return
-    }
+    let daily = cachedLibrary?.owned.first(where: \.isDailyNote)
     let filename = GistConventions.todayFilename()
-    if daily.files[filename] != nil {
-      await open(gistID: daily.id, filename: filename)
-    } else if let draft = localDrafts.first(where: {
-      $0.gistID == daily.id && $0.filename == filename
-    }) {
+    if let draft = todayDraft(filename: filename, daily: daily) {
       await openLocalDraft(id: draft.id)
+    } else if let daily, daily.files[filename] != nil {
+      await open(gistID: daily.id, filename: filename)
     } else {
       loadedDocument = nil
       library.selectedNoteID = nil
@@ -825,17 +819,33 @@ final class NotebookModel {
   private func updateToday() {
     let filename = GistConventions.todayFilename()
     let daily = cachedLibrary?.owned.first(where: \.isDailyNote)
-    let local = localDrafts.first {
-      $0.filename == filename
-        && ($0.gistID == daily?.id || $0.description == GistConventions.dailyNotesDescription)
-    }
+    let local = todayDraft(filename: filename, daily: daily)
     let text = local?.text ?? daily.flatMap { cachedLibrary?.content(gist: $0, filename: filename) }
-    library.today = LibraryTodaySummary(
+    var summary = LibraryTodaySummary(
       date: .now,
       progress: text.map {
         let tasks = TaskProgress(markdown: $0)
         return LibraryTaskProgress(completed: tasks.completed, total: tasks.total)
       })
+    if local != nil || daily?.files[filename] != nil {
+      summary.availability = .existing
+    } else if cachedLibrary != nil, library.loadState == .ready, daily?.truncated != true {
+      summary.availability = .missing
+    }
+    summary.excerpt = text.flatMap {
+      let lines = $0.split(whereSeparator: \.isNewline).prefix(2).joined(separator: "\n")
+      let excerpt = String(lines.prefix(280)).trimmingCharacters(in: .whitespacesAndNewlines)
+      return excerpt.isEmpty ? nil : excerpt
+    }
+    library.today = summary
+  }
+
+  private func todayDraft(filename: String, daily: Gist?) -> DraftSnapshot? {
+    localDrafts.first {
+      $0.filename == filename
+        && ($0.description == GistConventions.dailyNotesDescription
+          || (daily != nil && $0.gistID == daily?.id))
+    }
   }
   private static func isMissingRemote(_ error: any Error) -> Bool {
     if case GitHubClientError.http(let status, _) = error { return status == 404 }

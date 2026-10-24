@@ -7,6 +7,55 @@ import Testing
 
 @MainActor
 struct NotebookModelTests {
+  @Test func todaySummaryDistinguishesEmptyExistingMissingAndUnknownWithoutExtraRequests() async throws {
+    let filename = GistConventions.todayFilename()
+    let provider = StubNotebookProvider(
+      account: fixtureAccount,
+      gists: [
+        try makeGist(
+          id: "daily", title: GistConventions.dailyNotesDescription,
+          content: "", filename: filename)
+      ])
+    let model = NotebookModel(provider: provider)
+    #expect(model.library.today.availability == .unknown)
+    await model.start()
+    #expect(model.library.today.availability == .existing)
+    #expect(model.library.today.excerpt == nil)
+    #expect(model.library.today.progress == .init(completed: 0, total: 0))
+    let reads = await provider.readIDs
+    await model.updateCalendar()
+    #expect(await provider.readIDs == reads)
+    #expect(await provider.todayTargets.isEmpty)
+    #expect(await provider.creationCount == 0)
+
+    let missingProvider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    let missing = NotebookModel(provider: missingProvider)
+    await missing.start()
+    #expect(missing.library.today.availability == .missing)
+    #expect(missing.library.today.excerpt == nil)
+    #expect(await missingProvider.readIDs.isEmpty)
+    #expect(await missingProvider.creationCount == 0)
+  }
+
+  @Test func anUnpublishedTodayReopensItsLocalDraftWithoutCreatingOrFetching() async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await model.startToday()
+    let daily = try #require(model.loadedDocument?.draft)
+    #expect(daily.gistID == nil)
+    #expect(model.library.today.availability == .existing)
+    #expect(model.library.today.excerpt?.isEmpty == false)
+    await model.createNote()
+    #expect(model.loadedDocument?.draft?.id != daily.id)
+    await model.showToday()
+    #expect(model.loadedDocument?.draft?.id == daily.id)
+    #expect(model.loadedDocument?.text == daily.text)
+    #expect(await provider.todayTargets.count == 1)
+    #expect(await provider.creationCount == 1)
+    #expect(await provider.readIDs.isEmpty)
+  }
+
   @Test func ordinaryGistOpensReadmeBeforeAnEarlierAlphabeticFileAndHonorsExplicitSelection() async throws {
     let gist = try makeGist(
       id: "multiple", title: "Multiple files", content: "Apple source", filename: "Apple.md",
@@ -297,7 +346,7 @@ struct NotebookModelTests {
       gists: [
         try makeGist(
           id: "daily", title: GistConventions.dailyNotesDescription,
-          content: "- [x] One\n- [ ] Two", filename: filename)
+          content: "- [x] One\n- [ ] Two\nA third line stays out of the excerpt.", filename: filename)
       ])
     let model = NotebookModel(provider: provider)
     await model.start()
@@ -306,6 +355,7 @@ struct NotebookModelTests {
     let row = try #require(model.library.matchingNotes.first)
     #expect(row.id == "daily/\(filename)")
     #expect(row.progress == .init(completed: 1, total: 2))
+    #expect(model.library.today.excerpt == "- [x] One\n- [ ] Two")
     await model.openRow(id: row.id)
     #expect(model.loadedDocument?.filename == filename)
     #expect(model.library.selectedNoteID == row.id)
