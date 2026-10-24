@@ -38,8 +38,6 @@ public struct LibraryView: View {
 
     public var body: some View {
         adaptiveList
-            .listSectionMargins(.top, 8)
-            .listSectionMargins(.bottom, 0)
             .environment(\.defaultMinListHeaderHeight, 0)
             .navigationTitle("GistPad")
             .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 400)
@@ -85,6 +83,7 @@ public struct LibraryView: View {
                         .listRowSeparator(.hidden)
                         .accessibilityIdentifier("library-today")
                     }
+                    .listSectionMargins(.vertical, horizontalSizeClass == .regular ? nil : 0)
                 }
                 if model.hasFilters {
                     Section {
@@ -113,6 +112,8 @@ public struct LibraryView: View {
                     } header: {
                         sectionHeading(String(localized: "Open document", bundle: .module))
                     }
+                    .listSectionMargins(.top, horizontalSizeClass == .regular ? nil : 8)
+                    .listSectionMargins(.bottom, horizontalSizeClass == .regular ? nil : 0)
                 }
                 if case .results = model.searchState {
                     if !model.matchingNotes.isEmpty {
@@ -121,6 +122,8 @@ public struct LibraryView: View {
                         } header: {
                             sectionHeading(model.collection.title)
                         }
+                        .listSectionMargins(.top, horizontalSizeClass == .regular ? nil : 8)
+                        .listSectionMargins(.bottom, horizontalSizeClass == .regular ? nil : 0)
                     }
                 } else {
                     if !model.pinnedNotes.isEmpty {
@@ -129,6 +132,8 @@ public struct LibraryView: View {
                         } header: {
                             sectionHeading(String(localized: "Pinned", bundle: .module))
                         }
+                        .listSectionMargins(.top, horizontalSizeClass == .regular ? nil : 8)
+                        .listSectionMargins(.bottom, horizontalSizeClass == .regular ? nil : 0)
                     }
                     if !model.unpinnedNotes.isEmpty {
                         Section {
@@ -136,6 +141,8 @@ public struct LibraryView: View {
                         } header: {
                             sectionHeading(model.collection.title)
                         }
+                        .listSectionMargins(.top, horizontalSizeClass == .regular ? nil : 8)
+                        .listSectionMargins(.bottom, horizontalSizeClass == .regular ? nil : 0)
                     }
                 }
                 if model.matchingNotes.isEmpty && model.loadState != .loading && canShowEmptyState {
