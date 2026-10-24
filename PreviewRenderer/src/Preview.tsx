@@ -13,6 +13,7 @@ import Mermaid from "../../../gistpad.dev/src/features/markdown/Mermaid";
 import { taskRangePlugins } from "./tasks";
 import { toString } from "hast-util-to-string";
 import type { PreviewMessage, RenderRequest } from "./protocol";
+import { useDiagramTheme } from "./diagramTheme";
 
 const emojis = new Map(
   Object.entries(emojiData.emojis).map(([id, emoji]) => [id, emoji.skins[0]?.native ?? ""]),
@@ -142,6 +143,15 @@ export function Preview({ request }: { request: RenderRequest }) {
       },
       span({ children, node, ...props }) {
         if (props.className?.split(" ").includes("octicon")) return null;
+        const resultKind = props.className?.split(" ").includes("bg-amber-500")
+          ? "current" : props.className?.split(" ").includes("bg-green-500") ? "previous" : undefined;
+        if (resultKind) {
+          const value = node ? toString(node) : "";
+          return <span {...props} className={`calculation-result calculation-${resultKind}`}
+            role="math" aria-label={`${resultKind === "current" ? "Current" : "Previous"} result: ${value}`}>
+            {children}
+          </span>;
+        }
         return node?.properties.dataSpoiler !== undefined
           ? <Spoiler>{children}</Spoiler>
           : <span {...props}>{children}</span>;
@@ -233,6 +243,7 @@ function PreviewImage({ src, alt }: { src?: string; alt: string }) {
 }
 
 function NativeDiagram({ content }: { content: string }) {
+  const theme = useDiagramTheme();
   const container = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const updateScale = () => {
@@ -251,7 +262,7 @@ function NativeDiagram({ content }: { content: string }) {
       window.removeEventListener("gistpad-preview-appearance", updateScale);
     };
   }, []);
-  return <div ref={container} className="diagram-scroll" role="figure" aria-label="Mermaid diagram" tabIndex={0}>
+  return <div ref={container} className="diagram-scroll" data-native-theme={theme} role="figure" aria-label="Mermaid diagram" tabIndex={0}>
     <Mermaid content={content} onExpand={() => container.current?.focus()} />
   </div>;
 }

@@ -217,6 +217,8 @@ struct PreviewWebKitTests {
             }
         }
 
+        try await verifyReadingPolish(in: webView, receiver: receiver)
+
         let stress = "# A long synthetic note\n" + (0..<500).map { index in
             "\n## Section \(index)\n\nNative source remains canonical. 👩🏽‍💻 café é 日本語のメモ。中文笔记。مرحبا بالعالم. שלום עולם.\n\n- [ ] Repeated task \(index)\n\nA paragraph with **emphasis**, `inline code`, [[Ideas]], and a [safe link](https://gistpad.dev).\n"
         }.joined()
@@ -234,6 +236,126 @@ struct PreviewWebKitTests {
             arguments: [:], in: nil, contentWorld: .page
         ) as? Int
         #expect(headingCount == 500)
+    }
+
+    private func verifyReadingPolish(in webView: WKWebView, receiver: MessageReceiver) async throws {
+        let document = PreviewDocument(text: try PreviewFixtures.readingPolish, id: "reading-polish", generation: 0)
+        _ = try await webView.callAsyncJavaScript(
+            "window.gistpadPreview.render(payload);",
+            arguments: ["payload": document.arguments], in: nil, contentWorld: .page
+        )
+        try await waitFor("focused reading fixture") {
+            receiver.bodies.contains { $0["type"] as? String == "rendered" && $0["documentID"] as? String == "reading-polish" }
+        }
+        for style: UIUserInterfaceStyle in [.light, .dark] {
+            for contrast: UIAccessibilityContrast in [.normal, .high] {
+                for size: UIContentSizeCategory in [.large, .accessibilityExtraLarge] {
+                    let traits = UITraitCollection {
+                        $0.userInterfaceStyle = style
+                        $0.accessibilityContrast = contrast
+                        $0.preferredContentSizeCategory = size
+                    }
+                    let appearance = PreviewAppearance(traits: traits)
+                    _ = try await webView.callAsyncJavaScript(
+                        "window.gistpadPreview.setAppearance(payload);",
+                        arguments: ["payload": appearance.arguments], in: nil, contentWorld: .page
+                    )
+                    var themed = false
+                    for _ in 0..<200 {
+                        themed = try await webView.callAsyncJavaScript(
+                            """
+                            const diagrams = document.querySelectorAll('.diagram-scroll');
+                            if (diagrams.length !== 2 || !diagrams[1].querySelector('svg')) return false;
+                            const rect = diagrams[0].querySelector('.node rect');
+                            if (!rect) return false;
+                            const parse = color => color.match(/[\\d.]+/g).map(Number);
+                            const styles = getComputedStyle(document.documentElement);
+                            const surface = parse(styles.getPropertyValue('--gp-surface')).slice(0, 3);
+                            const secondary = parse(styles.getPropertyValue('--gp-text-secondary'));
+                            const stroke = secondary.slice(0, 3).map((value, index) =>
+                                Math.round(value * (secondary[3] ?? 1) + surface[index] * (1 - (secondary[3] ?? 1))));
+                            return parse(getComputedStyle(rect).fill).slice(0, 3).join() === surface.join() &&
+                                parse(getComputedStyle(rect).stroke).slice(0, 3).join() === stroke.join();
+                            """,
+                            arguments: [:], in: nil, contentWorld: .page
+                        ) as? Bool == true
+                        if themed { break }
+                        try await Task.sleep(for: .milliseconds(50))
+                    }
+                    #expect(themed)
+                    let checks = try await webView.callAsyncJavaScript(
+                        """
+                        const styles = getComputedStyle(document.documentElement);
+                        const current = getComputedStyle(document.querySelector('.calculation-current'));
+                        const previous = getComputedStyle(document.querySelector('.calculation-previous'));
+                        const authored = getComputedStyle(document.querySelectorAll('.diagram-scroll')[1].querySelector('.attention rect'));
+                        const summary = document.querySelector('summary');
+                        const summaryStyle = getComputedStyle(summary);
+                        const parse = color => color.match(/[\\d.]+/g).slice(0, 3).map(Number);
+                        const luminance = rgb => rgb.map(value => {
+                            value /= 255;
+                            return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+                        }).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+                        const ratio = (first, second) => {
+                            const left = luminance(parse(first)), right = luminance(parse(second));
+                            return (Math.max(left, right) + 0.05) / (Math.min(left, right) + 0.05);
+                        };
+                        const node = getComputedStyle(document.querySelector('.diagram-scroll .node rect'));
+                        const arrow = getComputedStyle(document.querySelector('.diagram-scroll .arrowMarkerPath'));
+                        const edge = getComputedStyle(document.querySelector('.diagram-scroll .flowchart-link'));
+                        const resolveColor = value => {
+                            const probe = document.createElement('span');
+                            probe.style.color = value;
+                            document.body.append(probe);
+                            const resolved = getComputedStyle(probe).color;
+                            probe.remove();
+                            return resolved;
+                        };
+                        return [
+                            [...document.querySelectorAll('.calculation-result')].map(node => node.textContent).join('|') === '$15.00|$15.00|$17.00',
+                            document.querySelector('.calculation-current').getAttribute('aria-label') === 'Current result: $15.00',
+                            document.querySelector('.calculation-previous').getAttribute('aria-label') === 'Previous result: $15.00',
+                            current.fontWeight === '600' && previous.fontWeight === '400' && current.color === styles.color,
+                            current.borderRadius === '6px' && current.padding === '2px 4px' && current.webkitUserSelect === 'none',
+                            [...document.querySelectorAll('td, th')].every(cell => {
+                                const style = getComputedStyle(cell);
+                                return style.borderLeftWidth === '0px' && style.borderRightWidth === '0px' &&
+                                    style.borderTopWidth === '0px' && style.borderBottomWidth === '0px' &&
+                                    style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.fontSize === styles.fontSize;
+                            }),
+                            [...document.querySelectorAll('table th')].slice(0, 3).map(cell => getComputedStyle(cell).textAlign).join('|') === 'left|center|right',
+                            [...document.querySelectorAll('.table-scroll')].some(table => table.scrollWidth > table.clientWidth),
+                            summary.getBoundingClientRect().height >= 44 && summaryStyle.fontWeight === '600' && summaryStyle.columnGap === '8px',
+                            ratio(node.stroke, node.fill) >= 3 && ratio(node.stroke, styles.backgroundColor) >= 3,
+                            ratio(arrow.fill, styles.backgroundColor) >= 3 && ratio(edge.stroke, styles.backgroundColor) >= 3,
+                            authored.fill === 'rgb(255, 240, 204)' && authored.stroke === 'rgb(118, 88, 0)',
+                            current.backgroundColor === resolveColor(styles.getPropertyValue('--gp-selected-surface')) &&
+                                previous.backgroundColor === resolveColor(styles.getPropertyValue('--gp-surface')),
+                            document.documentElement.scrollWidth <= window.innerWidth
+                        ];
+                        """,
+                        arguments: [:], in: nil, contentWorld: .page
+                    ) as? [Bool]
+                    let results = try #require(checks)
+                    for (index, passed) in results.enumerated() {
+                        #expect(passed, "Reading check \(index), \(style.rawValue)/\(contrast.rawValue)/\(size.rawValue)")
+                    }
+                }
+            }
+        }
+        let disclosureWorks = try await webView.callAsyncJavaScript(
+            """
+            const details = document.querySelector('details');
+            const summary = details.querySelector('summary');
+            summary.focus();
+            summary.click();
+            const expanded = details.open && document.activeElement === summary;
+            summary.click();
+            return expanded && !details.open;
+            """,
+            arguments: [:], in: nil, contentWorld: .page
+        ) as? Bool
+        #expect(disclosureWorks == true)
     }
 
     private func waitFor(_ description: String, condition: () -> Bool) async throws {

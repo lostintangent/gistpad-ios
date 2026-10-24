@@ -89,6 +89,8 @@ struct PreviewBridgeTests {
     @Test("Synthetic fixture is bundled")
     func fixture() throws {
         #expect(try PreviewFixtures.allSyntax.contains("Duplicate task"))
+        #expect(try PreviewFixtures.readingPolish.contains("classDef attention"))
+        #expect(try PreviewFixtures.readingPolish.contains("<summary>More to read</summary>"))
     }
 
     @Test("Late layout notifications do not become document errors")

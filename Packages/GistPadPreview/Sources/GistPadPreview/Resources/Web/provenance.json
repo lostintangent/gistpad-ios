@@ -2,7 +2,8 @@
   "source": "gistpad.dev/src",
   "adapters": [
     "Function arithmetic evaluation replaced with a non-executable parser",
-    "Mermaid media-query hook bound to the native appearance payload"
+    "Mermaid media-query hook bound to the native appearance payload",
+    "Mermaid default theme/cache key use resolved native colors without changing authored styles"
   ],
   "files": {
     "features/markdown/MarkdownPreview.tsx": "216830f3fbe673306ce834d009cbe6765d46ffb0450d439fc394f52c950fd3ac",

@@ -63,8 +63,23 @@ li { margin-block: .35em; }
 .task-toggle:has(input:disabled) { opacity: .6; }
 .table-scroll { overflow-x: auto; }
 table { border-collapse: collapse; min-width: 100%; }
-td, th { border: 1px solid var(--border); padding: 8px 12px; text-align: start; }
-summary { min-height: 32px; }
+td, th { border: 0; padding: 10px 12px; text-align: start; }
+th { font-weight: 600; }
+thead tr, tbody tr:not(:last-child) { border-bottom: 1px solid var(--border); }
+.prose tbody tr:nth-child(even) td,
+.prose tbody tr:nth-child(even) th:first-child:not([rowspan]) { background: transparent; }
+table [align="left"] { text-align: left; }
+table [align="center"] { text-align: center; }
+table [align="right"] { text-align: right; }
+.prose summary { display: flex; align-items: center; min-height: 44px; gap: 8px; font-weight: 600; list-style: none; cursor: pointer; }
+summary::-webkit-details-marker { display: none; }
+summary::marker { content: ""; }
+summary::before { content: ""; flex: 0 0 auto; width: 8px; height: 8px; margin-inline: 3px; border: solid var(--gp-text-secondary); border-width: 1.75px 1.75px 0 0; transform: rotate(45deg); }
+summary:dir(rtl)::before { transform: rotate(-135deg); }
+details[open] > summary::before { transform: rotate(135deg); }
+summary:active { background: var(--gp-selected-surface); }
+summary:focus-visible { outline: 3px solid var(--gp-link); outline-offset: 2px; }
+details[open] > summary { margin-bottom: 8px; }
 img, svg { max-width: 100%; height: auto; }
 .spoiler { border: 0; border-radius: 4px; background: var(--muted); padding: 0 5px; }
 .bookmark { background: none; border: none; color: var(--primary); }
@@ -75,8 +90,9 @@ img, svg { max-width: 100%; height: auto; }
 .rounded { border-radius: 4px; }
 .px-0\.5 { padding-inline: 2px; }
 .ml-1 { margin-left: 4px; }
-.bg-amber-500 { background: #fbbf24; }
-.bg-green-500 { background: #86d1a3; }
+.calculation-result { display: inline-block; color: var(--gp-text); border-radius: 6px; padding: 2px 4px; font-variant-numeric: tabular-nums; user-select: none; -webkit-user-select: none; }
+.calculation-current { background: var(--gp-selected-surface); font-weight: 600; margin-inline-start: 4px; }
+.calculation-previous { background: var(--gp-surface); font-weight: 400; }
 .font-bold { font-weight: 700; }
 .text-blue-500 { color: var(--primary); }
 .list-none { list-style: none; }
