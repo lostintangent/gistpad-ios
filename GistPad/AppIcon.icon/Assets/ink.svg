@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <title>GistPad ink layer</title>
-  <g id="ink" fill="#34434A" transform="translate(-102.4 -102.4) scale(1.2)">
-    <rect id="first-line" x="376" y="336" width="244" height="30" rx="15"/>
-    <rect id="second-line" x="376" y="438" width="244" height="30" rx="15"/>
-    <rect id="short-line" x="376" y="540" width="170" height="30" rx="15"/>
-  </g>
-</svg>

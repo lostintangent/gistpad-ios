@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>GistPad notebook layer, from gistpad.dev/public/icon.svg at 2x</title>
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e2e8f0"/>
+    </linearGradient>
+    <linearGradient id="spine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5ad1fa"/>
+      <stop offset="1" stop-color="#0ea5e9"/>
+    </linearGradient>
+  </defs>
+  <g transform="scale(2)" stroke-linejoin="round">
+    <rect id="cover-page" x="88" y="64" width="312" height="384" rx="44" fill="url(#page)"/>
+    <path id="spine" d="M164 64 H132 A44 44 0 0 0 88 108 V404 A44 44 0 0 0 132 448 H164 Z" fill="url(#spine)"/>
+    <line id="spine-edge" x1="164" y1="64" x2="164" y2="448" stroke="#1e293b" stroke-width="20"/>
+    <rect id="cover-outline" x="88" y="64" width="312" height="384" rx="44" fill="none" stroke="#1e293b" stroke-width="20"/>
+    <g id="lines" stroke="#94a3b8" stroke-width="20" stroke-linecap="round">
+      <line x1="206" y1="158" x2="350" y2="158"/>
+      <line x1="206" y1="208" x2="350" y2="208"/>
+      <line x1="206" y1="258" x2="350" y2="258"/>
+      <line x1="206" y1="308" x2="350" y2="308"/>
+      <line x1="206" y1="358" x2="304" y2="358"/>
+    </g>
+  </g>
+</svg>

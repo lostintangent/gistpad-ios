@@ -3,8 +3,8 @@
     {
       "value" : {
         "linear-gradient" : [
-          "srgb:0.19608,0.36863,0.43137,1.00000",
-          "srgb:0.13725,0.26667,0.31765,1.00000"
+          "srgb:0.96863,0.98039,0.99216,1.00000",
+          "srgb:0.82745,0.87451,0.93333,1.00000"
         ],
         "orientation" : { "start" : { "x" : 0.5, "y" : 0 }, "stop" : { "x" : 0.5, "y" : 1 } }
       }
@@ -13,8 +13,8 @@
       "appearance" : "dark",
       "value" : {
         "linear-gradient" : [
-          "srgb:0.11765,0.21569,0.25882,1.00000",
-          "srgb:0.07059,0.14118,0.17255,1.00000"
+          "srgb:0.20000,0.25490,0.33333,1.00000",
+          "srgb:0.05882,0.09020,0.16471,1.00000"
         ],
         "orientation" : { "start" : { "x" : 0.5, "y" : 0 }, "stop" : { "x" : 0.5, "y" : 1 } }
       }
@@ -22,41 +22,22 @@
   ],
   "groups" : [
     {
-      "name" : "Ink",
+      "name" : "Notebook",
       "layers" : [
-        {
-          "name" : "Ink", "image-name" : "ink.svg", "glass" : false,
-          "fill-specializations" : [ { "appearance" : "dark", "value" : { "solid" : "srgb:0.22353,0.28235,0.30588,1.00000" } } ]
-        }
+        { "name" : "Notebook", "image-name" : "notebook.svg", "glass" : false }
       ],
-      "shadow" : { "kind" : "none", "opacity" : 0.5 },
+      "shadow" : { "kind" : "neutral", "opacity" : 0.5 },
       "translucency" : { "enabled" : false, "value" : 0.5 },
       "specular" : false
     },
     {
-      "name" : "Notebook",
+      "name" : "Tabs",
       "layers" : [
-        {
-          "name" : "Binding", "image-name" : "binding.svg", "glass" : true,
-          "fill-specializations" : [ { "appearance" : "dark", "value" : { "solid" : "srgb:0.84314,0.71765,0.36078,1.00000" } } ]
-        },
-        {
-          "name" : "Paper", "image-name" : "paper.svg", "glass" : true,
-          "fill-specializations" : [ { "appearance" : "dark", "value" : { "solid" : "srgb:0.81176,0.80392,0.75686,1.00000" } } ]
-        }
+        { "name" : "Tabs", "image-name" : "tabs.svg", "glass" : false }
       ],
       "shadow" : { "kind" : "neutral", "opacity" : 0.5 },
       "translucency" : { "enabled" : false, "value" : 0.5 },
-      "specular" : true
-    },
-    {
-      "name" : "Tabs",
-      "layers" : [
-        { "name" : "Tabs", "image-name" : "tabs.svg", "glass" : true }
-      ],
-      "shadow" : { "kind" : "neutral", "opacity" : 0.5 },
-      "translucency" : { "enabled" : true, "value" : 0.2 },
-      "specular" : true
+      "specular" : false
     }
   ],
   "supported-platforms" : {
