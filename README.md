@@ -42,6 +42,8 @@ Open `GistPad.xcodeproj` to run interactively. Choose the shared **GistPad** sch
 
 Native fixture tests link the existing Supabase Auth product directly because they construct raw profile metadata. Production code uses typed Sync preferences instead. The app directly links GistPadIntelligence for its Debug evaluation workspace's model APIs. When updating Supabase, keep the exact version in `Packages/GistPadSync/Package.swift` and the Xcode project's test-only package reference aligned.
 
+The shared GistPad scheme includes app-hosted `GistPadTests` and the separate `GistPadUITests` XCUITest target. Real SwiftUI control activation belongs in UI tests, not synthetic accessibility activation inside the app process. Use `-only-testing:GistPadUITests` for the bounded interaction gate, with parallel testing disabled and the shared native slot held.
+
 The app root updates the personal-accent trait on its own window scene when the account preference changes and resets it to Sky on sign-out. Sheet content also receives the explicit profile value, including nested tag forms. Sheet dismissal controls stay neutral, while native alert actions keep the system tint. Debug captures use `--capture-accent` for the same scene trait, rather than only changing the displayed picker swatch.
 
 Sign Out uses a native alert with a short account-specific draft-retention message, a system-tinted Cancel action and destructive Sign Out. It never publishes drafts. Tag form titles and action labels use consistent Title Case.

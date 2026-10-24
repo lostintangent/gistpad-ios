@@ -40,6 +40,13 @@
 			remoteGlobalIDString = A00000000000000000000020;
 			remoteInfo = GistPad;
 		};
+		F80000000000000000000003 = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A00000000000000000000010 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A00000000000000000000020;
+			remoteInfo = GistPad;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -58,6 +65,7 @@
 		B40000000000000000000004 /* GistPadWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GistPadWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000000000000000004 /* GistPad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GistPad.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000000000000000005 /* GistPadTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GistPadTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F80000000000000000000004 /* GistPadUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GistPadUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0000000000000000000000C /* Public.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Configuration/Public.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -65,6 +73,7 @@
 		B40000000000000000000006 /* GistPadWidgets */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (B4000000000000000000000A,); path = GistPadWidgets; sourceTree = "<group>"; };
 		A00000000000000000000006 /* GistPad */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (A0000000000000000000000A,); path = GistPad; sourceTree = "<group>"; };
 		A00000000000000000000007 /* GistPadTests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = GistPadTests; sourceTree = "<group>"; };
+		F80000000000000000000006 /* GistPadUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = GistPadUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -76,17 +85,18 @@
 		B40000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (B40000000000000000000002 /* GistPadPlatform in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
 		A00000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000001 /* GistPadEditor in Frameworks */, A0000000000000000000000B /* GistPadPreview in Frameworks */, A0000000000000000000000D /* GistPadInterface in Frameworks */, A0000000000000000000000E /* GistPadSync in Frameworks */, C50000000000000000000004 /* GistPadAppearance in Frameworks */, B40000000000000000000001 /* GistPadPlatform in Frameworks */, B4000000000000000000000B /* GistPadIntelligence in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
 		A00000000000000000000009 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000002 /* GistPadEditor in Frameworks */, A0000000000000000000000F /* GistPadInterface in Frameworks */, C50000000000000000000001 /* GistPadAppearance in Frameworks */, C50000000000000000000002 /* GistPadPreview in Frameworks */, C50000000000000000000003 /* GistPadSync in Frameworks */, B40000000000000000000005 /* GistPadPlatform in Frameworks */, B40000000000000000000007 /* GistPadIntelligence in Frameworks */, E70000000000000000000001 /* Auth in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
+		F80000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		A00000000000000000000011 = {
 			isa = PBXGroup;
-			children = (A00000000000000000000006 /* GistPad */, A00000000000000000000007 /* GistPadTests */, B40000000000000000000006 /* GistPadWidgets */, A0000000000000000000000C /* Public.xcconfig */, A00000000000000000000012 /* Products */,);
+			children = (A00000000000000000000006 /* GistPad */, A00000000000000000000007 /* GistPadTests */, F80000000000000000000006 /* GistPadUITests */, B40000000000000000000006 /* GistPadWidgets */, A0000000000000000000000C /* Public.xcconfig */, A00000000000000000000012 /* Products */,);
 			sourceTree = "<group>";
 		};
 		A00000000000000000000012 /* Products */ = {
 			isa = PBXGroup;
-			children = (A00000000000000000000004 /* GistPad.app */, A00000000000000000000005 /* GistPadTests.xctest */, B40000000000000000000004 /* GistPadWidgets.appex */,);
+			children = (A00000000000000000000004 /* GistPad.app */, A00000000000000000000005 /* GistPadTests.xctest */, F80000000000000000000004 /* GistPadUITests.xctest */, B40000000000000000000004 /* GistPadWidgets.appex */,);
 			name = Products;
 			sourceTree = "<group>";
 		};
@@ -132,6 +142,19 @@
 			productReference = A00000000000000000000005;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		F80000000000000000000020 /* GistPadUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F80000000000000000000061;
+			buildPhases = (F80000000000000000000021, F80000000000000000000008, F80000000000000000000022,);
+			buildRules = ();
+			dependencies = (F80000000000000000000033,);
+			fileSystemSynchronizedGroups = (F80000000000000000000006 /* GistPadUITests */,);
+			name = GistPadUITests;
+			packageProductDependencies = ();
+			productName = GistPadUITests;
+			productReference = F80000000000000000000004;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -143,6 +166,7 @@
 				TargetAttributes = {
 					A00000000000000000000020 = {CreatedOnToolsVersion = 27.1; DevelopmentTeam = RHFNBL7EG4; ProvisioningStyle = Automatic; };
 					A00000000000000000000030 = {CreatedOnToolsVersion = 27.1; TestTargetID = A00000000000000000000020; };
+					F80000000000000000000020 = {CreatedOnToolsVersion = 27.1; DevelopmentTeam = RHFNBL7EG4; ProvisioningStyle = Automatic; TestTargetID = A00000000000000000000020; };
 					B40000000000000000000020 = {CreatedOnToolsVersion = 27.1; DevelopmentTeam = RHFNBL7EG4; ProvisioningStyle = Automatic; };
 				};
 			};
@@ -158,7 +182,7 @@
 			productRefGroup = A00000000000000000000012;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (A00000000000000000000020 /* GistPad */, A00000000000000000000030 /* GistPadTests */, B40000000000000000000020 /* GistPadWidgets */,);
+			targets = (A00000000000000000000020 /* GistPad */, A00000000000000000000030 /* GistPadTests */, F80000000000000000000020 /* GistPadUITests */, B40000000000000000000020 /* GistPadWidgets */,);
 		};
 /* End PBXProject section */
 
@@ -166,17 +190,20 @@
 		B40000000000000000000022 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A00000000000000000000022 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A00000000000000000000032 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		F80000000000000000000022 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		B40000000000000000000021 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A00000000000000000000021 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A00000000000000000000031 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		F80000000000000000000021 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
 		B40000000000000000000033 = {isa = PBXTargetDependency; target = B40000000000000000000020; targetProxy = B40000000000000000000010; };
 		A00000000000000000000033 = {isa = PBXTargetDependency; target = A00000000000000000000020; targetProxy = A00000000000000000000003; };
+		F80000000000000000000033 = {isa = PBXTargetDependency; target = A00000000000000000000020; targetProxy = F80000000000000000000003; };
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -309,6 +336,24 @@
 			TARGETED_DEVICE_FAMILY = 1;
 			TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GistPad.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/GistPad";
 		}; name = Release; };
+		F80000000000000000000072 = {isa = XCBuildConfiguration; buildSettings = {
+			CODE_SIGN_STYLE = Automatic;
+			DEVELOPMENT_TEAM = RHFNBL7EG4;
+			GENERATE_INFOPLIST_FILE = YES;
+			PRODUCT_BUNDLE_IDENTIFIER = dev.gistpad.GistPadUITests;
+			PRODUCT_NAME = "$(TARGET_NAME)";
+			TARGETED_DEVICE_FAMILY = 1;
+			TEST_TARGET_NAME = GistPad;
+		}; name = Debug; };
+		F80000000000000000000073 = {isa = XCBuildConfiguration; buildSettings = {
+			CODE_SIGN_STYLE = Automatic;
+			DEVELOPMENT_TEAM = RHFNBL7EG4;
+			GENERATE_INFOPLIST_FILE = YES;
+			PRODUCT_BUNDLE_IDENTIFIER = dev.gistpad.GistPadUITests;
+			PRODUCT_NAME = "$(TARGET_NAME)";
+			TARGETED_DEVICE_FAMILY = 1;
+			TEST_TARGET_NAME = GistPad;
+		}; name = Release; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -316,6 +361,7 @@
 		A00000000000000000000060 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000070, A00000000000000000000071,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		A00000000000000000000061 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000072, A00000000000000000000073,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		A00000000000000000000062 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000074, A00000000000000000000075,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		F80000000000000000000061 = {isa = XCConfigurationList; buildConfigurations = (F80000000000000000000072, F80000000000000000000073,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
