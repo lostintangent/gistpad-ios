@@ -18,6 +18,10 @@ This is the implementation specification and review gate, not a claim that the c
 
 The accepted recommendation governs scope. Earlier concept sketches are directional, not production geometry or an exception to these rules.
 
+### Preserve the original app identity
+
+Use the original PWA artwork from `gistpad.dev/public/icon.svg` for the native app icon. Preserve its blue gradient spine, outlined pale cover, coral/amber/teal tabs, writing strokes, proportions and shadow in the default full-color rendition. Do not substitute the simplified warm-binding notebook or another approximation. Adapt asset packaging and system-owned appearance variants without redesigning the master artwork.
+
 ### A useful default detail
 
 An unselected wide detail must not open onto a generic Select a gist placeholder. Resolve it in this order:
@@ -361,7 +365,9 @@ Required evidence includes a nonoverlapping proposal, overlapping edits, a remot
 
 ## 10. Review gate for every UI surface
 
-**No production UI task closes without Designer sign-off on actual Duo simulator evidence.** A polished SVG, passing build, stock component, or Light-mode screenshot alone is not sign-off. Award-caliber is the quality ambition, not a claim of an Apple award.
+**No production UI task closes without Designer sign-off on the actual installed Duo app.** Simulator evidence can establish scoped layout approval, not final device polish or hardware behavior. A polished SVG, passing build, stock component, or Light-mode screenshot alone is not sign-off. Award-caliber is the quality ambition, not a claim of an Apple award.
+
+Review the connected Library > open note > read > edit > switch file flow, including the real keyboard, menus, save status and return navigation. Assess hierarchy, breathing room, directness and continuity in that experience, not just each isolated fixture. Actual on-device feedback overrides earlier still-image density targets. Fixing correctness or basic usability does not by itself establish the intended design quality.
 
 For each implemented surface, supply eight captures from the same build and synthetic fixture:
 
