@@ -36,6 +36,7 @@ struct NotebookAccountSwitchSheet: View {
             }
           }
           .accessibilityIdentifier("account-switch-export")
+          .captureFrame("account-switch-export")
         } footer: {
           Text(
             "Reconnect the original account to return to its drafts. Export makes an additional backup without changing or deleting anything."

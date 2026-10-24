@@ -30,6 +30,12 @@ public struct TagEditor: View {
         editor._query = State(initialValue: value)
         return editor
     }
+
+    public func captureEditingTag(_ tag: LibraryTag?) -> Self {
+        var editor = self
+        editor._editingTag = State(initialValue: tag)
+        return editor
+    }
     #endif
 
     public var body: some View {
@@ -60,6 +66,7 @@ public struct TagEditor: View {
                                 : String(localized: "No matching tags.", bundle: .module))
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("tag-empty")
+                            .captureFrame("tag-empty")
                     }
                     if save != nil {
                         Button {
@@ -77,6 +84,7 @@ public struct TagEditor: View {
                         }
                         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
                         .accessibilityIdentifier("tag-create")
+                        .captureFrame("tag-create")
                     }
                 } footer: {
                     Text("Tags apply to every file in this note.", bundle: .module)
@@ -150,6 +158,7 @@ public struct TagEditor: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("tag-choice-\(tag.id)")
+        .captureFrame("tag-choice-\(tag.id)")
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
         .accessibilityAddTraits(draft.selectedTagIDs.contains(tag.id) ? .isSelected : [])
         .accessibilityAction(named: Text("Edit tag \(tag.name)", bundle: .module)) { editingTag = tag }

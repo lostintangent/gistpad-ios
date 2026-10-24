@@ -25,6 +25,12 @@ public struct PersonalAccentColorRow: View {
         row._chosenColor = State(initialValue: value)
         return row
     }
+
+    public func captureError(_ message: String?) -> Self {
+        var row = self
+        row._error = State(initialValue: message)
+        return row
+    }
     #endif
 
     private var preference: PersonalAccent { PersonalAccent(savedHex: savedHex) }
@@ -78,12 +84,14 @@ public struct PersonalAccentColorRow: View {
             }
             .disabled(isSaving)
             .accessibilityIdentifier("settings-save-accent")
+            .captureFrame("settings-save-accent")
         }
         if let error {
             Text(verbatim: error)
                 .font(.footnote)
                 .foregroundStyle(.red)
                 .accessibilityIdentifier("settings-accent-error")
+                .captureFrame("settings-accent-error")
         }
     }
 }

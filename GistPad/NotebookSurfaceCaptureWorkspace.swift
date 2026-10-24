@@ -80,6 +80,9 @@ struct NotebookSurfaceCaptureWorkspace: View {
             }
           }
           .captureQuery(tagCaptureQuery)
+          .captureEditingTag(
+            captureState == "new-tag" ? .init(id: "capture-new-tag", name: "")
+              : captureState == "edit-tag" ? Self.tags[0] : nil)
         case .account:
           NotebookAccountSwitchSheet(
             current: "octavia", replacement: "mira", export: { Data("[]".utf8) },
@@ -161,6 +164,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
           "contentSizeCategory": window.traitCollection.preferredContentSizeCategory.rawValue,
           "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
           "keyboardHeight": keyboardHeight,
+          "interactionEvidence": "presentation-only",
         ]
         metadata.merge(evidence.metadata) { _, value in value }
         if screen == "capture-today",
@@ -298,10 +302,14 @@ struct NotebookSurfaceCaptureWorkspace: View {
       }
       if ["error", "accent-save"].contains(captureState ?? "") {
         row.capturePendingColor(PersonalAccent(savedHex: "#DB9E47").color)
+          .captureError(
+            captureState == "error"
+              ? NotebookModel.message(for: URLError(.notConnectedToInternet)) : nil)
       } else {
         row
       }
     }
+    .captureSignOutConfirmation(captureState == "sign-out")
   }
 
   private enum CaptureSheet: String, Identifiable {
@@ -457,26 +465,6 @@ private final class NotebookSurfaceReadinessController: UIViewController {
               evidence.focusedFieldText = field?.text
               evidence.matchedTagCount = visibleTags.count
             case .newTag, .editTag:
-              if !activated {
-                if step == .newTag, let button = visibleElement("tag-create", in: window) {
-                  activated = try activate(button, description: "New Tag")
-                } else if step == .editTag,
-                  let row = visibleElement("tag-choice-everyday", in: window),
-                  let action = row.accessibilityCustomActions?.first(where: {
-                    $0.name == "Edit tag Everyday"
-                  })
-                {
-                  if let handler = action.actionHandler {
-                    activated = handler(action)
-                  } else if let target = action.target {
-                    activated = UIApplication.shared.sendAction(
-                      action.selector, to: target, from: action, for: nil)
-                  }
-                  guard activated else {
-                    throw NotebookSurfaceCaptureFailure(message: "The native Edit Tag action was not handled.")
-                  }
-                }
-              }
               let expectedTitle = step == .newTag ? "New tag" : "Edit tag"
               let bar = descendants(window).compactMap { $0 as? UINavigationBar }.first {
                 $0.topItem?.title == expectedTitle && isVisible($0)
@@ -484,7 +472,7 @@ private final class NotebookSurfaceReadinessController: UIViewController {
               let field = descendants(window).compactMap { $0 as? UITextField }.first {
                 $0.isFirstResponder
               }
-              complete = activated && bar != nil
+              complete = bar != nil
                 && (step != .newTag || (field != nil && keyboardHeight >= 150))
               evidence.formTitle = bar?.topItem?.title
               evidence.focusedFieldText = field?.text
@@ -493,16 +481,6 @@ private final class NotebookSurfaceReadinessController: UIViewController {
               evidence.scrollEndVisible = scroll?.atEnd == true
               evidence.scrollOffset = scroll?.offset
               evidence.scrollMaximum = scroll?.maximum
-              if step == .signOut, !activated, scroll?.atEnd == true,
-                let button = visibleElement("settings-sign-out", in: window)
-              {
-                activated = try activate(button, description: "Sign Out confirmation")
-              }
-              if step == .accentError, !activated, scroll?.atEnd == true,
-                let button = visibleElement("settings-save-accent", in: window)
-              {
-                activated = try activate(button, description: "Save Accent Color")
-              }
               switch step {
               case .end(let requiredID):
                 if visibleElement(requiredID, in: window) != nil {
@@ -516,14 +494,14 @@ private final class NotebookSurfaceReadinessController: UIViewController {
               case .accentError:
                 evidence.errorVisible = visibleElement("settings-accent-error", in: window) != nil
                 evidence.pendingAccentVisible = visibleElement("settings-save-accent", in: window) != nil
-                complete = activated && evidence.errorVisible && evidence.pendingAccentVisible && scroll?.atEnd == true
+                complete = evidence.errorVisible && evidence.pendingAccentVisible && scroll?.atEnd == true
               case .signOut:
                 let alert = topController(in: window) as? UIAlertController
                 evidence.confirmationVisible =
                   alert?.title == "Sign out of @octavia?"
                   && alert?.actions.contains(where: { $0.title == "Sign Out" && $0.style == .destructive }) == true
                   && alert?.viewIfLoaded?.window != nil
-                complete = activated && evidence.confirmationVisible
+                complete = evidence.confirmationVisible
               default:
                 break
               }
@@ -539,25 +517,28 @@ private final class NotebookSurfaceReadinessController: UIViewController {
           }
           try await Task.sleep(for: .milliseconds(100))
         }
+        let controls = descendants(window).compactMap { view -> String? in
+          guard view is UIControl, isVisible(view) else { return nil }
+          return view.accessibilityLabel
+        }
+        let scrolls = descendants(window).compactMap { $0 as? UIScrollView }.map {
+          "bounds=\($0.bounds) content=\($0.contentSize) offset=\($0.contentOffset)"
+        }
+        let ids = ["tag-create", "tag-choice-everyday", "tag-choice-ideas", "tag-empty",
+          "settings-sign-out", "settings-save-accent", "settings-accent-error", "account-switch-export"].map {
+          let element = notebookAccessibilityElement($0, in: window)
+          return "\($0)=\(element.map { String(describing: $0.accessibilityFrame) } ?? "missing")"
+        }
         throw NotebookSurfaceCaptureFailure(
-          message: "The native \(step) capture did not reach a settled, visible state.")
+          message: "The native \(step) capture did not reach a settled, visible state. "
+            + "Evidence: \(previousEvidence?.metadata ?? [:]). Controls: \(controls). "
+            + "Elements: \(ids). Scrolls: \(scrolls). Top: \(String(describing: topController(in: window))).")
       } catch is CancellationError {
         return
       } catch {
         failed(error.localizedDescription)
       }
     }
-  }
-
-  private func activate(_ element: NSObject, description: String) throws -> Bool {
-    if let control = element as? UIControl {
-      control.performPrimaryAction()
-      return true
-    }
-    guard element.accessibilityActivate() else {
-      throw NotebookSurfaceCaptureFailure(message: "The native \(description) control could not be activated.")
-    }
-    return true
   }
 
   private func topController(in window: UIWindow) -> UIViewController? {
@@ -583,7 +564,7 @@ private final class NotebookSurfaceReadinessController: UIViewController {
   }
 
   private func visibleElement(_ identifier: String, in window: UIWindow) -> NSObject? {
-    guard let element = notebookAccessibilityElement(identifier, in: window),
+    guard let element = notebookAccessibilityElement("capture-frame-\(identifier)", in: window),
       let scene = window.windowScene
     else { return nil }
     let frame: CGRect
