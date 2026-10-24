@@ -24,6 +24,7 @@
 
     public var body: some View {
       SourceTextView(session: session)
+        .id(session.viewIdentity)
         .toolbar {
           if session.isEditing {
             ToolbarItemGroup(placement: .keyboard) {
