@@ -112,6 +112,45 @@ public actor DailyNotesService {
         return try await task.value
     }
 
+    public func stageToday(target: DailyNoteTarget = DailyNoteTarget()) async throws -> TodayNote {
+        let cache = try await store.cachedLibrary(accountID: accountID)
+        guard let gist = cache?.owned.first(where: \.isDailyNote) else {
+            return try await openToday(target: target, publishIfMissing: false)
+        }
+        guard gist.owner?.id == githubUserID else { throw DraftError.readOnly }
+        let local = try await store.drafts(accountID: accountID)
+        if let existing = local.first(where: { $0.gistID == gist.id && $0.filename == target.filename }) {
+            return TodayNote(target: target, gist: gist, draft: existing)
+        }
+        guard gist.truncated != true else {
+            return try await openToday(target: target, publishIfMissing: false)
+        }
+        if gist.files[target.filename] != nil {
+            guard let content = cache?.cachedContent(gist: gist, filename: target.filename),
+                  content.isCurrent else {
+                return try await openToday(target: target, publishIfMissing: false)
+            }
+            let draft = try await store.openDraft(
+                accountID: accountID, githubUserID: githubUserID, gistID: gist.id,
+                filename: target.filename, description: gist.description ?? "",
+                content: content.text, revision: gist.revision)
+            return TodayNote(target: target, gist: gist, draft: draft)
+        }
+        var template: String?
+        if gist.files[GistConventions.templateFilename] != nil {
+            guard let cached = cache?.cachedContent(gist: gist, filename: GistConventions.templateFilename),
+                  cached.isCurrent else {
+                return try await openToday(target: target, publishIfMissing: false)
+            }
+            template = cached.text
+        }
+        let draft = try await store.newFileDraft(
+            accountID: accountID, githubUserID: githubUserID, gistID: gist.id,
+            filename: target.filename, description: gist.description ?? "",
+            text: GistConventions.dailyContent(template: template, dateFilename: target.filename))
+        return TodayNote(target: target, gist: gist, draft: draft)
+    }
+
     private func load(target: DailyNoteTarget, publishIfMissing: Bool) async throws -> TodayNote {
         let matches = try await client.listGists().filter(\.isDailyNote)
         guard let first = matches.first else {

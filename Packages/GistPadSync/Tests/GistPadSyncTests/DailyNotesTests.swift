@@ -58,6 +58,94 @@ private func arrayData(_ data: [Data]) -> Data {
         #expect(result.draft.state == .savedLocally)
     }
 
+    @Test func cachedTodayStartIsLocalAndRetainsTheSameTypedDraft() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let gist = try decodeGist(dailyData(files: ["template.md": "# {{date}}\n\n- [ ] Plan"]))
+        try await store.cacheLibrary(
+            owned: [gist], starred: [], preferences: .init(metadata: [:]), accountID: account)
+        let client = GitHubClient(session: FakeURLProtocol.session { _ in
+            Issue.record("A cached Today start must not access GitHub")
+            throw URLError(.notConnectedToInternet)
+        }) { "fake" }
+        let service = DailyNotesService(
+            accountID: account, githubUserID: 42, client: client, store: store,
+            coordinator: SyncCoordinator(client: client, store: store))
+        let first = try await service.stageToday(target: target)
+        #expect(first.draft.gistID == gist.id)
+        #expect(first.draft.text == "# \(target.filename.dropLast(3))\n\n- [ ] Plan")
+        #expect(first.draft.state == .savedLocally)
+        #expect(first.draft.attemptedGeneration == nil)
+        _ = try await store.persist(
+            id: first.draft.id, accountID: account, text: "Already writing", generation: 1)
+        let next = try await service.stageToday(target: target)
+        #expect(next.draft.id == first.draft.id)
+        #expect(next.draft.text == "Already writing")
+        #expect(next.draft.generation == 1)
+        #expect(try await store.drafts(accountID: account).count == 1)
+    }
+
+    @Test func cachedExistingTodayOpensWithoutFetchingOrPublishing() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let gist = try decodeGist(dailyData(files: [target.filename: "Cached Today"]))
+        try await store.cacheLibrary(
+            owned: [gist], starred: [], preferences: .init(metadata: [:]), accountID: account)
+        let client = GitHubClient(session: FakeURLProtocol.session { _ in
+            Issue.record("Current cached Today content must open without HTTP")
+            throw URLError(.notConnectedToInternet)
+        }) { "fake" }
+        let service = DailyNotesService(
+            accountID: account, githubUserID: 42, client: client, store: store,
+            coordinator: SyncCoordinator(client: client, store: store))
+        let result = try await service.stageToday(target: target)
+        #expect(result.draft.text == "Cached Today")
+        #expect(result.draft.state == .savedToGitHub)
+        #expect(result.draft.attemptedGeneration == nil)
+    }
+
+    @Test func unknownDailyIDUsesExistingReadFirstOpeningAndNeverPublishes() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let paths = Mutex<[String]>([])
+        let client = GitHubClient(session: FakeURLProtocol.session { request in
+            #expect(request.httpMethod == "GET")
+            paths.withLock { $0.append(request.url?.path ?? "") }
+            let gist = try dailyData(files: ["template.md": "- [ ] Discovered plan"])
+            return FakeResponse(data: request.url?.path == "/gists" ? arrayData([gist]) : gist)
+        }) { "fake" }
+        let service = DailyNotesService(
+            accountID: account, githubUserID: 42, client: client, store: store,
+            coordinator: SyncCoordinator(client: client, store: store))
+        let result = try await service.stageToday(target: target)
+        #expect(paths.withLock { $0 } == ["/gists", "/gists/abc123"])
+        #expect(result.draft.gistID == "abc123")
+        #expect(result.draft.text == "- [ ] Discovered plan")
+        #expect(result.draft.state == .savedLocally)
+        #expect(result.draft.attemptedGeneration == nil)
+        #expect(try await store.drafts(accountID: account).count == 1)
+    }
+
+    @Test func unavailableRequiredCachedTemplateNeverSilentlyUsesTheFallback() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        var object = try #require(
+            try JSONSerialization.jsonObject(with: dailyData()) as? [String: Any])
+        object["files"] = ["template.md": ["filename": "template.md", "language": "Markdown"]]
+        let gist = try decodeGist(JSONSerialization.data(withJSONObject: object))
+        try await store.cacheLibrary(
+            owned: [gist], starred: [], preferences: .init(metadata: [:]), accountID: account)
+        let client = GitHubClient(session: FakeURLProtocol.session { request in
+            #expect(request.httpMethod == "GET")
+            throw URLError(.notConnectedToInternet)
+        }) { "fake" }
+        let service = DailyNotesService(
+            accountID: account, githubUserID: 42, client: client, store: store,
+            coordinator: SyncCoordinator(client: client, store: store))
+        await #expect(throws: URLError.self) { try await service.stageToday(target: target) }
+        #expect(try await store.drafts(accountID: account).isEmpty)
+    }
+
     @Test func templateDayCreationIsTargetedAndConcurrentCallsDoNotDuplicateIt() async throws {
         let target = DailyNoteTarget(
             date: try Date.ISO8601FormatStyle().parse("2026-10-24T12:00:00Z"),
