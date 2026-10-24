@@ -969,9 +969,15 @@ final class NotebookModel {
     }
   }
 
+  func reloadPlatformState(accountID: UUID) async throws {
+    guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
+    try await reloadLocalState(accountID: accountID)
+    guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
+  }
+
   private func reloadLocalState(accountID: UUID) async throws {
     let local = try await provider.localState(accountID: accountID)
-    guard account?.id == accountID else { return }
+    guard account?.id == accountID, pendingAccount == nil else { return }
     localDrafts = local.drafts
     cachedLibrary = local.library
     if let cached = local.library, let account {
