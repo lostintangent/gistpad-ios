@@ -8,9 +8,8 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     private let actions: NoteActions
     private let source: Source
     private let preview: Preview
-    @State private var showingFiles = false
+    private let isFocused: Bool
     @State private var showingTags = false
-    @State private var pendingFileAction: (() -> Void)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var showingSource: Bool { mode == .source && document.access.canEdit }
@@ -20,35 +19,45 @@ public struct NoteScreen<Source: View, Preview: View>: View {
 
     public init(
         document: NoteChrome, mode: Binding<NoteMode>, saveState: NoteSaveState,
-        actions: NoteActions = .init(),
+        actions: NoteActions = .init(), isFocused: Bool = false,
         @ViewBuilder source: () -> Source, @ViewBuilder preview: () -> Preview
     ) {
         self.document = document
         self._mode = mode
         self.saveState = saveState
         self.actions = actions
+        self.isFocused = isFocused
         self.source = source()
         self.preview = preview()
     }
     public var body: some View {
-        ZStack {
-            source
-                .opacity(showingSource ? 1 : 0)
-                .allowsHitTesting(showingSource)
-                .accessibilityHidden(!showingSource)
-            preview
-                .opacity(showingSource ? 0 : 1)
-                .allowsHitTesting(!showingSource)
-                .accessibilityHidden(showingSource)
+        Group {
+            if isFocused {
+                ArrangementView {
+                    source
+                } secondary: {
+                    preview
+                }
+                .arrangementViewStyle(.split)
+            } else {
+                ZStack {
+                    source
+                        .opacity(showingSource ? 1 : 0)
+                        .allowsHitTesting(showingSource)
+                        .accessibilityHidden(!showingSource)
+                    preview
+                        .opacity(showingSource ? 0 : 1)
+                        .allowsHitTesting(!showingSource)
+                        .accessibilityHidden(showingSource)
+                }
+            }
         }
         .background(Color(uiColor: .systemBackground))
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarTitleMenu {
             if showsFiles {
-                Button(String(localized: "Files in this gist", bundle: .module), systemImage: "doc.on.doc") {
-                    showingFiles = true
-                }
+                fileChoices
             }
             if let rename = actions.rename, document.access.canEdit {
                 Button(String(localized: "Rename", bundle: .module), systemImage: "pencil", action: rename)
@@ -62,16 +71,10 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(uiColor: .systemBackground))
         }
-        .sheet(isPresented: $showingFiles, onDismiss: {
-            let action = pendingFileAction
-            pendingFileAction = nil
-            action?()
-        }) { files }
         .sheet(isPresented: $showingTags) {
             TagEditor(tags: document.tags, selectedTagIDs: Set(document.tags.map(\.id)))
         }
         .scrollEdgeEffectStyle(.soft, for: .bottom)
-        .onChange(of: document.selectedFileID) { showingFiles = false }
         .onChange(of: showingSource) {
             actions.didChangeMode?(showingSource ? .source : .reading)
         }
@@ -85,7 +88,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
 
     @ToolbarContentBuilder
     private var primaryToolbar: some ToolbarContent {
-        if document.access.canEdit {
+        if document.access.canEdit, !isFocused {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     mode = mode == .reading ? .source : .reading
@@ -116,14 +119,18 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         }
         if showsFiles {
             ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Files in this gist", bundle: .module), systemImage: "doc.on.doc") {
-                    showingFiles = true
+                Menu {
+                    fileChoices
+                } label: {
+                    Label(String(localized: "Files in this gist", bundle: .module), systemImage: "doc.on.doc")
                 }
             }
         }
         if let focus = actions.focus {
             ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Source & Preview", bundle: .module), systemImage: "rectangle.split.2x1", action: focus)
+                Button(
+                    isFocused ? String(localized: "Library", bundle: .module) : String(localized: "Source & Preview", bundle: .module),
+                    systemImage: isFocused ? "sidebar.left" : "rectangle.split.2x1", action: focus)
                     .disabled(!document.access.canEdit)
             }
         }
@@ -278,56 +285,68 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         }
     }
 
-    private var files: some View {
-        NavigationStack {
-            List {
-                Section {
-                    ForEach(document.files) { file in
-                        Button {
-                            if file.id == document.selectedFileID {
-                                showingFiles = false
-                            } else {
-                                actions.selectFile?(file.id)
-                            }
+    @ViewBuilder
+    private var fileChoices: some View {
+        let menu = NoteFileMenu(files: document.files)
+        Section(String(localized: "Files in this gist", bundle: .module)) {
+            ForEach(menu.years) { year in
+                Menu {
+                    ForEach(year.months) { month in
+                        Menu {
+                            ForEach(month.files) { fileChoice($0) }
                         } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "doc.text").foregroundStyle(.secondary)
-                                Text(verbatim: file.filename).foregroundStyle(.primary)
-                                Spacer()
-                                if file.id == document.selectedFileID {
-                                    Image(systemName: "checkmark").foregroundStyle(InterfaceTheme.accent)
-                                }
-                            }
-                            .frame(minHeight: 44)
-                        }
-                        .disabled(actions.selectFile == nil && file.id != document.selectedFileID)
-                        .accessibilityAddTraits(file.id == document.selectedFileID ? .isSelected : [])
-                    }
-                }
-                if document.access.canEdit && (actions.renameFile != nil || actions.addFile != nil) {
-                    Section {
-                        if let rename = actions.renameFile {
-                            Button(String(localized: "Rename File", bundle: .module), systemImage: "pencil") {
-                                pendingFileAction = rename
-                                showingFiles = false
-                            }
-                        }
-                        if let add = actions.addFile {
-                            Button(String(localized: "Add File", bundle: .module), systemImage: "doc.badge.plus") {
-                                pendingFileAction = add
-                                showingFiles = false
-                            }
+                            fileGroupLabel(Text(month.date, format: fileMonthFormat), files: month.files)
                         }
                     }
+                } label: {
+                    fileGroupLabel(Text(verbatim: String(year.id)), files: year.files)
                 }
             }
-            .navigationTitle(Text("Files in this gist", bundle: .module))
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Done", bundle: .module)) { showingFiles = false }
-                }
+            ForEach(menu.otherFiles) { fileChoice($0) }
+        }
+        if document.access.canEdit && (actions.renameFile != nil || actions.addFile != nil) {
+            Divider()
+            if let rename = actions.renameFile {
+                Button(String(localized: "Rename File", bundle: .module), systemImage: "pencil", action: rename)
+            }
+            if let add = actions.addFile {
+                Button(String(localized: "Add File", bundle: .module), systemImage: "doc.badge.plus", action: add)
             }
         }
+    }
+
+    private func fileChoice(_ file: NoteFile) -> some View {
+        Button {
+            if file.id != document.selectedFileID {
+                actions.selectFile?(file.id)
+            }
+        } label: {
+            if file.id == document.selectedFileID {
+                Label(file.filename, systemImage: "checkmark")
+            } else {
+                Text(verbatim: file.filename)
+            }
+        }
+        .disabled(actions.selectFile == nil && file.id != document.selectedFileID)
+        .accessibilityAddTraits(file.id == document.selectedFileID ? .isSelected : [])
+        .accessibilityIdentifier("note-file-\(file.id)")
+    }
+
+    private func fileGroupLabel(_ title: Text, files: [NoteFile]) -> some View {
+        HStack {
+            title
+            if files.contains(where: { $0.id == document.selectedFileID }) {
+                Image(systemName: "checkmark")
+            }
+        }
+        .accessibilityAddTraits(files.contains(where: { $0.id == document.selectedFileID }) ? .isSelected : [])
+    }
+
+    private var fileMonthFormat: Date.FormatStyle {
+        var format = Date.FormatStyle().month(.wide)
+        format.calendar = Calendar(identifier: .gregorian)
+        format.timeZone = .gmt
+        return format
     }
 
 }

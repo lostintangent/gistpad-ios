@@ -130,10 +130,10 @@ public struct LibraryView: View {
                         Section {
                             ForEach(model.pinnedNotes) { noteRow($0, showsPin: false) }
                         } header: {
-                            sectionHeading(String(localized: "Pinned", bundle: .module))
+                            pinnedHeading
                         }
                         .listSectionMargins(.top, horizontalSizeClass == .regular ? nil : 8)
-                        .listSectionMargins(.bottom, horizontalSizeClass == .regular ? nil : 0)
+                        .listSectionMargins(.bottom, horizontalSizeClass == .regular ? nil : 12)
                     }
                     if !model.unpinnedNotes.isEmpty {
                         Section {
@@ -162,6 +162,21 @@ public struct LibraryView: View {
             .textCase(nil)
             .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
             .accessibilityAddTraits(.isHeader)
+    }
+
+    private var pinnedHeading: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "pin.fill")
+                .foregroundStyle(InterfaceTheme.accent)
+                .accessibilityHidden(true)
+            Text("Pinned", bundle: .module)
+                .foregroundStyle(InterfaceTheme.text)
+        }
+        .font(.headline)
+        .textCase(nil)
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 
     private var canShowEmptyState: Bool {
@@ -330,11 +345,12 @@ public struct LibraryView: View {
                 .font(.footnote)
                 .foregroundStyle(.primary)
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 12)
         }
         .accessibilityValue(note.isPinned ? Text("Pinned", bundle: .module) : Text(""))
         .navigationLinkIndicatorVisibility(.hidden)
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+        .listRowSeparator(.hidden)
         .listRowBackground(model.selectedNoteID == note.id ? InterfaceTheme.selection : nil)
         .contextMenu { rowActions(note) }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {

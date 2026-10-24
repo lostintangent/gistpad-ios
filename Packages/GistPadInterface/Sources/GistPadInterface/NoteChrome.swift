@@ -7,10 +7,12 @@ public enum NoteMode: String, Sendable {
 public struct NoteFile: Equatable, Identifiable, Sendable {
     public let id: String
     public let filename: String
+    public let date: Date?
 
-    public init(id: String, filename: String) {
+    public init(id: String, filename: String, date: Date? = nil) {
         self.id = id
         self.filename = filename
+        self.date = date
     }
 }
 
