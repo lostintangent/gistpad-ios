@@ -71,6 +71,14 @@ private func imageDraft(store: DraftStore, account: UUID) async throws -> DraftS
         #expect(properties[kCGImagePropertyPixelWidth] as? Int == 1)
         #expect(properties[kCGImagePropertyPixelHeight] as? Int == 2)
         #expect(properties[kCGImagePropertyGPSDictionary] == nil)
+        let thumbnail = try PhotoImage.thumbnailData(from: normalized)
+        let thumbnailSource = try #require(CGImageSourceCreateWithData(thumbnail as CFData, nil))
+        let thumbnailProperties = try #require(
+            CGImageSourceCopyPropertiesAtIndex(thumbnailSource, 0, nil) as? [CFString: Any]
+        )
+        #expect(thumbnailProperties[kCGImagePropertyGPSDictionary] == nil)
+        #expect(try #require(thumbnailProperties[kCGImagePropertyPixelWidth] as? Int) <= 192)
+        #expect(try #require(thumbnailProperties[kCGImagePropertyPixelHeight] as? Int) <= 192)
         #expect(throws: PhotoImageError.invalidImage) { try PhotoImage.pngData(from: Data("not an image".utf8)) }
     }
 
@@ -171,6 +179,36 @@ private func imageDraft(store: DraftStore, account: UUID) async throws -> DraftS
                 try await store.imageInsertion(id: queued.id, accountID: account)
             }
             #expect(try await store.draft(id: draft.id, accountID: account).text == draft.text)
+        }
+    }
+
+    @Test func loadingAPhotoAcrossTypingPreservesBytesButNotAnUnsafeInsertionAnchor() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let draft = try await imageDraft(store: store, account: account)
+        _ = try await store.persist(id: draft.id, accountID: account, text: "new", generation: 1)
+        let bytes = try testPNG()
+        let queued = try await store.enqueueImage(
+            pngData: bytes, draftID: draft.id, accountID: account,
+            expectedGeneration: 0, insertionLocation: 12
+        )
+        #expect(queued.insertionGeneration == 0)
+        #expect(queued.insertionLocation == 12)
+        #expect(try await store.imageData(id: queued.id, accountID: account) == bytes)
+        _ = try await store.setImageUploadState(.uploaded, id: queued.id, accountID: account)
+        await #expect(throws: DraftError.staleGeneration) {
+            try await store.imageInsertion(id: queued.id, accountID: account)
+        }
+        let fresh = try await store.imageInsertion(
+            id: queued.id, accountID: account, expectedGeneration: 1, insertionLocation: 3
+        )
+        let changed = try await store.applyImageInsertion(id: queued.id, accountID: account, command: fresh)
+        #expect(changed.text.hasPrefix("new![Image]("))
+        await #expect(throws: DraftError.staleGeneration) {
+            try await store.enqueueImage(
+                pngData: bytes, draftID: draft.id, accountID: account,
+                expectedGeneration: 3, insertionLocation: 0
+            )
         }
     }
 

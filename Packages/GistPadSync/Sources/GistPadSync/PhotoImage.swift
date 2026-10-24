@@ -12,6 +12,16 @@ public enum PhotoImage {
     public static let maximumByteCount = 50_000_000
     public static let maximumPixelCount = 100_000_000
 
+    public static func thumbnailData(from data: Data) throws -> Data {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 192
+              ] as CFDictionary) else { throw PhotoImageError.invalidImage }
+        return try encodePNG(image)
+    }
+
     public static func pngData(from data: Data) throws -> Data {
         guard data.count <= maximumByteCount else { throw PhotoImageError.imageTooLarge }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -29,6 +39,10 @@ public enum PhotoImage {
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
             throw PhotoImageError.invalidImage
         }
+        return try encodePNG(image)
+    }
+
+    private static func encodePNG(_ image: CGImage) throws -> Data {
         let result = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(result, UTType.png.identifier as CFString, 1, nil) else {
             throw PhotoImageError.encodingFailed

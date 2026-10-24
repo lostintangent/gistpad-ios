@@ -75,7 +75,7 @@ final class StoredImageUpload {
 
     init(
         accountID: UUID, draft: DraftSnapshot, data: Data, insertionLocation: Int,
-        format: ImageInsertionFormat
+        insertionGeneration: UInt64, format: ImageInsertionFormat
     ) throws {
         id = UUID()
         self.accountID = accountID
@@ -83,7 +83,7 @@ final class StoredImageUpload {
         gistID = draft.gistID
         createdAt = .now
         self.data = data
-        insertionGeneration = draft.generation
+        self.insertionGeneration = insertionGeneration
         self.insertionLocation = insertionLocation
         self.format = format.rawValue
         stateData = try JSONEncoder().encode(draft.gistID == nil ? ImageUploadState.waitingForGist : .queued)
@@ -103,13 +103,16 @@ extension DraftStore {
         insertionLocation: Int, format: ImageInsertionFormat = .markdown
     ) throws -> ImageUploadSnapshot {
         let draft = try draft(id: draftID, accountID: accountID)
-        guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
-        _ = try DraftSourceEdit(
-            location: insertionLocation, length: 0, expectedText: "", replacement: ""
-        ).apply(to: draft.text)
+        guard expectedGeneration <= draft.generation, insertionLocation >= 0 else { throw DraftError.staleGeneration }
+        if draft.generation == expectedGeneration {
+            _ = try DraftSourceEdit(
+                location: insertionLocation, length: 0, expectedText: "", replacement: ""
+            ).apply(to: draft.text)
+        }
         try PhotoImage.validatePNG(pngData)
         let image = try StoredImageUpload(
-            accountID: accountID, draft: draft, data: pngData, insertionLocation: insertionLocation, format: format
+            accountID: accountID, draft: draft, data: pngData, insertionLocation: insertionLocation,
+            insertionGeneration: expectedGeneration, format: format
         )
         modelContext.insert(image)
         try saveImageChanges()

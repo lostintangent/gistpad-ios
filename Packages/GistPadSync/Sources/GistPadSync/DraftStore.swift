@@ -453,7 +453,17 @@ public actor DraftStore {
         let previousState = try decode(draft.stateData)
         draft.text = text
         draft.generation = generation
-        if let sent = draft.attemptedGeneration, case .savingToGitHub = previousState {
+        if case .conflict(let conflict) = previousState {
+            let suggestion: String?
+            if let base = conflict.base, let remote = conflict.remote {
+                suggestion = ThreeWayMerge.merge(base: base, local: text, remote: remote)
+            } else { suggestion = nil }
+            draft.stateData = try encode(.conflict(DraftConflict(
+                generation: generation, base: conflict.base, local: text,
+                remote: conflict.remote, remoteRevision: conflict.remoteRevision,
+                suggestedMerge: suggestion
+            )))
+        } else if let sent = draft.attemptedGeneration, case .savingToGitHub = previousState {
             draft.stateData = try encode(.savingToGitHub(generation: sent))
         } else if draft.attemptedGeneration != nil {
             draft.stateData = try encode(previousState)
@@ -508,6 +518,34 @@ public actor DraftStore {
         let draft = try find(id, accountID: accountID)
         draft.stateData = try encode(state)
         try commit()
+    }
+
+    public func refreshConflict(
+        id: UUID, accountID: UUID, expectedGeneration: UInt64,
+        expectedConflict: DraftConflict, remote: String?, revision: String?
+    ) throws -> DraftSnapshot {
+        let draft = try find(id, accountID: accountID)
+        guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
+        guard case .conflict(let conflict) = try decode(draft.stateData),
+              conflict.generation == expectedGeneration,
+              conflict.generation == expectedConflict.generation,
+              sourceEqual(conflict.base, expectedConflict.base),
+              sourceEqual(conflict.local, expectedConflict.local),
+              sourceEqual(conflict.remote, expectedConflict.remote),
+              sourceEqual(conflict.remoteRevision, expectedConflict.remoteRevision),
+              sourceEqual(conflict.suggestedMerge, expectedConflict.suggestedMerge) else {
+            throw DraftError.unresolvedConflict
+        }
+        let suggestion: String?
+        if let base = conflict.base, let remote {
+            suggestion = ThreeWayMerge.merge(base: base, local: draft.text, remote: remote)
+        } else { suggestion = nil }
+        draft.stateData = try encode(.conflict(DraftConflict(
+            generation: expectedGeneration, base: conflict.base, local: draft.text,
+            remote: remote, remoteRevision: revision, suggestedMerge: suggestion
+        )))
+        try commit()
+        return try snapshot(draft)
     }
 
     public func resolveConflict(
