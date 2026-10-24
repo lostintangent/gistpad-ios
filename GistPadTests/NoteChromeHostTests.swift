@@ -217,6 +217,42 @@ struct NoteChromeHostTests {
     Attachment.record(image, named: "note-resting-\(fileCount)-files.png", as: .png)
   }
 
+  @Test(arguments: [NoteMode.source, .reading])
+  func onlyTheModePickerHidesItsSharedToolbarBackground(mode: NoteMode) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    var actions = NoteActions()
+    actions.save = {}
+    actions.find = {}
+    window.rootViewController = UIHostingController(
+      rootView: NavigationStack {
+        NoteScreen(
+          document: .init(
+            title: "One native capsule", files: [.init(id: "README.md", filename: "README.md")],
+            selectedFileID: "README.md", isAutoSaveEnabled: false),
+          mode: .constant(mode), saveState: .unsaved, actions: actions
+        ) {
+          Text("Source")
+        } preview: {
+          Text("Preview")
+        }
+      })
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(300))
+    let bar = try #require(descendants(window).compactMap { $0 as? UINavigationBar }.last)
+    let items = try #require(bar.topItem).trailingItemGroups.flatMap(\.barButtonItems)
+    #expect(items.filter(\.hidesSharedBackground).count == 1)
+    #expect(items.filter { !$0.hidesSharedBackground }.count >= 2)
+    #expect(containsIdentifier("note-save", in: window))
+    #expect(containsIdentifier("note-actions", in: window))
+  }
+
   private func descendants(_ view: UIView) -> [UIView] {
     [view] + view.subviews.flatMap(descendants)
   }

@@ -145,6 +145,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 .labelStyle(.iconOnly)
                 .accessibilityIdentifier("note-toggle-mode")
             }
+            .sharedBackgroundVisibility(.hidden)
         }
         if let save = actions.save, document.access.canEdit, showsManualSave {
             ToolbarItem(placement: .primaryAction) {
