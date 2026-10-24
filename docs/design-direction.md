@@ -347,6 +347,8 @@ The Review tab observes one **document-owned Review state**, separate from Ask/E
 
 Show **On device**, the exact filename, suggestions and the existing verified before/after/individual-Apply flow, as the separate Review crop illustrates. No author avatars, Reply, Send, GitHub count or automatic publication. Keep all existing snapshot/stale/readonly/Undo protections. Applying one suggestion rebases the remainder without regenerating; an unrelated source edit makes it stale, and changing account or closing the document clears it. Ask/Edit retain their existing surface and lifecycle. The existing Review entry routes to this same content without stacking sheets. This is a proposed presentation integration, not a claim that it is implemented.
 
+**Daily Notes retain the same Review.** The existing Intelligence/Review entry opens the same adaptive inspector, titled **Review**, with Review content only: no Comments/Review picker, comment count, GitHub conversation or Comments toolbar button. Keep the identical On device, filename, generation, suggestion/diff and individual-Apply presentation. Scope it to the entire currently open daily file, never all days in the backing gist. The same Review-only presentation applies to a local note without a published gist. Gist-comment eligibility must not gate on-device Review, and opening this surface still never regenerates automatically. This closes Lead's 1526 ruling without introducing a second Review design.
+
 #### States and acceptance
 
 | State | What remains useful |
