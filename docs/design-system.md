@@ -36,7 +36,7 @@ Correct system components are the floor. A stock grouped list, readable fonts, a
 
 | Moment | Production direction and evidence |
 | --- | --- |
-| Opening the Library | A document library, not a Settings screen. Use continuous native list rows on the reading canvas on the cover, and the system sidebar treatment when the Library is a companion column. Avoid separate rounded containers for Today, Pinned, and Gists. Titles lead, metadata recedes, and a single useful cached excerpt may add context. Never delay opening or fetch every file merely to decorate rows |
+| Opening the Library | A document library, not a Settings screen. Use continuous native list rows without disclosure chevrons on the reading canvas on the cover, and the system sidebar treatment when the Library is a companion column. Preserve native navigation/accessibility semantics. Avoid separate rounded containers for Today, Pinned, and Gists. Titles lead, metadata recedes, and a single useful cached excerpt may add context. At Large, keep a visible 16-24 pt group rhythm below Today and an 8-12 pt section-label-to-first-row gap, without compounding native margins. Never delay opening or fetch every file merely to decorate rows |
 | Today feels like today | Give the current local date a deliberate typographic treatment beside Today. When actual current-day task data is available, show completed/total with a quiet progress indicator and an accessible text equivalent. No fabricated progress, streaks, weather, greetings, or carryover. Add a line is direct, with its target date pinned when composing starts |
 | Unfolding reveals context | The same page remains the visual and interaction anchor as Library appears beside it. Focus deliberately reveals source + preview at the relevant passage. Preserve text, selection, scroll and undo rather than crossfading to a fresh-looking copy. Judge this in motion through Closed, Partially Open and Open, not in independent screenshots |
 | Capturing a thought | A native, keyboard-ready composer with one clear commit action. After the durable local commit, reveal the inserted line in its real note rather than a generic success toast. An interrupted composer retains its text. Local capture never masquerades as GitHub publication |
@@ -98,6 +98,8 @@ Tags are small colored labels, not a comma-separated gray sentence. Use one shar
 - **No color escalation:** a selected note can have a warm selection surface without recoloring every tag warm. Preserve the user's actual web colors and distinguish a tag selection from a failed metadata save. An unsuccessful edit retains the user's choice with an inline Retry, not a silently reverted success state.
 
 The Tags sheet uses the warm action tint for selection checks. Keep each picker row to color dot, name and check. Expose **Edit Tag...** through swipe/context actions and a named accessibility action instead of a second pencil button in every row. Retain the useful **Tags apply to every file in this gist** explanation, but do not explain the conventional Cancel/Done interaction in a second paragraph. Library timestamps use scaled footnote regular, allowing titles to lead without fading small text below 4.5:1.
+
+Swatches are metadata, not radio controls. Do not add a universal primary/black outline. Use an unoutlined fill when it is distinct, with a subtle own-hue hairline only where separation is needed. White uses a neutral gray hairline rather than an invisible white edge. Increase Contrast can strengthen the necessary boundary without changing the tag's color identity. Selection remains a separate checkmark and accessibility state.
 
 ### Purposeful delight
 
@@ -179,6 +181,8 @@ Navigation follows size classes and usable container bounds, not a device model 
 ## 5. Materials and native controls
 
 Liquid Glass belongs to **navigation and controls**, not the document. System navigation, toolbars, sheets, search, menus, and share sheets get modern platform treatment. Use their semantic placements, grouping, visibility priorities, and overflow behavior. Supply title + SF Symbol even if only the symbol is currently visible. [7, 8]
+
+Use role-driven native actions for sheet chrome: `.cancel` discards the pending operation, `.confirm` commits it, and `.close` dismisses a read-only surface. Keep clear accessible names such as Cancel and Save Tags. Let native toolbar/title placement adapt to Duo rather than inserting manual centering spacers. Consequential choices such as Use GitHub Version or Restore File retain descriptive text in the sheet body instead of becoming unexplained checkmarks. [13]
 
 Reading and source are opaque `page` canvases. Code/alerts use content surfaces, not glass. A translucent panel behind every list row, tag, and paragraph is a rejection. Never hand-render blur/highlight edges to imitate system glass.
 
@@ -401,3 +405,4 @@ Review outcomes: **Approved**, **Approved for a named spike only**, or **Changes
 10. [HIG: Playing haptics](https://developer.apple.com/design/human-interface-guidelines/playing-haptics)
 11. [`sensoryFeedback(_:trigger:)`](https://developer.apple.com/documentation/swiftui/view/sensoryfeedback(_:trigger:))
 12. [Bringing Photos picker to your SwiftUI app](https://developer.apple.com/documentation/photokit/bringing-photos-picker-to-your-swiftui-app)
+13. [`ButtonRole`](https://developer.apple.com/documentation/swiftui/buttonrole), including [confirm](https://developer.apple.com/documentation/swiftui/buttonrole/confirm)
