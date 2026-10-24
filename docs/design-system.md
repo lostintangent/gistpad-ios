@@ -40,30 +40,32 @@ Correct system components are the floor. A stock grouped list, readable fonts, a
 
 | Moment | Production direction and evidence |
 | --- | --- |
-| Opening the Library | A document library, not a Settings screen. Use continuous native list rows without disclosure chevrons or row dividers on the reading canvas on the cover, and the system sidebar treatment when the Library is a companion column. Preserve native navigation/accessibility semantics. Only Today gets a distinct notebook-leaf surface; do not wrap Pinned and Notes in cards. Titles lead, metadata recedes, and a single useful cached excerpt may add context. Give each note row 12 pt vertical padding and keep its 6-pt internal rhythm. Do not squeeze row breathing room to satisfy a header-gap measurement. At Large, start with a visible 16-24 pt group rhythm below Today. Pinned uses a scaled headline with one sky pin symbol in its header and clear separation before Notes, not repeated row pins or another card. Never delay opening or fetch every file merely to decorate rows |
+| Opening the Library | A notebook collection with three visibly distinct compositions: a Today hero, an adaptive Pinned grid of little notebook cards, and an inset-grouped Notes list. Use the semantic grouped canvas with 20-pt outer margins and 32-pt section separation, not the rejected continuous flat list. Preserve native navigation, swipe, selection and accessibility semantics. Titles lead, metadata recedes, and cached excerpts add context without a new fetch. The signature-moves metrics below supersede earlier flat-list density targets |
 | Today feels like today | Give the current local date a deliberate typographic treatment beside Today. When actual current-day task data is available, show completed/total with a quiet progress indicator and an accessible text equivalent. No fabricated progress, streaks, weather, greetings, or carryover. Add a line is direct, with its target date pinned when composing starts |
 | Unfolding reveals context | The same page remains the visual and interaction anchor as Library appears beside it. Focus deliberately reveals source + preview at the relevant passage. Preserve text, selection, scroll and undo rather than crossfading to a fresh-looking copy. Judge this in motion through Closed, Partially Open and Open, not in independent screenshots |
 | Capturing a thought | A native, keyboard-ready composer with one clear commit action. After the durable local commit, reveal the inserted line in its real note rather than a generic success toast. An interrupted composer retains its text. Local capture never masquerades as GitHub publication |
-| Completing a task | Keep the line in place, make the checked state precise, and use at most one restrained symbol transition and optional light response after the local commit. Rejected edits retain a visible recovery path. No confetti, row teleportation, haptic on initial tap, or background-sync celebration |
+| Completing a task | Keep the line in place, make the checked state precise, and use one restrained checkmark transition and light response after the local commit for a direct toggle. Rejected edits retain a visible recovery path. No confetti, row teleportation, haptic on initial tap, or background-sync celebration |
 | Chrome gets out of the way | Use the platform's adaptive toolbar, native Liquid Glass and supported Duo arrangements/reserved regions. Let system chrome respond to scrolling and presentation. Do not imitate it with custom blur, a permanent command dashboard, or decorative fold effects. The page itself stays quiet and opaque |
 
-The sky spine, colored notebook tabs, editorial hierarchy and exact feedback are the recognizable identity. The icon's paper gradient belongs to the Today focal surface, not behind every row or paragraph. A signature interaction must still be clear with Reduce Motion, increased contrast, VoiceOver, and large type. Review the live save/error states with the same care as the opening frame.
+The sky spine, colored notebook tabs, editorial hierarchy and exact feedback are the recognizable identity. The icon's paper treatment belongs to notebook surfaces, not behind every paragraph. A signature interaction must still be clear with Reduce Motion, increased contrast, VoiceOver, and large type. Review the live error states with the same care as the opening frame; healthy persistence does not need a footer.
 
 ### Signature moves
 
-This reset replaces the olive/gold direction. Build in the priority order below, then show the same real-app fixture before and after. A recolor alone is not the finished pass.
+This reset replaces the olive/gold direction and the twice-rejected flat Library. Build in the priority order below, then show the same real-app fixture before and after. A recolor alone is not the finished pass.
 
 | Priority / surface | Memorable move and concrete delta |
 | --- | --- |
-| 1 / Library | A tabbed notebook shelf, not the previous ruled list. Keep the roomier 12-pt rows and divider removal. Replace olive selection/pins with sky, black custom content with adaptive slate ink, and generic rounded tag pills with notebook tabs. Pinned remains a distinct headline above the continuous Notes list. Do not add icons or cards to every note |
-| 1 / Today | One notebook leaf with a 3-pt leading sky-gradient spine, 16-pt internal inset and 12-pt corners. Give the day numeral native SF Rounded, bold at the scaled large-title size; month/weekday stay SF. Keep that date beside Today/weekday, then up to two real cached excerpt lines and actual task progress. No excerpt fetch or appearance-time creation. An existing note opens directly; an absent note has one explicit Start action. Stack at accessibility sizes. Reuse the date/spine identity on the empty Today landing, without enclosing the whole screen in a card |
+| 1 / Library | Use `systemGroupedBackground`. Pinned has a title3-bold header with a sky pin, then an adaptive notebook-card grid: 18-pt corners, 120-pt minimum height, 6-pt leading spine in the first tag's actual color or sky, headline title up to two lines at standard sizes, and one cached excerpt or factual file-summary line. Small tag-color tabs peek from the trailing edge. Notes has its own title3-bold header and one inset-grouped surface with 14-pt vertical row padding, inset hairline separators, headline titles, a secondary line, tag labels and relative time. No repeated row pins or outer borders around each row |
+| 1 / Today | A full-width notebook hero inside the margins, with 22-pt continuous corners, `secondarySystemGroupedBackground`, 20-pt internal inset and a 4-pt leading sky-gradient spine. Give the day numeral native SF Rounded bold, starting around 44 pt and scaling relative to large title; month uses `accentText`, weekday stays SF. Add up to two real cached excerpt lines and a small genuine task-progress ring beside a readable count. Leave 24 pt above and 32 pt below. No excerpt fetch or appearance-time creation. An existing note opens directly; an absent note has one explicit Start action. Stack at accessibility sizes |
 | 1 / Tags | Small index tabs identify notes: 3-pt leading corners, 8-pt trailing corners, a 3-pt own-color leading strip and an opaque tinted body with readable ink. The Tags sheet itself gets lighter, not bigger: remove its duplicate selected-chip panel, grouped cards and All tags heading. Use one plain searchable list with 44-pt minimum total rows, color/name/check and one quiet scope footer. Native medium/large detents, initially large at accessibility sizes. Keep editing behind swipe/context. Mirror tabs in RTL and preserve user colors; coral, amber and teal are new-tag presets, never a migration |
-| 2 / Reading | A composed, uninterrupted page, with New York for rendered H1/H2 only, SF prose, adaptive ink and 1.5-body line height. Keep the existing heading scales and language fallback. Fix the hard footer cut with native scroll-edge underlap and enough end space to reveal the final line. Keep tasks fully legible when read-only. No page texture, permanent contents rail or decorative card around prose |
+| 2 / Reading | A composed, uninterrupted page, with New York for rendered H1/H2 only, SF prose, adaptive ink and 1.5-body line height. Keep the existing heading scales and language fallback. Remove the healthy-state footer entirely. When a problem notice is present, use native scroll-edge underlap and enough end space to reveal the final line. Keep tasks fully legible when read-only. No page texture, permanent contents rail or decorative card around prose |
 | 2 / Editing | Inked source: proportional native body text, body-sized semibold headings, monospaced code and quieter but legible Markdown punctuation. No rainbow code or reduced-opacity content. The single native accessory is immediately visible with the keyboard. Keep the current passage anchored when moving between source and reading, with caret/selection/Undo intact |
 | 2 / File switching | The current exact filename is the native subtitle for a multi-file note; its title menu exposes ordinary files directly and dates in newest-first year/month groups. The selected file has a check. Choosing a file changes the actual mounted document, not just its title. No intermediate Files sheet or custom tab strip |
-| 3 / Motion and feedback | Use the native zoom only for the Today leaf into its note on compact push navigation, with stable identity, interactive cancellation and a Reduce Motion alternative. Plain text rows retain native navigation; side-by-side selection does not zoom. Pin gets one restrained symbol response after commit. Archive retains its real Undo. Manual Save may acknowledge a successful GitHub write once; autosave never buzzes or celebrates. Do not delay opening to animate [9-11, 14] |
+| 3 / Motion and feedback | Use the native zoom from Today and Pinned notebook cards into their note on compact push navigation, with stable identity, interactive cancellation and a Reduce Motion alternative. Plain Notes rows retain native navigation; side-by-side selection does not zoom. Pin gets one restrained symbol response after commit. Archive retains its real Undo. Manual Save may acknowledge a successful GitHub write once; autosave never buzzes or celebrates. Do not delay opening to animate [9-11, 14] |
 
 Palette and Library/Today/tab composition land first. Reading/editor/file chrome follow in the same connected flow. Motion is last, not a substitute for composition. The source-identity safety fix ships independently of this design pass.
+
+Pinned grid metrics: 12-pt gaps and at least 156 pt per card, yielding two columns from 324 usable content points, more when unfolded, and one on narrower/accessibility layouts. Use a 120-pt minimum, never fixed, height; let large text grow. Tabs may peek 4 pt within their grid cell, without overlap or tiny independent hit targets. Include full tag names in the card's accessible description and Tags route; colored edge tabs are decorative, not an abbreviation of a tappable label. Context menus preserve the row actions.
 
 Three daily moments make the notebook feel alive:
 
@@ -110,7 +112,7 @@ Prefix each CSS suffix with `--gp-`. `selectedSurface` uses `text` as its foregr
 
 Use `accentText` for the app's action tint and task markers, consistently across native chrome, editor accessory and preview. Use `accentFill` with `onAccent` for an opaque custom primary control only. System prominent buttons own their foreground/material adaptation. Do not put white text on bright sky or apply the fill as a global text tint. Links remain system link blue with their non-color affordance.
 
-The decorative spine uses the original `#5AD1FA` to `#0EA5E9` gradient. Neither stop is suitable for small text on white (1.76:1 and 2.77:1). Today's opaque paper gradient is `#FFFFFF` to `#E2E8F0` in light, and `#1E293B` to `#0F172A` in dark. Increase Contrast flattens it to the corresponding semantic page and retains the spine. Keep the source and reading page semantic and flat. New-tag presets use the icon's coral `#FB8B8B`/`#EF5C5C`, amber `#FCD34D`/`#F5B60B` and teal `#5EEAD4`/`#14B8A6`; they do not replace existing profile colors.
+The decorative spine uses the original `#5AD1FA` to `#0EA5E9` gradient. Neither stop is suitable for small text on white (1.76:1 and 2.77:1). Library uses semantic grouped surfaces, with the icon's paper `#FFFFFF` to `#E2E8F0` gradient reserved for small original-artwork illustrations rather than overriding those surfaces. Keep the source and reading page semantic and flat. New-tag presets use the icon's coral `#FB8B8B`/`#EF5C5C`, amber `#FCD34D`/`#F5B60B` and teal `#5EEAD4`/`#14B8A6`; they do not replace existing profile colors.
 
 The custom text roles above clear 4.5:1 against reference light canvases `#FFFFFF`/`#F2F2F7` and dark canvases `#000000`/`#1C1C1E`. The lowest measured normal-mode text ratio is 4.88:1, increased-mode 6.78:1. `onAccent` against its fill exceeds 6.4:1 in all variants. Those reference backgrounds are **test inputs, not a definition of system colors**. Measure final resolved text/background pairs, selected surfaces, actual materials, Today paper and tag fills on the shipping OS. Never assume these reference checks certify the whole screen.
 
@@ -161,7 +163,7 @@ Use system font APIs with language fallback: SF by default, SF Rounded for the T
 | Secondary metadata | `.subheadline` or `.footnote` | Not smaller merely to preserve a tight row |
 | Code | Monospaced system font at scaled body size | Regular, no `.88em` reduction |
 | Status / footnotes | `.footnote` | Approximately 13 pt, scales, remains readable |
-| Today day numeral | `.largeTitle`, rounded design | Bold; other date components remain SF |
+| Today day numeral | Rounded design, scaled relative to `.largeTitle` | Bold, starting around 44 pt; other date components remain SF |
 
 Point sizes are reference values only. Native style APIs determine actual size. All labels wrap/grow at large categories. Required actions must not truncate to identical labels. Source headings stay body-sized semibold, not the large rendered heading sizes.
 
@@ -217,6 +219,8 @@ Liquid Glass belongs to **navigation and controls**, not the document. System na
 Use role-driven native actions for sheet chrome: `.cancel` discards the pending operation, `.confirm` commits it, and `.close` dismisses a read-only surface. Keep clear accessible names such as Cancel and Save Tags. Let native toolbar/title placement adapt to Duo rather than inserting manual centering spacers. Consequential choices such as Use GitHub Version or Restore File retain descriptive text in the sheet body instead of becoming unexplained checkmarks. [13]
 
 For multi-file gists, show the active filename in the native subtitle. Opening the note-title menu reveals ordinary filenames directly and dated series in newest-first year/month groups within that same menu, with a checkmark on the selected file. Match the web's grouping rules using UTC Gregorian dates, never grouping UTC midnight in the viewer's local zone. Do not require Files in this gist followed by another sheet merely to choose a file. Keep filenames exact, including non-Markdown files. Separate Add File and Rename File actions from selection. Initial file resolution follows the web resolver, including newest-file selection for a detected dated series and README selection otherwise, with its fallback. Explicitly choosing a file always opens that exact file. The mounted source editor, preview and title must share that account/draft/file identity before editing is enabled.
+
+The note's overflow menu uses native sections. Begin with one compact Pin/Star/Share/Copy Link control group, with accessible names and current toggle states. Follow with content/view actions (Tags, Files, Source & Preview), Open in GitHub, Archive, then destructive Delete isolated at the bottom. Use a real native Menu with Sections if automatic secondary-action placement cannot express this hierarchy. Do not fake headings with disabled buttons or draw custom separator views.
 
 Reading and source are opaque `page` canvases. Code/alerts use content surfaces, not glass. A translucent panel behind every list row, tag, and paragraph is a rejection. Never hand-render blur/highlight edges to imitate system glass.
 
@@ -311,17 +315,26 @@ Prefer system transitions. Custom motion exists only to explain a user action, f
 
 Use SwiftUI `sensoryFeedback` where appropriate, with state that represents the **committed outcome**, not the initial tap. No haptic for every typed character. Keep feedback optional and never essential to understanding the result. Simulator screenshots cannot prove tactile quality. [10, 11]
 
-Approved save language:
+### Quiet healthy editing, explicit problems
 
-| Real condition | Text |
+Remove the footer, its container, padding and reserved inset for `unsaved`, `savedLocally`, `savingToGitHub` and `savedToGitHub`; do not leave an empty strip. Local durability and GitHub publication remain separate internally, but the editor does not narrate that pipeline. Do not add autosave spinners, success receipts or generic read-only labels to the healthy writing/reading edge.
+
+Hide Save to GitHub when autosave is effectively enabled. Keep manual Save available when the preference is off, after a publication failure, and while a conflict-reviewed draft's durable `autosavePaused` requires explicit publication. The effective flag must reflect that pause rather than the profile preference alone. Hiding the control never changes publication policy.
+
+Known offline status with unpublished edits gets one quiet `icloud.slash` toolbar glyph. Its accessible label is **Offline. Changes haven't reached GitHub.** Tapping explains that changes are kept locally and eligible autosave resumes online while the app is open. Offline with nothing pending stays silent.
+
+Only actionable problems get one compact native notice with a clear recovery action. Keep raw diagnostics behind Details rather than several paragraphs. Let large type wrap naturally, preserve a 44-pt action target and retain the notice until resolved. A local persistence failure remains prominent and must not look like successful offline storage.
+
+| Real condition | Notice / action |
 | --- | --- |
-| Durable local write, no confirmed matching GitHub version | Saved on this iPhone |
-| Cloud request in progress | Saving to GitHub |
-| Server accepted the current version | Saved to GitHub |
-| Publication failed, local copy safe | Saved on this iPhone. Couldn't save to GitHub. |
-| Local write failed | Couldn't save on this iPhone. Keep the editor open. |
-| Changed remotely | This note changed elsewhere. |
-| No persistence in an engineering fixture | In-memory fixture. Not saved. |
+| Publication failed, local copy safe | Couldn't sync. / Retry |
+| Local write failed | Changes aren't saved. Keep this note open. / Retry |
+| Changed remotely | Changed on GitHub. / Review |
+| Account needs reconnection | Reconnect GitHub to sync. / Reconnect |
+| Gist creation uncertain | Note creation not confirmed. / Check GitHub; never blind duplicate creation |
+| Publication uncertain | Save not confirmed. / Check Status |
+| Publication blocked | Can't sync this note. / Details with the actual reason and recovery path |
+| No persistence in an engineering fixture | Mark the evidence as synthetic and local-only; never claim actual saving or upload |
 
 Do not call queued or in-memory data Saved. Preserve the failed operation and give a recovery action. Status is accessible text, not just a colored dot. Errors remain long enough to act, not solely in an expiring toast.
 
@@ -335,7 +348,7 @@ Do not call queued or in-memory data Saved. Preserve the failed operation and gi
 
 Use **Continue** and **Cancel**. Continue opens PhotosPicker, not an upload. Remember acknowledgement locally for this account only, and keep this disclosure available from the photo entry's help. A notice dismissal, picker cancellation or failed image load creates no upload. The notice must fit large type through natural scrolling, not smaller text. This is a privacy explanation, not a claim that a secret gist protects its images.
 
-**Pending presentation:** use a native attachment row within the note, above the save status. Show a small thumbnail when available, **Photo**, a scaled readable state, and the appropriate recovery action. It is not a modal progress screen, translucent card, or literal text attachment. Pending UI never adds provisional Markdown, object-replacement characters, invented URLs or hidden source markers. Copy, share, preview and canonical persistence continue to use the unchanged source. This note-local row is the safe first implementation rather than introducing unproved in-text decorations into the retained TextKit session.
+**Pending presentation:** use a native attachment row within the note, above any active problem notice and the keyboard. It remains available when the healthy save footer is absent. Show a small thumbnail when available, **Photo**, a scaled readable state, and the appropriate recovery action. It is not a modal progress screen, translucent card, or literal text attachment. Pending UI never adds provisional Markdown, object-replacement characters, invented URLs or hidden source markers. Copy, share, preview and canonical persistence continue to use the unchanged source. This note-local row is the safe first implementation rather than introducing unproved in-text decorations into the retained TextKit session.
 
 | Actual state | Row language and action |
 | --- | --- |
@@ -386,7 +399,7 @@ Overlapping edits have no combined-version promise. The user can inspect both ve
 - Bind the review to account, draft/file identity, local generation, base and the inspected remote revision. Revalidate before Apply. If local text changed, leave it untouched and show **Your draft changed while this review was open. Review the latest draft.** Retain an inspectable proposal; never apply an old whole-file replacement over newer typing.
 - A foreground remote refresh may invalidate the reviewed remote revision. Do not silently swap the GitHub tab underneath the reader. Show **GitHub has a newer version** and an explicit refresh action. Publication performs the coordinator's fresh-read/conflict check again, even after a successful review.
 - Save a recovery snapshot before replacing text. The session owns the transaction, selection and undo. Apply replacement as one local undo step and a new generation; choosing unchanged text does not need a fake empty undo entry. Do not call `resolveConflict` before the active session can safely accept the transaction. Defer application while IME composition or Writing Tools is active, with visible **Finish the current edit to apply this version** guidance.
-- Keep autosave paused after resolving review until a deliberate **Save to GitHub**. After a durable local result, return to the note with **Saved on this iPhone** and the normal manual Save action. No combined Apply & Publish, background publication, or success claim before persistence succeeds.
+- Keep autosave paused after resolving review until a deliberate **Save to GitHub**. After a durable local result, return to the note with its manual Save action still reachable, even when the profile preference enables autosave. Do not add a healthy local-save footer. No combined Apply & Publish, background publication, or success claim before persistence succeeds.
 - A local storage failure leaves the review open with its proposal intact and an actionable error. Never dismiss into Saved or lose the original on failure. Dismissal, account switching and process termination preserve the unresolved durable draft.
 
 Required evidence includes a nonoverlapping proposal, overlapping edits, a remotely removed file, stale local generation, changed remote revision, local storage failure, offline inspection and AX3/VoiceOver traversal. Include a real undo after adopting the remote/combined source. Neither a diff screenshot nor a successful PATCH proves the safety of this flow.
@@ -395,7 +408,7 @@ Required evidence includes a nonoverlapping proposal, overlapping edits, a remot
 
 **No production UI task closes without Designer sign-off on the actual installed Duo app.** Simulator evidence can establish scoped layout approval, not final device polish or hardware behavior. A polished SVG, passing build, stock component, or Light-mode screenshot alone is not sign-off. Award-caliber is the quality ambition, not a claim of an Apple award.
 
-Review the connected Library > open note > read > edit > switch file flow, including the real keyboard, menus, save status and return navigation. Assess hierarchy, breathing room, directness and continuity in that experience, not just each isolated fixture. Actual on-device feedback overrides earlier still-image density targets. Fixing correctness or basic usability does not by itself establish the intended design quality.
+Review the connected Library > open note > read > edit > switch file flow, including the real keyboard, grouped menus, problem-only sync notices and return navigation. Assess hierarchy, breathing room, directness and continuity in that experience, not just each isolated fixture. Actual on-device feedback overrides earlier still-image density targets. Fixing correctness or basic usability does not by itself establish the intended design quality.
 
 For each implemented surface, supply eight captures from the same build and synthetic fixture:
 
