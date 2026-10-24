@@ -23,171 +23,55 @@
     }
 
     public var body: some View {
-      SourceTextView(session: session)
-        .id(session.viewIdentity)
-        .toolbar {
-          if session.isEditing {
-            ToolbarItemGroup(placement: .keyboard) {
-              controls
+      SourceTextView(
+        session: session,
+        actions: SourceToolbarActions(
+          format: format, link: beginLink, indent: indent, find: find,
+          photo: insertPhoto, photoPrivacy: photoPrivacy,
+          dismiss: { session.textView.resignFirstResponder() }),
+        configuration: SourceToolbarConfiguration(
+          canFormat: session.canFormat, canFind: !session.writingToolsActive,
+          canInsertPhoto: canInsertPhoto, hasPhoto: insertPhoto != nil,
+          hasPhotoPrivacy: photoPrivacy != nil)
+      )
+      .id(session.viewIdentity)
+      .sheet(
+        item: $linkRequest,
+        onDismiss: {
+          if session.textView.window != nil, session.textView.isEditable {
+            session.textView.becomeFirstResponder()
+          }
+        }
+      ) { request in
+        LinkEditor(label: request.label) { label, destination in
+          guard session.documentID == request.documentID else {
+            throw SourceMutation.MutationError.documentMismatch
+          }
+          if let edit = try MarkdownFormatting.edit(
+            .link(label: label, destination: destination), in: request.source,
+            selection: request.selection)
+          {
+            try session.apply(edit, generation: request.generation)
+          }
+        }
+      }
+      .alert(
+        String(localized: "Couldn't Format Text", bundle: .module),
+        isPresented: Binding(
+          get: { actionError != nil || session.inputError != nil },
+          set: {
+            if !$0 {
+              actionError = nil
+              session.inputError = nil
             }
-          }
+          })
+      ) {
+        Button(String(localized: "OK", bundle: .module), role: .cancel) {
+          actionError = nil
+          session.inputError = nil
         }
-        .sheet(
-          item: $linkRequest,
-          onDismiss: {
-            if session.textView.window != nil, session.textView.isEditable {
-              session.textView.becomeFirstResponder()
-            }
-          }
-        ) { request in
-          LinkEditor(label: request.label) { label, destination in
-            guard session.documentID == request.documentID else {
-              throw SourceMutation.MutationError.documentMismatch
-            }
-            if let edit = try MarkdownFormatting.edit(
-              .link(label: label, destination: destination), in: request.source,
-              selection: request.selection)
-            {
-              try session.apply(edit, generation: request.generation)
-            }
-          }
-        }
-        .alert(
-          String(localized: "Couldn't Format Text", bundle: .module),
-          isPresented: Binding(
-            get: { actionError != nil || session.inputError != nil },
-            set: {
-              if !$0 {
-                actionError = nil
-                session.inputError = nil
-              }
-            })
-        ) {
-          Button(String(localized: "OK", bundle: .module), role: .cancel) {
-            actionError = nil
-            session.inputError = nil
-          }
-        } message: {
-          Text(actionError ?? session.inputError ?? "")
-        }
-    }
-
-    private var controls: some View {
-      HStack(spacing: 0) {
-        Menu {
-          Button(String(localized: "Body", bundle: .module)) { format(.heading(0)) }
-          ForEach(1...6, id: \.self) { level in
-            Button(String(localized: "Heading \(level)", bundle: .module)) {
-              format(.heading(level))
-            }
-          }
-        } label: {
-          Label(String(localized: "Text Style", bundle: .module), systemImage: "textformat")
-            .labelStyle(.iconOnly)
-        }
-        .frame(minWidth: 44, minHeight: 44)
-        .disabled(!session.canFormat)
-        Button(String(localized: "Bold", bundle: .module), systemImage: "bold") { format(.bold) }
-          .labelStyle(.iconOnly)
-          .frame(minWidth: 44, minHeight: 44)
-          .disabled(!session.canFormat)
-        Button(String(localized: "Italic", bundle: .module), systemImage: "italic") {
-          format(.italic)
-        }
-        .labelStyle(.iconOnly)
-        .frame(minWidth: 44, minHeight: 44)
-        .disabled(!session.canFormat)
-        Menu {
-          Button(String(localized: "Bulleted List", bundle: .module), systemImage: "list.bullet") {
-            format(.bulletList)
-          }
-          Button(String(localized: "Numbered List", bundle: .module), systemImage: "list.number") {
-            format(.numberedList)
-          }
-          Button(String(localized: "Checklist", bundle: .module), systemImage: "checklist") {
-            format(.checklist)
-          }
-          Divider()
-          Button(
-            String(localized: "Increase Indent", bundle: .module), systemImage: "increase.indent"
-          ) {
-            indent(outdent: false)
-          }
-          .keyboardShortcut("]", modifiers: .command)
-          Button(
-            String(localized: "Decrease Indent", bundle: .module), systemImage: "decrease.indent"
-          ) {
-            indent(outdent: true)
-          }
-          .keyboardShortcut("[", modifiers: .command)
-        } label: {
-          Label(String(localized: "Lists", bundle: .module), systemImage: "list.bullet")
-            .labelStyle(.iconOnly)
-        }
-        .frame(minWidth: 44, minHeight: 44)
-        .disabled(!session.canFormat)
-        Menu {
-          Button(String(localized: "Link…", bundle: .module), systemImage: "link") { beginLink() }
-          Button(
-            String(localized: "Inline Code", bundle: .module),
-            systemImage: "chevron.left.forwardslash.chevron.right"
-          ) {
-            format(.inlineCode)
-          }
-          Button(
-            String(localized: "Code Block", bundle: .module), systemImage: "curlybraces.square"
-          ) {
-            format(.codeBlock)
-          }
-          Button(String(localized: "Quote", bundle: .module), systemImage: "text.quote") {
-            format(.quote)
-          }
-          Divider()
-          Button(String(localized: "Photo", bundle: .module), systemImage: "photo") {
-            insertPhoto?()
-          }
-          .disabled(insertPhoto == nil || !canInsertPhoto)
-          if photoPrivacy != nil {
-            Button(
-              String(localized: "Photos Are Public", bundle: .module), systemImage: "info.circle"
-            ) {
-              photoPrivacy?()
-            }
-          }
-        } label: {
-          Label(String(localized: "Insert", bundle: .module), systemImage: "plus")
-            .labelStyle(.iconOnly)
-        }
-        .accessibilityIdentifier("editor-insert-menu")
-        .frame(minWidth: 44, minHeight: 44)
-        .disabled(!session.canFormat)
-        Menu {
-          Button(String(localized: "Find", bundle: .module), systemImage: "magnifyingglass") {
-            find(replacing: false)
-          }
-          .keyboardShortcut("f", modifiers: .command)
-          Button(
-            String(localized: "Find and Replace", bundle: .module),
-            systemImage: "arrow.triangle.2.circlepath"
-          ) {
-            find(replacing: true)
-          }
-          .keyboardShortcut("f", modifiers: [.command, .option])
-        } label: {
-          Label(String(localized: "Find", bundle: .module), systemImage: "magnifyingglass")
-            .labelStyle(.iconOnly)
-        }
-        .frame(minWidth: 44, minHeight: 44)
-        .disabled(session.writingToolsActive)
-        Spacer(minLength: 0)
-        Button(
-          String(localized: "Hide Keyboard", bundle: .module),
-          systemImage: "keyboard.chevron.compact.down"
-        ) {
-          session.textView.resignFirstResponder()
-        }
-        .labelStyle(.iconOnly)
-        .frame(minWidth: 44, minHeight: 44)
+      } message: {
+        Text(actionError ?? session.inputError ?? "")
       }
     }
 
@@ -244,8 +128,21 @@
 
   private struct SourceTextView: UIViewRepresentable {
     let session: DocumentSession
-    func makeUIView(context: Context) -> UITextView { session.textView }
+    let actions: SourceToolbarActions
+    let configuration: SourceToolbarConfiguration
+
+    func makeCoordinator() -> SourceToolbarCoordinator {
+      SourceToolbarCoordinator(actions: actions)
+    }
+
+    func makeUIView(context: Context) -> UITextView {
+      context.coordinator.update(actions: actions, configuration: configuration)
+      session.textView.inputAccessoryView = context.coordinator.toolbar
+      return session.textView
+    }
+
     func updateUIView(_ view: UITextView, context: Context) {
+      context.coordinator.update(actions: actions, configuration: configuration)
       session.updateAppearanceIfNeeded()
     }
   }

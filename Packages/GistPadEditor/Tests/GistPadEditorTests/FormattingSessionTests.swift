@@ -163,6 +163,55 @@
       #expect(session.textView.undoManager?.canUndo == false)
     }
 
+    @Test func nativeInputAccessoryIsMountedAndItsBoldActionEditsTheActiveSession() throws {
+      let session = DocumentSession(documentID: "accessory", text: "A note")
+      let window = host(session)
+      defer { window.isHidden = true }
+      let toolbar = try #require(session.textView.inputAccessoryView as? UIToolbar)
+      #expect(toolbar.accessibilityIdentifier == "editor-keyboard-bar")
+      let items = try #require(toolbar.items)
+      #expect(items.count == 8)
+      let bold = try #require(items.first { $0.accessibilityLabel == "Bold" })
+      let selector = try #require(bold.action)
+      session.textView.selectedRange = NSRange(location: 2, length: 4)
+      session.textView.undoManager?.removeAllActions()
+      #expect(UIApplication.shared.sendAction(selector, to: bold.target, from: bold, for: nil))
+      #expect(session.text == "A **note**")
+      #expect(session.generation == 1)
+      session.textView.undoManager?.undo()
+      session.textViewDidChange(session.textView)
+      #expect(session.text == "A note")
+      #expect(session.textView.undoManager?.canUndo == false)
+      let insertion = try #require(
+        items.first { $0.accessibilityIdentifier == "editor-insert-menu" })
+      #expect(insertion.menu != nil)
+      #expect(items.first { $0.accessibilityLabel == "Lists" }?.menu?.children.count == 5)
+      #expect(items.first { $0.accessibilityLabel == "Find" }?.menu?.children.count == 2)
+      #expect(session.textView.keyCommands?.contains { $0.input == "]" } == true)
+      let dismiss = try #require(items.first { $0.accessibilityLabel == "Hide Keyboard" })
+      let hide = try #require(dismiss.action)
+      #expect(UIApplication.shared.sendAction(hide, to: dismiss.target, from: dismiss, for: nil))
+      #expect(!session.textView.isFirstResponder)
+    }
+
+    @Test func nativeFindAndReplaceKeepsURLReplacementsLiteral() async throws {
+      let session = DocumentSession(documentID: "find", text: "A note and another note")
+      let window = host(session)
+      defer { window.isHidden = true }
+      let interaction = try #require(session.textView.findInteraction)
+      interaction.presentFindNavigator(showingReplace: true)
+      defer { interaction.dismissFindNavigator() }
+      try await Task.sleep(for: .milliseconds(150))
+      #expect(interaction.isFindNavigatorVisible)
+      let find = try #require(interaction.activeFindSession)
+      #expect(find.supportsReplacement)
+      find.performSearch(query: "note", options: nil)
+      #expect(find.resultCount == 2)
+      find.replaceAll(searchQuery: "note", replacementString: "https://example.com", options: nil)
+      session.textViewDidChange(session.textView)
+      #expect(session.text == "A https://example.com and another https://example.com")
+    }
+
     private func host(_ session: DocumentSession) -> UIWindow {
       // Package logic tests have no connected UIWindowScene.
       let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))

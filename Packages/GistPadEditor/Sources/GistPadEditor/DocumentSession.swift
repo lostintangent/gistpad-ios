@@ -292,6 +292,36 @@
     private var anchorDelta: CGFloat = 0
     private var restoringAnchor = false
 
+    override var keyCommands: [UIKeyCommand]? {
+      let indent = UIKeyCommand(
+        input: "]", modifierFlags: .command, action: #selector(increaseIndent))
+      indent.discoverabilityTitle = String(localized: "Increase Indent", bundle: .module)
+      let outdent = UIKeyCommand(
+        input: "[", modifierFlags: .command, action: #selector(decreaseIndent))
+      outdent.discoverabilityTitle = String(localized: "Decrease Indent", bundle: .module)
+      return (super.keyCommands ?? []) + [indent, outdent]
+    }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+      if action == #selector(increaseIndent) || action == #selector(decreaseIndent) {
+        return (delegate as? DocumentSession)?.canFormat == true
+      }
+      return super.canPerformAction(action, withSender: sender)
+    }
+
+    @objc private func increaseIndent() { changeIndent(outdent: false) }
+    @objc private func decreaseIndent() { changeIndent(outdent: true) }
+
+    private func changeIndent(outdent: Bool) {
+      guard let session = delegate as? DocumentSession else { return }
+      do {
+        try session.indent(outdent: outdent)
+      } catch {
+        session.inputError = String(
+          localized: "Finish the current text edit, then select the lines again.", bundle: .module)
+      }
+    }
+
     func rememberReadingAnchor() {
       guard !sourceInteractionActive, !restoringAnchor, bounds.width > 0,
         previousWidth == 0 || abs(previousWidth - bounds.width) < 1,
