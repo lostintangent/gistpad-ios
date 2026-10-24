@@ -228,6 +228,16 @@ Ask may hold the entire answer until its prose and citations validate. Keep the 
 | Edit | Changes across the whole note presented as one reviewable diff. Apply the accepted set as one transaction and one Undo step |
 | Review | Whole-note comments anchored to exact source quotes, with optional replacements the user can apply individually. Comments remain separate from source until Apply |
 
+**Ask answer addendum (October 24): a short lead, then zero to five useful points.** A direct question may need only its lead. Do not pad it with five generic observations. Render validated structured fields as native SwiftUI text rows inside the existing scroll view, not Markdown, a nested scrolling List, another card or a chat bubble.
+
+- **Type:** lead is system `.body.weight(.semibold)`, points are `.body` regular, both primary adaptive ink. Body is 17 pt at Large and follows its native Dynamic Type curve. Use normal system leading, selectable text and no extra Answer heading. [Typography][typography].
+- **Markers:** use a standard text bullet in the same body style, primary neutral ink, first-baseline aligned with an 8-pt gap and a hanging indent for continuation lines. The app owns markers, not generated strings. No personal accent, numbered badges, task circles or interactive row treatment. Mirror the leading layout for RTL.
+- **Rhythm:** 12 pt from lead to first point and between points, within the existing 20-pt sheet gutter. No row fills or separators. Keep the existing verified citations/source actions separate, 16 pt after the answer, without changing provenance or hidden-front-matter behavior. These spacing values are product choices, not Apple-prescribed metrics.
+
+At AX sizes, retain the same body styles and natural word wrapping, without line caps, shrinking or a capped font scale. Each point is one logical accessibility element; the decorative marker is not a separate stop. Read lead, points and references in order rather than combining the entire answer. Once ready, put the answer before the full AX request echo so it is not buried below a long question. The question remains fully readable afterward. Do not add typewriter/cascade animation or force-scroll while someone is reading.
+
+First-frame acceptance covers a real lead-only answer and a real lead-plus-points answer at Large/AX3 in Light/Dark, including Increased Contrast. Confirm useful content, hanging indents and source actions, not just the new schema's shape. Rendering acceptance does not certify the model's answer quality.
+
 Edit and Review share exact-quote replacement hunks against the captured source; do not require the model to regenerate a long note. Reject nonmatching or overlapping hunks and report the omitted count in the review. Never offer Apply for an unverified anchor. The app computes the diff, not the model.
 
 Everything runs on device. A note that fits the measured request budget takes one pass. Longer notes use bounded passes covering every section, with final synthesis for Ask and merged anchored replacements for Edit/Review. Show honest progress such as **Reviewing part 3 of 7**, then **Preparing changes**. Say "section" only when the units are actual authored sections. Do not claim a partial pass covers the whole note. Cancellation or a failed pass never partially applies source.
