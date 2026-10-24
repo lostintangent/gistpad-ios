@@ -516,6 +516,51 @@ public actor DraftStore {
         try commit()
     }
 
+    public func confirmNewCreation(
+        id: UUID, accountID: UUID, expectedGeneration: UInt64
+    ) throws -> DraftSnapshot {
+        _ = try uncertainCreation(id: id, accountID: accountID, expectedGeneration: expectedGeneration)
+        try clearAttempt(id: id, accountID: accountID)
+        return try snapshot(find(id, accountID: accountID))
+    }
+
+    public func discardUncertainCreation(
+        id: UUID, accountID: UUID, expectedGeneration: UInt64
+    ) throws {
+        let draft = try uncertainCreation(
+            id: id, accountID: accountID, expectedGeneration: expectedGeneration)
+        let recoveries = try modelContext.fetch(FetchDescriptor<StoredRecovery>(
+            predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }))
+        let images = try modelContext.fetch(FetchDescriptor<StoredImageUpload>(
+            predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }))
+        for image in images {
+            guard try JSONDecoder().decode(ImageUploadState.self, from: image.stateData) != .uploading else {
+                throw ImageUploadError.uploadInProgress
+            }
+        }
+        let receipts = try modelContext.fetch(FetchDescriptor<StoredCommandReceipt>()).filter {
+            let command = try JSONDecoder().decode(SharedDraftCommand.self, from: $0.payload)
+            return command.accountID == accountID && command.draftID == id
+        }
+        for recovery in recoveries { modelContext.delete(recovery) }
+        for image in images { modelContext.delete(image) }
+        for receipt in receipts { modelContext.delete(receipt) }
+        modelContext.delete(draft)
+        try commit()
+    }
+
+    private func uncertainCreation(
+        id: UUID, accountID: UUID, expectedGeneration: UInt64
+    ) throws -> StoredDraft {
+        let draft = try find(id, accountID: accountID)
+        guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
+        guard draft.gistID == nil, draft.attemptedGeneration != nil,
+              case .failed(.creationUncertain) = try decode(draft.stateData) else {
+            throw DraftError.ambiguousCreation
+        }
+        return draft
+    }
+
     func setState(_ state: SaveState, id: UUID, accountID: UUID) throws {
         let draft = try find(id, accountID: accountID)
         draft.stateData = try encode(state)
@@ -556,8 +601,16 @@ public actor DraftStore {
     ) throws -> DraftSnapshot {
         let draft = try find(id, accountID: accountID)
         guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
-        guard draft.attemptedGeneration == nil else { throw DraftError.publishInProgress }
-        if case .conflict = try decode(draft.stateData) { return try snapshot(draft) }
+        let state = try decode(draft.stateData)
+        if case .conflict = state { return try snapshot(draft) }
+        if let generation = draft.attemptedGeneration {
+            if case .savingToGitHub = state { throw DraftError.publishInProgress }
+            guard let gistID = draft.gistID, let attempted = draft.attemptedContent,
+                  sourceEqual(remote, attempted) else { return try snapshot(draft) }
+            return try acknowledge(
+                id: id, accountID: accountID, gistID: gistID, content: attempted,
+                revision: revision, generation: generation)
+        }
         guard !sourceEqual(draft.baseContent, remote) else { return try snapshot(draft) }
         let suggestion: String?
         if let base = draft.baseContent, let remote {

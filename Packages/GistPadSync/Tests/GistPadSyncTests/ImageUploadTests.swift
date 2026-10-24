@@ -6,7 +6,7 @@ import Testing
 import UniformTypeIdentifiers
 @testable import GistPadSync
 
-private func testPNG() throws -> Data {
+func testPNG() throws -> Data {
     let context = try #require(CGContext(
         data: nil, width: 2, height: 1, bitsPerComponent: 8, bytesPerRow: 8,
         space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
