@@ -22,7 +22,8 @@ struct NotebookPhotoHost<Content: View>: View {
       }
       .photosPicker(
         isPresented: $controller.isShowingPicker, selection: $selectedPhoto,
-        matching: .images, preferredItemEncoding: .current)
+        matching: .images, preferredItemEncoding: .current
+      )
       .onChange(of: selectedPhoto) { _, photo in
         guard let photo else { return }
         controller.beginPreparing()
@@ -53,14 +54,18 @@ struct NotebookPhotoHost<Content: View>: View {
         }
         Button("Cancel", role: .cancel) { controller.removalID = nil }
       } message: {
-        Text("This removes the pending photo from this note. It does not delete any uploaded image.")
+        Text(
+          "This removes the pending photo from this note. It does not delete any uploaded image.")
       }
       .task { await controller.start() }
       .task(id: controller.publishedGistID) { await controller.resume() }
       .onChange(of: scenePhase) { _, phase in
         Task {
-          if phase == .active { await controller.start() }
-          else if phase == .background { await controller.stop() }
+          if phase == .active {
+            await controller.start()
+          } else if phase == .background {
+            await controller.stop()
+          }
         }
       }
       .onDisappear { Task { await controller.stop() } }
@@ -74,30 +79,59 @@ struct NotebookPhotoSurface<Content: View>: View {
   let isSource: Bool
   var showsAttachments = true
   @ViewBuilder let content: () -> Content
+  @Environment(\.dynamicTypeSize) private var typeSize
+
+  private var minimumSourceHeight: CGFloat {
+    let category: UIContentSizeCategory =
+      switch typeSize {
+      case .xSmall: .extraSmall
+      case .small: .small
+      case .medium: .medium
+      case .large: .large
+      case .xLarge: .extraLarge
+      case .xxLarge: .extraExtraLarge
+      case .xxxLarge: .extraExtraExtraLarge
+      case .accessibility1: .accessibilityMedium
+      case .accessibility2: .accessibilityLarge
+      case .accessibility3: .accessibilityExtraLarge
+      case .accessibility4: .accessibilityExtraExtraLarge
+      case .accessibility5: .accessibilityExtraExtraExtraLarge
+      @unknown default: .large
+      }
+    let height =
+      UIFont.preferredFont(
+        forTextStyle: .body,
+        compatibleWith: UITraitCollection(preferredContentSizeCategory: category)
+      ).lineHeight * 2 + 24
+    return height.rounded(.up)
+  }
 
   var body: some View {
-    content()
-      .safeAreaInset(edge: .bottom, spacing: 0) {
-        if showsAttachments {
-          VStack(spacing: 0) {
-            PhotoAttachmentShelf(
-              attachments: controller.displayedAttachments,
-              action: { id, action in Task { await controller.perform(action, id: id) } },
-              remove: { controller.removalID = $0 })
-            if let message = controller.queueError {
-              VStack(alignment: .leading, spacing: 4) {
-                Text(message).font(.subheadline)
-                Button("Retry") { Task { await controller.reload() } }
-                  .frame(minHeight: 44)
+    GeometryReader { geometry in
+      content()
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+          if showsAttachments {
+            VStack(spacing: 0) {
+              PhotoAttachmentShelf(
+                attachments: controller.displayedAttachments,
+                maximumHeight: isSource ? geometry.size.height - minimumSourceHeight : nil,
+                action: { id, action in Task { await controller.perform(action, id: id) } },
+                remove: { controller.removalID = $0 })
+              if let message = controller.queueError {
+                VStack(alignment: .leading, spacing: 4) {
+                  Text(message).font(.subheadline)
+                  Button("Retry") { Task { await controller.reload() } }
+                    .frame(minHeight: 44)
+                }
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+                .background(Color(uiColor: .systemBackground))
               }
-              .foregroundStyle(.primary)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .padding(.horizontal, 20)
-              .padding(.vertical, 8)
-              .background(Color(uiColor: .systemBackground))
             }
           }
         }
-      }
+    }
   }
 }

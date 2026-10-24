@@ -381,6 +381,7 @@
   private final class AnchoredTextView: UITextView {
     var sourceInteractionActive = false
     private var previousWidth: CGFloat = 0
+    private var previousHeight: CGFloat = 0
     private var readingOffset = 0
     private var anchorDelta: CGFloat = 0
     private var restoringAnchor = false
@@ -449,6 +450,30 @@
       (delegate as? DocumentSession)?.completeFocusRequestIfAttached()
     }
 
+    override func scrollRangeToVisible(_ range: NSRange) {
+      guard isFirstResponder, range == selectedRange, !sourceInteractionActive,
+        markedTextRange == nil else {
+        super.scrollRangeToVisible(range)
+        return
+      }
+      revealCaret()
+    }
+
+    private func revealCaret() {
+      guard let position = selectedTextRange?.end else { return }
+      if let manager = textLayoutManager, let range = manager.textContentManager?.documentRange {
+        manager.ensureLayout(for: range)
+      }
+      let caret = caretRect(for: position).insetBy(dx: 0, dy: -8)
+      let viewport = bounds.inset(by: adjustedContentInset)
+      guard viewport.height >= caret.height, caret.minY.isFinite, caret.maxY.isFinite else { return }
+      if caret.minY < viewport.minY {
+        setVerticalContentOffset(contentOffset.y + caret.minY - viewport.minY)
+      } else if caret.maxY > viewport.maxY {
+        setVerticalContentOffset(contentOffset.y + caret.maxY - viewport.maxY)
+      }
+    }
+
     override var keyCommands: [UIKeyCommand]? {
       let find = UIKeyCommand(input: "f", modifierFlags: .command, action: #selector(findText))
       find.discoverabilityTitle = String(localized: "Find", bundle: .module)
@@ -515,6 +540,7 @@
         return
       }
       let widthChanged = previousWidth > 0 && abs(previousWidth - bounds.width) > 1
+      let heightChanged = previousHeight > 0 && abs(previousHeight - bounds.height) > 1
       let savedOffset = readingOffset
       let savedDelta = anchorDelta
       restoringAnchor = true
@@ -532,7 +558,11 @@
           setVerticalContentOffset(y)
         }
       }
+      if (widthChanged || heightChanged), isFirstResponder, markedTextRange == nil {
+        revealCaret()
+      }
       previousWidth = bounds.width
+      previousHeight = bounds.height
       restoringAnchor = false
       rememberReadingAnchor()
     }

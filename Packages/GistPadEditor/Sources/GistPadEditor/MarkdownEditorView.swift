@@ -147,16 +147,60 @@
   private struct SourceViewport: UIViewRepresentable {
     let session: DocumentSession
 
-    func makeUIView(context: Context) -> UIView {
-      let view = UIView()
-      view.isUserInteractionEnabled = false
-      view.accessibilityElementsHidden = true
+    func makeUIView(context: Context) -> SourceViewportView {
+      let view = SourceViewportView()
+      view.editor = session.textView
       session.updateViewportView(view)
       return view
     }
 
-    func updateUIView(_ view: UIView, context: Context) {
+    func updateUIView(_ view: SourceViewportView, context: Context) {
+      view.editor = session.textView
       session.updateViewportView(view)
+    }
+  }
+
+  private final class SourceViewportView: UIView {
+    weak var editor: UITextView?
+    private let topEdge = UIScrollEdgeElementContainerInteraction()
+
+    override init(frame: CGRect) {
+      super.init(frame: frame)
+      isUserInteractionEnabled = false
+      accessibilityElementsHidden = true
+      topEdge.edge = .top
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func didMoveToWindow() {
+      super.didMoveToWindow()
+      updateChrome()
+      editor?.setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+      super.layoutSubviews()
+      updateChrome()
+      editor?.setNeedsLayout()
+    }
+
+    private func updateChrome() {
+      var responder: UIResponder? = self
+      var navigationBar: UINavigationBar?
+      while let current = responder, window != nil {
+        if let controller = current as? UIViewController,
+          let bar = controller.navigationController?.navigationBar, bar.window === window
+        {
+          navigationBar = bar
+          break
+        }
+        responder = current.next
+      }
+      guard topEdge.view !== navigationBar || topEdge.scrollView !== editor else { return }
+      topEdge.view?.removeInteraction(topEdge)
+      topEdge.scrollView = editor
+      navigationBar?.addInteraction(topEdge)
     }
   }
 

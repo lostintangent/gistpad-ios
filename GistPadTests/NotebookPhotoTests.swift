@@ -277,6 +277,13 @@ struct NotebookPhotoLayoutProbe {
     let prefix = "photos-ax3-\(photoCount)"
     record(window, named: "\(prefix)-shelf-top")
     let views = descendants(of: host.view)
+    let bars = views.compactMap { $0 as? UINavigationBar }
+    #expect(bars.contains { bar in
+      bar.interactions.contains { interaction in
+        guard let edge = interaction as? UIScrollEdgeElementContainerInteraction else { return false }
+        return edge.scrollView === editor && edge.edge == .top
+      }
+    }, "The real navigation chrome must participate in the source's native soft edge.")
     Attachment.record(
       views.map { view in
         let geometry =
@@ -317,6 +324,9 @@ struct NotebookPhotoLayoutProbe {
         + "scroll bottom: \(shelf.contentOffset.y) pt",
       named: "\(prefix)-geometry.txt")
     #expect(visibleSourceHeight >= twoLines, "Keep at least two source lines above the shelf and keyboard.")
+    #expect(
+      visibleSourceHeight >= twoLines + editor.textContainerInset.top,
+      "The opening passage's top padding must not consume either writing line.")
     editor.selectedRange = NSRange(location: editor.text.utf16.count, length: 0)
     editor.insertText(" Still editable")
     #expect(fixture.session.session.text.hasSuffix(" Still editable"))

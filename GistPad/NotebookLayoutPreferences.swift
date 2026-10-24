@@ -20,7 +20,7 @@ final class NotebookLayoutPreferences {
   }
 
   static func allowsSplit(availableWidth: CGFloat) -> Bool {
-    availableWidth.isFinite && availableWidth >= 640
+    availableWidth.isFinite && availableWidth >= 641
   }
 
   func select(_ mode: NoteMode) {

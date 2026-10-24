@@ -54,6 +54,7 @@ import SwiftUI
 public struct PhotoPrivacyNotice: View {
     private let proceed: (() -> Void)?
     private let cancel: () -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     public init(proceed: (() -> Void)? = nil, cancel: @escaping () -> Void) {
         self.proceed = proceed
@@ -89,7 +90,7 @@ public struct PhotoPrivacyNotice: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         .presentationDragIndicator(.visible)
     }
 }
@@ -98,14 +99,17 @@ public struct PhotoAttachmentShelf: View {
     private let attachments: [PhotoAttachment]
     private let action: (UUID, PhotoAttachmentAction) -> Void
     private let remove: (UUID) -> Void
+    private let maximumHeight: CGFloat?
     @Environment(\.dynamicTypeSize) private var typeSize
 
     public init(
         attachments: [PhotoAttachment],
+        maximumHeight: CGFloat? = nil,
         action: @escaping (UUID, PhotoAttachmentAction) -> Void,
         remove: @escaping (UUID) -> Void
     ) {
         self.attachments = attachments
+        self.maximumHeight = maximumHeight
         self.action = action
         self.remove = remove
     }
@@ -125,7 +129,9 @@ public struct PhotoAttachmentShelf: View {
         }
     }
 
-    private var shelfHeight: CGFloat { typeSize.isAccessibilitySize ? 180 : 128 }
+    private var shelfHeight: CGFloat {
+        min(typeSize.isAccessibilitySize ? 180 : 128, max(44, maximumHeight ?? .infinity))
+    }
 
     private var rows: some View {
         VStack(alignment: .leading, spacing: 16) {

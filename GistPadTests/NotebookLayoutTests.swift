@@ -33,10 +33,10 @@ struct NotebookLayoutTests {
     let defaults = try #require(UserDefaults(suiteName: name))
     defer { defaults.removePersistentDomain(forName: name) }
     let layout = NotebookLayoutPreferences(defaults: defaults)
-    for width: CGFloat in [0, 402, 639, .infinity, .nan] {
+    for width: CGFloat in [0, 402, 639, 640, .infinity, .nan] {
       #expect(!NotebookLayoutPreferences.allowsSplit(availableWidth: width))
     }
-    #expect(NotebookLayoutPreferences.allowsSplit(availableWidth: 640))
+    #expect(NotebookLayoutPreferences.allowsSplit(availableWidth: 641))
     #expect(
       layout.presentedMode(
         availableWidth: 800, sessionMode: .reading, isEditing: false, canEdit: true) == .split)
@@ -109,7 +109,7 @@ struct NotebookLayoutTests {
       baseline.caret.minY >= baseline.viewport.minY
         && baseline.caret.maxY <= baseline.viewport.maxY,
       "Establish a fully visible caret before testing resize continuity.")
-    let widths: [CGFloat] = [402, 800, 639, 952, 402]
+    let widths: [CGFloat] = [402, 800, 640, 952, 402]
     for (index, width) in widths.enumerated() {
       host.traitOverrides.horizontalSizeClass = width < 640 ? .compact : .regular
       host.rootView = LayoutNoteFixture(session: session, layout: layout, width: width)
@@ -124,7 +124,8 @@ struct NotebookLayoutTests {
       #expect(layout.preferredMode == .split)
       let (caret, viewport) = try recordCaretGeometry(
         editor, in: host.view, named: "resize-\(index)-\(Int(width))")
-      #expect(caret.maxY >= viewport.minY && caret.minY <= viewport.maxY)
+      #expect(caret.minY >= viewport.minY - 1 && caret.maxY <= viewport.maxY + 1)
+      #expect(caret.minX >= viewport.minX - 1 && caret.maxX <= viewport.maxX + 1)
     }
     let write = try #require(persistence)
     let saved = try await write.value
@@ -182,24 +183,26 @@ private struct LayoutNoteFixture: View {
   let width: CGFloat
 
   var body: some View {
-    NavigationStack {
-      NoteScreen(
-        document: .init(title: "Retained draft", files: [], selectedFileID: ""),
-        mode: Binding(
-          get: {
-            layout.presentedMode(
-              availableWidth: width, sessionMode: .source,
-              isEditing: session.isEditing, canEdit: true)
-          },
-          set: { layout.select($0) }),
-        saveState: .savedLocally,
-        allowsSplit: NotebookLayoutPreferences.allowsSplit(availableWidth: width)
-      ) {
-        MarkdownEditorView(session: session)
-      } preview: {
-        SessionPreview(session: session)
+    GeometryReader { _ in
+      NavigationStack {
+        NoteScreen(
+          document: .init(title: "Retained draft", files: [], selectedFileID: ""),
+          mode: Binding(
+            get: {
+              layout.presentedMode(
+                availableWidth: width, sessionMode: .source,
+                isEditing: session.isEditing, canEdit: true)
+            },
+            set: { layout.select($0) }),
+          saveState: .savedLocally,
+          allowsSplit: NotebookLayoutPreferences.allowsSplit(availableWidth: width)
+        ) {
+          MarkdownEditorView(session: session)
+        } preview: {
+          SessionPreview(session: session)
+        }
       }
+      .frame(width: width)
     }
-    .frame(width: width)
   }
 }
