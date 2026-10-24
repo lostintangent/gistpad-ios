@@ -68,10 +68,8 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         .background(Color(uiColor: .systemBackground))
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationSubtitle(
-            document.files.count > 1
-                ? document.files.first(where: { $0.id == document.selectedFileID })?.filename ?? "" : ""
-        )
+        .navigationSubtitle(document.headerFilename ?? "")
+        .background { NoteFileSubtitle(filename: document.headerFilename) }
         .modifier(NoteTitleMenu(isEnabled: document.files.count > 1) { fileChoices })
         .toolbar { noteToolbar }
         .safeAreaBar(edge: .bottom, spacing: 0) {

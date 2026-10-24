@@ -147,6 +147,7 @@ struct LiveNotebookWorkspace: View {
             }
           } else if let title = notebook.openingTitle {
             NotebookOpeningView(title: title)
+              .id(notebook.openingDocument?.rowID ?? notebook.library.selectedNoteID)
           } else {
             TodayLanding(summary: notebook.library.today, start: { startToday() })
               .disabled(notebook.account == nil || notebook.isCreating)

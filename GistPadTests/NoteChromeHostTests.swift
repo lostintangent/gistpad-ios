@@ -319,6 +319,73 @@ struct NoteChromeHostTests {
     }
   }
 
+  @Test(
+    arguments: ["README.md", "readme.md", "ReadMe.MD", "Ideas.md"],
+    [UIContentSizeCategory.large, .accessibilityExtraLarge])
+  func nativeHeaderOmitsReadmeAndGivesOtherFilesBreathingRoom(
+    filename: String, category: UIContentSizeCategory
+  ) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.traitOverrides.preferredContentSizeCategory = category
+    let title = "A place for good ideas"
+    func header(_ filename: String) -> some View {
+      var actions = NoteActions()
+      actions.selectFile = { _ in }
+      return NavigationStack {
+        NoteScreen(
+          document: .init(
+            title: title,
+            files: [
+              .init(id: "readme", filename: "README.md"),
+              .init(id: "selected", filename: filename),
+            ], selectedFileID: "selected"),
+          mode: .constant(.reading), saveState: .savedToGitHub, actions: actions
+        ) {
+          Text("Source")
+        } preview: {
+          Text("Preview")
+        }
+      }
+    }
+    let host = UIHostingController(rootView: header(filename))
+    window.rootViewController = host
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      previous?.makeKeyAndVisible()
+    }
+    for selected in [filename, filename == "Ideas.md" ? "README.md" : "Ideas.md", filename] {
+      host.rootView = header(selected)
+      try await Task.sleep(for: .milliseconds(300))
+      window.layoutIfNeeded()
+      let bar = try #require(descendants(window).compactMap { $0 as? UINavigationBar }.last)
+      let item = try #require(bar.topItem)
+      #expect(item.title == title)
+      #expect(item.titleMenuProvider != nil)
+      let labels = descendants(bar).compactMap { $0 as? UILabel }
+      let fileLabel = labels.first { $0.accessibilityIdentifier == "note-header-filename" }
+      if selected.caseInsensitiveCompare("README.md") == .orderedSame {
+        #expect(item.subtitle?.isEmpty != false)
+        #expect(item.subtitleView == nil)
+        #expect(fileLabel == nil)
+      } else {
+        let fileLabel = try #require(fileLabel)
+        let titleLabel = try #require(labels.first { $0.text == title })
+        let fileFrame = fileLabel.convert(fileLabel.bounds, to: window)
+        let titleFrame = titleLabel.convert(titleLabel.bounds, to: window)
+        let minimumGap = UIFontMetrics(forTextStyle: .body).scaledValue(
+          for: 4, compatibleWith: fileLabel.traitCollection)
+        #expect(fileLabel.text == selected)
+        #expect(fileFrame.minY - titleFrame.maxY >= minimumGap - 0.5)
+        #expect(window.bounds.contains(fileFrame))
+        #expect(fileLabel.adjustsFontForContentSizeCategory)
+      }
+    }
+  }
+
   private func descendants(_ view: UIView) -> [UIView] {
     [view] + view.subviews.flatMap(descendants)
   }

@@ -67,10 +67,11 @@ struct InterfaceCaptureWorkspace: View {
         supportedState = [
             "populated", "empty", "error", "offline", "readonly", "tag-audit", "today",
             "tag-editor", "tag-readonly", "search", "search-active", "no-results", "filtered", "signed-out",
-            "daily", "starred", "archive", "notes", "featured"
+            "daily", "starred", "archive", "notes", "featured", "header-file"
         ].contains(state) || (LaunchArguments.captureMangaFixture && screen == "note"
             && ["markers", "rules", "bullets"].contains(state))
         _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
+        _selectedFileID = State(initialValue: state == "header-file" ? "Ideas.md" : "README.md")
         var snapshot = state == "empty" ? LibrarySnapshot(notes: []) : InterfaceFixtures.library
         if state != "empty" {
             snapshot.notes.insert(
@@ -423,6 +424,13 @@ struct InterfaceCaptureWorkspace: View {
             // A hardware-keyboard shortcut bar is not a software-keyboard capture.
             let searchKeyboardVisible = searchKeyboardHeight >= 150
             guard captureState != "search-active" || (searchFocused && searchKeyboardVisible) else { return }
+            guard let window = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .flatMap(\.windows)
+                .first(where: { $0.isKeyWindow && !$0.isHidden }) else {
+                actionMessage = "Capture readiness requires a visible native window."
+                return
+            }
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent("gistpad-capture-\(readinessToken).ready")
             let data = try JSONSerialization.data(withJSONObject: [
@@ -430,6 +438,8 @@ struct InterfaceCaptureWorkspace: View {
                 "accent": captureAccent ?? "",
                 "searchFocused": searchFocused, "searchKeyboardVisible": searchKeyboardVisible,
                 "searchKeyboardHeight": searchKeyboardHeight,
+                "contentSizeCategory": window.traitCollection.preferredContentSizeCategory.rawValue,
+                "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
                 "fixture": LaunchArguments.captureMangaFixture ? "manga-reading"
                     : LaunchArguments.captureReadingFixture ? "reading-polish" : "notebook",
                 "token": readinessToken, "previewError": previewError ?? ""

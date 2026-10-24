@@ -1,5 +1,6 @@
 import GistPadInterface
 import GistPadPreview
+import OSLog
 import SwiftUI
 
 struct NotebookOpeningView: View {
@@ -7,6 +8,7 @@ struct NotebookOpeningView: View {
   var document: NotebookDocument?
   @State private var renderError: String?
   @State private var reload = 0
+  @State private var progressTitle: String?
 
   var body: some View {
     Group {
@@ -35,26 +37,43 @@ struct NotebookOpeningView: View {
           .accessibilityIdentifier("opening-cached-note")
         }
       } else {
-        ScrollView {
-          VStack(alignment: .leading, spacing: 16) {
-            Text("A little room for your thoughts").font(.title2.bold())
-            Text("The words in this note will appear here.")
-            Text("One thought, then another.")
+        ZStack {
+          if progressTitle == title {
+            VStack(spacing: 12) {
+              ProgressView()
+                .controlSize(.regular)
+                .tint(.secondary)
+              Text("Opening note...")
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(Text("Opening \(title)"))
+            .accessibilityIdentifier("opening-note-progress")
           }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(24)
-          .redacted(reason: .placeholder)
-          .accessibilityElement(children: .ignore)
-          .accessibilityLabel(Text("Loading \(title)"))
         }
-        .scrollDisabled(true)
-        .accessibilityIdentifier("opening-uncached-note")
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
     }
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
     .background(Color(uiColor: .systemBackground))
     .tint(InterfaceTheme.accent)
+    .task(id: document == nil ? title : nil) {
+      progressTitle = nil
+      guard document == nil else { return }
+      do {
+        try await Task.sleep(for: .milliseconds(350))
+        progressTitle = title
+      } catch is CancellationError {
+        return
+      } catch {
+        Logger(subsystem: "dev.gistpad.GistPad", category: "Opening")
+          .error("The opening progress delay failed: \(error.localizedDescription, privacy: .public)")
+      }
+    }
   }
 }
 

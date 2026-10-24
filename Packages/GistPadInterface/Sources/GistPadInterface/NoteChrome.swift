@@ -73,6 +73,13 @@ public struct NoteChrome: Equatable, Sendable {
     public var tags: [LibraryTag]
     public var isAutoSaveEnabled: Bool
 
+    var headerFilename: String? {
+        guard files.count > 1,
+              let filename = files.first(where: { $0.id == selectedFileID })?.filename,
+              filename.caseInsensitiveCompare("README.md") != .orderedSame else { return nil }
+        return filename
+    }
+
     public init(
         title: String, files: [NoteFile], selectedFileID: String,
         access: NoteAccess = .editable, isPinned: Bool = false,
