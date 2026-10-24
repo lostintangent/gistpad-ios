@@ -16,7 +16,7 @@ async (page) => {
     const currentStyle = getComputedStyle(current);
     const previousStyle = getComputedStyle(previous);
     const cells = [...document.querySelectorAll("td, th")];
-    const summary = document.querySelector("summary");
+    const summary = document.querySelector("details:not(.markdown-toc) summary");
     const summaryStyle = getComputedStyle(summary);
     const chevron = getComputedStyle(summary, "::before");
     return {
@@ -52,6 +52,16 @@ async (page) => {
       headingFamilies: ["h1", "h2"].every((selector) =>
         getComputedStyle(document.querySelector(selector)).fontFamily.startsWith("ui-serif")) &&
         getComputedStyle(document.querySelector("h3")).fontFamily.includes("-apple-system"),
+      compactContents: !document.querySelector("details.markdown-toc").open &&
+        document.querySelector(".markdown-toc").getBoundingClientRect().height >= 44 &&
+        document.querySelector(".markdown-toc").getBoundingClientRect().height <= 54 &&
+        getComputedStyle(document.querySelector(".markdown-toc > summary")).fontFamily.includes("-apple-system"),
+      authoredOpenState: document.querySelectorAll("details:not(.markdown-toc)")[1].open,
+      pageRhythm: getComputedStyle(document.querySelector("main")).padding === "24px 20px 40px" &&
+        Math.abs(parseFloat(getComputedStyle(document.querySelector("h1")).marginBottom) - 16) < .1 &&
+        Math.abs(parseFloat(getComputedStyle(document.querySelector("h2")).marginTop) - 28) < .1 &&
+        Math.abs(parseFloat(getComputedStyle(document.querySelector("h2")).marginBottom) - 10) < .1 &&
+        Math.abs(parseFloat(getComputedStyle(document.querySelector("h3")).marginTop) - 24) < .1,
     };
   });
   for (const [name, passed] of Object.entries(initial)) {
@@ -65,12 +75,20 @@ async (page) => {
     return scrolled;
   });
   if (!scrolledLocally) throw new Error("Wide table does not scroll independently of the page");
-  const summary = page.locator("summary");
+  const summary = page.locator("details:not(.markdown-toc) summary").first();
   await summary.focus();
   await page.keyboard.press("Enter");
-  if (!await page.locator("details").evaluate((node) => node.open)) throw new Error("Keyboard did not open the real disclosure");
+  if (!await page.locator("details:not(.markdown-toc)").first().evaluate((node) => node.open)) throw new Error("Keyboard did not open the real disclosure");
   await page.keyboard.press("Space");
-  if (await page.locator("details").evaluate((node) => node.open)) throw new Error("Keyboard did not close the real disclosure");
+  if (await page.locator("details:not(.markdown-toc)").first().evaluate((node) => node.open)) throw new Error("Keyboard did not close the real disclosure");
+  const contents = page.locator("details.markdown-toc");
+  await contents.locator("summary").focus();
+  await page.keyboard.press("Enter");
+  if (!await contents.evaluate((node) => node.open)) throw new Error("Keyboard did not open Contents");
+  await page.evaluate((markdown) =>
+    window.gistpadPreview.render({ version: 1, documentID: "reading-polish", generation: "2", markdown }), markdown);
+  await page.waitForFunction(() => document.querySelector("details.markdown-toc").open);
+  await contents.locator("summary").click();
 
   for (const dark of [false, true]) {
     for (const increasedContrast of [false, true]) {

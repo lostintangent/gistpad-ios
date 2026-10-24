@@ -51,6 +51,13 @@ This is a real disclosure. Its text remains selectable, and the keyboard and Voi
 
 </details>
 
+<details open>
+<summary>Already open</summary>
+
+This authored disclosure starts open and must stay that way.
+
+</details>
+
 ## Meaning without color
 
 > [!NOTE]

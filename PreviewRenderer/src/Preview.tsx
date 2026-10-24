@@ -103,6 +103,10 @@ export function identity(request: RenderRequest) {
 
 export function Preview({ request }: { request: RenderRequest }) {
   const taskPlugins = useMemo(() => taskRangePlugins(request.markdown), [request]);
+  const contents = useRef({ documentID: request.documentID, open: false });
+  if (contents.current.documentID !== request.documentID) {
+    contents.current = { documentID: request.documentID, open: false };
+  }
   const components = useMemo<Components>(() => {
     const link = (kind: "external" | "wikilink" | "anchor", target: string) => {
       if (kind === "anchor") {
@@ -116,7 +120,11 @@ export function Preview({ request }: { request: RenderRequest }) {
     return {
       div({ children, className, node: _, ...props }) {
         return className?.split(" ").includes("markdown-toc")
-          ? <nav className="markdown-toc" aria-label="Contents"><h2 className="contents-title">Contents</h2>{children}</nav>
+          ? <details className="markdown-toc" open={contents.current.open}
+            onToggle={(event) => { contents.current.open = event.currentTarget.open; }}>
+            <summary>Contents</summary>
+            <nav aria-label="Contents">{children}</nav>
+          </details>
           : <div {...props} className={className}>{children}</div>;
       },
       li({ style, node: _, ...props }) {

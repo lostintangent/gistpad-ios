@@ -261,7 +261,11 @@ struct PreviewWebKitTests {
         let readingPresentation = try await webView.callAsyncJavaScript(
             """
             const outline = document.querySelector('nav[aria-label="Contents"]');
-            return outline !== null &&
+            const disclosure = outline.closest('details');
+            const initiallyCollapsed = !disclosure.open;
+            disclosure.querySelector('summary').click();
+            return initiallyCollapsed && disclosure.open &&
+                getComputedStyle(disclosure.querySelector('summary')).fontFamily.includes('-apple-system') &&
                 [...outline.querySelectorAll('a')].every(anchor =>
                     anchor.getBoundingClientRect().height >= 44 &&
                     getComputedStyle(anchor).textDecorationLine === 'none') &&
@@ -489,7 +493,7 @@ struct PreviewWebKitTests {
                         const current = getComputedStyle(document.querySelector('.calculation-current'));
                         const previous = getComputedStyle(document.querySelector('.calculation-previous'));
                         const authored = getComputedStyle(document.querySelectorAll('.diagram-scroll')[1].querySelector('.attention rect'));
-                        const summary = document.querySelector('summary');
+                        const summary = document.querySelector('details:not(.markdown-toc) summary');
                         const summaryStyle = getComputedStyle(summary);
                         const parse = color => color.match(/[\\d.]+/g).slice(0, 3).map(Number);
                         const luminance = rgb => rgb.map(value => {
@@ -556,13 +560,14 @@ struct PreviewWebKitTests {
         }
         let disclosureWorks = try await webView.callAsyncJavaScript(
             """
-            const details = document.querySelector('details');
+            const details = document.querySelector('details:not(.markdown-toc)');
             const summary = details.querySelector('summary');
             summary.focus();
             summary.click();
             const expanded = details.open && document.activeElement === summary;
             summary.click();
-            return expanded && !details.open;
+            return expanded && !details.open && document.querySelectorAll('details:not(.markdown-toc)')[1].open &&
+                !document.querySelector('details.markdown-toc').open;
             """,
             arguments: [:], in: nil, contentWorld: .page
         ) as? Bool

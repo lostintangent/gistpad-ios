@@ -63,6 +63,9 @@ async (page) => {
   await page.getByRole("link", { name: "the link", exact: true }).click();
   await page.getByRole("button", { name: "Reveal spoiler", exact: true }).click();
   await page.evaluate(() => window.gistpadPreview.setViewportInsets({ top: 64, bottom: 82 }));
+  const contents = page.locator("details.markdown-toc");
+  if (await contents.evaluate((node) => node.open)) throw new Error("Contents must start collapsed");
+  await contents.locator("summary").click();
   await page.getByRole("navigation", { name: "Contents", exact: true }).getByRole("link", { name: "Connections", exact: true }).click();
   await page.route(`${base}/Web/csp-probe.js`, (route) => route.fulfill({
     contentType: "application/javascript",
