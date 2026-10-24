@@ -62,6 +62,7 @@ async (page) => {
   await page.getByRole("button", { name: "Ideas", exact: true }).click();
   await page.getByRole("link", { name: "the link", exact: true }).click();
   await page.getByRole("button", { name: "Reveal spoiler", exact: true }).click();
+  await page.evaluate(() => window.gistpadPreview.setViewportInsets({ top: 64, bottom: 82 }));
   await page.getByRole("navigation", { name: "Contents", exact: true }).getByRole("link", { name: "Connections", exact: true }).click();
   await page.route(`${base}/Web/csp-probe.js`, (route) => route.fulfill({
     contentType: "application/javascript",
@@ -82,6 +83,9 @@ async (page) => {
         getComputedStyle(anchor).textDecorationLine === "none" &&
         getComputedStyle(anchor).color === getComputedStyle(document.querySelector("article")).color),
       anchor: window.previewMessages.some((message) => message.type === "link" && message.kind === "anchor" && message.target === "connections"),
+      insetAnchor: document.activeElement === document.getElementById("connections") &&
+        Math.abs(document.getElementById("connections").getBoundingClientRect().top - 80) <= 1 &&
+        getComputedStyle(document.documentElement).scrollPaddingBottom === "82px",
       alertSymbols: document.querySelectorAll(".markdown-alert-title > svg.alert-symbol[aria-hidden=true]").length === 5,
       footnotes: document.querySelectorAll("[data-footnote-ref]").length === 1,
       taskTarget: document.querySelector(".task-toggle").getBoundingClientRect().height >= 44,

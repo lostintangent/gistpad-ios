@@ -4,6 +4,7 @@ import { Preview, PreviewErrorBoundary, send } from "./Preview";
 import { isRenderRequest } from "./protocol";
 import { setAppearance } from "./appearance";
 import { setTaskEditingEnabled } from "./taskEditing";
+import { setViewportInsets } from "./viewport";
 import "../../../gistpad.dev/src/features/markdown/index.css";
 import "./style.css";
 
@@ -12,6 +13,7 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false 
 window.gistpadPreview = Object.freeze({
   setAppearance,
   setTaskEditingEnabled,
+  setViewportInsets,
   render(request: unknown) {
     if (!isRenderRequest(request)) throw new TypeError("Invalid preview render request");
     root.render(

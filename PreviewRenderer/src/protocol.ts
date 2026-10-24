@@ -48,6 +48,7 @@ declare global {
       render: (request: unknown) => void;
       setAppearance: (appearance: unknown) => void;
       setTaskEditingEnabled: (enabled: unknown) => void;
+      setViewportInsets: (insets: unknown) => void;
     };
     webkit?: {
       messageHandlers?: { gistpadPreview?: { postMessage: (message: PreviewMessage) => void } };

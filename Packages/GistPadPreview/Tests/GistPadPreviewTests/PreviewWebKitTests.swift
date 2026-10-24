@@ -20,7 +20,7 @@ struct PreviewWebKitTests {
             document: document, documentID: "read-only", generation: 0,
             allowsTaskEdits: false
         ) { events.append($0) }
-        let controller = UIHostingController(rootView: preview.ignoresSafeArea(.container, edges: .vertical))
+        let controller = UIHostingController(rootView: preview)
         let container = UIViewController()
         container.title = "Reading"
         container.toolbarItems = [UIBarButtonItem(systemItem: .action)]
@@ -68,18 +68,18 @@ struct PreviewWebKitTests {
         #expect(webView.scrollView.backgroundColor?.cgColor.alpha == 0)
         #expect(webView.underPageBackgroundColor.cgColor.alpha == 0)
         let webFrame = webView.convert(webView.bounds, to: window)
-        let topBarFrame = navigation.navigationBar.convert(navigation.navigationBar.bounds, to: window)
-        let bottomBarFrame = navigation.toolbar.convert(navigation.toolbar.bounds, to: window)
-        #expect(topBarFrame.height > 0)
-        #expect(bottomBarFrame.height > 0)
-        #expect(webFrame.minY < topBarFrame.maxY)
-        #expect(webFrame.maxY > bottomBarFrame.minY)
-        #expect(webFrame.minY + webView.scrollView.adjustedContentInset.top >= topBarFrame.maxY - 1)
-        #expect(webFrame.maxY - webView.scrollView.adjustedContentInset.bottom <= bottomBarFrame.minY + 1)
+        let safeFrame = container.view.convert(container.view.safeAreaLayoutGuide.layoutFrame, to: window)
+        #expect(webFrame.minY < safeFrame.minY)
+        #expect(webFrame.maxY > safeFrame.maxY)
+        #expect(safeFrame.height > 0)
+        #expect(webFrame.minY + webView.scrollView.adjustedContentInset.top >= safeFrame.minY - 1)
+        #expect(webFrame.maxY - webView.scrollView.adjustedContentInset.bottom <= safeFrame.maxY + 1)
         let resting = try await viewportGeometry(in: webView, selector: "h1")
         Attachment.record(String(describing: resting), named: "native-preview-resting-geometry.txt")
         #expect(abs(webView.scrollView.contentOffset.y + webView.scrollView.adjustedContentInset.top) <= 1)
-        #expect(try #require(resting["elementTop"]) >= webView.scrollView.adjustedContentInset.top + 23)
+        #expect(try #require(resting["nativeElementTop"]) >= webView.scrollView.adjustedContentInset.top + 23)
+        #expect(resting["scrollPaddingTop"] == Double(webView.scrollView.adjustedContentInset.top))
+        #expect(resting["scrollPaddingBottom"] == Double(webView.scrollView.adjustedContentInset.bottom))
         _ = try await webView.callAsyncJavaScript(
             "document.querySelector('a[href=\"#destination\"]').click();",
             arguments: [:], in: nil, contentWorld: .page
@@ -88,7 +88,7 @@ struct PreviewWebKitTests {
         Attachment.record(String(describing: anchor), named: "native-preview-anchor-geometry.txt")
         #expect(anchor["focused"] == 1)
         #expect(try #require(anchor["scrollY"]) > 0)
-        let anchorTop = try #require(anchor["elementTop"])
+        let anchorTop = try #require(anchor["nativeElementTop"])
         let visibleTop = webView.scrollView.adjustedContentInset.top
         #expect(anchorTop >= visibleTop + 15 && anchorTop <= visibleTop + 17)
         let readOnly = try await webView.callAsyncJavaScript(
@@ -96,29 +96,29 @@ struct PreviewWebKitTests {
             const input = document.querySelector('input[type=checkbox]');
             const disabled = input.disabled && input.getAttribute('aria-label') === 'Read-only task: Read-only task';
             input.scrollIntoView({block: 'center'});
-            const rect = input.getBoundingClientRect();
             input.click();
-            return disabled && rect.top >= visibleTop && rect.bottom <= visibleBottom;
+            return disabled;
             """,
-            arguments: [
-                "visibleTop": webView.scrollView.adjustedContentInset.top,
-                "visibleBottom": webView.bounds.height - webView.scrollView.adjustedContentInset.bottom
-            ],
-            in: nil, contentWorld: .page
+            arguments: [:], in: nil, contentWorld: .page
         ) as? Bool
         #expect(readOnly == true)
+        let task = try await viewportGeometry(in: webView, selector: "input[type=checkbox]")
+        Attachment.record(String(describing: task), named: "native-preview-task-geometry.txt")
+        #expect(try #require(task["nativeElementTop"]) >= visibleTop)
+        #expect(try #require(task["nativeElementBottom"]) <= webView.bounds.height - webView.scrollView.adjustedContentInset.bottom)
         let readingOffset = webView.scrollView.contentOffset
         controller.rootView = MarkdownPreviewView(
             document: document + "\n", documentID: "read-only", generation: 1,
             allowsTaskEdits: false
         ) { events.append($0) }
-            .ignoresSafeArea(.container, edges: .vertical)
         try await waitFor("same-document update") {
             events.contains {
                 if case .rendered(documentID: "read-only", generation: 1) = $0 { return true }
                 return false
             }
         }
+        let updated = try await viewportGeometry(in: webView, selector: "input[type=checkbox]")
+        Attachment.record(String(describing: updated), named: "native-preview-updated-geometry.txt")
         #expect(findWebView(in: controller.view) === webView)
         #expect(abs(webView.scrollView.contentOffset.y - readingOffset.y) <= 1)
         try await Task.sleep(for: .milliseconds(100))
@@ -136,11 +136,14 @@ struct PreviewWebKitTests {
             await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
             const element = document.querySelector(selector);
             const rect = element.getBoundingClientRect();
+            const styles = getComputedStyle(document.documentElement);
             return {
                 elementTop: rect.top, elementBottom: rect.bottom,
                 focused: document.activeElement === element ? 1 : 0,
                 scrollY: window.scrollY, innerHeight: window.innerHeight,
-                visualTop: window.visualViewport.offsetTop, visualHeight: window.visualViewport.height
+                visualTop: window.visualViewport.offsetTop, visualHeight: window.visualViewport.height,
+                scrollPaddingTop: parseFloat(styles.scrollPaddingTop),
+                scrollPaddingBottom: parseFloat(styles.scrollPaddingBottom)
             };
             """,
             arguments: ["selector": selector], in: nil, contentWorld: .page
@@ -150,6 +153,11 @@ struct PreviewWebKitTests {
         geometry["nativeTopInset"] = webView.scrollView.adjustedContentInset.top
         geometry["nativeBottomInset"] = webView.scrollView.adjustedContentInset.bottom
         geometry["nativeHeight"] = webView.bounds.height
+        let scrollY = try #require(geometry["scrollY"])
+        let elementTop = try #require(geometry["elementTop"])
+        let elementBottom = try #require(geometry["elementBottom"])
+        geometry["nativeElementTop"] = elementTop + scrollY - webView.scrollView.contentOffset.y
+        geometry["nativeElementBottom"] = elementBottom + scrollY - webView.scrollView.contentOffset.y
         return geometry
     }
 
