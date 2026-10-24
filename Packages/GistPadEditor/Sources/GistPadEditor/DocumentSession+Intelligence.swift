@@ -18,19 +18,13 @@
           && !protected.contains {
             NSIntersectionRange($0.range, span.range).length > 0
           }
-      }.sorted { $0.range.location < $1.range.location }.enumerated().map { index, span in
-        let source = text as NSString
-        let line = source.lineRange(for: span.range)
-        return NoteTask(
-          id: index + 1, range: span.range,
-          text: source.substring(with: line).trimmingCharacters(in: .newlines),
-          isComplete: span.kind == .checkedTask)
-      }
+      }.map(\.range)
+      let headings = spans.filter { $0.kind == .heading }.map(\.range)
       return NoteSnapshot(
         documentID: documentID, sessionID: viewIdentity, generation: generation, source: text,
         headingOffsets: spans.filter { $0.kind == .heading }.map {
           $0.range.location
-        }, tasks: tasks)
+        }, tasks: NoteTask.indexed(in: text, markers: tasks, headings: headings))
     }
 
     @discardableResult

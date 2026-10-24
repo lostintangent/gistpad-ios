@@ -76,6 +76,57 @@ public final class NoteIntelligenceEngine {
                   task.range
                 ))
             }
+          case .deleteTasks(let ids):
+            guard !ids.isEmpty, Set(ids).count == ids.count,
+              ids.allSatisfy({ id in input.tasks.contains { $0.id == id } })
+            else { throw NoteIntelligenceError.invalidEdit }
+            for task in input.tasks where ids.contains(task.id) {
+              let line = (request.snapshot.source as NSString).lineRange(for: task.range)
+              let text = (request.snapshot.source as NSString).substring(with: line)
+              candidates.append(
+                (
+                  NoteReplacementCandidate(
+                    quote: text, replacement: "",
+                    reason: String(localized: "Remove this task.", bundle: .module)), line
+                ))
+            }
+          case .insertTask(let listID, let text):
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !text.contains(where: \.isNewline)
+            else { throw NoteIntelligenceError.invalidEdit }
+            let source = request.snapshot.source as NSString
+            let last = input.tasks.last { $0.listID == listID }
+            guard last != nil || (listID == 0 && request.snapshot.tasks.isEmpty) else {
+              throw NoteIntelligenceError.invalidEdit
+            }
+            let newline = request.snapshot.source.contains("\r\n") ? "\r\n" : "\n"
+            let offset: Int
+            let insertion: String
+            if let last {
+              let line = source.lineRange(for: last.range)
+              offset = NSMaxRange(line)
+              let prefix = source.substring(
+                with: NSRange(
+                  location: line.location, length: last.range.location - line.location))
+              let lineText = source.substring(with: line)
+              let ending = lineText.last.flatMap { $0.isNewline ? String($0) : nil }
+              let taskNewline = ending ?? newline
+              insertion =
+                (ending == nil ? taskNewline : "") + prefix + "[ ] " + text
+                + (ending == nil ? "" : taskNewline)
+            } else {
+              offset = source.length
+              insertion =
+                (source.length == 0 || request.snapshot.source.last?.isNewline == true
+                  ? "" : newline) + "- [ ] " + text + newline
+            }
+            candidates.append(
+              (
+                NoteReplacementCandidate(
+                  inserting: insertion,
+                  reason: String(localized: "Add this task.", bundle: .module)),
+                NSRange(location: offset, length: 0)
+              ))
           }
         }
         completed += 1
@@ -179,21 +230,40 @@ public final class NoteIntelligenceEngine {
     for _ in 0..<8 {
       let source = evidence.joined(separator: "\n\n")
       let answer = pass(
-        request, purpose: .answer, source: source, model: model, evidenceOnly: true)
+        request, purpose: .answer, source: source, model: model, evidenceOnly: true,
+        evidenceBlocks: evidence)
       if try await fits(answer, model: model) { return answer }
-      let snapshot = NoteSnapshot(
-        documentID: request.snapshot.documentID, sessionID: request.snapshot.sessionID,
-        generation: request.snapshot.generation, source: source)
-      let extraction = NoteIntelligenceRequest(
-        snapshot: snapshot, action: .ask, instruction: request.instruction, id: request.id)
-      let batches = try await chunks(for: extraction, purpose: .extract, model: model)
+      var batches: [[String]] = []
+      var batch: [String] = []
+      for excerpt in evidence {
+        let proposed = batch + [excerpt]
+        let probe = pass(
+          request, purpose: .extract, source: proposed.joined(separator: "\n\n"), model: model,
+          evidenceBlocks: proposed)
+        if try await fits(probe, model: model) {
+          batch = proposed
+        } else {
+          if !batch.isEmpty { batches.append(batch) }
+          batch = []
+          let snapshot = NoteSnapshot(
+            documentID: request.snapshot.documentID, sessionID: request.snapshot.sessionID,
+            generation: request.snapshot.generation, source: excerpt)
+          let extraction = NoteIntelligenceRequest(
+            snapshot: snapshot, action: .ask, instruction: request.instruction, id: request.id)
+          let parts = try await chunks(for: extraction, purpose: .extract, model: model)
+          batches.append(contentsOf: parts.map { [$0.source] })
+        }
+      }
+      if !batch.isEmpty { batches.append(batch) }
       var reduced: [String] = []
       for (index, batch) in batches.enumerated() {
         try Task.checkCancellation()
         progress(
           NoteIntelligenceProgress(phase: .combining, current: index + 1, total: batches.count))
         let excerpts = try await backend.excerpts(
-          for: pass(request, purpose: .extract, source: batch.source, model: model))
+          for: pass(
+            request, purpose: .extract, source: batch.joined(separator: "\n\n"), model: model,
+            evidenceBlocks: batch))
         for excerpt in excerpts {
           guard evidence.contains(where: { !NoteAnchors.matches(excerpt, in: $0).isEmpty }) else {
             throw NoteIntelligenceError.unverifiedQuotation
@@ -299,7 +369,8 @@ public final class NoteIntelligenceEngine {
 
   private func pass(
     _ request: NoteIntelligenceRequest, purpose: NoteModelPass.Purpose,
-    source: String, model: NoteModelInfo, evidenceOnly: Bool = false, scope: NSRange? = nil
+    source: String, model: NoteModelInfo, evidenceOnly: Bool = false, scope: NSRange? = nil,
+    evidenceBlocks: [String]? = nil
   ) -> NoteModelPass {
     NoteModelPass(
       purpose: purpose, instruction: request.instruction, source: source,
@@ -310,7 +381,7 @@ public final class NoteIntelligenceEngine {
           guard let scope else { return true }
           return task.range.location >= scope.location
             && NSMaxRange(task.range) <= NSMaxRange(scope)
-        } : [])
+        } : [], evidenceBlocks: evidenceBlocks)
   }
 
   private func validate(_ request: NoteIntelligenceRequest) throws {

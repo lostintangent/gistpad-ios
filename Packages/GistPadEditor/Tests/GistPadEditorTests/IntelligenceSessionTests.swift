@@ -9,6 +9,45 @@
   @Suite(.serialized)
   @MainActor
   struct IntelligenceSessionTests {
+    @Test func insertedAndDeletedTasksUseTheRetainedSourceAndOneNativeUndo() async throws {
+      let source =
+        "---\ntag: daily\n---\n## Morning\n\n- [ ] Read\n\n"
+        + "## Housework\n\n- [ ] Wash dishes\n- [ ] Recycle\n"
+      let session = DocumentSession(documentID: "task-add-delete-undo", text: source)
+      let window = host(session)
+      defer { window.isHidden = true }
+      let undo = try #require(session.textView.undoManager)
+      undo.removeAllActions()
+      var changes = 0
+      session.onSourceChange = { _, _ in changes += 1 }
+      let backend = TaskOperationModel()
+      backend.operations = [.insertTask(listID: 2, text: "Clean the kitchen")]
+      let request = NoteIntelligenceRequest(
+        snapshot: try session.intelligenceSnapshot(), action: .edit,
+        instruction: "add an item to clean the kitchen")
+      let proposal = try await NoteIntelligenceEngine(backend: backend).propose(request)
+      #expect(session.text.utf8.elementsEqual(source.utf8))
+      #expect(changes == 0)
+      try session.applyIntelligenceProposal(proposal)
+      #expect(session.text == source + "- [ ] Clean the kitchen\n")
+      #expect(changes == 1)
+      undo.undo()
+      session.textViewDidChange(session.textView)
+      #expect(session.text.utf8.elementsEqual(source.utf8))
+      #expect(!undo.canUndo)
+      backend.operations = [.deleteTasks(ids: [3])]
+      let deletion = try await NoteIntelligenceEngine(backend: backend).propose(
+        NoteIntelligenceRequest(
+          snapshot: try session.intelligenceSnapshot(), action: .edit, instruction: "delete Recycle"
+        ))
+      try session.applyIntelligenceProposal(deletion)
+      #expect(session.text == source.replacingOccurrences(of: "- [ ] Recycle\n", with: ""))
+      undo.undo()
+      session.textViewDidChange(session.textView)
+      #expect(session.text.utf8.elementsEqual(source.utf8))
+      #expect(!undo.canUndo)
+    }
+
     @Test func structuredTaskCompletionPreservesProtectedMarkdownAndHasOneNativeUndo() async throws
     {
       let source =
@@ -227,12 +266,13 @@
 
   @MainActor
   private final class TaskOperationModel: NoteModelBackend {
+    var operations: [NoteEditOperation] = [.setTaskStates(ids: nil, isComplete: true)]
     func modelInfo() async throws -> NoteModelInfo {
       NoteModelInfo(variant: "Test", contextSize: 16_384)
     }
     func tokenCount(for pass: NoteModelPass) async throws -> Int { pass.source.utf16.count + 100 }
     func editOperations(for pass: NoteModelPass) async throws -> [NoteEditOperation] {
-      [.setTaskStates(ids: nil, isComplete: true)]
+      operations
     }
     func replacements(for pass: NoteModelPass) async throws -> [NoteReplacementCandidate] { [] }
     func excerpts(for pass: NoteModelPass) async throws -> [String] { [] }

@@ -53,6 +53,7 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
   case insufficientContext
   case invalidResponse
   case emptyAnswer
+  case invalidEdit
   case unsafeEdit
   case responseTooLarge
   case unverifiedQuotation
@@ -74,9 +75,20 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
         localized:
           "This request needs more context than the on-device model can safely combine. Your note is unchanged.",
         bundle: .module)
-    case .invalidResponse, .responseTooLarge:
+    case .invalidResponse:
       String(
-        localized: "Apple Intelligence returned an incomplete response. Your note is unchanged.",
+        localized:
+          "Apple Intelligence returned a response the app couldn't read. Your note is unchanged.",
+        bundle: .module)
+    case .responseTooLarge:
+      String(
+        localized:
+          "Apple Intelligence reached the response limit before finishing. Your note is unchanged.",
+        bundle: .module)
+    case .invalidEdit:
+      String(
+        localized:
+          "Apple Intelligence proposed a change that couldn't be safely located in your note. Nothing was changed. Try again.",
         bundle: .module)
     case .emptyAnswer:
       String(
@@ -122,6 +134,7 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
     case .insufficientContext: "insufficientContext"
     case .invalidResponse: "invalidResponse"
     case .emptyAnswer: "emptyAnswer"
+    case .invalidEdit: "invalidEdit"
     case .unsafeEdit: "unsafeEdit"
     case .responseTooLarge: "responseTooLarge"
     case .unverifiedQuotation: "unverifiedQuotation"
@@ -155,10 +168,12 @@ public struct NoteModelPass: Sendable {
   public let evidenceOnly: Bool
   public let requestID: UUID
   public let tasks: [NoteTask]
+  public let evidenceBlocks: [String]?
 
   public init(
     purpose: Purpose, instruction: String, source: String, responseTokens: Int,
-    evidenceOnly: Bool = false, requestID: UUID = UUID(), tasks: [NoteTask] = []
+    evidenceOnly: Bool = false, requestID: UUID = UUID(), tasks: [NoteTask] = [],
+    evidenceBlocks: [String]? = nil
   ) {
     self.purpose = purpose
     self.instruction = instruction
@@ -167,6 +182,7 @@ public struct NoteModelPass: Sendable {
     self.evidenceOnly = evidenceOnly
     self.requestID = requestID
     self.tasks = tasks
+    self.evidenceBlocks = evidenceBlocks
   }
 }
 
@@ -175,18 +191,46 @@ public struct NoteTask: Sendable {
   public let range: NSRange
   public let text: String
   public let isComplete: Bool
+  public let listID: Int
+  public let listTitle: String
 
-  public init(id: Int, range: NSRange, text: String, isComplete: Bool) {
+  public init(
+    id: Int, range: NSRange, text: String, isComplete: Bool,
+    listID: Int = 1, listTitle: String = ""
+  ) {
     self.id = id
     self.range = range
     self.text = text
     self.isComplete = isComplete
+    self.listID = listID
+    self.listTitle = listTitle
+  }
+
+  public static func indexed(
+    in source: String, markers: [NSRange], headings: [NSRange]
+  ) -> [NoteTask] {
+    let text = source as NSString
+    var previousEnd: Int?
+    var listID = 0
+    return markers.sorted { $0.location < $1.location }.enumerated().map { index, marker in
+      let line = text.lineRange(for: marker)
+      if previousEnd != line.location { listID += 1 }
+      previousEnd = NSMaxRange(line)
+      let heading = headings.last { NSMaxRange($0) <= line.location }
+      return NoteTask(
+        id: index + 1, range: marker,
+        text: text.substring(with: line).trimmingCharacters(in: .newlines),
+        isComplete: text.substring(with: marker) != "[ ]",
+        listID: listID, listTitle: heading.map { text.substring(with: $0) } ?? "")
+    }
   }
 }
 
 public enum NoteEditOperation: Sendable {
   case replace(NoteReplacementCandidate)
   case setTaskStates(ids: [Int]?, isComplete: Bool)
+  case insertTask(listID: Int, text: String)
+  case deleteTasks(ids: [Int])
 }
 
 public struct ModelAnswerPart: Sendable, Equatable {

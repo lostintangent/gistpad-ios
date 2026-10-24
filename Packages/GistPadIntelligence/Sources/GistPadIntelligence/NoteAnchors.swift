@@ -6,6 +6,7 @@ public struct NoteReplacementCandidate: Sendable {
   public let reason: String
   public let before: String
   public let after: String
+  let isInsertion: Bool
 
   public init(
     quote: String, replacement: String?, reason: String, before: String = "", after: String = ""
@@ -15,6 +16,16 @@ public struct NoteReplacementCandidate: Sendable {
     self.reason = reason
     self.before = before
     self.after = after
+    self.isInsertion = false
+  }
+
+  init(inserting text: String, reason: String) {
+    quote = ""
+    replacement = text
+    self.reason = reason
+    before = ""
+    after = ""
+    isInsertion = true
   }
 }
 
@@ -65,11 +76,14 @@ public struct NoteProposal: Sendable {
     self.snapshot = snapshot
     self.safetyInstruction = safetyInstruction
     var anchored = scopedCandidates.map { candidate, scope in
-      let matches = NoteAnchors.matches(
-        candidate.quote, in: snapshot.source, within: scope,
-        before: candidate.before, after: candidate.after, allowEmptyNote: true)
+      let matches =
+        candidate.isInsertion && scope.length == 0 && Range(scope, in: snapshot.source) != nil
+        ? [scope]
+        : NoteAnchors.matches(
+          candidate.quote, in: snapshot.source, within: scope,
+          before: candidate.before, after: candidate.after, allowEmptyNote: true)
       let rejection: NoteAnchorRejection?
-      if (candidate.quote.isEmpty && !snapshot.source.isEmpty)
+      if (candidate.quote.isEmpty && !snapshot.source.isEmpty && !candidate.isInsertion)
         || Range(scope, in: snapshot.source) == nil
       {
         rejection = .invalidRange
@@ -92,6 +106,10 @@ public struct NoteProposal: Sendable {
         guard let right = anchored[second].range,
           NSIntersectionRange(left, right).length > 0
             || (left.length == 0 && right.length == 0 && left.location == right.location)
+            || (left.length == 0 && right.location <= left.location
+              && left.location <= NSMaxRange(right))
+            || (right.length == 0 && left.location <= right.location
+              && right.location <= NSMaxRange(left))
         else { continue }
         overlapping.insert(first)
         overlapping.insert(second)

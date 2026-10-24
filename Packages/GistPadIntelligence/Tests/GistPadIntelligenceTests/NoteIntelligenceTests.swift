@@ -209,6 +209,7 @@ struct NoteEngineTests {
     #expect(backend.answerPasses.count == 1)
     #expect(backend.answerPasses[0].source == "needle")
     #expect(backend.answerPasses[0].evidenceOnly)
+    #expect(backend.answerPasses[0].evidenceBlocks == ["needle"])
     #expect(answer.parts.count == 1)
   }
 

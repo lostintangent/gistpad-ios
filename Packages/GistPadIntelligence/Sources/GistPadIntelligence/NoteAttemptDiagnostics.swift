@@ -20,6 +20,7 @@ final class NoteAttemptDiagnostics {
     var modelVariant: String?
     var contextSize: Int?
     var passes: [Pass] = []
+    var generationSchemas: [String] = []
     var responseLength = 0
     var errorType: String?
     var modelError: String?
@@ -33,8 +34,8 @@ final class NoteAttemptDiagnostics {
   init(id: UUID, action: NoteIntelligenceAction, directory: URL? = nil) {
     let schema =
       switch action {
-      case .ask: "answer-v2"
-      case .edit: "edit-operations-v1"
+      case .ask: "answer-blocks-v3"
+      case .edit: "edit-operations-v2"
       case .review: "review-replacements-v1"
       }
     record = Record(id: id, action: action.rawValue, requestedSchema: schema, startedAt: Date())
@@ -64,6 +65,11 @@ final class NoteAttemptDiagnostics {
     record.responseLength = length
     record.errorType = nil
     record.modelError = nil
+  }
+
+  func generating(schema: String) {
+    record.generationSchemas.append(schema)
+    persist()
   }
 
   func failed(_ error: any Error, modelError: String? = nil) {

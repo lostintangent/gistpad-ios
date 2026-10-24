@@ -5,6 +5,74 @@ import Testing
 
 @MainActor
 struct NoteOutcomeTests {
+  @Test func insertedAndDeletedTaskLinesPreserveAllOtherBytesAndCorrectLists() async throws {
+    let source =
+      "---\r\ntag: daily\r\n---\r\n# Morning\r\n\r\n- [ ] Read café\r\n"
+      + "\r\n# Housework\r\n\r\n- [x] Wash 👩🏽‍💻\r\n- [ ] Recycle\r\n\r\nKeep  spacing.\r\n"
+    let markers = NoteAnchors.matches("[ ]", in: source) + NoteAnchors.matches("[x]", in: source)
+    let headings = [
+      ((source as NSString).range(of: "# Morning")),
+      ((source as NSString).range(of: "# Housework")),
+    ]
+    let tasks = NoteTask.indexed(in: source, markers: markers, headings: headings)
+    #expect(tasks.map(\.listID) == [1, 2, 2])
+    #expect(tasks.map(\.listTitle) == ["# Morning", "# Housework", "# Housework"])
+    let backend = OutcomeModel()
+    backend.operations = [.insertTask(listID: 2, text: "Clean the kitchen")]
+    let input = request(source, instruction: "Add a household task", tasks: tasks)
+    let proposal = try await NoteIntelligenceEngine(backend: backend).propose(input)
+    #expect(proposal.comments.count == 1)
+    #expect(proposal.comments.first?.quote.isEmpty == true)
+    #expect(
+      try proposal.application(to: input.snapshot).source.utf8.elementsEqual(
+        source.replacingOccurrences(
+          of: "- [ ] Recycle\r\n", with: "- [ ] Recycle\r\n- [ ] Clean the kitchen\r\n"
+        ).utf8))
+    backend.operations = [.deleteTasks(ids: [3])]
+    let deletion = try await NoteIntelligenceEngine(backend: backend).propose(input)
+    #expect(
+      try deletion.application(to: input.snapshot).source.utf8.elementsEqual(
+        source.replacingOccurrences(of: "- [ ] Recycle\r\n", with: "").utf8))
+  }
+
+  @Test func insertionAtANonNewlineEndingAndEmptyNoteStaysBytePreserving() async throws {
+    let backend = OutcomeModel()
+    backend.operations = [.insertTask(listID: 1, text: "Next")]
+    let source = "# Today\n\n- [ ] First"
+    let input = request(source, instruction: "Add Next", tasks: [task(1, "[ ]", in: source)])
+    let proposal = try await NoteIntelligenceEngine(backend: backend).propose(input)
+    #expect(try proposal.application(to: input.snapshot).source == source + "\n- [ ] Next")
+    backend.operations = [.insertTask(listID: 0, text: "First")]
+    let empty = request("", instruction: "Add First")
+    let first = try await NoteIntelligenceEngine(backend: backend).propose(empty)
+    #expect(try first.application(to: empty.snapshot).source == "- [ ] First\n")
+  }
+
+  @Test func taskInsertionRejectsUnknownListsAndMultilineModelText() async {
+    let backend = OutcomeModel()
+    let source = "- [ ] Keep"
+    let input = request(source, instruction: "Add Next", tasks: [task(1, "[ ]", in: source)])
+    for operation in [
+      NoteEditOperation.insertTask(listID: 99, text: "Next"),
+      .insertTask(listID: 1, text: "Next\n- [ ] Injected"), .deleteTasks(ids: [99]),
+    ] {
+      backend.operations = [operation]
+      await #expect(throws: NoteIntelligenceError.invalidEdit) {
+        try await NoteIntelligenceEngine(backend: backend).propose(input)
+      }
+    }
+  }
+
+  @Test(arguments: ["\n", "\r\n"])
+  func insertionUsesTheTaskListsLineEndingRatherThanFrontMatter(newline: String) async throws {
+    let backend = OutcomeModel()
+    backend.operations = [.insertTask(listID: 1, text: "Next")]
+    let source = "---\r\ntag: daily\r\n---\r\n# Today\n\n- [ ] First" + newline
+    let input = request(source, instruction: "Add Next", tasks: [task(1, "[ ]", in: source)])
+    let proposal = try await NoteIntelligenceEngine(backend: backend).propose(input)
+    #expect(try proposal.application(to: input.snapshot).source == source + "- [ ] Next" + newline)
+  }
+
   private let manga = """
     # Manga Reading List
 
@@ -191,7 +259,8 @@ struct NoteOutcomeTests {
       NoteModelPass(
         purpose: .answer, instruction: "PRIVATE REQUEST", source: "PRIVATE NOTE",
         responseTokens: 1_024, requestID: id),
-      tokens: 241, schema: "answer-v2")
+      tokens: 241, schema: "answer-blocks-v3")
+    diagnostics.generating(schema: "answer-blocks-v3")
     diagnostics.response(length: 173)
     diagnostics.failed(NoteIntelligenceError.emptyAnswer)
     diagnostics.finish(errorCode: "emptyAnswer")
@@ -204,7 +273,8 @@ struct NoteOutcomeTests {
     #expect(record.contextSize == 4_096)
     #expect(record.availability == "available")
     #expect(record.passes.first?.promptTokens == 241)
-    #expect(record.passes.first?.schema == "answer-v2")
+    #expect(record.passes.first?.schema == "answer-blocks-v3")
+    #expect(record.generationSchemas == ["answer-blocks-v3"])
     #expect(record.responseLength == 173)
     #expect(record.errorType?.contains("NoteIntelligenceError") == true)
     #expect(record.outcome == "emptyAnswer")
