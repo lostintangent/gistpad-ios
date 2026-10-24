@@ -55,11 +55,13 @@ public struct NoteChrome: Equatable, Sendable {
     public var isStarred: Bool
     public var isArchived: Bool
     public var tags: [LibraryTag]
+    public var isAutoSaveEnabled: Bool
 
     public init(
         title: String, files: [NoteFile], selectedFileID: String,
         access: NoteAccess = .editable, isPinned: Bool = false,
-        isStarred: Bool = false, isArchived: Bool = false, tags: [LibraryTag] = []
+        isStarred: Bool = false, isArchived: Bool = false, tags: [LibraryTag] = [],
+        isAutoSaveEnabled: Bool = false
     ) {
         self.title = title
         self.files = files
@@ -69,6 +71,7 @@ public struct NoteChrome: Equatable, Sendable {
         self.isStarred = isStarred
         self.isArchived = isArchived
         self.tags = tags
+        self.isAutoSaveEnabled = isAutoSaveEnabled
     }
 }
 
