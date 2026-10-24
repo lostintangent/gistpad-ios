@@ -11,15 +11,26 @@ public struct LibraryTaskProgress: Equatable, Sendable {
     }
 }
 
+public enum LibraryTodayAvailability: Equatable, Sendable {
+    case existing, missing, unknown
+}
+
 public struct LibraryTodaySummary: Equatable, Sendable {
     public var date: Date
     public var timeZone: TimeZone
     public var progress: LibraryTaskProgress?
+    public var availability: LibraryTodayAvailability
+    public var excerpt: String?
 
-    public init(date: Date, timeZone: TimeZone = .current, progress: LibraryTaskProgress? = nil) {
+    public init(
+        date: Date, timeZone: TimeZone = .current, progress: LibraryTaskProgress? = nil,
+        availability: LibraryTodayAvailability = .unknown, excerpt: String? = nil
+    ) {
         self.date = date
         self.timeZone = timeZone
         self.progress = progress
+        self.availability = availability
+        self.excerpt = excerpt
     }
 }
 

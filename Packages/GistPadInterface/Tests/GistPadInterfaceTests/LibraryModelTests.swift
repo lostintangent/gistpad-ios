@@ -96,10 +96,29 @@ struct LibraryModelTests {
         let zone = try #require(TimeZone(secondsFromGMT: 0))
         let summary = LibraryTodaySummary(date: InterfaceFixtures.referenceDate, timeZone: zone)
         #expect(summary.progress == nil)
+        #expect(summary.availability == .unknown)
+        #expect(summary.excerpt == nil)
         let model = LibraryModel(today: summary)
         model.query = "something else"
         #expect(model.today == summary)
         #expect(LibraryTaskProgress(completed: 0, total: 0).total == 0)
+    }
+
+    @Test func todayDistinguishesEmptyExistingNotesFromMissingOnes() {
+        let existing = LibraryTodaySummary(date: InterfaceFixtures.referenceDate, availability: .existing)
+        let missing = LibraryTodaySummary(date: InterfaceFixtures.referenceDate, availability: .missing)
+        #expect(existing.availability == .existing)
+        #expect(existing.excerpt == nil)
+        #expect(existing != missing)
+    }
+
+    @Test func todayCarriesOnlyTheSuppliedCachedExcerptAndProgress() {
+        let summary = LibraryTodaySummary(
+            date: InterfaceFixtures.referenceDate, progress: .init(completed: 1, total: 3),
+            availability: .existing, excerpt: "Keep the thought.\nLeave space for the next one."
+        )
+        #expect(summary.excerpt == "Keep the thought.\nLeave space for the next one.")
+        #expect(summary.progress == .init(completed: 1, total: 3))
     }
 
     @Test func tagNamesDoNotDependOnSetOrder() {
