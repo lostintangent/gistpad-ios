@@ -667,8 +667,8 @@ struct NotebookNavigationHostTests {
     #expect(entry.isEnabled)
     entry.performPrimaryAction()
     try await host.waitUntil {
-      host.descendants.compactMap { $0 as? UINavigationBar }
-        .contains { $0.topItem?.title == "Intelligence" }
+      notebookAccessibilityElement(
+        "capture-frame-note-intelligence-sheet", in: host.window) != nil
     }
     #expect(!editor.isFirstResponder)
     #expect(editor.selectedRange == selection)

@@ -160,6 +160,7 @@
       }
       .onDisappear { model.cancel() }
       .accessibilityIdentifier("note-intelligence-sheet")
+      .captureFrame("note-intelligence-sheet")
     }
 
     private var identification: some View {
@@ -429,6 +430,7 @@
           .accessibilityIdentifier("intelligence-apply")
         }
       }
+      .captureFrame("intelligence-results")
     }
 
     private func issue(_ message: String, symbol: String) -> some View {

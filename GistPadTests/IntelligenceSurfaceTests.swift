@@ -141,15 +141,16 @@
           return false
         }
         sheet.view.layoutIfNeeded()
-        return notebookAccessibilityElement("intelligence-apply", in: sheet.view) != nil
-          && notebookAccessibilityElement("intelligence-close", in: sheet.view) != nil
+        let result = notebookAccessibilityElement(
+          "capture-frame-intelligence-results", in: sheet.view) as? UIView
+        return result?.window === window && (result?.bounds.height ?? 0) > 0
+          && nativeCloseControl(in: sheet.view) != nil
       }
       let sheet = try #require(host.presentedViewController)
       try #require(sheet.presentingViewController != nil)
       #expect(!editor.isFirstResponder)
-      let close = try #require(
-        notebookAccessibilityElement("intelligence-close", in: sheet.view))
-      try #require(close.accessibilityActivate(), "Activate the real sheet's Close action.")
+      let close = try #require(nativeCloseControl(in: sheet.view))
+      close.performPrimaryAction()
       try await waitForNativeReturnState("Close to dismiss and resume the original editor") {
         host.view.layoutIfNeeded()
         return host.presentedViewController == nil && presentation.target == nil
@@ -189,6 +190,17 @@
 
     private enum NativeReturnFailure: Error {
       case timedOut
+    }
+
+    private func nativeCloseControl(in view: UIView) -> UIControl? {
+      if let control = view as? UIControl, control.window != nil, !control.isHidden,
+        control.isEnabled,
+        control.accessibilityIdentifier == "intelligence-close"
+          || control.accessibilityLabel == "Done"
+      {
+        return control
+      }
+      return view.subviews.lazy.compactMap { nativeCloseControl(in: $0) }.first
     }
   }
 
