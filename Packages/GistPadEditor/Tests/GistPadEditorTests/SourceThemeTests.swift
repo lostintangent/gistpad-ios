@@ -31,6 +31,7 @@
         for appearance in [UIUserInterfaceStyle.light, .dark] {
           for contrast in [UIAccessibilityContrast.normal, .high] {
             let session = DocumentSession(documentID: "theme", text: source)
+            session.setShowsFrontMatter(true)
             let view = session.textView
             view.traitOverrides.preferredContentSizeCategory = size
             view.traitOverrides.userInterfaceStyle = appearance
@@ -75,7 +76,7 @@
               ("code", UIColor(InterfaceTheme.text)),
               ("title", UIColor(InterfaceTheme.text)),
               ("- [ ]", UIColor(InterfaceTheme.text)),
-              ("[ ]", UIColor(InterfaceTheme.accent)),
+              ("[ ]", SourceSyntaxColor.orderedMarker),
               ("[x]", UIColor(InterfaceTheme.syntaxMuted)),
             ] {
               let actual = try #require(attributes(text)[.foregroundColor] as? UIColor)
@@ -186,7 +187,10 @@
         #expect(retained === taskColor)
         #expect(
           retained.resolvedColor(with: view.traitCollection)
-            .isEqual(UIColor(InterfaceTheme.accent).resolvedColor(with: view.traitCollection)))
+            .isEqual(SourceSyntaxColor.orderedMarker.resolvedColor(with: view.traitCollection)))
+        #expect(
+          view.tintColor.resolvedColor(with: view.traitCollection)
+            .isEqual(UIColor.systemBlue.resolvedColor(with: view.traitCollection)))
         #expect(
           view.textStorage.attribute(sentinel, at: 0, effectiveRange: nil) as? String == "retained")
         #expect(session.viewIdentity == identity)

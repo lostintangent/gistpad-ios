@@ -12,6 +12,47 @@ import WebKit
 
 @MainActor
 struct NotebookModelTests {
+  @Test(arguments: [Optional<Bool>.none, false, true])
+  func sourceUsesTheSavedFrontMatterPreferenceWithoutChangingTheDraft(shown: Bool?) async throws {
+    let prefix = "---\nedit:\n  instructions: Preserve source bytes\n---\n\n"
+    let source = prefix + "# Content\n\nA retained thought."
+    var metadata = fixtureAccount.preferences.metadata
+    if let shown { metadata["showFrontmatter"] = .bool(shown) }
+    let account = NotebookAccount(
+      id: fixtureAccount.id, login: fixtureAccount.login, githubUserID: fixtureAccount.githubUserID,
+      preferences: .init(metadata: metadata))
+    let provider = StubNotebookProvider(
+      account: account, gists: [try makeGist(id: "frontmatter", title: "Content", content: source)])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await model.open(gistID: "frontmatter")
+    let document = try #require(model.loadedDocument)
+    let draft = try await model.openDraft(for: document)
+    let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
+    #expect(controller.session.showsFrontMatter == (shown ?? false))
+    #expect(controller.session.contentStart == (shown == true ? 0 : prefix.utf16.count))
+    #expect(
+      controller.session.selection
+        == .init(
+          location: shown == true ? 0 : prefix.utf16.count, length: 0))
+    #expect(controller.session.text.utf8.elementsEqual(source.utf8))
+    #expect(controller.session.textView.text.utf8.elementsEqual(source.utf8))
+    #expect(controller.session.generation == draft.generation)
+    #expect(controller.session.textView.undoManager?.canUndo != true)
+    let identity = controller.session.viewIdentity
+    let view = controller.session.textView
+    await provider.setShowsFrontMatter(!(shown ?? false))
+    await model.refresh()
+    try await controller.refreshMetadata()
+    #expect(controller.session.showsFrontMatter == !(shown ?? false))
+    #expect(controller.session.contentStart == (shown == true ? prefix.utf16.count : 0))
+    #expect(controller.session.viewIdentity == identity)
+    #expect(controller.session.textView === view)
+    #expect(controller.session.text.utf8.elementsEqual(source.utf8))
+    #expect(controller.session.generation == draft.generation)
+    #expect(controller.session.textView.undoManager?.canUndo != true)
+  }
+
   @Test(arguments: [false, true], [false, true])
   func launchDiscardsAnAbandonedBlankDraftEvenWhenItWasRemembered(
     remembered: Bool, offline: Bool
@@ -833,7 +874,10 @@ struct NotebookNavigationHostTests {
           #expect(editor.window === host.window)
           #expect(host.isVisible(editor))
           #expect(glyph.height > 0)
+          let contentStart = MarkdownFrontMatter.contentStart(in: text)
+          #expect(editor.selectedRange == NSRange(location: contentStart, length: 0))
           #expect(glyph.minY >= top - 1)
+          #expect(glyph.minY < top + 40)
           #expect(glyph.maxY < editor.convert(editor.bounds, to: host.window).maxY
             - editor.adjustedContentInset.bottom + 1)
           #expect(editor.text.utf8.elementsEqual(text.utf8))
@@ -1942,6 +1986,13 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding {
   func setSpellingEnabled(_ enabled: Bool) {
     var metadata = account.preferences.metadata
     metadata["isSpellcheckEnabled"] = .bool(enabled)
+    account = NotebookAccount(
+      id: account.id, login: account.login, githubUserID: account.githubUserID,
+      preferences: .init(metadata: metadata))
+  }
+  func setShowsFrontMatter(_ shown: Bool) {
+    var metadata = account.preferences.metadata
+    metadata["showFrontmatter"] = .bool(shown)
     account = NotebookAccount(
       id: account.id, login: account.login, githubUserID: account.githubUserID,
       preferences: .init(metadata: metadata))

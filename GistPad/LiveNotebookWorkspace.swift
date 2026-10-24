@@ -705,7 +705,7 @@ struct LiveNotebookWorkspace: View {
     }
     actions.didChangeMode = { mode in
       if mode == .source {
-        controller.session.textView.becomeFirstResponder()
+        controller.session.requestFocusAtContentStart()
       } else if mode == .reading {
         controller.session.textView.resignFirstResponder()
       }

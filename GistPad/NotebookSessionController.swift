@@ -50,7 +50,8 @@ final class NotebookSessionController {
     self.notebook = notebook
     self.autosaveDelay = autosaveDelay
     session = DocumentSession(
-      documentID: document.id, text: draft.text, generation: draft.generation)
+      documentID: document.id, text: draft.text, generation: draft.generation,
+      showsFrontMatter: notebook.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
     saveState = NotebookModel.interfaceSaveState(draft.state)
     if document.isRecovery {
       saveState = .publicationBlocked(
@@ -157,6 +158,8 @@ final class NotebookSessionController {
   private func applyWritingPreferences() {
     let enabled = notebook.account?.preferences.booleanValue(.isSpellcheckEnabled) ?? true
     session.textView.spellCheckingType = enabled ? .yes : .no
+    session.setShowsFrontMatter(
+      notebook.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
   }
 
   func markRecovery() {

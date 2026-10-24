@@ -6,7 +6,9 @@
 
   @MainActor
   @Observable
-  public final class DocumentSession: NSObject, UITextViewDelegate {
+  public final class DocumentSession: NSObject, UITextViewDelegate,
+    @MainActor NSTextContentStorageDelegate
+  {
     public let documentID: String
     public let viewIdentity = UUID()
     public private(set) var text: String
@@ -15,18 +17,24 @@
     public private(set) var isComposing = false
     public private(set) var isEditing = false
     public private(set) var writingToolsActive = false
+    public private(set) var showsFrontMatter = false
+    public private(set) var contentStart = 0
     public var inputError: String?
     @ObservationIgnored public let textView: UITextView
     @ObservationIgnored public var onSourceChange: ((String, UInt64) -> Void)?
     @ObservationIgnored private var highlightTask: Task<Void, Never>?
     @ObservationIgnored private var highlightedTraits: UITraitCollection?
     @ObservationIgnored private var isApplyingSourceEdit = false
-    @ObservationIgnored private var pendingFocusAtEnd = false
+    @ObservationIgnored private var pendingFocusRequest = false
+    @ObservationIgnored private var pendingShowsFrontMatter: Bool?
 
-    public init(documentID: String, text: String, generation: UInt64 = 0) {
+    public init(
+      documentID: String, text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
+    ) {
       self.documentID = documentID
       self.text = text
       self.generation = generation
+      self.showsFrontMatter = showsFrontMatter
       textView = AnchoredTextView(usingTextLayoutManager: true)
       super.init()
       textView.delegate = self
@@ -34,7 +42,7 @@
       textView.font = .preferredFont(forTextStyle: .body)
       textView.adjustsFontForContentSizeCategory = true
       textView.backgroundColor = .systemBackground
-      textView.tintColor = UIColor(InterfaceTheme.accent)
+      textView.tintColor = .systemBlue
       textView.textContainerInset = UIEdgeInsets(top: 24, left: 20, bottom: 40, right: 20)
       textView.alwaysBounceVertical = true
       textView.topEdgeEffect.style = .soft
@@ -46,12 +54,16 @@
       textView.smartDashesType = .no
       textView.writingToolsBehavior = .complete
       textView.allowedWritingToolsResultOptions = .plainText
+      textView.textLayoutManager?.textContentManager?.delegate = self
       textView.registerForTraitChanges([
         UITraitPreferredContentSizeCategory.self, UITraitUserInterfaceStyle.self,
         UITraitAccessibilityContrast.self, UITraitLegibilityWeight.self,
       ]) { (view: UITextView, _: UITraitCollection) in
         (view.delegate as? DocumentSession)?.updateAppearanceIfNeeded()
       }
+      updateHiddenFrontMatter()
+      textView.selectedRange = NSRange(location: contentStart, length: 0)
+      selection = textView.selectedRange
       highlight()
     }
 
@@ -73,14 +85,6 @@
       }
       _ = try mutation.applying(to: text)
       let previousSelection = textView.selectedRange
-      guard
-        let start = textView.position(
-          from: textView.beginningOfDocument, offset: mutation.range.location),
-        let end = textView.position(from: start, offset: mutation.range.length),
-        let range = textView.textRange(from: start, to: end)
-      else {
-        throw SourceMutation.MutationError.invalidRange
-      }
       let inverse = SourceEdit(
         mutation: SourceMutation(
           range: NSRange(
@@ -91,9 +95,10 @@
       isApplyingSourceEdit = true
       let undo = textView.undoManager
       undo?.beginUndoGrouping()
-      // UIKit's replacement undo selects the mutation range, not the user's original selection.
+      // Source transactions bypass input substitutions and restore the exact source and selection.
       undo?.disableUndoRegistration()
-      textView.replace(range, withText: mutation.replacement)
+      textView.textStorage.replaceCharacters(in: mutation.range, with: mutation.replacement)
+      updateHiddenFrontMatter(in: textView.text)
       let delta = mutation.replacement.utf16.count - mutation.range.length
       if let finalSelection {
         textView.selectedRange = finalSelection
@@ -128,13 +133,68 @@
       }
       selection = NSRange(location: text.utf16.count, length: 0)
       textView.selectedRange = selection
-      pendingFocusAtEnd = true
+      pendingFocusRequest = true
       completeFocusRequestIfAttached()
     }
 
+    public func requestFocusAtContentStart() {
+      guard canFormat else {
+        inputError = String(
+          localized: "Finish the current text edit before moving the caret.", bundle: .module)
+        return
+      }
+      selection = NSRange(location: contentStart, length: 0)
+      textView.selectedRange = selection
+      (textView as? AnchoredTextView)?.resetReadingAnchor(to: contentStart)
+      pendingFocusRequest = true
+      completeFocusRequestIfAttached()
+    }
+
+    public func setShowsFrontMatter(_ value: Bool) {
+      guard !isComposing, !writingToolsActive, textView.markedTextRange == nil else {
+        pendingShowsFrontMatter = value
+        return
+      }
+      pendingShowsFrontMatter = nil
+      guard value != showsFrontMatter else { return }
+      showsFrontMatter = value
+      updateHiddenFrontMatter()
+    }
+
+    public func textContentManager(
+      _ textContentManager: NSTextContentManager, shouldEnumerate textElement: NSTextElement,
+      options: NSTextContentManager.EnumerationOptions
+    ) -> Bool {
+      guard contentStart > 0, let range = textElement.elementRange else { return true }
+      let start = textContentManager.offset(
+        from: textContentManager.documentRange.location, to: range.location)
+      return start == NSNotFound || start >= contentStart
+    }
+
+    private func updateHiddenFrontMatter(in source: String? = nil) {
+      let source = source ?? text
+      let start = showsFrontMatter ? 0 : MarkdownFrontMatter.contentStart(in: source)
+      textView.accessibilityValue = start > 0 ? (source as NSString).substring(from: start) : nil
+      guard start != contentStart else { return }
+      contentStart = start
+      (textView as? AnchoredTextView)?.contentStart = start
+      if let manager = textView.textLayoutManager,
+        let range = manager.textContentManager?.documentRange
+      {
+        manager.invalidateLayout(for: range)
+      }
+      if textView.selectedRange.location < start {
+        let end = max(start, NSMaxRange(textView.selectedRange))
+        textView.selectedRange = NSRange(location: start, length: end - start)
+      }
+      selection = textView.selectedRange
+      (textView as? AnchoredTextView)?.resetReadingAnchor(to: start)
+      textView.setNeedsLayout()
+    }
+
     fileprivate func completeFocusRequestIfAttached() {
-      guard pendingFocusAtEnd, textView.window != nil else { return }
-      pendingFocusAtEnd = false
+      guard pendingFocusRequest, textView.window != nil else { return }
+      pendingFocusRequest = false
       guard canFormat, textView.becomeFirstResponder() else {
         inputError = String(
           localized: "The editor couldn't receive focus. Tap the note to start writing.",
@@ -189,6 +249,7 @@
     public func textView(
       _ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText replacement: String
     ) -> Bool {
+      guard isApplyingSourceEdit || range.location >= contentStart else { return false }
       guard !isApplyingSourceEdit, !writingToolsActive, textView.isEditable,
         textView.markedTextRange == nil, !isComposing,
         textView.findInteraction?.isFindNavigatorVisible != true
@@ -237,8 +298,14 @@
     }
 
     public func textViewDidChangeSelection(_ textView: UITextView) {
+      let start = min(contentStart, textView.text.utf16.count)
+      if textView.selectedRange.location < start, textView.markedTextRange == nil {
+        let end = max(start, NSMaxRange(textView.selectedRange))
+        textView.selectedRange = NSRange(location: start, length: end - start)
+      }
       selection = textView.selectedRange
       isComposing = textView.markedTextRange != nil
+      if !isComposing, let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
       if !isComposing { scheduleHighlight() }
     }
 
@@ -252,6 +319,7 @@
     public func textViewWritingToolsDidEnd(_ textView: UITextView) {
       writingToolsActive = false
       synchronizeText()
+      if let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
       (textView as? AnchoredTextView)?.sourceInteractionActive = false
       (textView as? AnchoredTextView)?.rememberReadingAnchor()
     }
@@ -259,8 +327,17 @@
     public func textView(
       _ textView: UITextView, writingToolsIgnoredRangesInEnclosingRange enclosingRange: NSRange
     ) -> [NSValue] {
-      MarkdownSyntax.ignoredWritingToolsRanges(in: textView.text, enclosing: enclosingRange).map(
-        NSValue.init(range:))
+      var ranges = MarkdownSyntax.ignoredWritingToolsRanges(
+        in: textView.text, enclosing: enclosingRange)
+      var hidden = NSIntersectionRange(NSRange(location: 0, length: contentStart), enclosingRange)
+      if hidden.length > 0 {
+        while let first = ranges.first, first.location <= NSMaxRange(hidden) {
+          hidden = NSUnionRange(hidden, first)
+          ranges.removeFirst()
+        }
+        ranges.insert(hidden, at: 0)
+      }
+      return ranges.map(NSValue.init(range:))
     }
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -326,7 +403,7 @@
             .underlineStyle: NSUnderlineStyle.single.rawValue,
           ]
         case .task:
-          attributes = [.foregroundColor: UIColor(InterfaceTheme.accent)]
+          attributes = [.foregroundColor: SourceSyntaxColor.orderedMarker]
         case .checkedTask:
           attributes = [.foregroundColor: muted]
         case .punctuation:
@@ -376,9 +453,11 @@
       isComposing = textView.markedTextRange != nil
       if !text.utf8.elementsEqual(textView.text.utf8) {
         text = textView.text
+        updateHiddenFrontMatter()
         generation += 1
         onSourceChange?(text, generation)
       }
+      if !isComposing, let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
       scheduleHighlight()
     }
 
@@ -406,6 +485,7 @@
     }
 
     var sourceInteractionActive = false
+    var contentStart = 0
     private var previousWidth: CGFloat = 0
     private var previousHeight: CGFloat = 0
     private var readingOffset = 0
@@ -414,6 +494,49 @@
     private var viewportInsets: UIEdgeInsets?
     private weak var viewportView: UIView?
     private var applyingViewportInsets = false
+
+    override var selectedRange: NSRange {
+      get { super.selectedRange }
+      set {
+        let start = max(min(contentStart, textStorage.length), newValue.location)
+        let end = max(start, NSMaxRange(newValue))
+        super.selectedRange = NSRange(location: start, length: end - start)
+      }
+    }
+
+    override func selectAll(_ sender: Any?) {
+      selectedRange = NSRange(location: contentStart, length: text.utf16.count - contentStart)
+    }
+
+    override func deleteBackward() {
+      guard contentStart == 0 || selectedRange.location > contentStart || selectedRange.length > 0
+      else {
+        return
+      }
+      super.deleteBackward()
+    }
+
+    override func caretRect(for position: UITextPosition) -> CGRect {
+      let rect = super.caretRect(for: position)
+      guard contentStart > 0, contentStart == textStorage.length,
+        offset(from: beginningOfDocument, to: position) == contentStart,
+        rect.width <= 0 || rect.height <= 0
+      else { return rect }
+      // UIKit has no extra-line fragment when every stored paragraph is omitted from layout.
+      let font = typingAttributes[.font] as? UIFont ?? .preferredFont(forTextStyle: .body)
+      let padding = textContainer.lineFragmentPadding
+      let x =
+        effectiveUserInterfaceLayoutDirection == .rightToLeft
+        ? bounds.width - textContainerInset.right - padding - 2
+        : textContainerInset.left + padding
+      return CGRect(x: x, y: textContainerInset.top, width: 2, height: font.lineHeight)
+    }
+
+    func resetReadingAnchor(to offset: Int) {
+      readingOffset = offset
+      anchorDelta = adjustedContentInset.top + textContainerInset.top
+      setVerticalContentOffset(-adjustedContentInset.top)
+    }
 
     func beginAttributeUpdate() -> ReadingAnchor? {
       guard window != nil, !isFirstResponder, !sourceInteractionActive, !restoringAnchor,
