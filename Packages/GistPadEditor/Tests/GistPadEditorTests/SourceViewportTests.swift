@@ -13,6 +13,8 @@
       let view = session.textView
       view.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
       view.layoutIfNeeded()
+      let selection = session.selection
+      let nativeSelection = view.selectedRange
       session.updateViewportInsets(UIEdgeInsets(top: 96, left: 0, bottom: 34, right: 0))
       view.layoutIfNeeded()
       #expect(abs(view.adjustedContentInset.top - 96) < 0.001)
@@ -21,7 +23,8 @@
       #expect(view.textContainerInset.top == 24)
       #expect(session.text == source)
       #expect(session.generation == 0)
-      #expect(session.selection == NSRange(location: 0, length: 0))
+      #expect(session.selection == selection)
+      #expect(view.selectedRange == nativeSelection)
       #expect(view.undoManager?.canUndo != true)
     }
 
@@ -41,11 +44,14 @@
       session.updateViewportInsets(UIEdgeInsets(top: 96, left: 0, bottom: 34, right: 0))
       view.setContentOffset(CGPoint(x: 0, y: 1_400), animated: false)
       let top = view.contentOffset.y + view.adjustedContentInset.top
+      let selection = session.selection
+      let nativeSelection = view.selectedRange
       session.updateViewportInsets(UIEdgeInsets(top: 132, left: 0, bottom: 34, right: 0))
       #expect(abs(view.contentOffset.y + view.adjustedContentInset.top - top) < 0.001)
       #expect(session.text == source)
       #expect(session.generation == 0)
-      #expect(session.selection == NSRange(location: 0, length: 0))
+      #expect(session.selection == selection)
+      #expect(view.selectedRange == nativeSelection)
     }
 
     @Test func measuredInsetsDoNotDoubleTheUIKitSafeAreaContribution() throws {
