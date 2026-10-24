@@ -6,16 +6,18 @@ public struct NoteSnapshot: Sendable, Equatable {
   public let generation: UInt64
   public let source: String
   public let headingOffsets: [Int]
+  public let tasks: [NoteTask]
 
   public init(
     documentID: String, sessionID: UUID, generation: UInt64, source: String,
-    headingOffsets: [Int] = []
+    headingOffsets: [Int] = [], tasks: [NoteTask] = []
   ) {
     self.documentID = documentID
     self.sessionID = sessionID
     self.generation = generation
     self.source = source
     self.headingOffsets = headingOffsets
+    self.tasks = tasks
   }
 
   public static func == (lhs: Self, rhs: Self) -> Bool {
@@ -29,22 +31,29 @@ public enum NoteIntelligenceAction: String, CaseIterable, Sendable {
 }
 
 public struct NoteIntelligenceRequest: Sendable {
+  public let id: UUID
   public let snapshot: NoteSnapshot
   public let action: NoteIntelligenceAction
   public let instruction: String
 
-  public init(snapshot: NoteSnapshot, action: NoteIntelligenceAction, instruction: String = "") {
+  public init(
+    snapshot: NoteSnapshot, action: NoteIntelligenceAction, instruction: String = "",
+    id: UUID = UUID()
+  ) {
+    self.id = id
     self.snapshot = snapshot
     self.action = action
     self.instruction = instruction
   }
 }
 
-public enum NoteIntelligenceError: Error, LocalizedError, Sendable {
+public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
   case unavailable(String)
   case emptyInstruction
   case insufficientContext
   case invalidResponse
+  case emptyAnswer
+  case unsafeEdit
   case responseTooLarge
   case unverifiedQuotation
   case noEvidence
@@ -53,6 +62,7 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable {
   case invalidSelection
   case refused
   case rateLimited
+  case timedOut
 
   public var errorDescription: String? {
     switch self {
@@ -67,6 +77,14 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable {
     case .invalidResponse, .responseTooLarge:
       String(
         localized: "Apple Intelligence returned an incomplete response. Your note is unchanged.",
+        bundle: .module)
+    case .emptyAnswer:
+      String(
+        localized: "Apple Intelligence didn't return an answer. Try again.", bundle: .module)
+    case .unsafeEdit:
+      String(
+        localized:
+          "This suggestion repeats your instruction or would leave almost none of your note. Nothing was changed. Try a more specific edit.",
         bundle: .module)
     case .unverifiedQuotation:
       String(
@@ -91,6 +109,29 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable {
         bundle: .module)
     case .rateLimited:
       String(localized: "Apple Intelligence is busy. Try again in a moment.", bundle: .module)
+    case .timedOut:
+      String(
+        localized: "Apple Intelligence took too long to respond. Try again.", bundle: .module)
+    }
+  }
+
+  public var diagnosticCode: String {
+    switch self {
+    case .unavailable: "unavailable"
+    case .emptyInstruction: "emptyInstruction"
+    case .insufficientContext: "insufficientContext"
+    case .invalidResponse: "invalidResponse"
+    case .emptyAnswer: "emptyAnswer"
+    case .unsafeEdit: "unsafeEdit"
+    case .responseTooLarge: "responseTooLarge"
+    case .unverifiedQuotation: "unverifiedQuotation"
+    case .noEvidence: "noEvidence"
+    case .staleSnapshot: "staleSnapshot"
+    case .noApplicableChanges: "noApplicableChanges"
+    case .invalidSelection: "invalidSelection"
+    case .refused: "refused"
+    case .rateLimited: "rateLimited"
+    case .timedOut: "timedOut"
     }
   }
 }
@@ -112,17 +153,40 @@ public struct NoteModelPass: Sendable {
   public let source: String
   public let responseTokens: Int
   public let evidenceOnly: Bool
+  public let requestID: UUID
+  public let tasks: [NoteTask]
 
   public init(
     purpose: Purpose, instruction: String, source: String, responseTokens: Int,
-    evidenceOnly: Bool = false
+    evidenceOnly: Bool = false, requestID: UUID = UUID(), tasks: [NoteTask] = []
   ) {
     self.purpose = purpose
     self.instruction = instruction
     self.source = source
     self.responseTokens = responseTokens
     self.evidenceOnly = evidenceOnly
+    self.requestID = requestID
+    self.tasks = tasks
   }
+}
+
+public struct NoteTask: Sendable {
+  public let id: Int
+  public let range: NSRange
+  public let text: String
+  public let isComplete: Bool
+
+  public init(id: Int, range: NSRange, text: String, isComplete: Bool) {
+    self.id = id
+    self.range = range
+    self.text = text
+    self.isComplete = isComplete
+  }
+}
+
+public enum NoteEditOperation: Sendable {
+  case replace(NoteReplacementCandidate)
+  case setTaskStates(ids: [Int]?, isComplete: Bool)
 }
 
 public struct ModelAnswerPart: Sendable, Equatable {
@@ -160,12 +224,23 @@ public struct NoteIntelligenceProgress: Sendable {
 
 @MainActor
 public protocol NoteModelBackend {
+  func beginAttempt(id: UUID, action: NoteIntelligenceAction)
+  func finishAttempt(id: UUID, errorCode: String?, errorType: String?)
   func modelInfo() async throws -> NoteModelInfo
   func tokenCount(for pass: NoteModelPass) async throws -> Int
   func replacements(for pass: NoteModelPass) async throws -> [NoteReplacementCandidate]
+  func editOperations(for pass: NoteModelPass) async throws -> [NoteEditOperation]
   func excerpts(for pass: NoteModelPass) async throws -> [String]
   func answer(
     for pass: NoteModelPass,
     onUpdate: @MainActor ([ModelAnswerPart]) -> Void
   ) async throws -> [ModelAnswerPart]
+}
+
+extension NoteModelBackend {
+  public func beginAttempt(id: UUID, action: NoteIntelligenceAction) {}
+  public func finishAttempt(id: UUID, errorCode: String?, errorType: String?) {}
+  public func editOperations(for pass: NoteModelPass) async throws -> [NoteEditOperation] {
+    try await replacements(for: pass).map(NoteEditOperation.replace)
+  }
 }

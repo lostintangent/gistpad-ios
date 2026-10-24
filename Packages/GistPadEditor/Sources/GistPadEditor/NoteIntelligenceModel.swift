@@ -1,6 +1,7 @@
 #if canImport(UIKit)
   import GistPadIntelligence
   import Observation
+  import OSLog
   import UIKit
 
   @MainActor
@@ -27,6 +28,7 @@
     private let backend: any NoteModelBackend
     private let engine: NoteIntelligenceEngine
     private let isCurrent: @MainActor () -> Bool
+    private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
     @ObservationIgnored private(set) var task: Task<Void, Never>?
 
     init(
@@ -61,7 +63,7 @@
     }
 
     var canApply: Bool {
-      !isRunning && !isStale && session.canFormat
+      !isRunning && !isStale && session.canFormat && proposal?.canApply == true
     }
 
     var hasResults: Bool {
@@ -75,7 +77,7 @@
         availabilityReason = nil
       } catch {
         available = false
-        availabilityReason = error.localizedDescription
+        availabilityReason = Self.message(for: error)
       }
     }
 
@@ -99,20 +101,39 @@
       let selectedAction = action
       let instruction = selectedAction == .review ? "" : prompt
       submittedPrompt = selectedAction == .review ? nil : instruction
+      let requestID = UUID()
+      logger.notice(
+        "request=\(requestID.uuidString, privacy: .public) action=\(selectedAction.rawValue, privacy: .public) state=started sourceUTF16=\(self.session.text.utf16.count)"
+      )
       task = Task { [weak self] in
         guard let self else { return }
+        var failureCode: String?
+        var failureType: String?
+        self.backend.beginAttempt(id: requestID, action: selectedAction)
         defer {
+          if selectedAction == .ask, self.answerParts.isEmpty,
+            self.errorMessage == nil, self.notice == nil
+          {
+            self.errorMessage = NoteIntelligenceError.emptyAnswer.localizedDescription
+            failureCode = NoteIntelligenceError.emptyAnswer.diagnosticCode
+            failureType = String(reflecting: NoteIntelligenceError.self)
+          }
           self.isRunning = false
           self.isCancelling = false
           self.progress = nil
           self.task = nil
+          self.backend.finishAttempt(
+            id: requestID, errorCode: failureCode, errorType: failureType)
+          self.logger.notice(
+            "request=\(requestID.uuidString, privacy: .public) state=finished answerParts=\(self.answerParts.count) changes=\(self.proposal?.comments.count ?? 0) hasError=\(self.errorMessage != nil) cancelled=\(Task.isCancelled)"
+          )
         }
         do {
           guard self.isCurrent() else { throw NoteIntelligenceError.staleSnapshot }
           let snapshot = try self.session.intelligenceSnapshot()
           self.snapshot = snapshot
           let request = NoteIntelligenceRequest(
-            snapshot: snapshot, action: selectedAction, instruction: instruction)
+            snapshot: snapshot, action: selectedAction, instruction: instruction, id: requestID)
           if selectedAction == .ask {
             let answer = try await self.engine.ask(
               request, progress: { self.progress = $0 }, onUpdate: { self.answerParts = $0 })
@@ -121,15 +142,31 @@
             self.proposal = try await self.engine.propose(request, progress: { self.progress = $0 })
           }
         } catch is CancellationError {
+          failureCode = "cancelled"
+          failureType = String(reflecting: CancellationError.self)
           self.answerParts = []
           self.proposal = nil
           self.notice = String(localized: "Cancelled. Your note is unchanged.", bundle: .module)
         } catch {
           self.answerParts = []
           self.proposal = nil
-          self.errorMessage = error.localizedDescription
+          self.errorMessage = Self.message(for: error)
+          let code = (error as? NoteIntelligenceError)?.diagnosticCode ?? "unexpected"
+          failureCode = code
+          failureType = String(reflecting: type(of: error))
+          self.logger.error(
+            "request=\(requestID.uuidString, privacy: .public) failure=\(code, privacy: .public)")
         }
       }
+    }
+
+    private static func message(for error: any Error) -> String {
+      let message = error.localizedDescription
+      return message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ? String(
+          localized:
+            "Apple Intelligence couldn't complete this request. Try again. Your note is unchanged.",
+          bundle: .module) : message
     }
 
     func cancel() {

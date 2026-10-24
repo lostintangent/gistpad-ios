@@ -1,9 +1,11 @@
 import Foundation
+import OSLog
 
 @MainActor
 public final class NoteIntelligenceEngine {
   private let backend: any NoteModelBackend
   private let framingReserve = 96
+  private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 
   public init(backend: any NoteModelBackend) {
     self.backend = backend
@@ -15,6 +17,7 @@ public final class NoteIntelligenceEngine {
   ) async throws -> NoteProposal {
     guard request.action != .ask else { throw NoteIntelligenceError.invalidResponse }
     try validate(request)
+    try Task.checkCancellation()
     let model = try await backend.modelInfo()
     let purpose: NoteModelPass.Purpose = request.action == .edit ? .edit : .review
     let chunks = try await chunks(for: request, purpose: purpose, model: model)
@@ -28,13 +31,53 @@ public final class NoteIntelligenceEngine {
           phase: request.action == .edit ? .editing : .reviewing,
           current: completed + 1, total: completed + pending.count + 1))
       do {
-        let generated = try await backend.replacements(
-          for: pass(request, purpose: purpose, source: chunk.source, model: model))
-        try Task.checkCancellation()
-        if request.action == .edit, generated.contains(where: { $0.replacement == nil }) {
-          throw NoteIntelligenceError.invalidResponse
+        let input = pass(
+          request, purpose: purpose, source: chunk.source, model: model, scope: chunk.range)
+        let operations: [NoteEditOperation]
+        if request.action == .edit {
+          operations = try await backend.editOperations(for: input)
+        } else {
+          operations = try await backend.replacements(for: input).map(NoteEditOperation.replace)
         }
-        candidates.append(contentsOf: generated.map { ($0, chunk.range) })
+        try Task.checkCancellation()
+        for operation in operations {
+          switch operation {
+          case .replace(let candidate):
+            if request.action == .edit, candidate.replacement == nil {
+              throw NoteIntelligenceError.invalidResponse
+            }
+            candidates.append((candidate, chunk.range))
+          case .setTaskStates(let ids, let isComplete):
+            guard request.action == .edit,
+              ids.map({ !$0.isEmpty && Set($0).count == $0.count }) ?? true
+            else { throw NoteIntelligenceError.invalidResponse }
+            let selected =
+              ids.map { identifiers in
+                input.tasks.filter { identifiers.contains($0.id) }
+              } ?? input.tasks
+            guard ids == nil || selected.count == ids?.count else {
+              throw NoteIntelligenceError.invalidResponse
+            }
+            for task in selected where task.isComplete != isComplete {
+              guard let range = Range(task.range, in: request.snapshot.source) else {
+                throw NoteIntelligenceError.invalidResponse
+              }
+              let quote = String(request.snapshot.source[range])
+              guard quote == "[ ]" || quote == "[x]" || quote == "[X]" else {
+                throw NoteIntelligenceError.invalidResponse
+              }
+              candidates.append(
+                (
+                  NoteReplacementCandidate(
+                    quote: quote, replacement: isComplete ? "[x]" : "[ ]",
+                    reason: isComplete
+                      ? String(localized: "Mark this task complete.", bundle: .module)
+                      : String(localized: "Mark this task incomplete.", bundle: .module)),
+                  task.range
+                ))
+            }
+          }
+        }
         completed += 1
       } catch NoteIntelligenceError.responseTooLarge, NoteIntelligenceError.insufficientContext {
         let smaller = try await split(
@@ -42,7 +85,7 @@ public final class NoteIntelligenceEngine {
         pending.append(contentsOf: smaller.reversed())
       }
     }
-    return NoteProposal(snapshot: request.snapshot, scopedCandidates: candidates)
+    return try verifiedProposal(request, candidates: candidates)
   }
 
   public func ask(
@@ -52,6 +95,7 @@ public final class NoteIntelligenceEngine {
   ) async throws -> NoteAnswer {
     guard request.action == .ask else { throw NoteIntelligenceError.invalidResponse }
     try validate(request)
+    try Task.checkCancellation()
     let model = try await backend.modelInfo()
     let whole = pass(request, purpose: .answer, source: request.snapshot.source, model: model)
     let input: NoteModelPass
@@ -80,7 +124,8 @@ public final class NoteIntelligenceEngine {
     progress(NoteIntelligenceProgress(phase: .answering, current: 1, total: 1))
     let generated = try await backend.answer(for: input) { partial in
       var verified: [NoteAnswerPart] = []
-      for part in partial {
+      for part in partial
+      where !part.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
         switch part.kind {
         case .prose:
           verified.append(.prose(part.text))
@@ -96,10 +141,11 @@ public final class NoteIntelligenceEngine {
       onUpdate(verified)
     }
     try Task.checkCancellation()
-    guard !generated.isEmpty, generated.contains(where: { !$0.text.isEmpty }) else {
-      throw NoteIntelligenceError.invalidResponse
+    let visible = generated.filter {
+      !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-    let parts = try generated.map { part -> NoteAnswerPart in
+    guard !visible.isEmpty else { throw NoteIntelligenceError.emptyAnswer }
+    let parts = try visible.map { part -> NoteAnswerPart in
       switch part.kind {
       case .prose: return .prose(part.text)
       case .quote:
@@ -110,6 +156,19 @@ public final class NoteIntelligenceEngine {
     }
     onUpdate(parts)
     return NoteAnswer(snapshot: request.snapshot, parts: parts)
+  }
+
+  private func verifiedProposal(
+    _ request: NoteIntelligenceRequest,
+    candidates: [(NoteReplacementCandidate, NSRange)]
+  ) throws -> NoteProposal {
+    let proposal = NoteProposal(
+      snapshot: request.snapshot, scopedCandidates: candidates,
+      safetyInstruction: request.instruction)
+    if proposal.canApply {
+      _ = try proposal.application(to: request.snapshot)
+    }
+    return proposal
   }
 
   private func combine(
@@ -126,7 +185,7 @@ public final class NoteIntelligenceEngine {
         documentID: request.snapshot.documentID, sessionID: request.snapshot.sessionID,
         generation: request.snapshot.generation, source: source)
       let extraction = NoteIntelligenceRequest(
-        snapshot: snapshot, action: .ask, instruction: request.instruction)
+        snapshot: snapshot, action: .ask, instruction: request.instruction, id: request.id)
       let batches = try await chunks(for: extraction, purpose: .extract, model: model)
       var reduced: [String] = []
       for (index, batch) in batches.enumerated() {
@@ -173,7 +232,9 @@ public final class NoteIntelligenceEngine {
     try Task.checkCancellation()
     if !force,
       try await fits(
-        pass(request, purpose: purpose, source: chunk.source, model: model), model: model)
+        pass(
+          request, purpose: purpose, source: chunk.source, model: model, scope: chunk.range),
+        model: model)
     {
       return [chunk]
     }
@@ -183,7 +244,7 @@ public final class NoteIntelligenceEngine {
       $0 > chunk.range.location && $0 < NSMaxRange(chunk.range)
     }
     let heading = headings.min { abs($0 - midpoint) < abs($1 - midpoint) }
-    let offset: Int
+    var offset: Int
     if let heading, Range(NSRange(location: heading, length: 0), in: request.snapshot.source) != nil
     {
       offset = heading - chunk.range.location
@@ -197,6 +258,14 @@ public final class NoteIntelligenceEngine {
       let boundary = newline.map { chunk.source.index(after: $0.element) } ?? middle
       let safeBoundary = boundary == chunk.source.endIndex ? middle : boundary
       offset = chunk.source[..<safeBoundary].utf16.count
+    }
+    let boundary = chunk.range.location + offset
+    if let task = request.snapshot.tasks.first(where: {
+      $0.range.location < boundary && boundary < NSMaxRange($0.range)
+    }) {
+      offset =
+        task.range.location > chunk.range.location
+        ? task.range.location - chunk.range.location : NSMaxRange(task.range) - chunk.range.location
     }
     guard offset > 0, offset < chunk.range.length else {
       throw NoteIntelligenceError.insufficientContext
@@ -222,16 +291,26 @@ public final class NoteIntelligenceEngine {
     }
     let count = try await backend.tokenCount(for: pass)
     guard count >= 0 else { throw NoteIntelligenceError.invalidResponse }
+    logger.notice(
+      "request=\(pass.requestID.uuidString, privacy: .public) phase=\(pass.purpose.rawValue, privacy: .public) inputTokens=\(count) responseTokens=\(pass.responseTokens) context=\(model.contextSize)"
+    )
     return count <= model.contextSize - pass.responseTokens - framingReserve
   }
 
   private func pass(
     _ request: NoteIntelligenceRequest, purpose: NoteModelPass.Purpose,
-    source: String, model: NoteModelInfo, evidenceOnly: Bool = false
+    source: String, model: NoteModelInfo, evidenceOnly: Bool = false, scope: NSRange? = nil
   ) -> NoteModelPass {
     NoteModelPass(
       purpose: purpose, instruction: request.instruction, source: source,
-      responseTokens: min(1_536, model.contextSize / 3), evidenceOnly: evidenceOnly)
+      responseTokens: min(1_536, model.contextSize / 3), evidenceOnly: evidenceOnly,
+      requestID: request.id,
+      tasks: purpose == .edit
+        ? request.snapshot.tasks.filter { task in
+          guard let scope else { return true }
+          return task.range.location >= scope.location
+            && NSMaxRange(task.range) <= NSMaxRange(scope)
+        } : [])
   }
 
   private func validate(_ request: NoteIntelligenceRequest) throws {

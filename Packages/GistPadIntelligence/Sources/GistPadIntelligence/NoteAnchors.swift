@@ -45,6 +45,7 @@ public struct NoteDiffLine: Sendable {
 public struct NoteProposal: Sendable {
   public let snapshot: NoteSnapshot
   public let comments: [NoteProposalComment]
+  fileprivate let safetyInstruction: String?
 
   public var omittedCount: Int { comments.filter { $0.rejection != nil }.count }
   public var canApply: Bool { comments.contains { $0.canApply } }
@@ -57,8 +58,12 @@ public struct NoteProposal: Sendable {
       })
   }
 
-  init(snapshot: NoteSnapshot, scopedCandidates: [(NoteReplacementCandidate, NSRange)]) {
+  init(
+    snapshot: NoteSnapshot, scopedCandidates: [(NoteReplacementCandidate, NSRange)],
+    safetyInstruction: String? = nil
+  ) {
     self.snapshot = snapshot
+    self.safetyInstruction = safetyInstruction
     var anchored = scopedCandidates.map { candidate, scope in
       let matches = NoteAnchors.matches(
         candidate.quote, in: snapshot.source, within: scope,
@@ -101,9 +106,12 @@ public struct NoteProposal: Sendable {
     comments = anchored
   }
 
-  init(snapshot: NoteSnapshot, comments: [NoteProposalComment]) {
+  init(
+    snapshot: NoteSnapshot, comments: [NoteProposalComment], safetyInstruction: String? = nil
+  ) {
     self.snapshot = snapshot
     self.comments = comments
+    self.safetyInstruction = safetyInstruction
   }
 
   public func application(
@@ -119,6 +127,11 @@ public struct NoteProposal: Sendable {
         source[swiftRange].utf8.elementsEqual(comment.quote.utf8)
       else { throw NoteIntelligenceError.staleSnapshot }
       source.replaceSubrange(swiftRange, with: replacement)
+    }
+    if let safetyInstruction {
+      try NoteEditSafety.validate(
+        source: snapshot.source, replacement: source, instruction: safetyInstruction,
+        changes: selected)
     }
     return NoteApplication(
       proposal: self, source: source,
@@ -193,7 +206,9 @@ public struct NoteApplication: Sendable {
         reason: comment.reason, range: verified ? range : nil,
         rejection: verified ? nil : (comment.rejection ?? .notFound))
     }
-    return NoteProposal(snapshot: snapshot, comments: remaining)
+    return NoteProposal(
+      snapshot: snapshot, comments: remaining,
+      safetyInstruction: proposal.safetyInstruction)
   }
 
   private func mappedOffset(_ position: Int, trailing: Bool) -> Int {

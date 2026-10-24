@@ -9,6 +9,50 @@
   @Suite(.serialized)
   @MainActor
   struct IntelligenceSessionTests {
+    @Test func structuredTaskCompletionPreservesProtectedMarkdownAndHasOneNativeUndo() async throws
+    {
+      let source =
+        "---\r\nexample: '- [ ] protected'\r\n---\r\n"
+        + "# Today 👩🏽‍💻\r\n\r\n- [ ] Read café\r\n- [X] Already done\r\n"
+        + "> - [ ] A quoted task\r\n  - [ ]\r\n\r\n"
+        + "```markdown\r\n- [ ] Not a real task\r\n```\r\n"
+        + "A sentence with `[ ]` and preserved spacing.  \r\n"
+      let expected =
+        source
+        .replacingOccurrences(of: "- [ ] Read", with: "- [x] Read")
+        .replacingOccurrences(of: "> - [ ] A", with: "> - [x] A")
+        .replacingOccurrences(of: "  - [ ]\r\n", with: "  - [x]\r\n")
+      let session = DocumentSession(documentID: "task-operation-undo", text: source)
+      let window = host(session)
+      defer { window.isHidden = true }
+      let undo = try #require(session.textView.undoManager)
+      undo.removeAllActions()
+      let snapshot = try session.intelligenceSnapshot()
+      #expect(snapshot.tasks.count == 4)
+      #expect(snapshot.tasks.map(\.id) == [1, 2, 3, 4])
+      #expect(snapshot.tasks.map(\.isComplete) == [false, true, false, false])
+      var changes = 0
+      session.onSourceChange = { _, _ in changes += 1 }
+      let proposal = try await NoteIntelligenceEngine(backend: TaskOperationModel()).propose(
+        NoteIntelligenceRequest(
+          snapshot: snapshot, action: .edit, instruction: "すべてのタスクを完了にして"))
+      #expect(session.text.utf8.elementsEqual(source.utf8))
+      #expect(changes == 0)
+      #expect(proposal.comments.count == 3)
+      try session.applyIntelligenceProposal(proposal)
+      #expect(session.text.utf8.elementsEqual(expected.utf8))
+      #expect(session.generation == 1)
+      #expect(changes == 1)
+      undo.undo()
+      session.textViewDidChange(session.textView)
+      #expect(session.text.utf8.elementsEqual(source.utf8))
+      #expect(changes == 2)
+      #expect(!undo.canUndo)
+      undo.redo()
+      session.textViewDidChange(session.textView)
+      #expect(session.text.utf8.elementsEqual(expected.utf8))
+    }
+
     @Test func applyingBehindAnIntelligenceSheetRetainsTheEditorsNativeUndo() throws {
       let session = DocumentSession(documentID: "background-ai-undo", text: "bad")
       let window = host(session)
@@ -179,5 +223,21 @@
       session.textView.becomeFirstResponder()
       return window
     }
+  }
+
+  @MainActor
+  private final class TaskOperationModel: NoteModelBackend {
+    func modelInfo() async throws -> NoteModelInfo {
+      NoteModelInfo(variant: "Test", contextSize: 16_384)
+    }
+    func tokenCount(for pass: NoteModelPass) async throws -> Int { pass.source.utf16.count + 100 }
+    func editOperations(for pass: NoteModelPass) async throws -> [NoteEditOperation] {
+      [.setTaskStates(ids: nil, isComplete: true)]
+    }
+    func replacements(for pass: NoteModelPass) async throws -> [NoteReplacementCandidate] { [] }
+    func excerpts(for pass: NoteModelPass) async throws -> [String] { [] }
+    func answer(
+      for pass: NoteModelPass, onUpdate: @MainActor ([ModelAnswerPart]) -> Void
+    ) async throws -> [ModelAnswerPart] { [] }
   }
 #endif

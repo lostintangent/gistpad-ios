@@ -8,6 +8,77 @@
   @Suite(.serialized)
   @MainActor
   struct IntelligenceModelTests {
+    @Test func dailyNoteInstructionEchoIsRejectedBeforeTheSheetOffersApply() async {
+      let source = "## 📆 2026-10-24\n\n- [ ]"
+      let instruction = "mark everything complete"
+      let session = DocumentSession(documentID: "daily-echo", text: source)
+      var changes = 0
+      session.onSourceChange = { _, _ in changes += 1 }
+      let backend = SheetModel()
+      backend.candidates = [
+        NoteReplacementCandidate(quote: source, replacement: instruction, reason: "Mark complete")
+      ]
+      let model = NoteIntelligenceModel(session: session, backend: backend, isCurrent: { true })
+      model.action = .edit
+      model.editPrompt = instruction
+      await model.checkAvailability()
+      model.generate()
+      await model.task?.value
+      #expect(model.proposal == nil)
+      #expect(!model.canApply)
+      #expect(model.errorMessage?.isEmpty == false)
+      #expect(backend.finishedCode == "unsafeEdit")
+      #expect(session.text.utf8.elementsEqual(source.utf8))
+      #expect(session.generation == 0)
+      #expect(changes == 0)
+    }
+
+    @Test(arguments: [
+      NoteIntelligenceError.emptyAnswer, .refused, .timedOut,
+      .insufficientContext, .unavailable(""), .rateLimited,
+    ])
+    func everyFailedMangaAskEndsWithAVisibleReasonAndNoSourceChange(
+      failure: NoteIntelligenceError
+    ) async {
+      let source = "# Manga Reading\n\n### Reading\n1. Frieren, volume 8\n2. Yotsuba&!\n"
+      let session = DocumentSession(documentID: "manga-outcome", text: source)
+      var changes = 0
+      session.onSourceChange = { _, _ in changes += 1 }
+      let backend = SheetModel()
+      backend.answerFailure = failure
+      let model = NoteIntelligenceModel(session: session, backend: backend, isCurrent: { true })
+      model.askPrompt = "What's the summary of the manga reading list?"
+      await model.checkAvailability()
+      model.generate()
+      await model.task?.value
+      #expect(!model.isRunning)
+      #expect(model.answerParts.isEmpty)
+      #expect(model.errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+      #expect(backend.beganID == backend.lastPass?.requestID)
+      #expect(backend.finishedID == backend.beganID)
+      #expect(backend.finishedCode == failure.diagnosticCode)
+      #expect(session.text.utf8.elementsEqual(source.utf8))
+      #expect(session.generation == 0)
+      #expect(changes == 0)
+    }
+
+    @Test(arguments: [[], [ModelAnswerPart(kind: .prose, text: " \r\n\t")]])
+    func emptyAndWhitespaceAnswersCannotFinishAsAnEmptySheet(parts: [ModelAnswerPart]) async {
+      let session = DocumentSession(documentID: "empty-answer", text: "# Reading\n\n1. Frieren")
+      let backend = SheetModel()
+      backend.parts = parts
+      let model = NoteIntelligenceModel(session: session, backend: backend, isCurrent: { true })
+      model.askPrompt = "Summarize"
+      await model.checkAvailability()
+      model.generate()
+      await model.task?.value
+      #expect(!model.isRunning)
+      #expect(model.answerParts.isEmpty)
+      #expect(model.errorMessage?.isEmpty == false)
+      #expect(backend.finishedCode == "emptyAnswer")
+      #expect(session.generation == 0)
+    }
+
     @Test func resultSummaryKeepsTheSubmittedRequestUntilTheRequestIsEdited() async {
       let session = DocumentSession(documentID: "model-summary", text: "Unchanged source")
       let model = NoteIntelligenceModel(
@@ -188,6 +259,10 @@
 
   @MainActor
   private final class SheetModel: NoteModelBackend {
+    var answerFailure: NoteIntelligenceError?
+    var beganID: UUID?
+    var finishedID: UUID?
+    var finishedCode: String?
     var available = true
     var waitForCancellation = false
     var onAnswer: (() -> Void)?
@@ -197,6 +272,12 @@
     var candidates = [
       NoteReplacementCandidate(quote: "bad", replacement: "good", reason: "Clarity")
     ]
+
+    func beginAttempt(id: UUID, action: NoteIntelligenceAction) { beganID = id }
+    func finishAttempt(id: UUID, errorCode: String?, errorType: String?) {
+      finishedID = id
+      finishedCode = errorCode
+    }
 
     func modelInfo() async throws -> NoteModelInfo {
       guard available else { throw NoteIntelligenceError.unavailable("Model not ready") }
@@ -216,7 +297,9 @@
     func answer(
       for pass: NoteModelPass, onUpdate: @MainActor ([ModelAnswerPart]) -> Void
     ) async throws -> [ModelAnswerPart] {
+      lastPass = pass
       onUpdate(parts)
+      if let answerFailure { throw answerFailure }
       onAnswer?()
       if waitForCancellation { try await Task.sleep(for: .seconds(5)) }
       return parts
