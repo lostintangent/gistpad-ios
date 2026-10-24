@@ -147,6 +147,56 @@ struct LibraryHostTests {
   }
 
   @Test(arguments: [DynamicTypeSize.large, .accessibility3])
+  func taskProgressStaysBesideTheFirstTitleLine(size: DynamicTypeSize) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    let category: UIContentSizeCategory = size == .large ? .large : .accessibilityExtraLarge
+    window.traitOverrides.preferredContentSizeCategory = category
+    let note = LibraryNote(
+      id: "daily-progress", title: "2026-10-23", updatedAt: .now,
+      isDailyNote: true, filename: "2026-10-23.md", fileCount: 3,
+      excerpt: "Keep the useful thoughts close.", progress: .init(completed: 3, total: 4),
+      isOverdue: true)
+    var measured: CGSize?
+    window.rootViewController = UIHostingController(
+      rootView: VStack {
+        LibraryView.NoteRowContent(note: note, tags: [])
+          .frame(width: 350)
+          .fixedSize(horizontal: false, vertical: true)
+          .onGeometryChange(for: CGSize.self) { $0.size } action: { measured = $0 }
+        Spacer()
+      }
+      .environment(\.dynamicTypeSize, size))
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(350))
+    window.layoutIfNeeded()
+    func frame(_ name: String) throws -> CGRect {
+      let marker = try #require(descendants(window).first {
+        $0.accessibilityIdentifier == "capture-frame-\(name)" && !$0.bounds.isEmpty
+      })
+      return marker.convert(marker.bounds, to: window)
+    }
+    let title = try frame("note-title-daily-progress")
+    let progress = try frame("note-progress-daily-progress")
+    let titleFont = UIFont.preferredFont(
+      forTextStyle: .headline, compatibleWith: UITraitCollection(preferredContentSizeCategory: category))
+    #expect(title.height <= titleFont.lineHeight + 1)
+    #expect(progress.minX >= title.maxX + 7)
+    #expect(progress.midY >= title.minY)
+    #expect(progress.midY <= title.maxY)
+    let rowSize = try #require(measured)
+    #expect(rowSize.width == 350)
+    #expect(rowSize.height <= (size == .large ? 100 : 190))
+  }
+
+  @Test(arguments: [DynamicTypeSize.large, .accessibility3])
   func ordinaryRowsKeepMetadataTogetherWithoutClipping(size: DynamicTypeSize) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)

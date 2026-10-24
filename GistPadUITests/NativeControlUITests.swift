@@ -176,6 +176,69 @@ final class NativeControlUITests: XCTestCase {
   }
 
   @MainActor
+  func testScopedCollectionsHaveNoRepeatedHeadingOrEmptyHeaderSpace() async throws {
+    let collections = [
+      (state: "starred", title: "Starred", noteID: "starred"),
+      (state: "daily-progress", title: "Daily Notes", noteID: "daily-overdue"),
+      (state: "archive", title: "Archive", noteID: "archived"),
+    ]
+    for appearance in ["light", "dark"] {
+      for accessibility in [false, true] {
+        for collection in collections {
+          if accessibility && collection.state != "daily-progress" { continue }
+          let app = launch(
+            screen: "library", state: collection.state, accessibility: accessibility,
+            appearance: appearance)
+          defer { app.terminate() }
+          let window = app.windows.firstMatch
+          try await waitUntil("the actual folded Duo Library") {
+            abs(window.frame.width - 466) <= 1 && abs(window.frame.height - 678) <= 1
+          }
+          let bar = app.navigationBars[collection.title]
+          let count = bar.staticTexts[collection.state == "daily-progress" ? "2 notes" : "1 gist"]
+          let list = app.collectionViews.firstMatch
+          let row = app.descendants(matching: .any)["library-note-\(collection.noteID)"].firstMatch
+          try await waitUntil("the scoped title, gist-count subtitle and only document group") {
+            bar.exists && count.exists && list.exists && row.isHittable
+          }
+          XCTAssertGreaterThan(count.frame.height, 0)
+          XCTAssertTrue(window.frame.contains(count.frame))
+          XCTAssertFalse(list.staticTexts[collection.title].exists)
+          let contentTop = max(bar.frame.maxY, list.frame.minY)
+          XCTAssertGreaterThanOrEqual(row.frame.minY, contentTop)
+          XCTAssertLessThanOrEqual(row.frame.minY - contentTop, 24)
+          if collection.state == "daily-progress" {
+            let done = app.descendants(matching: .any)["library-note-daily-done"].firstMatch
+            XCTAssertTrue(row.label.contains("3 of 4 tasks complete"))
+            XCTAssertTrue(row.label.contains("Unfinished tasks"))
+            XCTAssertFalse(row.label.contains(".md"))
+            XCTAssertFalse(row.label.contains("3 files"))
+            XCTAssertFalse(row.label.contains("ago"))
+            XCTAssertTrue(done.label.contains("1 of 1 tasks complete"))
+            XCTAssertFalse(done.label.contains(".md"))
+          }
+          record(
+            app,
+            name: "scoped-\(collection.state)-folded-\(accessibility ? "AX3" : "Large")-\(appearance)")
+        }
+      }
+    }
+  }
+
+  @MainActor
+  func testTodayCompletionHasNoVisibleAllDoneCaption() async throws {
+    for appearance in ["light", "dark"] {
+      let app = launch(screen: "library", state: "today-done", appearance: appearance)
+      defer { app.terminate() }
+      let today = app.buttons["library-today"]
+      try await waitUntil("the completed Today card") { today.isHittable }
+      XCTAssertFalse(app.staticTexts["All done"].exists)
+      XCTAssertTrue((today.value as? String ?? "").contains("1 of 1 tasks complete"))
+      record(app, name: "today-done-static-check-folded-\(appearance)")
+    }
+  }
+
+  @MainActor
   func testQuickCaptureExposesTheNativeEditorAtBothTextSizes() async throws {
     for appearance in ["light", "dark"] {
       for accessibility in [false, true] {

@@ -98,7 +98,14 @@ public final class LibraryModel {
     public var selectedTagIDs: Set<String> = []
     public var selectedNoteID: String?
     public var today: LibraryTodaySummary
-    public var searchState: LibrarySearchState = .inactive
+    private var knownDailyNoteCount: Int?
+    public var searchState: LibrarySearchState = .inactive {
+        didSet {
+            if collection == .dailyNotes, case .results(_, let coverage) = searchState {
+                knownDailyNoteCount = coverage.totalDocuments
+            }
+        }
+    }
 
     public init(
         snapshot: LibrarySnapshot? = nil, loadState: LibraryLoadState = .loading,
@@ -137,6 +144,15 @@ public final class LibraryModel {
     public func replaceSnapshot(_ snapshot: LibrarySnapshot?) {
         self.snapshot = snapshot ?? .init(notes: [])
         hasKnownGistSnapshot = snapshot != nil
+        if snapshot == nil || !self.snapshot.notes.contains(where: { $0.isDailyNote && $0.isOwned }) {
+            knownDailyNoteCount = nil
+        }
+    }
+
+    public var dailyNoteCount: Int? {
+        guard hasKnownGistSnapshot else { return nil }
+        if let knownDailyNoteCount { return knownDailyNoteCount }
+        return snapshot.notes.contains { $0.isDailyNote && $0.isOwned } ? nil : 0
     }
 
     public var collectionGistCount: Int? {
@@ -162,6 +178,12 @@ public final class LibraryModel {
             : String(localized: "\(count) gists", bundle: .module)
     }
 
+    public static func noteCountLabel(_ count: Int) -> String {
+        count == 1
+            ? String(localized: "1 note", bundle: .module)
+            : String(localized: "\(count) notes", bundle: .module)
+    }
+
     private static func includes(_ note: LibraryNote, in collection: LibraryCollection) -> Bool {
         switch collection {
         case .gists: !note.isArchived && !note.isDailyNote && note.isOwned
@@ -182,6 +204,9 @@ public final class LibraryModel {
 
     var featuredNotes: [LibraryNote] { showsFeaturedNotes ? pinnedNotes : [] }
     var listedNotes: [LibraryNote] { showsFeaturedNotes ? unpinnedNotes : matchingNotes }
+    var showsListedNotesHeading: Bool {
+        collection == .gists || hasFilters || openDocumentOutsideFilter != nil
+    }
 
     public var openDocumentOutsideFilter: LibraryNote? {
         guard let selectedNoteID,

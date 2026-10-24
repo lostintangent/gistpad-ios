@@ -11,10 +11,21 @@ public enum InterfaceTheme {
     public static let syntaxMuted = Color("SyntaxMuted", bundle: .module)
     public static let syntaxCode = Color("SyntaxCode", bundle: .module)
     public static let text = Color("Ink", bundle: .module)
+    static let taskCompletion = taskInk(.systemGreen)
+    static let overdue = taskInk(.systemOrange)
     public static let spine = LinearGradient(
         colors: [Color("SpineTop", bundle: .module), Color("SpineBottom", bundle: .module)],
         startPoint: .top, endPoint: .bottom
     )
+
+    private static func taskInk(_ color: UIColor) -> Color {
+        Color(uiColor: UIColor { traits in
+            guard let rgb = RGBColor(uiColor: color.resolvedColor(with: traits)) else {
+                preconditionFailure("Native task colors must resolve to opaque RGB.")
+            }
+            return PersonalAccent(savedHex: rgb.hex).roles(traits: traits).text.uiColor
+        })
+    }
 }
 
 extension View {

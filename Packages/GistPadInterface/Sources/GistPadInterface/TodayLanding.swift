@@ -199,20 +199,14 @@ struct TodayFeature: View {
 
     private var compactContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TodayHeading(summary: summary, usesCompactLayout: true)
-            if let progress {
-                Group {
-                    if progress.remaining == 0 {
-                        Text("All done", bundle: .module)
-                    } else {
-                        Text(
-                            "\(progress.completed) of \(progress.total) tasks complete, \(progress.remaining) left",
-                            bundle: .module
-                        )
-                    }
+            HStack(alignment: .top, spacing: 8) {
+                TodayHeading(summary: summary, usesCompactLayout: true)
+                Spacer(minLength: 0)
+                if let progress {
+                    TodayTaskState(progress: progress)
+                        .fixedSize()
+                        .captureFrame("today-tasks")
                 }
-                .font(.subheadline)
-                .fixedSize(horizontal: false, vertical: true)
             }
             excerptOrInvitation
         }
@@ -274,14 +268,8 @@ private struct TodayTaskState: View {
     var body: some View {
         VStack(spacing: 4) {
             if progress.remaining == 0 {
-                Image(systemName: "checkmark")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(InterfaceTheme.onAccent)
-                    .frame(width: ringSize, height: ringSize)
-                    .background(InterfaceTheme.accentFill, in: .circle)
+                TaskCompletionMark(size: ringSize)
                     .accessibilityIdentifier("today-all-done")
-                Text("All done", bundle: .module)
-                    .font(.caption)
             } else {
                 ZStack {
                     Circle().strokeBorder(Color(uiColor: .separator), lineWidth: 2)
@@ -304,23 +292,34 @@ private struct TodayTaskState: View {
     }
 }
 
-struct TaskProgressLabel: View {
-    let progress: LibraryTaskProgress
-    var showsRing = true
-    var usesPersonalAccent = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ScaledMetric(relativeTo: .footnote) private var ringSize = 20
+private struct TaskCompletionMark: View {
+    let size: CGFloat
 
     var body: some View {
-        HStack(spacing: 8) {
-            if showsRing, progress.total > 0 {
+        Image(systemName: "checkmark.circle.fill")
+            .font(.system(size: size))
+            .foregroundStyle(InterfaceTheme.taskCompletion)
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+}
+
+struct TaskProgressLabel: View {
+    let progress: LibraryTaskProgress
+    var isOverdue = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .footnote) private var ringSize = 14
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if progress.remaining == 0 {
+                TaskCompletionMark(size: ringSize)
+            } else {
                 ZStack {
                     Circle().strokeBorder(Color(uiColor: .separator), lineWidth: 2)
                     Circle()
                         .trim(from: 0, to: Double(progress.completed) / Double(progress.total))
-                        .stroke(
-                            usesPersonalAccent ? InterfaceTheme.accent : Color(uiColor: .secondaryLabel),
-                            style: .init(lineWidth: 2, lineCap: .round))
+                        .stroke(ink, style: .init(lineWidth: 2, lineCap: .round))
                         .padding(1)
                         .rotationEffect(.degrees(-90))
                 }
@@ -328,10 +327,26 @@ struct TaskProgressLabel: View {
                 .accessibilityHidden(true)
                 .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: progress.completed)
             }
-            Text("\(progress.completed) of \(progress.total) tasks complete", bundle: .module)
+            Text(verbatim: "\(progress.completed.formatted())/\(progress.total.formatted())")
                 .font(.footnote)
+                .monospacedDigit()
         }
-        .accessibilityElement(children: .combine)
+        .foregroundStyle(ink)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+    }
+
+    private var ink: Color {
+        isOverdue && progress.remaining > 0 ? InterfaceTheme.overdue : .secondary
+    }
+
+    private var accessibilitySummary: Text {
+        let summary = Text("\(progress.completed) of \(progress.total) tasks complete", bundle: .module)
+        if isOverdue && progress.remaining > 0 {
+            let status = Text("Unfinished tasks", bundle: .module)
+            return Text("\(summary), \(status)", bundle: .module)
+        }
+        return summary
     }
 }
 #endif

@@ -68,7 +68,7 @@ struct InterfaceCaptureWorkspace: View {
         supportedState = [
             "populated", "empty", "error", "offline", "readonly", "tag-audit", "today",
             "tag-editor", "tag-readonly", "search", "search-active", "no-results", "filtered", "signed-out",
-            "daily", "starred", "archive", "notes", "featured", "header-file",
+            "daily", "daily-progress", "starred", "archive", "notes", "featured", "header-file",
             "mode-long", "mode-emoji", "today-done", "today-no-tasks",
             "status-busy", "status-error", "status-details", "status-limited", "tag-filters"
         ].contains(state) || (LaunchArguments.captureMangaFixture && screen == "note"
@@ -83,7 +83,7 @@ struct InterfaceCaptureWorkspace: View {
         if state != "empty" {
             snapshot.notes.insert(
                 .init(
-                    id: "small", title: "Small observations", updatedAt: InterfaceFixtures.referenceDate,
+                    id: "small", title: "Small observations", updatedAt: InterfaceFixtures.referenceDate, gistID: "small",
                     isPinned: true, tagIDs: ["ideas"], fileCount: 1,
                     excerpt: "A notebook can be both quiet and precise."
                 ),
@@ -106,19 +106,19 @@ struct InterfaceCaptureWorkspace: View {
             snapshot = LibrarySnapshot(
                 notes: [
                     .init(
-                        id: "shape", title: "Labels with room", updatedAt: InterfaceFixtures.referenceDate,
+                        id: "shape", title: "Labels with room", updatedAt: InterfaceFixtures.referenceDate, gistID: "shape",
                         isPinned: true, tagIDs: ["long", "yellow", "missing"]
                     ),
                     .init(
-                        id: "white-black", title: "Black and white", updatedAt: InterfaceFixtures.referenceDate,
+                        id: "white-black", title: "Black and white", updatedAt: InterfaceFixtures.referenceDate, gistID: "white-black",
                         tagIDs: ["black", "white"]
                     ),
                     .init(
-                        id: "missing-color", title: "An unspecified color", updatedAt: InterfaceFixtures.referenceDate,
+                        id: "missing-color", title: "An unspecified color", updatedAt: InterfaceFixtures.referenceDate, gistID: "missing-color",
                         tagIDs: ["missing"]
                     ),
                     .init(
-                        id: "similar-hues", title: "Distinct names, related colors", updatedAt: InterfaceFixtures.referenceDate,
+                        id: "similar-hues", title: "Distinct names, related colors", updatedAt: InterfaceFixtures.referenceDate, gistID: "similar-hues",
                         tagIDs: ["garden", "mint"]
                     )
                 ],
@@ -169,6 +169,27 @@ struct InterfaceCaptureWorkspace: View {
             ))
         }
         switch state {
+        case "daily-progress":
+            model.collection = .dailyNotes
+            model.searchState = .results(
+                notes: [
+                    .init(
+                        id: "daily-overdue", title: "2026-10-23",
+                        updatedAt: InterfaceFixtures.referenceDate, gistID: "daily",
+                        isDailyNote: true, filename: "2026-10-23.md", fileCount: 3,
+                        excerpt: "Set up the iPhone Duo. Keep the useful thoughts close.",
+                        progress: .init(completed: 3, total: 4), isOverdue: true
+                    ),
+                    .init(
+                        id: "daily-done", title: "2026-10-24",
+                        updatedAt: InterfaceFixtures.referenceDate, gistID: "daily",
+                        isDailyNote: true, filename: "2026-10-24.md", fileCount: 3,
+                        excerpt: "A little room to think.",
+                        progress: .init(completed: 1, total: 1)
+                    )
+                ],
+                coverage: .init(totalDocuments: 2, documentsWithCachedContent: 2)
+            )
         case "daily": model.collection = .dailyNotes
         case "starred": model.collection = .starred
         case "archive": model.collection = .archive
@@ -321,6 +342,9 @@ struct InterfaceCaptureWorkspace: View {
             actionMessage = "This synthetic invitation does not connect to GitHub."
         }
         actions.recoverStatus = recoverCaptureStatus
+        actions.account = {
+            actionMessage = "Settings opened for this synthetic notebook."
+        }
         return actions
     }
 

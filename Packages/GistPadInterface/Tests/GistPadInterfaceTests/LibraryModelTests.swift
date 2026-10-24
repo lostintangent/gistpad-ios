@@ -77,6 +77,26 @@ struct LibraryModelTests {
         #expect(model.matchingNotes.map(\.id) == ["daily"])
     }
 
+    @Test(arguments: LibraryCollection.allCases)
+    func singleScopedListsDoNotRepeatTheirNavigationTitle(collection: LibraryCollection) {
+        let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
+        model.collection = collection
+        #expect(model.showsListedNotesHeading == (collection == .gists))
+    }
+
+    @Test(arguments: [LibraryCollection.starred, .dailyNotes, .archive])
+    func scopedHeadingsStillSeparateAnOpenDocumentAndSearchResults(collection: LibraryCollection) {
+        let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
+        model.collection = collection
+        model.selectedNoteID = "shape"
+        #expect(model.openDocumentOutsideFilter?.id == "shape")
+        #expect(model.showsListedNotesHeading)
+        model.selectedNoteID = nil
+        #expect(!model.showsListedNotesHeading)
+        model.query = "note"
+        #expect(model.showsListedNotesHeading)
+    }
+
     @Test func selectedDocumentRemainsDiscoverableAfterFilterChangingEdit() {
         let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
         model.selectedNoteID = "shape"

@@ -7,6 +7,9 @@
     "%lld files" : {
 
     },
+    "%lld notes" : {
+
+    },
     "%@, %@" : {
 
     },
@@ -23,6 +26,9 @@
 
     },
     "All Notes" : {
+
+    },
+    "1 note" : {
 
     },
     "Accent Color" : {

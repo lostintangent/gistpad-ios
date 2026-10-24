@@ -1,8 +1,17 @@
 #if os(iOS)
+import OSLog
 import SwiftUI
 
 private struct LibrarySearchOwnerKey: EnvironmentKey {
     static let defaultValue = false
+}
+
+private struct LibrarySearchPresentationKey: EnvironmentKey {
+    static var defaultValue: Binding<Bool>? { nil }
+}
+
+private struct LibrarySearchProgressKey: EnvironmentKey {
+    static var defaultValue: String? { nil }
 }
 
 extension EnvironmentValues {
@@ -10,30 +19,43 @@ extension EnvironmentValues {
         get { self[LibrarySearchOwnerKey.self] }
         set { self[LibrarySearchOwnerKey.self] = newValue }
     }
+
+    fileprivate var librarySearchPresentation: Binding<Bool>? {
+        get { self[LibrarySearchPresentationKey.self] }
+        set { self[LibrarySearchPresentationKey.self] = newValue }
+    }
+
+    fileprivate var librarySearchProgress: String? {
+        get { self[LibrarySearchProgressKey.self] }
+        set { self[LibrarySearchProgressKey.self] = newValue }
+    }
 }
 
 private struct LibrarySearchModifier: ViewModifier {
     @Bindable var model: LibraryModel
     var isPresented: Binding<Bool>?
+    @State private var presented = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var presentation: Binding<Bool> { isPresented ?? $presented }
 
     func body(content: Content) -> some View {
         searchableContent(content)
             .searchToolbarBehavior(.minimize)
+            .toolbar(removing: horizontalSizeClass == .regular || presentation.wrappedValue ? nil : .search)
             .environment(\.librarySearchManagedByContainer, true)
+            .environment(\.librarySearchPresentation, presentation)
     }
 
     @ViewBuilder
     private func searchableContent(_ content: Content) -> some View {
         if model.loadState == .signedOut {
             content
-        } else if let isPresented {
+        } else {
             content.searchable(
-                text: $model.query, isPresented: isPresented,
+                text: $model.query, isPresented: presentation,
                 placement: .sidebar, prompt: Text("Search notes", bundle: .module)
             )
-        } else {
-            content
-                .searchable(text: $model.query, placement: .sidebar, prompt: Text("Search notes", bundle: .module))
         }
     }
 }
@@ -144,6 +166,73 @@ public struct LibraryView: View {
         }
     }
 
+    struct SearchProgressModifier: ViewModifier {
+        let state: GitHubStatusState
+        @State private var checkingOperation: String?
+
+        private var operation: String? {
+            if case .checking(let operation) = state { operation } else { nil }
+        }
+
+        func body(content: Content) -> some View {
+            content
+                .environment(\.librarySearchProgress, checkingOperation)
+                .task(id: operation) {
+                    checkingOperation = nil
+                    guard let operation else { return }
+                    do {
+                        try await Task.sleep(for: .milliseconds(400))
+                        try Task.checkCancellation()
+                        checkingOperation = operation
+                    } catch is CancellationError {
+                        return
+                    } catch {
+                        Logger(subsystem: "dev.gistpad.GistPad", category: "Status")
+                            .error("Search progress delay failed: \(String(reflecting: type(of: error)), privacy: .public)")
+                    }
+                }
+        }
+    }
+
+    struct SearchButton: View {
+        let action: @MainActor () -> Void
+        @Environment(\.librarySearchProgress) private var checkingOperation
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+        var body: some View {
+            Button(action: action) {
+                Label {
+                    Text("Search", bundle: .module)
+                } icon: {
+                    ZStack {
+                        if checkingOperation != nil {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.secondary)
+                                .captureFrame("library-search-progress")
+                                .transition(.opacity)
+                        } else {
+                            Image(systemName: "magnifyingglass")
+                                .transition(.symbolEffect(.appear))
+                        }
+                    }
+                    .accessibilityHidden(true)
+                    .allowsHitTesting(false)
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
+                .captureFrame("library-search")
+            }
+            .buttonStyle(.plain)
+            .labelStyle(.iconOnly)
+            .tint(.primary)
+            .accessibilityLabel(Text("Search", bundle: .module))
+            .accessibilityValue(checkingOperation ?? "")
+            .accessibilityIdentifier("library-search")
+            .animation(reduceMotion ? nil : .default, value: checkingOperation)
+        }
+    }
+
     struct NoteRowContent: View {
         let note: LibraryNote
         let tags: [LibraryTag]
@@ -153,14 +242,23 @@ public struct LibraryView: View {
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(verbatim: note.title)
-                        .font(.headline)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                    if note.isPinned && showsPin {
-                        Image(systemName: "pin.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .accessibilityLabel(Text("Pinned", bundle: .module))
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(verbatim: note.title)
+                            .font(.headline)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                            .captureFrame("note-title-\(note.id)")
+                        if note.isPinned && showsPin {
+                            Image(systemName: "pin.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel(Text("Pinned", bundle: .module))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if let progress = note.progress, progress.total > 0 {
+                        TaskProgressLabel(progress: progress, isOverdue: note.isOverdue)
+                            .fixedSize()
+                            .captureFrame("note-progress-\(note.id)")
                     }
                 }
                 if let excerpt = note.excerpt, !excerpt.isEmpty {
@@ -169,17 +267,11 @@ public struct LibraryView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                NoteRowMetadata(note: note, tags: tags)
-                if let filename = note.filename, filename != note.title {
+                if !note.isDailyNote || !tags.isEmpty || (!note.isOwned && note.owner != nil) {
+                    NoteRowMetadata(note: note, tags: tags)
+                }
+                if !note.isDailyNote, let filename = note.filename, filename != note.title {
                     Text(verbatim: filename)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                if let progress = note.progress {
-                    TaskProgressLabel(progress: progress)
-                }
-                if note.isOverdue {
-                    Label(String(localized: "Unfinished tasks", bundle: .module), systemImage: "clock")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -199,7 +291,9 @@ public struct LibraryView: View {
                 if !note.isOwned, let owner = note.owner {
                     Text(verbatim: "@\(owner)")
                 }
-                Text(note.updatedAt, format: .relative(presentation: .named))
+                if !note.isDailyNote {
+                    Text(note.updatedAt, format: .relative(presentation: .named))
+                }
                 ForEach(tags.prefix(2)) { TagLabel(tag: $0) }
                 if tags.count > 2 {
                     TagLabels.TagOverflowLabel(count: tags.count - 2)
@@ -208,7 +302,7 @@ public struct LibraryView: View {
                             bundle: .module
                         ))
                 }
-                if let count = note.fileCount, count > 1 {
+                if !note.isDailyNote, let count = note.fileCount, count > 1 {
                     HStack(spacing: 4) {
                         Image(systemName: "doc.on.doc")
                             .accessibilityHidden(true)
@@ -266,10 +360,12 @@ public struct LibraryView: View {
     @State private var showingTags = false
     @State private var tagQuery = ""
     @State private var isPullRefreshing = false
+    @State private var searchPresented = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.librarySearchManagedByContainer) private var searchManagedByContainer
+    @Environment(\.librarySearchPresentation) private var containerSearchPresentation
     @Environment(\.isGitHubStatusVisible) private var isGitHubStatusVisible
 
     public init(
@@ -294,6 +390,7 @@ public struct LibraryView: View {
     public var body: some View {
         navigationList
             .navigationTitle(navigationTitle)
+            .navigationSubtitle(navigationSubtitle)
             .toolbarTitleDisplayMode(.inline)
             .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
             .refreshable {
@@ -304,6 +401,7 @@ public struct LibraryView: View {
             .toolbar { libraryToolbar }
             .sheet(isPresented: $showingTags) { tagFilters }
             .scrollEdgeEffectStyle(.soft, for: .all)
+            .modifier(SearchProgressModifier(state: isSidebar ? .idle : remoteStatus))
     }
 
     @ViewBuilder
@@ -315,8 +413,11 @@ public struct LibraryView: View {
                 .toolbarTitleMenu { collectionPicker }
         } else {
             adaptiveList
-                .searchable(text: $model.query, prompt: Text("Search notes", bundle: .module))
+                .searchable(
+                    text: $model.query, isPresented: $searchPresented,
+                    prompt: Text("Search notes", bundle: .module))
                 .searchToolbarBehavior(.minimize)
+                .toolbar(removing: isSidebar || searchPresented ? nil : .search)
                 .toolbarTitleMenu { collectionPicker }
         }
     }
@@ -337,6 +438,14 @@ public struct LibraryView: View {
     private var navigationTitle: String {
         if model.loadState == .signedOut { return "" }
         return model.collection == .gists ? String(localized: "GistPad", bundle: .module) : model.collection.title
+    }
+
+    private var navigationSubtitle: String {
+        guard model.loadState != .signedOut, model.collection != .gists else { return "" }
+        if model.collection == .dailyNotes {
+            return model.dailyNoteCount.map(LibraryModel.noteCountLabel) ?? ""
+        }
+        return model.collectionGistCount.map(LibraryModel.gistCountLabel) ?? ""
     }
 
     private var libraryList: some View {
@@ -392,15 +501,8 @@ public struct LibraryView: View {
                     }
                 }
                 if !model.listedNotes.isEmpty {
-                    Section {
-                        ForEach(model.listedNotes) { noteRow($0) }
-                    } header: {
-                        VStack(alignment: .leading, spacing: 8) {
-                            if model.hasFilters { searchSummary }
-                            sectionHeading(model.hasFilters ? String(localized: "Results", bundle: .module) : model.collection.title)
-                        }
-                    }
-                    .listSectionSeparator(.hidden)
+                    listedNotesSection
+                        .listSectionSeparator(.hidden)
                 }
                 if model.matchingNotes.isEmpty && model.loadState != .loading && canShowEmptyState {
                     emptyState
@@ -412,6 +514,33 @@ public struct LibraryView: View {
         }
         .tint(.primary)
         .animation(reduceMotion ? nil : .default, value: model.matchingNotes.map(\.id))
+    }
+
+    @ViewBuilder
+    private var listedNotesSection: some View {
+        if model.showsListedNotesHeading {
+            Section {
+                listedNoteRows
+            } header: {
+                VStack(alignment: .leading, spacing: 8) {
+                    if model.hasFilters { searchSummary }
+                    sectionHeading(
+                        model.hasFilters ? String(localized: "Results", bundle: .module) : model.collection.title,
+                        symbol: !model.hasFilters && model.collection == .gists ? "doc.text" : nil,
+                        count: model.hasFilters ? model.resultGistCount
+                            : model.hasKnownGistSnapshot ? LibraryModel.gistCount(in: model.listedNotes) : nil)
+                    .accessibilityIdentifier("library-listed-heading")
+                }
+            }
+        } else {
+            Section {
+                listedNoteRows
+            }
+        }
+    }
+
+    private var listedNoteRows: some View {
+        ForEach(model.listedNotes) { noteRow($0) }
     }
 
     private var librarySelection: Binding<Selection?> {
@@ -434,19 +563,51 @@ public struct LibraryView: View {
         )
     }
 
-    private func sectionHeading(_ title: String) -> some View {
-        Text(verbatim: title)
+    private func sectionHeading(
+        _ title: String, symbol: String? = nil, count: Int? = nil
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Group {
+                if let symbol {
+                    Label {
+                        Text(verbatim: title)
+                    } icon: {
+                        Image(systemName: symbol)
+                            .imageScale(.small)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    }
+                } else {
+                    Text(verbatim: title)
+                }
+            }
             .font(.title3.weight(.bold))
-            .foregroundStyle(Color(uiColor: .label))
-            .textCase(nil)
-            .accessibilityAddTraits(.isHeader)
+            if let count {
+                Spacer(minLength: 12)
+                Text(count, format: .number)
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.title3.weight(.bold))
+        .foregroundStyle(Color(uiColor: .label))
+        .textCase(nil)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            count.map { Text("\(title), \(LibraryModel.gistCountLabel($0))", bundle: .module) }
+                ?? Text(verbatim: title))
+        .accessibilityAddTraits(.isHeader)
     }
 
     private var pinnedHeading: some View {
-        sectionHeading(String(localized: "Pinned Gists", bundle: .module))
+        sectionHeading(
+            String(localized: "Pinned Gists", bundle: .module), symbol: "pin.fill",
+            count: model.hasKnownGistSnapshot ? LibraryModel.gistCount(in: model.featuredNotes) : nil)
+        .accessibilityIdentifier("library-pinned-heading")
     }
 
-    private var footerStatus: GitHubStatusState {
+    private var remoteStatus: GitHubStatusState {
         let state = model.gitHubStatus
             ?? (model.loadState == .loading
                 ? .checking(operation: String(localized: "Updating from GitHub", bundle: .module))
@@ -617,7 +778,7 @@ public struct LibraryView: View {
 
     @ViewBuilder
     private var status: some View {
-        if !model.snapshot.notes.isEmpty, case .problem = footerStatus {
+        if !model.snapshot.notes.isEmpty, case .problem = remoteStatus {
             EmptyView()
         } else {
         switch model.loadState {
@@ -825,48 +986,99 @@ public struct LibraryView: View {
             if isSidebar {
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
             }
-            if isGitHubStatusVisible, footerStatus != .idle {
-                ToolbarSpacer(.flexible, placement: .bottomBar)
-                ToolbarItem(placement: .bottomBar) {
-                    GitHubStatusControl(state: footerStatus) {
-                        if let recover = actions.recoverStatus {
-                            recover()
-                        } else if case .reconnectRequired = model.loadState,
-                                  let reconnect = actions.reconnect {
-                            reconnect()
-                        } else {
-                            Task { await actions.refresh() }
+            if !(containerSearchPresentation?.wrappedValue ?? searchPresented) {
+                if !isSidebar {
+                    ToolbarSpacer(.flexible, placement: .bottomBar)
+                }
+                if isGitHubStatusVisible, case .problem = remoteStatus {
+                    if isSidebar {
+                        ToolbarSpacer(.flexible, placement: .bottomBar)
+                    }
+                    ToolbarItem(placement: .bottomBar) {
+                        GitHubStatusControl(state: remoteStatus) {
+                            if let recover = actions.recoverStatus {
+                                recover()
+                            } else if case .reconnectRequired = model.loadState,
+                                      let reconnect = actions.reconnect {
+                                reconnect()
+                            } else {
+                                Task { await actions.refresh() }
+                            }
                         }
                     }
+                    .sharedBackgroundVisibility(.hidden)
                 }
-                .sharedBackgroundVisibility(.hidden)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button(String(localized: "New note", bundle: .module), systemImage: "square.and.pencil", action: actions.create)
-                    .tint(.primary)
-                    .accessibilityIdentifier("library-create")
-            }
-            ToolbarItem(placement: .secondaryAction) {
-                Button {
-                    showingTags = true
-                } label: {
-                    Label(
-                        model.selectedTagIDs.isEmpty
-                            ? String(localized: "Filter by tags", bundle: .module)
-                            : String(localized: "Tag filters applied", bundle: .module),
-                        systemImage: model.selectedTagIDs.isEmpty ? "tag" : "tag.fill"
-                    )
+                if !isSidebar {
+                    ToolbarItem(placement: .bottomBar) {
+                        VStack(spacing: 8) {
+                            tagFilterButton
+                                .buttonStyle(.plain)
+                                .labelStyle(.iconOnly)
+                            SearchButton {
+                                if let containerSearchPresentation {
+                                    containerSearchPresentation.wrappedValue = true
+                                } else {
+                                    searchPresented = true
+                                }
+                            }
+                        }
+                        .padding(2)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                    }
+                    .sharedBackgroundVisibility(.hidden)
                 }
-                .disabled(model.snapshot.tags.isEmpty)
-                .tint(.primary)
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
+                createButton
+                if !isSidebar, let account = actions.account {
+                    settingsButton(account)
+                }
+            }
+            if isSidebar {
+                ToolbarItem(placement: .secondaryAction) {
+                    tagFilterButton
+                }
             }
         }
-        if let account = actions.account {
+        if isSidebar || model.loadState == .signedOut, let account = actions.account {
             ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Settings", bundle: .module), systemImage: "gearshape", action: account)
-                    .tint(.primary)
+                settingsButton(account)
             }
         }
+    }
+
+    private var createButton: some View {
+        Button(String(localized: "New note", bundle: .module), systemImage: "square.and.pencil", action: actions.create)
+            .tint(.primary)
+            .accessibilityIdentifier("library-create")
+    }
+
+    private func settingsButton(_ action: @escaping @MainActor () -> Void) -> some View {
+        Button(String(localized: "Settings", bundle: .module), systemImage: "gearshape", action: action)
+            .tint(.primary)
+            .accessibilityIdentifier("library-settings")
+    }
+
+    private var tagFilterButton: some View {
+        Button {
+            showingTags = true
+        } label: {
+            Label {
+                if isSidebar {
+                    Text("Filter by tags", bundle: .module)
+                } else {
+                    Text("Filter by tags, \(model.selectedTagIDs.count) selected", bundle: .module)
+                }
+            } icon: {
+                Image(systemName: model.selectedTagIDs.isEmpty ? "tag" : "tag.fill")
+            }
+            .frame(minWidth: isSidebar ? nil : 44, minHeight: isSidebar ? nil : 44)
+            .contentShape(.rect)
+        }
+        .disabled(model.snapshot.tags.isEmpty)
+        .tint(.primary)
+        .accessibilityValue(Text("\(model.selectedTagIDs.count) selected", bundle: .module))
+        .accessibilityIdentifier("library-filter-tags")
     }
 
     private var collectionPicker: some View {
