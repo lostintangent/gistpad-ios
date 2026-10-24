@@ -2,8 +2,12 @@ import GistPadInterface
 import GistPadPlatform
 import GistPadSync
 import SwiftUI
+import UIKit
 
 struct AddToTodaySheet: View {
+  // UIKit fills confirmation toolbars with the text-role navigation tint.
+  private static let confirmationInk = Color(
+    uiColor: UIColor { $0.userInterfaceStyle == .dark ? .black : .white })
   let target: DailyNoteTarget
   @State private var text = ""
   @State private var asTask = false
@@ -100,9 +104,8 @@ struct AddToTodaySheet: View {
           } else {
             Button(role: .confirm, action: add) {
               Image(systemName: "checkmark")
-                .foregroundStyle(InterfaceTheme.onAccent)
+                .foregroundStyle(Self.confirmationInk)
             }
-              .tint(InterfaceTheme.accentFill)
               .accessibilityLabel("Add")
               .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
               .accessibilityIdentifier("today-capture-add")
