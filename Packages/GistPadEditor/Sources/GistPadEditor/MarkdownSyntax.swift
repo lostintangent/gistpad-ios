@@ -1,8 +1,14 @@
 import Foundation
 
+#if canImport(UIKit)
+  import GistPadInterface
+  import UIKit
+#endif
+
 public enum MarkdownSyntax {
   public enum Kind: Sendable {
-    case heading, code, frontmatter, link, task, checkedTask, punctuation, linkDestination
+    case heading, strong, emphasis, blockquote, htmlTag, strikethrough, orderedMarker
+    case code, frontmatter, link, task, checkedTask, punctuation, linkDestination
   }
 
   public struct Span: Sendable {
@@ -12,28 +18,38 @@ public enum MarkdownSyntax {
 
   private static let inlinePatterns: [(NSRegularExpression, [(Int, Kind)])] = {
     let patterns: [(String, [(Int, Kind)])] = [
+      ("^ {0,3}(?:>[ \\t]*)+.*$", [(0, .blockquote)]),
       (
-        "^ {0,3}(#{1,6})(?:[ \\t]+(.*?))?(?:[ \\t]+(#+))?[ \\t]*$",
-        [(1, .punctuation), (2, .heading), (3, .punctuation)]
+        "^ {0,3}#{1,6}(?:[ \\t]+.*?)?(?:[ \\t]+#+)?[ \\t]*$",
+        [(0, .heading)]
+      ),
+      (
+        "(?<!\\\\)(\\*{3}|_{3})(?=\\S)(.+?\\S|\\S)\\1",
+        [(0, .strong), (0, .emphasis)]
+      ),
+      ("(?<!\\\\)(\\*\\*|__)(?=\\S)(.+?\\S|\\S)\\1", [(0, .strong)]),
+      (
+        #"(?<![\\*])\*(?!\*)(?=\S)(.+?\S|\S)(?<!\*)\*(?!\*)|(?<![\\_\p{L}\p{N}])_(?!_)(?=\S)(.+?\S|\S)(?<!_)_(?![_\p{L}\p{N}])"#,
+        [(0, .emphasis)]
+      ),
+      ("(?<!\\\\)(~~)(?=\\S)(.+?\\S|\\S)\\1", [(0, .strikethrough)]),
+      (
+        "(?<!\\\\)</?[A-Za-z][A-Za-z0-9-]*(?:[ \\t]+[^<>\\n]*?)?[ \\t]*/?>",
+        [(0, .htmlTag)]
       ),
       (
         "(!?\\[)([^\\]\\n]+)(\\]\\()([^\\)\\n]+)(\\))",
         [
-          (1, .punctuation), (2, .link), (3, .punctuation), (4, .linkDestination),
-          (5, .punctuation),
+          (0, .link), (4, .linkDestination),
         ]
       ),
       (
         "(\\[\\[)([^\\]\\n]+)(\\]\\])",
-        [(1, .punctuation), (2, .link), (3, .punctuation)]
+        [(0, .link)]
       ),
       ("^[ \\t]*(?:>[ \\t]*)*[-*+][ \\t]+(\\[[ xX]\\])", [(1, .task)]),
-      ("^[ \\t]*(?:>[ \\t]*)*((?:[-*+]|[0-9]{1,9}[.)]))(?=[ \\t])", [(1, .punctuation)]),
-      ("^(?:[ \\t]*>)+", [(0, .punctuation)]),
-      (
-        "(?<!\\\\)(\\*{1,3}|_{1,3}|~~)(?=\\S)(.+?\\S|\\S)(\\1)",
-        [(1, .punctuation), (3, .punctuation)]
-      ),
+      ("^[ \\t]*([0-9]{1,9}[.)])(?=[ \\t])", [(1, .orderedMarker)]),
+      ("^[ \\t]*(?:>[ \\t]*)*([-*+])(?=[ \\t])", [(1, .punctuation)]),
     ]
     return patterns.map { pattern, captures in
       do {
@@ -59,7 +75,6 @@ public enum MarkdownSyntax {
   public static func spans(in text: String) -> [Span] {
     let source = text as NSString
     var result: [Span] = []
-    var codeDelimiters: [Span] = []
     var proseRanges: [NSRange] = []
     var proseStart: Int?
     var offset = 0
@@ -71,7 +86,6 @@ public enum MarkdownSyntax {
       let candidate = fencePatterns.opening.firstMatch(
         in: line, range: NSRange(location: 0, length: (line as NSString).length))
       var protectedKind: Kind?
-      var fenceDelimiter: NSRange?
       if offset == 0 && line == "---" {
         frontmatter = true
         protectedKind = .frontmatter
@@ -88,7 +102,6 @@ public enum MarkdownSyntax {
             delimiter.length >= currentFence.length
           {
             fence = nil
-            fenceDelimiter = closing.range(at: 1)
           }
         }
       } else if let candidate {
@@ -97,7 +110,6 @@ public enum MarkdownSyntax {
         if delimiter.character(at: 0) != 0x60 || !suffix.contains("`") {
           fence = (delimiter.character(at: 0), delimiter.length)
           protectedKind = .code
-          fenceDelimiter = candidate.range(at: 1)
         }
       }
       if protectedKind != nil || line.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -110,12 +122,6 @@ public enum MarkdownSyntax {
       }
       if let protectedKind {
         result.append(Span(range: range, kind: protectedKind))
-        if let delimiter = fenceDelimiter {
-          codeDelimiters.append(
-            Span(
-              range: NSRange(location: offset + delimiter.location, length: delimiter.length),
-              kind: .punctuation))
-        }
       } else {
         for (expression, captures) in inlinePatterns {
           for match in expression.matches(
@@ -143,17 +149,9 @@ public enum MarkdownSyntax {
     for range in proseRanges {
       for code in inlineCodeRanges(in: source, range: range) {
         result.append(Span(range: code, kind: .code))
-        var length = 0
-        while length < code.length, source.character(at: code.location + length) == 0x60 {
-          length += 1
-        }
-        for location in [code.location, NSMaxRange(code) - length] {
-          codeDelimiters.append(
-            Span(range: NSRange(location: location, length: length), kind: .punctuation))
-        }
       }
     }
-    return result + codeDelimiters
+    return result
   }
 
   public static func ignoredWritingToolsRanges(in text: String, enclosing range: NSRange)
@@ -211,6 +209,44 @@ public enum MarkdownSyntax {
     return result
   }
 }
+
+#if canImport(UIKit)
+  @MainActor
+  enum SourceSyntaxColor {
+    static let emphasis = color(
+      light: 0x1E293B, dark: 0xD2A8FF, highLight: 0x0F172A, highDark: 0xE6CCFF)
+    static let quote = color(
+      light: 0x22863A, dark: 0x7EE787, highLight: 0x155D27, highDark: 0xB0F5B7)
+    static let htmlTag = color(
+      light: 0x116329, dark: 0x7EE787, highLight: 0x0B4B1E, highDark: 0xB0F5B7)
+    static let destination = color(
+      light: 0x032F62, dark: 0xA5D6FF, highLight: 0x02234A, highDark: 0xD1ECFF)
+    static let orderedMarker = color(
+      light: 0x005CC5, dark: 0x79C0FF, highLight: 0x004A9F, highDark: 0xB5DDFF)
+    static let link: UIColor = {
+      let ink = UIColor(InterfaceTheme.text)
+      let urlColor = destination
+      return UIColor { traits in
+        (traits.userInterfaceStyle == .dark ? ink : urlColor).resolvedColor(with: traits)
+      }
+    }()
+
+    private static func color(
+      light: UInt32, dark: UInt32, highLight: UInt32, highDark: UInt32
+    ) -> UIColor {
+      UIColor { traits in
+        let darkMode = traits.userInterfaceStyle == .dark
+        let value =
+          traits.accessibilityContrast == .high
+          ? (darkMode ? highDark : highLight) : (darkMode ? dark : light)
+        return UIColor(
+          red: CGFloat((value >> 16) & 255) / 255,
+          green: CGFloat((value >> 8) & 255) / 255,
+          blue: CGFloat(value & 255) / 255, alpha: 1)
+      }
+    }
+  }
+#endif
 
 public struct SourceMutation: Sendable {
   public let range: NSRange

@@ -44,6 +44,8 @@ Debug capture launches accept `--capture-screen library|note|editor|focus`. Libr
 
 Focus uses `ArrangementView` to adapt source and preview around the available display regions, backed by the same document session.
 
+The native source editor uses the web GitHub theme's Markdown token colors with adaptive Increased Contrast variants. Headings, emphasis, quotations, HTML and ordered markers keep their visible delimiters in the element's color. Code remains monochrome and monospaced. Appearance-only changes resolve dynamic colors without reparsing or changing source, selection or Undo.
+
 ## Checks
 
 ```sh

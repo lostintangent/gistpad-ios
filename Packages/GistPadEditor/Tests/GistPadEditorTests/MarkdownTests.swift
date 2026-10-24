@@ -121,7 +121,7 @@ import Testing
   #expect(MarkdownSyntax.ignoredWritingToolsRanges(in: source, enclosing: full) == [full])
 }
 
-@Test func syntaxThemeSeparatesContentFromVisibleMarkdownDelimiters() {
+@Test func syntaxThemeKeepsVisibleMarkdownDelimitersWithTheirElement() {
   let source = """
     ## A heading ##
     - [ ] Open task
@@ -134,27 +134,46 @@ import Testing
   func strings(_ kind: MarkdownSyntax.Kind) -> [String] {
     spans.filter { $0.kind == kind }.map { (source as NSString).substring(with: $0.range) }
   }
-  #expect(strings(.heading) == ["A heading"])
+  #expect(strings(.heading) == ["## A heading ##"])
   #expect(strings(.task) == ["[ ]"])
   #expect(strings(.checkedTask) == ["[X]"])
-  #expect(strings(.link) == ["Link label", "Wiki note"])
+  #expect(strings(.link) == ["[Link label](https://example.com)", "[[Wiki note]]"])
   #expect(strings(.linkDestination) == ["https://example.com"])
-  #expect(strings(.punctuation).filter { $0 == "##" }.count == 2)
-  #expect(strings(.punctuation).filter { $0 == "*" }.count == 2)
-  #expect(strings(.punctuation).filter { $0 == "**" }.count == 2)
+  #expect(strings(.strong) == ["**strong**"])
+  #expect(strings(.emphasis) == ["*emphasis*"])
 }
 
-@Test func codeContentOverridesProseStylesButItsDelimitersStayDistinct() {
+@Test func codeContentAndItsDelimitersOverrideProseStylesTogether() {
   let source = "`[literal](url) **not emphasis**`\n```swift\nlet value = 1\n```\n"
   let spans = MarkdownSyntax.spans(in: source)
   let literal = (source as NSString).range(of: "literal")
   #expect(spans.last { NSLocationInRange(literal.location, $0.range) }?.kind == .code)
   let tick = NSRange(location: 0, length: 1)
-  #expect(spans.last { NSLocationInRange(tick.location, $0.range) }?.kind == .punctuation)
-  let fences = spans.filter {
-    $0.kind == .punctuation && (source as NSString).substring(with: $0.range) == "```"
+  #expect(spans.last { NSLocationInRange(tick.location, $0.range) }?.kind == .code)
+  #expect(spans.filter { $0.kind == .code }.count == 4)
+}
+
+@Test func syntaxThemeRecognizesQuotesNestedEmphasisHTMLStrikesAndOrderedMarkers() {
+  let source = """
+    > Quoted _emphasis_ and **strong** with ***both***
+    14. Numbered item
+    - Ordinary bullet
+    <span class="note">HTML</span> and ~~deleted~~
+    """
+  let spans = MarkdownSyntax.spans(in: source)
+  func strings(_ kind: MarkdownSyntax.Kind) -> [String] {
+    spans.filter { $0.kind == kind }.map { (source as NSString).substring(with: $0.range) }
   }
-  #expect(fences.count == 2)
+  #expect(strings(.blockquote) == ["> Quoted _emphasis_ and **strong** with ***both***"])
+  #expect(strings(.emphasis).contains("_emphasis_"))
+  #expect(strings(.emphasis).contains("***both***"))
+  #expect(strings(.strong).contains("**strong**"))
+  #expect(strings(.strong).contains("***both***"))
+  #expect(strings(.orderedMarker) == ["14."])
+  #expect(strings(.punctuation) == ["-"])
+  #expect(strings(.htmlTag) == [#"<span class="note">"#, "</span>"])
+  #expect(strings(.strikethrough) == ["~~deleted~~"])
+  #expect(spans.allSatisfy { Range($0.range, in: source) != nil })
 }
 
 @Test func longFixtureIsSyntheticAndMultilingual() throws {
