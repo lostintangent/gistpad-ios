@@ -64,12 +64,11 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             }
         }
         .toolbar { noteToolbar }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .safeAreaBar(edge: .bottom, spacing: 0) {
             status
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(uiColor: .systemBackground))
         }
         .sheet(isPresented: $showingTags) {
             TagEditor(tags: document.tags, selectedTagIDs: Set(document.tags.map(\.id)))
