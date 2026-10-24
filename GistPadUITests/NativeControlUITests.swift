@@ -266,7 +266,6 @@ final class NativeControlUITests: XCTestCase {
       for: 48, compatibleWith: UITraitCollection(preferredContentSizeCategory: category))
     for appearance in ["light", "dark"] {
       for split in [false, true] {
-        XCUIDevice.shared.orientation = split ? .landscapeLeft : .portrait
         var baselineWidth: CGFloat?
         for title in titles {
           let app = launch(
@@ -274,10 +273,18 @@ final class NativeControlUITests: XCTestCase {
             appearance: appearance,
             extraArguments: ["--capture-multi-file"] + (split ? ["--capture-split"] : []))
           defer { app.terminate() }
-          try await waitUntil("the actual \(split ? "landscape" : "portrait") viewport") {
-            split ? app.frame.width > app.frame.height : app.frame.height > app.frame.width
+          XCUIDevice.shared.orientation = split ? .landscapeLeft : .portrait
+          let window = app.windows.firstMatch
+          do {
+            try await waitUntil("the actual \(split ? "landscape" : "portrait") viewport") {
+              split ? window.frame.width > window.frame.height
+                : window.frame.height > window.frame.width
+            }
+          } catch {
+            record(app, name: "native-mode-viewport-\(split ? "wide" : "folded")")
+            throw error
           }
-          if split { XCTAssertGreaterThanOrEqual(app.frame.width, 640) }
+          if split { XCTAssertGreaterThanOrEqual(window.frame.width, 640) }
           let picker = app.segmentedControls["note-toggle-mode"]
           let labels = split ? ["Edit", "Split", "Preview"] : ["Edit", "Preview"]
           try await waitUntil("every native mode target") {
@@ -289,12 +296,12 @@ final class NativeControlUITests: XCTestCase {
           } else {
             baselineWidth = picker.frame.width
           }
-          XCTAssertTrue(app.frame.contains(picker.frame))
+          XCTAssertTrue(window.frame.contains(picker.frame))
           for label in labels {
             let target = picker.buttons[label]
             XCTAssertGreaterThanOrEqual(target.frame.width, minimum - 1)
             XCTAssertGreaterThanOrEqual(target.frame.height, 44)
-            XCTAssertTrue(app.frame.contains(target.frame))
+            XCTAssertTrue(window.frame.contains(target.frame))
             target.tap()
             try await waitUntil("native \(label) selection") { target.isSelected }
           }
