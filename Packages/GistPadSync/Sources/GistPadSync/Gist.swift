@@ -57,6 +57,30 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
         )
     }
     public var markdownFilenames: [String] { files.keys.filter { $0.hasSuffix(".md") }.sorted() }
+    public var defaultMarkdownFilename: String? {
+        if let dated = datedFiles {
+            return dated.values.max { $0.value < $1.value }?.key
+        }
+        return files["README.md"] != nil ? "README.md" : markdownFilenames.first
+    }
+    public var fileDatesForGrouping: [String: Date] {
+        guard let dated = datedFiles, dated.format != .year else { return [:] }
+        return dated.values
+    }
+    private var datedFiles: (format: FilenameDateFormat, values: [String: Date])? {
+        let dated = markdownFilenames.filter { $0.lowercased() != "readme.md" }
+        if !dated.isEmpty {
+            for format in FilenameDateFormat.allCases {
+                let values = dated.compactMap { name in
+                    format.date(filename: name).map { (filename: name, date: $0) }
+                }
+                if values.count == dated.count {
+                    return (format, Dictionary(uniqueKeysWithValues: values))
+                }
+            }
+        }
+        return nil
+    }
     public var displayName: String {
         let name = displayDescription.isEmpty
             ? (files.keys.sorted().first.map(GistConventions.fileDisplayName) ?? "Empty")
@@ -70,6 +94,38 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
             $0.language == "Markdown" || $0.filename.hasSuffix(".tldraw")
                 || (allowImages && $0.filename.hasSuffix(".png"))
         }
+    }
+}
+
+private enum FilenameDateFormat: CaseIterable {
+    case isoDay, monthFirstDay, month, year
+
+    func date(filename: String) -> Date? {
+        let name = String(filename.dropLast(3))
+        let pattern: String
+        switch self {
+        case .isoDay: pattern = #"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"#
+        case .monthFirstDay: pattern = #"^[0-9]{2}-[0-9]{2}-[0-9]{4}$"#
+        case .month: pattern = #"^[0-9]{4}-[0-9]{2}$"#
+        case .year: pattern = #"^[0-9]{4}$"#
+        }
+        guard name.range(of: pattern, options: .regularExpression) != nil else { return nil }
+        let values = name.split(separator: "-").compactMap { Int($0) }
+        let components: DateComponents
+        switch self {
+        case .isoDay: components = DateComponents(year: values[0], month: values[1], day: values[2])
+        case .monthFirstDay:
+            components = DateComponents(year: values[2], month: values[0], day: values[1])
+        case .month: components = DateComponents(year: values[0], month: values[1], day: 1)
+        case .year: components = DateComponents(year: values[0], month: 1, day: 1)
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        guard let date = calendar.date(from: components) else { return nil }
+        let actual = calendar.dateComponents([.year, .month, .day], from: date)
+        guard actual.year == components.year, actual.month == components.month,
+              actual.day == components.day else { return nil }
+        return date
     }
 }
 
