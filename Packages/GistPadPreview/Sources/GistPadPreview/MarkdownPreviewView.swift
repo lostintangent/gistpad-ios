@@ -81,6 +81,7 @@ public struct MarkdownPreviewView: UIViewRepresentable {
         private var lastTaskEditing: Bool?
         private var lastAppearance: PreviewAppearance?
         private var ready = false
+        private var needsInitialScroll = true
 
         fileprivate init(document: PreviewDocument, allowsTaskEdits: Bool, onEvent: @escaping @MainActor (PreviewEvent) -> Void) {
             self.document = document
@@ -89,6 +90,9 @@ public struct MarkdownPreviewView: UIViewRepresentable {
         }
 
         fileprivate func update(_ document: PreviewDocument, allowsTaskEdits: Bool) {
+            if self.document.id != document.id {
+                needsInitialScroll = true
+            }
             self.document = document
             self.allowsTaskEdits = allowsTaskEdits
             guard ready, let webView else { return }
@@ -169,6 +173,12 @@ public struct MarkdownPreviewView: UIViewRepresentable {
                     Logger(subsystem: "dev.gistpad.GistPad", category: "MarkdownPreview")
                         .debug("Discarded a task edit after preview editing became unavailable.")
                 case .event(let event):
+                    if case .rendered = event, needsInitialScroll, let webView {
+                        webView.layoutIfNeeded()
+                        let insets = webView.scrollView.adjustedContentInset
+                        webView.scrollView.setContentOffset(CGPoint(x: -insets.left, y: -insets.top), animated: false)
+                        needsInitialScroll = false
+                    }
                     onEvent(event)
                 }
             } catch let failure as PreviewFailure {
@@ -198,6 +208,7 @@ public struct MarkdownPreviewView: UIViewRepresentable {
             lastSent = nil
             lastTaskEditing = nil
             lastAppearance = nil
+            needsInitialScroll = true
             onEvent(.failure(.renderer("The preview stopped unexpectedly. Reload the document to recover.")))
             webView.reload()
         }
