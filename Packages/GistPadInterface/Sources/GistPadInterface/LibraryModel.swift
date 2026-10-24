@@ -86,6 +86,7 @@ public enum LibraryLoadState: Equatable, Sendable {
 public final class LibraryModel {
     public var snapshot: LibrarySnapshot
     public var loadState: LibraryLoadState
+    public var gitHubStatus: GitHubStatusState?
     public var collection: LibraryCollection = .gists
     public var query = ""
     public var selectedTagIDs: Set<String> = []

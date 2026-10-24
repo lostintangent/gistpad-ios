@@ -126,11 +126,11 @@ struct GistPadApp: App {
       } message: {
         Text(routeError ?? "")
       }
-      .tint(InterfaceTheme.accent)
       .background {
         NotebookSceneAccent(savedHex: sceneAccent)
           .frame(width: 0, height: 0)
       }
+      .gitHubStatusKeyboardPolicy()
     }
   }
 }
