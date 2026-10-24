@@ -487,6 +487,7 @@ final class NotebookModel {
     do {
       let gist = try await provider.gist(id: gistID, accountID: account.id)
       let filenames = gist.markdownFilenames
+      let fileDates = gist.fileDatesForGrouping
       let selectedFilename: String?
       if let filename {
         selectedFilename = filenames.contains(filename) ? filename : nil
@@ -510,7 +511,7 @@ final class NotebookModel {
         chrome: NoteChrome(
           title: gist.displayName,
           files: filenames.map {
-            NoteFile(id: $0, filename: $0, date: gist.fileDatesForGrouping[$0])
+            NoteFile(id: $0, filename: $0, date: fileDates[$0])
           },
           selectedFileID: selectedFilename, access: owned ? .editable : .readOnly,
           isPinned: account.preferences.pinnedGists.contains(gist.id),
@@ -932,6 +933,7 @@ final class NotebookModel {
       return NotebookDocument(draft: draft).chrome
     }
     let owned = ownedGistIDs.contains(gist.id) || gist.owner?.id == draft.githubUserID
+    let fileDates = gist.fileDatesForGrouping
     let files = Set(
       gist.markdownFilenames
         + localDrafts.filter {
@@ -942,7 +944,7 @@ final class NotebookModel {
     return NoteChrome(
       title: gist.displayName,
       files: files.map {
-        .init(id: $0, filename: $0, date: gist.fileDatesForGrouping[$0])
+        .init(id: $0, filename: $0, date: fileDates[$0])
       }, selectedFileID: draft.filename,
       access: owned ? .editable : .readOnly,
       isPinned: account.preferences.pinnedGists.contains(gist.id),
