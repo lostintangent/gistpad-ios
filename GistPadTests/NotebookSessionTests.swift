@@ -11,6 +11,244 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct NotebookSessionTests {
+  @Test func cancelledURLInspectionDoesNotBecomeAVisibleGitHubFailure() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    await provider.failNextInspection(with: URLError(.cancelled))
+    await controller.inspectRemoteChanges()
+    #expect(controller.remoteInspectionError == nil)
+    #expect(await provider.inspectionGenerations == [0, 0])
+    #expect(controller.saveState == .savedToGitHub)
+    #expect(controller.session.text == "Base")
+    #expect(await provider.publishCount == 0)
+  }
+
+  @Test func aOneOffConnectionLossRetriesBeforeShowingAnError() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    await provider.failNextInspection(with: URLError(.networkConnectionLost))
+    await controller.inspectRemoteChanges()
+    #expect(controller.remoteInspectionError == nil)
+    #expect(await provider.inspectionGenerations == [0, 0])
+    #expect(controller.session.text == "Base")
+    #expect(await provider.publishCount == 0)
+  }
+
+  @Test func aWrappedURLCancellationAlsoRetriesWithoutWarning() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    await provider.failNextInspection(
+      with: ProviderReadFailure(underlying: URLError(.cancelled)))
+    await controller.inspectRemoteChanges()
+    #expect(controller.remoteInspectionError == nil)
+    #expect(await provider.inspectionGenerations == [0, 0])
+    #expect(controller.session.text == "Base")
+  }
+
+  @Test func aCancelledPresentationNeverRetriesOrShowsItsProviderFailure() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    await provider.holdNextInspection()
+    await provider.failNextInspection(
+      with: ProviderReadFailure(underlying: URLError(.cancelled)))
+    let check = Task { await controller.inspectRemoteChanges() }
+    await provider.waitForInspection()
+    check.cancel()
+    await provider.releaseInspection()
+    await check.value
+    #expect(controller.remoteInspectionError == nil)
+    #expect(!controller.isInspectingRemote)
+    #expect(await provider.inspectionGenerations == [0])
+  }
+
+  @Test func aSupersededReadRetriesTheLatestDurableGenerationWithoutReplacingSource() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    await provider.holdNextInspection()
+    let check = Task { await controller.inspectRemoteChanges() }
+    await provider.waitForInspection()
+    edit(controller, to: "A newer retained draft")
+    controller.session.textView.selectedRange = .init(location: 3, length: 2)
+    #expect(await controller.waitForLocalSave())
+    await provider.releaseInspection()
+    await check.value
+    #expect(await provider.inspectionGenerations == [0, 1])
+    #expect(controller.remoteInspectionError == nil)
+    #expect(controller.session.text == "A newer retained draft")
+    #expect(controller.session.textView.selectedRange == .init(location: 3, length: 2))
+    #expect(try await provider.snapshot().text == "A newer retained draft")
+    #expect(await provider.publishCount == 0)
+  }
+
+  @Test func persistentConnectionFailureStaysVisibleUntilARealRecoveryCompletes() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    for _ in 0..<3 { await provider.failNextInspection(with: URLError(.notConnectedToInternet)) }
+    await controller.inspectRemoteChanges()
+    let problem = try #require(controller.remoteInspectionError)
+    #expect(await provider.inspectionGenerations.count == 3)
+    #expect(controller.saveState == .savedToGitHub)
+    #expect(controller.session.text == "Base")
+    for _ in 0..<3 { await provider.failNextInspection(with: URLError(.notConnectedToInternet)) }
+    await controller.inspectRemoteChanges()
+    #expect(controller.remoteInspectionError == problem)
+    #expect(await provider.inspectionGenerations.count == 6)
+    await provider.holdNextInspection()
+    let retry = Task { await controller.inspectRemoteChanges() }
+    await provider.waitForInspection()
+    #expect(controller.isInspectingRemote)
+    #expect(controller.remoteInspectionError == problem)
+    await provider.releaseInspection()
+    await retry.value
+    #expect(controller.remoteInspectionError == nil)
+    #expect(!controller.isInspectingRemote)
+    #expect(await provider.inspectionGenerations.count == 7)
+    #expect(await provider.publishCount == 0)
+  }
+
+  @Test func repeatedCancellationRemainsQuietEvenAfterTheRetryBudgetIsExhausted() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    for _ in 0..<3 { await provider.failNextInspection(with: URLError(.cancelled)) }
+    await controller.inspectRemoteChanges()
+    #expect(controller.remoteInspectionError == nil)
+    #expect(await provider.inspectionGenerations.count == 3)
+    #expect(!controller.isInspectingRemote)
+  }
+
+  @Test func authenticationAndRateLimitsAreActionableWithoutRepeatedRequests() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    await provider.failNextInspection(with: GitHubClientError.http(status: 401, retryAfter: nil))
+    await controller.inspectRemoteChanges()
+    #expect(controller.remoteInspectionProblem?.recovery == .reconnect)
+    #expect(await provider.inspectionGenerations.count == 1)
+    let retryAfter = Date.now.addingTimeInterval(600)
+    await provider.failNextInspection(
+      with: GitHubClientError.http(status: 429, retryAfter: retryAfter))
+    await controller.inspectRemoteChanges()
+    #expect(controller.remoteInspectionProblem?.retryAfter == retryAfter)
+    #expect(controller.remoteInspectionProblem?.recovery == .retry)
+    #expect(await provider.inspectionGenerations.count == 2)
+    await controller.inspectRemoteChanges()
+    #expect(await provider.inspectionGenerations.count == 2)
+    #expect(controller.remoteInspectionError != nil)
+    #expect(await provider.publishCount == 0)
+  }
+
+  @Test func anExpiredRateLimitCanRecoverWithoutChangingTheNote() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    let deadline = Date.now.addingTimeInterval(-1)
+    await provider.failNextInspection(
+      with: GitHubClientError.http(status: 429, retryAfter: deadline))
+    await controller.inspectRemoteChanges()
+    #expect(controller.remoteInspectionProblem?.retryAfter == deadline)
+    await controller.inspectRemoteChanges()
+    #expect(controller.remoteInspectionError == nil)
+    #expect(await provider.inspectionGenerations == [0, 0])
+    #expect(controller.session.text == "Base")
+    #expect(await provider.publishCount == 0)
+  }
+
+  @Test func aNonReviewProviderResultFailsHonestlyWithoutPretendingToBeStale() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    await provider.returnDraftInsteadOfReview()
+    await controller.inspectRemoteChanges()
+    #expect(controller.remoteInspectionError != nil)
+    #expect(await provider.inspectionGenerations == [0])
+    #expect(controller.session.text == "Base")
+    #expect(controller.saveState == .savedToGitHub)
+    #expect(await provider.publishCount == 0)
+  }
+
+  @Test func saveSafetyIssuesTakePrecedenceOverTheRemoteCheckFooter() async throws {
+    let (controller, provider) = try await makeController(autosave: false)
+    for _ in 0..<3 { await provider.failNextInspection(with: URLError(.notConnectedToInternet)) }
+    await controller.inspectRemoteChanges()
+    guard case .problem = controller.remoteInspectionStatus else {
+      Issue.record("The ordinary persistent check failure needs its quiet footer.")
+      return
+    }
+    edit(controller, to: "Keep this newer source")
+    #expect(await controller.waitForLocalSave())
+    await provider.setRemoteContent("A conflicting remote edit")
+    await controller.inspectRemoteChanges()
+    #expect(controller.saveState == .remoteChange)
+    #expect(controller.remoteInspectionStatus == .idle)
+    #expect(controller.session.text == "Keep this newer source")
+    #expect(await provider.publishCount == 0)
+  }
+
+  @Test func cachedHomeRefreshRetriesAConnectionBlipWithoutAnAttentionState() async throws {
+    let (model, provider) = try makeRefreshModel()
+    await model.start()
+    #expect(model.cachedLibrary != nil)
+    let initialRequests = await provider.refreshCount
+    await provider.failNextRefresh(with: URLError(.networkConnectionLost))
+    await model.refresh()
+    #expect(await provider.refreshCount == initialRequests + 2)
+    #expect(model.library.loadState == .ready)
+    #expect(model.library.gitHubStatus == .idle)
+    #expect(model.remoteRefreshProblem == nil)
+  }
+
+  @Test func homeKeepsItsProblemDuringRetryAndClearsOnlyAfterRecovery() async throws {
+    let (model, provider) = try makeRefreshModel()
+    await model.start()
+    for _ in 0..<3 { await provider.failNextRefresh(with: URLError(.notConnectedToInternet)) }
+    await model.refresh()
+    let problem = try #require(model.remoteRefreshProblem)
+    guard case .problem(let status) = model.library.gitHubStatus else {
+      Issue.record("A persistent cached refresh problem needs the shared attention control.")
+      return
+    }
+    #expect(status.message == problem.message)
+    #expect(!status.isRecovering)
+    await provider.holdNextRefresh()
+    let retry = Task { await model.refresh() }
+    await provider.waitForRefresh()
+    #expect(model.isRefreshingRemote)
+    #expect(model.remoteRefreshProblem == problem)
+    guard case .problem(let recovering) = model.library.gitHubStatus else {
+      await provider.releaseRefresh()
+      await retry.value
+      Issue.record("Retry must not replace the unresolved problem with a spinner.")
+      return
+    }
+    #expect(recovering.isRecovering)
+    await provider.releaseRefresh()
+    await retry.value
+    #expect(model.library.loadState == .ready)
+    #expect(model.library.gitHubStatus == .idle)
+    #expect(model.remoteRefreshProblem == nil)
+  }
+
+  @Test func cancellingAHomeRefreshRestoresItsCachedStateWithoutWarning() async throws {
+    let (model, provider) = try makeRefreshModel()
+    await model.start()
+    let initialRequests = await provider.refreshCount
+    await provider.holdNextRefresh()
+    await provider.failNextRefresh(
+      with: ProviderReadFailure(underlying: URLError(.cancelled)))
+    let refresh = Task { await model.refresh() }
+    await provider.waitForRefresh()
+    refresh.cancel()
+    await provider.releaseRefresh()
+    await refresh.value
+    #expect(await provider.refreshCount == initialRequests + 1)
+    #expect(model.library.loadState == .ready)
+    #expect(model.library.gitHubStatus == .idle)
+    #expect(model.remoteRefreshProblem == nil)
+    #expect(!model.isRefreshingRemote)
+  }
+
+  @Test func firstLoadWithoutCacheKeepsItsExplicitFailureSurface() async throws {
+    let (model, provider) = try makeRefreshModel()
+    for _ in 0..<3 { await provider.failNextRefresh(with: URLError(.notConnectedToInternet)) }
+    await model.start()
+    #expect(model.cachedLibrary == nil)
+    guard case .failed = model.library.loadState else {
+      Issue.record("A first load without cache cannot look like an empty successful notebook.")
+      return
+    }
+    #expect(model.library.gitHubStatus == .idle)
+    await model.refresh()
+    #expect(model.library.loadState == .ready)
+    #expect(model.remoteRefreshProblem == nil)
+  }
+
   @Test func explicitlyConfirmingAnUnboundCreationPreservesTheEditorAndUsesOneManualPost() async throws {
     let (controller, provider) = try await makeController(autosave: true, uncertainCreation: true)
     let identity = controller.session.viewIdentity
@@ -389,6 +627,7 @@ struct NotebookSessionTests {
       Issue.record("An unacknowledged local write must remain an explicit failure.")
       return
     }
+    #expect(controller.remoteInspectionStatus == .idle)
   }
 
   @Test func writingToolsPersistsOnlyTheFinalChoiceAndNeverPublishesPreviews() async throws {
@@ -642,6 +881,15 @@ struct NotebookSessionTests {
     controller.session.textViewDidChange(controller.session.textView)
   }
 
+  private func makeRefreshModel() throws -> (NotebookModel, SessionNotebookProvider) {
+    let provider = SessionNotebookProvider(
+      store: try DraftStore.open(inMemory: true), id: UUID(), accountID: UUID(), autosave: false)
+    return (
+      NotebookModel(
+        provider: provider, remoteReadRetryDelays: [.milliseconds(1), .milliseconds(1)]),
+      provider)
+  }
+
   private func makeController(
     generation: UInt64 = 0, autosave: Bool? = nil, isReadOnly: Bool = false,
     uncertainPublication: Bool = false, uncertainCreation: Bool = false
@@ -694,7 +942,8 @@ struct NotebookSessionTests {
           selectedFileID: "README.md"))
     return (
       NotebookSessionController(
-        document: document, draft: draft, notebook: model, autosaveDelay: .milliseconds(30)),
+        document: document, draft: draft, notebook: model, autosaveDelay: .milliseconds(30),
+        remoteInspectionRetryDelays: [.milliseconds(1), .milliseconds(1)]),
       provider
     )
   }
@@ -738,6 +987,17 @@ private actor SessionNotebookProvider: NotebookProviding {
   private var publishing: CheckedContinuation<Void, Never>?
   private var publishObserver: CheckedContinuation<Void, Never>?
   private var pausesBeforeValidation = false
+  private var inspectionFailures: [any Error] = []
+  private(set) var inspectionGenerations: [UInt64] = []
+  private var inspectionGate: CheckedContinuation<Void, Never>?
+  private var inspectionObserver: CheckedContinuation<Void, Never>?
+  private var pausesInspection = false
+  private var returnsDraftInsteadOfReview = false
+  private var refreshFailures: [any Error] = []
+  private(set) var refreshCount = 0
+  private var refreshGate: CheckedContinuation<Void, Never>?
+  private var refreshObserver: CheckedContinuation<Void, Never>?
+  private var pausesRefresh = false
 
   init(store: DraftStore, id: UUID, accountID: UUID, autosave: Bool? = nil) {
     self.store = store
@@ -753,7 +1013,17 @@ private actor SessionNotebookProvider: NotebookProviding {
       preferences: .init(metadata: ["isAutoSaveEnabled": .bool(autosave)]))
   }
   func signIn() throws -> NotebookAccount { throw AccountError.signedOut }
-  func refreshAccount() throws -> NotebookAccount {
+  func refreshAccount() async throws -> NotebookAccount {
+    refreshCount += 1
+    if pausesRefresh {
+      pausesRefresh = false
+      await withCheckedContinuation {
+        refreshGate = $0
+        refreshObserver?.resume()
+        refreshObserver = nil
+      }
+    }
+    if !refreshFailures.isEmpty { throw refreshFailures.removeFirst() }
     guard let account = cachedAccount() else { throw AccountError.signedOut }
     return account
   }
@@ -768,9 +1038,14 @@ private actor SessionNotebookProvider: NotebookProviding {
   }
 
   func localState(accountID: UUID) async throws -> NotebookLocalState {
-    NotebookLocalState(library: nil, drafts: try await store.drafts(accountID: accountID))
+    NotebookLocalState(
+      library: try await store.cachedLibrary(accountID: accountID),
+      drafts: try await store.drafts(accountID: accountID))
   }
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) {}
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) async throws {
+    try await store.cacheLibrary(
+      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id)
+  }
   func createDraft(accountID: UUID) throws -> DraftSnapshot { throw DraftError.notFound }
   func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
     try await store.discardBlankDraft(
@@ -791,12 +1066,45 @@ private actor SessionNotebookProvider: NotebookProviding {
       return .discardedDraft(id)
     }
     if case .inspectRemote(let id, let generation) = action {
+      inspectionGenerations.append(generation)
+      if pausesInspection {
+        pausesInspection = false
+        await withCheckedContinuation {
+          inspectionGate = $0
+          inspectionObserver?.resume()
+          inspectionObserver = nil
+        }
+      }
+      if !inspectionFailures.isEmpty { throw inspectionFailures.removeFirst() }
+      if returnsDraftInsteadOfReview { return .draft(try await snapshot()) }
       return .review(
         try await store.inspectRemoteChange(
           id: id, accountID: accountID, expectedGeneration: generation,
           remote: remoteContent, revision: "remote"))
     }
     throw DraftError.notFound
+  }
+
+  func failNextInspection(with error: any Error) { inspectionFailures.append(error) }
+  func returnDraftInsteadOfReview() { returnsDraftInsteadOfReview = true }
+  func holdNextInspection() { pausesInspection = true }
+  func waitForInspection() async {
+    if inspectionGate != nil { return }
+    await withCheckedContinuation { inspectionObserver = $0 }
+  }
+  func releaseInspection() {
+    inspectionGate?.resume()
+    inspectionGate = nil
+  }
+  func failNextRefresh(with error: any Error) { refreshFailures.append(error) }
+  func holdNextRefresh() { pausesRefresh = true }
+  func waitForRefresh() async {
+    if refreshGate != nil { return }
+    await withCheckedContinuation { refreshObserver = $0 }
+  }
+  func releaseRefresh() {
+    refreshGate?.resume()
+    refreshGate = nil
   }
   func setRemoteContent(_ content: String?) { remoteContent = content }
 
@@ -873,4 +1181,11 @@ private actor SessionNotebookProvider: NotebookProviding {
           remote: remote, remoteRevision: "2", suggestedMerge: nil)), id: id, accountID: accountID)
     return try await snapshot()
   }
+}
+
+private struct ProviderReadFailure: CustomNSError {
+  static let errorDomain = "GistPadTests.ProviderReadFailure"
+  let underlying: any Error
+  var errorCode: Int { 1 }
+  var errorUserInfo: [String: Any] { [NSUnderlyingErrorKey: underlying] }
 }

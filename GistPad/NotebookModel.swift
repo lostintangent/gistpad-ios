@@ -308,9 +308,12 @@ final class NotebookModel {
   private(set) var recoverySearchRows: Set<String> = []
   private(set) var deletedGistIDs: Set<String> = []
   var documentError: String?
+  private(set) var remoteRefreshProblem: NotebookRemoteReadProblem?
+  private(set) var isRefreshingRemote = false
 
   @ObservationIgnored private let provider: any NotebookProviding
   @ObservationIgnored private let selections: NotebookSelectionStore
+  @ObservationIgnored private let remoteReadRetryDelays: [Duration]
   @ObservationIgnored private var libraryRequest = UUID()
   @ObservationIgnored private var documentRequest = UUID()
   @ObservationIgnored private var searchRequest = UUID()
@@ -319,10 +322,24 @@ final class NotebookModel {
     subsystem: "dev.gistpad.GistPad", category: "Notebook")
 
   init(
-    provider: any NotebookProviding, selections: NotebookSelectionStore = NotebookSelectionStore()
+    provider: any NotebookProviding, selections: NotebookSelectionStore = NotebookSelectionStore(),
+    remoteReadRetryDelays: [Duration] = NotebookRemoteRead.retryDelays
   ) {
     self.provider = provider
     self.selections = selections
+    self.remoteReadRetryDelays = remoteReadRetryDelays
+    library.gitHubStatus = .idle
+  }
+
+  var remoteRefreshStatus: GitHubStatusState {
+    if let problem = remoteRefreshProblem, cachedLibrary != nil || !localDrafts.isEmpty {
+      return problem.status(
+        heading: String(localized: "Couldn't update your gists"),
+        detail: String(localized: "Your notes on this iPhone are unchanged."),
+        isRecovering: isRefreshingRemote)
+    }
+    return isRefreshingRemote
+      ? .checking(operation: String(localized: "Checking GitHub for changes")) : .idle
   }
 
   convenience init(publishableKey: String) throws {
@@ -552,6 +569,9 @@ final class NotebookModel {
     libraryRequest = UUID()
     documentRequest = UUID()
     account = pendingAccount
+    remoteRefreshProblem = nil
+    isRefreshingRemote = false
+    library.gitHubStatus = .idle
     deletedGistIDs = selections.deletedGistIDs(accountID: pendingAccount.id)
     self.pendingAccount = nil
     loadedDocument = nil
@@ -625,18 +645,33 @@ final class NotebookModel {
       await start()
       return
     }
+    if let retryAfter = remoteRefreshProblem?.retryAfter, retryAfter > .now { return }
     let request = UUID()
     libraryRequest = request
-    let previousState = library.loadState
+    let previousState: LibraryLoadState = library.loadState == .loading ? .ready : library.loadState
+    isRefreshingRemote = true
+    defer {
+      if request == libraryRequest {
+        isRefreshingRemote = false
+        library.gitHubStatus = remoteRefreshStatus
+      }
+    }
     library.loadState = .loading
+    library.gitHubStatus = remoteRefreshStatus
     do {
-      let refreshed = try await provider.refreshAccount()
-      guard request == libraryRequest else { return }
-      guard refreshed.id == account.id else { throw AccountError.accountChanged }
-      async let owned = provider.gists(accountID: account.id)
-      async let starred = provider.starredGists(accountID: account.id)
-      let (ownedGists, starredGists) = try await (owned, starred)
-      guard request == libraryRequest, self.account?.id == account.id else { return }
+      let (refreshed, ownedGists, starredGists) = try await NotebookRemoteRead.run(
+        retryDelays: remoteReadRetryDelays,
+        while: {
+          request == self.libraryRequest && self.account?.id == account.id
+            && self.pendingAccount == nil && !self.isSigningOut
+        }
+      ) {
+        let refreshed = try await self.provider.refreshAccount()
+        guard refreshed.id == account.id else { throw AccountError.accountChanged }
+        async let owned = self.provider.gists(accountID: account.id)
+        async let starred = self.provider.starredGists(accountID: account.id)
+        return try await (refreshed, owned, starred)
+      }
       try await provider.cacheLibrary(owned: ownedGists, starred: starredGists, account: refreshed)
       guard request == libraryRequest, self.account?.id == account.id else { return }
       self.account = refreshed
@@ -645,13 +680,15 @@ final class NotebookModel {
         owned: ownedGists, starred: starredGists, account: refreshed)
       library.loadState = .ready
       try await reloadLocalState(accountID: account.id)
+      remoteRefreshProblem = nil
     } catch is CancellationError {
       if request == libraryRequest { library.loadState = previousState }
     } catch {
       guard request == libraryRequest else { return }
       report(error, operation: "refresh")
+      remoteRefreshProblem = NotebookRemoteRead.problem(for: error)
       library.loadState =
-        Self.isAuthorizationError(error)
+        remoteRefreshProblem?.recovery == .reconnect
         ? .reconnectRequired(message: Self.message(for: error))
         : .failed(message: Self.message(for: error))
     }
@@ -1306,6 +1343,9 @@ final class NotebookModel {
     localDrafts = []
     cachedLibrary = nil
     documentError = nil
+    remoteRefreshProblem = nil
+    isRefreshingRemote = false
+    library.gitHubStatus = .idle
     isOpeningDocument = false
     ownedGistIDs = []
     deletedGistIDs = []

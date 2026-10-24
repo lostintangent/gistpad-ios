@@ -22,7 +22,8 @@ final class NotebookSessionController {
   private(set) var isPerformingDestructiveAction = false
   private(set) var metadataError: String?
   private(set) var isApplyingDurableEdit = false
-  private(set) var remoteInspectionError: String?
+  private(set) var remoteInspectionProblem: NotebookRemoteReadProblem?
+  var remoteInspectionError: String? { remoteInspectionProblem?.message }
   private(set) var isInspectingRemote = false
   var mode: NoteMode = .reading
   @ObservationIgnored private let notebook: NotebookModel
@@ -34,12 +35,14 @@ final class NotebookSessionController {
   @ObservationIgnored private var isDiscarded = false
   @ObservationIgnored private var publicationWaiters: [CheckedContinuation<Void, Never>] = []
   @ObservationIgnored private let autosaveDelay: Duration
+  @ObservationIgnored private let remoteInspectionRetryDelays: [Duration]
   @ObservationIgnored private let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "Document")
 
   init(
     document: NotebookDocument, draft: DraftSnapshot, notebook: NotebookModel,
-    autosaveDelay: Duration = .seconds(5)
+    autosaveDelay: Duration = .seconds(5),
+    remoteInspectionRetryDelays: [Duration] = NotebookRemoteRead.retryDelays
   ) {
     var initialDocument = document
     if notebook.account?.id == draft.accountID {
@@ -49,6 +52,7 @@ final class NotebookSessionController {
     self.draft = draft
     self.notebook = notebook
     self.autosaveDelay = autosaveDelay
+    self.remoteInspectionRetryDelays = remoteInspectionRetryDelays
     session = DocumentSession(
       documentID: document.id, text: draft.text, generation: draft.generation,
       showsFrontMatter: notebook.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
@@ -72,6 +76,25 @@ final class NotebookSessionController {
     document.chrome.access.canEdit && !isDiscarded && !session.isComposing && !session.writingToolsActive
       && !isPerformingDestructiveAction
       && !isApplyingDurableEdit
+  }
+
+  var remoteInspectionStatus: GitHubStatusState {
+    guard document.chrome.access != .truncated else { return .idle }
+    switch saveState {
+    case .cloudFailure, .localFailure, .remoteChange, .reconnectRequired,
+      .creationUncertain, .publicationUncertain, .publicationBlocked:
+      return .idle
+    default:
+      break
+    }
+    if let problem = remoteInspectionProblem {
+      return problem.status(
+        heading: String(localized: "Couldn't check for updates"),
+        detail: String(localized: "Your notes on this iPhone are unchanged."),
+        isRecovering: isInspectingRemote)
+    }
+    return isInspectingRemote
+      ? .checking(operation: String(localized: "Checking GitHub for changes")) : .idle
   }
 
   func requestCreationFocus() {
@@ -176,29 +199,39 @@ final class NotebookSessionController {
       notebook.account?.id == draft.accountID, notebook.pendingAccount == nil
     else { return }
     if case .conflict = draft.state { return }
+    if let retryAfter = remoteInspectionProblem?.retryAfter, retryAfter > .now { return }
     isInspectingRemote = true
     defer { isInspectingRemote = false }
     guard await waitForLocalSave() else { return }
-    let generation = session.generation
     do {
-      guard
-        case .review = try await notebook.perform(
-          .inspectRemote(draftID: draft.id, generation: generation))
-      else { throw NotebookActionError.staleReview }
-      let current = try await notebook.draftSnapshot(id: draft.id, accountID: draft.accountID)
-      guard current.generation == session.generation else { return }
+      let current = try await NotebookRemoteRead.run(
+        retryDelays: remoteInspectionRetryDelays,
+        while: {
+          self.notebook.account?.id == self.draft.accountID && self.notebook.pendingAccount == nil
+            && !self.notebook.isSigningOut && !self.isPublishing && self.canMutate
+            && !self.document.isRecovery
+        }
+      ) {
+        guard await self.waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
+        let generation = self.session.generation
+        let result = try await self.notebook.perform(
+          .inspectRemote(draftID: self.draft.id, generation: generation))
+        guard case .review(let current) = result,
+          current.id == self.draft.id, current.accountID == self.draft.accountID
+        else { throw NotebookRemoteReadError.invalidResult }
+        guard current.generation == self.session.generation else { throw DraftError.staleGeneration }
+        return current
+      }
       draft = current
       document.draft = current
       saveState = NotebookModel.interfaceSaveState(current.state)
-      remoteInspectionError = nil
+      remoteInspectionProblem = nil
     } catch is CancellationError {
-      return
-    } catch DraftError.staleGeneration {
       return
     } catch {
       logger.error(
         "Remote inspection failed: \(String(reflecting: type(of: error)), privacy: .public)")
-      remoteInspectionError = NotebookModel.message(for: error)
+      remoteInspectionProblem = NotebookRemoteRead.problem(for: error)
     }
   }
 

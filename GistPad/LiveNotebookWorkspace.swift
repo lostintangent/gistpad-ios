@@ -457,6 +457,15 @@ struct LiveNotebookWorkspace: View {
           active?.didReconnect()
         }
       }
+      actions.recoverStatus = {
+        Task {
+          if notebook.remoteRefreshProblem?.recovery == .reconnect {
+            await notebook.signIn()
+          } else {
+            await notebook.refresh()
+          }
+        }
+      }
     }
     actions.togglePin = { rowID in
       guard let account = notebook.account,
@@ -547,18 +556,25 @@ struct LiveNotebookWorkspace: View {
         preview(controller)
       }
     }
-    .safeAreaInset(edge: .bottom, spacing: 0) {
-      if let error = controller.remoteInspectionError {
-        VStack(alignment: .leading, spacing: 6) {
-          Label("Couldn't check GitHub for changes", systemImage: "exclamationmark.circle")
-          Text(error)
-          Button("Retry") { Task { await controller.inspectRemoteChanges() } }
-            .frame(minHeight: 44)
+    .toolbar {
+      if isGitHubStatusVisible, controller.remoteInspectionStatus != .idle {
+        ToolbarSpacer(.flexible, placement: .bottomBar)
+        ToolbarItem(placement: .bottomBar) {
+          GitHubStatusControl(state: controller.remoteInspectionStatus) {
+            Task {
+              if controller.remoteInspectionProblem?.recovery == .reconnect {
+                await notebook.signIn()
+                guard notebook.account?.id == controller.draft.accountID,
+                  notebook.pendingAccount == nil
+                else { return }
+                controller.didReconnect()
+              }
+              await controller.inspectRemoteChanges()
+            }
+          }
+          .id(controller.session.viewIdentity)
         }
-        .font(.footnote)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
-        .background(Color(uiColor: .systemBackground))
+        .sharedBackgroundVisibility(.hidden)
       }
     }
     .task(id: controller.draft.id) { await controller.inspectRemoteChanges() }
