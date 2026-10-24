@@ -8,6 +8,48 @@
   @Suite(.serialized)
   @MainActor
   struct IntelligenceModelTests {
+    @Test(arguments: [false, true])
+    func hiddenMetadataReferencesHaveNoRevealActionAndFollowTheVisibilityPreference(
+      shown: Bool
+    ) async throws {
+      let prefix = "---\nkey: e\u{301} 👩🏽‍💻\n---\n\n"
+      let source = prefix + "# Content\n\nA retained thought."
+      let session = DocumentSession(
+        documentID: "metadata-reference", text: source, generation: 8, showsFrontMatter: shown)
+      session.textView.selectedRange = (source as NSString).range(of: "retained")
+      let identity = session.viewIdentity
+      let selection = session.textView.selectedRange
+      var changes = 0
+      session.onSourceChange = { _, _ in changes += 1 }
+      let model = NoteIntelligenceModel(
+        session: session, backend: SheetModel(), isCurrent: { true })
+      model.askPrompt = "What does this note say?"
+      await model.checkAvailability()
+      model.generate()
+      await model.task?.value
+      try #require(model.snapshot != nil)
+      for (range, metadata) in [
+        ((source as NSString).range(of: "e\u{301} 👩🏽‍💻"), true),
+        (NSRange(location: prefix.utf16.count - 1, length: 3), true),
+        ((source as NSString).range(of: "retained"), false),
+      ] {
+        try #require(Range(range, in: source) != nil)
+        #expect(model.isHiddenFrontMatterReference(range) == (metadata && !shown))
+        #expect(model.canReveal(range) == !(metadata && !shown))
+        session.setShowsFrontMatter(!shown)
+        #expect(model.isHiddenFrontMatterReference(range) == (metadata && shown))
+        #expect(model.canReveal(range) == !(metadata && shown))
+        session.setShowsFrontMatter(shown)
+      }
+      #expect(session.viewIdentity == identity)
+      #expect(session.textView.selectedRange == selection)
+      #expect(session.showsFrontMatter == shown)
+      #expect(session.text.utf8.elementsEqual(source.utf8))
+      #expect(session.generation == 8)
+      #expect(session.textView.undoManager?.canUndo != true)
+      #expect(changes == 0)
+    }
+
     @Test func dailyNoteInstructionEchoIsRejectedBeforeTheSheetOffersApply() async {
       let source = "## 📆 2026-10-24\n\n- [ ]"
       let instruction = "mark everything complete"

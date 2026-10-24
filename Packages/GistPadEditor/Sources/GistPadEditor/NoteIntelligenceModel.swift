@@ -201,7 +201,11 @@
 
     func canReveal(_ range: NSRange) -> Bool {
       guard !isStale, let snapshot else { return false }
-      return Range(range, in: snapshot.source) != nil
+      return !isHiddenFrontMatterReference(range) && Range(range, in: snapshot.source) != nil
+    }
+
+    func isHiddenFrontMatterReference(_ range: NSRange) -> Bool {
+      range.location < session.contentStart
     }
   }
 #endif

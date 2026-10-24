@@ -370,9 +370,15 @@
           case .prose(let text):
             Text(text).textSelection(.enabled)
           case .quotation(let citation):
+            let ranges = citation.ranges.filter { !model.isHiddenFrontMatterReference($0) }
             VStack(alignment: .leading, spacing: 8) {
               Text(citation.quote).textSelection(.enabled)
-              if citation.ranges.count == 1, let range = citation.ranges.first {
+              if !citation.ranges.isEmpty, ranges.isEmpty {
+                Text("Front matter", bundle: .module)
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                  .accessibilityIdentifier("intelligence-front-matter-reference")
+              } else if ranges.count == 1, let range = ranges.first {
                 Button(
                   String(localized: "Show in Note", bundle: .module),
                   systemImage: "arrow.up.forward"
@@ -387,7 +393,7 @@
                   String(localized: "Show in Note", bundle: .module),
                   systemImage: "arrow.up.forward"
                 ) {
-                  ForEach(Array(citation.ranges.enumerated()), id: \.offset) { index, range in
+                  ForEach(Array(ranges.enumerated()), id: \.offset) { index, range in
                     Button(String(localized: "Match \(index + 1)", bundle: .module)) {
                       reveal(range)
                     }
