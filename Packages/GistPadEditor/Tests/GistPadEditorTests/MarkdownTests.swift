@@ -52,6 +52,75 @@ import Testing
   #expect(ranges.contains { (source as NSString).substring(with: $0).contains("let x") })
 }
 
+@Test func writingToolsProtectsLongFencesUntilAnActualClosingDelimiter() {
+  let source = "Before\n````swift\n```\nlet value = 1\n```` not a closer\n~~~~\n`````\nAfter"
+  let ranges = MarkdownSyntax.ignoredWritingToolsRanges(
+    in: source, enclosing: NSRange(location: 0, length: source.utf16.count))
+  #expect(ranges.count == 1)
+  #expect(
+    (source as NSString).substring(with: ranges[0])
+      == "````swift\n```\nlet value = 1\n```` not a closer\n~~~~\n`````\n")
+}
+
+@Test func writingToolsProtectsTildeAndContainerFencesIncludingUnclosedCode() {
+  let source = "Prose\n> ~~~~ js\n> `value`\n> ~~~~\n\n- ```swift\n  let value = 1"
+  let ranges = MarkdownSyntax.ignoredWritingToolsRanges(
+    in: source, enclosing: NSRange(location: 0, length: source.utf16.count))
+  #expect(
+    ranges.map { (source as NSString).substring(with: $0) } == [
+      "> ~~~~ js\n> `value`\n> ~~~~\n", "- ```swift\n  let value = 1",
+    ])
+}
+
+@Test func listItemsInsideFencedCodeAreNotClosingDelimiters() {
+  let source = "```\n- ```\nStill protected\n```\nProse"
+  let ranges = MarkdownSyntax.ignoredWritingToolsRanges(
+    in: source, enclosing: NSRange(location: 0, length: source.utf16.count))
+  #expect(ranges == [(source as NSString).range(of: "```\n- ```\nStill protected\n```\n")])
+}
+
+@Test func writingToolsProtectsMatchingCodeSpansAcrossLinesAndEscapedOpeners() {
+  let source = #"""
+    日本語 👩🏽‍💻 ``a ` b`` and `two
+    lines` then \`not code and \``still code` and `closed\`
+    """#
+  let ranges = MarkdownSyntax.ignoredWritingToolsRanges(
+    in: source, enclosing: NSRange(location: 0, length: source.utf16.count))
+  #expect(
+    ranges.map { (source as NSString).substring(with: $0) } == [
+      "``a ` b``", "`two\nlines`", "`still code`", #"`closed\`"#,
+    ])
+  #expect(ranges.allSatisfy { Range($0, in: source) != nil })
+}
+
+@Test func unmatchedTicksDoNotHideProseOrCrossParagraphsAndProtectedBlocks() {
+  for source in ["a ` lone delimiter", "`first\n\nsecond`", "`first\n~~~\ncode\n~~~\nlast`"] {
+    let ranges = MarkdownSyntax.ignoredWritingToolsRanges(
+      in: source, enclosing: NSRange(location: 0, length: source.utf16.count))
+    #expect(!ranges.contains { (source as NSString).substring(with: $0).contains("first") })
+  }
+}
+
+@Test func writingToolsFrontmatterUsesExactUTF16BoundariesAndClipsInsideCode() {
+  let source = "---\r\ntitle: 日本語 👨‍👩‍👧‍👦\r\n...\r\nProse `cafe\u{301}` after"
+  let full = NSRange(location: 0, length: source.utf16.count)
+  let ranges = MarkdownSyntax.ignoredWritingToolsRanges(in: source, enclosing: full)
+  #expect(
+    ranges.map { (source as NSString).substring(with: $0) } == [
+      "---\r\ntitle: 日本語 👨‍👩‍👧‍👦\r\n...\r\n", "`cafe\u{301}`",
+    ])
+  let partial = (source as NSString).range(of: "afe\u{301}")
+  #expect(MarkdownSyntax.ignoredWritingToolsRanges(in: source, enclosing: partial) == [partial])
+  let prose = (source as NSString).range(of: "Prose")
+  #expect(MarkdownSyntax.ignoredWritingToolsRanges(in: source, enclosing: prose).isEmpty)
+}
+
+@Test func unfinishedFrontmatterIsProtectedConservatively() {
+  let source = "---\ntitle: draft\nStill editing metadata"
+  let full = NSRange(location: 0, length: source.utf16.count)
+  #expect(MarkdownSyntax.ignoredWritingToolsRanges(in: source, enclosing: full) == [full])
+}
+
 @Test func longFixtureIsSyntheticAndMultilingual() throws {
   let fixture = try EditorFixture.markdown()
   #expect(fixture.utf16.count > 60_000)

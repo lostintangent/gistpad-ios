@@ -31,12 +31,14 @@
       textView.backgroundColor = .systemBackground
       textView.textContainerInset = UIEdgeInsets(top: 24, left: 20, bottom: 40, right: 20)
       textView.alwaysBounceVertical = true
+      textView.bottomEdgeEffect.style = .soft
       textView.isFindInteractionEnabled = true
       textView.accessibilityIdentifier = "source-editor"
       textView.accessibilityLabel = "Markdown source"
       textView.smartQuotesType = .no
       textView.smartDashesType = .no
       textView.writingToolsBehavior = .complete
+      textView.allowedWritingToolsResultOptions = .plainText
       highlight()
     }
 
@@ -84,13 +86,17 @@
     }
 
     public func textViewWritingToolsWillBegin(_ textView: UITextView) {
+      synchronizeText()
       writingToolsActive = true
       highlightTask?.cancel()
+      (textView as? AnchoredTextView)?.sourceInteractionActive = true
     }
 
     public func textViewWritingToolsDidEnd(_ textView: UITextView) {
       writingToolsActive = false
       synchronizeText()
+      (textView as? AnchoredTextView)?.sourceInteractionActive = false
+      (textView as? AnchoredTextView)?.rememberReadingAnchor()
     }
 
     public func textView(
@@ -159,6 +165,8 @@
     }
 
     private func synchronizeText() {
+      // Inline previews are transient. UIKit owns their selection and native undo history.
+      guard !writingToolsActive else { return }
       if !text.utf8.elementsEqual(textView.text.utf8) {
         text = textView.text
         generation += 1
@@ -200,13 +208,14 @@
   }
 
   private final class AnchoredTextView: UITextView {
+    var sourceInteractionActive = false
     private var previousWidth: CGFloat = 0
     private var readingOffset = 0
     private var anchorDelta: CGFloat = 0
     private var restoringAnchor = false
 
     func rememberReadingAnchor() {
-      guard !restoringAnchor, bounds.width > 0,
+      guard !sourceInteractionActive, !restoringAnchor, bounds.width > 0,
         previousWidth == 0 || abs(previousWidth - bounds.width) < 1,
         let position = closestPosition(
           to: CGPoint(x: textContainerInset.left, y: contentOffset.y + adjustedContentInset.top + 1)
@@ -220,6 +229,12 @@
     }
 
     override func layoutSubviews() {
+      if sourceInteractionActive {
+        // Writing Tools owns inline animations and scrolling until its session finishes.
+        super.layoutSubviews()
+        previousWidth = bounds.width
+        return
+      }
       guard !restoringAnchor else {
         super.layoutSubviews()
         return

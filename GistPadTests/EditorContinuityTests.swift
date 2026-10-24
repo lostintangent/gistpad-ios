@@ -8,7 +8,7 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct EditorContinuityTests {
-  private func host(_ session: DocumentSession) throws -> UIWindow {
+  func host(_ session: DocumentSession) throws -> UIWindow {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)

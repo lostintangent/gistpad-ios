@@ -50,6 +50,31 @@ struct NotebookSessionTests {
     }
   }
 
+  @Test func writingToolsPersistsOnlyTheFinalChoiceAndNeverPublishesPreviews() async throws {
+    let (controller, provider) = try await makeController(generation: 7)
+    let source = controller.session.text
+    controller.session.textViewWritingToolsWillBegin(controller.session.textView)
+    edit(controller, to: "Temporary rewrite")
+    #expect(controller.session.text == source)
+    #expect(await provider.persistedGenerations.isEmpty)
+    await controller.publish()
+    #expect(await provider.publishCount == 0)
+    edit(controller, to: "The accepted rewrite 日本語 👩🏽‍💻")
+    controller.session.textViewWritingToolsDidEnd(controller.session.textView)
+    #expect(await controller.waitForLocalSave())
+    #expect(await provider.persistedGenerations == [8])
+    #expect(try await provider.snapshot().text == "The accepted rewrite 日本語 👩🏽‍💻")
+    #expect(controller.saveState == .savedLocally)
+    #expect(await provider.publishCount == 0)
+
+    controller.session.textViewWritingToolsWillBegin(controller.session.textView)
+    edit(controller, to: "A rejected rewrite")
+    edit(controller, to: "The accepted rewrite 日本語 👩🏽‍💻")
+    controller.session.textViewWritingToolsDidEnd(controller.session.textView)
+    #expect(await controller.waitForLocalSave())
+    #expect(await provider.persistedGenerations == [8])
+  }
+
   @Test func lostOwnershipBlocksFurtherPublication() async throws {
     let (controller, provider) = try await makeController()
     edit(controller, to: "A local edit")
