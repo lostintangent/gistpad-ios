@@ -18,7 +18,7 @@ struct NotebookOpeningView: View {
             document: document.text, documentID: document.id,
             generation: document.draft?.generation ?? 0, allowsTaskEdits: false
           ) { event in
-            if case .renderFailed(let message) = event { renderError = message }
+            if case .failure(let failure) = event { renderError = failure.localizedDescription }
           }
           .allowsHitTesting(false)
           .accessibilityIdentifier("opening-cached-note")
