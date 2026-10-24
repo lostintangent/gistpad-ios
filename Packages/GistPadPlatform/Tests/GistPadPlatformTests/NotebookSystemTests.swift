@@ -42,7 +42,7 @@ struct NotebookSystemTests {
         let appended = try await store.apply(text)
         #expect(appended.text == "# Today\n\nA thought\n\nA second thought\n")
         let tasks = try TodayAppend.command(
-            draft: appended, text: "First task\n日本語 👩🏽‍💻\n", asTask: true)
+            draft: appended, text: "First task\n  \t\n日本語 👩🏽‍💻\n", asTask: true)
         let completed = try await store.apply(tasks)
         #expect(completed.text.hasSuffix("A second thought\n- [ ] First task\n- [ ] 日本語 👩🏽‍💻\n"))
         #expect(completed.generation == 2)

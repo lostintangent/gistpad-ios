@@ -34,9 +34,11 @@ public enum TodayAppend {
         }
         let content: String
         if asTask {
-            content = text.split(whereSeparator: \.isNewline).map {
-                "- [ ] " + $0.trimmingCharacters(in: .whitespaces)
-            }.joined(separator: "\n")
+            content = text.split(whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+                .map { "- [ ] " + $0 }
+                .joined(separator: "\n")
         } else {
             content = text.trimmingCharacters(in: .newlines)
         }
