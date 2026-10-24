@@ -18,6 +18,8 @@ Provide only supported `NoteActions`. Unavailable optional actions are absent, n
 
 Save labels are assertions about real persistence. In-memory and unsaved states do not claim a local write. Only a confirmed matching remote version is `.savedToGitHub`. Failure messages must be useful, non-sensitive user-facing explanations. Supply retry/review callbacks for recoverable failures. Share callbacks own the unsaved-version choice and secret-link disclosure before presenting the native share sheet.
 
+`PhotoPrivacyNotice(proceed:cancel:)` explains public image storage before the first pick, including for secret gists. Omit `proceed` to show the same notice as help. The app owns per-account acknowledgement and PhotosPicker, without broad library access. Place `PhotoAttachmentShelf(attachments:action:remove:)` above the existing save status in source/preview. Preparing, local durability, waiting for a published note, transfer, uncertainty, reconnect, upload failure and failed local insertion remain distinct. Only a verified upload can offer Insert Here. Retry honors its exact server deadline. The shelf bounds its height and scrolls larger content so multiple photos and accessibility type do not consume the writing viewport. Removal requests require an app-owned confirmation and never imply remote deletion. These components do not upload, insert source or claim an Undo transaction.
+
 `InterfaceFixtures` and SwiftUI previews use synthetic data. The native String Catalog and four-appearance color assets live in the package resource bundle. `scripts/capture-matrix.sh` and `docs/capture-matrix.md` define the shared review workflow. No screen is production-approved until Designer reviews the required Duo evidence.
 
 ```sh
