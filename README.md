@@ -40,7 +40,7 @@ Open `GistPad.xcodeproj` to run interactively. Choose the shared **GistPad** sch
 
 `Configuration/Public.xcconfig` contains the same **public** Supabase publishable key as the web app. It is exposed as `SupabasePublishableKey` in the app's Info.plist. If that public key rotates, run `node scripts/sync-public-config.mjs`. The generator rejects service-role keys. User sessions and GitHub tokens must never enter configuration or source control.
 
-Native fixture tests link the existing Supabase Auth product directly because they construct raw profile metadata. Production code uses typed Sync preferences instead. When updating Supabase, keep the exact version in `Packages/GistPadSync/Package.swift` and the Xcode project's test-only package reference aligned.
+Native fixture tests link the existing Supabase Auth product directly because they construct raw profile metadata. Production code uses typed Sync preferences instead. The app directly links GistPadIntelligence for its Debug evaluation workspace's model APIs. When updating Supabase, keep the exact version in `Packages/GistPadSync/Package.swift` and the Xcode project's test-only package reference aligned.
 
 The app root updates the personal-accent trait on its own window scene when the account preference changes and resets it to Sky on sign-out. Sheet content also receives the explicit profile value, including nested tag forms. Sheet dismissal controls stay neutral, while native alert actions keep the system tint. Debug captures use `--capture-accent` for the same scene trait, rather than only changing the displayed picker swatch.
 

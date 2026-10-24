@@ -22,6 +22,7 @@
 		C50000000000000000000004 /* GistPadAppearance in Frameworks */ = {isa = PBXBuildFile; productRef = C50000000000000000000054 /* GistPadAppearance */; };
 		E70000000000000000000001 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = E70000000000000000000051 /* Auth */; };
 		B40000000000000000000007 /* GistPadIntelligence in Frameworks */ = {isa = PBXBuildFile; productRef = B40000000000000000000055 /* GistPadIntelligence */; };
+		B4000000000000000000000B /* GistPadIntelligence in Frameworks */ = {isa = PBXBuildFile; productRef = B40000000000000000000056 /* GistPadIntelligence */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -73,7 +74,7 @@
 
 /* Begin PBXFrameworksBuildPhase section */
 		B40000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (B40000000000000000000002 /* GistPadPlatform in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
-		A00000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000001 /* GistPadEditor in Frameworks */, A0000000000000000000000B /* GistPadPreview in Frameworks */, A0000000000000000000000D /* GistPadInterface in Frameworks */, A0000000000000000000000E /* GistPadSync in Frameworks */, C50000000000000000000004 /* GistPadAppearance in Frameworks */, B40000000000000000000001 /* GistPadPlatform in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
+		A00000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000001 /* GistPadEditor in Frameworks */, A0000000000000000000000B /* GistPadPreview in Frameworks */, A0000000000000000000000D /* GistPadInterface in Frameworks */, A0000000000000000000000E /* GistPadSync in Frameworks */, C50000000000000000000004 /* GistPadAppearance in Frameworks */, B40000000000000000000001 /* GistPadPlatform in Frameworks */, B4000000000000000000000B /* GistPadIntelligence in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
 		A00000000000000000000009 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000002 /* GistPadEditor in Frameworks */, A0000000000000000000000F /* GistPadInterface in Frameworks */, C50000000000000000000001 /* GistPadAppearance in Frameworks */, C50000000000000000000002 /* GistPadPreview in Frameworks */, C50000000000000000000003 /* GistPadSync in Frameworks */, B40000000000000000000005 /* GistPadPlatform in Frameworks */, B40000000000000000000007 /* GistPadIntelligence in Frameworks */, E70000000000000000000001 /* Auth in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
@@ -113,7 +114,7 @@
 			dependencies = (B40000000000000000000033,);
 			fileSystemSynchronizedGroups = (A00000000000000000000006 /* GistPad */,);
 			name = GistPad;
-			packageProductDependencies = (A00000000000000000000051 /* GistPadEditor */, A00000000000000000000054 /* GistPadPreview */, A00000000000000000000056 /* GistPadInterface */, A00000000000000000000058 /* GistPadSync */, C50000000000000000000054 /* GistPadAppearance */, B40000000000000000000051 /* GistPadPlatform */,);
+			packageProductDependencies = (A00000000000000000000051 /* GistPadEditor */, A00000000000000000000054 /* GistPadPreview */, A00000000000000000000056 /* GistPadInterface */, A00000000000000000000058 /* GistPadSync */, C50000000000000000000054 /* GistPadAppearance */, B40000000000000000000051 /* GistPadPlatform */, B40000000000000000000056 /* GistPadIntelligence */,);
 			productName = GistPad;
 			productReference = A00000000000000000000004;
 			productType = "com.apple.product-type.application";
@@ -351,6 +352,7 @@
 		C50000000000000000000054 /* GistPadAppearance */ = {isa = XCSwiftPackageProductDependency; package = C50000000000000000000050; productName = GistPadAppearance; };
 		E70000000000000000000051 /* Auth */ = {isa = XCSwiftPackageProductDependency; package = E70000000000000000000050; productName = Auth; };
 		B40000000000000000000055 /* GistPadIntelligence */ = {isa = XCSwiftPackageProductDependency; package = B40000000000000000000054; productName = GistPadIntelligence; };
+		B40000000000000000000056 /* GistPadIntelligence */ = {isa = XCSwiftPackageProductDependency; package = B40000000000000000000054; productName = GistPadIntelligence; };
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A00000000000000000000010 /* Project object */;
