@@ -101,14 +101,15 @@
         },
       ]
       let style = item("Text Style", image: "textformat", menu: UIMenu(children: headings))
-      let bold = item("Bold", image: "bold", selector: #selector(makeBold))
-      let italic = item("Italic", image: "italic", selector: #selector(makeItalic))
+      let bold = command("Bold", image: "bold") { $0.actions.format(.bold) }
+      let italic = command("Italic", image: "italic") { $0.actions.format(.italic) }
       let list = item("Lists", image: "list.bullet", menu: UIMenu(children: lists))
       let insertion = item("Insert", image: "plus", menu: UIMenu(children: insert))
       insertion.accessibilityIdentifier = "editor-insert-menu"
       let search = item("Find", image: "magnifyingglass", menu: UIMenu(children: find))
-      let dismiss = item(
-        "Hide Keyboard", image: "keyboard.chevron.compact.down", selector: #selector(hideKeyboard))
+      let dismiss = command("Hide Keyboard", image: "keyboard.chevron.compact.down") {
+        $0.actions.dismiss()
+      }
       for item in [style, bold, italic, list, insertion] {
         item.isEnabled = configuration.canFormat
       }
@@ -117,14 +118,21 @@
     }
 
     private func item(
-      _ title: String.LocalizationValue, image: String, menu: UIMenu? = nil,
-      selector: Selector? = nil
+      _ title: String.LocalizationValue, image: String, menu: UIMenu
     ) -> UIBarButtonItem {
-      let item = UIBarButtonItem(
-        image: UIImage(systemName: image), style: .plain, target: selector == nil ? nil : self,
-        action: selector)
-      item.menu = menu
+      let item = UIBarButtonItem(image: UIImage(systemName: image), menu: menu)
       item.accessibilityLabel = String(localized: title, bundle: .module)
+      item.width = 44
+      return item
+    }
+
+    private func command(
+      _ title: String.LocalizationValue, image: String,
+      perform: @escaping @MainActor (SourceToolbarCoordinator) -> Void
+    ) -> UIBarButtonItem {
+      let title = String(localized: title, bundle: .module)
+      let item = UIBarButtonItem(primaryAction: action(title, image: image, perform: perform))
+      item.accessibilityLabel = title
       item.width = 44
       return item
     }
@@ -139,8 +147,5 @@
       }
     }
 
-    @objc private func makeBold() { actions.format(.bold) }
-    @objc private func makeItalic() { actions.format(.italic) }
-    @objc private func hideKeyboard() { actions.dismiss() }
   }
 #endif
