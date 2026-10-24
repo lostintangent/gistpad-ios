@@ -110,6 +110,10 @@ async (page) => {
               ? (dark ? "#c2c2c6" : "#444447") : (dark ? "rgba(235,235,245,0.6)" : "rgba(60,60,67,0.6)"),
             "--gp-list-marker": increasedContrast
               ? (dark ? "#c2c2c6" : "#555559") : (dark ? "#8e8e93" : "#757579"),
+            "--gp-list-bullet": increasedContrast
+              ? (dark ? "#c2c2c6" : "#555559") : (dark ? "#525252" : "#d4d4d4"),
+            "--gp-list-number": increasedContrast
+              ? (dark ? "#c2c2c6" : "#555559") : (dark ? "#a1a1a1" : "#737373"),
             "--gp-link": dark ? "#64b4ff" : "#005dc2",
             "--gp-separator": dark ? "#38383a" : "#c6c6c8",
             "--gp-boundary": dark ? "#545458" : "#8e8e93",
@@ -215,9 +219,10 @@ async (page) => {
             listMarkers: [...document.querySelectorAll("article > ol > li, article > ul:not(.contains-task-list) li")].every((item) => {
               const marker = getComputedStyle(item, "::marker");
               const text = getComputedStyle(item);
-              return marker.color === resolveColor(page.getPropertyValue("--gp-list-marker")) &&
-                ratio(marker.color, page.backgroundColor) >=
-                  (document.documentElement.dataset.contrast === "increased" ? 7 : 4.5) &&
+              const bullet = item.parentElement.tagName === "UL";
+              const increased = document.documentElement.dataset.contrast === "increased";
+              return marker.color === resolveColor(page.getPropertyValue(bullet ? "--gp-list-bullet" : "--gp-list-number")) &&
+                (bullet && !increased || ratio(marker.color, page.backgroundColor) >= (increased ? 7 : 4.5)) &&
                 text.color === page.color && marker.fontWeight === text.fontWeight;
             }),
             markerExclusions: [...document.querySelectorAll(".markdown-toc li, li.task-list-item")].every((item) =>

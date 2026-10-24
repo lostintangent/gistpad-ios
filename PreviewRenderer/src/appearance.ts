@@ -1,5 +1,6 @@
 const colorNames = [
-  "page", "surface", "surface-raised", "text", "syntax-code", "text-secondary", "list-marker", "link",
+  "page", "surface", "surface-raised", "text", "syntax-code", "text-secondary",
+  "list-marker", "list-bullet", "list-number", "link",
   "separator", "boundary", "error", "success", "accent-text", "accent-fill", "on-accent", "selected-surface",
 ];
 const metricNames = [

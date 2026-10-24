@@ -381,7 +381,11 @@
           attributes = [.foregroundColor: SourceSyntaxColor.htmlTag]
         case .strikethrough:
           attributes = [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
-        case .orderedMarker, .task, .checkedTask, .punctuation:
+        case .orderedMarker:
+          attributes = [.foregroundColor: SourceSyntaxColor.listNumber]
+        case .punctuation:
+          attributes = [.foregroundColor: SourceSyntaxColor.listBullet]
+        case .task, .checkedTask:
           attributes = [.foregroundColor: muted]
         case .code:
           attributes = [

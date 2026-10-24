@@ -3,10 +3,20 @@ import XCTest
 @MainActor
 final class MutedMarkerUITests: XCTestCase {
     func testMarkersInEachNativeAppearanceAndSavedAccent() {
+        capture(increasedContrasts: [false, true], accents: [
+            ("#FACC15", "yellow"), ("#FF00FF", "magenta")
+        ], prefix: "muted")
+    }
+
+    func testWebMarkerGraysInLightAndDark() {
+        capture(increasedContrasts: [false], accents: [("#FACC15", "yellow")], prefix: "web-gray")
+    }
+
+    private func capture(increasedContrasts: [Bool], accents: [(String, String)], prefix: String) {
         continueAfterFailure = false
         for appearance in ["light", "dark"] {
-            for increased in [false, true] {
-                for (accent, accentName) in [("#FACC15", "yellow"), ("#FF00FF", "magenta")] {
+            for increased in increasedContrasts {
+                for (accent, accentName) in accents {
                     for source in [false, true] {
                         let app = XCUIApplication()
                         app.launchArguments = [
@@ -35,7 +45,7 @@ final class MutedMarkerUITests: XCTestCase {
                             XCTAssertTrue(task.waitForExistence(timeout: 15))
                         }
                         let image = XCTAttachment(screenshot: app.screenshot())
-                        image.name = "muted-\(source ? "edit" : "preview")-\(appearance)-\(increased ? "increased" : "normal")-\(accentName)"
+                        image.name = "\(prefix)-\(source ? "edit" : "preview")-\(appearance)-\(increased ? "increased" : "normal")-\(accentName)"
                         image.lifetime = .keepAlways
                         add(image)
                         app.terminate()

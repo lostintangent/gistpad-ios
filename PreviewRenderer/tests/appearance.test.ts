@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { validateAppearance } from "../src/appearance";
 
 function nativeAppearance(alpha = "1.0") {
-  const colors = ["page", "surface", "surface-raised", "text", "syntax-code", "text-secondary", "list-marker", "link",
+  const colors = ["page", "surface", "surface-raised", "text", "syntax-code", "text-secondary",
+    "list-marker", "list-bullet", "list-number", "link",
     "separator", "boundary", "error", "success", "accent-text", "accent-fill", "on-accent", "selected-surface"];
   const metrics = ["body-size", "body-line-height", "title1-size", "title1-line-height",
     "title2-size", "title2-line-height", "title3-size", "title3-line-height",
@@ -33,7 +34,9 @@ test("rejects incomplete or executable appearance values", () => {
   const incomplete = nativeAppearance();
   delete incomplete.variables["--gp-syntax-code"];
   expect(() => validateAppearance(incomplete)).toThrow();
-  const missingMarker = nativeAppearance();
-  delete missingMarker.variables["--gp-list-marker"];
-  expect(() => validateAppearance(missingMarker)).toThrow();
+  for (const role of ["list-marker", "list-bullet", "list-number"]) {
+    const missingMarker = nativeAppearance();
+    delete missingMarker.variables[`--gp-${role}`];
+    expect(() => validateAppearance(missingMarker)).toThrow();
+  }
 });

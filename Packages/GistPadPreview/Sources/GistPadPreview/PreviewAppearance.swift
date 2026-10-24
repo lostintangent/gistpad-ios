@@ -16,6 +16,7 @@ struct PreviewAppearance: Equatable {
         colorScheme = dark ? "dark" : "light"
         let accent = traits[PersonalAccentTrait.self].roles(traits: traits)
         let code = increasedContrast ? (dark ? "#F1F5F9" : "#334155") : (dark ? "#CBD5E1" : "#475569")
+        let marker = Self.listMarker(traits: traits)
         var values = [
             "--gp-page": Self.css(UIColor.systemBackground.resolvedColor(with: traits)),
             "--gp-surface": Self.css(UIColor.secondarySystemBackground.resolvedColor(with: traits)),
@@ -23,7 +24,9 @@ struct PreviewAppearance: Equatable {
             "--gp-text": Self.css(UIColor.label.resolvedColor(with: traits)),
             "--gp-syntax-code": code,
             "--gp-text-secondary": Self.css(UIColor.secondaryLabel.resolvedColor(with: traits)),
-            "--gp-list-marker": Self.listMarker(traits: traits),
+            "--gp-list-marker": marker,
+            "--gp-list-bullet": increasedContrast ? marker : (dark ? "#525252" : "#D4D4D4"),
+            "--gp-list-number": increasedContrast ? marker : (dark ? "#A1A1A1" : "#737373"),
             "--gp-link": Self.css(UIColor.link.resolvedColor(with: traits)),
             "--gp-separator": Self.css(UIColor.separator.resolvedColor(with: traits)),
             "--gp-boundary": Self.css(UIColor.opaqueSeparator.resolvedColor(with: traits)),

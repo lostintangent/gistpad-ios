@@ -5,6 +5,8 @@
   --gp-syntax-code: light-dark(#475569, #cbd5e1);
   --gp-text-secondary: light-dark(#636366, #aeaeb2);
   --gp-list-marker: var(--gp-text-secondary);
+  --gp-list-bullet: #d4d4d4;
+  --gp-list-number: #737373;
   --gp-surface: light-dark(#f2f2f7, #1c1c1e);
   --gp-separator: light-dark(#c6c6c8, #38383a);
   --gp-boundary: var(--gp-separator);
@@ -61,7 +63,8 @@ pre { background: var(--muted); padding: 14px; border-radius: 12px; white-space:
 blockquote { border-inline-start: 3px solid var(--border); padding-inline-start: 16px; margin-inline: 0; color: var(--foreground); }
 ul, ol { margin-block: 1.25em; padding-inline-start: 1.625em; }
 li { margin-block: .5em; padding-inline-start: .375em; }
-.prose li:not(.task-list-item, .markdown-toc li)::marker { color: var(--gp-list-marker); }
+.prose ul > li:not(.task-list-item, .markdown-toc li)::marker { color: var(--gp-list-bullet); }
+.prose ol > li:not(.task-list-item, .markdown-toc li)::marker { color: var(--gp-list-number); }
 li p { margin-block: .75em; }
 li :is(ul, ol) { margin-block: .75em; }
 .contains-task-list { padding-inline-start: .2em; }

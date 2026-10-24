@@ -32,7 +32,7 @@ struct PreviewAppearanceTests {
         }
     }
 
-    @Test("List-marker gray is opaque, contrast-safe and independent of personal accent")
+    @Test("Lists match the web grays, with stronger Increased Contrast and unchanged task gray")
     func listMarkerPalette() throws {
         for style: UIUserInterfaceStyle in [.light, .dark] {
             for contrast: UIAccessibilityContrast in [.normal, .high] {
@@ -48,6 +48,10 @@ struct PreviewAppearanceTests {
                     let marker = try #require(RGBColor(hex: value))
                     let page = try #require(RGBColor(uiColor: UIColor.systemBackground.resolvedColor(with: traits)))
                     #expect(marker.contrast(with: page) >= (contrast == .high ? 7 : 4.5))
+                    #expect(appearance.variables["--gp-list-bullet"] ==
+                        (contrast == .high ? value : (style == .dark ? "#525252" : "#D4D4D4")))
+                    #expect(appearance.variables["--gp-list-number"] ==
+                        (contrast == .high ? value : (style == .dark ? "#A1A1A1" : "#737373")))
                     if let reference { #expect(value == reference) }
                     else { reference = value }
                     let secondary = UIColor.secondaryLabel.resolvedColor(with: traits)

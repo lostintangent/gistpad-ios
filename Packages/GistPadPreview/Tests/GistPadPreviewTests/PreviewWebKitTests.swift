@@ -618,9 +618,10 @@ struct PreviewWebKitTests {
                             [...document.querySelectorAll('article > ol > li, article > ul:not(.contains-task-list) li')].every(item => {
                                 const marker = getComputedStyle(item, '::marker');
                                 const text = getComputedStyle(item);
-                                return marker.color === resolveColor(styles.getPropertyValue('--gp-list-marker')) &&
-                                    ratio(marker.color, styles.backgroundColor) >=
-                                        (document.documentElement.dataset.contrast === 'increased' ? 7 : 4.5) &&
+                                const bullet = item.parentElement.tagName === 'UL';
+                                const increased = document.documentElement.dataset.contrast === 'increased';
+                                return marker.color === resolveColor(styles.getPropertyValue(bullet ? '--gp-list-bullet' : '--gp-list-number')) &&
+                                    (bullet && !increased || ratio(marker.color, styles.backgroundColor) >= (increased ? 7 : 4.5)) &&
                                     text.color === styles.color && marker.fontWeight === text.fontWeight;
                             }),
                             [...document.querySelectorAll('.markdown-toc li, li.task-list-item')].every(item =>
