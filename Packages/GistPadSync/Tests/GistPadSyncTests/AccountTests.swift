@@ -94,6 +94,38 @@ private func authSession(includeProvider: Bool = true) throws -> Data {
         #expect(requests.withLock { $0 } == 0)
     }
 
+    @Test func storageUsesSupabaseAccessTokenAndRejectsUseAfterSignOut() async throws {
+        let credentials = MemoryCredentials()
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            session: FakeURLProtocol.session { _ in FakeResponse(data: try authSession()) },
+            automaticallyRefreshesToken: false
+        )
+        _ = try await account.signIn { _ in URL(string: "gistpad://auth-callback?code=fake")! }
+        let calls = Mutex(0)
+        let bytes = Data("fake image transfer".utf8)
+        let storage = try await account.imageStorageClient(
+            accountID: testAccountID, session: FakeURLProtocol.session { request in
+                calls.withLock { $0 += 1 }
+                if request.httpMethod == "POST" {
+                    #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fake-access")
+                    return FakeResponse()
+                }
+                return FakeResponse(data: bytes)
+            }
+        )
+        _ = try await storage.upload(bytes, gistID: "abc123", assetID: UUID())
+        try credentials.remove(key: "gistpad-supabase-session")
+        await #expect(throws: AccountError.signedOut) {
+            try await storage.upload(bytes, gistID: "abc123", assetID: UUID())
+        }
+        #expect(calls.withLock { $0 } == 2)
+        let foreign = try await account.imageStorageClient(accountID: UUID())
+        await #expect(throws: AccountError.signedOut) {
+            try await foreign.upload(bytes, gistID: "abc123", assetID: UUID())
+        }
+    }
+
     @Test func rejectsServiceRoleConfiguration() {
         #expect(throws: AccountError.invalidConfiguration) {
             try AccountService(publishableKey: "eyJ.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.fake")

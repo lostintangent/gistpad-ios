@@ -160,6 +160,35 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
         #expect(LibrarySearch.search(library, collection: .gists, drafts: [daily]).matches.isEmpty)
     }
 
+    @Test func missingRemoteGistsRemainSearchableAsAccountScopedRecoveryDrafts() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let draft = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "gone", filename: "Recovered.md",
+            description: "Retained note", content: "saved text", revision: "one"
+        )
+        let local = try await store.persist(
+            id: draft.id, accountID: account, text: "recoverable needle", generation: 1
+        )
+        let foreign = try await store.newDraft(accountID: UUID(), githubUserID: 99, text: "foreign needle")
+        let library = CachedLibrarySnapshot(
+            accountID: account, owned: [], starred: [], preferences: Preferences(metadata: [
+                "tags": .object(["p": .object(["name": .string("Project")])]),
+                "gistTags": .object(["gone": .array([.string("p")])])
+            ])
+        )
+        let result = LibrarySearch.search(
+            library, query: LibrarySearchQuery(text: "needle", tagIDs: ["p"]),
+            drafts: [local, foreign]
+        )
+        #expect(result.matches.count == 1)
+        #expect(result.matches.first?.draftID == draft.id)
+        #expect(result.matches.first?.gistID == "gone")
+        #expect(result.matches.first?.text == "recoverable needle")
+        #expect(result.matches.first?.isRecovery == true)
+        #expect(library.gists.isEmpty)
+    }
+
     @Test func shareLinksPercentEncodeEachFileComponentAndNeverPublishADraft() async throws {
         let filename = "Résumé #1? 100%.md"
         let gist = try decodeGist(gistData(filename: filename))

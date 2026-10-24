@@ -174,12 +174,17 @@ public actor DraftStore {
                 draft.stateData = try JSONEncoder().encode(SaveState.failed(failure))
             }
         }
+        for image in try context.fetch(FetchDescriptor<StoredImageUpload>()) {
+            if try JSONDecoder().decode(ImageUploadState.self, from: image.stateData) == .uploading {
+                image.stateData = try JSONEncoder().encode(ImageUploadState.uncertain)
+            }
+        }
         try context.save()
     }
 
     public static func open(url: URL? = nil, inMemory: Bool = false) throws -> DraftStore {
         let schema = Schema([
-            StoredDraft.self, StoredRecovery.self, StoredLibrary.self, StoredCommandReceipt.self
+            StoredDraft.self, StoredRecovery.self, StoredLibrary.self, StoredCommandReceipt.self, StoredImageUpload.self
         ])
         let configuration: ModelConfiguration
         if let url {
@@ -192,7 +197,32 @@ public actor DraftStore {
                 groupContainer: .none, cloudKitDatabase: .none
             )
         }
-        return try DraftStore(container: ModelContainer(for: schema, configurations: [configuration]))
+        #if os(iOS)
+        if !inMemory {
+            let directory = configuration.url.deletingLastPathComponent()
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true,
+                attributes: [.protectionKey: FileProtectionType.complete]
+            )
+            try FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.complete], ofItemAtPath: directory.path
+            )
+        }
+        #endif
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        #if os(iOS)
+        if !inMemory {
+            for suffix in ["", "-wal", "-shm"] {
+                let path = configuration.url.path + suffix
+                if FileManager.default.fileExists(atPath: path) {
+                    try FileManager.default.setAttributes(
+                        [.protectionKey: FileProtectionType.complete], ofItemAtPath: path
+                    )
+                }
+            }
+        }
+        #endif
+        return try DraftStore(container: container)
     }
 
     public func drafts(accountID: UUID) throws -> [DraftSnapshot] {
@@ -244,8 +274,9 @@ public actor DraftStore {
                 predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }
             )) > 0
             let value = try snapshot(draft)
+            let hasImage = try imageUploads(accountID: accountID).contains { $0.draftID == id && !$0.isInserted }
             if value.state == .savedToGitHub, value.attemptedGeneration == nil,
-               sourceEqual(value.text, value.baseContent), !hasRecovery {
+               sourceEqual(value.text, value.baseContent), !hasRecovery, !hasImage {
                 modelContext.delete(draft)
                 removed.insert(id)
             } else {
@@ -394,6 +425,12 @@ public actor DraftStore {
     }
 
     public func apply(_ command: SharedDraftCommand) throws -> DraftSnapshot {
+        let result = try applyCommand(command)
+        try commit()
+        return result
+    }
+
+    func applyCommand(_ command: SharedDraftCommand) throws -> DraftSnapshot {
         let draft = try find(command.draftID, accountID: command.accountID)
         let id = command.id
         let payload = try encodedCommand(command)
@@ -409,7 +446,6 @@ public actor DraftStore {
         let text = try command.edit.apply(to: draft.text)
         try replaceText(draft, text: text, generation: draft.generation + 1)
         modelContext.insert(StoredCommandReceipt(id: id, payload: payload))
-        try commit()
         return try snapshot(draft)
     }
 
@@ -501,7 +537,7 @@ public actor DraftStore {
     public func hasUnsyncedWork(accountID: UUID) throws -> Bool {
         try drafts(accountID: accountID).contains {
             $0.gistID == nil || !sourceEqual($0.text, $0.baseContent) || $0.attemptedGeneration != nil
-        }
+        } || imageUploads(accountID: accountID).contains { !$0.isInserted }
     }
 
     private func find(_ id: UUID, accountID: UUID) throws -> StoredDraft {

@@ -77,6 +77,7 @@ public actor AccountService {
     private static let sessionKey = "gistpad-supabase-session"
     private let auth: AuthClient
     private let credentials: any AuthLocalStorage
+    private let publishableKey: String
     private var signingIn = false
     private var signingOut = false
     private var updatingPreferences = false
@@ -91,6 +92,7 @@ public actor AccountService {
             throw AccountError.invalidConfiguration
         }
         self.credentials = credentials
+        self.publishableKey = publishableKey
         let session = session ?? GitHubClient.makeSession()
         auth = AuthClient(
             url: Self.projectURL.appendingPathComponent("auth/v1"),
@@ -160,7 +162,7 @@ public actor AccountService {
               url.fragment == nil else { throw AccountError.invalidCallback }
     }
 
-    private static func isPublishableKey(_ key: String) -> Bool {
+    static func isPublishableKey(_ key: String) -> Bool {
         if key.hasPrefix("sb_publishable_") { return key.count > "sb_publishable_".count }
         let parts = key.split(separator: ".")
         guard parts.count == 3 else { return false }
@@ -174,6 +176,23 @@ public actor AccountService {
 
     public func githubClient(accountID: UUID, session: URLSession? = nil) -> GitHubClient {
         GitHubClient(session: session) { [self] in try await githubToken(accountID: accountID) }
+    }
+
+    public func imageStorageClient(accountID: UUID, session: URLSession? = nil) throws -> ImageStorageClient {
+        try ImageStorageClient(publishableKey: publishableKey, session: session) { [self] in
+            try await storageToken(accountID: accountID)
+        }
+    }
+
+    private func storageToken(accountID: UUID) async throws -> String {
+        guard !signingIn, !signingOut else { throw AccountError.accountChanged }
+        guard let persisted = try persistedSession() else { throw AccountError.signedOut }
+        guard persisted.user.id == accountID else { throw AccountError.accountChanged }
+        let session = try await auth.session
+        guard session.user.id == accountID, try persistedSession()?.user.id == accountID else {
+            throw AccountError.accountChanged
+        }
+        return session.accessToken
     }
 
     public func githubToken(accountID: UUID) async throws -> String {

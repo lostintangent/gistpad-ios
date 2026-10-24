@@ -100,6 +100,8 @@ Cache a complete list refresh with `cacheLibrary(owned:starred:preferences:accou
 
 `LibrarySearch.search(_:query:collection:drafts:date:timeZone:)` searches cached titles, filenames and available Markdown. This intentionally improves on the web's description-only filter. It overlays accepted local drafts, including unpublished files and new notes, without mixing accounts. `LibrarySearchQuery(query:preferences:tagIDs:)` accepts free words, quoted phrases, `tag:ID`, `tag:"Tag name"` and `#TagName`. All text terms and tags are conjunctive. Unknown/ambiguous typed tags and malformed quoting are explicit errors. Deleted selected tag IDs are ignored to match the web. Results report cached-content coverage, incomplete gists and stale content rather than implying a complete server-side search.
 
+Retained drafts whose gist has disappeared from the cache remain searchable by body and tags with `isRecovery == true`. They preserve their real draft ID and original gist ID, without fabricating a remote Gist value. Open their local draft directly. Absence from a cache is not proof of remote deletion, and their remote privacy/access cannot be inferred from local-only presentation defaults.
+
 `DocumentLinks(gist:filename:draft:)` returns a read-only `/#/share/` URL, an explicit editor URL, and a GitHub URL, with correct UTF-8 filename escaping. It reports `isSecret` and `hasUnpublishedChanges`. It never publishes. A new, unpublished gist/file cannot yield a saved-file share URL. The UI must explain that secret gists are unlisted and links expose the saved revision.
 
 ## App Group boundary
@@ -111,3 +113,37 @@ Cache a complete list refresh with `cacheLibrary(owned:starred:preferences:accou
 The main app flushes accepted editor changes and imports commands only when the affected session can accept an external edit. `DraftStore.apply(_:)` validates account, expected generation, UTF-16 scalar boundaries and exact expected source. The new source and deduplication receipt are committed in one SwiftData save. The host must then update the active document session through its undoable edit path, or reload an inactive session. Delete the inbox envelope with `acknowledge(_:)` only after that successful import. A crash before acknowledgement is safe to replay. Stale or invalid commands remain actionable errors, never silently discarded.
 
 This is an honest foundation for M4 capture and controls. Immediate widget checkbox completion while the app is not running still requires a process-coordinated mutation owner and extension integration. An enqueued command alone is not proof that the note changed or reached GitHub. Keychain credentials are not shared with extensions.
+
+## Photos and durable image uploads
+
+```swift
+let png = try PhotoImage.pngData(from: pickedData)
+let pending = try await store.enqueueImage(
+    pngData: png, draftID: draft.id, accountID: account.id,
+    expectedGeneration: draft.generation, insertionLocation: selectedUTF16Offset
+)
+let storage = try await accounts.imageStorageClient(accountID: account.id)
+let images = ImageUploadCoordinator(accountID: account.id, store: store, storage: storage)
+let uploaded = try await images.upload(id: pending.id)
+let proposal = try await store.imageInsertion(id: uploaded.id, accountID: account.id)
+```
+
+Use PhotosPicker in the app and load its transferable image data without requesting broad library access. Normalize off the main actor. `PhotoImage` converts the first image to upright PNG without carrying location/EXIF metadata. It explicitly rejects invalid images, inputs/outputs over 50 MB and decoded images over 100 megapixels. These are native safety limits, not claims about the server's configured bucket limit.
+
+The upload contract matches the web: `POST /storage/v1/object/assets/{gistId}/{lowercase-uuid}.png`, the project `apikey`, a Bearer Supabase access token (never the GitHub provider token), `Content-Type: image/png`, and `Cache-Control: max-age=3600`. There is no upsert. The public URL is `/storage/v1/object/public/assets/{gistId}/{uuid}.png`. The low-level client supports the web's publishable-key fallback. Native account-bound clients instead reject signed-out/wrong-account use and refresh the Supabase session when needed.
+
+The app must offer insertion only for an editable, current-account document. The storage service does not determine GitHub ownership from an asset path. Storage conflict/error semantics follow [Supabase's current error codes](https://supabase.com/docs/guides/storage/debugging/error-codes).
+
+**Assets are public even when the gist is secret.** Explain that before the first upload. No test uploads to the live bucket. The native Photos action, its permission/privacy presentation and its undo/session integration remain app-owned.
+
+Enqueue commits PNG bytes and the original insertion generation/location to the same local SwiftData store as drafts before returning. On iOS, persistent store directories and existing SQLite/journal files request complete file protection. No background or locked-device transfer is promised. Pending images count as unsynced work and prevent deletion of an otherwise clean recovery draft.
+
+`ImageUploadCoordinator` coalesces concurrent requests for one image. A stable UUID/path survives offline errors and relaunch. Interrupted requests reopen as uncertain. A retry first checks that exact public path with no credentials, comparing both byte count and SHA-256. The same verification follows successful POST and duplicate responses. A missing or mismatched asset never exposes a ready URL or inserts Markdown. Retry-After is durable and honored. Failures persist and throw, rather than dropping the image.
+
+Call `resumePending()` after account restoration, explicit foreground recovery or a connectivity change. It returns an explicit Result for each attempted transfer. Waiting unpublished notes remain visible without an HTTP request until their gist ID is acknowledged. Reconnect, permanent failure, queued, uploading, offline, uncertain, uploaded and inserted states are inspectable with `imageUploads(accountID:)`. Cancel active transfers on account change with `cancelUploads()`. This is foreground resumption, not an iOS background-transfer entitlement.
+
+Pending placeholders stay out of canonical Markdown and Undo, as on the web. A verified upload proposes exactly `![Image](URL)`, or `<img src="URL" />` for explicit HTML format. If the document generation changed, the original proposal is rejected. Let the user select a current insertion point and request `imageInsertion(id:accountID:expectedGeneration:insertionLocation:)` instead of guessing where to insert.
+
+Flush accepted session edits and wait for composition/Writing Tools to end before applying a proposal. `applyImageInsertion(id:accountID:command:)` commits the source edit, deduplication receipt and inserted state together. Reflect that exact edit in the active session as one undoable edit at the same generation, or reload an inactive session. Do not independently insert the text twice. An interrupted acknowledgement can safely replay the same command. Image insertion only saves locally. Ordinary autosave-off publication rules still apply.
+
+`discardImageUpload(id:accountID:)` removes local queued bytes/state only after the app's explicit discard action. It cannot cancel an in-flight transfer or delete a remote asset. After an inserted upload, discarding its local cache does not remove the note's Markdown. A public orphan from a canceled insertion is possible and is never silently deleted from the user's storage.

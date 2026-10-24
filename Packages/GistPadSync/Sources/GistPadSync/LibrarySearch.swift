@@ -79,6 +79,7 @@ public struct LibrarySearchMatch: Equatable, Identifiable, Sendable {
     public let isArchived: Bool
     public let isDailyNote: Bool
     public let isSecret: Bool
+    public let isRecovery: Bool
     public let tagIDs: Set<String>
     public let progress: TaskProgress?
     public let isOverdue: Bool
@@ -103,6 +104,7 @@ public enum LibrarySearch {
     ) -> LibrarySearchResult {
         let drafts = drafts.filter { $0.accountID == library.accountID }
         let owned = Set(library.owned.map(\.id))
+        let availableGists = Set(library.gists.map(\.id))
         let starred = Set(library.starred.map(\.id))
         let validTagIDs = Set(library.preferences.tags.keys)
         let selectedTags = query.tagIDs.intersection(validTagIDs)
@@ -145,24 +147,29 @@ public enum LibrarySearch {
                     text: text, updatedAt: gist.updatedAt,
                     isPinned: pinned.contains(gist.id), isStarred: starred.contains(gist.id),
                     isArchived: gist.isArchived, isDailyNote: gist.isDailyNote, isSecret: !gist.isPublic,
+                    isRecovery: false,
                     tagIDs: tags, progress: progress,
                     isOverdue: day.map { $0 < today && (progress?.remaining ?? 0) > 0 } ?? false,
                     contentIsCurrent: text != nil && current
                 ))
             }
         }
-        for draft in drafts where draft.gistID == nil {
+        for draft in drafts where draft.gistID.map({ !availableGists.contains($0) }) ?? true {
             let daily = draft.description == GistConventions.dailyNotesDescription
-            if collection == .all || (collection == .gists && !daily) || (collection == .dailyNotes && daily) {
+            let archived = draft.description.range(of: #"\s*\[Archived\]$"#, options: .regularExpression) != nil
+            if collection == .all || (collection == .gists && !daily && !archived)
+                || (collection == .dailyNotes && daily) || (collection == .archive && archived) {
                 let day = daily ? DailyNotesIndex.parseDateFilename(draft.filename, timeZone: timeZone) : nil
                 let progress = TaskProgress(markdown: draft.text)
+                let tags = Set(draft.gistID.flatMap { library.preferences.gistTags[$0] } ?? []).intersection(validTagIDs)
                 documents.append(LibrarySearchMatch(
-                    id: draft.id.uuidString, gistID: nil, draftID: draft.id,
+                    id: draft.id.uuidString, gistID: draft.gistID, draftID: draft.id,
                     filename: draft.filename, title: draft.description.isEmpty
                         ? GistConventions.fileDisplayName(draft.filename) : draft.description,
-                    text: draft.text, updatedAt: library.cachedAt, isPinned: false, isStarred: false,
-                    isArchived: false, isDailyNote: daily, isSecret: true,
-                    tagIDs: [], progress: progress,
+                    text: draft.text, updatedAt: library.cachedAt,
+                    isPinned: draft.gistID.map(pinned.contains) ?? false, isStarred: false,
+                    isArchived: archived, isDailyNote: daily, isSecret: true, isRecovery: draft.gistID != nil,
+                    tagIDs: tags, progress: progress,
                     isOverdue: day.map { $0 < today && progress.remaining > 0 } ?? false,
                     contentIsCurrent: true
                 ))

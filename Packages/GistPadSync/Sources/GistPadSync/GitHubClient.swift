@@ -216,18 +216,7 @@ public actor GitHubClient {
         guard let response = response as? HTTPURLResponse else { throw GitHubClientError.invalidResponse }
         if response.statusCode == 304, let cached { return (cached.data, cached.link) }
         guard (200..<300).contains(response.statusCode) else {
-            var retry: Date?
-            if let header = response.value(forHTTPHeaderField: "Retry-After") {
-                if let seconds = TimeInterval(header) {
-                    retry = .now.addingTimeInterval(max(0, seconds))
-                } else {
-                    let formatter = DateFormatter()
-                    formatter.locale = Locale(identifier: "en_US_POSIX")
-                    formatter.timeZone = TimeZone(secondsFromGMT: 0)
-                    formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
-                    retry = formatter.date(from: header)
-                }
-            }
+            var retry = response.retryAfterDate
             if retry == nil, [403, 429].contains(response.statusCode) {
                 if response.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0" {
                     retry = response.value(forHTTPHeaderField: "X-RateLimit-Reset")

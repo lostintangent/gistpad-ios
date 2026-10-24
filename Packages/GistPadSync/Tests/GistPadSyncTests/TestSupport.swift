@@ -82,6 +82,10 @@ func decodeGist(_ data: Data) throws -> Gist {
 }
 
 func requestBody(_ request: URLRequest) throws -> [String: Any] {
+    try #require(JSONSerialization.jsonObject(with: requestData(request)) as? [String: Any])
+}
+
+func requestData(_ request: URLRequest) throws -> Data {
     let data: Data
     if let body = request.httpBody {
         data = body
@@ -101,5 +105,5 @@ func requestBody(_ request: URLRequest) throws -> [String: Any] {
     } else {
         throw URLError(.zeroByteResource)
     }
-    return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    return data
 }
