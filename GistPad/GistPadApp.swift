@@ -1,5 +1,6 @@
 import GistPadEditor
 import GistPadPreview
+import GistPadPlatform
 import SwiftUI
 
 @main
@@ -7,6 +8,11 @@ struct GistPadApp: App {
   @State private var notebook: NotebookModel?
   @State private var fixtureSession: DocumentSession?
   @State private var loadError: String?
+  @State private var routeError: String?
+
+  init() {
+    NotebookPlatformBootstrap.install()
+  }
 
   @ViewBuilder
   private func fixtureWorkspace(session: DocumentSession) -> some View {
@@ -50,7 +56,7 @@ struct GistPadApp: App {
       else {
         throw NotebookConfigurationError.missingPublicKey
       }
-      notebook = try NotebookModel(publishableKey: key)
+      notebook = try NotebookPlatformBootstrap.notebook(publishableKey: key)
     } catch {
       loadError = error.localizedDescription
     }
@@ -79,6 +85,21 @@ struct GistPadApp: App {
       .task {
         guard notebook == nil, fixtureSession == nil else { return }
         load()
+      }
+      .onOpenURL { url in
+        if url.scheme == "gistpad", url.host == "auth-callback" { return }
+        do { try NotebookRouteInbox.shared.receive(url) }
+        catch {
+          routeError = String(localized: "This link doesn't point to a supported GistPad note.")
+        }
+      }
+      .alert("Cannot Open Link", isPresented: Binding(
+        get: { routeError != nil },
+        set: { if !$0 { routeError = nil } })
+      ) {
+        Button("OK") { routeError = nil }
+      } message: {
+        Text(routeError ?? "")
       }
     }
   }

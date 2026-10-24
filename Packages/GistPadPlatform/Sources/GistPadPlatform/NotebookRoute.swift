@@ -5,10 +5,11 @@ public enum NotebookRouteError: Error, Equatable, Sendable {
     case invalidRoute
 }
 
-public enum NotebookRoute: Equatable, Sendable {
+public enum NotebookRoute: Codable, Equatable, Sendable {
     case library
     case today
     case newNote
+    case addToToday
     case note(gistID: String, filename: String?, shared: Bool)
     case draft(accountID: UUID, draftID: UUID)
 
@@ -34,7 +35,7 @@ public enum NotebookRoute: Equatable, Sendable {
             }
         case "gistpad":
             guard let host = components.host,
-                  ["library", "today", "new", "note", "share", "draft"].contains(host),
+                  ["library", "today", "new", "add-to-today", "note", "share", "draft"].contains(host),
                   components.fragment == nil else {
                 throw NotebookRouteError.unsupportedURL
             }
@@ -60,6 +61,8 @@ public enum NotebookRoute: Equatable, Sendable {
             self = .today
         } else if segments == ["new"] {
             self = .newNote
+        } else if segments == ["add-to-today"], components.scheme?.lowercased() == "gistpad" {
+            self = .addToToday
         } else if segments.first == "draft", components.scheme?.lowercased() == "gistpad" {
             guard segments.count == 3, let account = UUID(uuidString: segments[1]),
                   let draft = UUID(uuidString: segments[2]) else {
@@ -91,6 +94,8 @@ public enum NotebookRoute: Equatable, Sendable {
             components.host = "today"
         case .newNote:
             components.host = "new"
+        case .addToToday:
+            components.host = "add-to-today"
         case .note(let gistID, let filename, let shared):
             components.host = shared ? "share" : "note"
             components.percentEncodedPath = "/" + Self.encode(gistID)

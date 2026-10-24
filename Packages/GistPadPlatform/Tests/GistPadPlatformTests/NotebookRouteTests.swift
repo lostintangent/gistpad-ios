@@ -24,7 +24,7 @@ struct NotebookRouteTests {
     }
 
     @Test(arguments: [
-        NotebookRoute.library, .today, .newNote,
+        NotebookRoute.library, .today, .newNote, .addToToday,
         .note(gistID: "abc123", filename: "folder/name ?#%.md", shared: false),
         .note(gistID: "abc123", filename: "README.md", shared: true),
         .draft(

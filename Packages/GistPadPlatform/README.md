@@ -14,3 +14,44 @@ Universal links require the associated-domains entitlement and deployment of
 `public/.well-known/apple-app-site-association` from the web repository. Until that
 file is deployed, native scheme links work but HTTPS links are not claimed to
 open the app.
+
+## System surfaces
+
+`NoteEntity` is an `IndexedEntity` with title, exact filename, tags and a cached
+snippet. `NoteEntityQuery` supports identifier and string lookup, plus iOS 27
+reindex requests. Entities are indexed using complete file protection. Account
+changes and removed notes remove the old entities. Queries and Open Note validate
+the currently authenticated account, not just a cached entity ID.
+
+Open Note, Open Today and Add to Today are App Shortcuts. The Add to Today control
+opens the native capture sheet. Provided shortcut text needs no duplicate sheet.
+Captures pin the destination date, then use `TodayAppend` and the same validated
+`SharedDraftCommand` transaction as editor integrations.
+
+Both targets use `group.dev.gistpad.GistPad`. `SharedNotebookStore` is a protected,
+atomically replaced presentation snapshot under the existing `SharedStoreLocation`.
+It contains only the active account, cached note metadata and accepted Today
+tasks. The main app's existing private draft store is not moved or reopened by
+extensions. No credentials are shared.
+
+Task intents use the iOS 27 `allowedExecutionTargets = .main` execution policy and
+system authentication. They validate account, displayed file, generation and
+exact UTF-16 marker. Retained editors receive the durable change through their
+one-step Undo path. Conflicts, composition, Writing Tools and stale anchors reject
+the mutation. A checked widget task means the local source committed, not that a
+GitHub write was acknowledged. Publication uses the existing foreground/background
+save paths. A publication failure remains durable and visible in the next snapshot.
+
+The Today widget supports small, medium, all three Lock Screen accessory families
+and the system's small-widget StandBy presentation. Timelines never create a note.
+Personal task/excerpt content is privacy-sensitive. Locked or unavailable content
+shows an explicit invitation instead of fabricated tasks.
+
+## Validation
+
+Pure routes, snapshot isolation and durable commands use fake/in-memory data.
+`NotebookPlatformTests` additionally covers retained editor Undo, stale tasks,
+account/Writing Tools gates, pinned-date capture and main-process intent policy.
+Widget view screenshots are hosted native presentations. Installed WidgetKit
+execution, Control Center placement, Spotlight launching and provisioning remain
+separate device acceptance gates.
