@@ -21,6 +21,7 @@ final class NoteAttemptDiagnostics {
     var contextSize: Int?
     var passes: [Pass] = []
     var generationSchemas: [String] = []
+    var rejectedAnswerIssues: [String] = []
     var responseLength = 0
     var errorType: String?
     var modelError: String?
@@ -34,7 +35,7 @@ final class NoteAttemptDiagnostics {
   init(id: UUID, action: NoteIntelligenceAction, directory: URL? = nil) {
     let schema =
       switch action {
-      case .ask: "answer-blocks-v3"
+      case .ask: "answer-blocks-v4"
       case .edit: "edit-operations-v2"
       case .review: "review-replacements-v1"
       }
@@ -69,6 +70,11 @@ final class NoteAttemptDiagnostics {
 
   func generating(schema: String) {
     record.generationSchemas.append(schema)
+    persist()
+  }
+
+  func rejectedAnswer(_ issue: NoteAnswerIssue) {
+    record.rejectedAnswerIssues.append(issue.rawValue)
     persist()
   }
 

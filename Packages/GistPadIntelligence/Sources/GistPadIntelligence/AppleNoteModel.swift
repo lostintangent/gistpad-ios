@@ -9,11 +9,19 @@
     private let model = SystemLanguageModel.default
     private var loggedModel = false
     private var diagnostics: NoteAttemptDiagnostics?
+    #if DEBUG
+      public private(set) var rejectedAnswerTexts: [String] = []
+      public private(set) var answerGenerationCount = 0
+    #endif
     private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 
     public init() {}
 
     public func beginAttempt(id: UUID, action: NoteIntelligenceAction) {
+      #if DEBUG
+        rejectedAnswerTexts = []
+        answerGenerationCount = 0
+      #endif
       diagnostics = NoteAttemptDiagnostics(id: id, action: action)
       switch model.availability {
       case .available:
@@ -208,30 +216,42 @@
       for pass: NoteModelPass, onUpdate: @MainActor ([ModelAnswerPart]) -> Void
     ) async throws -> [ModelAnswerPart] {
       try await perform(pass: pass) {
-        diagnostics?.generating(schema: "answer-blocks-v3")
-        let session = Self.session(model: model, pass: pass)
-        let stream = session.streamResponse(
-          to: try Self.prompt(for: pass), generating: AppleAnswer.self,
-          options: GenerationOptions(temperature: 0.2, maximumResponseTokens: pass.responseTokens))
-        for try await snapshot in stream {
+        for attempt in 0..<2 {
           try Task.checkCancellation()
-          diagnostics?.response(length: snapshot.rawContent.jsonString.utf16.count)
-          var parts: [ModelAnswerPart] = []
-          if let answer = snapshot.content.answer,
-            !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-          {
-            parts.append(ModelAnswerPart(kind: .prose, text: answer))
+          #if DEBUG
+            answerGenerationCount += 1
+          #endif
+          diagnostics?.generating(schema: "answer-blocks-v4")
+          let session = Self.session(model: model, pass: pass)
+          let stream = session.streamResponse(
+            to: try Self.prompt(for: pass), generating: AppleAnswer.self,
+            options: GenerationOptions(temperature: 0.2, maximumResponseTokens: pass.responseTokens)
+          )
+          for try await snapshot in stream {
+            try Task.checkCancellation()
+            diagnostics?.response(length: snapshot.rawContent.jsonString.utf16.count)
           }
-          for id in snapshot.content.blockIDs ?? [] {
-            if let block = Self.blocks(for: pass).first(where: { $0.id == id }) {
-              parts.append(ModelAnswerPart(kind: .quote, text: block.text))
-            }
+          let response = try await stream.collect()
+          diagnostics?.response(length: response.rawContent.jsonString.utf16.count)
+          let parts = try Self.decodeAnswer(response.rawContent, blocks: Self.blocks(for: pass))
+          let prose = parts.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
+          if let issue = NoteAnswerIssue.check(
+            prose, source: pass.source, instruction: pass.instruction)
+          {
+            diagnostics?.rejectedAnswer(issue)
+            #if DEBUG
+              rejectedAnswerTexts.append(prose)
+            #endif
+            logger.notice(
+              "request=\(pass.requestID.uuidString, privacy: .public) answerRejected=\(issue.rawValue, privacy: .public) attempt=\(attempt + 1)"
+            )
+            if attempt == 0 { continue }
+            throw NoteIntelligenceError.invalidAnswer(issue)
           }
           onUpdate(parts)
+          return parts
         }
-        let response = try await stream.collect()
-        diagnostics?.response(length: response.rawContent.jsonString.utf16.count)
-        return try Self.decodeAnswer(response.rawContent, blocks: Self.blocks(for: pass))
+        throw NoteIntelligenceError.emptyAnswer
       }
     }
 
@@ -418,7 +438,7 @@
 
     private static func schemaName(for purpose: NoteModelPass.Purpose) -> String {
       switch purpose {
-      case .answer: "answer-blocks-v3"
+      case .answer: "answer-blocks-v4"
       case .extract: "evidence-blocks-v2"
       case .edit: "edit-operations-v2"
       case .review: "review-replacements-v1"
@@ -447,12 +467,21 @@
         return common + evidence + """
 
           Write a useful, nonempty answer to the request in the answer field.
+          Address the reader as you/your, never the user, the creator or the author.
+          For a factual question, answer directly in one to three sentences, at most 60 words.
+          Use plain natural prose. Do not include quotation marks or quote passages.
+          Paraphrase source evidence. The citation chips handle exact quotations.
+          Never expose block numbers, blockIDs, firstOrderedItem, field names, schema names,
+          ranking metadata, HTML tags, or other implementation details.
           For a summary, explain the note's main points and preserve the meaning of headings and lists.
           Interpret ranked lists and section labels as evidence of preferences. A number-one item
           in the highest-rated section is the best-supported favorite, even without the word favorite.
           Name it directly as the likely favorite, then explain the ranking evidence.
+          A ranking supports an inference. Do not say the note explicitly states a favorite
+          when you inferred it. Explain the ranking in your own words, in second person.
           Do not begin by saying the favorite is unspecified when the ranking supports an inference.
           Volume counts and currently-reading numbers are not preference ranks.
+          List positions are ranks, not numerical ratings or scores.
           firstOrderedItem identifies the first actual item in each block's ordered list.
           A section label is never a series. When asked for a series, name an actual item.
           Select supporting blockIDs first, then answer from those selected blocks.
@@ -625,7 +654,7 @@
     var blockIDs: [Int]
     @Guide(
       description:
-        "A complete, nonempty answer to the user's question, or an honest explanation of why the note cannot answer it."
+        "Answer directly in your own words, addressing you/your. Use at most 60 words for a factual question. No quotations, internal identifiers, metadata or HTML. Distinguish ranking-based inference from an explicit statement."
     )
     var answer: String
   }

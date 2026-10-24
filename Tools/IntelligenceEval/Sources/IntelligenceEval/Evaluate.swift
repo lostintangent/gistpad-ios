@@ -30,8 +30,9 @@ struct Evaluate {
       let table = heading + NoteIntelligenceEvaluation.table(results)
       try table.write(to: output.appending(path: "summary.md"), atomically: true, encoding: .utf8)
       if let result = results.last {
+        let visible = result.timeToVisibleAnswerSeconds.map { String(format: "%.2f", $0) } ?? "-"
         print(
-          "\(result.passed ? "PASS" : "FAIL") \(result.caseID) run=\(result.repeatIndex) outcome=\(result.errorCode ?? "success") seconds=\(Int(result.elapsedSeconds)) request=\(result.requestID)"
+          "\(result.passed ? "PASS" : "FAIL") \(result.caseID) run=\(result.repeatIndex) outcome=\(result.errorCode ?? "success") visibleSeconds=\(visible) qualityRetries=\(result.qualityRetryCount ?? 0) qualityRejections=\(result.qualityRejectionCount ?? 0) totalSeconds=\(Int(result.elapsedSeconds)) request=\(result.requestID)"
         )
         fflush(stdout)
       }

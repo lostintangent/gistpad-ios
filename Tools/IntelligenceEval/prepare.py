@@ -26,6 +26,7 @@ cases = [
         source=fixture("manga.md"),
         prompt="what is my favorite series?",
         favorite="The Glass Orchard",
+        maximumAnswerWords=60,
         alternativeFavorites=["Mountain Trails", "The Clockmaker", "City of Paper",
                               "Winter Lantern", "Summer Postcards", "The Second Train",
                               "Midnight Elevator"],
@@ -83,6 +84,7 @@ if args.manga_gist:
             source=source,
             prompt="what is my favorite series?",
             favorite=args.favorite,
+            maximumAnswerWords=60,
             alternativeFavorites=[
                 re.sub(r"\s*\([^)]*\)\s*$", "", match.strip())
                 for match in re.findall(r"^\s*\d+[.)]\s+(.+)$", source, re.MULTILINE)

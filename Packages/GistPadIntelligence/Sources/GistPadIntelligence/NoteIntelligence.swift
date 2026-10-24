@@ -53,6 +53,7 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
   case insufficientContext
   case invalidResponse
   case emptyAnswer
+  case invalidAnswer(NoteAnswerIssue)
   case invalidEdit
   case unsafeEdit
   case responseTooLarge
@@ -93,6 +94,11 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
     case .emptyAnswer:
       String(
         localized: "Apple Intelligence didn't return an answer. Try again.", bundle: .module)
+    case .invalidAnswer:
+      String(
+        localized:
+          "Apple Intelligence couldn't produce a clear, grounded answer. Try again.",
+        bundle: .module)
     case .unsafeEdit:
       String(
         localized:
@@ -100,9 +106,7 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
         bundle: .module)
     case .unverifiedQuotation:
       String(
-        localized:
-          "A quoted passage didn't match your note. Try again.",
-        bundle: .module)
+        localized: "A quoted passage didn't match your note.", bundle: .module)
     case .noEvidence:
       String(localized: "I couldn't find information about that in this note.", bundle: .module)
     case .staleSnapshot:
@@ -134,6 +138,7 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
     case .insufficientContext: "insufficientContext"
     case .invalidResponse: "invalidResponse"
     case .emptyAnswer: "emptyAnswer"
+    case .invalidAnswer(let issue): issue.rawValue
     case .invalidEdit: "invalidEdit"
     case .unsafeEdit: "unsafeEdit"
     case .responseTooLarge: "responseTooLarge"

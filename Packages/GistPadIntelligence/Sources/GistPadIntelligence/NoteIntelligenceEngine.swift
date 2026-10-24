@@ -174,6 +174,11 @@ public final class NoteIntelligenceEngine {
     try Task.checkCancellation()
     progress(NoteIntelligenceProgress(phase: .answering, current: 1, total: 1))
     let generated = try await backend.answer(for: input) { partial in
+      let prose = partial.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
+      guard
+        NoteAnswerIssue.check(
+          prose, source: request.snapshot.source, instruction: request.instruction) == nil
+      else { return }
       var verified: [NoteAnswerPart] = []
       for part in partial
       where !part.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -196,6 +201,12 @@ public final class NoteIntelligenceEngine {
       !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     guard !visible.isEmpty else { throw NoteIntelligenceError.emptyAnswer }
+    let prose = visible.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
+    if let issue = NoteAnswerIssue.check(
+      prose, source: request.snapshot.source, instruction: request.instruction)
+    {
+      throw NoteIntelligenceError.invalidAnswer(issue)
+    }
     let parts = try visible.map { part -> NoteAnswerPart in
       switch part.kind {
       case .prose: return .prose(part.text)

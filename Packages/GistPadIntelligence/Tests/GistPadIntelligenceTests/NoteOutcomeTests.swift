@@ -115,6 +115,26 @@ struct NoteOutcomeTests {
     #expect(answer.snapshot.source.utf8.elementsEqual(manga.utf8))
   }
 
+  @Test(arguments: [
+    (
+      "You wrote “I especially enjoy this invented quotation”.",
+      NoteAnswerIssue.unverifiedProseQuote
+    ),
+    ("The user prefers this series.", .thirdPerson),
+    ("The first block contains the answer.", .internalIdentifier),
+  ])
+  func unreliableProseIsNeverEmittedAsAnAnswer(text: String, issue: NoteAnswerIssue) async {
+    let backend = OutcomeModel()
+    backend.parts = [ModelAnswerPart(kind: .prose, text: text)]
+    var updates = 0
+    await #expect(throws: NoteIntelligenceError.invalidAnswer(issue)) {
+      try await NoteIntelligenceEngine(backend: backend).ask(
+        request(manga, action: .ask, instruction: "Summarize my reading list"),
+        onUpdate: { _ in updates += 1 })
+    }
+    #expect(updates == 0)
+  }
+
   @Test func longMangaWithoutVerifiedEvidenceExplainsWhyItCannotAnswer() async {
     let backend = OutcomeModel()
     backend.contextSize = 512
@@ -259,8 +279,9 @@ struct NoteOutcomeTests {
       NoteModelPass(
         purpose: .answer, instruction: "PRIVATE REQUEST", source: "PRIVATE NOTE",
         responseTokens: 1_024, requestID: id),
-      tokens: 241, schema: "answer-blocks-v3")
-    diagnostics.generating(schema: "answer-blocks-v3")
+      tokens: 241, schema: "answer-blocks-v4")
+    diagnostics.generating(schema: "answer-blocks-v4")
+    diagnostics.rejectedAnswer(.internalIdentifier)
     diagnostics.response(length: 173)
     diagnostics.failed(NoteIntelligenceError.emptyAnswer)
     diagnostics.finish(errorCode: "emptyAnswer")
@@ -273,8 +294,9 @@ struct NoteOutcomeTests {
     #expect(record.contextSize == 4_096)
     #expect(record.availability == "available")
     #expect(record.passes.first?.promptTokens == 241)
-    #expect(record.passes.first?.schema == "answer-blocks-v3")
-    #expect(record.generationSchemas == ["answer-blocks-v3"])
+    #expect(record.passes.first?.schema == "answer-blocks-v4")
+    #expect(record.generationSchemas == ["answer-blocks-v4"])
+    #expect(record.rejectedAnswerIssues == ["internalIdentifier"])
     #expect(record.responseLength == 173)
     #expect(record.errorType?.contains("NoteIntelligenceError") == true)
     #expect(record.outcome == "emptyAnswer")
