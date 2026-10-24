@@ -38,7 +38,12 @@ async (page) => {
         .map((node) => getComputedStyle(node).textAlign).join("|") === "left|center|right",
       horizontalRules: parseFloat(getComputedStyle(document.querySelector("thead tr")).borderBottomWidth) > 0 &&
         getComputedStyle(document.querySelector("tbody tr:last-child")).borderBottomWidth === "0px",
-      localTableScroll: [...document.querySelectorAll(".table-scroll")].some((node) => node.scrollWidth > node.clientWidth),
+      localTableScroll: [...document.querySelectorAll(".table-scroll")].some((node) => node.scrollWidth > node.clientWidth + 100),
+      unbrokenHeaders: [...document.querySelectorAll("table")[1].querySelectorAll("th")].every((cell) => {
+        const style = getComputedStyle(cell);
+        return cell.getBoundingClientRect().height <= parseFloat(style.lineHeight) +
+          parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + 2;
+      }),
       disclosure: summary.getBoundingClientRect().height >= 44 && summaryStyle.fontWeight === "600" &&
         summaryStyle.columnGap === "8px" && summaryStyle.listStyleType === "none" &&
         parseFloat(chevron.borderTopWidth) > 0 && chevron.backgroundColor === "rgba(0, 0, 0, 0)",
@@ -49,6 +54,14 @@ async (page) => {
   for (const [name, passed] of Object.entries(initial)) {
     if (!passed) throw new Error(`Reading check failed: ${name}`);
   }
+  const scrolledLocally = await page.locator(".table-scroll").nth(1).evaluate((table) => {
+    const pageOffset = window.scrollX;
+    table.scrollLeft = table.scrollWidth;
+    const scrolled = table.scrollLeft > 100 && window.scrollX === pageOffset;
+    table.scrollLeft = 0;
+    return scrolled;
+  });
+  if (!scrolledLocally) throw new Error("Wide table does not scroll independently of the page");
   const summary = page.locator("summary");
   await summary.focus();
   await page.keyboard.press("Enter");

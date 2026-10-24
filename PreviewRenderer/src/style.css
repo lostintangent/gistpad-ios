@@ -64,6 +64,7 @@ li { margin-block: .35em; }
 .table-scroll { overflow-x: auto; }
 table { border-collapse: collapse; min-width: 100%; }
 td, th { border: 0; padding: 10px 12px; text-align: start; }
+.prose :is(td, th) { overflow-wrap: normal; word-break: normal; }
 th { font-weight: 600; }
 thead tr, tbody tr:not(:last-child) { border-bottom: 1px solid var(--border); }
 .prose tbody tr:nth-child(even) td,

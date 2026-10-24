@@ -324,7 +324,12 @@ struct PreviewWebKitTests {
                                     style.backgroundColor === 'rgba(0, 0, 0, 0)' && style.fontSize === styles.fontSize;
                             }),
                             [...document.querySelectorAll('table th')].slice(0, 3).map(cell => getComputedStyle(cell).textAlign).join('|') === 'left|center|right',
-                            [...document.querySelectorAll('.table-scroll')].some(table => table.scrollWidth > table.clientWidth),
+                            [...document.querySelectorAll('.table-scroll')].some(table => table.scrollWidth > table.clientWidth + 100),
+                            [...document.querySelectorAll('table')[1].querySelectorAll('th')].every(cell => {
+                                const style = getComputedStyle(cell);
+                                return cell.getBoundingClientRect().height <= parseFloat(style.lineHeight) +
+                                    parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + 2;
+                            }),
                             summary.getBoundingClientRect().height >= 44 && summaryStyle.fontWeight === '600' && summaryStyle.columnGap === '8px',
                             ratio(node.stroke, node.fill) >= 3 && ratio(node.stroke, styles.backgroundColor) >= 3,
                             ratio(arrow.fill, styles.backgroundColor) >= 3 && ratio(edge.stroke, styles.backgroundColor) >= 3,
