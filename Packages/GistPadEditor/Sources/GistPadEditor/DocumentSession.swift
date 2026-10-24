@@ -126,6 +126,13 @@
       textView.scrollRangeToVisible(textView.selectedRange)
     }
 
+    func updateViewportInsets(_ insets: UIEdgeInsets) {
+      guard let view = textView as? AnchoredTextView else {
+        preconditionFailure("Document sessions require the retained source text view.")
+      }
+      view.updateViewportInsets(insets)
+    }
+
     public func apply(_ edit: SourceEdit, generation: UInt64) throws {
       guard canFormat else { throw SourceMutation.MutationError.compositionActive }
       guard self.generation == generation else {
@@ -370,6 +377,45 @@
     private var readingOffset = 0
     private var anchorDelta: CGFloat = 0
     private var restoringAnchor = false
+    private var viewportInsets: UIEdgeInsets?
+    private var applyingViewportInsets = false
+
+    func updateViewportInsets(_ insets: UIEdgeInsets) {
+      viewportInsets = insets
+      applyViewportInsets()
+    }
+
+    override func adjustedContentInsetDidChange() {
+      super.adjustedContentInsetDidChange()
+      applyViewportInsets()
+    }
+
+    private func applyViewportInsets() {
+      guard !applyingViewportInsets, let viewportInsets else { return }
+      let previous = adjustedContentInset
+      var insets = contentInset
+      insets.top = max(0, viewportInsets.top - (previous.top - contentInset.top))
+      insets.bottom = max(0, viewportInsets.bottom - (previous.bottom - contentInset.bottom))
+      guard
+        abs(insets.top - contentInset.top) > 0.001
+          || abs(insets.bottom - contentInset.bottom) > 0.001
+      else { return }
+      applyingViewportInsets = true
+      let wasRestoring = restoringAnchor
+      restoringAnchor = true
+      defer {
+        restoringAnchor = wasRestoring
+        applyingViewportInsets = false
+      }
+      let offset = contentOffset
+      contentInset = insets
+      verticalScrollIndicatorInsets.top = insets.top
+      verticalScrollIndicatorInsets.bottom = insets.bottom
+      if !sourceInteractionActive, markedTextRange == nil, !isTracking, !isDecelerating {
+        setVerticalContentOffset(offset.y + previous.top - adjustedContentInset.top)
+        if isFirstResponder { scrollRangeToVisible(selectedRange) }
+      }
+    }
 
     override func didMoveToWindow() {
       super.didMoveToWindow()
@@ -430,6 +476,7 @@
     }
 
     override func layoutSubviews() {
+      applyViewportInsets()
       if sourceInteractionActive {
         // Writing Tools owns inline animations and scrolling until its session finishes.
         super.layoutSubviews()
@@ -455,17 +502,19 @@
           scrollRangeToVisible(NSRange(location: savedOffset, length: 0))
           super.layoutSubviews()
           let y = caretRect(for: position).minY - savedDelta
-          let maximum = max(
-            -adjustedContentInset.top,
-            contentSize.height - bounds.height + adjustedContentInset.bottom)
-          setContentOffset(
-            CGPoint(x: contentOffset.x, y: min(maximum, max(-adjustedContentInset.top, y))),
-            animated: false)
+          setVerticalContentOffset(y)
         }
       }
       previousWidth = bounds.width
       restoringAnchor = false
       rememberReadingAnchor()
+    }
+
+    private func setVerticalContentOffset(_ y: CGFloat) {
+      let minimum = -adjustedContentInset.top
+      let maximum = max(minimum, contentSize.height - bounds.height + adjustedContentInset.bottom)
+      setContentOffset(
+        CGPoint(x: contentOffset.x, y: min(maximum, max(minimum, y))), animated: false)
     }
   }
 #endif

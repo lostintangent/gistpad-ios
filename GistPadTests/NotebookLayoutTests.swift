@@ -81,6 +81,10 @@ struct NotebookLayoutTests {
     try await Task.sleep(for: .milliseconds(250))
     let editor = session.textView
     let preview = try #require(descendants(of: host.view).compactMap { $0 as? WKWebView }.first)
+    let initial = try recordCaretGeometry(editor, in: host.view, named: "initial-800")
+    #expect(
+      initial.caret.minY >= initial.viewport.minY && initial.caret.maxY <= initial.viewport.maxY,
+      "The first source line must start below the actual navigation chrome.")
     editor.becomeFirstResponder()
     editor.selectedRange = NSRange(location: original.utf16.count / 2, length: 0)
     editor.undoManager?.beginUndoGrouping()

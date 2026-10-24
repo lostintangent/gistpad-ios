@@ -23,18 +23,24 @@
     }
 
     public var body: some View {
-      SourceTextView(
-        session: session,
-        actions: SourceToolbarActions(
-          format: format, link: beginLink, indent: indent,
-          photo: insertPhoto, photoPrivacy: photoPrivacy,
-          dismiss: { session.textView.resignFirstResponder() }),
-        configuration: SourceToolbarConfiguration(
-          canFormat: session.canFormat,
-          canInsertPhoto: canInsertPhoto, hasPhoto: insertPhoto != nil,
-          hasPhotoPrivacy: photoPrivacy != nil)
-      )
-      .id(session.viewIdentity)
+      GeometryReader { geometry in
+        SourceTextView(
+          session: session,
+          viewportInsets: UIEdgeInsets(
+            top: geometry.safeAreaInsets.top, left: 0,
+            bottom: geometry.safeAreaInsets.bottom, right: 0),
+          actions: SourceToolbarActions(
+            format: format, link: beginLink, indent: indent,
+            photo: insertPhoto, photoPrivacy: photoPrivacy,
+            dismiss: { session.textView.resignFirstResponder() }),
+          configuration: SourceToolbarConfiguration(
+            canFormat: session.canFormat,
+            canInsertPhoto: canInsertPhoto, hasPhoto: insertPhoto != nil,
+            hasPhotoPrivacy: photoPrivacy != nil)
+        )
+        .id(session.viewIdentity)
+        .ignoresSafeArea(.container, edges: .vertical)
+      }
       .sheet(
         item: $linkRequest,
         onDismiss: {
@@ -121,6 +127,7 @@
 
   private struct SourceTextView: UIViewRepresentable {
     let session: DocumentSession
+    let viewportInsets: UIEdgeInsets
     let actions: SourceToolbarActions
     let configuration: SourceToolbarConfiguration
 
@@ -131,11 +138,13 @@
     func makeUIView(context: Context) -> UITextView {
       context.coordinator.update(actions: actions, configuration: configuration)
       session.textView.inputAccessoryView = context.coordinator.toolbar
+      session.updateViewportInsets(viewportInsets)
       return session.textView
     }
 
     func updateUIView(_ view: UITextView, context: Context) {
       context.coordinator.update(actions: actions, configuration: configuration)
+      session.updateViewportInsets(viewportInsets)
       session.updateAppearanceIfNeeded()
     }
   }
