@@ -62,7 +62,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                     .accessibilityHidden(true)
             }
         }
-        .ignoresSafeArea(.container, edges: [.top, .bottom])
         .background(Color(uiColor: .systemBackground))
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -146,15 +145,15 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                     .disabled(!saveState.canPublish)
                     .accessibilityIdentifier("note-save")
             }
-            if saveState == .offline {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingOfflineExplanation = true
-                    } label: {
-                        Label(String(localized: "Offline changes haven't synced", bundle: .module), systemImage: "icloud.slash")
-                    }
-                    .accessibilityIdentifier("note-offline")
+        }
+        if document.access.canEdit, saveState == .offline {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showingOfflineExplanation = true
+                } label: {
+                    Label(String(localized: "Offline changes haven't synced", bundle: .module), systemImage: "icloud.slash")
                 }
+                .accessibilityIdentifier("note-offline")
             }
         }
     }
