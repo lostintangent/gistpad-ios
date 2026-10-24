@@ -11,6 +11,89 @@ import UIKit
 
 @MainActor
 struct NotebookModelTests {
+  @Test(arguments: [false, true], [false, true])
+  func launchDiscardsAnAbandonedBlankDraftEvenWhenItWasRemembered(
+    remembered: Bool, offline: Bool
+  ) async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    let blank = try await provider.createDraft(accountID: fixtureAccount.id)
+    let kept = try await provider.createDraft(accountID: fixtureAccount.id)
+    let text = "Keep e\u{301}\r\n日本語 👩🏽‍💻"
+    _ = try await provider.persist(
+      draftID: kept.id, accountID: kept.accountID, text: text, generation: 1)
+    let selections = NotebookSelectionStore()
+    if remembered {
+      try selections.save(
+        .init(gistID: nil, filename: blank.filename, draftID: blank.id),
+        accountID: fixtureAccount.id)
+    }
+    if offline { await provider.failRequests() }
+    let model = NotebookModel(provider: provider, selections: selections)
+    await model.start()
+    #expect(model.localDrafts.map(\.id) == [kept.id])
+    #expect(model.library.snapshot.notes.map(\.id) == [kept.id.uuidString])
+    #expect(model.loadedDocument == nil)
+    #expect(model.documentError == nil)
+    #expect(try selections.selection(accountID: fixtureAccount.id) == nil)
+    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.first?.text.utf8
+      .elementsEqual(text.utf8) == true)
+    #expect(await provider.publicationReasons.isEmpty)
+  }
+
+  @Test func refreshingTheLibraryNeverDiscardsTheCurrentlyOpenBlankDraft() async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await model.createNote()
+    let blank = try #require(model.loadedDocument?.draft)
+    await model.refresh()
+    #expect(model.loadedDocument?.draft?.id == blank.id)
+    #expect(model.library.selectedNoteID == blank.id.uuidString)
+    #expect(model.localDrafts.map(\.id) == [blank.id])
+    #expect(try await !model.discardBlankDraft(blank))
+    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.first?.id == blank.id)
+  }
+
+  @Test func anEmptyCurrentSessionIsKeptUntilItActuallyLeaves() async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await model.createNote()
+    let document = try #require(model.loadedDocument)
+    let draft = try #require(document.draft)
+    let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
+    #expect(await !controller.finishLeavingNote())
+    #expect(model.loadedDocument?.draft?.id == draft.id)
+    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.first?.id == draft.id)
+    #expect(await provider.publicationReasons.isEmpty)
+    model.showLibrary()
+    #expect(await controller.finishLeavingNote())
+    #expect(!controller.hasUnpublishedChanges)
+    #expect(!controller.canMutate)
+    #expect(await !controller.finishLeavingNote())
+    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.isEmpty)
+    #expect(await provider.publicationReasons.isEmpty)
+  }
+
+  @Test func leavingAfterErasingANewNoteDiscardsOnlyItsPersistedBlankGeneration() async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await model.createNote()
+    let document = try #require(model.loadedDocument)
+    let draft = try #require(document.draft)
+    let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
+    for text in ["A thought", " \t\r\n"] {
+      controller.session.textView.text = text
+      controller.session.textViewDidChange(controller.session.textView)
+    }
+    model.showLibrary()
+    #expect(await controller.finishLeavingNote())
+    #expect(controller.session.generation == 2)
+    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.isEmpty)
+    #expect(await provider.publicationReasons.isEmpty)
+  }
+
   @Test func signOutDefersForegroundAndRouteRestorationUntilLocalCleanupFinishes() async throws {
     let provider = StubNotebookProvider(
       account: fixtureAccount, gists: [try makeGist(id: "a", title: "Signing out")])
@@ -646,6 +729,69 @@ struct NotebookModelTests {
 @Suite(.serialized)
 @MainActor
 struct NotebookNavigationHostTests {
+  @Test(arguments: [false, true])
+  func leavingANewBlankNoteDiscardsItsDraftWithoutPublishing(autosave: Bool) async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    let host = try await NavigationHost(
+      provider: provider, autosave: autosave, sizeClass: .compact)
+    defer { await host.close() }
+    await host.model.createNote()
+    let blank = try #require(host.model.loadedDocument?.draft)
+    try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
+    try await host.waitForKeyboard(visible: true)
+    #expect(host.model.localDrafts.map(\.id) == [blank.id])
+    host.routes.submit(.library)
+    try await host.waitUntil {
+      host.routes.pending == nil && host.isLibraryVisible && host.model.localDrafts.isEmpty
+    }
+    #expect(host.model.loadedDocument == nil)
+    #expect(!host.model.library.snapshot.notes.contains { $0.id == blank.id.uuidString })
+    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.isEmpty)
+    #expect(await provider.publicationReasons.isEmpty)
+  }
+
+  @Test func leavingANewNoteAfterTypingKeepsItsDurableContent() async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    let host = try await NavigationHost(provider: provider, sizeClass: .compact)
+    defer { await host.close() }
+    await host.model.createNote()
+    let draft = try #require(host.model.loadedDocument?.draft)
+    try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
+    try await host.waitForKeyboard(visible: true)
+    let editor = try #require(host.editor(text: ""))
+    let text = "A thought worth keeping 👩🏽‍💻"
+    editor.insertText(text)
+    host.routes.submit(.library)
+    try await host.waitUntil { host.routes.pending == nil && host.isLibraryVisible }
+    try await host.waitUntil { host.model.localDrafts.first?.text == text }
+    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.first?.id == draft.id)
+    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.first?.text == text)
+    #expect(await provider.publicationReasons.isEmpty)
+  }
+
+  @Test func selectingAnotherNoteDiscardsTheOldBlankButKeepsTheNewSelection() async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount,
+      gists: [try makeGist(id: "kept", title: "Kept", content: "A real note")])
+    let host = try await NavigationHost(provider: provider, sizeClass: .compact)
+    defer { await host.close() }
+    await host.model.createNote()
+    let blank = try #require(host.model.loadedDocument?.draft)
+    try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
+    try await host.waitForKeyboard(visible: true)
+    host.routes.submit(.note(gistID: "kept", filename: nil, shared: false))
+    try await host.waitUntil {
+      host.routes.pending == nil && host.editor(text: "A real note") != nil
+        && !host.model.localDrafts.contains { $0.id == blank.id }
+    }
+    #expect(host.model.library.selectedNoteID == "kept")
+    #expect(host.model.loadedDocument?.gist?.id == "kept")
+    #expect(try await !provider.localState(accountID: fixtureAccount.id).drafts.contains {
+      $0.id == blank.id
+    })
+    #expect(await provider.publicationReasons.isEmpty)
+  }
+
   @Test func sourceIntelligenceOpensTheLiveSheetForTheRetainedEditor() async throws {
     let provider = StubNotebookProvider(
       account: fixtureAccount,
@@ -1564,6 +1710,10 @@ private actor StubNotebookProvider: NotebookProviding {
   func createDraft(accountID: UUID) async throws -> DraftSnapshot {
     creationCount += 1
     return try await draftStore().createGistDraft(accountID: accountID, githubUserID: 1)
+  }
+  func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
+    try await draftStore().discardBlankDraft(
+      id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation)
   }
   func today(accountID: UUID, target: DailyNoteTarget) async throws -> TodayNote {
     todayTargets.append(target)

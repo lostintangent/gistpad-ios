@@ -44,6 +44,13 @@ public struct DraftSnapshot: Equatable, Sendable, Identifiable {
     public let attemptedGeneration: UInt64?
     public let autosavePaused: Bool
     public let state: SaveState
+
+    public var isDiscardableBlank: Bool {
+        gistID == nil && baseContent == nil && attemptedContent == nil
+            && attemptedGeneration == nil && description.isEmpty
+            && text.allSatisfy(\.isWhitespace)
+            && state == .savedLocally
+    }
 }
 
 public struct RecoverySnapshot: Equatable, Sendable, Identifiable {
@@ -235,6 +242,30 @@ public actor DraftStore {
 
     public func draft(id: UUID, accountID: UUID) throws -> DraftSnapshot {
         try snapshot(find(id, accountID: accountID))
+    }
+
+    public func discardBlankDraft(
+        id: UUID, accountID: UUID, expectedGeneration: UInt64
+    ) throws -> Bool {
+        let draft: StoredDraft
+        do {
+            draft = try find(id, accountID: accountID)
+        } catch DraftError.notFound {
+            return false
+        }
+        guard draft.generation == expectedGeneration, try snapshot(draft).isDiscardableBlank else {
+            return false
+        }
+        let hasRecovery = try modelContext.fetchCount(FetchDescriptor<StoredRecovery>(
+            predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }
+        )) > 0
+        let hasImage = try modelContext.fetchCount(FetchDescriptor<StoredImageUpload>(
+            predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }
+        )) > 0
+        guard !hasRecovery, !hasImage else { return false }
+        modelContext.delete(draft)
+        try commit()
+        return true
     }
 
     public func updateDraftMetadata(

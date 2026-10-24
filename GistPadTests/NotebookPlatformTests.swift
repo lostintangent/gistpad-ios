@@ -286,6 +286,10 @@ private actor PlatformNotebookProvider: NotebookProviding {
   func createDraft(accountID: UUID) async throws -> DraftSnapshot {
     throw NotebookPlatformError.serviceUnavailable
   }
+  func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
+    try await store.discardBlankDraft(
+      id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation)
+  }
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
     throw NotebookPlatformError.serviceUnavailable
   }

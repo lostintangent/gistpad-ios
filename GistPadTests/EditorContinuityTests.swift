@@ -187,7 +187,16 @@ struct EditorContinuityTests {
     manager.ensureLayout(for: documentRange)
     session.textView.scrollRangeToVisible(
       NSRange(location: source.utf16.count / 2, length: 0))
-    try await Task.sleep(for: .milliseconds(150))
+    let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+    while session.textView.contentOffset.y <= 0, ContinuousClock.now < deadline {
+      session.textView.scrollRangeToVisible(
+        NSRange(location: source.utf16.count / 2, length: 0))
+      try await Task.sleep(for: .milliseconds(20))
+      session.textView.layoutIfNeeded()
+    }
+    try #require(
+      session.textView.contentOffset.y > 0,
+      "The reading-anchor fixture must scroll to its middle source range before measuring.")
     session.textView.layoutIfNeeded()
     let point = CGPoint(
       x: session.textView.textContainerInset.left,

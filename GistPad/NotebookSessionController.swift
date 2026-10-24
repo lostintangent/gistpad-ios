@@ -31,6 +31,7 @@ final class NotebookSessionController {
   @ObservationIgnored private var scheduledAutosave: AutosaveRequest?
   @ObservationIgnored private var isForeground = false
   @ObservationIgnored private var didRequestCreationFocus = false
+  @ObservationIgnored private var isDiscarded = false
   @ObservationIgnored private var publicationWaiters: [CheckedContinuation<Void, Never>] = []
   @ObservationIgnored private let autosaveDelay: Duration
   @ObservationIgnored private let logger = Logger(
@@ -67,7 +68,7 @@ final class NotebookSessionController {
   }
 
   var canMutate: Bool {
-    document.chrome.access.canEdit && !session.isComposing && !session.writingToolsActive
+    document.chrome.access.canEdit && !isDiscarded && !session.isComposing && !session.writingToolsActive
       && !isPerformingDestructiveAction
       && !isApplyingDurableEdit
   }
@@ -209,6 +210,7 @@ final class NotebookSessionController {
   }
 
   var hasUnpublishedChanges: Bool {
+    guard !isDiscarded else { return false }
     guard let base = draft.baseContent else { return true }
     return !session.text.utf8.elementsEqual(base.utf8) || draft.attemptedGeneration != nil
   }
@@ -280,7 +282,7 @@ final class NotebookSessionController {
 
   func endDestructiveAction() {
     isPerformingDestructiveAction = false
-    session.textView.isEditable = document.chrome.access.canEdit
+    session.textView.isEditable = document.chrome.access.canEdit && !isDiscarded
   }
 
   func applyDurableEdit(
@@ -392,9 +394,33 @@ final class NotebookSessionController {
     if saveState == .reconnectRequired { saveState = .savedLocally }
   }
 
-  func publishOnLeavingNote() async {
-    guard hasUnpublishedChanges else { return }
+  @discardableResult
+  func finishLeavingNote() async -> Bool {
+    guard await waitForLocalSave() else { return false }
+    if draft.isDiscardableBlank, notebook.isDraftSelected(draft.id) { return false }
+    if draft.isDiscardableBlank, !notebook.isDraftSelected(draft.id),
+      canMutate, !isPublishing,
+      session.generation == draft.generation, session.text.utf8.elementsEqual(draft.text.utf8)
+    {
+      do {
+        try beginDestructiveAction()
+        defer { endDestructiveAction() }
+        if try await notebook.discardBlankDraft(draft) {
+          isDiscarded = true
+          autosaveTask?.cancel()
+          autosaveTask = nil
+          return true
+        }
+      } catch {
+        logger.error(
+          "Blank draft cleanup failed: \(String(reflecting: type(of: error)), privacy: .public)")
+        saveState = .localFailure(message: NotebookModel.message(for: error))
+        return false
+      }
+    }
+    guard hasUnpublishedChanges else { return false }
     await publish(reason: .autosave)
+    return false
   }
 
   func publish(

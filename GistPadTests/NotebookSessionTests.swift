@@ -198,7 +198,7 @@ struct NotebookSessionTests {
     edit(enabled, to: "Leaving this note")
     #expect(await enabled.waitForLocalSave())
     let timer = try #require(enabled.updateAutosave(isForeground: true))
-    await enabled.publishOnLeavingNote()
+    await enabled.finishLeavingNote()
     await timer.value
     #expect(timer.isCancelled)
     #expect(await provider.publishCount == 1)
@@ -209,7 +209,7 @@ struct NotebookSessionTests {
     edit(disabled, to: "Retain this local note")
     #expect(await disabled.waitForLocalSave())
     disabled.updateAutosave(isForeground: true)
-    await disabled.publishOnLeavingNote()
+    await disabled.finishLeavingNote()
     #expect(await disabledProvider.publishCount == 0)
     #expect(try await disabledProvider.snapshot().text == "Retain this local note")
   }
@@ -772,6 +772,10 @@ private actor SessionNotebookProvider: NotebookProviding {
   }
   func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) {}
   func createDraft(accountID: UUID) throws -> DraftSnapshot { throw DraftError.notFound }
+  func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
+    try await store.discardBlankDraft(
+      id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation)
+  }
   func today(accountID: UUID, target: DailyNoteTarget) throws -> TodayNote {
     throw DraftError.notFound
   }

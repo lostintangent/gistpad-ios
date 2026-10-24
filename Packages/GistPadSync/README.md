@@ -75,6 +75,8 @@ After an acknowledged remote rename, `updateDraftMetadata(id:accountID:expectedF
 
 After a confirmed remote deletion, `removeCleanDraftsForDeletedGist(gistID:accountID:)` removes only acknowledged, byte-clean drafts without recovery history. Dirty, uncertain, conflicted and historical recovery-bearing drafts stay intact and are returned for recovery presentation. The host must label their remote note as deleted and not recreate it implicitly. Retained state/source are deliberately unchanged.
 
+`discardBlankDraft(id:accountID:expectedGeneration:)` quietly removes only an unbound, locally saved draft with an empty description, whitespace-only source, no publication attempt or baseline, and no recovery or photo records. The store rechecks the generation and commits the deletion before returning `true`. A changed, meaningful or already removed draft returns `false`. The host must finish pending local edits and exclude its current note before requesting cleanup.
+
 ## Validation
 
 ```sh

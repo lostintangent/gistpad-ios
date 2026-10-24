@@ -51,6 +51,7 @@ protocol NotebookProviding: Sendable {
   func localState(accountID: UUID) async throws -> NotebookLocalState
   func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) async throws
   func createDraft(accountID: UUID) async throws -> DraftSnapshot
+  func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool
   func today(accountID: UUID, target: DailyNoteTarget) async throws -> TodayNote
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult
 }
@@ -178,6 +179,11 @@ actor LiveNotebookProvider: NotebookProviding {
   func createDraft(accountID: UUID) async throws -> DraftSnapshot {
     let userID = try await verifiedUserID(accountID: accountID)
     return try await drafts.createGistDraft(accountID: accountID, githubUserID: userID)
+  }
+
+  func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
+    try await drafts.discardBlankDraft(
+      id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation)
   }
 
   func today(accountID: UUID, target: DailyNoteTarget) async throws -> TodayNote {
@@ -493,7 +499,7 @@ final class NotebookModel {
       }
       account = restored
       deletedGistIDs = selections.deletedGistIDs(accountID: restored.id)
-      try await reloadLocalState(accountID: restored.id)
+      try await reloadLocalState(accountID: restored.id, discardAbandonedBlanks: true)
       await refresh()
       await restoreSelectionIfNeeded()
     } catch is CancellationError {
@@ -526,6 +532,7 @@ final class NotebookModel {
       }
       account = signedIn
       pendingAccount = nil
+      try await reloadLocalState(accountID: signedIn.id, discardAbandonedBlanks: true)
       await refresh()
       await restoreSelectionIfNeeded()
     } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
@@ -558,6 +565,12 @@ final class NotebookModel {
     library.snapshot = .init(notes: [])
     library.selectedNoteID = nil
     library.clearFilters()
+    do {
+      try await reloadLocalState(accountID: pendingAccount.id, discardAbandonedBlanks: true)
+    } catch {
+      report(error, operation: "reload-local")
+      documentError = Self.message(for: error)
+    }
     await refresh()
     await restoreSelectionIfNeeded()
   }
@@ -1044,10 +1057,20 @@ final class NotebookModel {
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
   }
 
-  private func reloadLocalState(accountID: UUID) async throws {
+  private func reloadLocalState(
+    accountID: UUID, discardAbandonedBlanks: Bool = false
+  ) async throws {
     let local = try await provider.localState(accountID: accountID)
     guard account?.id == accountID, pendingAccount == nil else { return }
-    localDrafts = local.drafts
+    var removed: Set<UUID> = []
+    for draft in local.drafts where discardAbandonedBlanks && draft.isDiscardableBlank {
+      guard account?.id == accountID, pendingAccount == nil else { return }
+      guard !isCreating, loadedDocument?.draft?.id != draft.id, !isDraftSelected(draft.id)
+      else { continue }
+      if try await discardBlankDraft(draft) { removed.insert(draft.id) }
+    }
+    guard account?.id == accountID, pendingAccount == nil else { return }
+    localDrafts = local.drafts.filter { !removed.contains($0.id) }
     cachedLibrary = local.library
     if let cached = local.library, let account {
       ownedGistIDs = Set(cached.owned.map(\.id))
@@ -1057,7 +1080,7 @@ final class NotebookModel {
       library.snapshot = .init(notes: [])
     }
     let known = Set(library.snapshot.notes.map(\.id))
-    library.snapshot.notes += local.drafts.filter {
+    library.snapshot.notes += localDrafts.filter {
       $0.gistID.map { !known.contains($0) } ?? true
     }.map { draft in
       LibraryNote(
@@ -1139,6 +1162,31 @@ final class NotebookModel {
       })
     else { throw DraftError.notFound }
     return draft
+  }
+
+  func isDraftSelected(_ id: UUID) -> Bool {
+    library.selectedNoteID != nil && presentedDocument?.draft?.id == id
+  }
+
+  func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
+    guard account?.id == draft.accountID, pendingAccount == nil,
+      draft.isDiscardableBlank, !isDraftSelected(draft.id)
+    else { return false }
+    let selection = try selections.selection(accountID: draft.accountID)
+    guard try await provider.discardBlankDraft(draft) else { return false }
+    if selection?.draftID == draft.id,
+      try selections.selection(accountID: draft.accountID)?.draftID == draft.id
+    {
+      selections.clear(accountID: draft.accountID)
+    }
+    guard account?.id == draft.accountID else { return true }
+    localDrafts.removeAll { $0.id == draft.id }
+    library.snapshot.notes.removeAll { $0.id == draft.id.uuidString }
+    if loadedDocument?.draft?.id == draft.id, !isDraftSelected(draft.id) {
+      loadedDocument = nil
+    }
+    await search()
+    return true
   }
 
   func photoServices(accountID: UUID) async throws -> NotebookPhotoServices {

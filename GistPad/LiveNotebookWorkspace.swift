@@ -182,15 +182,15 @@ struct LiveNotebookWorkspace: View {
       guard previous != selected, let previous,
         let outgoing = sessions.values.first(where: { $0.document.rowID == previous })
       else { return }
-      Task { await outgoing.publishOnLeavingNote() }
+      finishLeavingNote(outgoing)
     }
     .onChange(of: activeID) { previous, current in
       guard previous != current, let previous, let outgoing = sessions[previous] else { return }
-      Task { await outgoing.publishOnLeavingNote() }
+      finishLeavingNote(outgoing)
     }
     .onChange(of: compactColumn) { previous, current in
       guard previous != current, current == .sidebar, let outgoing = active else { return }
-      Task { await outgoing.publishOnLeavingNote() }
+      finishLeavingNote(outgoing)
     }
   }
 
@@ -832,6 +832,16 @@ struct LiveNotebookWorkspace: View {
     Task {
       await controller.publish()
       if let error = controller.metadataError { actionMessage = error }
+    }
+  }
+
+  private func finishLeavingNote(_ controller: NotebookSessionController) {
+    Task {
+      guard await controller.finishLeavingNote() else { return }
+      let id = controller.draft.id.uuidString
+      sessions[id] = nil
+      if activeID == id { activeID = nil }
+      if let photos = photoControllers.removeValue(forKey: id) { await photos.stop() }
     }
   }
 

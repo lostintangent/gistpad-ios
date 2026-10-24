@@ -569,6 +569,10 @@
     }
     func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) {}
     func createDraft(accountID: UUID) throws -> DraftSnapshot { throw DraftError.notFound }
+    func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
+      try await store.discardBlankDraft(
+        id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation)
+    }
     func today(accountID: UUID, target: DailyNoteTarget) throws -> TodayNote {
       throw DraftError.notFound
     }
