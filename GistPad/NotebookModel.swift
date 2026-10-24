@@ -1309,11 +1309,8 @@ final class NotebookModel {
         if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
         return $0.id < $1.id
       },
-      tags: preferences.tags.map { id, value in
-        LibraryTag(
-          id: id, name: value.objectValue?["name"]?.stringValue ?? id,
-          colorHex: value.objectValue?["color"]?.stringValue
-        )
+      tags: preferences.tagDefinitions.map { tag in
+        LibraryTag(id: tag.id, name: tag.name, colorHex: tag.colorHex)
       }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     )
   }

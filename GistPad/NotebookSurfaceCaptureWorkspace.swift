@@ -29,10 +29,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
       """)
   @State private var mode = NoteMode.reading
   @State private var presentedSheet: CaptureSheet?
-  @State private var metadata: [String: MetadataValue] = [
-    "isAutoSaveEnabled": .bool(true),
-    "accentColor": .string("#0EA5E9"),
-  ]
+  @State private var preferences = Preferences(isAutoSaveEnabled: true, accentColor: "#0EA5E9")
   @State private var selectedTagIDs: Set<String> = ["ideas", "everyday"]
 
   static func supports(_ screen: String) -> Bool {
@@ -61,7 +58,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
         }
       }
     }
-    .personalAccent(savedHex: metadata["accentColor"]?.stringValue)
+    .personalAccent(savedHex: preferences.accentColor)
     .sheet(item: $presentedSheet) { sheet in
       switch sheet {
       case .settings:
@@ -129,12 +126,12 @@ struct NotebookSurfaceCaptureWorkspace: View {
     NotebookSettingsSheet(
       account: screen == "settings-signed-out" ? nil : .init(
         id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
-        login: "octavia", preferences: .init(metadata: metadata)),
-      savePreference: { key, value in metadata[key.rawValue] = .bool(value) },
+        login: "octavia", preferences: preferences),
+      savePreference: { key, value in preferences = try preferences.applying(.setBoolean(key, value)) },
       connect: { presentedSheet = .account }
     ) {
-      PersonalAccentColorRow(savedHex: metadata["accentColor"]?.stringValue) {
-        metadata["accentColor"] = .string($0)
+      PersonalAccentColorRow(savedHex: preferences.accentColor) {
+        preferences = try preferences.applying(.setAccentColor($0))
       }
     }
   }

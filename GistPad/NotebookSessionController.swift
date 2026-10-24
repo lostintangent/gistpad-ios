@@ -154,7 +154,7 @@ final class NotebookSessionController {
   }
 
   private func applyWritingPreferences() {
-    let enabled = notebook.account?.preferences.metadata["isSpellcheckEnabled"]?.boolValue ?? true
+    let enabled = notebook.account?.preferences.booleanValue(.isSpellcheckEnabled) ?? true
     session.textView.spellCheckingType = enabled ? .yes : .no
   }
 

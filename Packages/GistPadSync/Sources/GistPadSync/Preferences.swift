@@ -8,6 +8,38 @@ public struct Preferences: Codable, Equatable, Sendable {
 
     public init(metadata: [String: MetadataValue]) { self.metadata = metadata }
 
+    public init(isAutoSaveEnabled: Bool, accentColor: String?) {
+        var metadata: [String: MetadataValue] = ["isAutoSaveEnabled": .bool(isAutoSaveEnabled)]
+        metadata["accentColor"] = accentColor.map(MetadataValue.string)
+        self.init(metadata: metadata)
+    }
+
+    public func booleanValue(_ preference: BooleanPreference, default fallback: Bool = true) -> Bool {
+        metadata[preference.rawValue]?.boolValue ?? fallback
+    }
+
+    public var profileDisplayName: String? {
+        for key in ["full_name", "name"] {
+            if let value = metadata[key]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty {
+                return value
+            }
+        }
+        return nil
+    }
+
+    public var tagDefinitions: [PreferenceTag] {
+        tags.map { id, value in
+            PreferenceTag(
+                id: id, name: value.objectValue?["name"]?.stringValue ?? id,
+                colorHex: value.objectValue?["color"]?.stringValue)
+        }
+    }
+
+    public func applying(_ operation: PreferenceOperation) throws -> Preferences {
+        Preferences(metadata: metadata.merging(try operation.changes(in: metadata)) { _, new in new })
+    }
+
     public var isAutoSaveEnabled: Bool { metadata["isAutoSaveEnabled"]?.boolValue ?? true }
     public var accentColor: String? { metadata["accentColor"]?.stringValue }
     public var hasMalformedAccentColor: Bool { metadata["accentColor"] != nil && accentColor == nil }
@@ -19,6 +51,12 @@ public struct Preferences: Codable, Equatable, Sendable {
         (metadata["gistTags"]?.objectValue ?? [:]).mapValues {
             $0.arrayValue?.compactMap(\.stringValue) ?? []
         }
+    }
+
+    public struct PreferenceTag: Equatable, Sendable {
+        public let id: String
+        public let name: String
+        public let colorHex: String?
     }
 
     public func tagNames(gistID: String) -> [String] {

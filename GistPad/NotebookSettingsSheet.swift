@@ -79,7 +79,7 @@ struct NotebookSettingsSheet<Appearance: View>: View {
     Binding(
       get: {
         pendingPreference == key
-          ? pendingValue : account?.preferences.metadata[key.rawValue]?.boolValue ?? fallback
+          ? pendingValue : account?.preferences.booleanValue(key, default: fallback) ?? fallback
       },
       set: { value in
         guard pendingPreference == nil else { return }
