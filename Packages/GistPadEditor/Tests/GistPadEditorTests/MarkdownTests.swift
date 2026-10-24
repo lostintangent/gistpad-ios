@@ -156,6 +156,7 @@ import Testing
 @Test func syntaxThemeRecognizesQuotesNestedEmphasisHTMLStrikesAndOrderedMarkers() {
   let source = """
     > Quoted _emphasis_ and **strong** with ***both***
+    > 2) Quoted list item
     14. Numbered item
     - Ordinary bullet
     <span class="note">HTML</span> and ~~deleted~~
@@ -164,16 +165,41 @@ import Testing
   func strings(_ kind: MarkdownSyntax.Kind) -> [String] {
     spans.filter { $0.kind == kind }.map { (source as NSString).substring(with: $0.range) }
   }
-  #expect(strings(.blockquote) == ["> Quoted _emphasis_ and **strong** with ***both***"])
+  #expect(
+    strings(.blockquote) == [
+      "> Quoted _emphasis_ and **strong** with ***both***", "> 2) Quoted list item",
+    ])
   #expect(strings(.emphasis).contains("_emphasis_"))
   #expect(strings(.emphasis).contains("***both***"))
   #expect(strings(.strong).contains("**strong**"))
   #expect(strings(.strong).contains("***both***"))
-  #expect(strings(.orderedMarker) == ["14."])
+  #expect(strings(.orderedMarker) == ["2)", "14."])
   #expect(strings(.punctuation) == ["-"])
   #expect(strings(.htmlTag) == [#"<span class="note">"#, "</span>"])
   #expect(strings(.strikethrough) == ["~~deleted~~"])
   #expect(spans.allSatisfy { Range($0.range, in: source) != nil })
+}
+
+@Test func sourceEmphasisLeavesIntrawordUnderscoresAndEscapedMarkersLiteral() {
+  let source = #"""
+    keep__field__name and keep_field_name and keep___field___name
+    \**literal**
+    \_literal_
+    __strong__ and ___both___
+    """#
+  let spans = MarkdownSyntax.spans(in: source)
+  let plain = (source as NSString).range(
+    of: "keep__field__name and keep_field_name and keep___field___name")
+  #expect(!spans.contains { NSIntersectionRange($0.range, plain).length > 0 })
+  #expect(!spans.contains { (source as NSString).substring(with: $0.range).contains("literal") })
+  #expect(
+    spans.contains {
+      $0.kind == .strong && (source as NSString).substring(with: $0.range) == "__strong__"
+    })
+  #expect(
+    spans.contains {
+      $0.kind == .emphasis && (source as NSString).substring(with: $0.range) == "___both___"
+    })
 }
 
 @Test func longFixtureIsSyntheticAndMultilingual() throws {

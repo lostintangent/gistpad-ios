@@ -18,6 +18,7 @@
         # Heading
         Plain prose [link](https://example.com)
         > Quoted _emphasis_ and **strong** with ***both***
+        > 2) Quoted list item
         **outer _inner_**
         14. Numbered item
         <span>HTML</span> and ~~deleted~~
@@ -66,6 +67,7 @@
               ("_emphasis_", SourceSyntaxColor.emphasis),
               ("**strong**", SourceSyntaxColor.emphasis),
               ("14.", SourceSyntaxColor.orderedMarker),
+              ("2)", SourceSyntaxColor.orderedMarker),
               ("Numbered", UIColor(InterfaceTheme.text)),
               ("<span>", SourceSyntaxColor.htmlTag),
               ("</span>", SourceSyntaxColor.htmlTag),
@@ -97,6 +99,7 @@
             for text in ["literal", "code link", "not struck"] {
               let font = try #require(attributes(text)[.font] as? UIFont)
               #expect(font.fontDescriptor.symbolicTraits.contains(.traitMonoSpace))
+              #expect(!font.fontDescriptor.symbolicTraits.contains(.traitBold))
               #expect(!font.fontDescriptor.symbolicTraits.contains(.traitItalic))
               #expect((attributes(text)[.underlineStyle] as? Int ?? 0) == 0)
               #expect((attributes(text)[.strikethroughStyle] as? Int ?? 0) == 0)
@@ -116,6 +119,7 @@
         (SourceSyntaxColor.htmlTag, [0x116329, 0x7EE787, 0x0B4B1E, 0xB0F5B7]),
         (SourceSyntaxColor.destination, [0x032F62, 0xA5D6FF, 0x02234A, 0xD1ECFF]),
         (SourceSyntaxColor.orderedMarker, [0x005CC5, 0x79C0FF, 0x004A9F, 0xB5DDFF]),
+        (SourceSyntaxColor.link, [0x032F62, 0xE2E8F0, 0x02234A, 0xF8FAFC]),
       ]
       let appearances: [(UIUserInterfaceStyle, UIAccessibilityContrast)] = [
         (.light, .normal), (.dark, .normal), (.light, .high), (.dark, .high),
@@ -137,7 +141,7 @@
       }
     }
 
-    @Test func appearanceChangesKeepTheSameAttributedTokensAndNativeUndo() throws {
+    @Test func appearanceChangesPreserveAttributedTokensWithoutRehighlighting() throws {
       let session = DocumentSession(documentID: "dynamic", text: "# Heading\n**bold**")
       let view = session.textView
       view.traitOverrides.legibilityWeight = .regular
@@ -147,6 +151,9 @@
       let identity = session.viewIdentity
       let selection = NSRange(location: 2, length: 4)
       view.selectedRange = selection
+      let sentinel = NSAttributedString.Key("GistPadThemeTestSentinel")
+      view.textStorage.addAttribute(
+        sentinel, value: "retained", range: NSRange(location: 0, length: 1))
       for appearance in [UIUserInterfaceStyle.dark, .light] {
         for contrast in [UIAccessibilityContrast.high, .normal] {
           view.traitOverrides.userInterfaceStyle = appearance
@@ -155,6 +162,9 @@
           let retained = try #require(
             view.textStorage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? UIColor)
           #expect(retained === color)
+          #expect(
+            view.textStorage.attribute(sentinel, at: 0, effectiveRange: nil) as? String
+              == "retained")
           #expect(session.viewIdentity == identity)
           #expect(view.selectedRange == selection)
           #expect(session.generation == 0)
