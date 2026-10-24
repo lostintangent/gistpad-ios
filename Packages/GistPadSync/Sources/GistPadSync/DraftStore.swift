@@ -78,6 +78,18 @@ public enum DraftRefreshResult: Equatable, Sendable {
     }
 }
 
+public enum DraftMetadataError: Error, Equatable, Sendable {
+    case invalidFilename
+    case filenameInUse
+    case staleMetadata
+    case publicationPending
+}
+
+public struct DeletedGistDrafts: Equatable, Sendable {
+    public let removedDraftIDs: Set<UUID>
+    public let retainedDrafts: [DraftSnapshot]
+}
+
 @Model
 final class StoredDraft {
     @Attribute(.unique) var id: UUID
@@ -191,6 +203,57 @@ public actor DraftStore {
 
     public func draft(id: UUID, accountID: UUID) throws -> DraftSnapshot {
         try snapshot(find(id, accountID: accountID))
+    }
+
+    public func updateDraftMetadata(
+        id: UUID, accountID: UUID, expectedFilename: String,
+        filename: String, description: String
+    ) throws -> DraftSnapshot {
+        let draft = try find(id, accountID: accountID)
+        guard !filename.isEmpty, !filename.contains("/"), !filename.contains("\\"),
+              !filename.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
+            throw DraftMetadataError.invalidFilename
+        }
+        guard draft.filename == expectedFilename || draft.filename == filename else {
+            throw DraftMetadataError.staleMetadata
+        }
+        guard draft.attemptedGeneration == nil else { throw DraftMetadataError.publicationPending }
+        if let gistID = draft.gistID {
+            let duplicates = try modelContext.fetch(FetchDescriptor<StoredDraft>(
+                predicate: #Predicate {
+                    $0.accountID == accountID && $0.gistID == gistID && $0.filename == filename
+                }
+            ))
+            guard !duplicates.contains(where: { $0.id != id }) else { throw DraftMetadataError.filenameInUse }
+        }
+        draft.filename = filename
+        draft.gistDescription = description
+        try commit()
+        return try snapshot(draft)
+    }
+
+    public func removeCleanDraftsForDeletedGist(gistID: String, accountID: UUID) throws -> DeletedGistDrafts {
+        let candidates = try modelContext.fetch(FetchDescriptor<StoredDraft>(
+            predicate: #Predicate { $0.accountID == accountID && $0.gistID == gistID }
+        ))
+        var removed: Set<UUID> = []
+        var retained: [DraftSnapshot] = []
+        for draft in candidates {
+            let id = draft.id
+            let hasRecovery = try modelContext.fetchCount(FetchDescriptor<StoredRecovery>(
+                predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }
+            )) > 0
+            let value = try snapshot(draft)
+            if value.state == .savedToGitHub, value.attemptedGeneration == nil,
+               sourceEqual(value.text, value.baseContent), !hasRecovery {
+                modelContext.delete(draft)
+                removed.insert(id)
+            } else {
+                retained.append(value)
+            }
+        }
+        try commit()
+        return DeletedGistDrafts(removedDraftIDs: removed, retainedDrafts: retained)
     }
 
     public func recoveries(id: UUID, accountID: UUID) throws -> [RecoverySnapshot] {

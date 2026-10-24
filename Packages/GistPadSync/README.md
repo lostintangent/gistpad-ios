@@ -69,6 +69,10 @@ GitHub Gist PATCH has no documented conditional-write precondition. A fresh read
 
 Before sign-out, ask the user to keep, export or discard unsynced work using `hasUnsyncedWork(accountID:)`. Kept drafts remain account-isolated. The account service does not delete local drafts.
 
+After an acknowledged remote rename, `updateDraftMetadata(id:accountID:expectedFilename:filename:description:)` retargets the same draft without changing source, generation, baseline, state or recovery history. Filename collisions, stale metadata and unresolved publication attempts are explicit errors. Serialize remote metadata mutations with publication and flush the active session first. This operation does not rename anything on GitHub.
+
+After a confirmed remote deletion, `removeCleanDraftsForDeletedGist(gistID:accountID:)` removes only acknowledged, byte-clean drafts without recovery history. Dirty, uncertain, conflicted and historical recovery-bearing drafts stay intact and are returned for recovery presentation. The host must label their remote note as deleted and not recreate it implicitly. Retained state/source are deliberately unchanged.
+
 ## Validation
 
 ```sh
