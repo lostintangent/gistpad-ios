@@ -85,7 +85,7 @@
     "Search All Notes" : {
 
     },
-    "Search titles, filenames and tags. Available cached text is included. All selected tags must match." : {
+    "Searches note titles." : {
 
     },
     "Settings" : {
@@ -97,7 +97,7 @@
     "Tags apply to every file in this note." : {
 
     },
-    "Try another search or clear your filters. Notes without cached text can still match by title, filename or tag." : {
+    "Try another search or clear your filters." : {
 
     },
     "Your daily notes will gather here. Begin with today." : {
@@ -188,12 +188,15 @@
     "Color" : {
 
     },
-    "Content from %lld of %lld notes is available to search." : {
+    "Matches all selected tags." : {
+
+    },
+    "Searches titles, filenames and tags, plus text from %lld of %lld notes." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Content from %1$lld of %2$lld notes is available to search."
+            "value" : "Searches titles, filenames and tags, plus text from %1$lld of %2$lld notes."
           }
         }
       }

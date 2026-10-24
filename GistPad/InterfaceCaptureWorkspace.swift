@@ -3,6 +3,7 @@ import GistPadEditor
 import GistPadInterface
 import GistPadPreview
 import SwiftUI
+import UIKit
 
 struct InterfaceCaptureWorkspace: View {
     static let markdown = """
@@ -37,6 +38,8 @@ struct InterfaceCaptureWorkspace: View {
     @State private var previewReload = 0
     @State private var actionMessage: String?
     @State private var showingTagEditor: Bool
+    @State private var searchPresented = false
+    @State private var searchKeyboardHeight: CGFloat = 0
     private let captureState: String
     private let captureScreen: String
     private let captureAccent: String?
@@ -62,7 +65,7 @@ struct InterfaceCaptureWorkspace: View {
         captureState = state
         supportedState = [
             "populated", "empty", "error", "offline", "readonly", "tag-audit", "today",
-            "tag-editor", "tag-readonly", "search", "no-results", "filtered", "signed-out",
+            "tag-editor", "tag-readonly", "search", "search-active", "no-results", "filtered", "signed-out",
             "daily", "starred", "archive", "notes", "featured"
         ].contains(state)
         _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
@@ -135,13 +138,18 @@ struct InterfaceCaptureWorkspace: View {
         case "starred": model.collection = .starred
         case "archive": model.collection = .archive
         case "filtered": model.selectedTagIDs = ["ideas"]
-        case "search":
+        case "search", "search-active":
             model.query = "notebook"
             model.searchState = .results(
                 notes: snapshot.notes.filter { ["shape", "small"].contains($0.id) },
                 coverage: .init(totalDocuments: snapshot.notes.count, documentsWithCachedContent: 2)
             )
-        case "no-results": model.query = "No matching synthetic words"
+        case "no-results":
+            model.query = "No matching synthetic words"
+            model.searchState = .results(
+                notes: [],
+                coverage: .init(totalDocuments: snapshot.notes.count, documentsWithCachedContent: 2)
+            )
         default: break
         }
         model.selectedNoteID = state == "empty" || state == "today" || screen == "library" ? nil : "shape"
@@ -189,7 +197,10 @@ struct InterfaceCaptureWorkspace: View {
                 }
             }
             .navigationSplitViewStyle(.balanced)
-            .librarySearch(model: library)
+            .librarySearch(
+                model: library,
+                isPresented: captureState == "search-active" ? $searchPresented : nil
+            )
             .sheet(isPresented: $showingTagEditor) {
                 TagEditor(
                     tags: library.snapshot.tags, selectedTagIDs: Set(chrome.tags.map(\.id)),
@@ -200,6 +211,7 @@ struct InterfaceCaptureWorkspace: View {
                 if library.selectedNoteID != nil { compactColumn = .detail }
             }
             .task {
+                if captureState == "search-active" { searchPresented = true }
                 if captureScreen == "library", horizontalSizeClass == .regular, captureState != "empty" {
                     library.selectedNoteID = "shape"
                 }
@@ -207,6 +219,14 @@ struct InterfaceCaptureWorkspace: View {
                     || captureState == "error" || captureState == "today" {
                     await markReady()
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)) { notification in
+                guard captureState == "search-active",
+                      let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+                      let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first
+                else { return }
+                searchKeyboardHeight = max(0, scene.effectiveGeometry.coordinateSpace.bounds.intersection(frame).height)
+                Task { await markReady() }
             }
             .personalAccent(savedHex: captureAccent)
         } else {
@@ -343,11 +363,21 @@ struct InterfaceCaptureWorkspace: View {
         guard let readinessToken else { return }
         do {
             try await Task.sleep(for: .milliseconds(500))
+            let searchFocused = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap(\.windows)
+                .filter { !$0.isHidden }
+                .contains { hasFocusedSearch(in: $0) }
+            // A hardware-keyboard shortcut bar is not a software-keyboard capture.
+            let searchKeyboardVisible = searchKeyboardHeight >= 150
+            guard captureState != "search-active" || (searchFocused && searchKeyboardVisible) else { return }
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent("gistpad-capture-\(readinessToken).ready")
             let data = try JSONSerialization.data(withJSONObject: [
                 "screen": captureScreen, "state": captureState,
                 "accent": captureAccent ?? "",
+                "searchFocused": searchFocused, "searchKeyboardVisible": searchKeyboardVisible,
+                "searchKeyboardHeight": searchKeyboardHeight,
                 "fixture": LaunchArguments.captureReadingFixture ? "reading-polish" : "notebook",
                 "token": readinessToken, "previewError": previewError ?? ""
             ], options: [.sortedKeys])
@@ -357,6 +387,13 @@ struct InterfaceCaptureWorkspace: View {
         } catch {
             actionMessage = "Capture readiness could not be recorded: \(error.localizedDescription)"
         }
+    }
+
+    private func hasFocusedSearch(in view: UIView) -> Bool {
+        if let field = view as? UITextField, field.isFirstResponder, field.text == library.query {
+            return true
+        }
+        return view.subviews.contains { hasFocusedSearch(in: $0) }
     }
 }
 

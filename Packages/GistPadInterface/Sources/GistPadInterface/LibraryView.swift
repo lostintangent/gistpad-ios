@@ -14,23 +14,34 @@ extension EnvironmentValues {
 
 private struct LibrarySearchModifier: ViewModifier {
     @Bindable var model: LibraryModel
+    var isPresented: Binding<Bool>?
+
+    func body(content: Content) -> some View {
+        searchableContent(content)
+            .searchToolbarBehavior(.minimize)
+            .tint(InterfaceTheme.accent)
+            .environment(\.librarySearchManagedByContainer, true)
+    }
 
     @ViewBuilder
-    func body(content: Content) -> some View {
+    private func searchableContent(_ content: Content) -> some View {
         if model.loadState == .signedOut {
-            content.environment(\.librarySearchManagedByContainer, true)
+            content
+        } else if let isPresented {
+            content.searchable(
+                text: $model.query, isPresented: isPresented,
+                placement: .sidebar, prompt: Text("Search notes", bundle: .module)
+            )
         } else {
             content
                 .searchable(text: $model.query, placement: .sidebar, prompt: Text("Search notes", bundle: .module))
-                .searchToolbarBehavior(.minimize)
-                .environment(\.librarySearchManagedByContainer, true)
         }
     }
 }
 
 extension View {
-    public func librarySearch(model: LibraryModel) -> some View {
-        modifier(LibrarySearchModifier(model: model))
+    public func librarySearch(model: LibraryModel, isPresented: Binding<Bool>? = nil) -> some View {
+        modifier(LibrarySearchModifier(model: model, isPresented: isPresented))
     }
 }
 
@@ -162,6 +173,37 @@ public struct LibraryView: View {
         }
     }
 
+    struct SearchSummary: View {
+        let coverage: LibrarySearchCoverage?
+        let selectedTagCount: Int
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                if let coverage {
+                    Text(
+                        "Searches titles, filenames and tags, plus text from \(coverage.documentsWithCachedContent) of \(coverage.totalDocuments) notes.",
+                        bundle: .module
+                    )
+                    if coverage.incompleteGistCount > 0 {
+                        Text("\(coverage.incompleteGistCount) gists have incomplete file lists.", bundle: .module)
+                    }
+                    if coverage.staleResultCount > 0 {
+                        Text("\(coverage.staleResultCount) results have older cached content.", bundle: .module)
+                    }
+                } else {
+                    Text("Searches note titles.", bundle: .module)
+                }
+                if selectedTagCount > 1 {
+                    Text("Matches all selected tags.", bundle: .module)
+                }
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .textCase(nil)
+            .accessibilityIdentifier("library-search-coverage")
+        }
+    }
+
     @Bindable private var model: LibraryModel
     private let actions: LibraryActions
     private let footer: Text?
@@ -194,6 +236,7 @@ public struct LibraryView: View {
             .toolbar { libraryToolbar }
             .sheet(isPresented: $showingTags) { tagFilters }
             .scrollEdgeEffectStyle(.soft, for: .all)
+            .tint(InterfaceTheme.accent)
     }
 
     @ViewBuilder
@@ -243,7 +286,6 @@ public struct LibraryView: View {
                             }
                             .navigationLinkIndicatorVisibility(.hidden)
                             .tag(Selection.today)
-                            .listRowBackground(isTodaySelected ? InterfaceTheme.selection : nil)
                             .listRowSeparator(.hidden)
                             .accessibilityValue(Text(
                                 model.today.date,
@@ -263,7 +305,7 @@ public struct LibraryView: View {
                     }
                     .listSectionMargins(.top, 16)
                 }
-                if model.hasFilters {
+                if model.showsSearchScope {
                     searchScope
                 }
                 searchStatus
@@ -285,7 +327,10 @@ public struct LibraryView: View {
                     Section {
                         ForEach(model.listedNotes) { noteRow($0) }
                     } header: {
-                        sectionHeading(model.hasFilters ? String(localized: "Results", bundle: .module) : model.collection.title)
+                        VStack(alignment: .leading, spacing: 8) {
+                            if model.hasFilters { searchSummary }
+                            sectionHeading(model.hasFilters ? String(localized: "Results", bundle: .module) : model.collection.title)
+                        }
                     }
                     .listSectionSeparator(.hidden)
                 }
@@ -368,7 +413,7 @@ public struct LibraryView: View {
                 .accessibilityIdentifier("library-featured-\(note.id)")
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                 .listRowSeparator(.hidden)
-                .listRowBackground(model.selectedNoteID == note.id ? InterfaceTheme.selection : nil)
+                .listRowBackground(!isSidebar && model.selectedNoteID == note.id ? InterfaceTheme.selection : nil)
                 .contextMenu { rowActions(note) }
             }
         }
@@ -439,12 +484,16 @@ public struct LibraryView: View {
                 }
             }
             .padding(.vertical, 4)
-        } footer: {
-            Text(
-                "Search titles, filenames and tags. Available cached text is included. All selected tags must match.",
-                bundle: .module
-            )
         }
+    }
+
+    private var searchSummary: some View {
+        let coverage: LibrarySearchCoverage? = if case .results(_, let coverage) = model.searchState {
+            coverage
+        } else {
+            nil
+        }
+        return SearchSummary(coverage: coverage, selectedTagCount: model.selectedTagIDs.count)
     }
 
     private var canShowEmptyState: Bool {
@@ -463,7 +512,7 @@ public struct LibraryView: View {
     @ViewBuilder
     private var searchStatus: some View {
         switch model.searchState {
-        case .inactive:
+        case .inactive, .results:
             EmptyView()
         case .searching:
             Section {
@@ -473,22 +522,6 @@ public struct LibraryView: View {
             Section {
                 Label(String(localized: "Search needs attention", bundle: .module), systemImage: "exclamationmark.circle")
                 Text(verbatim: message).foregroundStyle(.primary)
-            }
-        case .results(_, let coverage):
-            if !coverage.isComplete {
-                Section {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Content from \(coverage.documentsWithCachedContent) of \(coverage.totalDocuments) notes is available to search.", bundle: .module)
-                        if coverage.incompleteGistCount > 0 {
-                            Text("\(coverage.incompleteGistCount) gists have incomplete file lists.", bundle: .module)
-                        }
-                        if coverage.staleResultCount > 0 {
-                            Text("\(coverage.staleResultCount) results have older cached content.", bundle: .module)
-                        }
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(.primary)
-                }
             }
         }
     }
@@ -578,7 +611,7 @@ public struct LibraryView: View {
                 }
             } description: {
                 if model.hasFilters {
-                    Text("Try another search or clear your filters. Notes without cached text can still match by title, filename or tag.", bundle: .module)
+                    Text("Try another search or clear your filters.", bundle: .module)
                 } else {
                     Text(verbatim: emptyDescription)
                 }
@@ -593,6 +626,8 @@ public struct LibraryView: View {
                         .buttonStyle(.borderedProminent)
                 }
             }
+        } header: {
+            if model.hasFilters { searchSummary }
         }
         .listRowBackground(Color.clear)
     }
@@ -626,7 +661,7 @@ public struct LibraryView: View {
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .listRowSeparator(.visible)
-        .listRowBackground(model.selectedNoteID == note.id ? InterfaceTheme.selection : nil)
+        .listRowBackground(!isSidebar && model.selectedNoteID == note.id ? InterfaceTheme.selection : nil)
         .contextMenu { rowActions(note) }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if note.isOwned, let archive = actions.toggleArchive {

@@ -1,3 +1,4 @@
+import GistPadAppearance
 import SwiftUI
 import Testing
 import UIKit
@@ -133,6 +134,13 @@ struct LibraryHostTests {
     let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
       host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
     }
+    let sidebarImage = UIGraphicsImageRenderer(size: CGSize(width: 280, height: 800)).image { _ in
+      image.draw(at: .zero)
+    }
+    let expected = PersonalAccent().roles(traits: window.traitCollection).text
+    let counts = try accentPixels(in: sidebarImage, expected: expected)
+    #expect(counts.personal > 30, "Today and sidebar selection must use the personal accent.")
+    #expect(counts.systemBlue == 0, "The native sidebar must not retain a system-blue Today symbol.")
     Attachment.record(
       image, named: "mounted-library-\(width)-\(dark ? "Dark" : "Light")-Large.png", as: .png)
   }
@@ -261,6 +269,99 @@ struct LibraryHostTests {
       }
     }
     Attachment.record(image, named: "library-search-\(dark ? "Dark" : "Light")-Large.png", as: .png)
+  }
+
+  @Test(arguments: [false, true], [nil, "#FACC15"] as [String?])
+  func searchAndEmptyControlsUsePersonalAccent(dark: Bool, savedHex: String?) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = UIWindow(windowScene: scene)
+    window.overrideUserInterfaceStyle = dark ? .dark : .light
+    let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
+    model.query = "No matching words"
+    model.selectedTagIDs = ["ideas"]
+    model.searchState = .results(
+      notes: [], coverage: .init(totalDocuments: 8, documentsWithCachedContent: 2))
+    window.rootViewController = UIHostingController(
+      rootView: NavigationStack {
+        LibraryView(model: model, actions: .init(refresh: {}, create: {}, today: {}))
+      }
+      .librarySearch(model: model)
+      .personalAccent(savedHex: savedHex)
+      .environment(\.dynamicTypeSize, .large)
+      .environment(\.colorScheme, dark ? .dark : .light))
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    try await Task.sleep(for: .milliseconds(500))
+    window.layoutIfNeeded()
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+    }
+    let expected = PersonalAccent(savedHex: savedHex).roles(traits: window.traitCollection).text
+    let counts = try accentPixels(in: image, expected: expected)
+    #expect(counts.personal > 30, "The scope and Clear actions must render the account accent.")
+    #expect(counts.systemBlue == 0, "Library content must not fall back to system-blue controls.")
+    Attachment.record(
+      image, named: "search-accent-\(savedHex ?? "Sky")-\(dark ? "Dark" : "Light").png", as: .png)
+  }
+
+  @Test(arguments: [DynamicTypeSize.large, .accessibility3])
+  func searchCoverageIsOneUnboxedCaption(size: DynamicTypeSize) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = UIWindow(windowScene: scene)
+    var measuredSize: CGSize?
+    window.rootViewController = UIHostingController(
+      rootView: VStack {
+        LibraryView.SearchSummary(
+          coverage: .init(totalDocuments: 8, documentsWithCachedContent: 2), selectedTagCount: 0)
+          .frame(width: 324, alignment: .leading)
+          .fixedSize(horizontal: false, vertical: true)
+          .onGeometryChange(for: CGSize.self) { $0.size } action: { measuredSize = $0 }
+        Spacer()
+      }
+      .environment(\.dynamicTypeSize, size))
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    try await Task.sleep(for: .milliseconds(300))
+    let measured = try #require(measuredSize)
+    #expect(measured.width == 324)
+    if size == .large {
+      #expect(measured.height <= 66)
+    } else {
+      #expect(measured.height > 66)
+    }
+  }
+
+  private func accentPixels(in image: UIImage, expected: RGBColor) throws
+    -> (personal: Int, systemBlue: Int)
+  {
+    let source = try #require(image.cgImage)
+    let width = source.width
+    let height = source.height
+    let space = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+    var pixels = [UInt8](repeating: 0, count: width * height * 4)
+    try pixels.withUnsafeMutableBytes { bytes in
+      let context = try #require(
+        CGContext(
+          data: bytes.baseAddress, width: width, height: height, bitsPerComponent: 8,
+          bytesPerRow: width * 4, space: space,
+          bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue))
+      context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+    }
+    return stride(from: 0, to: pixels.count, by: 4).reduce(into: (0, 0)) { counts, index in
+      let red = Int(pixels[index])
+      let green = Int(pixels[index + 1])
+      let blue = Int(pixels[index + 2])
+      if abs(red - Int(expected.red)) <= 6, abs(green - Int(expected.green)) <= 6,
+        abs(blue - Int(expected.blue)) <= 6, pixels[index + 3] > 250
+      {
+        counts.0 += 1
+      }
+      if red < 30, green > 90, green < 160, blue > 245, pixels[index + 3] > 250 {
+        counts.1 += 1
+      }
+    }
   }
 
   private func descendants(_ view: UIView) -> [UIView] {

@@ -32,6 +32,19 @@ struct LibraryModelTests {
         #expect(model.listedNotes.map(\.id) == ["starred"])
     }
 
+    @Test func defaultSearchDoesNotShowARedundantScopeCard() {
+        let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
+        model.query = "notebook"
+        #expect(!model.showsSearchScope)
+        model.selectedTagIDs = ["ideas"]
+        #expect(model.showsSearchScope)
+        model.selectedTagIDs = []
+        model.collection = .starred
+        #expect(model.showsSearchScope)
+        model.query = ""
+        #expect(!model.showsSearchScope)
+    }
+
     @Test func appSearchNeverCreatesASecondFeaturedResultGroup() {
         let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
         let pinned = InterfaceFixtures.library.notes[0]

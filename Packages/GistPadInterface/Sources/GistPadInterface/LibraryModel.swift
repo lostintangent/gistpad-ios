@@ -106,6 +106,10 @@ public final class LibraryModel {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedTagIDs.isEmpty
     }
 
+    var showsSearchScope: Bool {
+        hasFilters && (collection != .gists || !selectedTagIDs.isEmpty)
+    }
+
     public var matchingNotes: [LibraryNote] {
         switch searchState {
         case .results(let notes, _): return notes
