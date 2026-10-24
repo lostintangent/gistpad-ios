@@ -63,7 +63,7 @@ public struct TagLabels: View {
     }
 
     public var body: some View {
-        TagFlowLayout(layoutDirection: layoutDirection) {
+        MetadataFlowLayout(layoutDirection: layoutDirection) {
             ForEach(visibleTags) { TagLabel(tag: $0, isSelected: isSelected) }
             if overflow > 0 {
                 TagOverflowLabel(count: overflow)
@@ -91,7 +91,7 @@ public struct TagLabels: View {
     private var overflow: Int { tags.count - visibleTags.count }
 }
 
-private struct TagFlowLayout: Layout {
+struct MetadataFlowLayout: Layout {
     var layoutDirection: LayoutDirection
     private let spacing: CGFloat = 6
 
@@ -120,11 +120,19 @@ private struct TagFlowLayout: Layout {
         var x: CGFloat = 0
         var y: CGFloat = 0
         var rowHeight: CGFloat = 0
+        var rowStart = 0
         var usedWidth: CGFloat = 0
+        func centerRow() {
+            for index in rowStart..<placements.count {
+                placements[index].origin.y += (rowHeight - placements[index].height) / 2
+            }
+        }
         for subview in subviews {
             let ideal = subview.sizeThatFits(.unspecified)
             let size = subview.sizeThatFits(ProposedViewSize(width: min(ideal.width, available), height: nil))
             if x > 0 && x + size.width > available {
+                centerRow()
+                rowStart = placements.count
                 x = 0
                 y += rowHeight + spacing
                 rowHeight = 0
@@ -134,6 +142,7 @@ private struct TagFlowLayout: Layout {
             rowHeight = max(rowHeight, size.height)
             x += size.width + spacing
         }
+        centerRow()
         return (CGSize(width: width ?? usedWidth, height: y + rowHeight), placements)
     }
 }

@@ -101,17 +101,21 @@ struct LibraryHostTests {
         NavigationStack {
           LibraryView(
             model: model,
-            actions: .init(refresh: {}, create: {}, today: {}))
+            actions: .init(refresh: {}, create: {}, today: {}),
+            isTodaySelected: true, isSidebar: true)
         })
     } else {
       content = AnyView(
         NavigationSplitView {
-          LibraryView(model: model, actions: .init(refresh: {}, create: {}, today: {}))
+          LibraryView(
+            model: model, actions: .init(refresh: {}, create: {}, today: {}),
+            isTodaySelected: true, isSidebar: true)
         } detail: {
           NavigationStack {
             TodayLanding(summary: model.today) {}
           }
-        })
+        }
+        .librarySearch(model: model))
     }
     let host = UIHostingController(
       rootView: content
@@ -125,11 +129,138 @@ struct LibraryHostTests {
     window.layoutIfNeeded()
     #expect(host.view.bounds.width == CGFloat(width))
     #expect(descendants(window).contains { $0 is UINavigationBar })
+    print("Mounted Library container: \(host.view.bounds), native scene: \(scene.effectiveGeometry.coordinateSpace.bounds)")
     let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
       host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
     }
     Attachment.record(
       image, named: "mounted-library-\(width)-\(dark ? "Dark" : "Light")-Large.png", as: .png)
+  }
+
+  @Test(arguments: [DynamicTypeSize.large, .accessibility3])
+  func ordinaryRowsKeepMetadataTogetherWithoutClipping(size: DynamicTypeSize) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = UIWindow(windowScene: scene)
+    let note = LibraryNote(
+      id: "metadata", title: "Words worth keeping",
+      updatedAt: .now.addingTimeInterval(-172_800), tagIDs: ["ideas"], fileCount: 3,
+      excerpt: "A few sentences to return to when a thought needs a starting point.")
+    let tags = [LibraryTag(id: "ideas", name: "Ideas", colorHex: "#EBC85A")]
+    var measuredSize: CGSize?
+    var metadataSize: CGSize?
+    window.rootViewController = UIHostingController(
+      rootView: VStack {
+        LibraryView.NoteRowContent(note: note, tags: tags)
+          .frame(width: 324)
+          .fixedSize(horizontal: false, vertical: true)
+          .onGeometryChange(for: CGSize.self) { $0.size } action: { measuredSize = $0 }
+        LibraryView.NoteRowMetadata(note: note, tags: tags)
+          .frame(width: 324)
+          .fixedSize(horizontal: false, vertical: true)
+          .onGeometryChange(for: CGSize.self) { $0.size } action: { metadataSize = $0 }
+        Spacer()
+      }
+      .environment(\.dynamicTypeSize, size))
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    try await Task.sleep(for: .milliseconds(400))
+    window.layoutIfNeeded()
+    let measured = try #require(measuredSize)
+    let metadata = try #require(metadataSize)
+    #expect(measured.width == 324)
+    if size == .large {
+      #expect(measured.height <= 128)
+      #expect(metadata.height <= 30)
+    } else {
+      #expect(measured.height > 128)
+      #expect(metadata.height > 30)
+    }
+  }
+
+  @Test(arguments: [false, true])
+  func collectionMenuOpensAsNativeUI(dark: Bool) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = UIWindow(windowScene: scene)
+    window.overrideUserInterfaceStyle = dark ? .dark : .light
+    let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
+    model.collection = dark ? .starred : .gists
+    let title = dark ? "Starred" : "Library"
+    window.rootViewController = UIHostingController(
+      rootView: NavigationStack {
+        LibraryView(model: model, actions: .init(refresh: {}, create: {}, today: {}))
+      }
+      .environment(\.dynamicTypeSize, .large)
+      .environment(\.colorScheme, dark ? .dark : .light))
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    try await Task.sleep(for: .milliseconds(400))
+    let bar = try #require(descendants(window).compactMap { $0 as? UINavigationBar }.last)
+    let titleButton = try #require(
+      descendants(bar).compactMap { $0 as? UIControl }.first { button in
+        button.accessibilityLabel?.contains(title) == true
+          || descendants(button).compactMap { $0 as? UILabel }.contains { $0.text == title }
+      })
+    titleButton.performPrimaryAction()
+    try await Task.sleep(for: .milliseconds(400))
+    let visibleTitles = Set(scene.windows.filter { !$0.isHidden }.flatMap { window in
+      descendants(window).compactMap { ($0 as? UILabel)?.text }
+    })
+    #expect(visibleTitles.isSuperset(of: ["All Notes", "Daily Notes", "Starred", "Archive"]))
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+      for overlay in scene.windows where !overlay.isHidden && overlay.windowLevel > window.windowLevel {
+        overlay.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+      }
+    }
+    Attachment.record(image, named: "collection-menu-\(dark ? "Dark" : "Light")-Large.png", as: .png)
+    for interaction in titleButton.interactions.compactMap({ $0 as? UIContextMenuInteraction }) {
+      interaction.dismissMenu()
+    }
+    window.rootViewController?.dismiss(animated: false)
+    try await Task.sleep(for: .milliseconds(300))
+  }
+
+  @Test(arguments: [false, true])
+  func searchOpensAsNativeUI(dark: Bool) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = UIWindow(windowScene: scene)
+    window.overrideUserInterfaceStyle = dark ? .dark : .light
+    let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
+    model.query = "notebook"
+    model.searchState = .results(
+      notes: InterfaceFixtures.library.notes.filter { $0.id == "shape" },
+      coverage: .init(totalDocuments: 7, documentsWithCachedContent: 1))
+    window.rootViewController = UIHostingController(
+      rootView: NavigationStack {
+        LibraryView(model: model, actions: .init(refresh: {}, create: {}, today: {}))
+      }
+      .environment(\.dynamicTypeSize, .large)
+      .environment(\.colorScheme, dark ? .dark : .light))
+    window.makeKeyAndVisible()
+    defer {
+      window.endEditing(true)
+      window.isHidden = true
+    }
+    try await Task.sleep(for: .milliseconds(400))
+    let searchButton = try #require(
+      descendants(window).compactMap { $0 as? UIControl }.first { $0.accessibilityLabel == "Search" })
+    searchButton.performPrimaryAction()
+    try await Task.sleep(for: .milliseconds(1200))
+    let field = try #require(
+      descendants(window).compactMap { $0 as? UITextField }.first {
+        $0.window != nil && $0.text == "notebook"
+      })
+    #expect(field.isFirstResponder)
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+      for overlay in scene.windows where !overlay.isHidden && overlay.windowLevel > window.windowLevel {
+        overlay.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+      }
+    }
+    Attachment.record(image, named: "library-search-\(dark ? "Dark" : "Light")-Large.png", as: .png)
   }
 
   private func descendants(_ view: UIView) -> [UIView] {

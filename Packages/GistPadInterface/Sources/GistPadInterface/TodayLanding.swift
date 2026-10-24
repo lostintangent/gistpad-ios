@@ -148,7 +148,7 @@ struct TodayFeature: View {
             if summary.availability == .missing {
                 Label(
                     String(localized: "Start today's note", bundle: .module),
-                    systemImage: "arrow.up.right"
+                    systemImage: "square.and.pencil"
                 )
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(InterfaceTheme.accent)

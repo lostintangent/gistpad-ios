@@ -39,6 +39,7 @@ struct InterfaceCaptureWorkspace: View {
     @State private var showingTagEditor: Bool
     private let captureState: String
     private let captureScreen: String
+    private let captureAccent: String?
     private let readinessToken: String?
     private let supportedState: Bool
     @Environment(\.openURL) private var openURL
@@ -53,6 +54,8 @@ struct InterfaceCaptureWorkspace: View {
         }
         let screen = LaunchArguments.captureScreen ?? "library"
         let state = argument("--capture-state", default: "populated")
+        let accent = argument("--capture-accent", default: "")
+        captureAccent = accent.isEmpty ? nil : accent
         captureScreen = screen
         let token = argument("--capture-ready-token", default: "")
         readinessToken = UUID(uuidString: token) == nil ? nil : token
@@ -153,7 +156,9 @@ struct InterfaceCaptureWorkspace: View {
                 ScrollViewReader { scroll in
                     LibraryView(
                         model: library, actions: libraryActions,
-                        footer: Text(actionMessage ?? "Synthetic library. No account connected.")
+                        footer: Text(actionMessage ?? "Synthetic library. No account connected."),
+                        isTodaySelected: captureState == "today",
+                        isSidebar: horizontalSizeClass == .regular
                     )
                     .task {
                         if captureState == "notes" || captureState == "featured" {
@@ -184,6 +189,7 @@ struct InterfaceCaptureWorkspace: View {
                 }
             }
             .navigationSplitViewStyle(.balanced)
+            .librarySearch(model: library)
             .sheet(isPresented: $showingTagEditor) {
                 TagEditor(
                     tags: library.snapshot.tags, selectedTagIDs: Set(chrome.tags.map(\.id)),
@@ -202,6 +208,7 @@ struct InterfaceCaptureWorkspace: View {
                     await markReady()
                 }
             }
+            .personalAccent(savedHex: captureAccent)
         } else {
             ContentUnavailableView(
                 "Unknown capture state", systemImage: "exclamationmark.triangle",
@@ -340,6 +347,7 @@ struct InterfaceCaptureWorkspace: View {
                 .appendingPathComponent("gistpad-capture-\(readinessToken).ready")
             let data = try JSONSerialization.data(withJSONObject: [
                 "screen": captureScreen, "state": captureState,
+                "accent": captureAccent ?? "",
                 "fixture": LaunchArguments.captureReadingFixture ? "reading-polish" : "notebook",
                 "token": readinessToken, "previewError": previewError ?? ""
             ], options: [.sortedKeys])
