@@ -24,7 +24,6 @@
                   MarkdownEditorView(
                     session: session.session,
                     insertPhoto: { fixture.photos.choosePhoto() },
-                    photoPrivacy: { fixture.photos.showPrivacy() },
                     canInsertPhoto: fixture.photos.canChoosePhoto)
                 }
               } preview: {
@@ -97,26 +96,31 @@
       try await Task.sleep(for: .milliseconds(500))
       let textView = session.session.textView
       guard let window = textView.window else { throw ImageUploadError.targetChanged }
-      let data = try JSONSerialization.data(
-        withJSONObject: [
-          "screen": "photos", "state": captureState,
-          "fixture": "offline-photos", "token": token,
-          "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
-          "contentSizeCategory": textView.traitCollection.preferredContentSizeCategory.rawValue,
-          "sourceFocused": textView.isFirstResponder,
-        ], options: [.sortedKeys])
+      var readiness: [String: Any] = [
+        "screen": "photos", "state": captureState,
+        "fixture": "offline-photos", "token": token,
+        "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
+        "contentSizeCategory": textView.traitCollection.preferredContentSizeCategory.rawValue,
+        "sourceFocused": textView.isFirstResponder,
+      ]
+      if captureState == "notice-end" || captureState == "multiple-end" {
+        let scroll = try await scrollToEnd(in: window)
+        readiness["scrollOffset"] = scroll.contentOffset.y
+        readiness["scrollContentHeight"] = scroll.contentSize.height
+        readiness["scrollEndVisible"] =
+          scroll.contentOffset.y + scroll.bounds.height - scroll.adjustedContentInset.bottom
+          >= scroll.contentSize.height - 1
+      }
+      let data = try JSONSerialization.data(withJSONObject: readiness, options: [.sortedKeys])
       let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("gistpad-capture-\(token).ready")
       try data.write(to: url, options: .atomic)
     }
 
     func presentInsertMenu() async throws {
-      func descendants(_ view: UIView) -> [UIView] {
-        view.subviews.flatMap { [$0] + descendants($0) }
-      }
       for _ in 0..<50 {
         if let accessory = session.session.textView.inputAccessoryView,
-          let insert = descendants(accessory).compactMap({ $0 as? UIButton }).first(where: {
+          let insert = descendants(of: accessory).compactMap({ $0 as? UIButton }).first(where: {
             $0.accessibilityIdentifier == "editor-insert-menu" && $0.window != nil
           })
         {
@@ -128,6 +132,31 @@
         try await Task.sleep(for: .milliseconds(100))
       }
       throw ImageUploadError.targetChanged
+    }
+
+    private func scrollToEnd(in window: UIWindow) async throws -> UIScrollView {
+      for _ in 0..<50 {
+        if let scroll = descendants(of: window).compactMap({ $0 as? UIScrollView }).first(where: {
+          let visibleHeight =
+            $0.bounds.height - $0.adjustedContentInset.top - $0.adjustedContentInset.bottom
+          return $0 !== session.session.textView && !$0.isHidden && $0.alpha > 0
+            && visibleHeight > 0 && $0.contentSize.height > visibleHeight
+            && (captureState == "notice-end" || visibleHeight <= 181)
+        }) {
+          let bottom =
+            scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom
+          scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: bottom), animated: false)
+          try await Task.sleep(for: .milliseconds(200))
+          guard abs(scroll.contentOffset.y - bottom) < 1 else { throw ImageUploadError.targetChanged }
+          return scroll
+        }
+        try await Task.sleep(for: .milliseconds(100))
+      }
+      throw ImageUploadError.targetChanged
+    }
+
+    private func descendants(of view: UIView) -> [UIView] {
+      view.subviews.flatMap { [$0] + descendants(of: $0) }
     }
 
     var actions: NoteActions {
@@ -157,8 +186,10 @@
         state = "editor"
       }
       guard
-        ["editor", "insert", "notice", "picker", "pending", "multiple", "unpublished"].contains(
-          state)
+        [
+          "editor", "insert", "notice", "notice-end", "picker", "pending", "multiple",
+          "multiple-end", "unpublished",
+        ].contains(state)
       else {
         throw ImageUploadError.targetChanged
       }
@@ -211,12 +242,12 @@
         preparePresentation: { session.session.textView.resignFirstResponder() },
         defaults: defaults)
       switch state {
-      case "notice": photos.choosePhoto()
+      case "notice", "notice-end": photos.choosePhoto()
       case "picker":
         photos.choosePhoto()
         photos.acceptNotice()
         photos.noticeDidDismiss()
-      case "pending", "multiple", "unpublished":
+      case "pending", "multiple", "multiple-end", "unpublished":
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 160, height: 120))
         let bytes = renderer.pngData { context in
           UIColor.systemTeal.setFill()
@@ -231,7 +262,7 @@
           mountain.close()
           mountain.fill()
         }
-        for _ in 0..<(state == "multiple" ? 3 : 1) {
+        for _ in 0..<(["multiple", "multiple-end"].contains(state) ? 3 : 1) {
           photos.choosePhoto()
           photos.acceptNotice()
           photos.noticeDidDismiss()

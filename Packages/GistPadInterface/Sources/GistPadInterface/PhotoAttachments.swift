@@ -64,16 +64,21 @@ public struct PhotoPrivacyNotice: View {
     public var body: some View {
         NavigationStack {
             ScrollView {
-                Text(
-                    "Photos you choose are uploaded to GistPad's public image storage. Anyone with an image link can view them, even in a secret gist. Location metadata is removed, but visible details remain.",
-                    bundle: .module
-                )
-                .font(.body)
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Photos are public", bundle: .module)
+                        .font(.title2.weight(.bold))
+                        .accessibilityAddTraits(.isHeader)
+                    Text(
+                        "Photos you choose are uploaded to GistPad's public image storage. Anyone with an image link can view them, even in a secret gist. Location metadata is removed, but visible details remain.",
+                        bundle: .module
+                    )
+                    .font(.body)
+                }
                 .frame(maxWidth: 540, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(24)
             }
-            .navigationTitle(String(localized: "Photos are public", bundle: .module))
+            .navigationTitle(String(localized: "Photos", bundle: .module))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -123,6 +128,8 @@ public struct PhotoAttachmentShelf: View {
                     .frame(height: shelfHeight)
             }
             .frame(maxHeight: shelfHeight)
+            .clipped()
+            .contentShape(.rect)
             .background(Color(uiColor: .systemBackground))
             .scrollEdgeEffectStyle(.soft, for: .all)
             .accessibilityIdentifier("pending-photos")

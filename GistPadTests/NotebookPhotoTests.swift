@@ -275,7 +275,6 @@ struct NotebookPhotoLayoutProbe {
     #expect(editor.isFirstResponder)
     #expect(editor.inputAccessoryView != nil)
     let prefix = "photos-ax3-\(photoCount)"
-    record(window, named: "\(prefix)-shelf-top")
     let views = descendants(of: host.view)
     let bars = views.compactMap { $0 as? UINavigationBar }
     #expect(bars.contains { bar in
@@ -301,6 +300,22 @@ struct NotebookPhotoLayoutProbe {
       shelf.bounds.height - shelf.adjustedContentInset.top - shelf.adjustedContentInset.bottom
     #expect(visibleShelfHeight > 0 && visibleShelfHeight <= 181)
     #expect(shelf.contentSize.height > visibleShelfHeight)
+    let shelfViewport = shelf.convert(
+      CGRect(
+        x: shelf.bounds.minX, y: shelf.bounds.minY + shelf.adjustedContentInset.top,
+        width: shelf.bounds.width, height: visibleShelfHeight), to: window)
+    let image = record(window, named: "\(prefix)-shelf-top")
+    if photoCount == 3 {
+      let pixelRows = try thumbnailPixelRows(in: image)
+      let top = max(0, Int(ceil(shelfViewport.minY * image.scale)))
+      let bottom = min(pixelRows.count, Int(ceil(shelfViewport.maxY * image.scale)))
+      try #require(top < bottom)
+      #expect(pixelRows[top..<bottom].reduce(0, +) > 0, "The synthetic thumbnail must be rendered.")
+      let below = min(pixelRows.count, bottom + Int(ceil(image.scale)))
+      #expect(
+        pixelRows.dropFirst(below).reduce(0, +) == 0,
+        "Photo rows must not paint below the shelf's inset-adjusted viewport.")
+    }
     let bottom = shelf.contentSize.height - shelf.bounds.height + shelf.adjustedContentInset.bottom
     shelf.setContentOffset(CGPoint(x: 0, y: bottom), animated: false)
     try await Task.sleep(for: .milliseconds(150))
@@ -338,11 +353,39 @@ struct NotebookPhotoLayoutProbe {
     view.subviews.flatMap { [$0] + descendants(of: $0) }
   }
 
-  private func record(_ window: UIWindow, named name: String) {
+  @discardableResult
+  private func record(_ window: UIWindow, named name: String) -> UIImage {
     let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
     Attachment.record(image, named: "\(name).png", as: .png)
+    return image
+  }
+
+  private func thumbnailPixelRows(in image: UIImage) throws -> [Int] {
+    let source = try #require(image.cgImage)
+    let width = source.width
+    let height = source.height
+    var pixels = [UInt8](repeating: 0, count: width * height * 4)
+    try pixels.withUnsafeMutableBytes { bytes in
+      let context = try #require(
+        CGContext(
+          data: bytes.baseAddress, width: width, height: height, bitsPerComponent: 8,
+          bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+          bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue))
+      context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+    }
+    return (0..<height).map { row in
+      (0..<width).reduce(into: 0) { count, column in
+        let index = (row * width + column) * 4
+        if pixels[index] < 120, pixels[index + 1] < 200, pixels[index + 2] > 200,
+          pixels[index + 2] > pixels[index + 1] + 40,
+          pixels[index + 1] > pixels[index] + 20, pixels[index + 3] > 200
+        {
+          count += 1
+        }
+      }
+    }
   }
 }
 

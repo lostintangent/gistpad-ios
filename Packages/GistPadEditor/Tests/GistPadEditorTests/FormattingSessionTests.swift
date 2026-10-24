@@ -201,7 +201,11 @@
       #expect(session.textView.undoManager?.canUndo == false)
       let insertion = try #require(
         items.first { $0.accessibilityIdentifier == "editor-insert-menu" })
-      #expect(insertion.menu != nil)
+      let insertMenu = try #require(insertion.menu)
+      let insertActions = menuActions(insertMenu.children)
+      let photo = try #require(insertActions.first { $0.title == "Photo" })
+      #expect(photo.subtitle == "Public, even in a secret gist")
+      #expect(!insertActions.contains { $0.title == "Photos Are Public" })
       #expect(items.first { $0.accessibilityLabel == "Lists" }?.menu?.children.count == 5)
       #expect(!items.contains { $0.accessibilityLabel == "Find" })
       #expect(session.textView.keyCommands?.contains { $0.input == "]" } == true)

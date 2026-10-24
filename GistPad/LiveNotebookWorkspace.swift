@@ -403,7 +403,6 @@ struct LiveNotebookWorkspace: View {
         MarkdownEditorView(
           session: controller.session,
           insertPhoto: { photos.choosePhoto() },
-          photoPrivacy: { photos.showPrivacy() },
           canInsertPhoto: photos.canChoosePhoto)
       }
     } preview: {

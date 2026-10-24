@@ -5,7 +5,6 @@
   public struct MarkdownEditorView: View {
     public let session: DocumentSession
     private let insertPhoto: (@MainActor () -> Void)?
-    private let photoPrivacy: (@MainActor () -> Void)?
     private let canInsertPhoto: Bool
     private let intelligence: (@MainActor () -> Void)?
     @State private var linkRequest: LinkRequest?
@@ -14,13 +13,11 @@
     public init(
       session: DocumentSession,
       insertPhoto: (@MainActor () -> Void)? = nil,
-      photoPrivacy: (@MainActor () -> Void)? = nil,
       canInsertPhoto: Bool = false,
       intelligence: (@MainActor () -> Void)? = nil
     ) {
       self.session = session
       self.insertPhoto = insertPhoto
-      self.photoPrivacy = photoPrivacy
       self.canInsertPhoto = canInsertPhoto
       self.intelligence = intelligence
     }
@@ -31,13 +28,12 @@
           session: session,
           actions: SourceToolbarActions(
             format: format, link: beginLink, indent: indent,
-            photo: insertPhoto, photoPrivacy: photoPrivacy,
+            photo: insertPhoto,
             intelligence: intelligence,
             dismiss: { session.textView.resignFirstResponder() }),
           configuration: SourceToolbarConfiguration(
             canFormat: session.canFormat,
             canInsertPhoto: canInsertPhoto, hasPhoto: insertPhoto != nil,
-            hasPhotoPrivacy: photoPrivacy != nil,
             canUseIntelligence: !session.isComposing && !session.writingToolsActive
               && session.textView.markedTextRange == nil,
             hasIntelligence: intelligence != nil)

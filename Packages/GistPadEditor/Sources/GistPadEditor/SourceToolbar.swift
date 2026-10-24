@@ -8,7 +8,6 @@
     let link: @MainActor () -> Void
     let indent: @MainActor (Bool) -> Void
     let photo: (@MainActor () -> Void)?
-    let photoPrivacy: (@MainActor () -> Void)?
     var intelligence: (@MainActor () -> Void)? = nil
     let dismiss: @MainActor () -> Void
   }
@@ -17,7 +16,6 @@
     let canFormat: Bool
     let canInsertPhoto: Bool
     let hasPhoto: Bool
-    let hasPhotoPrivacy: Bool
     var canUseIntelligence = true
     var hasIntelligence = false
   }
@@ -137,15 +135,9 @@
       let photo = action(String(localized: "Photo", bundle: .module), image: "photo") {
         $0.actions.photo?()
       }
+      photo.subtitle = String(localized: "Public, even in a secret gist", bundle: .module)
       photo.attributes = configuration.hasPhoto && configuration.canInsertPhoto ? [] : .disabled
-      var photos: [UIMenuElement] = [photo]
-      if configuration.hasPhotoPrivacy {
-        photos.append(
-          action(String(localized: "Photos Are Public", bundle: .module), image: "info.circle") {
-            $0.actions.photoPrivacy?()
-          })
-      }
-      insert.append(UIMenu(options: .displayInline, children: photos))
+      insert.append(UIMenu(options: .displayInline, children: [photo]))
       let emphasis = [
         action(String(localized: "Bold", bundle: .module), image: "bold") {
           $0.actions.format(.bold)
