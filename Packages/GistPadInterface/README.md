@@ -1,6 +1,6 @@
 # GistPadInterface
 
-Native Library and note-screen chrome for iOS 27.0 and later. Screen inputs are Sendable value types. The app owns navigation, authentication, editor sessions, rendering and persistence. This package never initiates a network write.
+Native Library and note-screen chrome for iOS 27.1 and later. Screen inputs are Sendable value types. The app owns navigation, authentication, editor sessions, rendering and persistence. This package never initiates a network write.
 
 `LibraryView(model:actions:)` belongs in the sidebar of a `NavigationSplitView`. Bind the app's active document to `LibraryModel.selectedNoteID`. Apply `LibrarySnapshot` values without recreating the model so collection, title search and AND-combined tag filters survive updates. Pinned and recent groups are separate. A selected note that stops matching remains in Open document until selection changes. Load failures and cached offline content are explicit states.
 

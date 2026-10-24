@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "GistPadPreview",
-    platforms: [.iOS("27.0"), .macOS(.v14)],
+    platforms: [.iOS("27.1"), .macOS(.v14)],
     products: [.library(name: "GistPadPreview", targets: ["GistPadPreview"])],
     targets: [
         .target(

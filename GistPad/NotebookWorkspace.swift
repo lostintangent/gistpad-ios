@@ -47,18 +47,13 @@ struct NotebookWorkspace: View {
     MarkdownEditorView(session: session)
   }
 
-  @ViewBuilder
   private var focusContents: some View {
-    if #available(iOS 27.1, *) {
-      ArrangementView {
-        source
-      } secondary: {
-        preview
-      }
-      .arrangementViewStyle(.split)
-    } else {
-      documentPages
+    ArrangementView {
+      source
+    } secondary: {
+      preview
     }
+    .arrangementViewStyle(.split)
   }
 
   private var documentPages: some View {
@@ -74,15 +69,10 @@ struct NotebookWorkspace: View {
     }
   }
 
-  private var supportsArrangements: Bool {
-    if #available(iOS 27.1, *) { return true }
-    return false
-  }
-
   @ToolbarContentBuilder
   private var workspaceToolbar: some ToolbarContent {
     ToolbarItemGroup(placement: .primaryAction) {
-      if !state.focus || !supportsArrangements {
+      if !state.focus {
         Button {
           state.editing.toggle()
         } label: {

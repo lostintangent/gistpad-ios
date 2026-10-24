@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "GistPadSync",
-    platforms: [.iOS("27.0"), .macOS(.v15)],
+    platforms: [.iOS("27.1"), .macOS(.v15)],
     products: [.library(name: "GistPadSync", targets: ["GistPadSync"])],
     dependencies: [
         .package(url: "https://github.com/supabase/supabase-swift.git", exact: "2.55.4")

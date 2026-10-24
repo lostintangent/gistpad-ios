@@ -5,8 +5,8 @@ A personal, native iPhone notebook backed by GitHub Gists. **M2 integration in p
 ## Requirements
 
 - Xcode 27.1 and its iOS SDK
-- iPhone running iOS 27.0+, or its matching simulator runtime
-- Duo posture testing requires the iOS 27.1 runtime. Standard iPhone validation uses 27.0.
+- iPhone running iOS 27.1+, or its matching simulator runtime
+- Duo posture testing uses the iOS 27.1 runtime. iOS 27.0 and earlier are outside the product scope.
 - For hardware, Apple Developer team `RHFNBL7EG4`, automatic signing and Developer Mode
 
 Use the full Xcode path without changing the machine's `xcode-select` setting:
@@ -42,7 +42,7 @@ Open `GistPad.xcodeproj` to run interactively. Choose the shared **GistPad** sch
 
 Debug capture launches accept `--capture-screen library|note|editor|focus`. Library and note use a short interface-review fixture and the actual screen package, with populated/empty/error/offline/readonly states. Editor uses the long multilingual source fixture. Focus uses the shared all-syntax renderer fixture. `--long-fixture` also selects the long document outside interface captures. All fixture content is synthetic.
 
-Focus uses `ArrangementView` on iOS 27.1+. On iOS 27.0 it is a single-screen workspace with explicit Edit/Read switching, backed by the same document session.
+Focus uses `ArrangementView` to adapt source and preview around the available display regions, backed by the same document session.
 
 ## Checks
 

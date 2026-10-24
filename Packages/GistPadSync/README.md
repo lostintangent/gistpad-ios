@@ -82,7 +82,7 @@ API choices were checked against [Supabase OAuth](https://supabase.com/docs/refe
 
 ## Daily-driver operations
 
-The package supports iOS 27.0 and later. It has no Duo-only UI dependency.
+The package supports iOS 27.1 and later. It has no Duo-only UI dependency.
 
 `DailyNotesService(accountID:githubUserID:client:store:coordinator:)` shares the active account's existing coordinator. Create a `DailyNoteTarget(date:timeZone:)` at the start of an action, then call `openToday(target:)`. The target pins the local Gregorian date even if midnight or the time zone changes while the request runs. It freshly lists owned gists and selects the first exact `📆 Daily notes` match in the same stable updated-date order as the web.
 
