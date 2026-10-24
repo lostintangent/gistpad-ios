@@ -36,7 +36,7 @@ public enum BooleanPreference: String, Sendable {
 public enum PreferenceOperation: Sendable {
     case setBoolean(BooleanPreference, Bool)
     case setPinned(gistID: String, pinned: Bool)
-    case upsertTag(id: String, name: String, color: String)
+    case upsertTag(id: String, name: String, color: String?)
     case deleteTag(id: String)
     case setTag(gistID: String, tagID: String, included: Bool)
 
@@ -55,7 +55,7 @@ public enum PreferenceOperation: Sendable {
             var tags = try object(metadata["tags"], key: "tags")
             var tag = try object(tags[id], key: "tags.\(id)")
             tag["name"] = .string(name)
-            tag["color"] = .string(color)
+            tag["color"] = color.map(MetadataValue.string)
             tags[id] = .object(tag)
             return ["tags": .object(tags)]
         case .deleteTag(let id):
