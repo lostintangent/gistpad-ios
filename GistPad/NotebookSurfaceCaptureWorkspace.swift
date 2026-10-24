@@ -7,6 +7,7 @@ import UIKit
 
 struct NotebookSurfaceCaptureWorkspace: View {
   let screen: String
+  private let captureState: String?
   @State private var path: [String]
   @State private var session = DocumentSession(
     documentID: "note-chrome-capture",
@@ -38,6 +39,14 @@ struct NotebookSurfaceCaptureWorkspace: View {
 
   init(screen: String, accent: String? = nil) {
     self.screen = screen
+    let arguments = ProcessInfo.processInfo.arguments
+    if let index = arguments.firstIndex(of: "--capture-state"),
+      arguments.indices.contains(index + 1)
+    {
+      captureState = arguments[index + 1]
+    } else {
+      captureState = nil
+    }
     _path = State(initialValue: [screen])
     let accent = accent ?? LaunchArguments.captureAccent ?? "#0EA5E9"
     _preferences = State(initialValue: Preferences(isAutoSaveEnabled: true, accentColor: accent))
@@ -74,7 +83,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
             current: "octavia", replacement: "mira", export: { Data("[]".utf8) },
             switchAccount: { presentedSheet = nil }, keepCurrent: { presentedSheet = nil })
         case .captureToday:
-          AddToTodaySheet()
+          AddToTodaySheet.captureFixture()
         }
       }
       .background { readinessMarker }
@@ -137,6 +146,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
   private var readinessMarker: some View {
     NotebookSurfaceReadinessMarker(
       requiresKeyboard: screen == "capture-today", keyboardHeight: keyboardHeight,
+      menuState: screen == "note-chrome" ? captureState : nil,
       failed: { readinessError = $0 }
     ) { window, keyboardHeight in
       let arguments = ProcessInfo.processInfo.arguments
@@ -148,6 +158,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
       do {
         let data = try JSONSerialization.data(withJSONObject: [
           "screen": screen, "fixture": "native-surfaces", "token": token,
+          "state": captureState ?? "resting",
           "accent": preferences.accentColor ?? "",
           "contentSizeCategory": window.traitCollection.preferredContentSizeCategory.rawValue,
           "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
@@ -236,12 +247,13 @@ struct NotebookSurfaceCaptureWorkspace: View {
 private struct NotebookSurfaceReadinessMarker: UIViewControllerRepresentable {
   let requiresKeyboard: Bool
   let keyboardHeight: CGFloat
+  let menuState: String?
   let failed: @MainActor (String) -> Void
   let ready: @MainActor (UIWindow, CGFloat) -> Void
 
   func makeUIViewController(context: Context) -> NotebookSurfaceReadinessController {
     NotebookSurfaceReadinessController(
-      requiresKeyboard: requiresKeyboard, failed: failed, ready: ready)
+      requiresKeyboard: requiresKeyboard, menuState: menuState, failed: failed, ready: ready)
   }
 
   func updateUIViewController(_ controller: NotebookSurfaceReadinessController, context: Context) {
@@ -251,16 +263,19 @@ private struct NotebookSurfaceReadinessMarker: UIViewControllerRepresentable {
 
 private final class NotebookSurfaceReadinessController: UIViewController {
   private let requiresKeyboard: Bool
+  private let menuState: String?
   private let failed: @MainActor (String) -> Void
   private let ready: @MainActor (UIWindow, CGFloat) -> Void
   private var readiness: Task<Void, Never>?
   var keyboardHeight: CGFloat = 0
 
   init(
-    requiresKeyboard: Bool, failed: @escaping @MainActor (String) -> Void,
+    requiresKeyboard: Bool, menuState: String?,
+    failed: @escaping @MainActor (String) -> Void,
     ready: @escaping @MainActor (UIWindow, CGFloat) -> Void
   ) {
     self.requiresKeyboard = requiresKeyboard
+    self.menuState = menuState
     self.failed = failed
     self.ready = ready
     super.init(nibName: nil, bundle: nil)
@@ -272,6 +287,14 @@ private final class NotebookSurfaceReadinessController: UIViewController {
     super.viewDidAppear(animated)
     guard let window = view.window else { return }
     window.layoutIfNeeded()
+    if let menuState {
+      guard let menu = NotebookMenuCapture(rawValue: menuState) else {
+        failed("Unsupported native note menu capture: \(menuState).")
+        return
+      }
+      openMenu(menu, in: window)
+      return
+    }
     guard requiresKeyboard else { ready(window, 0); return }
     readiness = Task { @MainActor in
       let deadline = ContinuousClock.now.advanced(by: .seconds(10))
@@ -311,6 +334,86 @@ private final class NotebookSurfaceReadinessController: UIViewController {
 
   private func hasFocusedTextEditor(_ view: UIView) -> Bool {
     (view is UITextView && view.isFirstResponder) || view.subviews.contains(where: hasFocusedTextEditor)
+  }
+
+  private func openMenu(_ menu: NotebookMenuCapture, in window: UIWindow) {
+    guard let scene = window.windowScene else {
+      failed("The native note menu has no attached window scene.")
+      return
+    }
+    readiness = Task { @MainActor in
+      do {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        var opened = false
+        var stableSamples = 0
+        while ContinuousClock.now < deadline {
+          try Task.checkCancellation()
+          guard view.window === window, !window.isHidden else { return }
+          window.layoutIfNeeded()
+          if !opened, let control = menuControl(menu, in: window) {
+            control.performPrimaryAction()
+            opened = true
+          }
+          let titles = Set(scene.windows.filter { !$0.isHidden }.flatMap {
+            descendants($0).compactMap { ($0 as? UILabel)?.text }
+          })
+          stableSamples = opened && titles.isSuperset(of: menu.expectedTitles) ? stableSamples + 1 : 0
+          if stableSamples >= 4 {
+            ready(window, 0)
+            return
+          }
+          try await Task.sleep(for: .milliseconds(100))
+        }
+        failed("The native \(menu.rawValue) did not expose all expected menu commands.")
+      } catch is CancellationError {
+        return
+      } catch {
+        failed(error.localizedDescription)
+      }
+    }
+  }
+
+  private func menuControl(_ menu: NotebookMenuCapture, in window: UIWindow) -> UIControl? {
+    if menu == .title {
+      guard let bar = descendants(window).compactMap({ $0 as? UINavigationBar }).last else {
+        return nil
+      }
+      return descendants(bar).compactMap { $0 as? UIControl }.first {
+        $0.accessibilityLabel?.contains("A place for good ideas") == true
+          || descendants($0).compactMap { $0 as? UILabel }.contains {
+            $0.text == "A place for good ideas"
+          }
+      }
+    }
+    return descendants(window).compactMap { $0 as? UIControl }.first {
+      $0.accessibilityIdentifier == "note-actions"
+        || $0.accessibilityLabel == "Note actions"
+        || $0.accessibilityLabel == "More"
+        || ($0 as? UIButton)?.menu.map { menuTitles($0).contains("Intelligence…") } == true
+    }
+  }
+
+  private func descendants(_ view: UIView) -> [UIView] {
+    [view] + view.subviews.flatMap(descendants)
+  }
+
+  private func menuTitles(_ menu: UIMenu) -> [String] {
+    menu.children.flatMap { item in
+      if let menu = item as? UIMenu { return menuTitles(menu) }
+      return [(item as? UIAction)?.title].compactMap { $0 }
+    }
+  }
+}
+
+private enum NotebookMenuCapture: String {
+  case title = "title-menu"
+  case more = "more-menu"
+
+  var expectedTitles: Set<String> {
+    switch self {
+    case .title: ["README.md", "Ideas.md", "Rename Current File…", "Add File…"]
+    case .more: ["Rename Note…", "Intelligence…", "Archive", "Delete Note…"]
+    }
   }
 }
 #endif
