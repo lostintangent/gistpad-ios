@@ -107,6 +107,32 @@ struct NotebookPlatformTests {
     #expect(await fixture.provider.publishCount == 0)
   }
 
+  @Test func capturedUnopenedNoteJoinsTheExistingForegroundAutosave() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let routes = NotebookRouteInbox()
+    let window = UIWindow(windowScene: scene)
+    window.frame = scene.effectiveGeometry.coordinateSpace.bounds
+    window.rootViewController = UIHostingController(
+      rootView: LiveNotebookWorkspace(notebook: fixture.model, routes: routes)
+        .environment(\.scenePhase, .active))
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    let destination = try await fixture.bridge.addToToday(
+      text: "A captured thought", asTask: false, target: DailyNoteTarget())
+    #expect(await fixture.provider.publishCount == 0)
+    routes.submit(destination)
+    let deadline = ContinuousClock.now.advanced(by: .seconds(8))
+    while await fixture.provider.publishCount == 0, ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    #expect(fixture.model.loadedDocument?.text.hasSuffix("A captured thought\n") == true)
+    #expect(routes.pending == nil)
+    #expect(await fixture.provider.publishCount == 1)
+  }
+
   @Test func intentsUseTheOfficialMainProcessExecutionTarget() {
     #expect(SetTodayTaskIntent.allowedExecutionTargets == .main)
     #expect(AddToTodayIntent.allowedExecutionTargets == .main)
