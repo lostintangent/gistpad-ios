@@ -211,6 +211,7 @@ public struct TodayWidgetView: View {
         .accessibilityLabel(task.title)
         .accessibilityValue(task.isCompleted ? Text("Completed") : Text("Not completed"))
         .accessibilityHint(task.isCompleted ? Text("Mark incomplete") : Text("Complete task"))
+        .accessibilityIdentifier("today-task-\(task.id)")
     }
 }
 #endif

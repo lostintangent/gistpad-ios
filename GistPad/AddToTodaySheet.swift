@@ -23,11 +23,13 @@ struct AddToTodaySheet: View {
             .frame(minHeight: 140)
             .focused($isFocused)
             .accessibilityLabel("Text to add to Today")
+            .accessibilityIdentifier("today-capture-input")
           Picker("Add as", selection: $asTask) {
             Text("Text").tag(false)
             Text("Task").tag(true)
           }
           .pickerStyle(.segmented)
+          .accessibilityIdentifier("today-capture-kind")
         } header: {
           Text(target.filename.replacingOccurrences(of: ".md", with: ""))
         }
@@ -49,6 +51,7 @@ struct AddToTodaySheet: View {
         ToolbarItem(placement: .confirmationAction) {
           Button("Add", systemImage: "plus") { add() }
             .disabled(isAdding || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .accessibilityIdentifier("today-capture-add")
         }
       }
       .disabled(isAdding)
