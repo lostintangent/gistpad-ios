@@ -260,7 +260,7 @@ The editor is Markdown source, not a lossy rich-text conversion. Use familiar se
 
 These dynamic source colors replace the previous `syntaxMuted`/`syntaxCode` styling contract. Preserve the exact web-light quote on the white source page, where it measures 4.63:1. It is only 4.15:1 on the secondary gray reference; if a quote can appear on that surface, use `#1E7A34` there (4.84:1). Increased-contrast variants clear AA on both reference canvases. Resolve appearance through dynamic native colors, without rewriting or reparsing source solely to change appearance.
 
-List markers are the exception to the colored syntax palette. The user's later October 24 feedback restores the existing `InterfaceTheme.syntaxMuted` role for bullets, ordered numbers and task delimiters in every state. Preview uses `--gp-text-secondary` for the equivalent markers and task-box borders/checked fills, with a contrasting checkmark. Preserve ordinary item text, source bytes, task state, targets, wrapping and the native blue caret.
+List markers are the exception to the colored syntax palette. The user's later October 24 feedback restores the existing `InterfaceTheme.syntaxMuted` role for bullets, ordered numbers and task delimiters in every state. Preview uses the marker-only `--gp-list-marker` for equivalent markers and task-box borders/checked fills, with a contrasting checkmark. Resolve an opaque native secondary gray against the page and minimally adjust for 4.5:1 normally and 7:1 with Increased Contrast. Do not globally recolor secondary captions or copy Source's slate palette to them. Preserve ordinary item text, source bytes, task state, targets, wrapping and the native blue caret.
 
 | Source element | Style |
 | --- | --- |
