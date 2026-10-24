@@ -132,6 +132,7 @@ public struct TodayWidgetView: View {
                         content(limit: 1)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .environment(\.personalAccent, PersonalAccent(savedHex: snapshot?.accentHex))
@@ -170,6 +171,7 @@ public struct TodayWidgetView: View {
     }
 
     private var accessibleSummary: String {
+        if state == .signedOut { return String(localized: "Sign in to GistPad") }
         guard state == .available else { return invitation }
         guard !tasks.isEmpty else { return today?.excerpt ?? invitation }
         return remaining == 1
