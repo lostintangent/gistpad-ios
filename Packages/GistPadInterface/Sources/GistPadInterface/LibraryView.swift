@@ -38,6 +38,9 @@ public struct LibraryView: View {
 
     public var body: some View {
         adaptiveList
+            .listSectionMargins(.top, 16)
+            .listSectionMargins(.bottom, 8)
+            .environment(\.defaultMinListHeaderHeight, 0)
             .navigationTitle("GistPad")
             .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 400)
             .searchable(text: $model.query, prompt: Text("Search notes", bundle: .module))
@@ -70,7 +73,7 @@ public struct LibraryView: View {
                                 TodayHeading(summary: model.today)
                                 if let progress = model.today.progress {
                                     TaskProgressLabel(progress: progress)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(.primary)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -104,25 +107,33 @@ public struct LibraryView: View {
                 }
                 searchStatus
                 if let open = model.openDocumentOutsideFilter {
-                    Section(String(localized: "Open document", bundle: .module)) {
+                    Section {
                         noteRow(open)
+                    } header: {
+                        sectionHeading(String(localized: "Open document", bundle: .module))
                     }
                 }
                 if case .results = model.searchState {
                     if !model.matchingNotes.isEmpty {
-                        Section(model.collection.title) {
+                        Section {
                             ForEach(model.matchingNotes) { noteRow($0) }
+                        } header: {
+                            sectionHeading(model.collection.title)
                         }
                     }
                 } else {
                     if !model.pinnedNotes.isEmpty {
-                        Section(String(localized: "Pinned", bundle: .module)) {
+                        Section {
                             ForEach(model.pinnedNotes) { noteRow($0, showsPin: false) }
+                        } header: {
+                            sectionHeading(String(localized: "Pinned", bundle: .module))
                         }
                     }
                     if !model.unpinnedNotes.isEmpty {
-                        Section(model.collection.title) {
+                        Section {
                             ForEach(model.unpinnedNotes) { noteRow($0) }
+                        } header: {
+                            sectionHeading(model.collection.title)
                         }
                     }
                 }
@@ -134,6 +145,15 @@ public struct LibraryView: View {
                 }
             }
         }
+    }
+
+    private func sectionHeading(_ title: String) -> some View {
+        Text(verbatim: title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(InterfaceTheme.text)
+            .textCase(nil)
+            .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+            .accessibilityAddTraits(.isHeader)
     }
 
     private var canShowEmptyState: Bool {
@@ -155,7 +175,7 @@ public struct LibraryView: View {
         case .failed(let message):
             Section {
                 Label(String(localized: "Search needs attention", bundle: .module), systemImage: "exclamationmark.circle")
-                Text(verbatim: message).foregroundStyle(.secondary)
+                Text(verbatim: message).foregroundStyle(.primary)
             }
         case .results(_, let coverage):
             if !coverage.isComplete {
@@ -170,7 +190,7 @@ public struct LibraryView: View {
                         }
                     }
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                 }
             }
         }
@@ -200,7 +220,7 @@ public struct LibraryView: View {
                 Label(String(localized: "Couldn't update from GitHub.", bundle: .module), systemImage: "exclamationmark.circle")
                 Text(verbatim: message)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                 Button(String(localized: "Retry", bundle: .module)) {
                     Task { await actions.refresh() }
                 }
@@ -210,7 +230,7 @@ public struct LibraryView: View {
                 Label(String(localized: "Reconnect GitHub", bundle: .module), systemImage: "person.crop.circle.badge.exclamationmark")
                 Text(verbatim: message)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                 if let reconnect = actions.reconnect {
                     Button(String(localized: "Continue with GitHub", bundle: .module), action: reconnect)
                 }
@@ -278,7 +298,7 @@ public struct LibraryView: View {
                 if let excerpt = note.excerpt, !excerpt.isEmpty {
                     Text(verbatim: excerpt)
                         .font(.subheadline)
-                        .foregroundStyle(model.selectedNoteID == note.id ? .primary : .secondary)
+                        .foregroundStyle(.primary)
                         .lineLimit(2)
                 }
                 if !model.tags(for: note).isEmpty {
@@ -299,12 +319,13 @@ public struct LibraryView: View {
                         Label(String(localized: "Unfinished tasks", bundle: .module), systemImage: "clock")
                     }
                 }
-                .font(.subheadline)
-                .foregroundStyle(model.selectedNoteID == note.id ? .primary : .secondary)
+                .font(.footnote)
+                .foregroundStyle(.primary)
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, 8)
         }
         .accessibilityValue(note.isPinned ? Text("Pinned", bundle: .module) : Text(""))
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
         .listRowBackground(model.selectedNoteID == note.id ? InterfaceTheme.selection : nil)
         .contextMenu { rowActions(note) }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {

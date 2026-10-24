@@ -4,6 +4,7 @@ import SwiftUI
 public enum InterfaceTheme {
     public static let accent = Color("AccentText", bundle: .module)
     public static let selection = Color("SelectedSurface", bundle: .module)
+    public static let text = Color(uiColor: .label)
 }
 
 extension LibraryCollection {

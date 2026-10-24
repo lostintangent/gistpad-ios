@@ -9,10 +9,14 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     private let source: Source
     private let preview: Preview
     @State private var showingFiles = false
-    @State private var showingDetails = false
+    @State private var showingTags = false
+    @State private var pendingFileAction: (() -> Void)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var showingSource: Bool { mode == .source && document.access.canEdit }
+    private var showsFiles: Bool {
+        document.files.count > 1 || (document.access.canEdit && (actions.addFile != nil || actions.renameFile != nil))
+    }
 
     public init(
         document: NoteChrome, mode: Binding<NoteMode>, saveState: NoteSaveState,
@@ -41,12 +45,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarTitleMenu {
-            if !document.tags.isEmpty {
-                Button(String(localized: "Note details", bundle: .module), systemImage: "info.circle") {
-                    showingDetails = true
-                }
-            }
-            if document.files.count > 1 {
+            if showsFiles {
                 Button(String(localized: "Files in this gist", bundle: .module), systemImage: "doc.on.doc") {
                     showingFiles = true
                 }
@@ -63,8 +62,14 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(uiColor: .systemBackground))
         }
-        .sheet(isPresented: $showingFiles) { files }
-        .sheet(isPresented: $showingDetails) { details }
+        .sheet(isPresented: $showingFiles, onDismiss: {
+            let action = pendingFileAction
+            pendingFileAction = nil
+            action?()
+        }) { files }
+        .sheet(isPresented: $showingTags) {
+            TagEditor(tags: document.tags, selectedTagIDs: Set(document.tags.map(\.id)))
+        }
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .onChange(of: document.selectedFileID) { showingFiles = false }
         .onChange(of: showingSource) {
@@ -109,7 +114,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 Button(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up", action: share)
             }
         }
-        if document.files.count > 1 {
+        if showsFiles {
             ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Files in this gist", bundle: .module), systemImage: "doc.on.doc") {
                     showingFiles = true
@@ -125,6 +130,10 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         if let tags = actions.tags {
             ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Tags", bundle: .module), systemImage: "tag", action: tags)
+            }
+        } else if !document.tags.isEmpty {
+            ToolbarItem(placement: .secondaryAction) {
+                Button(String(localized: "Tags", bundle: .module), systemImage: "tag") { showingTags = true }
             }
         }
         if let pin = actions.togglePin {
@@ -184,7 +193,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             saveStatus
         }
         .font(.footnote)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.primary)
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("note-save-state")
         .contentTransition(.opacity)
@@ -295,14 +304,21 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                         .accessibilityAddTraits(file.id == document.selectedFileID ? .isSelected : [])
                     }
                 }
-                if let add = actions.addFile, document.access.canEdit {
+                if document.access.canEdit && (actions.renameFile != nil || actions.addFile != nil) {
                     Section {
-                        Button(String(localized: "Add File", bundle: .module), systemImage: "doc.badge.plus") {
-                            showingFiles = false
-                            add()
+                        if let rename = actions.renameFile {
+                            Button(String(localized: "Rename File", bundle: .module), systemImage: "pencil") {
+                                pendingFileAction = rename
+                                showingFiles = false
+                            }
+                        }
+                        if let add = actions.addFile {
+                            Button(String(localized: "Add File", bundle: .module), systemImage: "doc.badge.plus") {
+                                pendingFileAction = add
+                                showingFiles = false
+                            }
                         }
                     }
-
                 }
             }
             .navigationTitle(Text("Files in this gist", bundle: .module))
@@ -314,31 +330,5 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         }
     }
 
-    private var details: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    Text(verbatim: document.title)
-                        .font(.title2.bold())
-                        .textSelection(.enabled)
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Tags", bundle: .module)
-                            .font(.headline)
-                            .accessibilityAddTraits(.isHeader)
-                        TagLabels(tags: document.tags)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(24)
-            }
-            .navigationTitle(Text("Note details", bundle: .module))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Done", bundle: .module)) { showingDetails = false }
-                }
-            }
-        }
-    }
 }
 #endif

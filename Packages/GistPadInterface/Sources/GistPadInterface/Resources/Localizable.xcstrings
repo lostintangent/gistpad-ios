@@ -29,10 +29,16 @@
     "A quiet place to think. A precise engine beneath the page." : {
 
     },
+    "A tag with this name already exists." : {
+
+    },
     "Account" : {
 
     },
     "Add File" : {
+
+    },
+    "Add tag" : {
 
     },
     "All selected tags must match." : {
@@ -41,7 +47,13 @@
     "All selected tags must match. Tags apply to the whole gist." : {
 
     },
+    "All tags" : {
+
+    },
     "Archive" : {
+
+    },
+    "Cancel" : {
 
     },
     "Check GitHub" : {
@@ -50,13 +62,28 @@
     "Check save status" : {
 
     },
+    "Checking upload..." : {
+
+    },
+    "Choose Another Photo" : {
+
+    },
     "Clear filters" : {
 
     },
     "Clear tag filters" : {
 
     },
+    "Close" : {
+
+    },
+    "Close without retrying?" : {
+
+    },
     "Collection" : {
+
+    },
+    "Color" : {
 
     },
     "Content from %lld of %lld notes is available to search." : {
@@ -69,16 +96,31 @@
         }
       }
     },
+    "Continue" : {
+
+    },
     "Continue with GitHub" : {
 
     },
     "Copy Link" : {
 
     },
+    "Couldn't finish saving tags." : {
+
+    },
+    "Couldn't prepare this photo." : {
+
+    },
     "Couldn't save on this iPhone. Keep the editor open." : {
 
     },
+    "Couldn't save this photo on this iPhone" : {
+
+    },
     "Couldn't update from GitHub." : {
+
+    },
+    "Couldn't upload photo" : {
 
     },
     "Create a note" : {
@@ -90,10 +132,34 @@
     "Delete gist" : {
 
     },
+    "Delete tag" : {
+
+    },
+    "Delete this tag from every note?" : {
+
+    },
+    "Deleting a tag removes it from every note. Note content is unchanged." : {
+
+    },
+    "Discard changes" : {
+
+    },
+    "Discard tag changes?" : {
+
+    },
     "Done" : {
 
     },
     "Edit" : {
+
+    },
+    "Edit Tag…" : {
+
+    },
+    "Edit tag" : {
+
+    },
+    "Edit tag %@" : {
 
     },
     "Files in this gist" : {
@@ -108,22 +174,37 @@
     "GitHub returned an incomplete note. Editing is unavailable to protect the original." : {
 
     },
+    "Give this tag a name." : {
+
+    },
     "In-memory fixture. Not saved." : {
+
+    },
+    "Insert Here" : {
+
+    },
+    "Keep editing" : {
 
     },
     "New note" : {
 
     },
+    "New tag" : {
+
+    },
     "No matching notes" : {
+
+    },
+    "No matching tags." : {
 
     },
     "No notes here yet" : {
 
     },
-    "Not saved yet" : {
+    "No tags on this note." : {
 
     },
-    "Note details" : {
+    "Not saved yet" : {
 
     },
     "Notes" : {
@@ -132,16 +213,40 @@
     "Offline. Showing notes on this iPhone." : {
 
     },
+    "On this note" : {
+
+    },
     "Open document" : {
 
     },
     "Open in GitHub" : {
 
     },
+    "Photo" : {
+
+    },
+    "Photo options" : {
+
+    },
+    "Photo ready" : {
+
+    },
+    "Photo saved on this iPhone" : {
+
+    },
+    "Photos are public" : {
+
+    },
+    "Photos you choose are uploaded to GistPad's public image storage. Anyone with an image link can view them, even in a secret gist. Location metadata is removed, but visible details remain." : {
+
+    },
     "Pin" : {
 
     },
     "Pinned" : {
+
+    },
+    "Preparing photo..." : {
 
     },
     "Preview" : {
@@ -153,16 +258,28 @@
     "Reconnect GitHub" : {
 
     },
+    "Reconnect to upload" : {
+
+    },
     "Reconnect your account to see your notes, tags and pins. Local drafts stay on this iPhone." : {
 
     },
+    "Remove Pending Photo" : {
+
+    },
     "Rename" : {
+
+    },
+    "Rename File" : {
 
     },
     "Retry" : {
 
     },
     "Review changes" : {
+
+    },
+    "Save this note to GitHub to upload the photo." : {
 
     },
     "Save to GitHub" : {
@@ -186,7 +303,13 @@
     "Saved on this iPhone. Reconnect GitHub to publish changes." : {
 
     },
+    "Saved on this iPhone. Waiting for connection." : {
+
+    },
     "Saved to GitHub" : {
+
+    },
+    "Saving tags" : {
 
     },
     "Saving to GitHub" : {
@@ -210,6 +333,12 @@
     "Share" : {
 
     },
+    "Some changes may already be saved. Closing does not undo saved changes." : {
+
+    },
+    "Some changes may already be saved. Retry to finish applying your choices." : {
+
+    },
     "Source & Preview" : {
 
     },
@@ -228,7 +357,16 @@
     "Tag filters applied" : {
 
     },
+    "Tag name" : {
+
+    },
     "Tags" : {
+
+    },
+    "Tags apply to every file in this gist." : {
+
+    },
+    "Tags are read-only" : {
 
     },
     "Tags: %@" : {
@@ -238,6 +376,9 @@
 
     },
     "These are synthetic screen fixtures. Nothing is connected to GitHub." : {
+
+    },
+    "This color couldn't be read. Choose another color." : {
 
     },
     "This note changed elsewhere." : {
@@ -262,6 +403,12 @@
 
     },
     "Updating from GitHub" : {
+
+    },
+    "Uploading photo..." : {
+
+    },
+    "Use default color" : {
 
     },
     "Your notebook, on GitHub" : {

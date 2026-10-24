@@ -82,6 +82,7 @@ public struct NoteActions {
     public var focus: (() -> Void)?
     public var tags: (() -> Void)?
     public var rename: (() -> Void)?
+    public var renameFile: (() -> Void)?
     public var togglePin: (() -> Void)?
     public var toggleStar: (() -> Void)?
     public var toggleArchive: (() -> Void)?

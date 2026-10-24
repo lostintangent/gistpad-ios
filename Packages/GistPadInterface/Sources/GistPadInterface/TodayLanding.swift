@@ -19,7 +19,7 @@ public struct TodayLanding: View {
                     .foregroundStyle(.primary)
                 Text("Start when you're ready. Nothing is created until you choose to begin.", bundle: .module)
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                 Button(String(localized: "Start today's note", bundle: .module), systemImage: "square.and.pencil", action: start)
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("today-start")
@@ -40,8 +40,12 @@ struct TodayHeading: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
-            Text(summary.date, format: dayFormat)
-                .font(.largeTitle.weight(.semibold))
+            VStack(spacing: 0) {
+                Text(summary.date, format: monthFormat)
+                    .font(.footnote.weight(.semibold))
+                Text(summary.date, format: dayFormat)
+                    .font(.largeTitle.weight(.semibold))
+            }
                 .foregroundStyle(InterfaceTheme.accent)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
@@ -50,7 +54,7 @@ struct TodayHeading: View {
                     .foregroundStyle(.primary)
                 Text(summary.date, format: contextFormat)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -65,7 +69,13 @@ struct TodayHeading: View {
     }
 
     private var contextFormat: Date.FormatStyle {
-        var style = Date.FormatStyle().weekday(.wide).month(.wide)
+        var style = Date.FormatStyle().weekday(.wide)
+        style.timeZone = summary.timeZone
+        return style
+    }
+
+    private var monthFormat: Date.FormatStyle {
+        var style = Date.FormatStyle().month(.abbreviated)
         style.timeZone = summary.timeZone
         return style
     }
