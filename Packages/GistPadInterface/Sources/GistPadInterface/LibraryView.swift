@@ -202,7 +202,7 @@ public struct LibraryView: View {
                 }
             }
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color(uiColor: .secondaryLabel))
             .textCase(nil)
             .accessibilityIdentifier("library-search-coverage")
         }
