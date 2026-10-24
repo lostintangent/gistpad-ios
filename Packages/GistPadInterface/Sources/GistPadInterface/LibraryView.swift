@@ -180,10 +180,14 @@ public struct LibraryView: View {
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
                 if let coverage {
-                    Text(
-                        "Searches titles, filenames and tags, plus text from \(coverage.documentsWithCachedContent) of \(coverage.totalDocuments) notes.",
-                        bundle: .module
-                    )
+                    if coverage.documentsWithCachedContent == coverage.totalDocuments {
+                        Text("Searches titles, filenames, tags and note text.", bundle: .module)
+                    } else {
+                        Text(
+                            "Searches titles, filenames and tags, plus text from \(coverage.documentsWithCachedContent) of \(coverage.totalDocuments) notes.",
+                            bundle: .module
+                        )
+                    }
                     if coverage.incompleteGistCount > 0 {
                         Text("\(coverage.incompleteGistCount) gists have incomplete file lists.", bundle: .module)
                     }

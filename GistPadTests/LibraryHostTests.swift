@@ -305,8 +305,8 @@ struct LibraryHostTests {
       image, named: "search-accent-\(savedHex ?? "Sky")-\(dark ? "Dark" : "Light").png", as: .png)
   }
 
-  @Test(arguments: [DynamicTypeSize.large, .accessibility3])
-  func searchCoverageIsOneUnboxedCaption(size: DynamicTypeSize) async throws {
+  @Test(arguments: [DynamicTypeSize.large, .accessibility3], [2, 8])
+  func searchCoverageIsOneUnboxedCaption(size: DynamicTypeSize, cachedCount: Int) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
@@ -314,7 +314,7 @@ struct LibraryHostTests {
     window.rootViewController = UIHostingController(
       rootView: VStack {
         LibraryView.SearchSummary(
-          coverage: .init(totalDocuments: 8, documentsWithCachedContent: 2), selectedTagCount: 0)
+          coverage: .init(totalDocuments: 8, documentsWithCachedContent: cachedCount), selectedTagCount: 0)
           .frame(width: 324, alignment: .leading)
           .fixedSize(horizontal: false, vertical: true)
           .onGeometryChange(for: CGSize.self) { $0.size } action: { measuredSize = $0 }
