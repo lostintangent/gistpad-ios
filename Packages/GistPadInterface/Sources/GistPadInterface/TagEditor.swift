@@ -168,6 +168,7 @@ public struct TagEditor: View {
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(String(localized: "Edit Tag…", bundle: .module), systemImage: "pencil") { editingTag = tag }
+                .tint(Color(uiColor: .systemGray))
         }
     }
 

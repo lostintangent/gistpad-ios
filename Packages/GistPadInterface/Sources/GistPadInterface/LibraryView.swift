@@ -779,6 +779,7 @@ public struct LibraryView: View {
                         systemImage: "archivebox"
                     )
                 }
+                .tint(Color(uiColor: .systemGray))
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
@@ -791,6 +792,7 @@ public struct LibraryView: View {
                         systemImage: note.isPinned ? "pin.slash" : "pin"
                     )
                 }
+                .tint(Color(uiColor: .systemGray))
             }
         }
     }

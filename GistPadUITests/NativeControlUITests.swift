@@ -205,6 +205,47 @@ final class NativeControlUITests: XCTestCase {
   }
 
   @MainActor
+  func testNativeLibrarySwipeActionsInLightAndDark() async throws {
+    for appearance in ["light", "dark"] {
+      for leading in [false, true] {
+        let app = launch(screen: "library-delete", state: "native-swipes", appearance: appearance)
+        defer { app.terminate() }
+        let row = app.descendants(matching: .any)["library-note-b"].firstMatch
+        try await waitUntil("the owned Library row") { row.isHittable }
+        if leading {
+          row.swipeRight()
+        } else {
+          row.swipeLeft()
+        }
+        let labels = leading ? ["Pin"] : ["Archive", "Delete"]
+        for label in labels {
+          let action = app.buttons[label]
+          try await waitUntil("the native \(label) swipe action") { action.isHittable }
+          XCTAssertGreaterThanOrEqual(action.frame.height, 44)
+          XCTAssertTrue(app.frame.contains(action.frame))
+        }
+        record(app, name: "native-library-swipe-\(leading ? "leading" : "trailing")-\(appearance)")
+      }
+    }
+  }
+
+  @MainActor
+  func testNativeTagEditSwipeInLightAndDark() async throws {
+    for appearance in ["light", "dark"] {
+      let app = launch(screen: "tags", state: "resting", appearance: appearance)
+      defer { app.terminate() }
+      let row = app.buttons["tag-choice-ideas"]
+      try await waitUntil("the native editable tag row") { row.isHittable }
+      row.swipeLeft()
+      let edit = app.buttons["Edit Tag…"]
+      try await waitUntil("the native Edit Tag swipe action") { edit.isHittable }
+      XCTAssertGreaterThanOrEqual(edit.frame.height, 44)
+      XCTAssertTrue(app.frame.contains(edit.frame))
+      record(app, name: "native-tag-edit-swipe-\(appearance)")
+    }
+  }
+
+  @MainActor
   private func checkSegmentMatrix(accessibility: Bool) async throws {
     let titles = [
       (state: "mode-short", title: "A note"),
