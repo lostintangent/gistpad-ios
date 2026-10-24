@@ -1,3 +1,4 @@
+import GistPadAppearance
 import GistPadInterface
 import PhotosUI
 import SwiftUI
@@ -7,6 +8,7 @@ struct NotebookPhotoHost<Content: View>: View {
   @ViewBuilder let content: () -> Content
   @State private var selectedPhoto: PhotosPickerItem?
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.personalAccent) private var personalAccent
 
   var body: some View {
     content()
@@ -19,6 +21,14 @@ struct NotebookPhotoHost<Content: View>: View {
         PhotoPrivacyNotice(
           proceed: controller.noticeStartsPicker ? { controller.acceptNotice() } : nil,
           cancel: { controller.dismissNotice() })
+      }
+      .sheet(isPresented: $controller.isShowingDetails, onDismiss: controller.detailsDidDismiss) {
+        PhotoAttachmentDetails(
+          attachments: controller.displayedAttachments,
+          action: { id, action in Task { await controller.perform(action, id: id) } },
+          remove: { controller.removalID = $0 })
+          .environment(\.personalAccent, personalAccent)
+          .modifier(NotebookPhotoRemovalConfirmation(controller: controller))
       }
       .photosPicker(
         isPresented: $controller.isShowingPicker, selection: $selectedPhoto,
@@ -42,21 +52,9 @@ struct NotebookPhotoHost<Content: View>: View {
       .onChange(of: controller.isShowingPicker) { _, showing in
         if !showing, selectedPhoto == nil { controller.pickerCancelled() }
       }
-      .confirmationDialog(
-        "Remove Pending Photo?",
-        isPresented: Binding(
-          get: { controller.removalID != nil },
-          set: { if !$0 { controller.removalID = nil } }),
-        titleVisibility: .visible
-      ) {
-        Button("Remove Pending Photo", role: .destructive) {
-          Task { await controller.removePendingPhoto() }
-        }
-        Button("Cancel", role: .cancel) { controller.removalID = nil }
-      } message: {
-        Text(
-          "This removes the pending photo from this note. It does not delete any uploaded image.")
-      }
+      .modifier(
+        NotebookPhotoRemovalConfirmation(
+          controller: controller, enabled: !controller.isShowingDetails))
       .task { await controller.start() }
       .task(id: controller.publishedGistID) { await controller.resume() }
       .onChange(of: scenePhase) { _, phase in
@@ -72,6 +70,30 @@ struct NotebookPhotoHost<Content: View>: View {
   }
 
   private enum PhotoPickerError: Error { case noImageData }
+}
+
+private struct NotebookPhotoRemovalConfirmation: ViewModifier {
+  @Bindable var controller: NotebookPhotoController
+  var enabled = true
+
+  func body(content: Content) -> some View {
+    content
+      .confirmationDialog(
+        "Remove Pending Photo?",
+        isPresented: Binding(
+          get: { enabled && controller.removalID != nil },
+          set: { if !$0 { controller.removalID = nil } }),
+        titleVisibility: .visible
+      ) {
+        Button("Remove Pending Photo", role: .destructive) {
+          Task { await controller.removePendingPhoto() }
+        }
+        Button("Cancel", role: .cancel) { controller.removalID = nil }
+      } message: {
+        Text(
+          "This removes the pending photo from this note. It does not delete any uploaded image.")
+      }
+  }
 }
 
 struct NotebookPhotoSurface<Content: View>: View {
@@ -115,13 +137,13 @@ struct NotebookPhotoSurface<Content: View>: View {
               PhotoAttachmentShelf(
                 attachments: controller.displayedAttachments,
                 maximumHeight: isSource ? geometry.size.height - minimumSourceHeight : nil,
-                action: { id, action in Task { await controller.perform(action, id: id) } },
-                remove: { controller.removalID = $0 })
+                details: controller.showDetails)
               if let message = controller.queueError {
                 VStack(alignment: .leading, spacing: 4) {
                   Text(message).font(.subheadline)
                   Button("Retry") { Task { await controller.reload() } }
                     .frame(minHeight: 44)
+                    .foregroundStyle(InterfaceTheme.accent)
                 }
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)

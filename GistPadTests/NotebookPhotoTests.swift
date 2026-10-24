@@ -1,4 +1,5 @@
 import Foundation
+import GistPadAppearance
 import GistPadEditor
 import GistPadInterface
 import SwiftUI
@@ -78,6 +79,40 @@ struct NotebookPhotoTests {
     fixture.photos.showPrivacy()
     #expect(!fixture.session.session.textView.isFirstResponder)
     #expect(fixture.photos.isShowingNotice)
+  }
+
+  @Test func detailsPreservesSourceSelectionUndoAndDefersChoosingAnotherUntilDismissal() async throws {
+    let fixture = try await PhotoFixture()
+    defer { fixture.cleanup() }
+    let window = try EditorContinuityTests().host(fixture.session.session)
+    defer { window.isHidden = true }
+    let editor = fixture.session.session.textView
+    editor.becomeFirstResponder()
+    editor.insertText(" preserved")
+    editor.selectedRange = NSRange(location: 1, length: 3)
+    let selection = editor.selectedRange
+    let text = fixture.session.session.text
+    fixture.authorize()
+    fixture.photos.isShowingPicker = false
+    fixture.photos.preparationFailed(URLError(.cannotDecodeContentData))
+    let failed = try #require(fixture.photos.attachments.first)
+    fixture.photos.showDetails()
+    #expect(fixture.photos.isShowingDetails)
+    #expect(!editor.isFirstResponder)
+    #expect(editor.selectedRange == selection)
+    #expect(fixture.session.session.text == text)
+    #expect(editor.undoManager?.canUndo == true)
+    #expect(fixture.network.requests.withLock { $0.isEmpty })
+    await fixture.photos.perform(.chooseAnother, id: failed.id)
+    #expect(!fixture.photos.isShowingDetails)
+    #expect(!fixture.photos.isShowingPicker)
+    fixture.photos.detailsDidDismiss()
+    #expect(fixture.photos.isShowingPicker)
+    #expect(fixture.session.session.text == text)
+    #expect(editor.selectedRange == selection)
+    editor.becomeFirstResponder()
+    editor.undoManager?.undo()
+    #expect(fixture.session.session.text == "Base")
   }
 
   @Test func failedLocalQueueRetainsBytesAndBlocksAnOverwritingSecondPick() async throws {
@@ -235,8 +270,8 @@ struct NotebookPhotoTests {
 @Suite(.serialized)
 @MainActor
 struct NotebookPhotoLayoutProbe {
-  @Test(arguments: [1, 3])
-  func accessibilityShelfCanScrollWithoutLosingTheEditor(photoCount: Int) async throws {
+  @Test(arguments: [1, 3], [false, true])
+  func shelfKeepsWritingSpaceAndAccessibilityDetails(photoCount: Int, accessibility: Bool) async throws {
     let fixture = try await PhotoFixture()
     defer { fixture.cleanup() }
     for _ in 0..<photoCount {
@@ -244,26 +279,37 @@ struct NotebookPhotoLayoutProbe {
       await fixture.photos.receivePickedData(fixture.bytes)
       fixture.photos.isShowingPicker = false
     }
+    if let last = fixture.photos.attachments.last {
+      _ = try await fixture.store.setImageUploadState(
+        .failed(.network), id: last.id, accountID: fixture.accountID)
+      await fixture.photos.reload()
+    }
     #expect(fixture.photos.attachments.count == photoCount)
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
-    let root = NavigationStack {
-      NoteScreen(
-        document: fixture.session.document.chrome, mode: .constant(.source),
-        saveState: .savedLocally
-      ) {
-        NotebookPhotoSurface(controller: fixture.photos, isSource: true) {
-          MarkdownEditorView(
-            session: fixture.session.session,
-            insertPhoto: { fixture.photos.choosePhoto() },
-            canInsertPhoto: fixture.photos.canChoosePhoto)
-        }
-      } preview: { Color.clear }
+    let accent = PersonalAccent(savedHex: "#FACC15")
+    window.traitOverrides[PersonalAccentTrait.self] = accent
+    window.overrideUserInterfaceStyle = accessibility ? .dark : .light
+    let root = NotebookPhotoHost(controller: fixture.photos) {
+      NavigationStack {
+        NoteScreen(
+          document: fixture.session.document.chrome, mode: .constant(.source),
+          saveState: .savedLocally
+        ) {
+          NotebookPhotoSurface(controller: fixture.photos, isSource: true) {
+            MarkdownEditorView(
+              session: fixture.session.session,
+              insertPhoto: { fixture.photos.choosePhoto() },
+              canInsertPhoto: fixture.photos.canChoosePhoto)
+          }
+        } preview: { Color.clear }
+      }
     }
-    .environment(\.dynamicTypeSize, .accessibility3)
+    .environment(\.dynamicTypeSize, accessibility ? .accessibility3 : .large)
+    .environment(\.personalAccent, accent)
     let host = UIHostingController(rootView: root)
-    host.traitOverrides.preferredContentSizeCategory = .accessibilityExtraLarge
+    host.traitOverrides.preferredContentSizeCategory = accessibility ? .accessibilityExtraLarge : .large
     window.rootViewController = host
     window.makeKeyAndVisible()
     defer { window.isHidden = true }
@@ -284,7 +330,7 @@ struct NotebookPhotoLayoutProbe {
     let photo = try #require(insertActions.first { $0.title == "Photo" })
     #expect(photo.subtitle == "Public, even in a secret gist")
     #expect(!insertActions.contains { $0.title == "Photos Are Public" })
-    let prefix = "photos-ax3-\(photoCount)"
+    let prefix = "photos-\(accessibility ? "ax3" : "large")-\(photoCount)"
     let views = descendants(of: host.view)
     let bars = views.compactMap { $0 as? UINavigationBar }
     #expect(bars.contains { bar in
@@ -303,34 +349,35 @@ struct NotebookPhotoLayoutProbe {
       }.joined(separator: "\n"),
       named: "\(prefix)-hierarchy.txt")
     let scrolls = views.compactMap { $0 as? UIScrollView }
-    let shelf = try #require(scrolls.first {
-      $0 !== editor && !$0.isHidden && $0.bounds.height > 0
-    })
-    let visibleShelfHeight =
-      shelf.bounds.height - shelf.adjustedContentInset.top - shelf.adjustedContentInset.bottom
-    #expect(visibleShelfHeight > 0 && visibleShelfHeight <= 181)
-    #expect(shelf.contentSize.height > visibleShelfHeight)
-    let shelfViewport = shelf.convert(
-      CGRect(
-        x: shelf.bounds.minX, y: shelf.bounds.minY + shelf.adjustedContentInset.top,
-        width: shelf.bounds.width, height: visibleShelfHeight), to: window)
+    let shelf = scrolls.first {
+      $0 !== editor && !$0.isHidden && $0.bounds.height > 0 && $0.alpha > 0
+    }
+    let summary = try #require(PhotoCaptureAccessibility.element(
+      id: "pending-photos-summary", in: host.view))
+    let summaryFrame = window.convert(
+      summary.accessibilityFrame, from: scene.effectiveGeometry.coordinateSpace)
+    let visibleShelfHeight = summaryFrame.height
     let image = record(window, named: "\(prefix)-shelf-top")
-    if photoCount == 3 {
+    #expect(visibleShelfHeight >= 44 && visibleShelfHeight + 16 <= (accessibility ? 180 : 128))
+    #expect(shelf == nil, "The disclosure summary must not introduce a nested scroll view.")
+    #expect(summary.accessibilityLabel?.contains("\(photoCount)") == true)
+    #expect(summary.accessibilityValue == "1 couldn't upload")
+    let expectedAccent = accent.roles(traits: window.traitCollection).text
+    let summaryImage = try #require(image.cgImage?.cropping(to: summaryFrame.applying(
+      CGAffineTransform(scaleX: image.scale, y: image.scale))))
+    let summaryPixels = try nativeAccentPixels(
+      in: UIImage(cgImage: summaryImage), expected: expectedAccent)
+    #expect(summaryPixels.personal > 10, "The disclosure must use the saved personal accent.")
+    if !accessibility {
+      let shelfViewport = summaryFrame
       let pixelRows = try thumbnailPixelRows(in: image)
       let top = max(0, Int(ceil(shelfViewport.minY * image.scale)))
       let bottom = min(pixelRows.count, Int(ceil(shelfViewport.maxY * image.scale)))
       try #require(top < bottom)
-      #expect(pixelRows[top..<bottom].reduce(0, +) > 0, "The synthetic thumbnail must be rendered.")
+      #expect(pixelRows[top..<bottom].reduce(0, +) > 0)
       let below = min(pixelRows.count, bottom + Int(ceil(image.scale)))
-      #expect(
-        pixelRows.dropFirst(below).reduce(0, +) == 0,
-        "Photo rows must not paint below the shelf's inset-adjusted viewport.")
+      #expect(pixelRows.dropFirst(below).reduce(0, +) == 0)
     }
-    let bottom = shelf.contentSize.height - shelf.bounds.height + shelf.adjustedContentInset.bottom
-    shelf.setContentOffset(CGPoint(x: 0, y: bottom), animated: false)
-    try await Task.sleep(for: .milliseconds(150))
-    #expect(abs(shelf.contentOffset.y - bottom) < 1)
-    record(window, named: "\(prefix)-shelf-bottom")
     var visibleSourceTop = editor.bounds.minY + editor.adjustedContentInset.top
     for bar in views.compactMap({ $0 as? UINavigationBar }) where !bar.isHidden && bar.alpha > 0 {
       let rect = bar.convert(bar.bounds, to: editor)
@@ -344,9 +391,7 @@ struct NotebookPhotoLayoutProbe {
     Attachment.record(
       "source unobscured viewport: \(visibleSourceHeight) pt, top: \(visibleSourceTop) pt, "
         + "two lines: \(twoLines) pt, "
-        + "shelf viewport: \(visibleShelfHeight) pt, bounds: \(shelf.bounds.height) pt, "
-        + "content: \(shelf.contentSize.height) pt, "
-        + "scroll bottom: \(shelf.contentOffset.y) pt",
+        + "shelf viewport: \(visibleShelfHeight) pt",
       named: "\(prefix)-geometry.txt")
     #expect(visibleSourceHeight >= twoLines, "Keep at least two source lines above the shelf and keyboard.")
     #expect(
@@ -357,6 +402,50 @@ struct NotebookPhotoLayoutProbe {
     #expect(fixture.session.session.text.hasSuffix(" Still editable"))
     #expect(editor.isFirstResponder)
     record(window, named: "\(prefix)-continued-edit")
+    do {
+      let selection = editor.selectedRange
+      let text = fixture.session.session.text
+      #expect(summary.accessibilityActivate())
+      try await Task.sleep(for: .milliseconds(600))
+      #expect(fixture.photos.isShowingDetails)
+      #expect(!editor.isFirstResponder)
+      #expect(editor.selectedRange == selection)
+      #expect(fixture.session.session.text == text)
+      #expect(editor.undoManager?.canUndo == true)
+      let details = try #require(host.presentedViewController)
+      let list = try #require(descendants(of: details.view).compactMap { $0 as? UIScrollView }.first {
+        $0.bounds.height > 0 && $0.contentSize.height > 0
+      })
+      let bottom = max(
+        -list.adjustedContentInset.top,
+        list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom)
+      list.setContentOffset(CGPoint(x: 0, y: bottom), animated: false)
+      try await Task.sleep(for: .milliseconds(250))
+      let last = try #require(fixture.photos.attachments.last)
+      let recovery = try #require(PhotoCaptureAccessibility.element(
+        id: "photo-recovery-\(last.id)", in: details.view))
+      let recoveryFrame = details.view.convert(
+        recovery.accessibilityFrame, from: scene.effectiveGeometry.coordinateSpace)
+      #expect(recoveryFrame.height >= 44)
+      #expect(recoveryFrame.minY >= details.view.safeAreaInsets.top)
+      #expect(recoveryFrame.maxY <= details.view.bounds.maxY - details.view.safeAreaInsets.bottom + 1)
+      let detailsImage = record(window, named: "\(prefix)-details-end")
+      let recoveryInWindow = window.convert(
+        recovery.accessibilityFrame, from: scene.effectiveGeometry.coordinateSpace)
+      let recoveryImage = try #require(detailsImage.cgImage?.cropping(to: recoveryInWindow.applying(
+        CGAffineTransform(scaleX: detailsImage.scale, y: detailsImage.scale))))
+      let recoveryPixels = try nativeAccentPixels(
+        in: UIImage(cgImage: recoveryImage), expected: expectedAccent)
+      #expect(recoveryPixels.personal > 10, "Recovery must use the saved personal accent.")
+      #expect(recoveryPixels.systemBlue == 0, "Recovery must not fall back to system blue.")
+      fixture.photos.isShowingDetails = false
+      try await Task.sleep(for: .milliseconds(350))
+      #expect(fixture.session.session.text == text)
+      #expect(editor.selectedRange == selection)
+      editor.becomeFirstResponder()
+      editor.undoManager?.undo()
+      #expect(fixture.session.session.text == "Base")
+    }
   }
 
   private func descendants(of view: UIView) -> [UIView] {

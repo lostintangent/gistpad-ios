@@ -42,6 +42,8 @@
                 session.session.requestFocusAtEnd()
                 if fixture.capturesInsertMenu {
                   try await fixture.presentInsertMenu()
+                } else if fixture.capturesDetails {
+                  try await fixture.presentDetails()
                 }
               }
               try await fixture.markReady()
@@ -86,8 +88,10 @@
     let captureState: String
     let scrollFraction: CGFloat
     var keyboardHeight: CGFloat = 0
+    private var activatedSummary = false
 
     var capturesInsertMenu: Bool { captureState == "insert" }
+    var capturesDetails: Bool { captureState == "details" || captureState == "details-end" }
 
     init(
       session: NotebookSessionController, photos: NotebookPhotoController,
@@ -109,6 +113,7 @@
       try await Task.sleep(for: .milliseconds(500))
       let textView = session.session.textView
       guard let window = textView.window else { throw ImageUploadError.targetChanged }
+      let summary = captureState == "multiple" ? try await settledSummary() : nil
       var readiness: [String: Any] = [
         "screen": "photos", "state": captureState,
         "fixture": "offline-photos", "token": token,
@@ -119,8 +124,13 @@
         "photoCount": photos.displayedAttachments.count,
         "lastPhotoHasRecoveryAction": photos.displayedAttachments.last?.action != nil,
       ]
-      if captureState == "notice-end" || captureState == "multiple-end" || captureState == "multiple-scroll" {
-        let scroll = try await scrollToEnd(in: window)
+      if let summary {
+        readiness["summaryFrame"] = frameValues(summary.accessibilityFrame)
+        readiness["summaryLabel"] = summary.accessibilityLabel
+        readiness["summaryStatus"] = summary.accessibilityValue
+      }
+      if captureState == "notice-end" || capturesDetails {
+        let scroll = try await settledScroll(in: window)
         readiness["scrollOffset"] = scroll.contentOffset.y
         readiness["scrollContentHeight"] = scroll.contentSize.height
         readiness["scrollViewportHeight"] =
@@ -132,11 +142,77 @@
         readiness["scrollEndVisible"] =
           scroll.contentOffset.y + scroll.bounds.height - scroll.adjustedContentInset.bottom
           >= scroll.contentSize.height - 1
+        if capturesDetails {
+          readiness["disclosureActivated"] = activatedSummary
+        }
+        if captureState == "details-end",
+          let last = photos.displayedAttachments.last,
+          let recovery = PhotoCaptureAccessibility.element(
+            id: "photo-recovery-\(last.id)", in: window),
+          let scene = window.windowScene
+        {
+          let frame = window.convert(
+            recovery.accessibilityFrame, from: scene.effectiveGeometry.coordinateSpace)
+          guard frame.height >= 44, frame.minY >= 0,
+            frame.maxY <= window.bounds.height - window.safeAreaInsets.bottom + 1
+          else { throw PhotoCaptureFailure.recoveryActionUnavailable }
+          readiness["lastRecoveryFrame"] = frameValues(frame)
+        } else if captureState == "details-end" {
+          throw PhotoCaptureFailure.recoveryActionUnavailable
+        }
       }
       let data = try JSONSerialization.data(withJSONObject: readiness, options: [.sortedKeys])
       let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("gistpad-capture-\(token).ready")
       try data.write(to: url, options: .atomic)
+    }
+
+    func settledSummary() async throws -> NSObject {
+      let clock = ContinuousClock()
+      let deadline = clock.now.advanced(by: .seconds(12))
+      var previous: CGRect?
+      var stableSince: ContinuousClock.Instant?
+      var stableSamples = 0
+      while clock.now < deadline {
+        try Task.checkCancellation()
+        if let window = session.session.textView.window,
+          let summary = PhotoCaptureAccessibility.element(
+            id: "pending-photos-summary", in: window),
+          session.session.textView.isFirstResponder, keyboardHeight >= 150
+        {
+          let frame = summary.accessibilityFrame
+          if frame.height >= 44, frame.width > 0, frame == previous {
+            stableSamples += 1
+            if stableSamples >= 20, let stableSince,
+              stableSince.duration(to: clock.now) >= .milliseconds(350)
+            {
+              return summary
+            }
+          } else {
+            stableSamples = 0
+            stableSince = clock.now
+          }
+          previous = frame
+        } else {
+          previous = nil
+          stableSamples = 0
+          stableSince = nil
+        }
+        try await Task.sleep(for: .milliseconds(16))
+      }
+      throw PhotoCaptureFailure.summaryDidNotSettle
+    }
+
+    func presentDetails() async throws {
+      let summary = try await settledSummary()
+      guard summary.accessibilityActivate() else {
+        throw PhotoCaptureFailure.summaryDidNotActivate
+      }
+      activatedSummary = true
+    }
+
+    private func frameValues(_ frame: CGRect) -> [String: CGFloat] {
+      ["x": frame.minX, "y": frame.minY, "width": frame.width, "height": frame.height]
     }
 
     func presentInsertMenu() async throws {
@@ -156,7 +232,7 @@
       throw ImageUploadError.targetChanged
     }
 
-    private func scrollToEnd(in window: UIWindow) async throws -> UIScrollView {
+    private func settledScroll(in window: UIWindow) async throws -> UIScrollView {
       let clock = ContinuousClock()
       let deadline = clock.now.advanced(by: .seconds(12))
       var previous: ScrollSample?
@@ -169,16 +245,14 @@
           let sample = ScrollSample(
             scroll: scroll, window: window, source: session.session.textView,
             keyboardHeight: keyboardHeight)
-          let shelfReady =
-            !captureState.hasPrefix("multiple")
-            || (sample.viewportHeight <= 181 && sample.sourceFocused && sample.keyboardHeight >= 150)
+          let presentationReady = !capturesDetails || (!sample.sourceFocused && sample.keyboardHeight < 1)
           let target = -sample.insets.top + (sample.bottom + sample.insets.top) * scrollFraction
           if abs(sample.offset.y - target) > 0.5 {
             scroll.setContentOffset(
               CGPoint(x: sample.offset.x, y: target), animated: false)
             stableSamples = 0
             stableSince = nil
-          } else if shelfReady, sample == previous {
+          } else if presentationReady, sample == previous {
             stableSamples += 1
             if stableSamples >= 20, let stableSince,
               stableSince.duration(to: clock.now) >= .milliseconds(350)
@@ -201,20 +275,16 @@
     }
 
     private func captureScroll(in window: UIWindow) -> UIScrollView? {
-      var root: UIView? =
-        captureState.hasPrefix("multiple") ? session.session.textView.superview : window
-      while let container = root {
-        let candidates = descendants(of: container).compactMap { $0 as? UIScrollView }.filter {
+      guard let controller = window.rootViewController?.presentedViewController,
+        !controller.isBeingPresented, let container = controller.view
+      else { return nil }
+      let candidates = descendants(of: container).compactMap { $0 as? UIScrollView }.filter {
           let height =
             $0.bounds.height - $0.adjustedContentInset.top - $0.adjustedContentInset.bottom
           return $0 !== session.session.textView && height > 0
-            && $0.contentSize.height > height && isVisible($0, in: window)
+            && $0.contentSize.height > 0 && isVisible($0, in: window)
         }
-        if candidates.count == 1 { return candidates[0] }
-        if candidates.count > 1 { return nil }
-        root = container.superview
-      }
-      return nil
+      return candidates.count == 1 ? candidates[0] : nil
     }
 
     private func isVisible(_ view: UIView, in window: UIWindow) -> Bool {
@@ -258,12 +328,18 @@
 
     private enum PhotoCaptureFailure: LocalizedError {
       case scrollDidNotSettle
+      case summaryDidNotSettle
+      case summaryDidNotActivate
       case recoveryActionUnavailable
 
       var errorDescription: String? {
         switch self {
         case .scrollDidNotSettle:
-          "The photo scroll viewport, content end or required source keyboard didn't settle within 12 seconds."
+          "The Photos sheet or requested scroll position didn't settle within 12 seconds."
+        case .summaryDidNotSettle:
+          "The photo summary and source keyboard didn't settle within 12 seconds."
+        case .summaryDidNotActivate:
+          "The native photo summary didn't handle its accessibility action."
         case .recoveryActionUnavailable:
           "The three-photo fixture couldn't prepare its synthetic failure and Retry action."
         }
@@ -299,22 +375,13 @@
       guard
         [
           "editor", "insert", "notice", "notice-end", "picker", "pending", "multiple",
-          "multiple-end", "multiple-scroll", "unpublished",
+          "details", "details-end", "unpublished",
         ].contains(state)
       else {
         throw ImageUploadError.targetChanged
       }
-      let scrollFraction: CGFloat
-      if state == "multiple-scroll" {
-        guard let index = arguments.firstIndex(of: "--capture-scroll-fraction"),
-          arguments.indices.contains(index + 1),
-          let fraction = Double(arguments[index + 1]), fraction.isFinite,
-          (0...1).contains(fraction)
-        else { throw ImageUploadError.targetChanged }
-        scrollFraction = fraction
-      } else {
-        scrollFraction = 1
-      }
+      let scrollFraction: CGFloat = state == "details" ? 0 : 1
+      let multiplePhotos = ["multiple", "details", "details-end"].contains(state)
       let accountID = UUID()
       let store = try DraftStore.open(inMemory: true)
       let text = """
@@ -339,7 +406,7 @@
       session.session.textView.selectedRange = NSRange(location: text.utf16.count, length: 0)
       let configuration = URLSessionConfiguration.ephemeral
       configuration.protocolClasses = [OfflinePhotoCaptureProtocol.self]
-      if state.hasPrefix("multiple") {
+      if multiplePhotos {
         configuration.httpAdditionalHeaders = ["X-GistPad-Capture-Failure": "retry"]
       }
       let storage = try ImageStorageClient(
@@ -372,7 +439,7 @@
         photos.choosePhoto()
         photos.acceptNotice()
         photos.noticeDidDismiss()
-      case "pending", "multiple", "multiple-end", "multiple-scroll", "unpublished":
+      case "pending", "multiple", "details", "details-end", "unpublished":
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 160, height: 120))
         let bytes = renderer.pngData { context in
           UIColor.systemTeal.setFill()
@@ -387,14 +454,14 @@
           mountain.close()
           mountain.fill()
         }
-        for _ in 0..<(state.hasPrefix("multiple") ? 3 : 1) {
+        for _ in 0..<(multiplePhotos ? 3 : 1) {
           photos.choosePhoto()
           photos.acceptNotice()
           photos.noticeDidDismiss()
           photos.isShowingPicker = false
           await photos.receivePickedData(bytes)
         }
-        if state.hasPrefix("multiple") {
+        if multiplePhotos {
           guard photos.displayedAttachments.count == 3,
             photos.displayedAttachments.last?.action == .retry
           else { throw PhotoCaptureFailure.recoveryActionUnavailable }
@@ -403,6 +470,40 @@
       }
       return PhotoCaptureFixture(
         session: session, photos: photos, captureState: state, scrollFraction: scrollFraction)
+    }
+  }
+
+  @MainActor
+  enum PhotoCaptureAccessibility {
+    static func element(id: String, in root: NSObject) -> NSObject? {
+      var visited = Set<ObjectIdentifier>()
+      return element(id: id, in: root, visited: &visited)
+    }
+
+    private static func element(
+      id: String, in root: NSObject, visited: inout Set<ObjectIdentifier>
+    ) -> NSObject? {
+      guard visited.insert(ObjectIdentifier(root)).inserted else { return nil }
+      if let view = root as? UIView, view.isHidden || view.alpha <= 0 { return nil }
+      if let identified = root as? any UIAccessibilityIdentification,
+        identified.accessibilityIdentifier == id
+      {
+        return root
+      }
+      if let view = root as? UIView {
+        for child in view.subviews {
+          if let result = element(id: id, in: child, visited: &visited) { return result }
+        }
+      }
+      let count = max(0, min(500, root.accessibilityElementCount()))
+      for index in 0..<count {
+        if let child = root.accessibilityElement(at: index) as? NSObject,
+          let result = element(id: id, in: child, visited: &visited)
+        {
+          return result
+        }
+      }
+      return nil
     }
   }
 

@@ -24,4 +24,16 @@ import Testing
         photo.action = nil
         #expect(!photo.isActionEnabled(at: .now))
     }
+
+    @Test func summaryCountsOnlyActualUploadAndPreparationFailures() {
+        let phases: [PhotoAttachmentPhase] = [
+            .preparing, .queued, .waitingForNote, .uploading, .checking, .offline,
+            .reconnect, .ready, .failed(message: "Retained"), .localFailure(message: "Retained"),
+            .preparationFailed(message: "Choose another"),
+        ]
+        let photos = phases.map { PhotoAttachment(id: UUID(), phase: $0) }
+        #expect(photos.filter(\.hasFailure).count == 3)
+        #expect(!photos[5].hasFailure)
+        #expect(!photos[6].hasFailure)
+    }
 }

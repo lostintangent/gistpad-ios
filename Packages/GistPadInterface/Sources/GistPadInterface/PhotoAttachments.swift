@@ -46,6 +46,13 @@ public struct PhotoAttachment: Equatable, Identifiable, Sendable {
         if case .failed(_, let deadline) = phase, let deadline { return deadline <= date }
         return true
     }
+
+    public var hasFailure: Bool {
+        switch phase {
+        case .failed, .localFailure, .preparationFailed: true
+        default: false
+        }
+    }
 }
 
 #if os(iOS)
@@ -102,37 +109,27 @@ public struct PhotoPrivacyNotice: View {
 
 public struct PhotoAttachmentShelf: View {
     private let attachments: [PhotoAttachment]
-    private let action: (UUID, PhotoAttachmentAction) -> Void
-    private let remove: (UUID) -> Void
+    private let details: () -> Void
     private let maximumHeight: CGFloat?
     @Environment(\.dynamicTypeSize) private var typeSize
 
     public init(
         attachments: [PhotoAttachment],
         maximumHeight: CGFloat? = nil,
-        action: @escaping (UUID, PhotoAttachmentAction) -> Void,
-        remove: @escaping (UUID) -> Void
+        details: @escaping () -> Void
     ) {
         self.attachments = attachments
         self.maximumHeight = maximumHeight
-        self.action = action
-        self.remove = remove
+        self.details = details
     }
 
     public var body: some View {
         if !attachments.isEmpty {
-            ViewThatFits(in: .vertical) {
-                rows
-                ScrollView { rows }
-                    .scrollBounceBehavior(.basedOnSize)
-                    .frame(height: shelfHeight)
-            }
-            .frame(maxHeight: shelfHeight)
-            .clipped()
-            .contentShape(.rect)
-            .background(Color(uiColor: .systemBackground))
-            .scrollEdgeEffectStyle(.soft, for: .all)
-            .accessibilityIdentifier("pending-photos")
+            summary
+                .background(Color(uiColor: .secondarySystemBackground), in: .rect(cornerRadius: 16))
+                .padding(.horizontal, 16)
+                .padding(.vertical, verticalPadding)
+                .accessibilityIdentifier("pending-photos")
         }
     }
 
@@ -140,16 +137,139 @@ public struct PhotoAttachmentShelf: View {
         min(typeSize.isAccessibilitySize ? 180 : 128, max(44, maximumHeight ?? .infinity))
     }
 
-    private var rows: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(attachments) { attachment in row(attachment) }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .fixedSize(horizontal: false, vertical: true)
+    private var verticalPadding: CGFloat {
+        min(8, max(0, (shelfHeight - 44) / 2))
     }
 
-    private func row(_ attachment: PhotoAttachment) -> some View {
+    private var summary: some View {
+        Button(action: details) {
+            ViewThatFits {
+                summaryLabel(showsStatus: true, usesPhotoSymbol: false)
+                summaryLabel(showsStatus: false, usesPhotoSymbol: false)
+                summaryLabel(showsStatus: false, usesPhotoSymbol: true)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(
+                maxWidth: .infinity, minHeight: 44,
+                maxHeight: shelfHeight - 2 * verticalPadding, alignment: .leading)
+            .contentShape(.rect(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(photoCount)
+        .accessibilityValue(attachments.contains(where: \.hasFailure)
+            ? Text("\(attachments.filter(\.hasFailure).count) couldn't upload", bundle: .module)
+            : Text("Upload statuses in Details", bundle: .module))
+        .accessibilityHint(Text("Show photo details", bundle: .module))
+        .accessibilityIdentifier("pending-photos-summary")
+    }
+
+    private func summaryLabel(showsStatus: Bool, usesPhotoSymbol: Bool) -> some View {
+        HStack(spacing: 12) {
+            if !typeSize.isAccessibilitySize,
+               let data = attachments.first?.thumbnail, let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 44, height: 44)
+                    .clipShape(.rect(cornerRadius: 6))
+                    .accessibilityHidden(true)
+            }
+            if usesPhotoSymbol {
+                Image(systemName: "photo.on.rectangle")
+                    .foregroundStyle(InterfaceTheme.accent)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Group {
+                    if usesPhotoSymbol {
+                        Text(attachments.count.formatted())
+                    } else {
+                        photoCount
+                    }
+                }
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                if showsStatus, attachments.contains(where: \.hasFailure) {
+                    Text("\(attachments.filter(\.hasFailure).count) couldn't upload", bundle: .module)
+                        .font(.subheadline)
+                        .foregroundStyle(Color(uiColor: .secondaryLabel))
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            if !showsStatus, attachments.contains(where: \.hasFailure) {
+                Image(systemName: "exclamationmark.circle")
+                    .foregroundStyle(.primary)
+                    .accessibilityHidden(true)
+            }
+            Image(systemName: "chevron.forward")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(InterfaceTheme.accent)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var photoCount: Text {
+        attachments.count == 1
+            ? Text("1 photo", bundle: .module)
+            : Text("\(attachments.count) photos", bundle: .module)
+    }
+}
+
+public struct PhotoAttachmentDetails: View {
+    private let attachments: [PhotoAttachment]
+    private let action: (UUID, PhotoAttachmentAction) -> Void
+    private let remove: (UUID) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    public init(
+        attachments: [PhotoAttachment],
+        action: @escaping (UUID, PhotoAttachmentAction) -> Void,
+        remove: @escaping (UUID) -> Void
+    ) {
+        self.attachments = attachments
+        self.action = action
+        self.remove = remove
+    }
+
+    public var body: some View {
+        NavigationStack {
+            List {
+                ForEach(attachments) { attachment in
+                    PhotoAttachmentRow(attachment: attachment, action: action, remove: remove)
+                        .padding(.vertical, 8)
+                }
+            }
+            .overlay {
+                if attachments.isEmpty {
+                    ContentUnavailableView(
+                        String(localized: "No Pending Photos", bundle: .module),
+                        systemImage: "photo.on.rectangle")
+                }
+            }
+            .navigationTitle(String(localized: "Photos", bundle: .module))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { dismiss() }
+                        .tint(.primary)
+                }
+            }
+        }
+        .tint(InterfaceTheme.accent)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .accessibilityIdentifier("photo-attachment-details")
+    }
+}
+
+private struct PhotoAttachmentRow: View {
+    let attachment: PhotoAttachment
+    let action: (UUID, PhotoAttachmentAction) -> Void
+    let remove: (UUID) -> Void
+
+    var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Group {
                 if let data = attachment.thumbnail, let image = UIImage(data: data) {
@@ -174,10 +294,12 @@ public struct PhotoAttachmentShelf: View {
                             ) { remove(attachment.id) }
                         } label: {
                             Image(systemName: "ellipsis")
+                                .foregroundStyle(InterfaceTheme.accent)
                                 .frame(minWidth: 44, minHeight: 44)
                                 .contentShape(.rect)
                         }
                         .accessibilityLabel(Text("Photo options", bundle: .module))
+                        .accessibilityIdentifier("photo-options-\(attachment.id)")
                     }
                 }
                 HStack(alignment: .top, spacing: 8) {
@@ -185,12 +307,13 @@ public struct PhotoAttachmentShelf: View {
                         ProgressView().controlSize(.small).accessibilityHidden(true)
                     }
                     Text(status(attachment.phase)).font(.subheadline)
+                        .foregroundStyle(.primary)
                 }
                 if let detail = detail(attachment.phase) {
-                    Text(detail).font(.subheadline)
+                    Text(detail).font(.subheadline).foregroundStyle(.primary)
                 }
                 if let guidance = attachment.guidance {
-                    Text(guidance).font(.subheadline)
+                    Text(guidance).font(.subheadline).foregroundStyle(.primary)
                 }
                 if let recovery = attachment.action {
                     if case .failed(_, .some) = attachment.phase {
@@ -202,9 +325,9 @@ public struct PhotoAttachmentShelf: View {
                     }
                 }
             }
-            .foregroundStyle(.primary)
         }
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("photo-attachment-\(attachment.id)")
     }
 
     private func status(_ phase: PhotoAttachmentPhase) -> String {
@@ -251,8 +374,10 @@ public struct PhotoAttachmentShelf: View {
     ) -> some View {
         Button(actionTitle(recovery)) { action(attachment.id, recovery) }
             .font(.body)
+            .foregroundStyle(InterfaceTheme.accent)
             .frame(minHeight: 44)
             .disabled(!attachment.isActionEnabled(at: date))
+            .accessibilityIdentifier("photo-recovery-\(attachment.id)")
     }
 }
 #endif

@@ -40,6 +40,7 @@ final class NotebookPhotoController {
   private(set) var attachments: [PhotoAttachment] = []
   private(set) var isPreparing = false
   private(set) var isShowingNotice = false
+  var isShowingDetails = false
   private(set) var noticeStartsPicker = false
   var isShowingPicker = false
   var removalID: UUID?
@@ -67,6 +68,7 @@ final class NotebookPhotoController {
   @ObservationIgnored private var isForeground = true
   @ObservationIgnored private var insertionFailures: Set<UUID> = []
   @ObservationIgnored private var isPersisting = false
+  @ObservationIgnored private var picksAfterDetails = false
   @ObservationIgnored private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Photos")
 
   init(
@@ -159,6 +161,18 @@ final class NotebookPhotoController {
     preparePresentation()
     noticeStartsPicker = false
     isShowingNotice = true
+  }
+
+  func showDetails() {
+    guard !attachments.isEmpty else { return }
+    preparePresentation()
+    isShowingDetails = true
+  }
+
+  func detailsDidDismiss() {
+    guard picksAfterDetails else { return }
+    picksAfterDetails = false
+    choosePhoto()
   }
 
   func acceptNotice() {
@@ -262,7 +276,13 @@ final class NotebookPhotoController {
 
   func perform(_ action: PhotoAttachmentAction, id: UUID) async {
     switch action {
-    case .chooseAnother: choosePhoto()
+    case .chooseAnother:
+      if isShowingDetails {
+        picksAfterDetails = true
+        isShowingDetails = false
+      } else {
+        choosePhoto()
+      }
     case .reconnect:
       await reconnect()
       await resume()
