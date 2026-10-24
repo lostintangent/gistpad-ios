@@ -17,7 +17,7 @@
       #expect(removed.count == 1)
       #expect(added.count == 1)
       #expect(removed.allSatisfy { $0.foregroundColor == .secondary })
-      #expect(added.allSatisfy { $0.foregroundColor == InterfaceTheme.accent })
+      #expect(added.allSatisfy { $0.foregroundColor == .primary && $0.underlineStyle != nil })
       #expect(String(before.characters) == "Take teh path.")
       #expect(String(after.characters) == "Take the path.")
     }

@@ -1,5 +1,9 @@
 {
   "sourceLanguage" : "en",
-  "strings" : {},
+  "strings" : {
+    "Show Front Matter" : {
+
+    }
+  },
   "version" : "1.0"
 }

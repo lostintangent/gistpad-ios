@@ -26,11 +26,15 @@ struct SessionPreview: View {
         } description: {
           Text(renderError)
         } actions: {
-          Button("Retry") {
+          Button {
             self.renderError = nil
             reload += 1
+          } label: {
+            Text("Retry")
+              .foregroundStyle(Color(uiColor: .systemBackground))
           }
           .buttonStyle(.borderedProminent)
+          .tint(Color(uiColor: .label))
         }
         .background(Color(uiColor: .systemBackground))
       }

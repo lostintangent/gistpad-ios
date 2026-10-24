@@ -182,6 +182,13 @@
       let items = toolbar.buttons.arrangedSubviews.compactMap { $0 as? UIButton }
       #expect(items.count == 5)
       #expect(items.allSatisfy { $0.title(for: .normal) == nil })
+      for appearance: UIUserInterfaceStyle in [.light, .dark] {
+        toolbar.traitOverrides.userInterfaceStyle = appearance
+        #expect(items.allSatisfy {
+          $0.tintColor.resolvedColor(with: $0.traitCollection)
+            .isEqual(UIColor.label.resolvedColor(with: $0.traitCollection))
+        })
+      }
       let style = try #require(items.first { $0.accessibilityLabel == "Text Style" })
       let menu = try #require(style.menu)
       let bold = try #require(menuActions(menu.children).first { $0.title == "Bold" })

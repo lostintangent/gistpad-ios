@@ -28,6 +28,7 @@ struct NotebookAccountSwitchSheet: View {
           Button("Switch to @\(replacement)") {
             work { try await switchAccount() }
           }
+          .tint(.primary)
           .accessibilityIdentifier("account-switch-confirm")
           Button("Export Current Drafts") {
             work {
@@ -35,6 +36,7 @@ struct NotebookAccountSwitchSheet: View {
               showingExporter = true
             }
           }
+          .tint(.primary)
           .accessibilityIdentifier("account-switch-export")
           .captureFrame("account-switch-export")
         } footer: {
@@ -70,7 +72,6 @@ struct NotebookAccountSwitchSheet: View {
         }
       }
     }
-    .tint(InterfaceTheme.accent)
   }
 
   private func work(_ operation: @escaping @MainActor () async throws -> Void) {

@@ -360,12 +360,13 @@ extension NotebookPhotoTests {
     #expect(shelf == nil, "The disclosure summary must not introduce a nested scroll view.")
     #expect(summary.accessibilityLabel?.contains("\(photoCount)") == true)
     #expect(summary.accessibilityValue == "\(photoCount) couldn't upload")
-    let expectedAccent = accent.roles(traits: window.traitCollection).text
+    let expectedNeutral = try #require(RGBColor(
+      uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
     let summaryImage = try #require(image.cgImage?.cropping(to: summaryFrame.applying(
       CGAffineTransform(scaleX: image.scale, y: image.scale))))
     let summaryPixels = try nativeAccentPixels(
-      in: UIImage(cgImage: summaryImage), expected: expectedAccent)
-    #expect(summaryPixels.personal > 10, "The disclosure must use the saved personal accent.")
+      in: UIImage(cgImage: summaryImage), expected: expectedNeutral)
+    #expect(summaryPixels.personal > 10, "The disclosure retains readable neutral primary ink.")
     if !accessibility {
       let shelfViewport = summaryFrame
       let pixelRows = try thumbnailPixelRows(in: image)
@@ -433,8 +434,8 @@ extension NotebookPhotoTests {
       let recoveryImage = try #require(detailsImage.cgImage?.cropping(to: recoveryInWindow.applying(
         CGAffineTransform(scaleX: detailsImage.scale, y: detailsImage.scale))))
       let recoveryPixels = try nativeAccentPixels(
-        in: UIImage(cgImage: recoveryImage), expected: expectedAccent)
-      #expect(recoveryPixels.personal > 10, "Recovery must use the saved personal accent.")
+        in: UIImage(cgImage: recoveryImage), expected: expectedNeutral)
+      #expect(recoveryPixels.personal > 10, "Recovery retains readable neutral primary ink.")
       #expect(recoveryPixels.systemBlue == 0, "Recovery must not fall back to system blue.")
       fixture.photos.isShowingDetails = false
       try await Task.sleep(for: .milliseconds(350))

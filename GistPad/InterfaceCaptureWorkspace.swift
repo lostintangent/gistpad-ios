@@ -48,6 +48,7 @@ struct InterfaceCaptureWorkspace: View {
     private let supportedState: Bool
     @Environment(\.openURL) private var openURL
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.isGitHubStatusVisible) private var isGitHubStatusVisible
 
     init(session: DocumentSession) {
         self.session = session
@@ -67,11 +68,16 @@ struct InterfaceCaptureWorkspace: View {
         supportedState = [
             "populated", "empty", "error", "offline", "readonly", "tag-audit", "today",
             "tag-editor", "tag-readonly", "search", "search-active", "no-results", "filtered", "signed-out",
-            "daily", "starred", "archive", "notes", "featured", "header-file"
+            "daily", "starred", "archive", "notes", "featured", "header-file",
+            "mode-long", "mode-emoji", "today-done", "today-no-tasks",
+            "status-busy", "status-error", "status-details", "status-limited", "tag-filters"
         ].contains(state) || (LaunchArguments.captureMangaFixture && screen == "note"
             && ["markers", "rules", "bullets"].contains(state))
         _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
         _selectedFileID = State(initialValue: state == "header-file" ? "Ideas.md" : "README.md")
+        if state == "mode-long" || state == "mode-emoji" {
+            _modes = State(initialValue: ["README.md": .source])
+        }
         var snapshot = state == "empty" ? LibrarySnapshot(notes: []) : InterfaceFixtures.library
         if state != "empty" {
             snapshot.notes.insert(
@@ -109,6 +115,10 @@ struct InterfaceCaptureWorkspace: View {
                     .init(
                         id: "missing-color", title: "An unspecified color", updatedAt: InterfaceFixtures.referenceDate,
                         tagIDs: ["missing"]
+                    ),
+                    .init(
+                        id: "similar-hues", title: "Distinct names, related colors", updatedAt: InterfaceFixtures.referenceDate,
+                        tagIDs: ["garden", "mint"]
                     )
                 ],
                 tags: [
@@ -116,7 +126,9 @@ struct InterfaceCaptureWorkspace: View {
                     .init(id: "yellow", name: "Bright yellow", colorHex: "#FFFF00"),
                     .init(id: "white", name: "White", colorHex: "#FFFFFF"),
                     .init(id: "black", name: "Black", colorHex: "#000000"),
-                    .init(id: "missing", name: "No color")
+                    .init(id: "missing", name: "No color"),
+                    .init(id: "garden", name: "Garden", colorHex: "#548C80"),
+                    .init(id: "mint", name: "Mint", colorHex: "#588E82")
                 ]
             )
         }
@@ -140,11 +152,26 @@ struct InterfaceCaptureWorkspace: View {
                 excerpt: state == "empty" || state == "today" ? nil : "Keep the thought, not the interface."
             )
         )
+        if state == "today-done" {
+            model.today.progress = .init(completed: 1, total: 1)
+        } else if state == "today-no-tasks" {
+            model.today.progress = .init(completed: 0, total: 0)
+        }
+        if state == "status-busy" {
+            model.gitHubStatus = .checking(operation: "Checking GitHub")
+        } else if ["status-error", "status-details", "status-limited"].contains(state) {
+            model.gitHubStatus = .problem(.init(
+                heading: "Couldn't check for updates",
+                message: "Synthetic connection failure after retrying. No account request was made.",
+                recoveryTitle: "Retry", detail: "Your notes on this iPhone are unchanged.",
+                retryAfter: state == "status-limited" ? .now.addingTimeInterval(15) : nil
+            ))
+        }
         switch state {
         case "daily": model.collection = .dailyNotes
         case "starred": model.collection = .starred
         case "archive": model.collection = .archive
-        case "filtered": model.selectedTagIDs = ["ideas"]
+        case "filtered", "tag-filters": model.selectedTagIDs = ["ideas"]
         case "search", "search-active":
             model.query = "notebook"
             model.searchState = .results(
@@ -175,8 +202,9 @@ struct InterfaceCaptureWorkspace: View {
                         isTodaySelected: captureState == "today",
                         isSidebar: horizontalSizeClass == .regular
                     )
+                    .captureTagFilters(captureState == "tag-filters")
                     .task {
-                        if captureState == "notes" || captureState == "featured" {
+                        if ["notes", "featured", "tag-audit"].contains(captureState) {
                             try? await Task.sleep(for: .milliseconds(400))
                             scroll.scrollTo(captureState == "notes" ? "weekend" : "shape", anchor: .top)
                             await markReady()
@@ -197,6 +225,15 @@ struct InterfaceCaptureWorkspace: View {
                             MarkdownEditorView(session: activeSession)
                         } preview: {
                             preview
+                        }
+                        .toolbar {
+                            if isGitHubStatusVisible, let status = library.gitHubStatus, status != .idle {
+                                ToolbarSpacer(.flexible, placement: .bottomBar)
+                                ToolbarItem(placement: .bottomBar) {
+                                    GitHubStatusControl(state: status, recover: recoverCaptureStatus)
+                                }
+                                .sharedBackgroundVisibility(.hidden)
+                            }
                         }
                     } else {
                         ContentUnavailableView("Select a gist", systemImage: "doc.text")
@@ -222,7 +259,7 @@ struct InterfaceCaptureWorkspace: View {
                 if captureScreen == "library", horizontalSizeClass == .regular, captureState != "empty" {
                     library.selectedNoteID = "shape"
                 }
-                if (captureScreen == "library" && !["notes", "featured"].contains(captureState))
+                if (captureScreen == "library" && !["notes", "featured", "tag-audit"].contains(captureState))
                     || captureState == "error" || captureState == "today" {
                     await markReady()
                 }
@@ -256,6 +293,11 @@ struct InterfaceCaptureWorkspace: View {
             chrome.title = note.title
             chrome.tags = library.tags(for: note)
         }
+        if captureState == "mode-long" {
+            chrome.title = "A very long notebook title that must yield its space to the complete editing controls"
+        } else if captureState == "mode-emoji" {
+            chrome.title = "💔 OSS Maintainers: A Three-Part Tragedy"
+        }
         return chrome
     }
 
@@ -277,7 +319,28 @@ struct InterfaceCaptureWorkspace: View {
         actions.reconnect = {
             actionMessage = "This synthetic invitation does not connect to GitHub."
         }
+        actions.recoverStatus = recoverCaptureStatus
         return actions
+    }
+
+    private func recoverCaptureStatus() {
+        guard case .problem(let problem) = library.gitHubStatus else {
+            actionMessage = "Synthetic recovery requires a presented problem."
+            return
+        }
+        library.gitHubStatus = .problem(.init(
+            heading: problem.heading, message: problem.message, recoveryTitle: problem.recoveryTitle,
+            detail: problem.detail, isRecovering: true))
+        Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2))
+                library.gitHubStatus = .idle
+            } catch is CancellationError {
+                return
+            } catch {
+                actionMessage = "Synthetic recovery failed: \(error.localizedDescription)"
+            }
+        }
     }
 
     private var noteActions: NoteActions {
@@ -289,7 +352,7 @@ struct InterfaceCaptureWorkspace: View {
         }
         actions.didChangeMode = { mode in
             if mode == .source {
-                activeSession.textView.becomeFirstResponder()
+                activeSession.requestFocusAtContentStart()
             } else {
                 activeSession.textView.resignFirstResponder()
             }
@@ -431,6 +494,49 @@ struct InterfaceCaptureWorkspace: View {
                 actionMessage = "Capture readiness requires a visible native window."
                 return
             }
+            if captureState == "status-details",
+               window.rootViewController?.presentedViewController == nil {
+                guard let button = notebookAccessibilityElement("github-status-attention", in: window)
+                else {
+                    actionMessage = "Capture readiness requires the native GitHub status button."
+                    return
+                }
+                if let control = button as? UIControl {
+                    control.performPrimaryAction()
+                } else if !button.accessibilityActivate() {
+                    actionMessage = "The native GitHub status button could not be activated."
+                    return
+                }
+                let deadline = ContinuousClock.now + .seconds(8)
+                while ContinuousClock.now < deadline {
+                    if let presented = window.rootViewController?.presentedViewController,
+                       !presented.isBeingPresented,
+                       notebookAccessibilityElement("github-status-recover", in: window) != nil
+                        || notebookAccessibilityElement("capture-frame-github-status-recover", in: window) != nil {
+                        break
+                    }
+                    try await Task.sleep(for: .milliseconds(20))
+                }
+            }
+            guard captureState != "status-details"
+                || notebookAccessibilityElement("github-status-recover", in: window) != nil
+                || notebookAccessibilityElement("capture-frame-github-status-recover", in: window) != nil
+            else {
+                actionMessage = "Capture readiness requires the settled GitHub status explanation."
+                return
+            }
+            if captureState == "tag-filters" {
+                func hasFilterTitle(in view: UIView) -> Bool {
+                    if let bar = view as? UINavigationBar,
+                       bar.topItem?.title == "Filter by tags" { return true }
+                    return view.subviews.contains { hasFilterTitle(in: $0) }
+                }
+                guard let presented = window.rootViewController?.presentedViewController,
+                      !presented.isBeingPresented, hasFilterTitle(in: presented.view) else {
+                    actionMessage = "Capture readiness requires the native tag filter sheet."
+                    return
+                }
+            }
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent("gistpad-capture-\(readinessToken).ready")
             let data = try JSONSerialization.data(withJSONObject: [
@@ -456,8 +562,10 @@ struct InterfaceCaptureWorkspace: View {
         if let field = view as? UITextField, field.isFirstResponder, field.text == library.query {
             return true
         }
+
         return view.subviews.contains { hasFocusedSearch(in: $0) }
     }
+
 }
 
 private struct CaptureTagSaveFailure: LocalizedError {

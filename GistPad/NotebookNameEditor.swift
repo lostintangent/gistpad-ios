@@ -39,6 +39,7 @@ struct NotebookNameEditor: View {
           Section {
             Label(error, systemImage: "exclamationmark.circle")
             Button("Retry", action: commit)
+              .tint(.primary)
           }
         }
       }
@@ -47,9 +48,11 @@ struct NotebookNameEditor: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { dismiss() }.disabled(isSaving)
+            .tint(.primary)
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save", action: commit)
+            .tint(.primary)
             .disabled(isSaving || value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }

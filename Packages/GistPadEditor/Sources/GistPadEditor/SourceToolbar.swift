@@ -36,7 +36,7 @@
       super.init(frame: CGRect(x: 0, y: 0, width: 320, height: 72))
       autoresizingMask = [.flexibleWidth]
       backgroundColor = .clear
-      tintColor = UIColor(InterfaceTheme.accent)
+      tintColor = .label
       accessibilityIdentifier = "editor-keyboard-bar"
       glass.cornerConfiguration = .capsule()
       glass.translatesAutoresizingMaskIntoConstraints = false

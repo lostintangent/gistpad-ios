@@ -83,6 +83,7 @@ public struct PersonalAccentColorRow: View {
                 }
             }
             .disabled(isSaving)
+            .tint(.primary)
             .accessibilityIdentifier("settings-save-accent")
             .captureFrame("settings-save-accent")
         }

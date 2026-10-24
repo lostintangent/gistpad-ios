@@ -49,6 +49,9 @@ struct NotebookSurfaceCaptureWorkspace: View {
       captureState = nil
     }
     _path = State(initialValue: [screen])
+    if arguments.contains("--capture-source") {
+      _mode = State(initialValue: .source)
+    }
     let accent = accent ?? LaunchArguments.captureAccent ?? "#0EA5E9"
     _preferences = State(initialValue: Preferences(isAutoSaveEnabled: true, accentColor: accent))
   }
@@ -133,7 +136,8 @@ struct NotebookSurfaceCaptureWorkspace: View {
         ) {}
       } else {
         NoteScreen(
-          document: chrome, mode: $mode, saveState: captureSaveState, actions: actions
+          document: chrome, mode: $mode, saveState: captureSaveState, actions: actions,
+          allowsSplit: ProcessInfo.processInfo.arguments.contains("--capture-split")
         ) {
           MarkdownEditorView(session: session)
         } preview: {
@@ -230,6 +234,9 @@ struct NotebookSurfaceCaptureWorkspace: View {
   private var captureStep: NotebookSurfaceCaptureStep? {
     guard let captureState else { return nil }
     switch (screen, captureState) {
+    case ("note-chrome", let state)
+      where state == "native-controls" || state.hasPrefix("save-") || state.hasPrefix("mode-"):
+      return nil
     case ("note-chrome", _): return .menu(captureState)
     case ("tags", "search"): return .tagSearch(query: tagCaptureQuery, expectedTagID: "ideas")
     case ("tags", "search-empty"): return .tagSearch(query: tagCaptureQuery, expectedTagID: nil)
@@ -250,9 +257,16 @@ struct NotebookSurfaceCaptureWorkspace: View {
     let files = ProcessInfo.processInfo.arguments.contains("--capture-multi-file")
       ? [NoteFile(id: "README.md", filename: "README.md"), .init(id: "Ideas.md", filename: "Ideas.md")]
       : [NoteFile(id: "README.md", filename: "README.md")]
+    let title = switch captureState {
+    case "mode-short": "A note"
+    case "mode-long":
+      "A very long notebook title that must yield its space to the complete editing controls while leaving every reading, writing and navigation action intact"
+    case "mode-emoji": "💔 OSS Maintainers: A Three-Part Tragedy"
+    default: "A place for good ideas"
+    }
     return .init(
-      title: "A place for good ideas", files: files, selectedFileID: "README.md",
-      tags: Array(Self.tags.prefix(2)), isAutoSaveEnabled: true)
+      title: title, files: files, selectedFileID: "README.md",
+      tags: Array(Self.tags.prefix(2)), isAutoSaveEnabled: captureState != "save-manual")
   }
 
   private var captureSaveState: NoteSaveState {
@@ -260,7 +274,14 @@ struct NotebookSurfaceCaptureWorkspace: View {
     if ProcessInfo.processInfo.arguments.contains("--capture-cloud-failure") {
       return .cloudFailure(message: NotebookModel.message(for: URLError(.notConnectedToInternet)))
     }
-    return .savedToGitHub
+    return switch captureState {
+    case "save-local", "save-manual": .savedLocally
+    case "save-unsaved": .unsaved
+    case "save-publishing": .savingToGitHub
+    case "save-offline": .offline
+    case "save-failed": .cloudFailure(message: "Synthetic failure. No account request was made.")
+    default: .savedToGitHub
+    }
   }
 
   private var actions: NoteActions {

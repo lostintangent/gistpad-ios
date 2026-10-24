@@ -47,17 +47,20 @@ struct NotebookConflictReview: View {
                 error = nil
               } catch { self.error = NotebookModel.message(for: error) }
             }
+            .tint(.primary)
           }
           if let error {
             Label(error, systemImage: "exclamationmark.circle")
           }
           if remoteChanged {
             Button("Refresh GitHub version") { refreshRemote() }
+              .tint(.primary)
           }
           Picker("Version", selection: $tab) {
             ForEach(ReviewTab.allCases, id: \.self) { Text($0.title).tag($0) }
           }
           .pickerStyle(.segmented)
+          .tint(.primary)
           switch tab {
           case .changes:
             if isComparing {
@@ -88,6 +91,7 @@ struct NotebookConflictReview: View {
               Text("There was no saved file when this local draft was created.")
             }
           }
+          .tint(.primary)
           if let combined = review.conflict.suggestedMerge {
             DisclosureGroup("Review combined version") {
               VStack(alignment: .leading, spacing: 16) {
@@ -96,11 +100,18 @@ struct NotebookConflictReview: View {
                 )
                 source(combined)
                 changes(title: String(localized: "Changes to My Draft"), lines: combinedChanges)
-                Button("Use combined draft") { apply(combined) }
+                Button {
+                  apply(combined)
+                } label: {
+                  Text("Use combined draft")
+                    .foregroundStyle(Color(uiColor: .systemBackground))
+                }
                   .buttonStyle(.borderedProminent)
+                  .tint(Color(uiColor: .label))
                   .disabled(isStale || !controller.canMutate)
               }
             }
+            .tint(.primary)
           } else if review.conflict.remote != nil {
             Text(
               "Both versions changed the same passage. Choose a version, or return to your draft to combine the changes yourself."
@@ -108,15 +119,28 @@ struct NotebookConflictReview: View {
           }
           VStack(alignment: .leading, spacing: 12) {
             if review.conflict.remote != nil {
-              Button("Use My Draft") { apply(review.conflict.local) }
+              Button {
+                apply(review.conflict.local)
+              } label: {
+                Text("Use My Draft")
+                  .foregroundStyle(Color(uiColor: .systemBackground))
+              }
                 .buttonStyle(.borderedProminent)
+                .tint(Color(uiColor: .label))
               Text("A later Save to GitHub replaces the inspected remote file with this draft.")
                 .font(.subheadline)
               Button("Use GitHub Version") { isConfirmingRemote = true }
                 .buttonStyle(.bordered)
+                .tint(.primary)
             } else {
-              Button("Keep Local Draft") { dismiss() }
+              Button {
+                dismiss()
+              } label: {
+                Text("Keep Local Draft")
+                  .foregroundStyle(Color(uiColor: .systemBackground))
+              }
                 .buttonStyle(.borderedProminent)
+                .tint(Color(uiColor: .label))
               Text(
                 "The conflict stays unresolved. Nothing will recreate the missing file automatically."
               )
@@ -138,9 +162,11 @@ struct NotebookConflictReview: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Done") { dismiss() }.disabled(isApplying)
+            .tint(.primary)
         }
         ToolbarItem(placement: .secondaryAction) {
           Button("Refresh GitHub", systemImage: "arrow.clockwise", action: refreshRemote)
+            .tint(.primary)
             .disabled(isStale || isApplying)
         }
       }

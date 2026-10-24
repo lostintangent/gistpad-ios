@@ -302,7 +302,7 @@ struct NotebookModelTests {
     let daily = try #require(model.loadedDocument?.draft)
     #expect(daily.gistID == nil)
     #expect(model.library.today.availability == .existing)
-    #expect(model.library.today.excerpt?.isEmpty == false)
+    #expect(model.library.today.excerpt == nil, "A date-only template is not excerpt prose.")
     await model.createNote()
     #expect(model.loadedDocument?.draft?.id != daily.id)
     await model.showToday()
@@ -420,6 +420,33 @@ struct NotebookModelTests {
     await model.start()
     #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.excerpt == "The local thought wins")
     #expect(model.library.snapshot.notes.first(where: { $0.id == "b" })?.excerpt == "A real cached excerpt with another line")
+    #expect(await provider.readIDs.isEmpty)
+  }
+
+  @Test func durableEditsRefreshCleanDefaultFileExcerptsWithoutUsingAnotherFile() async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount,
+      gists: [
+        try makeGist(
+          id: "a", title: "A useful note", content: "Cached source",
+          additionalFiles: ["Ideas.md": "Another file"])
+      ])
+    let primary = try await provider.stageExistingDraft(
+      gistID: "a", text: "# A useful note\n\nAn earlier thought.")
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    _ = try await model.persist(
+      draftID: primary.id, accountID: fixtureAccount.id,
+      text: "---\nprivate: metadata\n---\n\n# A useful note\n\n- [x] Keep **this thought**.",
+      generation: primary.generation + 1)
+    #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.excerpt == "Keep this thought.")
+    await model.open(gistID: "a", filename: "Ideas.md")
+    let secondaryDocument = try #require(model.loadedDocument)
+    let secondary = try await provider.openDraft(for: secondaryDocument)
+    _ = try await model.persist(
+      draftID: secondary.id, accountID: fixtureAccount.id,
+      text: "# Ideas\n\nThis is not the default file.", generation: secondary.generation + 1)
+    #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.excerpt == "Keep this thought.")
     #expect(await provider.readIDs.isEmpty)
   }
 
@@ -761,7 +788,7 @@ struct NotebookModelTests {
     let row = try #require(model.library.matchingNotes.first)
     #expect(row.id == "daily/\(filename)")
     #expect(row.progress == .init(completed: 1, total: 2))
-    #expect(model.library.today.excerpt == "- [x] One\n- [ ] Two")
+    #expect(model.library.today.excerpt == "One\nTwo")
     await model.openRow(id: row.id)
     #expect(model.loadedDocument?.filename == filename)
     #expect(model.library.selectedNoteID == row.id)
@@ -1580,7 +1607,7 @@ private struct NavigationHost {
 
   var isLibraryVisible: Bool {
     let bars = descendants.compactMap { $0 as? UINavigationBar }.filter {
-      $0.topItem?.title == "Library" && isVisible($0)
+      $0.topItem?.title == "GistPad" && isVisible($0)
     }
     for bar in bars {
       let frame = bar.convert(bar.bounds, to: window)

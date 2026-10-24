@@ -7,6 +7,7 @@ public enum InterfaceTheme {
     public static let accentFill = Color(uiColor: AccentRole.fill.uiColor)
     public static let onAccent = Color(uiColor: AccentRole.onFill.uiColor)
     public static let selection = Color(uiColor: AccentRole.selectedSurface.uiColor)
+    public static let neutralSelection = Color(uiColor: .tertiarySystemFill)
     public static let syntaxMuted = Color("SyntaxMuted", bundle: .module)
     public static let syntaxCode = Color("SyntaxCode", bundle: .module)
     public static let text = Color("Ink", bundle: .module)
@@ -25,7 +26,7 @@ extension View {
 extension LibraryCollection {
     var title: String {
         switch self {
-        case .gists: String(localized: "Notes", bundle: .module)
+        case .gists: String(localized: "Your Gists", bundle: .module)
         case .dailyNotes: String(localized: "Daily Notes", bundle: .module)
         case .starred: String(localized: "Starred", bundle: .module)
         case .archive: String(localized: "Archive", bundle: .module)

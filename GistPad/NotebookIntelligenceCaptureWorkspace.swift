@@ -54,6 +54,7 @@
       guard let token else { return }
       var previous: Sample?
       var stableSamples = 0
+      let started = ContinuousClock.now
       let deadline = Date().addingTimeInterval(12)
       do {
         while Date() < deadline {
@@ -86,13 +87,26 @@
               keyboardHeight: keyboardHeight,
               firstResponder: descendants(view).contains(where: \.isFirstResponder),
               scrollEndVisible: scroll == nil || abs((scroll?.contentOffset.y ?? 0) - end) <= 1,
+              pendingProgressVisible: visibleProbe("intelligence-progress", in: view, window: window),
+              pendingCancelVisible: visibleProbe("intelligence-cancel", in: view, window: window),
+              pendingRequestVisible: visibleProbe(
+                "intelligence-submitted-request", in: view, window: window,
+                requiresFullVisibility:
+                  !view.traitCollection.preferredContentSizeCategory.isAccessibilityCategory),
+              hasResults: descendants(view).contains {
+                $0.accessibilityIdentifier == "capture-frame-intelligence-results"
+              },
               textSize: view.traitCollection.preferredContentSizeCategory.rawValue)
             let keyboardReady =
               state != "ask-keyboard"
               || (sample.firstResponder && sample.keyboardHeight >= 150)
             let scrollReady = !state.hasSuffix("-end")
               || (scroll != nil && sample.scrollEndVisible)
-            if keyboardReady, scrollReady, sample == previous {
+            let pendingReady = !state.hasPrefix("pending-")
+              || (started.duration(to: .now) >= .seconds(5)
+                && sample.pendingProgressVisible && sample.pendingCancelVisible
+                && sample.pendingRequestVisible && !sample.hasResults)
+            if keyboardReady, scrollReady, pendingReady, sample == previous {
               stableSamples += 1
             } else {
               stableSamples = 0
@@ -123,6 +137,18 @@
       [view] + view.subviews.flatMap(descendants)
     }
 
+    @MainActor
+    private func visibleProbe(
+      _ id: String, in view: UIView, window: UIWindow, requiresFullVisibility: Bool = true
+    ) -> Bool {
+      guard let probe = descendants(view).first(where: {
+        $0.accessibilityIdentifier == "capture-frame-\(id)"
+      }), probe.window === window, !probe.isHidden, probe.alpha > 0 else { return false }
+      let frame = probe.convert(probe.bounds, to: window)
+      return !frame.isEmpty
+        && (requiresFullVisibility ? window.bounds.contains(frame) : window.bounds.intersects(frame))
+    }
+
     private struct Sample: Codable, Equatable {
       let windowWidth: CGFloat
       let windowHeight: CGFloat
@@ -132,6 +158,10 @@
       let keyboardHeight: CGFloat
       let firstResponder: Bool
       let scrollEndVisible: Bool
+      let pendingProgressVisible: Bool
+      let pendingCancelVisible: Bool
+      let pendingRequestVisible: Bool
+      let hasResults: Bool
       let textSize: String
     }
 

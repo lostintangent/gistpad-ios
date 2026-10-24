@@ -62,7 +62,7 @@ struct NotebookSurfaceHostTests {
   }
 
   @Test(arguments: ["settings", "tags", "note-failed"], [false, true])
-  func presentedSurfacesUseTheSavedAccent(screen: String, dark: Bool) async throws {
+  func presentedSurfacesKeepChromeNeutral(screen: String, dark: Bool) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.windows.first(where: \.isKeyWindow)
@@ -73,7 +73,6 @@ struct NotebookSurfaceHostTests {
     window.rootViewController = UIHostingController(
       rootView: NotebookSurfaceCaptureWorkspace(screen: screen, accent: "#FACC15")
         .environment(\.dynamicTypeSize, .large)
-        .tint(InterfaceTheme.accent)
         .background {
           NotebookSceneAccent(savedHex: "#FACC15").frame(width: 0, height: 0)
         })
@@ -102,11 +101,20 @@ struct NotebookSurfaceHostTests {
     let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
       canvas.drawHierarchy(in: canvas.bounds, afterScreenUpdates: true)
     }
-    let roles = PersonalAccent(savedHex: "#FACC15").roles(traits: canvas.traitCollection)
-    let expected = screen == "note-failed" ? roles.fill : roles.text
+    let expected = try #require(RGBColor(
+      uiColor: UIColor.label.resolvedColor(with: canvas.traitCollection)))
     let pixels = try nativeAccentPixels(in: image, expected: expected)
     #expect(pixels.personal > 40)
     #expect(pixels.systemBlue < 20)
+    let accent = PersonalAccent(savedHex: "#FACC15").roles(traits: canvas.traitCollection).text
+    #expect(try nativeAccentPixels(in: image, expected: accent).personal < 20)
+    if screen == "settings" {
+      let toggle = try #require(descendants(canvas).compactMap { $0 as? UISwitch }.first)
+      if let onTint = toggle.onTintColor {
+        #expect(onTint.resolvedColor(with: toggle.traitCollection)
+          .isEqual(UIColor.systemGreen.resolvedColor(with: toggle.traitCollection)))
+      }
+    }
     Attachment.record(
       image, named: "\(screen)-saved-yellow-\(dark ? "Dark" : "Light").png", as: .png)
   }
@@ -148,7 +156,10 @@ struct NotebookSurfaceHostTests {
     #expect(presented.traitCollection[PersonalAccentTrait.self].color == .sky)
   }
 
-  @Test func settingsUseSavedValuesAndExposeARejectedChangeWithoutSilentlyAcceptingIt() async throws {
+  @Test(arguments: [BooleanPreference.isAutoSaveEnabled, .showFrontmatter])
+  func settingsUseSavedValuesAndExposeARejectedChangeWithoutSilentlyAcceptingIt(
+    preference: BooleanPreference
+  ) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.windows.first(where: \.isKeyWindow)
@@ -156,12 +167,12 @@ struct NotebookSurfaceHostTests {
     var attempted: Bool?
     let account = NotebookAccount(
       id: UUID(), login: "octavia",
-      preferences: .init(metadata: ["isAutoSaveEnabled": .bool(false)]))
+      preferences: .init(metadata: [preference.rawValue: .bool(false)]))
     window.rootViewController = UIHostingController(
       rootView: NotebookSettingsSheet(
         account: account,
         savePreference: { key, value in
-          #expect(key == .isAutoSaveEnabled)
+          #expect(key == preference)
           attempted = value
           throw URLError(.notConnectedToInternet)
         }, connect: {}, signOut: {}
@@ -174,13 +185,14 @@ struct NotebookSurfaceHostTests {
       previous?.makeKeyAndVisible()
     }
     try await Task.sleep(for: .milliseconds(250))
-    let toggle = try #require(descendants(window).compactMap { $0 as? UISwitch }.first)
+    let identifier = preference == .showFrontmatter ? "settings-front-matter" : "settings-autosave"
+    let toggle = try #require(preferenceSwitch(identifier, in: window))
     #expect(!toggle.isOn)
     toggle.setOn(true, animated: false)
     toggle.sendActions(for: .valueChanged)
     try await Task.sleep(for: .milliseconds(250))
     #expect(attempted == true)
-    #expect(descendants(window).compactMap { $0 as? UISwitch }.first?.isOn == false)
+    #expect(toggle.isOn == false)
     let alert = try #require(window.rootViewController?.presentedViewController as? UIAlertController)
     #expect(alert.title == "Couldn't Confirm Setting")
     #expect(alert.message?.contains("offline") == true)
@@ -188,6 +200,39 @@ struct NotebookSurfaceHostTests {
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
     Attachment.record(image, named: "settings-rejected-change.png", as: .png)
+  }
+
+  @Test(arguments: [nil, false, true] as [Bool?])
+  func frontMatterDefaultsToHiddenAndSavesTheSharedPreference(stored: Bool?) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    var saved: [(BooleanPreference, Bool)] = []
+    var metadata: [String: MetadataValue] = ["unrelated": .string("retained")]
+    metadata["showFrontmatter"] = stored.map(MetadataValue.bool)
+    window.rootViewController = UIHostingController(
+      rootView: SettingsPreferenceFixture(preferences: .init(metadata: metadata)) { key, value in
+        saved.append((key, value))
+      })
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(250))
+    let toggle = try #require(preferenceSwitch("settings-front-matter", in: window))
+    let initial = stored ?? false
+    #expect(toggle.isOn == initial)
+    for value in [!initial, initial] {
+      toggle.setOn(value, animated: false)
+      toggle.sendActions(for: .valueChanged)
+      try await Task.sleep(for: .milliseconds(250))
+      #expect(saved.last?.0 == .showFrontmatter)
+      #expect(saved.last?.1 == value)
+      #expect(toggle.isOn == value)
+    }
+    #expect(saved.count == 2)
   }
 
   @Test(arguments: [false, true])
@@ -228,4 +273,31 @@ struct NotebookSurfaceHostTests {
     [view] + view.subviews.flatMap(descendants)
   }
 
+  private func preferenceSwitch(_ identifier: String, in window: UIWindow) -> UISwitch? {
+    guard let row = descendants(window).first(where: {
+      $0.accessibilityIdentifier == "capture-frame-\(identifier)"
+    }) else { return nil }
+    let frame = row.convert(row.bounds, to: window)
+    return descendants(window).compactMap { $0 as? UISwitch }.first {
+      frame.intersects($0.convert($0.bounds, to: window))
+    }
+  }
+
+  private struct SettingsPreferenceFixture: View {
+    @State var preferences: Preferences
+    let saved: @MainActor (BooleanPreference, Bool) -> Void
+
+    var body: some View {
+      NotebookSettingsSheet(
+        account: .init(id: UUID(), login: "octavia", preferences: preferences),
+        savePreference: { key, value in
+          preferences = try preferences.applying(.setBoolean(key, value))
+          #expect(preferences.metadata["unrelated"] == .string("retained"))
+          saved(key, value)
+        }, connect: {}, signOut: {}
+      ) {
+        Text("Accent Color")
+      }
+    }
+  }
 }

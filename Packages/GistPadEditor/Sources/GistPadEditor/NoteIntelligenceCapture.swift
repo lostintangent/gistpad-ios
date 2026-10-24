@@ -41,10 +41,14 @@
     static let supportedStates: Set<String> = [
       "ask", "ask-keyboard", "answer", "edit", "review", "review-end", "readonly",
       "unavailable", "error", "edit-applied", "review-applied", "working", "edit-long-request",
+      "pending-success", "pending-cancel", "pending-error",
     ]
     let state: String
     let session: DocumentSession
     let model: NoteIntelligenceModel
+    private let backend: CaptureNoteModel
+
+    var answerStartedAt: ContinuousClock.Instant? { backend.answerStartedAt }
 
     init(state: String) {
       precondition(Self.supportedStates.contains(state), "Unknown intelligence capture state.")
@@ -54,10 +58,23 @@
       backend.available = state != "unavailable"
       backend.unverified = state == "error"
       backend.waitForCancellation = state == "working"
+      if state.hasPrefix("pending-") {
+        backend.zeroAnswerDelay = .seconds(state == "pending-cancel" ? 300 : 9)
+        backend.failAfterDelay = state == "pending-error"
+      }
       session.textView.isEditable = state != "readonly"
       self.session = session
+      self.backend = backend
       model = NoteIntelligenceModel(session: session, backend: backend, isCurrent: { true })
       model.askPrompt = "What's the plan for this morning?"
+      if state.hasPrefix("pending-") {
+        model.askPrompt =
+          """
+          Tell me the plan for this morning in a clear, short answer. Keep the route, departure \
+          time and cafe opening time exactly as written. Distinguish my own plans from the cafe \
+          schedule, and quote the sentence about the route so I can find it again.
+          """
+      }
       model.editPrompt = "Fix the spelling without changing the meaning."
       if state == "edit-long-request" {
         model.editPrompt =
@@ -79,7 +96,7 @@
       await model.checkAvailability()
       guard !["ask", "ask-keyboard", "unavailable"].contains(state) else { return }
       model.generate()
-      guard state != "working" else { return }
+      guard state != "working", !state.hasPrefix("pending-") else { return }
       await model.task?.value
       if state == "edit-applied" { model.apply() }
       if state == "review-applied", let first = model.proposal?.comments.first {
@@ -93,6 +110,9 @@
     var available = true
     var unverified = false
     var waitForCancellation = false
+    var zeroAnswerDelay: Duration?
+    var failAfterDelay = false
+    private(set) var answerStartedAt: ContinuousClock.Instant?
 
     func modelInfo() async throws -> NoteModelInfo {
       guard available else {
@@ -124,6 +144,9 @@
     func answer(
       for pass: NoteModelPass, onUpdate: @MainActor ([ModelAnswerPart]) -> Void
     ) async throws -> [ModelAnswerPart] {
+      answerStartedAt = .now
+      if let zeroAnswerDelay { try await Task.sleep(for: zeroAnswerDelay) }
+      if failAfterDelay { throw CaptureFailure.generationStopped }
       let parts = [
         ModelAnswerPart(kind: .prose, text: "You're planning a river walk, leaving at 9am."),
         ModelAnswerPart(
@@ -132,6 +155,14 @@
       onUpdate(parts)
       if waitForCancellation { try await Task.sleep(for: .seconds(300)) }
       return parts
+    }
+  }
+
+  private enum CaptureFailure: LocalizedError {
+    case generationStopped
+
+    var errorDescription: String? {
+      "Generation stopped in this explicit capture fixture. No model request was made."
     }
   }
 #endif

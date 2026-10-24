@@ -40,7 +40,6 @@ struct NotebookWorkspace: View {
         .navigationSplitViewStyle(.balanced)
       }
     }
-    .tint(InterfaceTheme.accent)
   }
 
   private var source: some View {
@@ -77,12 +76,13 @@ struct NotebookWorkspace: View {
           state.editing.toggle()
         } label: {
           if state.editing {
-            Label("Read", systemImage: "doc.richtext")
+            Label("Read", systemImage: "eye")
           } else {
             Label("Edit", systemImage: "square.and.pencil")
           }
         }
         .accessibilityIdentifier("toggle-edit")
+        .tint(.primary)
       }
       Button {
         state.focus.toggle()
@@ -94,12 +94,14 @@ struct NotebookWorkspace: View {
         }
       }
       .accessibilityIdentifier("toggle-focus")
+      .tint(.primary)
     }
     ToolbarItem(placement: .secondaryAction) {
       Button("Find and Replace", systemImage: "magnifyingglass") {
         state.editing = true
         session.presentFind(replacing: true)
       }
+      .tint(.primary)
     }
   }
 

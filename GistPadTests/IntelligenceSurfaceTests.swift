@@ -81,14 +81,17 @@
       }
       let sheetTraits = try #require(
         window.rootViewController?.presentedViewController?.traitCollection)
-      let expected = PersonalAccent(savedHex: capture.accent).roles(traits: sheetTraits).text
+      let expected = try #require(RGBColor(
+        uiColor: UIColor.label.resolvedColor(with: sheetTraits)))
       let counts = try nativeAccentPixels(in: image, expected: expected)
-      #expect(counts.systemBlue == 0, "Intelligence must not fall back to system-blue controls.")
+      #expect(counts.systemBlue == 0, "Intelligence commands stay neutral, separate from text entry.")
       if capture.state == "answer" {
         #expect(
           counts.personal > 30,
-          "Verified source-reference links must use the personal accent: \(expected).")
+          "Verified source-reference controls retain readable native primary ink.")
       }
+      let accent = PersonalAccent(savedHex: capture.accent).roles(traits: sheetTraits).text
+      #expect(try nativeAccentPixels(in: image, expected: accent).personal < 20)
       Attachment.record(
         image,
         named:
@@ -96,7 +99,88 @@
         as: .png)
     }
 
-    @Test func closingAResultReturnsToTheRetainedEditableNote() async throws {
+    @Test(arguments: ["pending-success", "pending-cancel", "pending-error"], [false, true])
+    func aGenuineZeroAnswerWaitKeepsProgressAndCancelVisible(
+      state: String, accessibility: Bool
+    ) async throws {
+      let fixture = NoteIntelligenceCaptureFixture(state: state)
+      await fixture.prepare()
+      let scene = try #require(
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+      let previous = scene.windows.first(where: \.isKeyWindow)
+      let window = UIWindow(windowScene: scene)
+      window.traitOverrides.preferredContentSizeCategory =
+        accessibility ? .accessibilityExtraLarge : .large
+      window.rootViewController = UIHostingController(
+        rootView: Color(uiColor: .systemBackground)
+          .sheet(isPresented: .constant(true)) {
+            NoteIntelligenceSheet(
+              model: fixture.model, title: "Saturday walk", filename: "Saturday.md",
+              revealSource: { _ in Issue.record("Pending generation must not navigate.") }
+            )
+            .environment(\.dynamicTypeSize, accessibility ? .accessibility3 : .large)
+          })
+      window.makeKeyAndVisible()
+      defer {
+        fixture.model.cancel()
+        window.rootViewController?.dismiss(animated: false)
+        window.isHidden = true
+        window.rootViewController = nil
+        previous?.makeKeyAndVisible()
+      }
+      try await waitForNativeReturnState("a genuinely empty answer generation to begin") {
+        fixture.answerStartedAt != nil
+          && window.rootViewController?.presentedViewController?.isBeingPresented == false
+      }
+      let started = try #require(fixture.answerStartedAt)
+      while started.duration(to: .now) < .seconds(5.1) {
+        #expect(fixture.model.isRunning)
+        #expect(fixture.model.answerParts.isEmpty)
+        try await Task.sleep(for: .milliseconds(100))
+      }
+      let canvas = try #require(window.rootViewController?.presentedViewController?.view)
+      canvas.layoutIfNeeded()
+      for id in ["intelligence-submitted-request", "intelligence-progress", "intelligence-cancel"] {
+        let probe = try #require(
+          notebookAccessibilityElement("capture-frame-\(id)", in: canvas) as? UIView)
+        let frame = probe.convert(probe.bounds, to: window)
+        if accessibility, id == "intelligence-submitted-request" {
+          #expect(window.bounds.intersects(frame))
+        } else {
+          #expect(window.bounds.insetBy(dx: 0, dy: 1).contains(frame))
+        }
+        #expect(frame.width > 0 && frame.height > 0)
+        if id == "intelligence-cancel" { #expect(frame.height >= 44) }
+      }
+      #expect(fixture.model.answerParts.isEmpty)
+      #expect(fixture.model.isRunning)
+      let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+        window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+      }
+      Attachment.record(
+        image, named: "intelligence-\(state)-zero-answer-\(accessibility ? "AX3" : "Large").png",
+        as: .png)
+      if state == "pending-cancel" {
+        fixture.model.cancel()
+      }
+      try await waitForNativeReturnState("the pending generation to reach its terminal state") {
+        !fixture.model.isRunning
+      }
+      await fixture.model.task?.value
+      #expect(!fixture.model.isRunning)
+      #expect(fixture.model.askPrompt.count > 200)
+      #expect(fixture.session.generation == 0)
+      #expect(fixture.session.text.utf8.elementsEqual(NoteIntelligenceCaptureFixture.source.utf8))
+      if state == "pending-success" {
+        #expect(!fixture.model.answerParts.isEmpty)
+        #expect(fixture.model.errorMessage == nil)
+      } else {
+        #expect(fixture.model.answerParts.isEmpty)
+        if state == "pending-error" { #expect(fixture.model.errorMessage != nil) }
+      }
+    }
+
+    @Test func dismissingAResultRestoresSourceSelectionFocusAndUndo() async throws {
       let fixture = NoteIntelligenceCaptureFixture(state: "edit")
       await fixture.prepare()
       try #require(fixture.model.hasResults)
@@ -136,7 +220,7 @@
         isCurrent: { true },
         revealSource: { _ in Issue.record("Closing must not navigate to a reference.") })
       try #require(presentation.target?.wasEditing == true)
-      try await waitForNativeReturnState("the result and native Close control") {
+      try await waitForNativeReturnState("the result to mount") {
         guard let sheet = host.presentedViewController, !sheet.isBeingPresented else {
           return false
         }
@@ -144,14 +228,12 @@
         let result = notebookAccessibilityElement(
           "capture-frame-intelligence-results", in: sheet.view) as? UIView
         return result?.window === window && (result?.bounds.height ?? 0) > 0
-          && nativeCloseControl(in: sheet.view) != nil
       }
       let sheet = try #require(host.presentedViewController)
       try #require(sheet.presentingViewController != nil)
       #expect(!editor.isFirstResponder)
-      let close = try #require(nativeCloseControl(in: sheet.view))
-      close.performPrimaryAction()
-      try await waitForNativeReturnState("Close to dismiss and resume the original editor") {
+      presentation.target = nil
+      try await waitForNativeReturnState("dismissal to resume the original editor") {
         host.view.layoutIfNeeded()
         return host.presentedViewController == nil && presentation.target == nil
           && editor.isFirstResponder
@@ -192,16 +274,6 @@
       case timedOut
     }
 
-    private func nativeCloseControl(in view: UIView) -> UIControl? {
-      if let control = view as? UIControl, control.window != nil, !control.isHidden,
-        control.isEnabled,
-        control.accessibilityIdentifier == "intelligence-close"
-          || control.accessibilityLabel == "Done"
-      {
-        return control
-      }
-      return view.subviews.lazy.compactMap { nativeCloseControl(in: $0) }.first
-    }
   }
 
   @MainActor

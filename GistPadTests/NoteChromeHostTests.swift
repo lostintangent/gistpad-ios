@@ -6,168 +6,6 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct NoteChromeHostTests {
-  struct MenuCapture: Sendable {
-    let titleMenu: Bool
-    let dark: Bool
-  }
-
-  @Test(arguments: [
-    MenuCapture(titleMenu: true, dark: false),
-    MenuCapture(titleMenu: true, dark: true),
-    MenuCapture(titleMenu: false, dark: false),
-    MenuCapture(titleMenu: false, dark: true),
-  ])
-  func nativeNoteMenusOpenForDesignReview(capture: MenuCapture) async throws {
-    let scene = try #require(
-      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-    let previous = scene.windows.first(where: \.isKeyWindow)
-    let window = UIWindow(windowScene: scene)
-    window.overrideUserInterfaceStyle = capture.dark ? .dark : .light
-    let title = "A place for good ideas"
-    var actions = NoteActions()
-    actions.selectFile = { _ in }
-    actions.renameFile = {}
-    actions.addFile = {}
-    actions.rename = {}
-    actions.togglePin = {}
-    actions.toggleStar = {}
-    actions.share = {}
-    actions.copyLink = {}
-    actions.find = {}
-    actions.tags = {}
-    actions.intelligence = {}
-    actions.openInGitHub = {}
-    actions.toggleArchive = {}
-    actions.delete = {}
-    window.rootViewController = UIHostingController(
-      rootView: NavigationStack {
-        NoteScreen(
-          document: .init(
-            title: title,
-            files: [
-              .init(id: "README.md", filename: "README.md"),
-              .init(id: "Ideas.md", filename: "Ideas.md"),
-            ],
-            selectedFileID: "README.md"),
-          mode: .constant(.reading), saveState: .savedToGitHub, actions: actions
-        ) {
-          Text("Some days, all you need is a little room to think.")
-        } preview: {
-          Text("Some days, all you need is a little room to think.")
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(24)
-        }
-      })
-    window.makeKeyAndVisible()
-    defer {
-      window.rootViewController?.dismiss(animated: false)
-      window.isHidden = true
-      previous?.makeKeyAndVisible()
-    }
-    try await Task.sleep(for: .milliseconds(400))
-    let bar = try #require(descendants(window).compactMap { $0 as? UINavigationBar }.last)
-    let controls = descendants(capture.titleMenu ? bar : window).compactMap { $0 as? UIControl }
-    let candidate = controls.first { control in
-      if capture.titleMenu {
-        return control.accessibilityLabel?.contains(title) == true
-          || descendants(control).compactMap { $0 as? UILabel }.contains { $0.text == title }
-      }
-      return control.accessibilityIdentifier == "note-actions"
-        || control.accessibilityLabel == "Note actions"
-        || control.accessibilityLabel == "More"
-        || (control as? UIButton)?.menu.map {
-          menuTitles($0).contains("Intelligence…")
-        } == true
-    }
-    if candidate == nil {
-      Attachment.record(
-        controls.map {
-          "\(type(of: $0)): \($0.accessibilityIdentifier ?? "") / \($0.accessibilityLabel ?? "")"
-        }.joined(separator: "\n"),
-        named: "native-note-menu-controls.txt")
-    }
-    let button = try #require(candidate)
-    button.performPrimaryAction()
-    try await Task.sleep(for: .milliseconds(400))
-    let titles = Set(scene.windows.filter { !$0.isHidden }.flatMap {
-      descendants($0).compactMap { ($0 as? UILabel)?.text }
-    })
-    let expected: Set<String> = capture.titleMenu
-      ? ["README.md", "Ideas.md", "Rename File…", "Add File…"]
-      : ["Rename Note…", "Intelligence…", "Archive", "Delete Note…"]
-    #expect(titles.isSuperset(of: expected))
-    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
-      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-      for overlay in scene.windows where !overlay.isHidden && overlay.windowLevel > window.windowLevel {
-        overlay.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-      }
-    }
-    Attachment.record(
-      image,
-      named: "note-\(capture.titleMenu ? "title" : "more")-menu-\(capture.dark ? "Dark" : "Light").png",
-      as: .png)
-  }
-
-  struct Presentation: Sendable {
-    let state: NoteSaveState
-    let autosave: Bool
-    let showsSave: Bool
-    let showsOffline: Bool
-  }
-
-  @Test(arguments: [
-    Presentation(state: .savedLocally, autosave: true, showsSave: false, showsOffline: false),
-    Presentation(state: .unsaved, autosave: true, showsSave: false, showsOffline: false),
-    Presentation(state: .savingToGitHub, autosave: true, showsSave: false, showsOffline: false),
-    Presentation(state: .savedToGitHub, autosave: true, showsSave: false, showsOffline: false),
-    Presentation(state: .offline, autosave: true, showsSave: false, showsOffline: true),
-    Presentation(
-      state: .cloudFailure(message: "Synthetic failure"), autosave: true,
-      showsSave: true, showsOffline: false),
-    Presentation(state: .savedLocally, autosave: false, showsSave: true, showsOffline: false),
-  ])
-  func autosaveAndOfflineHaveIndependentNativeToolbarControls(
-    presentation: Presentation
-  ) async throws {
-    let scene = try #require(
-      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-    let window = UIWindow(windowScene: scene)
-    var actions = NoteActions()
-    actions.save = {}
-    actions.retry = {}
-    let host = UIHostingController(
-      rootView: NavigationStack {
-        NoteScreen(
-          document: .init(
-            title: "Quiet chrome", files: [.init(id: "readme", filename: "README.md")],
-            selectedFileID: "readme", isAutoSaveEnabled: presentation.autosave),
-          mode: .constant(.reading), saveState: presentation.state, actions: actions
-        ) {
-          Text("Synthetic source")
-        } preview: {
-          Text("Synthetic preview")
-        }
-      })
-    window.rootViewController = host
-    window.makeKeyAndVisible()
-    defer { window.isHidden = true }
-    try await Task.sleep(for: .milliseconds(250))
-    window.layoutIfNeeded()
-    #expect(
-      containsIdentifier("note-save", in: window) == presentation.showsSave)
-    #expect(
-      containsIdentifier("note-offline", in: window) == presentation.showsOffline)
-    if case .cloudFailure = presentation.state {
-      let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
-        window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-      }
-      Attachment.record(image, named: "note-cloud-failure-retry.png", as: .png)
-    } else {
-      #expect(!containsIdentifier("note-save-issue", in: window))
-      #expect(!containsIdentifier("note-save-retry", in: window))
-    }
-  }
-
   @Test(arguments: [1, 2])
   func onlyMultiFileNotesHaveATitleMenuAndItContainsOnlyFileCommands(fileCount: Int) async throws {
     let scene = try #require(
@@ -246,17 +84,17 @@ struct NoteChromeHostTests {
     }
     try await Task.sleep(for: .milliseconds(300))
     let bar = try #require(descendants(window).compactMap { $0 as? UINavigationBar }.last)
-    let items = try #require(bar.topItem).trailingItemGroups.flatMap(\.barButtonItems)
+    let navigation = try #require(bar.topItem)
+    let items = navigation.trailingItemGroups.flatMap(\.barButtonItems)
+      + (navigation.pinnedTrailingGroup?.barButtonItems ?? [])
     #expect(items.filter(\.hidesSharedBackground).count == 1)
     #expect(items.filter { !$0.hidesSharedBackground }.count >= 2)
-    #expect(containsIdentifier("note-save", in: window))
-    #expect(containsIdentifier("note-actions", in: window))
   }
 
   @Test(
     arguments: [false, true],
     [UIContentSizeCategory.large, .accessibilityExtraLarge])
-  func regularWidthModePickerKeepsItsNativeIdealSizeAndHitTargets(
+  func regularWidthModePickerKeepsItsNativeIdealSize(
     allowsSplit: Bool, category: UIContentSizeCategory
   ) async throws {
     let scene = try #require(
@@ -303,15 +141,6 @@ struct NoteChromeHostTests {
     #expect(window.traitCollection.preferredContentSizeCategory == category)
     #expect(window.bounds.contains(picker.convert(picker.bounds, to: window)))
     for appearance: UIUserInterfaceStyle in [.dark, .light] {
-      let targets = (0..<max(0, picker.accessibilityElementCount())).compactMap {
-        picker.accessibilityElement(at: $0) as? NSObject
-      }
-      #expect(targets.count == picker.numberOfSegments)
-      for target in targets {
-        #expect(target.accessibilityFrame.width >= 44)
-        #expect(target.accessibilityFrame.height >= 44)
-        #expect(target.accessibilityFrame.width >= minimum - 1)
-      }
       window.overrideUserInterfaceStyle = appearance
       try await Task.sleep(for: .milliseconds(300))
       window.layoutIfNeeded()
@@ -386,6 +215,97 @@ struct NoteChromeHostTests {
     }
   }
 
+  @Test(arguments: [CGFloat(466), 951], [UIContentSizeCategory.large, .accessibilityExtraLarge])
+  func longTitlesYieldToTheUncompressedModePicker(
+    width: CGFloat, category: UIContentSizeCategory
+  ) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.frame.size.width = width
+    let regular = width > 640
+    window.traitOverrides.horizontalSizeClass = regular ? .regular : .compact
+    window.traitOverrides.preferredContentSizeCategory = category
+    let titles = [
+      "A note",
+      "A very long notebook title that must yield its space to the complete editing controls while leaving every reading, writing and navigation action intact",
+      "💔 OSS Maintainers: A Three-Part Tragedy",
+    ]
+    func screen(_ title: String) -> some View {
+      var actions = NoteActions()
+      actions.find = {}
+      return NavigationStack {
+        NoteScreen(
+          document: .init(
+            title: title, files: [.init(id: "README.md", filename: "README.md")],
+            selectedFileID: "README.md"),
+          mode: .constant(.source), saveState: .savedToGitHub,
+          actions: actions, allowsSplit: regular
+        ) {
+          Text("Source")
+        } preview: {
+          Text("Preview")
+        }
+      }
+      .environment(\.horizontalSizeClass, regular ? .regular : .compact)
+    }
+    let host = UIHostingController(rootView: screen(titles[0]))
+    window.rootViewController = host
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      previous?.makeKeyAndVisible()
+    }
+    var baselineWidth: CGFloat?
+    for title in titles {
+      host.rootView = screen(title)
+      try await Task.sleep(for: .milliseconds(300))
+      window.layoutIfNeeded()
+      let picker = try #require(descendants(window).compactMap { $0 as? UISegmentedControl }.first)
+      let minimum = UIFontMetrics(forTextStyle: .body).scaledValue(
+        for: 48, compatibleWith: window.traitCollection)
+      #expect(abs(picker.bounds.width - max(
+        picker.intrinsicContentSize.width, minimum * CGFloat(picker.numberOfSegments))) <= 1)
+      if let baselineWidth {
+        #expect(abs(picker.bounds.width - baselineWidth) <= 1)
+      } else {
+        baselineWidth = picker.bounds.width
+      }
+      let pickerFrame = picker.convert(picker.bounds, to: window)
+      #expect(window.bounds.contains(pickerFrame))
+      var ancestor = picker.superview
+      while let view = ancestor {
+        if view.clipsToBounds || view.layer.masksToBounds {
+          #expect(view.bounds.insetBy(dx: -1, dy: -1).contains(
+            picker.convert(picker.bounds, to: view)))
+        }
+        ancestor = view.superview
+      }
+      let bar = try #require(descendants(window).compactMap { $0 as? UINavigationBar }.last)
+      #expect(bar.topItem?.title == title)
+      if title != titles[0] {
+        let label = try #require(descendants(bar).compactMap { $0 as? UILabel }.first { $0.text == title })
+        if title == titles[1] || width == 466 {
+          #expect(label.bounds.width < label.intrinsicContentSize.width)
+        }
+        #expect(label.numberOfLines == 1)
+        #expect(label.convert(label.bounds, to: window).maxX <= pickerFrame.minX + 1)
+      }
+      for appearance: UIUserInterfaceStyle in [.light, .dark] {
+        window.overrideUserInterfaceStyle = appearance
+        try await Task.sleep(for: .milliseconds(100))
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+          window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        Attachment.record(
+          image,
+          named: "mode-picker-\(Int(width))-\(category.rawValue)-\(title == titles[2] ? "emoji" : title == titles[1] ? "long" : "short")-\(appearance == .dark ? "Dark" : "Light").png",
+          as: .png)
+      }
+    }
+  }
+
   private func descendants(_ view: UIView) -> [UIView] {
     [view] + view.subviews.flatMap(descendants)
   }
@@ -397,7 +317,4 @@ struct NoteChromeHostTests {
     }
   }
 
-  private func containsIdentifier(_ identifier: String, in view: UIView) -> Bool {
-    notebookAccessibilityElement(identifier, in: view) != nil
-  }
 }

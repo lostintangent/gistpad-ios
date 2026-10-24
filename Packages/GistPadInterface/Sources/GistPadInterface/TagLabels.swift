@@ -4,7 +4,6 @@ import SwiftUI
 public struct TagLabel: View {
     private let tag: LibraryTag
     private let isSelected: Bool
-    @ScaledMetric(relativeTo: .footnote) private var swatchSize: CGFloat = 10
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -14,15 +13,12 @@ public struct TagLabel: View {
     }
 
     public var body: some View {
-        let swatchSize = self.swatchSize
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            TagSwatch(hex: tag.colorHex, size: swatchSize)
-                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + swatchSize * 0.3 }
             Text(verbatim: tag.name)
                 .fixedSize(horizontal: false, vertical: true)
             if isSelected {
                 Image(systemName: "checkmark")
-                    .foregroundStyle(InterfaceTheme.accent)
+                    .foregroundStyle(.primary)
             }
         }
         .font(.footnote.weight(.medium))
@@ -34,7 +30,8 @@ public struct TagLabel: View {
                 .fill(Color(uiColor: .secondarySystemBackground))
                 .overlay {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(TagSwatch.color(hex: tag.colorHex).opacity(colorScheme == .dark ? 0.28 : 0.24))
+                        .fill(TagSwatch.color(hex: tag.colorHex).opacity(
+                            colorScheme == .dark ? (contrast == .increased ? 0.22 : 0.28) : 0.24))
                 }
                 .overlay {
                     if contrast == .increased {

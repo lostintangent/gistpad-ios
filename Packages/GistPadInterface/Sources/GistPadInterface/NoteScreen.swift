@@ -18,7 +18,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     @ScaledMetric(relativeTo: .body) private var minimumModeSegmentWidth = 48
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var showingSplit: Bool { document.access.canEdit && (isFocused || (allowsSplit && mode == .split)) }
     private var showingSource: Bool { document.access.canEdit && (showingSplit || mode != .reading) }
@@ -125,20 +124,19 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     @ToolbarContentBuilder
     private var primaryToolbar: some ToolbarContent {
         if document.access.canEdit, !isFocused {
-            ToolbarItem(placement: .primaryAction) {
-                if horizontalSizeClass == .regular {
-                    modePicker
-                        .frame(minWidth: minimumModeSegmentWidth * CGFloat(allowsSplit ? 3 : 2))
-                        .fixedSize(horizontal: true, vertical: false)
-                } else {
-                    modePicker
-                }
+            ToolbarItem(placement: .topBarPinnedTrailing) {
+                modePicker
+                    .frame(minWidth: minimumModeSegmentWidth * CGFloat(allowsSplit ? 3 : 2))
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(1)
+                    .tint(.primary)
             }
             .sharedBackgroundVisibility(.hidden)
         }
         if let save = actions.save, document.access.canEdit, showsManualSave {
             ToolbarItem(placement: .primaryAction) {
                 Button(String(localized: "Save to GitHub", bundle: .module), systemImage: "arrow.up.doc", action: save)
+                    .tint(.primary)
                     .disabled(!saveState.canPublish)
                     .accessibilityIdentifier("note-save")
             }
@@ -151,6 +149,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                     Label(String(localized: "Offline changes haven't synced", bundle: .module), systemImage: "icloud.slash")
                 }
                 .accessibilityIdentifier("note-offline")
+                .tint(.primary)
             }
         }
     }
@@ -170,7 +169,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             if allowsSplit {
                 Label(String(localized: "Split", bundle: .module), systemImage: "rectangle.split.2x1").tag(NoteMode.split)
             }
-            Label(String(localized: "Preview", bundle: .module), systemImage: "doc.richtext").tag(NoteMode.reading)
+            Label(String(localized: "Preview", bundle: .module), systemImage: "eye").tag(NoteMode.reading)
         }
         .pickerStyle(.segmented)
         .labelStyle(.iconOnly)
@@ -269,6 +268,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                     Label(String(localized: "Note actions", bundle: .module), systemImage: "ellipsis")
                 }
                 .accessibilityIdentifier("note-actions")
+                .tint(.primary)
             }
         }
     }
@@ -306,6 +306,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             }
         }
         .font(.footnote)
+        .tint(.primary)
         .foregroundStyle(InterfaceTheme.text)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("note-save-state")

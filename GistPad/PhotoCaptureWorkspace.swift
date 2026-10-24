@@ -350,7 +350,7 @@
       var value = NoteActions()
       value.didChangeMode = { [session] mode in
         if mode == .source {
-          session.session.textView.becomeFirstResponder()
+          session.session.requestFocusAtContentStart()
         } else {
           session.session.textView.resignFirstResponder()
         }

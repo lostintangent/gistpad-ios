@@ -241,10 +241,13 @@
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
             Button(role: .cancel) { dismiss() }
+              .tint(.primary)
               .accessibilityLabel(String(localized: "Cancel", bundle: .module))
           }
           ToolbarItem(placement: .confirmationAction) {
             Button(role: .confirm) { insert() }
+              .buttonStyle(.glassProminent)
+              .tint(Color(uiColor: .label))
               .accessibilityLabel(String(localized: "Insert Link", bundle: .module))
               .disabled(destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
           }

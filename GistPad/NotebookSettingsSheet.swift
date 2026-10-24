@@ -1,5 +1,4 @@
 import GistPadInterface
-import GistPadInterface
 import GistPadSync
 import SwiftUI
 
@@ -61,6 +60,7 @@ struct NotebookSettingsSheet<Appearance: View>: View {
             Text("Sign in to open your GitHub gists, daily notes and saved tags.")
               .foregroundStyle(.secondary)
             Button("Sign In with GitHub", action: connect)
+              .tint(.primary)
               .accessibilityIdentifier("settings-sign-in")
           }
         } header: {
@@ -70,6 +70,7 @@ struct NotebookSettingsSheet<Appearance: View>: View {
           Section {
             Toggle("Autosave While Writing", isOn: preference(.isAutoSaveEnabled, default: true))
               .accessibilityIdentifier("settings-autosave")
+              .captureFrame("settings-autosave")
           } header: {
             Text("Saving")
           } footer: {
@@ -79,12 +80,16 @@ struct NotebookSettingsSheet<Appearance: View>: View {
           Section("Writing") {
             Toggle("Check Spelling", isOn: preference(.isSpellcheckEnabled, default: true))
               .accessibilityIdentifier("settings-spelling")
+            Toggle("Show Front Matter", isOn: preference(.showFrontmatter, default: false))
+              .accessibilityIdentifier("settings-front-matter")
+              .captureFrame("settings-front-matter")
           }
           Section("Appearance") { appearance() }
         }
         if account != nil {
           Section {
             Button("Switch GitHub Account", action: connect)
+              .tint(.primary)
               .accessibilityIdentifier("settings-switch-account")
           } footer: {
             Text("Drafts stay on this iPhone with their original account. Switching never publishes them.")
@@ -131,7 +136,6 @@ struct NotebookSettingsSheet<Appearance: View>: View {
         Text(saveError ?? "")
       }
     }
-    .tint(InterfaceTheme.accent)
   }
 
   private var isWorking: Bool { pendingPreference != nil || isSigningOut }

@@ -159,7 +159,6 @@ struct LiveNotebookWorkspace: View {
     }
     .navigationSplitViewStyle(.balanced)
     .librarySearch(model: notebook.library)
-    .tint(InterfaceTheme.accent)
   }
 
   private var workspaceNavigationLifecycle: some View {

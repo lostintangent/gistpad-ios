@@ -132,10 +132,12 @@ public struct PhotoPrivacyNotice: View {
                             : String(localized: "Cancel", bundle: .module),
                         action: cancel
                     )
+                    .tint(.primary)
                 }
                 if let proceed {
                     ToolbarItem(placement: .confirmationAction) {
                         Button(String(localized: "Continue", bundle: .module), action: proceed)
+                            .tint(.primary)
                     }
                 }
             }
@@ -219,7 +221,7 @@ public struct PhotoAttachmentShelf: View {
             }
             if usesPhotoSymbol {
                 Image(systemName: "photo.on.rectangle")
-                    .foregroundStyle(InterfaceTheme.accent)
+                    .foregroundStyle(.primary)
                     .accessibilityHidden(true)
             }
             VStack(alignment: .leading, spacing: 4) {
@@ -247,7 +249,7 @@ public struct PhotoAttachmentShelf: View {
             }
             Image(systemName: "chevron.forward")
                 .font(.body.weight(.semibold))
-                .foregroundStyle(InterfaceTheme.accent)
+                .foregroundStyle(.primary)
                 .accessibilityHidden(true)
         }
     }
@@ -313,7 +315,6 @@ public struct PhotoAttachmentDetails: View {
                 }
             }
         }
-        .tint(InterfaceTheme.accent)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .accessibilityIdentifier("photo-attachment-details")
@@ -351,20 +352,21 @@ private struct PhotoAttachmentRow: View {
                             ) { remove(attachment.id) }
                         } label: {
                             Image(systemName: "ellipsis")
-                                .foregroundStyle(InterfaceTheme.accent)
+                                .foregroundStyle(.primary)
                                 .frame(minWidth: 44, minHeight: 44)
                                 .contentShape(.rect)
                         }
                         .accessibilityLabel(Text("Photo options", bundle: .module))
                         .accessibilityIdentifier("photo-options-\(attachment.id)")
+                        .tint(.primary)
                     }
                 }
                 HStack(alignment: .top, spacing: 8) {
                     if isBusy(attachment.phase) {
-                        ProgressView().controlSize(.small).accessibilityHidden(true)
+                        ProgressView().controlSize(.small).tint(.secondary).accessibilityHidden(true)
                     }
                     Text(status(attachment.phase)).font(.subheadline)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(.secondary)
                 }
                 if showsExplanation, let detail = attachment.failureExplanation {
                     Text(detail).font(.subheadline).foregroundStyle(Color(uiColor: .secondaryLabel))
@@ -429,7 +431,7 @@ private struct PhotoAttachmentRow: View {
         ) {
             Text(actionTitle(recovery))
                 .font(.body)
-                .foregroundStyle(InterfaceTheme.accent)
+                .foregroundStyle(.primary)
                 .frame(minHeight: 44)
         }
         .fixedSize(horizontal: true, vertical: false)

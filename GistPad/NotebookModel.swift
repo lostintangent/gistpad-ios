@@ -497,7 +497,21 @@ final class NotebookModel {
           isDailyNote: draft.description == GistConventions.dailyNotesDescription),
         at: 0)
     }
+    updateLibraryExcerpt(for: draft)
     updateToday()
+  }
+
+  private func updateLibraryExcerpt(for draft: DraftSnapshot) {
+    guard let index = library.snapshot.notes.firstIndex(where: {
+      $0.id == draft.id.uuidString || $0.id == draft.gistID
+    }) else { return }
+    if let gist = cachedLibrary?.gists.first(where: { $0.id == draft.gistID }) {
+      let filename = gist.isDailyNote
+        ? GistConventions.todayFilename() : gist.defaultMarkdownFilename
+      guard draft.filename == filename else { return }
+    }
+    library.snapshot.notes[index].excerpt = Self.libraryExcerpt(
+      draft.text, title: library.snapshot.notes[index].title)
   }
 
   func start() async {
@@ -928,9 +942,7 @@ final class NotebookModel {
           isSecret: match.isSecret, isPinned: match.isPinned, isStarred: match.isStarred,
           isArchived: match.isArchived, isDailyNote: match.isDailyNote, tagIDs: match.tagIDs,
           filename: match.filename, fileCount: gist?.truncated == true ? nil : gist?.files.count,
-          excerpt: match.text.map {
-            String($0.split(whereSeparator: \.isNewline).joined(separator: " ").prefix(160))
-          },
+          excerpt: match.text.flatMap { Self.libraryExcerpt($0, title: match.title) },
           progress: match.progress.map { .init(completed: $0.completed, total: $0.total) },
           isOverdue: match.isOverdue)
       }
@@ -1125,7 +1137,7 @@ final class NotebookModel {
         title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
         updatedAt: local.library?.cachedAt ?? .now,
         isSecret: true, isDailyNote: draft.description == GistConventions.dailyNotesDescription,
-        excerpt: Self.libraryExcerpt(draft.text))
+        excerpt: Self.libraryExcerpt(draft.text, title: draft.description))
     }
     for index in library.snapshot.notes.indices {
       let id = library.snapshot.notes[index].id
@@ -1140,16 +1152,18 @@ final class NotebookModel {
       } else {
         text = cached ?? draft?.text
       }
-      library.snapshot.notes[index].excerpt = text.flatMap(Self.libraryExcerpt)
+      library.snapshot.notes[index].excerpt = text.flatMap {
+        Self.libraryExcerpt($0, title: gist.displayName)
+      }
     }
     updateToday()
     await search()
   }
 
-  private static func libraryExcerpt(_ text: String) -> String? {
-    let excerpt = String(text.prefix(320)).split(whereSeparator: \.isWhitespace)
-      .joined(separator: " ")
-    return excerpt.isEmpty ? nil : String(excerpt.prefix(160))
+  private static func libraryExcerpt(_ text: String, title: String? = nil) -> String? {
+    NotebookExcerpt.text(from: text, title: title).map {
+      String($0.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(160))
+    }
   }
 
   private func updateToday() {
@@ -1168,7 +1182,7 @@ final class NotebookModel {
     } else if cachedLibrary != nil, library.loadState == .ready, daily?.truncated != true {
       summary.availability = .missing
     }
-    summary.excerpt = text.flatMap {
+    summary.excerpt = text.flatMap { NotebookExcerpt.text(from: $0) }.flatMap {
       let lines = $0.split(whereSeparator: \.isNewline).prefix(2).joined(separator: "\n")
       let excerpt = String(lines.prefix(280)).trimmingCharacters(in: .whitespacesAndNewlines)
       return excerpt.isEmpty ? nil : excerpt
@@ -1426,6 +1440,7 @@ final class NotebookModel {
     if account?.id == accountID {
       localDrafts.removeAll { $0.id == saved.id }
       localDrafts.append(saved)
+      updateLibraryExcerpt(for: saved)
       updateToday()
       await search()
     }

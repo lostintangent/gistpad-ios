@@ -19,7 +19,6 @@ private struct LibrarySearchModifier: ViewModifier {
     func body(content: Content) -> some View {
         searchableContent(content)
             .searchToolbarBehavior(.minimize)
-            .tint(InterfaceTheme.accent)
             .environment(\.librarySearchManagedByContainer, true)
     }
 
@@ -110,7 +109,7 @@ public struct LibraryView: View {
                     if note.isPinned && showsPin {
                         Image(systemName: "pin.fill")
                             .font(.subheadline)
-                            .foregroundStyle(InterfaceTheme.accent)
+                            .foregroundStyle(.secondary)
                             .accessibilityLabel(Text("Pinned", bundle: .module))
                     }
                 }
@@ -216,10 +215,12 @@ public struct LibraryView: View {
     private let sidebarOverride: Bool?
     @State private var showingTags = false
     @State private var tagQuery = ""
+    @State private var isPullRefreshing = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.librarySearchManagedByContainer) private var searchManagedByContainer
+    @Environment(\.isGitHubStatusVisible) private var isGitHubStatusVisible
 
     public init(
         model: LibraryModel, actions: LibraryActions, footer: Text? = nil,
@@ -232,16 +233,27 @@ public struct LibraryView: View {
         sidebarOverride = isSidebar
     }
 
+    #if DEBUG
+    public func captureTagFilters(_ value: Bool) -> Self {
+        var library = self
+        library._showingTags = State(initialValue: value)
+        return library
+    }
+    #endif
+
     public var body: some View {
         navigationList
             .navigationTitle(navigationTitle)
             .toolbarTitleDisplayMode(.inline)
             .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
-            .refreshable { await actions.refresh() }
+            .refreshable {
+                isPullRefreshing = true
+                defer { isPullRefreshing = false }
+                await actions.refresh()
+            }
             .toolbar { libraryToolbar }
             .sheet(isPresented: $showingTags) { tagFilters }
             .scrollEdgeEffectStyle(.soft, for: .all)
-            .tint(InterfaceTheme.accent)
     }
 
     @ViewBuilder
@@ -274,7 +286,7 @@ public struct LibraryView: View {
 
     private var navigationTitle: String {
         if model.loadState == .signedOut { return "" }
-        return model.collection == .gists ? String(localized: "Library", bundle: .module) : model.collection.title
+        return model.collection == .gists ? String(localized: "GistPad", bundle: .module) : model.collection.title
     }
 
     private var libraryList: some View {
@@ -289,6 +301,7 @@ public struct LibraryView: View {
                                     .font(.headline)
                                     .frame(minHeight: 44)
                             }
+                            .tint(.primary)
                             .navigationLinkIndicatorVisibility(.hidden)
                             .tag(Selection.today)
                             .listRowSeparator(.hidden)
@@ -347,6 +360,8 @@ public struct LibraryView: View {
                 }
             }
         }
+        .tint(.primary)
+        .animation(reduceMotion ? nil : .default, value: model.matchingNotes.map(\.id))
     }
 
     private var librarySelection: Binding<Selection?> {
@@ -378,7 +393,16 @@ public struct LibraryView: View {
     }
 
     private var pinnedHeading: some View {
-        sectionHeading(String(localized: "Pinned", bundle: .module))
+        sectionHeading(String(localized: "Pinned Gists", bundle: .module))
+    }
+
+    private var footerStatus: GitHubStatusState {
+        let state = model.gitHubStatus
+            ?? (model.loadState == .loading
+                ? .checking(operation: String(localized: "Updating from GitHub", bundle: .module))
+                : .idle)
+        if isPullRefreshing, case .checking = state { return .idle }
+        return state
     }
 
     @ViewBuilder
@@ -395,7 +419,7 @@ public struct LibraryView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             .background(
                                 model.selectedNoteID == note.id
-                                    ? InterfaceTheme.selection : Color(uiColor: .secondarySystemGroupedBackground),
+                                    ? InterfaceTheme.neutralSelection : Color(uiColor: .secondarySystemGroupedBackground),
                                 in: .rect(cornerRadius: 20)
                             )
                     }
@@ -418,7 +442,7 @@ public struct LibraryView: View {
                 .accessibilityIdentifier("library-featured-\(note.id)")
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                 .listRowSeparator(.hidden)
-                .listRowBackground(!isSidebar && model.selectedNoteID == note.id ? InterfaceTheme.selection : nil)
+                .listRowBackground(!isSidebar && model.selectedNoteID == note.id ? InterfaceTheme.neutralSelection : nil)
                 .contextMenu { rowActions(note) }
             }
         }
@@ -446,18 +470,24 @@ public struct LibraryView: View {
     }
 
     private func featuredTags(_ tags: [LibraryTag]) -> some View {
-        ViewThatFits(in: .horizontal) {
-            TagLabels(tags: tags, limit: 2)
-                .fixedSize(horizontal: true, vertical: false)
-            TagLabels(tags: tags, limit: 1)
-                .fixedSize(horizontal: true, vertical: false)
-            HStack(spacing: 6) {
-                if let tag = tags.first {
-                    TagLabel(tag: tag).lineLimit(1)
-                }
-                if tags.count > 1 {
-                    TagLabels.TagOverflowLabel(count: tags.count - 1)
-                        .fixedSize()
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                TagLabels(tags: tags, limit: 1)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    TagLabels(tags: tags, limit: 2)
+                        .fixedSize(horizontal: true, vertical: false)
+                    TagLabels(tags: tags, limit: 1)
+                        .fixedSize(horizontal: true, vertical: false)
+                    HStack(spacing: 6) {
+                        if let tag = tags.first {
+                            TagLabel(tag: tag).lineLimit(1)
+                        }
+                        if tags.count > 1 {
+                            TagLabels.TagOverflowLabel(count: tags.count - 1)
+                                .fixedSize()
+                        }
+                    }
                 }
             }
         }
@@ -473,6 +503,7 @@ public struct LibraryView: View {
                         .font(.subheadline.weight(.semibold))
                     Spacer(minLength: 8)
                     Button(String(localized: "Clear", bundle: .module)) { model.clearFilters() }
+                        .tint(.primary)
                         .font(.subheadline)
                 }
                 if !model.selectedTagIDs.isEmpty {
@@ -485,6 +516,7 @@ public struct LibraryView: View {
                     Button(String(localized: "Search All Notes", bundle: .module)) {
                         model.collection = .gists
                     }
+                    .tint(.primary)
                     .font(.subheadline)
                 }
             }
@@ -533,16 +565,12 @@ public struct LibraryView: View {
 
     @ViewBuilder
     private var status: some View {
+        if !model.snapshot.notes.isEmpty, case .problem = footerStatus {
+            EmptyView()
+        } else {
         switch model.loadState {
         case .loading:
-            Section {
-                HStack(spacing: 12) {
-                    ProgressView()
-                    Text("Updating from GitHub", bundle: .module)
-                        .font(.subheadline)
-                }
-                .accessibilityElement(children: .combine)
-            }
+            EmptyView()
         case .offline:
             Section {
                 Label {
@@ -564,6 +592,7 @@ public struct LibraryView: View {
                 Button(String(localized: "Retry", bundle: .module)) {
                     Task { await actions.refresh() }
                 }
+                .tint(.primary)
             }
         case .reconnectRequired(let message):
             Section {
@@ -571,12 +600,14 @@ public struct LibraryView: View {
                 Text(verbatim: message)
                     .font(.subheadline)
                     .foregroundStyle(.primary)
-                if let reconnect = actions.reconnect {
-                    Button(String(localized: "Continue with GitHub", bundle: .module), action: reconnect)
+                    if let reconnect = actions.reconnect {
+                        Button(String(localized: "Continue with GitHub", bundle: .module), action: reconnect)
+                            .tint(.primary)
                 }
             }
         case .signedOut, .ready:
             EmptyView()
+        }
         }
     }
 
@@ -589,11 +620,14 @@ public struct LibraryView: View {
             Text("Markdown notes, backed by your GitHub gists.", bundle: .module)
         } actions: {
             if let reconnect = actions.reconnect {
-                Button(String(localized: "Continue with GitHub", bundle: .module), action: reconnect)
+                Button(action: reconnect) {
+                    Text("Continue with GitHub", bundle: .module)
+                        .foregroundStyle(Color(uiColor: .systemBackground))
+                }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .frame(minHeight: 44)
-                    .tint(InterfaceTheme.accent)
+                    .tint(Color(uiColor: .label))
                     .accessibilityIdentifier("library-sign-in")
             }
         }
@@ -623,12 +657,21 @@ public struct LibraryView: View {
             } actions: {
                 if model.hasFilters {
                     Button(String(localized: "Clear filters", bundle: .module)) { model.clearFilters() }
+                        .tint(.primary)
                 } else if model.collection == .gists {
-                    Button(String(localized: "Create a note", bundle: .module), action: actions.create)
+                    Button(action: actions.create) {
+                        Text("Create a note", bundle: .module)
+                            .foregroundStyle(Color(uiColor: .systemBackground))
+                    }
                         .buttonStyle(.borderedProminent)
+                        .tint(Color(uiColor: .label))
                 } else if model.collection == .dailyNotes {
-                    Button(String(localized: "Start today's note", bundle: .module), action: actions.today)
+                    Button(action: actions.today) {
+                        Text("Start today's note", bundle: .module)
+                            .foregroundStyle(Color(uiColor: .systemBackground))
+                    }
                         .buttonStyle(.borderedProminent)
+                        .tint(Color(uiColor: .label))
                 }
             }
         } header: {
@@ -666,7 +709,7 @@ public struct LibraryView: View {
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .listRowSeparator(.visible)
-        .listRowBackground(!isSidebar && model.selectedNoteID == note.id ? InterfaceTheme.selection : nil)
+        .listRowBackground(!isSidebar && model.selectedNoteID == note.id ? InterfaceTheme.neutralSelection : nil)
         .contextMenu { rowActions(note) }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if note.isOwned, let archive = actions.toggleArchive {
@@ -716,8 +759,25 @@ public struct LibraryView: View {
             if isSidebar {
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
             }
+            if isGitHubStatusVisible, footerStatus != .idle {
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+                ToolbarItem(placement: .bottomBar) {
+                    GitHubStatusControl(state: footerStatus) {
+                        if let recover = actions.recoverStatus {
+                            recover()
+                        } else if case .reconnectRequired = model.loadState,
+                                  let reconnect = actions.reconnect {
+                            reconnect()
+                        } else {
+                            Task { await actions.refresh() }
+                        }
+                    }
+                }
+                .sharedBackgroundVisibility(.hidden)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button(String(localized: "New note", bundle: .module), systemImage: "square.and.pencil", action: actions.create)
+                    .tint(.primary)
                     .accessibilityIdentifier("library-create")
             }
             ToolbarItem(placement: .secondaryAction) {
@@ -732,11 +792,13 @@ public struct LibraryView: View {
                     )
                 }
                 .disabled(model.snapshot.tags.isEmpty)
+                .tint(.primary)
             }
         }
         if let account = actions.account {
             ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Settings", bundle: .module), systemImage: "gearshape", action: account)
+                    .tint(.primary)
             }
         }
     }
@@ -751,6 +813,7 @@ public struct LibraryView: View {
                 .tag(collection)
             }
         }
+        .tint(.primary)
         .accessibilityIdentifier("library-collection")
     }
 
@@ -773,14 +836,17 @@ public struct LibraryView: View {
                                 Spacer()
                                 if model.selectedTagIDs.contains(tag.id) {
                                     Image(systemName: "checkmark")
-                                        .foregroundStyle(InterfaceTheme.accent)
+                                        .foregroundStyle(.primary)
                                         .transition(.opacity)
                                 }
                             }
                             .frame(minHeight: 44)
                             .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                         .accessibilityAddTraits(model.selectedTagIDs.contains(tag.id) ? .isSelected : [])
+                        .accessibilityIdentifier("library-tag-filter-\(tag.id)")
+                        .captureFrame("library-tag-filter-\(tag.id)")
                         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: model.selectedTagIDs.contains(tag.id))
                     }
@@ -791,6 +857,7 @@ public struct LibraryView: View {
                     Button(String(localized: "Clear tag filters", bundle: .module)) {
                         model.selectedTagIDs = []
                     }
+                    .tint(.primary)
                 }
             }
             .navigationTitle(Text("Filter by tags", bundle: .module))
@@ -803,6 +870,10 @@ public struct LibraryView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(String(localized: "Done", bundle: .module)) { showingTags = false }
+                        .tint(.primary)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("library-tag-filter-done")
+                        .captureFrame("library-tag-filter-done")
                 }
             }
         }

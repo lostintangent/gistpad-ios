@@ -45,8 +45,8 @@ struct PreviewIntegrationTests {
             editor.traitCollection[PersonalAccentTrait.self].savedHex == "#A855F7"
         }
         try await Task.sleep(for: .milliseconds(150))
-        let roles = PersonalAccent(savedHex: "#A855F7").roles(traits: editor.traitCollection)
-        #expect(RGBColor(uiColor: editor.tintColor.resolvedColor(with: editor.traitCollection)) == roles.text)
+        #expect(editor.tintColor.resolvedColor(with: editor.traitCollection)
+            .isEqual(UIColor.systemBlue.resolvedColor(with: editor.traitCollection)))
         #expect(session.textView === editor)
         #expect(editor.window === window)
         #expect(editor.attributedText.isEqual(to: attributes))

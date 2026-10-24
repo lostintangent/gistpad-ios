@@ -36,7 +36,7 @@ struct LibraryHostTests {
     window.layoutIfNeeded()
     let bar = try #require(descendants(window).compactMap { $0 as? UINavigationBar }.last)
     let item = try #require(bar.topItem)
-    #expect(item.title == (collection == .gists ? "Library" : currentTitle))
+    #expect(item.title == (collection == .gists ? "GistPad" : currentTitle))
     let menu = try #require(item.titleMenuProvider?([]))
     let choices = menuActions(menu)
     let titles = Set(choices.map(\.title))
@@ -137,10 +137,11 @@ struct LibraryHostTests {
     let sidebarImage = UIGraphicsImageRenderer(size: CGSize(width: 280, height: 800)).image { _ in
       image.draw(at: .zero)
     }
-    let expected = PersonalAccent().roles(traits: window.traitCollection).text
+    let expected = try #require(RGBColor(
+      uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
     let counts = try nativeAccentPixels(in: sidebarImage, expected: expected)
-    #expect(counts.personal > 30, "Today and sidebar selection must use the personal accent.")
-    #expect(counts.systemBlue == 0, "The native sidebar must not retain a system-blue Today symbol.")
+    #expect(counts.personal > 30, "The sidebar keeps readable native primary ink.")
+    #expect(counts.systemBlue == 0, "The native sidebar selection and Today symbol stay neutral.")
     Attachment.record(
       image, named: "mounted-library-\(width)-\(dark ? "Dark" : "Light")-Large.png", as: .png)
   }
@@ -194,7 +195,7 @@ struct LibraryHostTests {
     window.overrideUserInterfaceStyle = dark ? .dark : .light
     let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
     model.collection = dark ? .starred : .gists
-    let title = dark ? "Starred" : "Library"
+    let title = dark ? "Starred" : "GistPad"
     window.rootViewController = UIHostingController(
       rootView: NavigationStack {
         LibraryView(model: model, actions: .init(refresh: {}, create: {}, today: {}))
@@ -262,6 +263,8 @@ struct LibraryHostTests {
         $0.window != nil && $0.text == "notebook"
       })
     #expect(field.isFirstResponder)
+    #expect(field.tintColor.resolvedColor(with: field.traitCollection)
+      .isEqual(UIColor.systemBlue.resolvedColor(with: field.traitCollection)))
     let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
       for overlay in scene.windows where !overlay.isHidden && overlay.windowLevel > window.windowLevel {
@@ -272,7 +275,7 @@ struct LibraryHostTests {
   }
 
   @Test(arguments: [false, true], [nil, "#FACC15"] as [String?])
-  func searchAndEmptyControlsUsePersonalAccent(dark: Bool, savedHex: String?) async throws {
+  func searchAndEmptyControlsStayNeutral(dark: Bool, savedHex: String?) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
@@ -297,12 +300,84 @@ struct LibraryHostTests {
     let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
-    let expected = PersonalAccent(savedHex: savedHex).roles(traits: window.traitCollection).text
+    let expected = try #require(RGBColor(
+      uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
     let counts = try nativeAccentPixels(in: image, expected: expected)
-    #expect(counts.personal > 30, "The scope and Clear actions must render the account accent.")
-    #expect(counts.systemBlue == 0, "Library content must not fall back to system-blue controls.")
+    #expect(counts.personal > 30, "The scope and Clear actions retain readable neutral ink.")
+    #expect(counts.systemBlue == 0, "Library commands must not inherit the system text-entry tint.")
+    let accent = PersonalAccent(savedHex: savedHex).roles(traits: window.traitCollection).text
+    #expect(try nativeAccentPixels(in: image, expected: accent).personal < 20)
     Attachment.record(
       image, named: "search-accent-\(savedHex ?? "Sky")-\(dark ? "Dark" : "Light").png", as: .png)
+  }
+
+  @Test(arguments: [false, true], [DynamicTypeSize.large, .accessibility3])
+  func tagFilterNamesChecksAndDoneStayNeutral(dark: Bool, size: DynamicTypeSize) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.overrideUserInterfaceStyle = dark ? .dark : .light
+    window.traitOverrides.preferredContentSizeCategory =
+      size.isAccessibilitySize ? .accessibilityExtraLarge : .large
+    let model = LibraryModel(
+      snapshot: .init(
+        notes: [],
+        tags: [
+          .init(id: "ideas", name: "Ideas", colorHex: "#7C3AED"),
+          .init(id: "work", name: "Work", colorHex: "#E93D82")
+        ]), loadState: .ready)
+    model.selectedTagIDs = ["ideas"]
+    window.rootViewController = UIHostingController(
+      rootView: NavigationStack {
+        LibraryView(model: model, actions: .init(refresh: {}, create: {}, today: {}))
+          .captureTagFilters(true)
+      }
+      .tint(Color(uiColor: .systemGreen))
+      .environment(\.dynamicTypeSize, size)
+      .environment(\.colorScheme, dark ? .dark : .light))
+    window.makeKeyAndVisible()
+    defer {
+      window.rootViewController?.dismiss(animated: false)
+      window.isHidden = true
+      previous?.makeKeyAndVisible()
+    }
+    let deadline = ContinuousClock.now + .seconds(5)
+    while window.rootViewController?.presentedViewController?.view.window == nil,
+      ContinuousClock.now < deadline
+    {
+      try await Task.sleep(for: .milliseconds(20))
+    }
+    try await Task.sleep(for: .milliseconds(350))
+    let canvas = try #require(window.rootViewController?.presentedViewController?.view)
+    canvas.layoutIfNeeded()
+    #expect(descendants(canvas).compactMap { $0 as? UINavigationBar }.last?.topItem?.title == "Filter by tags")
+    let image = UIGraphicsImageRenderer(bounds: canvas.bounds).image { _ in
+      canvas.drawHierarchy(in: canvas.bounds, afterScreenUpdates: true)
+    }
+    let label = try #require(RGBColor(
+      uiColor: UIColor.label.resolvedColor(with: canvas.traitCollection)))
+    let inheritedTint = try #require(RGBColor(
+      uiColor: UIColor.systemGreen.resolvedColor(with: canvas.traitCollection)))
+    for id in ["library-tag-filter-ideas", "library-tag-filter-work", "library-tag-filter-done"] {
+      let view = try #require(descendants(canvas).first {
+        $0.accessibilityIdentifier == "capture-frame-\(id)"
+      })
+      let frame = view.convert(view.bounds, to: canvas).intersection(canvas.bounds)
+      #expect(!frame.isEmpty)
+      #expect(frame.height >= 44)
+      let pixels = CGRect(
+        x: frame.minX * image.scale, y: frame.minY * image.scale,
+        width: frame.width * image.scale, height: frame.height * image.scale)
+      let crop = try #require(image.cgImage?.cropping(to: pixels))
+      let sample = UIImage(cgImage: crop)
+      #expect(try nativeAccentPixels(in: sample, expected: label).personal > 20)
+      #expect(try nativeAccentPixels(in: sample, expected: inheritedTint).personal < 10)
+    }
+    #expect(model.selectedTagIDs == ["ideas"])
+    Attachment.record(
+      image, named: "tag-filters-\(dark ? "Dark" : "Light")-\(size.isAccessibilitySize ? "AX3" : "Large").png",
+      as: .png)
   }
 
   @Test(arguments: [DynamicTypeSize.large, .accessibility3], [2, 8])

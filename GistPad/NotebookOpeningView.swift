@@ -60,7 +60,6 @@ struct NotebookOpeningView: View {
     .navigationTitle(title)
     .navigationBarTitleDisplayMode(.inline)
     .background(Color(uiColor: .systemBackground))
-    .tint(InterfaceTheme.accent)
     .task(id: document == nil ? title : nil) {
       progressTitle = nil
       guard document == nil else { return }
@@ -87,16 +86,17 @@ struct NotebookFailedOpeningView: View {
     } description: {
       Text(failure.message)
     } actions: {
-      Button("Try Again", action: retry)
+      Button(action: retry) {
+        Text("Try Again")
+          .foregroundStyle(Color(uiColor: .systemBackground))
+      }
         .frame(minHeight: 44)
         .buttonStyle(.borderedProminent)
-        .tint(InterfaceTheme.accentFill)
-        .foregroundStyle(InterfaceTheme.onAccent)
+        .tint(Color(uiColor: .label))
         .accessibilityIdentifier("note-open-retry")
     }
     .navigationTitle(failure.title)
     .navigationSubtitle(failure.filename ?? "")
     .navigationBarTitleDisplayMode(.inline)
-    .tint(InterfaceTheme.accent)
   }
 }

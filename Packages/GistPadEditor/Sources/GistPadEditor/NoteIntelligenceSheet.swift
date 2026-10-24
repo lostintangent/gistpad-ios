@@ -47,9 +47,29 @@
     @ViewBuilder
     private var actionPicker: some View {
       if dynamicTypeSize.isAccessibilitySize {
-        actionChoices.pickerStyle(.menu)
+        Menu {
+          actionChoices.pickerStyle(.inline)
+        } label: {
+          HStack(spacing: 8) {
+            actionTitle
+            Image(systemName: "chevron.up.chevron.down")
+          }
+          .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .tint(.primary)
+        .accessibilityLabel(Text("Action", bundle: .module))
+        .accessibilityValue(actionTitle)
       } else {
         actionChoices.pickerStyle(.segmented)
+      }
+    }
+
+    private var actionTitle: Text {
+      switch model.action {
+      case .ask: Text("Ask", bundle: .module)
+      case .edit: Text("Edit", bundle: .module)
+      case .review: Text("Review", bundle: .module)
       }
     }
 
@@ -61,6 +81,7 @@
           .disabled(!model.session.textView.isEditable)
         Text("Review", bundle: .module).tag(NoteIntelligenceAction.review)
       }
+      .tint(.primary)
     }
 
     public var body: some View {
@@ -73,17 +94,19 @@
               Button(String(localized: "Check Again", bundle: .module)) {
                 Task { await model.checkAvailability() }
               }
+              .tint(.primary)
             }
             actionPicker
               .disabled(model.isRunning)
               .accessibilityIdentifier("intelligence-actions")
             if let error = model.errorMessage { issue(error, symbol: "exclamationmark.circle") }
+            if model.isRunning, dynamicTypeSize.isAccessibilitySize { generationProgress }
             if model.action != .review || !model.hasResults || model.isRunning
               || !model.session.textView.isEditable
             {
               request
             }
-            if model.isRunning { generationProgress }
+            if model.isRunning, !dynamicTypeSize.isAccessibilitySize { generationProgress }
             if model.isStale, model.snapshot != nil {
               issue(
                 String(
@@ -133,13 +156,12 @@
           }
         }
       }
-      .tint(InterfaceTheme.accent)
       .presentationDetents([.medium, .large], selection: $detent)
       .presentationDragIndicator(.visible)
       .sensoryFeedback(.success, trigger: model.applyFeedback)
       .task {
         if dynamicTypeSize.isAccessibilitySize
-          || (model.action != .ask && model.hasResults)
+          || model.isRunning || (model.action != .ask && model.hasResults)
         {
           detent = .large
         }
@@ -154,6 +176,9 @@
       .onChange(of: model.action) { _, _ in model.clearResults() }
       .onChange(of: model.proposal != nil) { _, exists in
         if exists { detent = .large }
+      }
+      .onChange(of: model.isRunning) { _, running in
+        if running { detent = .large }
       }
       .onChange(of: dynamicTypeSize) { _, size in
         if size.isAccessibilitySize { detent = .large }
@@ -189,22 +214,29 @@
               .font(.callout)
               .foregroundStyle(.secondary)
           }
-        } else if model.hasResults {
+        } else if model.isRunning || model.hasResults {
           VStack(alignment: .leading, spacing: 8) {
             Text(model.submittedPrompt ?? model.prompt)
               .font(.callout)
               .foregroundStyle(.secondary)
-              .lineLimit(2)
+              .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
               .truncationMode(.tail)
               .frame(maxWidth: .infinity, alignment: .leading)
               .accessibilityLabel(model.submittedPrompt ?? model.prompt)
               .accessibilityIdentifier("intelligence-submitted-request")
-            Button(String(localized: "Edit Request", bundle: .module)) {
-              model.clearResults()
-              promptFocused = true
+              .captureFrame("intelligence-submitted-request")
+            if !model.isRunning {
+              Button {
+                model.clearResults()
+                promptFocused = true
+              } label: {
+                Label(String(localized: "Edit Request", bundle: .module), systemImage: "pencil")
+                  .frame(minHeight: 44)
+                  .contentShape(.rect)
+              }
+              .font(.callout)
+              .tint(.primary)
             }
-            .font(.callout)
-            .disabled(model.isRunning)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
         } else {
@@ -223,10 +255,7 @@
           .disabled(model.isRunning)
           .accessibilityIdentifier("intelligence-prompt")
         }
-        if model.isRunning {
-          Button(String(localized: "Cancel", bundle: .module), role: .cancel) { model.cancel() }
-            .disabled(model.isCancelling)
-        } else if !model.hasResults {
+        if !model.isRunning && !model.hasResults {
           generateButton
         }
         if !model.session.textView.isEditable {
@@ -246,17 +275,20 @@
       } else {
         generateAction
           .buttonStyle(.glassProminent)
-          .tint(InterfaceTheme.accentFill)
-          .foregroundStyle(InterfaceTheme.onAccent)
       }
     }
 
     private var generateAction: some View {
-      Button(generateLabel, systemImage: "sparkles") {
+      Button {
         promptFocused = false
         model.generate()
+      } label: {
+        Label(generateLabel, systemImage: "sparkles")
+          .foregroundStyle(
+            model.hasResults ? Color(uiColor: .label) : Color(uiColor: .systemBackground))
       }
       .disabled(!model.canGenerate)
+      .tint(Color(uiColor: .label))
       .accessibilityIdentifier("intelligence-generate")
     }
 
@@ -277,11 +309,34 @@
     }
 
     private var generationProgress: some View {
-      HStack(spacing: 10) {
-        ProgressView().controlSize(.small)
-        Text(progressLabel).font(.callout).foregroundStyle(.secondary)
+      let layout = dynamicTypeSize.isAccessibilitySize
+        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+        : AnyLayout(HStackLayout(spacing: 12))
+      return layout {
+        HStack(spacing: 10) {
+          ProgressView().controlSize(.small)
+          Text(progressLabel)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(progressLabel)
+        .accessibilityIdentifier("intelligence-progress")
+        .captureFrame("intelligence-progress")
+        if !dynamicTypeSize.isAccessibilitySize {
+          Spacer(minLength: 0)
+        }
+        Button(String(localized: "Cancel", bundle: .module), role: .cancel) { model.cancel() }
+          .buttonStyle(.glass)
+          .controlSize(.large)
+          .tint(.primary)
+          .fixedSize()
+          .frame(minHeight: 44)
+          .disabled(model.isCancelling)
+          .accessibilityIdentifier("intelligence-cancel")
+          .captureFrame("intelligence-cancel")
       }
-      .accessibilityElement(children: .combine)
     }
 
     private var progressLabel: String {
@@ -325,6 +380,7 @@
                   reveal(range)
                 }
                 .font(.callout)
+                .tint(.primary)
                 .disabled(!model.canReveal(range))
               } else {
                 Menu(
@@ -339,6 +395,7 @@
                   }
                 }
                 .font(.callout)
+                .tint(.primary)
               }
             }
             .padding(14)
@@ -411,6 +468,7 @@
                 model.apply(commentID: comment.id)
               }
               .buttonStyle(.glass)
+              .tint(.primary)
               .disabled(!model.canApply)
             }
           }
@@ -420,12 +478,14 @@
             Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
         }
         if model.action == .edit, model.appliedEdit == nil, proposal.canApply {
-          Button(String(localized: "Apply Changes", bundle: .module), systemImage: "checkmark") {
+          Button {
             model.apply()
+          } label: {
+            Label(String(localized: "Apply Changes", bundle: .module), systemImage: "checkmark")
+              .foregroundStyle(Color(uiColor: .systemBackground))
           }
           .buttonStyle(.glassProminent)
-          .tint(InterfaceTheme.accentFill)
-          .foregroundStyle(InterfaceTheme.onAccent)
+          .tint(Color(uiColor: .label))
           .disabled(!model.canApply)
           .accessibilityIdentifier("intelligence-apply")
         }
@@ -459,8 +519,9 @@
           text.foregroundColor = .secondary
           text.strikethroughStyle = Text.LineStyle(pattern: .solid)
         case .added:
-          text.foregroundColor = InterfaceTheme.accent
+          text.foregroundColor = .primary
           text.font = .body.weight(.semibold)
+          text.underlineStyle = Text.LineStyle(pattern: .solid)
         }
         result += text
       }

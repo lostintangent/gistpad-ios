@@ -143,7 +143,7 @@ struct NotebookPhotoSurface<Content: View>: View {
                   Text(message).font(.subheadline)
                   Button("Retry") { Task { await controller.reload() } }
                     .frame(minHeight: 44)
-                    .foregroundStyle(InterfaceTheme.accent)
+                    .tint(.primary)
                 }
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)

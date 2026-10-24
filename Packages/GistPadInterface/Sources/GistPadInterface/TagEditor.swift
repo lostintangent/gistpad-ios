@@ -48,6 +48,7 @@ public struct TagEditor: View {
                         Text("Some changes may already be saved. Retry to finish applying your choices.", bundle: .module)
                             .font(.footnote)
                         Button(String(localized: "Retry", bundle: .module), action: commit)
+                            .tint(.primary)
                     }
                     .foregroundStyle(.primary)
                 }
@@ -74,7 +75,7 @@ public struct TagEditor: View {
                         } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: "plus")
-                                    .foregroundStyle(InterfaceTheme.accent)
+                                    .foregroundStyle(.primary)
                                     .frame(width: min(swatchSize, 24))
                                 Text("New Tag", bundle: .module)
                                     .foregroundStyle(.primary)
@@ -128,7 +129,6 @@ public struct TagEditor: View {
                 }
             }
         }
-        .tint(InterfaceTheme.accent)
     }
 
     private var selectedTags: [LibraryTag] {
@@ -168,7 +168,6 @@ public struct TagEditor: View {
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(String(localized: "Edit Tag…", bundle: .module), systemImage: "pencil") { editingTag = tag }
-                .tint(InterfaceTheme.accent)
         }
     }
 
@@ -182,7 +181,7 @@ public struct TagEditor: View {
             Spacer(minLength: 8)
             if draft.selectedTagIDs.contains(tag.id) {
                 Image(systemName: "checkmark")
-                    .foregroundStyle(InterfaceTheme.accent)
+                    .foregroundStyle(.primary)
                     .accessibilityHidden(true)
                     .transition(.opacity)
             }
@@ -210,6 +209,8 @@ public struct TagEditor: View {
                 ProgressView(String(localized: "Saving tags", bundle: .module))
             } else if save != nil {
                 Button(String(localized: "Save", bundle: .module), role: .confirm, action: commit)
+                    .buttonStyle(.glassProminent)
+                    .tint(Color(uiColor: .label))
                     .accessibilityLabel(Text("Save Tags", bundle: .module))
                     .accessibilityIdentifier("tag-save")
             } else {
@@ -275,6 +276,7 @@ private struct TagEditForm: View {
                     ColorPicker(String(localized: "Color", bundle: .module), selection: color, supportsOpacity: false)
                     if colorHex != nil {
                         Button(String(localized: "Use Default Color", bundle: .module)) { colorHex = nil }
+                            .tint(.primary)
                     }
                     if let error {
                         Label(error, systemImage: "exclamationmark.circle")
@@ -316,6 +318,8 @@ private struct TagEditForm: View {
                             self.error = error.localizedDescription
                         }
                     }
+                    .buttonStyle(.glassProminent)
+                    .tint(Color(uiColor: .label))
                     .accessibilityLabel(Text("Save Tag", bundle: .module))
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -332,7 +336,6 @@ private struct TagEditForm: View {
             }
             .task { if isNew { nameFocused = true } }
         }
-        .tint(InterfaceTheme.accent)
     }
 
     private var color: Binding<Color> {

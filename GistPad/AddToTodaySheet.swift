@@ -5,9 +5,6 @@ import SwiftUI
 import UIKit
 
 struct AddToTodaySheet: View {
-  // UIKit fills confirmation toolbars with the text-role navigation tint.
-  private static let confirmationInk = Color(
-    uiColor: UIColor { $0.userInterfaceStyle == .dark ? .black : .white })
   let target: DailyNoteTarget
   @State private var text = ""
   @State private var asTask = false
@@ -105,8 +102,9 @@ struct AddToTodaySheet: View {
           } else {
             Button(role: .confirm, action: add) {
               Image(systemName: "checkmark")
-                .foregroundStyle(Self.confirmationInk)
             }
+              .buttonStyle(.glassProminent)
+              .tint(Color(uiColor: .label))
               .accessibilityLabel("Add")
               .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
               .accessibilityIdentifier("today-capture-add")
@@ -119,7 +117,6 @@ struct AddToTodaySheet: View {
     }
     .presentationDetents(
       dynamicTypeSize.isAccessibilitySize || errorMessage != nil ? [.large] : [.medium, .large])
-    .tint(InterfaceTheme.accent)
   }
 
   private var kindPicker: some View {
@@ -127,6 +124,7 @@ struct AddToTodaySheet: View {
       Text("Text").tag(false)
       Text("Task").tag(true)
     }
+    .tint(.primary)
     .accessibilityIdentifier("today-capture-kind")
   }
 

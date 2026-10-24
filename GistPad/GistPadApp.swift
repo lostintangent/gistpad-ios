@@ -100,8 +100,12 @@ struct GistPadApp: App {
           } description: {
             Text(loadError)
           } actions: {
-            Button("Retry", action: load)
+            Button(action: load) {
+              Text("Retry")
+                .foregroundStyle(Color(uiColor: .systemBackground))
+            }
               .buttonStyle(.borderedProminent)
+              .tint(Color(uiColor: .label))
           }
         } else {
           ProgressView("Opening notebook")
@@ -131,6 +135,9 @@ struct GistPadApp: App {
           .frame(width: 0, height: 0)
       }
       .gitHubStatusKeyboardPolicy()
+      #if DEBUG
+        .preferredColorScheme(LaunchArguments.captureColorScheme)
+      #endif
     }
   }
 }
@@ -139,6 +146,19 @@ enum LaunchArguments {
   #if DEBUG
     static let evaluatesIntelligence =
       ProcessInfo.processInfo.arguments.contains("--evaluate-intelligence")
+
+    static let captureColorScheme: ColorScheme? = {
+      let arguments = ProcessInfo.processInfo.arguments
+      guard captureScreen != nil,
+        let index = arguments.firstIndex(of: "--capture-appearance"),
+        arguments.indices.contains(index + 1)
+      else { return nil }
+      switch arguments[index + 1] {
+      case "light": return .light
+      case "dark": return .dark
+      default: preconditionFailure("Unknown capture appearance.")
+      }
+    }()
   #endif
   static let captureAccent: String? = {
     let arguments = ProcessInfo.processInfo.arguments

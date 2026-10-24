@@ -3,6 +3,7 @@ import Foundation
 public struct LibraryTaskProgress: Equatable, Sendable {
     public let completed: Int
     public let total: Int
+    public var remaining: Int { total - completed }
 
     public init(completed: Int, total: Int) {
         precondition(completed >= 0 && total >= completed)
