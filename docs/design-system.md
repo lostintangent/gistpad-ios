@@ -6,6 +6,8 @@ Version 1, October 23, 2026. Owner: Designer. Applies to native UI, the TextKit 
 
 This is the implementation specification and review gate, not a claim that the current spike passes it. The app targets iOS 27.1 and later. It is personal, installed directly with the user's paid developer account. No marketing onboarding, App Store work, or subscription UI.
 
+**Design reset in progress:** Library composition and other new visual proposals below are research inputs, not authorization to keep building a hero/grid restyle. The user will review one coherent `design-direction.md` before further visual implementation. Data-safety rules and explicitly requested fixes to note chrome, keyboard controls, scrolling and syntax remain active.
+
 ## 1. Non-negotiable product rules
 
 - Existing notes open rendered. New notes open in source. An interrupted edit resumes at its selection.
@@ -47,7 +49,7 @@ Correct system components are the floor. A stock grouped list, readable fonts, a
 | Completing a task | Keep the line in place, make the checked state precise, and use one restrained checkmark transition and light response after the local commit for a direct toggle. Rejected edits retain a visible recovery path. No confetti, row teleportation, haptic on initial tap, or background-sync celebration |
 | Chrome gets out of the way | Use the platform's adaptive toolbar, native Liquid Glass and supported Duo arrangements/reserved regions. Let system chrome respond to scrolling and presentation. Do not imitate it with custom blur, a permanent command dashboard, or decorative fold effects. The page itself stays quiet and opaque |
 
-The sky spine, colored notebook tabs, editorial hierarchy and exact feedback are the recognizable identity. The icon's paper treatment belongs to notebook surfaces, not behind every paragraph. A signature interaction must still be clear with Reduce Motion, increased contrast, VoiceOver, and large type. Review the live error states with the same care as the opening frame; healthy persistence does not need a footer.
+The sky spine, existing colored tag labels, editorial hierarchy and exact feedback are the recognizable identity. The web is the reference for capability and speed, not a visual template. Titles are user content: display them exactly as written, without extracting emoji faces or inventing fallback illustrations per note. The icon's paper treatment belongs to notebook surfaces, not behind every paragraph. A signature interaction must still be clear with Reduce Motion, increased contrast, VoiceOver, and large type. Review the live error states with the same care as the opening frame; healthy persistence does not need a footer.
 
 ### Signature moves
 
@@ -55,17 +57,19 @@ This reset replaces the olive/gold direction and the twice-rejected flat Library
 
 | Priority / surface | Memorable move and concrete delta |
 | --- | --- |
-| 1 / Library | Use `systemGroupedBackground`. Pinned has a title3-bold header with a sky pin, then an adaptive notebook-card grid: 18-pt corners, 120-pt minimum height, 6-pt leading spine in the first tag's actual color or sky, headline title up to two lines at standard sizes, and one cached excerpt or factual file-summary line. Small tag-color tabs peek from the trailing edge. Notes has its own title3-bold header and one inset-grouped surface with 14-pt vertical row padding, inset hairline separators, headline titles, a secondary line, tag labels and relative time. No repeated row pins or outer borders around each row |
+| 1 / Library | Use `systemGroupedBackground`. Pinned has a title3-bold header with a sky pin, then an adaptive notebook-card grid: 18-pt corners, 120-pt minimum height, 6-pt leading spine in the first tag's actual color or sky, the exact headline title up to two lines at standard sizes, and one cached excerpt or factual file-summary line. Use the existing tinted tag labels. Notes has its own title3-bold header and one inset-grouped surface with 14-pt vertical row padding, inset hairline separators, headline titles, a secondary line, tag labels and a quiet relative-time/file-count line. Pinned notes outside the shelf, such as search results, retain a small sky pin. No outer borders around each row |
 | 1 / Today | A full-width notebook hero inside the margins, with 22-pt continuous corners, `secondarySystemGroupedBackground`, 20-pt internal inset and a 4-pt leading sky-gradient spine. Give the day numeral native SF Rounded bold, starting around 44 pt and scaling relative to large title; month uses `accentText`, weekday stays SF. Add up to two real cached excerpt lines and a small genuine task-progress ring beside a readable count. Leave 24 pt above and 32 pt below. No excerpt fetch or appearance-time creation. An existing note opens directly; an absent note has one explicit Start action. Stack at accessibility sizes |
-| 1 / Tags | Small index tabs identify notes: 3-pt leading corners, 8-pt trailing corners, a 3-pt own-color leading strip and an opaque tinted body with readable ink. The Tags sheet itself gets lighter, not bigger: remove its duplicate selected-chip panel, grouped cards and All tags heading. Use one plain searchable list with 44-pt minimum total rows, color/name/check and one quiet scope footer. Native medium/large detents, initially large at accessibility sizes. Keep editing behind swipe/context. Mirror tabs in RTL and preserve user colors; coral, amber and teal are new-tag presets, never a migration |
+| 1 / Tags | Keep the installed iOS metadata labels: tinted fill, color dot, readable full name and soft rounded shape. The user explicitly prefers these; do not replace them with solid web pills, a new leading strip or a notebook-tab shape. The Tags sheet itself gets lighter, not bigger: remove its duplicate selected-chip panel, grouped cards and All tags heading. Use one plain searchable list with 44-pt minimum total rows, color/name/check and one quiet scope footer. Native medium/large detents, initially large at accessibility sizes. Keep editing behind swipe/context and preserve user colors |
 | 2 / Reading | A composed, uninterrupted page, with New York for rendered H1/H2 only, SF prose, adaptive ink and 1.5-body line height. Keep the existing heading scales and language fallback. Remove the healthy-state footer entirely. When a problem notice is present, use native scroll-edge underlap and enough end space to reveal the final line. Keep tasks fully legible when read-only. No page texture, permanent contents rail or decorative card around prose |
-| 2 / Editing | Inked source: proportional native body text, body-sized semibold headings, monospaced code and quieter but legible Markdown punctuation. No rainbow code or reduced-opacity content. The keyboard accessory floats as a native glass capsule, with a visible trailing Hide Keyboard button and no overflow. Keep the current passage anchored when moving between source and reading, with caret/selection/Undo intact |
+| 2 / Editing | Readable, colorful Markdown structure using the web's semantic token colors: bold purple headings/strong and green quotes in dark mode, with the light theme and increased-contrast adaptations below. Keep native body-sized fonts and monochrome code, not a fenced-code language rainbow. The keyboard accessory floats as a native glass capsule, with a visible trailing Hide Keyboard button and no overflow. Keep the current passage anchored when moving between source and reading, with caret/selection/Undo intact |
 | 2 / File switching | The current exact filename is the native subtitle for a multi-file note; its title menu exposes ordinary files directly and dates in newest-first year/month groups. The selected file has a check. Choosing a file changes the actual mounted document, not just its title. No intermediate Files sheet or custom tab strip |
 | 3 / Motion and feedback | Use the native zoom from Today and Pinned notebook cards into their note on compact push navigation, with stable identity, interactive cancellation and a Reduce Motion alternative. Plain Notes rows retain native navigation; side-by-side selection does not zoom. Pin gets one restrained symbol response after commit. Archive retains its real Undo. Manual Save may acknowledge a successful GitHub write once; autosave never buzzes or celebrates. Do not delay opening to animate [9-11, 14] |
 
 Palette and Library/Today/tab composition land first. Reading/editor/file chrome follow in the same connected flow. Motion is last, not a substitute for composition. The source-identity safety fix ships independently of this design pass.
 
-Pinned grid metrics: 12-pt gaps and at least 156 pt per card, yielding two columns from 324 usable content points, more when unfolded, and one on narrower/accessibility layouts. Use a 120-pt minimum, never fixed, height; let large text grow. Tabs may peek 4 pt within their grid cell, without overlap or tiny independent hit targets. Include full tag names in the card's accessible description and Tags route; colored edge tabs are decorative, not an abbreviation of a tappable label. Context menus preserve the row actions.
+Pinned grid metrics: 12-pt gaps and at least 156 pt per card, yielding two columns from 324 usable content points, more when unfolded, and one on narrower/accessibility layouts. Use a 120-pt minimum, never fixed, height; let large text grow. Existing tag labels keep full names and honest overflow, not cropped decorative fragments or tiny independent hit targets. Context menus preserve the row actions.
+
+The quiet metadata line combines relative time with a `doc.on.doc` count when more than one file is known. Do not fetch for decoration or show a guessed count. Daily notes and Archived remain clear native navigation rows with trailing collection counts at the bottom of the Library, not hidden only in the overflow menu.
 
 Three daily moments make the notebook feel alive:
 
@@ -105,16 +109,14 @@ These are exact sRGB assets, with light, dark, light increased-contrast, and dar
 | `accentFill` / `accent-fill` | `#0EA5E9` | `#38BDF8` | `#0EA5E9` | `#7DD3FC` |
 | `onAccent` / `on-accent` | `#0F172A` | `#0F172A` | `#0F172A` | `#0F172A` |
 | `selectedSurface` / `selected-surface` | `#E7F6FD` | `#0B3548` | `#D4EEFC` | `#134B63` |
-| `syntaxMuted` / `syntax-muted` | `#5B6B80` | `#CBD5E1` | `#475569` | `#E2E8F0` |
-| `syntaxCode` / `syntax-code` | `#475569` | `#CBD5E1` | `#334155` | `#F1F5F9` |
 
 Prefix each CSS suffix with `--gp-`. `selectedSurface` uses `text` as its foreground and a selection trait/checkmark as appropriate. It is a row/anchor highlight, **not** the OS text-selection color.
 
 Use `accentText` for the app's action tint and task markers, consistently across native chrome, editor accessory and preview. Use `accentFill` with `onAccent` for an opaque custom primary control only. System prominent buttons own their foreground/material adaptation. Do not put white text on bright sky or apply the fill as a global text tint. Links remain system link blue with their non-color affordance.
 
-The decorative spine uses the original `#5AD1FA` to `#0EA5E9` gradient. Neither stop is suitable for small text on white (1.76:1 and 2.77:1). Library uses semantic grouped surfaces, with the icon's paper `#FFFFFF` to `#E2E8F0` gradient reserved for small original-artwork illustrations rather than overriding those surfaces. Keep the source and reading page semantic and flat. New-tag presets use the icon's coral `#FB8B8B`/`#EF5C5C`, amber `#FCD34D`/`#F5B60B` and teal `#5EEAD4`/`#14B8A6`; they do not replace existing profile colors.
+The decorative spine uses the original `#5AD1FA` to `#0EA5E9` gradient. Neither stop is suitable for small text on white (1.76:1 and 2.77:1). Library uses semantic grouped surfaces, with the icon's paper `#FFFFFF` to `#E2E8F0` gradient reserved for small original-artwork illustrations rather than overriding those surfaces. Keep the source and reading page semantic and flat. The icon's coral, amber and teal do not replace existing profile colors or force a new tag palette.
 
-The custom text roles above clear 4.5:1 against reference light canvases `#FFFFFF`/`#F2F2F7` and dark canvases `#000000`/`#1C1C1E`. The lowest measured normal-mode text ratio is 4.88:1, increased-mode 6.78:1. `onAccent` against its fill exceeds 6.4:1 in all variants. Those reference backgrounds are **test inputs, not a definition of system colors**. Measure final resolved text/background pairs, selected surfaces, actual materials, Today paper and tag fills on the shipping OS. Never assume these reference checks certify the whole screen.
+The shared custom text roles above clear 4.5:1 against reference light canvases `#FFFFFF`/`#F2F2F7` and dark canvases `#000000`/`#1C1C1E`. The lowest measured normal-mode text ratio is 5.32:1, increased-mode 6.78:1. `onAccent` against its fill exceeds 6.4:1 in all variants. Source-only token colors and their quote-background caveat are specified in section 6. Those reference backgrounds are **test inputs, not a definition of system colors**. Measure final resolved text/background pairs, selected surfaces, actual materials, Today paper and tag fills on the shipping OS. Never assume these reference checks certify the whole screen.
 
 User-defined tag colors stay compatible with the web. Show the tag name. Use a color swatch plus semantic text instead of forcing unreadable text onto an arbitrary fill. Chosen tags also have a checkmark. A tag's color is not an error or sync status.
 
@@ -122,7 +124,7 @@ User-defined tag colors stay compatible with the web. Show the tag name. Use a c
 
 Tags are small colored labels, not a comma-separated gray sentence. Use one shared presentation across Library metadata, the selected note's metadata, and tag selection.
 
-- **Label:** scaled `.footnote` medium, adaptive ink, 8-pt horizontal / 4-pt vertical padding, 3-pt leading and 8-pt trailing corners, and a 3-pt own-color leading strip replacing the previous dot. Mirror the tab in RTL. The strip must not consume the text inset or reduce the full-name space. Composite the tag color into `surface` at 24% in light and 28% in dark, producing an opaque final fill with recognizable color. Do not lower the whole label's opacity or use arbitrary user color as its text color. Increased contrast adds a visible boundary and retains the name/strip. Check final contrast for white, black, saturated yellow and missing-color tags. Black, white and missing-color tags remain truthfully neutral rather than receiving invented hues. Keep color dots in the native tag picker.
+- **Label:** retain the installed scaled `.footnote` medium label, primary text, a 10-pt color dot scaled relative to footnote, 8-pt horizontal / 4-pt vertical padding and softly rounded 8-pt shape. Composite the tag color into `surface` at 24% in light and 28% in dark, producing an opaque final fill with recognizable color. Do not replace it with solid pills, a leading strip or asymmetric corners. Do not lower the whole label's opacity or use arbitrary user color as its text color. Increased contrast adds a visible boundary and retains the name/dot. Check final contrast for white, black, saturated yellow and missing-color tags. Black, white and missing-color tags remain truthfully neutral rather than receiving invented hues.
 - **Library rows:** place labels below the title/excerpt, with 6-pt gaps. At standard sizes show up to two complete names plus a truthful `+N` overflow label. Never cut a chip midway or abbreviate two names into the same string. At accessibility sizes wrap/grow rather than compressing text. Row tags are metadata, not nested buttons inside the note's navigation link. The note's labeled Tags action reveals the complete set.
 - **Note metadata:** provide one labeled Tags route in native note chrome. Its editable sheet is a single plain native searchable list: color swatch, full name and selected check. No duplicated On this note chip shelf, All tags heading or rounded group cards. The total row target is at least 44 pt, not a 44-pt inner control plus List padding; grow for wrapping/accessibility. Offer medium/large native sheet detents, starting large at accessibility sizes. Use one scope footer, **Applies to every file in this gist.** A nonmutating presentation shows the assigned tags in the same compact list without toggle checks, plus the native Close action. GitHub source access is a separate capability: a signed-in user can tag someone else's gist, and incomplete source does not by itself block profile-only tag changes. Use a nonmutating presentation only when the account lacks profile-write capability or no safe account-scoped gist association exists. A transient offline/save failure preserves local choices with Retry rather than changing their permission. Avoid a separate information-only sheet that duplicates the Tags editor. Do not pin a new ribbon over the writing canvas or insert tags into the Markdown file.
 - **Filtering:** selected search/filter tokens use the same name and color identity plus a checkmark or explicit remove affordance. Show the matching rule and Clear filters. An interactive label has a nonoverlapping 44-pt target. The full tag picker remains a native searchable list with color dot, name and selected checkmark, not a wall of tiny pills.
@@ -159,13 +161,13 @@ Use system font APIs with language fallback: SF by default, SF Rounded for the T
 | H3 | `.title3` | Semibold, approximately 20 pt |
 | H4-H6 / section heading | `.headline` | Semibold, approximately 17 pt, preserve semantic heading levels |
 | Prose / source / task | `.body` | Regular, approximately 17 pt |
-| Library title | `.headline` | Default semibold, allow two lines then a detail route. Do not repeat a pin symbol inside the Pinned section or let a status symbol steal title width at accessibility sizes |
+| Library title | `.headline` | Default semibold, allow two lines then a detail route. No repeated pin inside Pinned; retain a small pin for a pinned note outside that shelf. Do not let a status symbol steal title width at accessibility sizes |
 | Secondary metadata | `.subheadline` or `.footnote` | Not smaller merely to preserve a tight row |
 | Code | Monospaced system font at scaled body size | Regular, no `.88em` reduction |
 | Status / footnotes | `.footnote` | Approximately 13 pt, scales, remains readable |
 | Today day numeral | Rounded design, scaled relative to `.largeTitle` | Bold, starting around 44 pt; other date components remain SF |
 
-Point sizes are reference values only. Native style APIs determine actual size. All labels wrap/grow at large categories. Required actions must not truncate to identical labels. Source headings stay body-sized semibold, not the large rendered heading sizes.
+Point sizes are reference values only. Native style APIs determine actual size. All labels wrap/grow at large categories. Required actions must not truncate to identical labels. Source headings stay body-sized bold, not the large rendered heading sizes.
 
 For UIKit, resolve `UIFont.preferredFont(forTextStyle:compatibleWith:)` using the current view traits and update attributed spans when those traits change. Use `UIFontMetrics` for a custom monospaced base. Do not double-scale a font that is already preferred/scaled. Attribute refresh must not change characters, marked text, undo, selection, or the current reading anchor. Defer restyling while composition or Writing Tools is active, then apply current traits safely. [4, 5]
 
@@ -246,23 +248,38 @@ Use system symbol weight/scale matched to adjacent text. Confirm each symbol in 
 
 ## 6. Source syntax theme
 
-The editor is Markdown source, not a lossy rich-text conversion. It should be quieter than a code IDE.
+The editor is Markdown source, not a lossy rich-text conversion. Use familiar semantic Markdown color, not a gray-only approximation. The web reference is `src/features/editor/extensions/theme.ts`, which uses `@uiw/codemirror-theme-github`. Native typography and input remain iOS-owned.
+
+| Source token | Light | Dark | Light increased | Dark increased |
+| --- | --- | --- | --- | --- |
+| Heading / strong / emphasis | `#1E293B` | `#D2A8FF` | `#0F172A` | `#E6CCFF` |
+| Quote | `#22863A` | `#7EE787` | `#155D27` | `#B0F5B7` |
+| HTML tag | `#116329` | `#7EE787` | `#0B4B1E` | `#B0F5B7` |
+| URL destination | `#032F62` | `#A5D6FF` | `#02234A` | `#D1ECFF` |
+| Ordered number marker | `#005CC5` | `#79C0FF` | `#004A9F` | `#B5DDFF` |
+
+These dynamic source colors replace the previous `syntaxMuted`/`syntaxCode` styling contract. Preserve the exact web-light quote on the white source page, where it measures 4.63:1. It is only 4.15:1 on the secondary gray reference; if a quote can appear on that surface, use `#1E7A34` there (4.84:1). Increased-contrast variants clear AA on both reference canvases. Resolve appearance through dynamic native colors, without rewriting or reparsing source solely to change appearance.
 
 | Source element | Style |
 | --- | --- |
 | Ordinary prose | Body regular, `text` |
-| Heading text | Body semibold, `text`; preserve all source characters |
-| Heading/list/emphasis/fence punctuation | `syntaxMuted`, same readable size |
+| Whole heading, including `#` markers | Body bold, heading token; preserve every source character |
+| Strong / emphasis | Their token color, with bold / italic respectively; compose both traits when nested |
+| Whole blockquote line, including `>` | Quote token; nested emphasis/strong/link/code retain their own valid styles |
+| Ordered number / unordered bullet | Ordered-number token / body ink; list-item text stays body ink |
+| Element punctuation | Same readable size and color as its owning element, not independently grayed |
 | Unchecked task marker | `accentText`, same size; never changes by decoration alone |
-| Checked marker | `syntaxMuted`; do not make the task unreadable |
-| Inline/fenced code | Monospaced scaled body, `syntaxCode`; optional `surface` block background |
-| Link label / wikilink | `link`; source delimiters remain visible |
-| URL destination | `syntaxMuted`, no hide/replace without an explicit source view |
-| Frontmatter | Monospaced scaled body, `syntaxMuted`; explicit collapse affordance only |
+| Checked marker | Native task accent/state; do not dim the task's text |
+| Inline/fenced code | Monospaced scaled body in ink; optional `surface` block background, no language-token rainbow |
+| Link label / wikilink | Underlined; URL color in light mode, inherited ink in dark mode as in the web theme; source delimiters remain visible |
+| URL destination | URL token, underlined; no hide/replace without an explicit source view |
+| HTML tag | HTML token, without misclassifying autolinks or code as HTML |
+| Strikethrough | Line-through on the valid content span, with source markers intact |
+| Frontmatter | Monospaced scaled body in ink; explicit collapse affordance only |
 | Selection, caret, marked text | Native system behavior, no custom purple selection |
 | Proposed diff | Add/remove label and `+`/`-` or equivalent, not red/green alone |
 
-Do not use opacity-faded entire code blocks, teal headings, a rainbow of language tokens by default, giant source headings, or an active-line highlight that competes with selection. Syntax changes must be pure attributes. No rewriting smart quotes, invisible delimiter removal, or automatic code formatting on appearance changes.
+Do not use opacity-faded entire code blocks, a rainbow of language tokens by default, giant source headings, or an active-line highlight that competes with selection. Valid inline code, fences and frontmatter remain protected from prose-role matching. Syntax changes must be pure attributes. No rewriting smart quotes, invisible delimiter removal, or automatic code formatting on appearance changes.
 
 System Writing Tools exclude code/frontmatter through the supported integration. Highlighting and sync replacement must not interrupt Writing Tools or active IME composition. The inability to demonstrate that is an interaction blocker, not a typography compromise.
 
