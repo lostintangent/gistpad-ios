@@ -20,6 +20,7 @@ public enum NoteSaveState: Equatable, Sendable {
     case inMemoryFixture
     case unsaved
     case savedLocally
+    case offline
     case savingToGitHub
     case savedToGitHub
     case cloudFailure(message: String)
@@ -32,7 +33,7 @@ public enum NoteSaveState: Equatable, Sendable {
 
     public var canPublish: Bool {
         switch self {
-        case .unsaved, .savedLocally, .cloudFailure: true
+        case .unsaved, .savedLocally, .offline, .cloudFailure: true
         default: false
         }
     }
@@ -85,6 +86,7 @@ public struct NoteActions {
     public var copyLink: (() -> Void)?
     public var openInGitHub: (() -> Void)?
     public var focus: (() -> Void)?
+    public var find: (() -> Void)?
     public var tags: (() -> Void)?
     public var rename: (() -> Void)?
     public var renameFile: (() -> Void)?

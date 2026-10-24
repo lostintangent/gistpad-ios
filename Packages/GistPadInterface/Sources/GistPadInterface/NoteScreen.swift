@@ -215,6 +215,8 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             Label(String(localized: "Not saved yet", bundle: .module), systemImage: "doc")
         case .savedLocally:
             Label(String(localized: "Saved on this iPhone", bundle: .module), systemImage: "iphone")
+        case .offline:
+            Label(String(localized: "Offline. Changes haven't synced to GitHub.", bundle: .module), systemImage: "icloud.slash")
         case .savingToGitHub:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
