@@ -4,7 +4,7 @@ Version 1, October 23, 2026. Owner: Designer. Applies to native UI, the TextKit 
 
 **A quiet notebook with a precise Markdown engine.** Content is stable, controls are recognizably iOS, and every action tells the truth about its effect. Use system components before custom styling. Modern means the best supported tool for the job, not replacing a reliable text engine merely because a newer wrapper exists.
 
-This is the implementation specification and review gate, not a claim that the current spike passes it. The app is personal, installed directly with the user's paid developer account. No marketing onboarding, App Store work, or subscription UI.
+This is the implementation specification and review gate, not a claim that the current spike passes it. The app targets iOS 27.1 and later. It is personal, installed directly with the user's paid developer account. No marketing onboarding, App Store work, or subscription UI.
 
 ## 1. Non-negotiable product rules
 
@@ -14,9 +14,36 @@ This is the implementation specification and review gate, not a claim that the c
 - Local drafts and GitHub publication are different states. Autosave off never publishes on background.
 - Today contains the user's current dated note and template. **No Earlier days, task carryover, automatic journal text, or large-gist Git fallback.** A truncated response warns and blocks unsafe writes.
 - Tags apply to gists, not individual files or days. Secret gists and uploaded images are readable by URL.
-- Writing Tools is the v1 intelligence surface. Later generated edits remain separate proposals until Apply. No permanent chatbot.
+- Apple Intelligence is the only AI platform. Writing Tools is the v1 intelligence surface. Later generated edits remain separate proposals until Apply. No app-owned third-party model integration or permanent chatbot.
 
 The accepted recommendation governs scope. Earlier concept sketches are directional, not production geometry or an exception to these rules.
+
+### A useful default detail
+
+An unselected wide detail must not open onto a generic Select a gist placeholder. Resolve it in this order:
+
+1. Restore the last accessible note and file for the current account, including its durable local draft and genuine interrupted editing state.
+2. With no restorable note, show the existing current-day note in reading mode.
+3. If today's note does not exist, show a composed Today landing with the local date and an explicit Start today's note action. This is an invitation, not an automatically created file.
+
+Opening the Library, restoring the app, or unfolding never creates or publishes a note. A default-detail read may fill only a still-unselected detail, never replace a newer user selection. An active note always wins over the fallback, even when it falls outside the current Library filter. A remotely removed note with a recoverable local draft needs a recovery state, not silent abandonment.
+
+Signed-out, offline-without-cache, loading and failed-read states explain the actual condition and provide an appropriate action. Do not conceal those states behind a decorative empty page. Use note in selection/reading copy. Retain gist where the GitHub object's scope matters, such as multiple files, gist-level tags, and unlisted-link warnings.
+
+### Signature craft, not just compliant controls
+
+Correct system components are the floor. A stock grouped list, readable fonts, and a passing accessibility matrix are not the finished product. The production experience needs an identifiable notebook composition and exceptionally direct interactions. These requirements fit the existing M2/M3 scope, not a new feature milestone.
+
+| Moment | Production direction and evidence |
+| --- | --- |
+| Opening the Library | A document library, not a Settings screen. Use continuous native list rows on the reading canvas on the cover, and the system sidebar treatment when the Library is a companion column. Avoid separate rounded containers for Today, Pinned, and Gists. Titles lead, metadata recedes, and a single useful cached excerpt may add context. Never delay opening or fetch every file merely to decorate rows |
+| Today feels like today | Give the current local date a deliberate typographic treatment beside Today. When actual current-day task data is available, show completed/total with a quiet progress indicator and an accessible text equivalent. No fabricated progress, streaks, weather, greetings, or carryover. Add a line is direct, with its target date pinned when composing starts |
+| Unfolding reveals context | The same page remains the visual and interaction anchor as Library appears beside it. Focus deliberately reveals source + preview at the relevant passage. Preserve text, selection, scroll and undo rather than crossfading to a fresh-looking copy. Judge this in motion through Closed, Partially Open and Open, not in independent screenshots |
+| Capturing a thought | A native, keyboard-ready composer with one clear commit action. After the durable local commit, reveal the inserted line in its real note rather than a generic success toast. An interrupted composer retains its text. Local capture never masquerades as GitHub publication |
+| Completing a task | Keep the line in place, make the checked state precise, and use at most one restrained symbol transition and optional light response after the local commit. Rejected edits retain a visible recovery path. No confetti, row teleportation, haptic on initial tap, or background-sync celebration |
+| Chrome gets out of the way | Use the platform's adaptive toolbar, native Liquid Glass and supported Duo arrangements/reserved regions. Let system chrome respond to scrolling and presentation. Do not imitate it with custom blur, a permanent command dashboard, or decorative fold effects. The page itself stays quiet and opaque |
+
+The warm accent, editorial hierarchy, continuity and exact feedback are the recognizable identity. Do not add gradients, giant cards, or extra animation to manufacture personality. A signature interaction must still be clear with Reduce Motion, increased contrast, VoiceOver, and large type. Review the live save/error states with the same care as the opening frame.
 
 ## 2. Color: one set of roles, four appearances
 
@@ -60,6 +87,31 @@ The custom text roles above clear 4.5:1 against reference light canvases `#FFFFF
 
 User-defined tag colors stay compatible with the web. Show the tag name. Use a color swatch plus semantic text instead of forcing unreadable text onto an arbitrary fill. Chosen tags also have a checkmark. A tag's color is not an error or sync status.
 
+### Tags with presence
+
+Tags are small colored labels, not a comma-separated gray sentence. Use one shared presentation across Library metadata, the selected note's metadata, and tag selection.
+
+- **Label:** scaled `.footnote` medium, semantic primary text, an 8-pt color dot, 8-pt horizontal / 4-pt vertical padding, and a softly rounded 8-pt shape. A gentle tag-color tint may be composited into `surface` at 10% in light and 16% in dark, producing an opaque final fill. Do not lower the whole label's opacity or use arbitrary user color as its text color. Increased contrast adds a visible boundary and retains the name/dot. Check final contrast for white, black, saturated yellow and missing-color tags.
+- **Library rows:** place labels below the title/excerpt, with 6-pt gaps. At standard sizes show up to two complete names plus a truthful `+N` overflow label. Never cut a chip midway or abbreviate two names into the same string. At accessibility sizes wrap/grow rather than compressing text. Row tags are metadata, not nested buttons inside the note's navigation link. Opening the note reveals all its tags.
+- **Note metadata:** show the gist's tags together in a wrapping group, visually quieter than the document title. One labeled Tags action opens the native tag editor. Do not pin a new ribbon over the writing canvas or insert tags into the Markdown file.
+- **Filtering:** selected search/filter tokens use the same name and color identity plus a checkmark or explicit remove affordance. Show the matching rule and Clear filters. An interactive label has a nonoverlapping 44-pt target. The full tag picker remains a native searchable list with color dot, name and selected checkmark, not a wall of tiny pills.
+- **No color escalation:** a selected note can have a warm selection surface without recoloring every tag warm. Preserve the user's actual web colors and distinguish a tag selection from a failed metadata save. An unsuccessful edit retains the user's choice with an inline Retry, not a silently reverted success state.
+
+### Purposeful delight
+
+Animation and accent details are welcome when they make writing, reading or navigation feel more direct. Quiet does not mean lifeless. Prefer the system control's pressed, selection and presentation behavior, then add only the missing explanatory transition.
+
+| Interaction | Intended character |
+| --- | --- |
+| Choosing a tag/filter | Keep the tapped label anchored. A short fill/checkmark transition makes the choice visible; a single settled list update follows. Never animate a fresh result order on every typed character or duplicate the system haptic |
+| Opening/closing a note | Native navigation owns the gesture and interactive cancellation. A source-to-destination relationship is desirable only when it survives back gestures, large type and interrupted transitions. Do not replace native navigation with a bespoke page-flip |
+| Source and reading | Preserve the relevant passage and the persistent editor. Let mode chrome change crisply while the document remains the anchor. No full-page flash, fake typing or slide that implies another note |
+| Committing a captured line | Reveal the actual inserted line once, using a brief `selectedSurface` highlight that clears. Never replay it on refresh or use an ongoing pulse |
+| Task completion | A single restrained checkmark transition after local commit. Keep the row and text stable. Optional light feedback is reserved for that committed user action |
+| Save status | A quiet content transition when the truthful state changes. No pill bounce, spinner after completion, autosave toast or success animation competing with the sentence being written |
+
+For custom state changes, start around 160-220 ms ease-out and evaluate on the device. This is a tuning range, not a replacement for system spring parameters. Motion must be interruptible, and Reduce Motion uses an immediate state change or brief nonspatial fade. A flourish that damages input responsiveness, reading position or clarity is removed. Custom gradients or accent strokes are not categorically banned, but must serve a specific focal point and pass the same appearance/accessibility review as typography.
+
 ## 3. Typography and Dynamic Type
 
 Use SF through system font APIs, with language fallback. No bundled system fonts, fixed-size UI typography, condensed prose, manual tracking on body text, or all-uppercase labels needed to understand the product. [3]
@@ -72,7 +124,7 @@ Use SF through system font APIs, with language fallback. No bundled system fonts
 | H3 | `.title3` | Semibold, approximately 20 pt |
 | H4-H6 / section heading | `.headline` | Semibold, approximately 17 pt, preserve semantic heading levels |
 | Prose / source / task | `.body` | Regular, approximately 17 pt |
-| Library title | `.headline` | Default semibold, allow two lines then a detail route |
+| Library title | `.headline` | Default semibold, allow two lines then a detail route. Do not repeat a pin symbol inside the Pinned section or let a status symbol steal title width at accessibility sizes |
 | Secondary metadata | `.subheadline` or `.footnote` | Not smaller merely to preserve a tight row |
 | Code | Monospaced system font at scaled body size | Regular, no `.88em` reduction |
 | Status / footnotes | `.footnote` | Approximately 13 pt, scales, remains readable |
@@ -185,10 +237,13 @@ The preview is a document, not a website inside a card. It matches the editor's 
 | Quote | 3-pt logical-start rule, 16-pt content inset; prose remains primary text, not low-contrast italic |
 | Inline code | Body-size monospace, `surface`, 2-4 pt horizontal padding; no synthetic backticks |
 | Fenced code | Body-size monospace, `surface`, 12-16 pt inset; preserve whitespace and allow horizontal scroll within the block |
-| Tables | Scroll within their block when needed; cells remain legible, not shrunk to fit; semantics retained |
+| Tables | Body-size text with a semibold header and quiet horizontal separators. No outer box, vertical cell grid, or default zebra stripes. Retain authored column alignment and table semantics. Scroll within the block instead of shrinking cells |
 | Alerts | Kind label + symbol + boundary. Color supplements the meaning. Match shared roles in every contrast mode |
 | Footnotes | Scaled footnote style, discoverable backlinks, no 0.8-em unreadable reduction |
-| Diagrams/images | Fit available width, preserve aspect ratio, meaningful alternative text; explicit enlargement if needed |
+| Calculator results | Current result: semibold body text on `selectedSurface`, with a 6-pt radius and 4-pt inline / 2-pt block padding. Previous-result substitutions: regular body text on `surface`. Both use `text`, with tabular numerals when available. No fixed orange/green status chips. Preserve exact expression/value/copy behavior and label the current versus previous result accessibly |
+| Diagrams | Neutral default nodes on `surface`, primary text labels, and `textSecondary` strokes/arrows measured at 3:1 against their actual surroundings. No default lavender. Use the native body font/size, preserve authored meaningful styles, and scroll within the block rather than shrinking labels. Keep alternative text and an explicit enlargement route where needed |
+| Images | Fit available width, preserve aspect ratio, meaningful alternative text; explicit enlargement if needed |
+| Disclosure content | Keep real details/summary semantics, replacing only the browser triangle with a quiet stroked chevron. Body-size semibold summary, 44-pt whole-row target, 8-pt label gap, visible pressed/focus states, and 8-pt space before expanded content. The chevron indicates collapsed/expanded state, with no mandatory motion or card wrapper |
 | Empty/error content | Native-state treatment with an explanation and a real action, not a blank document |
 
 Use logical CSS properties for RTL, with content-aware direction for mixed-script paragraphs. Isolate code direction where necessary without forcing the whole note LTR. No clipped diacritics or line boxes at large size. Do not assume a fixed `line-height` suits every script.
@@ -230,7 +285,39 @@ Approved save language:
 
 Do not call queued or in-memory data Saved. Preserve the failed operation and give a recovery action. Status is accessible text, not just a colored dot. Errors remain long enough to act, not solely in an expiring toast.
 
-## 9. Review gate for every UI surface
+## 9. Conflict review: local choice before publication
+
+### Entry and composition
+
+Keep the inline note state **This note changed elsewhere** with **Review changes**. Do not interrupt writing with a modal alert or open review automatically. Publishing is paused while the conflict remains unresolved, while local persistence continues.
+
+Review changes opens one native, large sheet titled **Review changes**, with the filename and **Your draft is saved on this iPhone. Nothing will be published from this review.** The sheet dismisses without losing the conflict or the source editor's place. On the cover, use one readable column. On the open display the sheet may be wider, but never squeeze base/local/remote into three columns.
+
+Use a native segmented control for **Changes**, **My Draft**, and **GitHub**. Changes shows deterministic source differences from the saved base, grouped and labeled **On this iPhone** and **On GitHub**. Added/removed lines have explicit `+`/`-` and labels, with color only supplementary. Preserve whitespace and Markdown characters. Long source lines scroll inside their block. My Draft and GitHub show full read-only source for inspection, not lossy rendered substitutes. Base is available through **Show original**, not a permanent fourth column. Review source uses the same scaled monospace and semantic colors as code.
+
+### Choices and exact effects
+
+| Available evidence | Choice | Effect |
+| --- | --- | --- |
+| `suggestedMerge` contains a deterministic nonoverlapping merge | **Review combined version**, then **Use combined draft** | Preview the proposed source and its diff against the current local draft. Apply only after that explicit choice. This is not AI and not a claim that the prose is semantically correct |
+| Both local and remote are complete | **Use My Draft** | Retain local text and accept the inspected GitHub version as the comparison baseline. Explain that a later Save to GitHub replaces the inspected remote file with this version. Do not publish from the sheet |
+| A complete remote file exists | **Use GitHub Version** | Show a confirmation that this replaces the current local text, with Cancel as the safe choice. Preserve a durable recovery snapshot. Apply as one undoable local edit, without an automatic write |
+| The remote file is verifiably absent (`remote == nil`) | **Keep Local Draft**; optionally **Restore File...** | Never present a missing file as empty content. Keep the draft recoverable. Restoration requires an explicit confirmation naming the file and a fresh check that the containing gist still exists. A missing whole gist is a different recovery case, not an implicit new-gist creation |
+| Remote is truncated, unavailable, or unverified | **Retry** / **Reconnect GitHub**, as appropriate | No Use GitHub or merge choice based on incomplete content. A timeout or 404 without sufficient evidence is not proof the user's draft should be discarded |
+
+Overlapping edits have no combined-version promise. The user can inspect both versions, copy exact passages using native selection, and choose a complete version. Do not add a per-hunk merge editor or a second live canonical text editor to v1. A dismissible explanation states **Both versions changed the same passage. Choose a version, or return to your draft to combine the changes yourself.**
+
+### Stale review, failure and safety
+
+- Bind the review to account, draft/file identity, local generation, base and the inspected remote revision. Revalidate before Apply. If local text changed, leave it untouched and show **Your draft changed while this review was open. Review the latest draft.** Retain an inspectable proposal; never apply an old whole-file replacement over newer typing.
+- A foreground remote refresh may invalidate the reviewed remote revision. Do not silently swap the GitHub tab underneath the reader. Show **GitHub has a newer version** and an explicit refresh action. Publication performs the coordinator's fresh-read/conflict check again, even after a successful review.
+- Save a recovery snapshot before replacing text. The session owns the transaction, selection and undo. Apply replacement as one local undo step and a new generation; choosing unchanged text does not need a fake empty undo entry. Do not call `resolveConflict` before the active session can safely accept the transaction. Defer application while IME composition or Writing Tools is active, with visible **Finish the current edit to apply this version** guidance.
+- Keep autosave paused after resolving review until a deliberate **Save to GitHub**. After a durable local result, return to the note with **Saved on this iPhone** and the normal manual Save action. No combined Apply & Publish, background publication, or success claim before persistence succeeds.
+- A local storage failure leaves the review open with its proposal intact and an actionable error. Never dismiss into Saved or lose the original on failure. Dismissal, account switching and process termination preserve the unresolved durable draft.
+
+Required evidence includes a nonoverlapping proposal, overlapping edits, a remotely removed file, stale local generation, changed remote revision, local storage failure, offline inspection and AX3/VoiceOver traversal. Include a real undo after adopting the remote/combined source. Neither a diff screenshot nor a successful PATCH proves the safety of this flow.
+
+## 10. Review gate for every UI surface
 
 **No production UI task closes without Designer sign-off on actual Duo simulator evidence.** A polished SVG, passing build, stock component, or Light-mode screenshot alone is not sign-off. Award-caliber is the quality ambition, not a claim of an Apple award.
 
