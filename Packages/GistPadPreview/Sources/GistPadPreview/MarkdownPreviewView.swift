@@ -8,6 +8,7 @@ public struct MarkdownPreviewView: View {
     private let document: PreviewDocument
     private let allowsTaskEdits: Bool
     private let onEvent: @MainActor (PreviewEvent) -> Void
+    @State private var viewportView = PreviewViewportView()
 
     public init(
         document: String,
@@ -22,20 +23,21 @@ public struct MarkdownPreviewView: View {
     }
 
     public var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { _ in
             NativeMarkdownPreview(
                 document: document, allowsTaskEdits: allowsTaskEdits,
-                verticalInsets: geometry.safeAreaInsets, onEvent: onEvent
+                viewportView: viewportView, onEvent: onEvent
             )
             .ignoresSafeArea(.container, edges: .vertical)
         }
+        .overlay { PreviewViewport(view: viewportView).allowsHitTesting(false) }
     }
 }
 
 private struct NativeMarkdownPreview: UIViewRepresentable {
     let document: PreviewDocument
     let allowsTaskEdits: Bool
-    let verticalInsets: EdgeInsets
+    let viewportView: PreviewViewportView
     let onEvent: @MainActor (PreviewEvent) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorSchemeContrast) private var contrast
@@ -44,12 +46,12 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     @Environment(\.personalAccent) private var personalAccent
 
     init(
-        document: PreviewDocument, allowsTaskEdits: Bool, verticalInsets: EdgeInsets,
+        document: PreviewDocument, allowsTaskEdits: Bool, viewportView: PreviewViewportView,
         onEvent: @escaping @MainActor (PreviewEvent) -> Void
     ) {
         self.document = document
         self.allowsTaskEdits = allowsTaskEdits
-        self.verticalInsets = verticalInsets
+        self.viewportView = viewportView
         self.onEvent = onEvent
     }
 
@@ -79,14 +81,16 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         context.coordinator.webView = webView
         let coordinator = context.coordinator
         webView.onViewportChange = { [weak coordinator] in coordinator?.updateViewport($0) }
-        webView.updateVerticalInsets(verticalInsets)
+        viewportView.webView = webView
+        webView.updateViewportView(viewportView)
         webView.load(URLRequest(url: URL(string: "gistpad-preview://bundle/index.html")!))
         return webView
     }
 
     func updateUIView(_ webView: InsetAwareWebView, context: Context) {
         context.coordinator.onEvent = onEvent
-        webView.updateVerticalInsets(verticalInsets)
+        viewportView.webView = webView
+        webView.updateViewportView(viewportView)
         let traits = webView.traitCollection.modifyingTraits {
             $0.userInterfaceStyle = colorScheme == .dark ? .dark : .light
             $0.accessibilityContrast = contrast == .increased ? .high : .normal
@@ -295,13 +299,44 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
 }
 
 @MainActor
+private struct PreviewViewport: UIViewRepresentable {
+    let view: PreviewViewportView
+
+    func makeUIView(context: Context) -> PreviewViewportView { view }
+    func updateUIView(_ view: PreviewViewportView, context: Context) {}
+}
+
+@MainActor
+private final class PreviewViewportView: UIView {
+    weak var webView: InsetAwareWebView?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        accessibilityElementsHidden = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        webView?.setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        webView?.setNeedsLayout()
+    }
+}
+
+@MainActor
 private final class InsetAwareWebView: WKWebView {
     var onViewportChange: ((UIEdgeInsets) -> Void)?
-    private var verticalInsets = EdgeInsets()
+    private weak var viewportView: UIView?
     private var applyingInsets = false
 
-    func updateVerticalInsets(_ insets: EdgeInsets) {
-        verticalInsets = insets
+    func updateViewportView(_ view: UIView) {
+        viewportView = view
         updateContentInsets()
     }
 
@@ -316,16 +351,17 @@ private final class InsetAwareWebView: WKWebView {
     }
 
     private func updateContentInsets() {
-        guard !applyingInsets else { return }
+        guard !applyingInsets, let viewportView, window != nil, viewportView.window === window else { return }
         applyingInsets = true
         defer { applyingInsets = false }
         let previous = scrollView.adjustedContentInset
         let atTop = abs(scrollView.contentOffset.y + previous.top) <= 1
         let automaticTop = previous.top - scrollView.contentInset.top
         let automaticBottom = previous.bottom - scrollView.contentInset.bottom
+        let viewport = convert(viewportView.bounds, from: viewportView)
         var contentInsets = scrollView.contentInset
-        contentInsets.top = max(0, verticalInsets.top - automaticTop)
-        contentInsets.bottom = max(0, verticalInsets.bottom - automaticBottom)
+        contentInsets.top = max(0, viewport.minY - bounds.minY - automaticTop)
+        contentInsets.bottom = max(0, bounds.maxY - viewport.maxY - automaticBottom)
         if contentInsets != scrollView.contentInset {
             scrollView.contentInset = contentInsets
             if atTop, !scrollView.isTracking, !scrollView.isDecelerating {
