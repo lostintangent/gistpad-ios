@@ -6,17 +6,17 @@ Version 1, October 23, 2026. Owner: Designer. Applies to native UI, the TextKit 
 
 This is the implementation specification and review gate, not a claim that the current spike passes it. The app targets iOS 27.1 and later. It is personal, installed directly with the user's paid developer account. No marketing onboarding, App Store work, or subscription UI.
 
-**Design reset in progress:** Library composition and other new visual proposals below are research inputs, not authorization to keep building a hero/grid restyle. The user will review one coherent `design-direction.md` before further visual implementation. Data-safety rules and explicitly requested fixes to note chrome, keyboard controls, scrolling and syntax remain active.
+**October 24 design reset:** Use [design-direction.md](design-direction.md) for the overnight work through M4, with Designer reviewing the actual surfaces as they land. Earlier Library, palette and decorative proposals below are inputs, not competing specifications. Data-safety rules and explicitly requested fixes to note chrome, keyboard controls, scrolling and syntax remain active. The October 24 saving and Apple Intelligence decisions below supersede the earlier background-save and staged-AI policies.
 
 ## 1. Non-negotiable product rules
 
 - Existing notes open rendered. New notes open in source. An interrupted edit resumes at its selection.
 - Cover display: Library or one document. Open inner display: Library + document. Deliberate Focus: source + preview, with Library hidden. Never three squeezed columns.
 - One document session and native text surface survive presentation changes. Folding never saves, publishes, changes mode, accepts a proposal, or resets undo.
-- Local drafts and GitHub publication are different states. Autosave off never publishes on background.
+- Local drafts and GitHub publication are different states. Keep local edits durable. Publish after five quiet seconds and on leaving a note when autosave is on; attempt publication on app background regardless of that preference, within the existing background-task lease and eligibility/safety checks.
 - Today contains the user's current dated note and template. **No Earlier days, task carryover, automatic journal text, or large-gist Git fallback.** A truncated response warns and blocks unsafe writes.
 - Tags apply to gists, not individual files or days. Secret gists and uploaded images are readable by URL.
-- Apple Intelligence is the only AI platform. Writing Tools is the v1 intelligence surface. Later generated edits remain separate proposals until Apply. No app-owned third-party model integration or permanent chatbot.
+- Apple Intelligence is the only AI platform. V1 includes system Writing Tools plus exactly three whole-note actions: Ask, Edit and Review. Use the on-device model when the complete request fits its measured budget; Apple Private Cloud Compute is allowed otherwise. No app-owned tag suggestions, selection/section modes, third-party models or permanent chatbot. Generated changes remain proposals until Apply.
 
 The accepted recommendation governs scope. Earlier concept sketches are directional, not production geometry or an exception to these rules.
 
@@ -420,7 +420,7 @@ Overlapping edits have no combined-version promise. The user can inspect both ve
 - Bind the review to account, draft/file identity, local generation, base and the inspected remote revision. Revalidate before Apply. If local text changed, leave it untouched and show **Your draft changed while this review was open. Review the latest draft.** Retain an inspectable proposal; never apply an old whole-file replacement over newer typing.
 - A foreground remote refresh may invalidate the reviewed remote revision. Do not silently swap the GitHub tab underneath the reader. Show **GitHub has a newer version** and an explicit refresh action. Publication performs the coordinator's fresh-read/conflict check again, even after a successful review.
 - Save a recovery snapshot before replacing text. The session owns the transaction, selection and undo. Apply replacement as one local undo step and a new generation; choosing unchanged text does not need a fake empty undo entry. Do not call `resolveConflict` before the active session can safely accept the transaction. Defer application while IME composition or Writing Tools is active, with visible **Finish the current edit to apply this version** guidance.
-- Keep autosave paused after resolving review until a deliberate **Save to GitHub**. After a durable local result, return to the note with its manual Save action still reachable, even when the profile preference enables autosave. Do not add a healthy local-save footer. No combined Apply & Publish, background publication, or success claim before persistence succeeds.
+- Keep timed/leave-note autosave paused after resolving review until a deliberate **Save to GitHub**. After a durable local result, return to the note with its manual Save action still reachable, even when the profile preference enables autosave. Under the October 24 policy, background Save is manual-save-equivalent and can clear this pause, with the existing fresh-read/conflict and eligibility checks. No combined Apply & Publish, healthy local-save footer or success claim before persistence succeeds.
 - A local storage failure leaves the review open with its proposal intact and an actionable error. Never dismiss into Saved or lose the original on failure. Dismissal, account switching and process termination preserve the unresolved durable draft.
 
 Required evidence includes a nonoverlapping proposal, overlapping edits, a remotely removed file, stale local generation, changed remote revision, local storage failure, offline inspection and AX3/VoiceOver traversal. Include a real undo after adopting the remote/combined source. Neither a diff screenshot nor a successful PATCH proves the safety of this flow.
