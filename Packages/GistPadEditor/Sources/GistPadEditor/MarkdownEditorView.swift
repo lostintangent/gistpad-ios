@@ -7,6 +7,7 @@
     private let insertPhoto: (@MainActor () -> Void)?
     private let photoPrivacy: (@MainActor () -> Void)?
     private let canInsertPhoto: Bool
+    private let intelligence: (@MainActor () -> Void)?
     @State private var linkRequest: LinkRequest?
     @State private var actionError: String?
 
@@ -14,12 +15,14 @@
       session: DocumentSession,
       insertPhoto: (@MainActor () -> Void)? = nil,
       photoPrivacy: (@MainActor () -> Void)? = nil,
-      canInsertPhoto: Bool = false
+      canInsertPhoto: Bool = false,
+      intelligence: (@MainActor () -> Void)? = nil
     ) {
       self.session = session
       self.insertPhoto = insertPhoto
       self.photoPrivacy = photoPrivacy
       self.canInsertPhoto = canInsertPhoto
+      self.intelligence = intelligence
     }
 
     public var body: some View {
@@ -29,11 +32,15 @@
           actions: SourceToolbarActions(
             format: format, link: beginLink, indent: indent,
             photo: insertPhoto, photoPrivacy: photoPrivacy,
+            intelligence: intelligence,
             dismiss: { session.textView.resignFirstResponder() }),
           configuration: SourceToolbarConfiguration(
             canFormat: session.canFormat,
             canInsertPhoto: canInsertPhoto, hasPhoto: insertPhoto != nil,
-            hasPhotoPrivacy: photoPrivacy != nil)
+            hasPhotoPrivacy: photoPrivacy != nil,
+            canUseIntelligence: !session.isComposing && !session.writingToolsActive
+              && session.textView.markedTextRange == nil,
+            hasIntelligence: intelligence != nil)
         )
         .id(session.viewIdentity)
         .ignoresSafeArea(.container, edges: .vertical)

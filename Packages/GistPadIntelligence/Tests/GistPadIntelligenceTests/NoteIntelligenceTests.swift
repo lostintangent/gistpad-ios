@@ -4,6 +4,18 @@ import Testing
 @testable import GistPadIntelligence
 
 struct NoteAnchorTests {
+  @Test func anEmptyNoteHasExactlyOneSafeInsertionAnchor() throws {
+    let snapshot = note("")
+    let proposal = NoteProposal(snapshot: snapshot, candidates: [change("", "A new paragraph")])
+    #expect(proposal.canApply)
+    #expect(try proposal.application(to: snapshot).source == "A new paragraph")
+    #expect(NoteAnchors.matches("", in: "").isEmpty)
+    let overlapping = NoteProposal(
+      snapshot: snapshot, candidates: [change("", "First"), change("", "Second")])
+    #expect(overlapping.omittedCount == 2)
+    #expect(!overlapping.canApply)
+  }
+
   @Test func literalAnchorsRejectMissingAmbiguousAndNormalizedQuotes() {
     let snapshot = note("same same cafe\u{301}")
     let proposal = NoteProposal(
@@ -196,6 +208,7 @@ struct NoteEngineTests {
     #expect(backend.extractionPasses.map(\.source).joined().utf8.elementsEqual(source.utf8))
     #expect(backend.answerPasses.count == 1)
     #expect(backend.answerPasses[0].source == "needle")
+    #expect(backend.answerPasses[0].evidenceOnly)
     #expect(answer.parts.count == 1)
   }
 
@@ -210,7 +223,17 @@ struct NoteEngineTests {
     await #expect(throws: NoteIntelligenceError.self) {
       try await NoteIntelligenceEngine(backend: backend).propose(request)
     }
+
     #expect(backend.replacementPasses.isEmpty)
+  }
+
+  @Test func editRejectsACommentInsteadOfAReplacement() async {
+    let backend = FakeNoteModel()
+    backend.omitReplacement = true
+    await #expect(throws: NoteIntelligenceError.self) {
+      try await NoteIntelligenceEngine(backend: backend).propose(
+        NoteIntelligenceRequest(snapshot: note("bad"), action: .edit, instruction: "Fix"))
+    }
   }
 }
 
@@ -219,6 +242,7 @@ private final class FakeNoteModel: NoteModelBackend {
   let context = 1_536
   let overhead = 64
   var available = true
+  var omitReplacement = false
   var maximumGeneratedSourceLength = Int.max
   var replacementPasses: [NoteModelPass] = []
   var extractionPasses: [NoteModelPass] = []
@@ -243,7 +267,9 @@ private final class FakeNoteModel: NoteModelBackend {
     return [
       NoteReplacementCandidate(
         quote: pass.source,
-        replacement: pass.source.replacingOccurrences(of: "bad", with: "good"), reason: "Fix")
+        replacement: omitReplacement
+          ? nil : pass.source.replacingOccurrences(of: "bad", with: "good"),
+        reason: "Fix")
     ]
   }
 

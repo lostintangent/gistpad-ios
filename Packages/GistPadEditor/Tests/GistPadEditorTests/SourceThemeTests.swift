@@ -1,5 +1,6 @@
 #if canImport(UIKit)
   import Foundation
+  import GistPadAppearance
   import GistPadInterface
   import Testing
   import UIKit
@@ -142,12 +143,16 @@
     }
 
     @Test func appearanceChangesPreserveAttributedTokensWithoutRehighlighting() throws {
-      let session = DocumentSession(documentID: "dynamic", text: "# Heading\n**bold**")
+      let session = DocumentSession(documentID: "dynamic", text: "# Heading\n**bold**\n- [ ] Task")
       let view = session.textView
       view.traitOverrides.legibilityWeight = .regular
       session.updateAppearanceIfNeeded()
       let color = try #require(
         view.textStorage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? UIColor)
+      let taskIndex = (session.text as NSString).range(of: "[ ]").location
+      let taskColor = try #require(
+        view.textStorage.attribute(.foregroundColor, at: taskIndex, effectiveRange: nil) as? UIColor
+      )
       let identity = session.viewIdentity
       let selection = NSRange(location: 2, length: 4)
       view.selectedRange = selection
@@ -168,9 +173,27 @@
           #expect(session.viewIdentity == identity)
           #expect(view.selectedRange == selection)
           #expect(session.generation == 0)
-          #expect(session.text == "# Heading\n**bold**")
+          #expect(session.text == "# Heading\n**bold**\n- [ ] Task")
           #expect(view.undoManager?.canUndo != true)
         }
+      }
+      for saved in ["#FACC15", "#FF00FF"] {
+        view.traitOverrides[PersonalAccentTrait.self] = PersonalAccent(savedHex: saved)
+        session.updateAppearanceIfNeeded()
+        let retained = try #require(
+          view.textStorage.attribute(.foregroundColor, at: taskIndex, effectiveRange: nil)
+            as? UIColor)
+        #expect(retained === taskColor)
+        #expect(
+          retained.resolvedColor(with: view.traitCollection)
+            .isEqual(UIColor(InterfaceTheme.accent).resolvedColor(with: view.traitCollection)))
+        #expect(
+          view.textStorage.attribute(sentinel, at: 0, effectiveRange: nil) as? String == "retained")
+        #expect(session.viewIdentity == identity)
+        #expect(view.selectedRange == selection)
+        #expect(session.generation == 0)
+        #expect(session.text == "# Heading\n**bold**\n- [ ] Task")
+        #expect(view.undoManager?.canUndo != true)
       }
     }
 

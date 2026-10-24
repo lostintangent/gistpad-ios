@@ -62,9 +62,11 @@ public struct NoteProposal: Sendable {
     var anchored = scopedCandidates.map { candidate, scope in
       let matches = NoteAnchors.matches(
         candidate.quote, in: snapshot.source, within: scope,
-        before: candidate.before, after: candidate.after)
+        before: candidate.before, after: candidate.after, allowEmptyNote: true)
       let rejection: NoteAnchorRejection?
-      if candidate.quote.isEmpty || Range(scope, in: snapshot.source) == nil {
+      if (candidate.quote.isEmpty && !snapshot.source.isEmpty)
+        || Range(scope, in: snapshot.source) == nil
+      {
         rejection = .invalidRange
       } else if matches.isEmpty {
         rejection = .notFound
@@ -84,6 +86,7 @@ public struct NoteProposal: Sendable {
       for second in anchored.indices where second > first {
         guard let right = anchored[second].range,
           NSIntersectionRange(left, right).length > 0
+            || (left.length == 0 && right.length == 0 && left.location == right.location)
         else { continue }
         overlapping.insert(first)
         overlapping.insert(second)
@@ -229,11 +232,15 @@ public struct NoteApplication: Sendable {
 enum NoteAnchors {
   static func matches(
     _ quote: String, in source: String, within scope: NSRange? = nil,
-    before: String = "", after: String = ""
+    before: String = "", after: String = "", allowEmptyNote: Bool = false
   ) -> [NSRange] {
     let text = source as NSString
     let scope = scope ?? NSRange(location: 0, length: text.length)
-    guard !quote.isEmpty, Range(scope, in: source) != nil else { return [] }
+    guard Range(scope, in: source) != nil else { return [] }
+    if quote.isEmpty {
+      return allowEmptyNote && source.isEmpty && scope == NSRange(location: 0, length: 0)
+        && before.isEmpty && after.isEmpty ? [scope] : []
+    }
     var result: [NSRange] = []
     var cursor = scope.location
     while cursor < NSMaxRange(scope) {

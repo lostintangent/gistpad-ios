@@ -31,6 +31,9 @@ public final class NoteIntelligenceEngine {
         let generated = try await backend.replacements(
           for: pass(request, purpose: purpose, source: chunk.source, model: model))
         try Task.checkCancellation()
+        if request.action == .edit, generated.contains(where: { $0.replacement == nil }) {
+          throw NoteIntelligenceError.invalidResponse
+        }
         candidates.append(contentsOf: generated.map { ($0, chunk.range) })
         completed += 1
       } catch NoteIntelligenceError.responseTooLarge, NoteIntelligenceError.insufficientContext {
@@ -116,7 +119,8 @@ public final class NoteIntelligenceEngine {
     var evidence = initial
     for _ in 0..<8 {
       let source = evidence.joined(separator: "\n\n")
-      let answer = pass(request, purpose: .answer, source: source, model: model)
+      let answer = pass(
+        request, purpose: .answer, source: source, model: model, evidenceOnly: true)
       if try await fits(answer, model: model) { return answer }
       let snapshot = NoteSnapshot(
         documentID: request.snapshot.documentID, sessionID: request.snapshot.sessionID,
@@ -223,11 +227,11 @@ public final class NoteIntelligenceEngine {
 
   private func pass(
     _ request: NoteIntelligenceRequest, purpose: NoteModelPass.Purpose,
-    source: String, model: NoteModelInfo
+    source: String, model: NoteModelInfo, evidenceOnly: Bool = false
   ) -> NoteModelPass {
     NoteModelPass(
       purpose: purpose, instruction: request.instruction, source: source,
-      responseTokens: min(1_536, model.contextSize / 3))
+      responseTokens: min(1_536, model.contextSize / 3), evidenceOnly: evidenceOnly)
   }
 
   private func validate(_ request: NoteIntelligenceRequest) throws {

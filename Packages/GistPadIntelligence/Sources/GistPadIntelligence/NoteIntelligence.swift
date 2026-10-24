@@ -111,12 +111,17 @@ public struct NoteModelPass: Sendable {
   public let instruction: String
   public let source: String
   public let responseTokens: Int
+  public let evidenceOnly: Bool
 
-  public init(purpose: Purpose, instruction: String, source: String, responseTokens: Int) {
+  public init(
+    purpose: Purpose, instruction: String, source: String, responseTokens: Int,
+    evidenceOnly: Bool = false
+  ) {
     self.purpose = purpose
     self.instruction = instruction
     self.source = source
     self.responseTokens = responseTokens
+    self.evidenceOnly = evidenceOnly
   }
 }
 

@@ -81,8 +81,18 @@
       else {
         throw SourceMutation.MutationError.invalidRange
       }
+      let inverse = SourceEdit(
+        mutation: SourceMutation(
+          range: NSRange(
+            location: mutation.range.location, length: mutation.replacement.utf16.count),
+          expected: mutation.replacement,
+          replacement: (text as NSString).substring(with: mutation.range)),
+        selection: previousSelection)
       isApplyingSourceEdit = true
-      textView.undoManager?.beginUndoGrouping()
+      let undo = textView.undoManager
+      undo?.beginUndoGrouping()
+      // UIKit's replacement undo selects the mutation range, not the user's original selection.
+      undo?.disableUndoRegistration()
       textView.replace(range, withText: mutation.replacement)
       let delta = mutation.replacement.utf16.count - mutation.range.length
       if let finalSelection {
@@ -93,7 +103,15 @@
         textView.selectedRange = NSRange(
           location: previousSelection.location + delta, length: previousSelection.length)
       }
-      textView.undoManager?.endUndoGrouping()
+      undo?.enableUndoRegistration()
+      undo?.registerUndo(withTarget: self) { session in
+        do {
+          try session.apply(inverse, generation: session.generation)
+        } catch {
+          session.inputError = error.localizedDescription
+        }
+      }
+      undo?.endUndoGrouping()
       isApplyingSourceEdit = false
       synchronizeText()
     }
@@ -452,7 +470,8 @@
 
     override func scrollRangeToVisible(_ range: NSRange) {
       guard isFirstResponder, range == selectedRange, !sourceInteractionActive,
-        markedTextRange == nil else {
+        markedTextRange == nil
+      else {
         super.scrollRangeToVisible(range)
         return
       }
@@ -466,7 +485,9 @@
       }
       let caret = caretRect(for: position).insetBy(dx: 0, dy: -8)
       let viewport = bounds.inset(by: adjustedContentInset)
-      guard viewport.height >= caret.height, caret.minY.isFinite, caret.maxY.isFinite else { return }
+      guard viewport.height >= caret.height, caret.minY.isFinite, caret.maxY.isFinite else {
+        return
+      }
       if caret.minY < viewport.minY {
         setVerticalContentOffset(contentOffset.y + caret.minY - viewport.minY)
       } else if caret.maxY > viewport.maxY {
@@ -558,7 +579,7 @@
           setVerticalContentOffset(y)
         }
       }
-      if (widthChanged || heightChanged), isFirstResponder, markedTextRange == nil {
+      if widthChanged || heightChanged, isFirstResponder, markedTextRange == nil {
         revealCaret()
       }
       previousWidth = bounds.width

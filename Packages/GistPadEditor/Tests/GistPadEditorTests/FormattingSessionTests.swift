@@ -180,12 +180,19 @@
       #expect(toolbar.accessibilityIdentifier == "editor-keyboard-bar")
       #expect(toolbar.glass.effect is UIGlassEffect)
       let items = toolbar.buttons.arrangedSubviews.compactMap { $0 as? UIButton }
-      #expect(items.count == 6)
+      #expect(items.count == 5)
       #expect(items.allSatisfy { $0.title(for: .normal) == nil })
-      let bold = try #require(items.first { $0.accessibilityLabel == "Bold" })
+      let style = try #require(items.first { $0.accessibilityLabel == "Text Style" })
+      let menu = try #require(style.menu)
+      let bold = try #require(menuActions(menu.children).first { $0.title == "Bold" })
+      #expect(menuActions(menu.children).contains { $0.title == "Italic" })
+      #expect(
+        !items.contains { $0.accessibilityLabel == "Bold" || $0.accessibilityLabel == "Italic" })
       session.textView.selectedRange = NSRange(location: 2, length: 4)
       session.textView.undoManager?.removeAllActions()
-      bold.sendActions(for: .primaryActionTriggered)
+      let dispatch = UIButton(type: .system)
+      dispatch.addAction(bold, for: .primaryActionTriggered)
+      dispatch.sendActions(for: .primaryActionTriggered)
       #expect(session.text == "A **note**")
       #expect(session.generation == 1)
       session.textView.undoManager?.undo()
@@ -223,6 +230,25 @@
       #expect(!session.textView.isFirstResponder)
     }
 
+    @Test func intelligenceAccessoryInvokesItsCallbackWithoutChangingSource() throws {
+      let session = DocumentSession(documentID: "intelligence-button", text: "A note")
+      var requests = 0
+      let window = host(session, intelligence: { requests += 1 })
+      defer { window.isHidden = true }
+      session.textView.undoManager?.removeAllActions()
+      let toolbar = try #require(session.textView.inputAccessoryView as? SourceAccessoryView)
+      let button = try #require(
+        toolbar.buttons.arrangedSubviews.compactMap { $0 as? UIButton }.first {
+          $0.accessibilityIdentifier == "editor-intelligence"
+        })
+      #expect(button.isEnabled)
+      button.sendActions(for: .primaryActionTriggered)
+      #expect(requests == 1)
+      #expect(session.text == "A note")
+      #expect(session.generation == 0)
+      #expect(session.textView.undoManager?.canUndo == false)
+    }
+
     @Test func nativeFindAndReplaceKeepsURLReplacementsLiteral() async throws {
       let session = DocumentSession(documentID: "find", text: "A note and another note")
       let window = host(session)
@@ -241,11 +267,21 @@
       #expect(session.text == "A https://example.com and another https://example.com")
     }
 
-    private func host(_ session: DocumentSession) -> UIWindow {
+    private func menuActions(_ elements: [UIMenuElement]) -> [UIAction] {
+      elements.flatMap { element -> [UIAction] in
+        if let action = element as? UIAction { return [action] }
+        if let menu = element as? UIMenu { return menuActions(menu.children) }
+        return []
+      }
+    }
+
+    private func host(
+      _ session: DocumentSession, intelligence: (@MainActor () -> Void)? = nil
+    ) -> UIWindow {
       // Package logic tests have no connected UIWindowScene.
       let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
       window.rootViewController = UIHostingController(
-        rootView: MarkdownEditorView(session: session))
+        rootView: MarkdownEditorView(session: session, intelligence: intelligence))
       window.makeKeyAndVisible()
       window.layoutIfNeeded()
       session.textView.becomeFirstResponder()

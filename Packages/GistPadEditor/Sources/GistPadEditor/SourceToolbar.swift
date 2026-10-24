@@ -9,6 +9,7 @@
     let indent: @MainActor (Bool) -> Void
     let photo: (@MainActor () -> Void)?
     let photoPrivacy: (@MainActor () -> Void)?
+    var intelligence: (@MainActor () -> Void)? = nil
     let dismiss: @MainActor () -> Void
   }
 
@@ -17,6 +18,8 @@
     let canInsertPhoto: Bool
     let hasPhoto: Bool
     let hasPhotoPrivacy: Bool
+    var canUseIntelligence = true
+    var hasIntelligence = false
   }
 
   @MainActor
@@ -143,19 +146,35 @@
           })
       }
       insert.append(UIMenu(options: .displayInline, children: photos))
-      let style = item("Text Style", image: "textformat", menu: UIMenu(children: headings))
-      let bold = command("Bold", image: "bold") { $0.actions.format(.bold) }
-      let italic = command("Italic", image: "italic") { $0.actions.format(.italic) }
+      let emphasis = [
+        action(String(localized: "Bold", bundle: .module), image: "bold") {
+          $0.actions.format(.bold)
+        },
+        action(String(localized: "Italic", bundle: .module), image: "italic") {
+          $0.actions.format(.italic)
+        },
+      ]
+      let style = item(
+        "Text Style", image: "textformat",
+        menu: UIMenu(children: [
+          UIMenu(options: .displayInline, children: emphasis),
+          UIMenu(options: .displayInline, children: headings),
+        ]))
       let list = item("Lists", image: "list.bullet", menu: UIMenu(children: lists))
       let insertion = item("Insert", image: "plus", menu: UIMenu(children: insert))
       insertion.accessibilityIdentifier = "editor-insert-menu"
+      let intelligence = command("Intelligence", image: "sparkles") {
+        $0.actions.intelligence?()
+      }
+      intelligence.accessibilityIdentifier = "editor-intelligence"
+      intelligence.isEnabled = configuration.hasIntelligence && configuration.canUseIntelligence
       let dismiss = command("Hide Keyboard", image: "keyboard.chevron.compact.down") {
         $0.actions.dismiss()
       }
-      for item in [style, bold, italic, list, insertion] {
+      for item in [style, list, insertion] {
         item.isEnabled = configuration.canFormat
       }
-      toolbar.setButtons([style, bold, italic, list, insertion, dismiss])
+      toolbar.setButtons([style, list, insertion, intelligence, dismiss])
     }
 
     private func item(
