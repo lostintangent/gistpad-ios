@@ -6,6 +6,108 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct NoteChromeHostTests {
+  struct MenuCapture: Sendable {
+    let titleMenu: Bool
+    let dark: Bool
+  }
+
+  @Test(arguments: [
+    MenuCapture(titleMenu: true, dark: false),
+    MenuCapture(titleMenu: true, dark: true),
+    MenuCapture(titleMenu: false, dark: false),
+    MenuCapture(titleMenu: false, dark: true),
+  ])
+  func nativeNoteMenusOpenForDesignReview(capture: MenuCapture) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.overrideUserInterfaceStyle = capture.dark ? .dark : .light
+    let title = "A place for good ideas"
+    var actions = NoteActions()
+    actions.selectFile = { _ in }
+    actions.renameFile = {}
+    actions.addFile = {}
+    actions.rename = {}
+    actions.togglePin = {}
+    actions.toggleStar = {}
+    actions.share = {}
+    actions.copyLink = {}
+    actions.find = {}
+    actions.tags = {}
+    actions.intelligence = {}
+    actions.openInGitHub = {}
+    actions.toggleArchive = {}
+    actions.delete = {}
+    window.rootViewController = UIHostingController(
+      rootView: NavigationStack {
+        NoteScreen(
+          document: .init(
+            title: title,
+            files: [
+              .init(id: "README.md", filename: "README.md"),
+              .init(id: "Ideas.md", filename: "Ideas.md"),
+            ],
+            selectedFileID: "README.md"),
+          mode: .constant(.reading), saveState: .savedToGitHub, actions: actions
+        ) {
+          Text("Some days, all you need is a little room to think.")
+        } preview: {
+          Text("Some days, all you need is a little room to think.")
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(24)
+        }
+      })
+    window.makeKeyAndVisible()
+    defer {
+      window.rootViewController?.dismiss(animated: false)
+      window.isHidden = true
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(400))
+    let bar = try #require(descendants(window).compactMap { $0 as? UINavigationBar }.last)
+    let controls = descendants(capture.titleMenu ? bar : window).compactMap { $0 as? UIControl }
+    let candidate = controls.first { control in
+      if capture.titleMenu {
+        return control.accessibilityLabel?.contains(title) == true
+          || descendants(control).compactMap { $0 as? UILabel }.contains { $0.text == title }
+      }
+      return control.accessibilityIdentifier == "note-actions"
+        || control.accessibilityLabel == "Note actions"
+        || control.accessibilityLabel == "More"
+        || (control as? UIButton)?.menu.map {
+          menuTitles($0).contains("Intelligence…")
+        } == true
+    }
+    if candidate == nil {
+      Attachment.record(
+        controls.map {
+          "\(type(of: $0)): \($0.accessibilityIdentifier ?? "") / \($0.accessibilityLabel ?? "")"
+        }.joined(separator: "\n"),
+        named: "native-note-menu-controls.txt")
+    }
+    let button = try #require(candidate)
+    button.performPrimaryAction()
+    try await Task.sleep(for: .milliseconds(400))
+    let titles = Set(scene.windows.filter { !$0.isHidden }.flatMap {
+      descendants($0).compactMap { ($0 as? UILabel)?.text }
+    })
+    let expected: Set<String> = capture.titleMenu
+      ? ["README.md", "Ideas.md", "Rename Current File…", "Add File…"]
+      : ["Rename Note…", "Intelligence…", "Archive", "Delete Note…"]
+    #expect(titles.isSuperset(of: expected))
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+      for overlay in scene.windows where !overlay.isHidden && overlay.windowLevel > window.windowLevel {
+        overlay.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+      }
+    }
+    Attachment.record(
+      image,
+      named: "note-\(capture.titleMenu ? "title" : "more")-menu-\(capture.dark ? "Dark" : "Light").png",
+      as: .png)
+  }
+
   struct Presentation: Sendable {
     let state: NoteSaveState
     let autosave: Bool
@@ -109,6 +211,10 @@ struct NoteChromeHostTests {
       #expect(titles.contains("Add File…"))
       #expect(!titles.contains("Rename Note…"))
     }
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+    }
+    Attachment.record(image, named: "note-resting-\(fileCount)-files.png", as: .png)
   }
 
   private func descendants(_ view: UIView) -> [UIView] {

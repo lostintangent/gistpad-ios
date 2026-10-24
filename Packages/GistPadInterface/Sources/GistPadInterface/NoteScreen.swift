@@ -95,6 +95,20 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             String(localized: "Save details", bundle: .module),
             isPresented: Binding(get: { saveDetails != nil }, set: { if !$0 { saveDetails = nil } })
         ) {
+            if saveState == .creationUncertain {
+                if let publish = actions.publishAsNew {
+                    Button(String(localized: "Publish as New Note…", bundle: .module)) {
+                        saveDetails = nil
+                        publish()
+                    }
+                }
+                if let discard = actions.discardLocalCopy {
+                    Button(String(localized: "Discard This Copy…", bundle: .module), role: .destructive) {
+                        saveDetails = nil
+                        discard()
+                    }
+                }
+            }
             Button(String(localized: "Close", bundle: .module), role: .cancel) { saveDetails = nil }
         } message: {
             Text(verbatim: saveDetails ?? "")
@@ -357,6 +371,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             }
             .labelStyle(.iconOnly)
             .frame(minWidth: 44, minHeight: 44)
+            .accessibilityIdentifier("note-save-details")
         }
     }
 

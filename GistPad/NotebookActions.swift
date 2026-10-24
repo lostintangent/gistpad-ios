@@ -2,6 +2,7 @@ import Foundation
 import GistPadSync
 
 enum NotebookAction: Sendable {
+  case signOut
   case preference(PreferenceOperation)
   case star(gistID: String, starred: Bool)
   case archive(gistID: String, archived: Bool)
@@ -12,17 +13,26 @@ enum NotebookAction: Sendable {
   case addFile(gistID: String, filename: String)
   case delete(gistID: String)
   case inspectRemote(draftID: UUID, generation: UInt64)
+  case confirmNewCreation(draftID: UUID, generation: UInt64)
+  case discardUncertainCreation(draftID: UUID, generation: UInt64)
   case refreshConflict(NotebookReviewContext)
   case resolveConflict(NotebookReviewContext, text: String, generation: UInt64)
 }
 
 enum NotebookActionResult: Sendable {
+  case signedOut
   case account(NotebookAccount)
   case gist(Gist, starred: Bool? = nil)
   case archived(Gist, undo: NotebookArchiveUndo)
   case draft(DraftSnapshot, gist: Gist? = nil)
   case deleted(gistID: String, drafts: DeletedGistDrafts)
   case review(DraftSnapshot)
+  case discardedDraft(UUID)
+}
+
+enum NotebookCreationChoice: Equatable, Sendable {
+  case publishAsNew
+  case discard
 }
 
 enum NotebookActionError: Error, Equatable {
@@ -87,6 +97,20 @@ extension LiveNotebookProvider {
     }
     if case .preference(let operation) = action {
       return .account(NotebookAccount(try await accounts.apply(operation, accountID: accountID)))
+    }
+    if case .signOut = action {
+      try await accounts.signOut(accountID: accountID)
+      return .signedOut
+    }
+    if case .confirmNewCreation(let id, let generation) = action {
+      return .review(
+        try await drafts.confirmNewCreation(
+          id: id, accountID: accountID, expectedGeneration: generation))
+    }
+    if case .discardUncertainCreation(let id, let generation) = action {
+      try await drafts.discardUncertainCreation(
+        id: id, accountID: accountID, expectedGeneration: generation)
+      return .discardedDraft(id)
     }
     if case .renameLocal(let id, let title) = action {
       guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -160,7 +184,8 @@ extension LiveNotebookProvider {
     case .archive(let gistID, _), .rename(let gistID, _),
       .renameFile(let gistID, _, _), .addFile(let gistID, _), .delete(let gistID):
       id = gistID
-    case .star, .preference, .renameLocal, .refreshConflict, .resolveConflict, .inspectRemote:
+    case .star, .preference, .renameLocal, .refreshConflict, .resolveConflict, .inspectRemote,
+      .signOut, .confirmNewCreation, .discardUncertainCreation:
       preconditionFailure("Handled before the owner-only action boundary.")
     }
     let gist = try await client.gist(id: id)
@@ -241,7 +266,8 @@ extension LiveNotebookProvider {
       } catch {
         throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: id)
       }
-    case .star, .preference, .renameLocal, .refreshConflict, .resolveConflict, .inspectRemote:
+    case .star, .preference, .renameLocal, .refreshConflict, .resolveConflict, .inspectRemote,
+      .signOut, .confirmNewCreation, .discardUncertainCreation:
       preconditionFailure("Handled before the owner-only action boundary.")
     }
 

@@ -1,3 +1,4 @@
+import GistPadInterface
 import GistPadSync
 import SwiftUI
 import UniformTypeIdentifiers
@@ -19,12 +20,12 @@ struct NotebookAccountSwitchSheet: View {
       Form {
         Section {
           LabeledContent("Current", value: "@\(current)")
-          LabeledContent("Switching to", value: "@\(replacement)")
+          LabeledContent("New account", value: "@\(replacement)")
         } footer: {
           Text("Your drafts stay on this iPhone with their original account. Switching never publishes them.")
         }
         Section {
-          Button("Switch Account") {
+          Button("Switch to @\(replacement)") {
             work { try await switchAccount() }
           }
           .accessibilityIdentifier("account-switch-confirm")
@@ -67,6 +68,7 @@ struct NotebookAccountSwitchSheet: View {
         }
       }
     }
+    .tint(InterfaceTheme.accent)
   }
 
   private func work(_ operation: @escaping @MainActor () async throws -> Void) {

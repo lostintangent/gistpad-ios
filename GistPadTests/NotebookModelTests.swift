@@ -11,6 +11,91 @@ import UIKit
 
 @MainActor
 struct NotebookModelTests {
+  @Test func signOutDefersForegroundAndRouteRestorationUntilLocalCleanupFinishes() async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount, gists: [try makeGist(id: "a", title: "Signing out")])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    let cachedReads = await provider.cachedAccountReads
+    let refreshReads = await provider.refreshAccountReads
+    await provider.holdSignOut()
+    let signOut = Task { try await model.perform(.signOut) }
+    await provider.waitForSignOut()
+    #expect(model.isSigningOut)
+    await model.start()
+    await model.refresh()
+    await model.signIn()
+    #expect(await provider.cachedAccountReads == cachedReads)
+    #expect(await provider.refreshAccountReads == refreshReads)
+    #expect(model.library.loadState == .ready)
+    #expect(model.account?.id == fixtureAccount.id)
+    await provider.releaseSignOut()
+    _ = try await signOut.value
+    #expect(!model.isSigningOut)
+    #expect(model.account == nil)
+    #expect(model.library.loadState == .signedOut)
+  }
+
+  @Test(arguments: [false, true])
+  func signOutRetainsExactDraftsAndRestoresTheSameAccount(afterLocalCleanupFailure: Bool) async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount, gists: [try makeGist(id: "a", title: "Kept on this iPhone")])
+    let selectionStore = NotebookSelectionStore()
+    let model = NotebookModel(provider: provider, selections: selectionStore)
+    await model.start()
+    let text = "Private e\u{301}\r\n日本語 👩🏽‍💻"
+    let draft = try await provider.stageExistingDraft(gistID: "a", text: text)
+    await model.open(gistID: "a")
+    try model.remember(.init(gistID: "a", filename: draft.filename, draftID: draft.id))
+    await provider.failSignOut(afterLocalCleanup: afterLocalCleanupFailure)
+    if afterLocalCleanupFailure {
+      await #expect(throws: URLError.self) { _ = try await model.perform(.signOut) }
+    } else {
+      _ = try await model.perform(.signOut)
+    }
+    #expect(model.account == nil)
+    #expect(model.loadedDocument == nil)
+    #expect(model.cachedLibrary == nil)
+    #expect(model.library.snapshot.notes.isEmpty)
+    #expect(model.library.loadState == .signedOut)
+    #expect(try selectionStore.selection(accountID: fixtureAccount.id)?.draftID == draft.id)
+    let kept = try await provider.localState(accountID: fixtureAccount.id).drafts
+    #expect(kept.count == 1)
+    #expect(kept.first?.text.utf8.elementsEqual(text.utf8) == true)
+    #expect(await provider.publicationReasons.isEmpty)
+    await model.signIn()
+    #expect(model.account?.id == fixtureAccount.id)
+    #expect(model.loadedDocument?.draft?.id == draft.id)
+    #expect(model.loadedDocument?.text.utf8.elementsEqual(text.utf8) == true)
+    #expect(await provider.publicationReasons.isEmpty)
+  }
+
+  @Test func rejectedSignOutLeavesTheOpenAccountAndDraftIntact() async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount, gists: [try makeGist(id: "a", title: "Still open")])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await model.open(gistID: "a")
+    let document = try #require(model.loadedDocument)
+    await provider.rejectSignOut()
+    await #expect(throws: URLError.self) { _ = try await model.perform(.signOut) }
+    #expect(model.account?.id == fixtureAccount.id)
+    #expect(model.loadedDocument?.id == document.id)
+    #expect(model.loadedDocument?.text.utf8.elementsEqual(document.text.utf8) == true)
+    #expect(await provider.publicationReasons.isEmpty)
+  }
+
+  @Test func accountIdentityOmitsMissingNamesAndUsesTheNativeAvatarURL() throws {
+    let account = NotebookAccount(
+      id: UUID(), login: "octavia", avatarURL: URL(string: "https://avatars.githubusercontent.com/u/1"),
+      preferences: .init(metadata: ["full_name": .string("  "), "name": .string("Octavia")]))
+    #expect(account.displayName == "Octavia")
+    #expect(account.avatarURL?.host == "avatars.githubusercontent.com")
+    #expect(fixtureAccount.displayName == nil)
+    #expect(NotebookModel.message(for: URLError(.notConnectedToInternet))
+      == "You're offline. Connect to the internet, then try again.")
+  }
+
   @Test func spellingPreferencesUpdateTheRetainedEditorWithoutChangingItsSourceOrSelection() async throws {
     let provider = StubNotebookProvider(
       account: fixtureAccount, gists: [try makeGist(id: "a", title: "Spelling")])
@@ -325,6 +410,8 @@ struct NotebookModelTests {
     let model = NotebookModel(provider: provider)
     await model.start()
     await model.open(gistID: "a")
+    model.library.query = "Requested"
+    await model.search()
     await provider.setReadFailure(id: "b", fails: true)
     await model.open(gistID: "b", filename: "Other.md", rowID: "search-result")
     #expect(model.loadedDocument?.gist?.id == "a")
@@ -559,6 +646,40 @@ struct NotebookModelTests {
 @Suite(.serialized)
 @MainActor
 struct NotebookNavigationHostTests {
+  @Test func sourceIntelligenceOpensTheLiveSheetForTheRetainedEditor() async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount,
+      gists: [try makeGist(id: "a", title: "A retained thought", content: "A little room to think.")])
+    let host = try await NavigationHost(provider: provider)
+    defer { host.close() }
+    await host.model.open(gistID: "a")
+    try await host.waitUntil { host.editor(text: "A little room to think.") != nil }
+    let editor = try #require(host.editor(text: "A little room to think."))
+    editor.becomeFirstResponder()
+    try await host.waitUntil { editor.isFirstResponder }
+    let selection = NSRange(location: 2, length: 6)
+    editor.selectedRange = selection
+    let accessory = try #require(editor.inputAccessoryView)
+    let entry = try #require(
+      host.descendants(of: accessory).compactMap { $0 as? UIButton }.first {
+        $0.accessibilityIdentifier == "editor-intelligence"
+      })
+    #expect(entry.isEnabled)
+    entry.performPrimaryAction()
+    try await host.waitUntil {
+      host.descendants.compactMap { $0 as? UINavigationBar }
+        .contains { $0.topItem?.title == "Intelligence" }
+    }
+    #expect(!editor.isFirstResponder)
+    #expect(editor.selectedRange == selection)
+    #expect(host.editor(text: "A little room to think.") === editor)
+    let image = UIGraphicsImageRenderer(bounds: host.window.bounds).image { _ in
+      host.window.drawHierarchy(in: host.window.bounds, afterScreenUpdates: true)
+    }
+    Attachment.record(image, named: "live-source-intelligence-entry-no-generation.png", as: .png)
+    #expect(await provider.publicationReasons.isEmpty)
+  }
+
   @Test func aFailedOpenShowsItsOwnTitleAndRetryInsteadOfThePreviousEditor() async throws {
     let provider = StubNotebookProvider(
       account: fixtureAccount,
@@ -576,6 +697,11 @@ struct NotebookNavigationHostTests {
       host.descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title }.contains("Requested")
     }
     #expect(host.editor(text: "Previous source") == nil)
+    host.window.layoutIfNeeded()
+    let image = UIGraphicsImageRenderer(bounds: host.window.bounds).image { _ in
+      host.window.drawHierarchy(in: host.window.bounds, afterScreenUpdates: true)
+    }
+    Attachment.record(image, named: "failed-open-complete-workspace.png", as: .png)
     await provider.setReadFailure(id: "b", fails: false)
     await host.model.retryFailedOpen()
     try await host.waitUntil { host.editor(text: "Retried source") != nil }
@@ -886,8 +1012,11 @@ private struct NavigationHost {
   }
 
   var descendants: [UIView] {
-    func walk(_ view: UIView) -> [UIView] { [view] + view.subviews.flatMap(walk) }
-    return walk(window)
+    descendants(of: window)
+  }
+
+  func descendants(of view: UIView) -> [UIView] {
+    [view] + view.subviews.flatMap { descendants(of: $0) }
   }
 
   func editor(text: String) -> UITextView? {
@@ -921,6 +1050,7 @@ private struct NavigationHost {
   }
 
   func close() {
+    window.rootViewController?.dismiss(animated: false)
     window.isHidden = true
     previousWindow?.makeKeyAndVisible()
     UserDefaults.standard.removePersistentDomain(forName: suite)
@@ -978,6 +1108,15 @@ private actor StubNotebookProvider: NotebookProviding {
   private(set) var readIDs: [String] = []
   private(set) var publicationReasons: [PublishReason] = []
   private var failingReadIDs: Set<String> = []
+  private var isSignedOut = false
+  private var failsSignOutAfterCleanup = false
+  private var rejectsSignOut = false
+  private var isSigningOut = false
+  private var holdsSignOut = false
+  private var heldSignOut: CheckedContinuation<Void, Never>?
+  private var signOutObserver: CheckedContinuation<Void, Never>?
+  private(set) var cachedAccountReads = 0
+  private(set) var refreshAccountReads = 0
 
   init(account: NotebookAccount, gists: [Gist], cachesContent: Bool = true) {
     self.account = account
@@ -986,9 +1125,32 @@ private actor StubNotebookProvider: NotebookProviding {
     self.cachesContent = cachesContent
   }
 
-  func cachedAccount() -> NotebookAccount? { account }
-  func signIn() -> NotebookAccount { signInAccount }
+  func cachedAccount() throws -> NotebookAccount? {
+    cachedAccountReads += 1
+    if isSigningOut { throw AccountError.signInInProgress }
+    return isSignedOut ? nil : account
+  }
+  func signIn() -> NotebookAccount {
+    isSignedOut = false
+    return signInAccount
+  }
+  func failSignOut(afterLocalCleanup: Bool) {
+    failsSignOutAfterCleanup = afterLocalCleanup
+  }
+  func rejectSignOut() { rejectsSignOut = true }
+  func holdSignOut() { holdsSignOut = true }
+  func waitForSignOut() async {
+    if heldSignOut != nil { return }
+    await withCheckedContinuation { signOutObserver = $0 }
+  }
+  func releaseSignOut() {
+    heldSignOut?.resume()
+    heldSignOut = nil
+    holdsSignOut = false
+  }
   func refreshAccount() throws -> NotebookAccount {
+    refreshAccountReads += 1
+    if isSigningOut { throw AccountError.signInInProgress }
     if shouldFail { throw URLError(.notConnectedToInternet) }
     return account
   }
@@ -1058,6 +1220,21 @@ private actor StubNotebookProvider: NotebookProviding {
       content: current.text, revision: "synthetic-revision", generation: current.generation)
   }
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
+    if case .signOut = action {
+      if rejectsSignOut { throw URLError(.notConnectedToInternet) }
+      isSigningOut = true
+      defer { isSigningOut = false }
+      if holdsSignOut {
+        await withCheckedContinuation { continuation in
+          heldSignOut = continuation
+          signOutObserver?.resume()
+          signOutObserver = nil
+        }
+      }
+      isSignedOut = true
+      if failsSignOutAfterCleanup { throw URLError(.timedOut) }
+      return .signedOut
+    }
     if case .inspectRemote(let id, let generation) = action {
       let store = try draftStore()
       let draft = try await store.draft(id: id, accountID: accountID)

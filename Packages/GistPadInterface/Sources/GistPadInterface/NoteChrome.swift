@@ -97,6 +97,8 @@ public struct NoteActions {
     public var retry: (() -> Void)?
     public var reconnect: (() -> Void)?
     public var reviewChanges: (() -> Void)?
+    public var publishAsNew: (() -> Void)?
+    public var discardLocalCopy: (() -> Void)?
     public var share: (() -> Void)?
     public var copyLink: (() -> Void)?
     public var openInGitHub: (() -> Void)?

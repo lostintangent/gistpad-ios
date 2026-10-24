@@ -10,18 +10,25 @@ struct NotebookAccount: Equatable, Sendable, Identifiable {
   let id: UUID
   let login: String
   let githubUserID: Int64?
+  let avatarURL: URL?
   let preferences: Preferences
+  var displayName: String? { preferences.profileDisplayName }
 
-  init(id: UUID, login: String, githubUserID: Int64? = nil, preferences: Preferences) {
+  init(
+    id: UUID, login: String, githubUserID: Int64? = nil, avatarURL: URL? = nil,
+    preferences: Preferences
+  ) {
     self.id = id
     self.login = login
     self.githubUserID = githubUserID
+    self.avatarURL = avatarURL
     self.preferences = preferences
   }
 
   init(_ snapshot: AccountSnapshot) {
     self.init(
       id: snapshot.id, login: snapshot.login, githubUserID: snapshot.githubUserID,
+      avatarURL: snapshot.avatarURL,
       preferences: snapshot.preferences)
   }
 }
@@ -283,6 +290,7 @@ final class NotebookModel {
   private(set) var pendingAccount: NotebookAccount?
   private(set) var loadedDocument: NotebookDocument?
   private(set) var isSigningIn = false
+  private(set) var isSigningOut = false
   private(set) var isStarting = false
   private(set) var isOpeningDocument = false
   private(set) var openingDocument: NotebookOpeningDocument?
@@ -437,6 +445,10 @@ final class NotebookModel {
   }
 
   private func present(_ document: NotebookDocument) throws {
+    var document = document
+    if !library.hasFilters, library.collection != .dailyNotes {
+      document.libraryRowID = nil
+    }
     failedOpen = nil
     loadedDocument = document
     library.selectedNoteID = document.rowID
@@ -466,7 +478,7 @@ final class NotebookModel {
   }
 
   func start() async {
-    guard !isStarting else { return }
+    guard !isStarting, !isSigningOut else { return }
     isStarting = true
     defer { isStarting = false }
     let request = UUID()
@@ -496,7 +508,7 @@ final class NotebookModel {
   }
 
   func signIn() async {
-    guard !isSigningIn else { return }
+    guard !isSigningIn, !isSigningOut else { return }
     isSigningIn = true
     let previousState = library.loadState
     defer { isSigningIn = false }
@@ -595,7 +607,7 @@ final class NotebookModel {
   }
 
   func refresh() async {
-    guard pendingAccount == nil else { return }
+    guard pendingAccount == nil, !isSigningOut else { return }
     guard let account else {
       await start()
       return
@@ -1131,6 +1143,14 @@ final class NotebookModel {
 
   func perform(_ action: NotebookAction) async throws -> NotebookActionResult {
     guard let account, pendingAccount == nil else { throw AccountError.accountChanged }
+    guard !isSigningOut else { throw NotebookActionError.publicationInProgress }
+    if case .signOut = action {
+      isSigningOut = true
+      libraryRequest = UUID()
+    }
+    defer {
+      if case .signOut = action { isSigningOut = false }
+    }
     let result: NotebookActionResult
     do {
       result = try await provider.perform(action, accountID: account.id)
@@ -1138,9 +1158,23 @@ final class NotebookModel {
       selections.markDeleted(gistID: id, accountID: account.id)
       if self.account?.id == account.id { deletedGistIDs.insert(id) }
       throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: id)
+    } catch {
+      if case .signOut = action {
+        do {
+          if try await provider.cachedAccount() == nil {
+            clearSignedOutPresentation(accountID: account.id)
+          }
+        } catch {
+          report(error, operation: "confirm-local-sign-out")
+        }
+      }
+      throw error
     }
     guard self.account?.id == account.id else { throw AccountError.accountChanged }
     switch result {
+    case .signedOut:
+      clearSignedOutPresentation(accountID: account.id)
+      return result
     case .account(let updated):
       self.account = updated
       if let cache = cachedLibrary {
@@ -1189,9 +1223,40 @@ final class NotebookModel {
       }
     case .review:
       break
+    case .discardedDraft(let id):
+      if loadedDocument?.draft?.id == id {
+        loadedDocument = nil
+        openingDocument = nil
+        failedOpen = nil
+        library.selectedNoteID = nil
+      }
+      if try selections.selection(accountID: account.id)?.draftID == id {
+        selections.clear(accountID: account.id)
+      }
     }
     try await reloadLocalState(accountID: account.id)
     return result
+  }
+
+  private func clearSignedOutPresentation(accountID: UUID) {
+    guard account?.id == accountID else { return }
+    libraryRequest = UUID()
+    documentRequest = UUID()
+    account = nil
+    pendingAccount = nil
+    loadedDocument = nil
+    openingDocument = nil
+    failedOpen = nil
+    localDrafts = []
+    cachedLibrary = nil
+    documentError = nil
+    isOpeningDocument = false
+    ownedGistIDs = []
+    deletedGistIDs = []
+    library.snapshot = .init(notes: [])
+    library.selectedNoteID = nil
+    library.clearFilters()
+    library.loadState = .signedOut
   }
 
   func chrome(gist: Gist?, draft: DraftSnapshot) -> NoteChrome {
@@ -1363,6 +1428,16 @@ final class NotebookModel {
   }
 
   static func message(for error: any Error) -> String {
+    if let error = error as? DraftError {
+      switch error {
+      case .staleGeneration:
+        return String(localized: "This note changed. Review the latest version before continuing.")
+      case .ambiguousCreation:
+        return String(localized: "This copy no longer has an unconfirmed creation. Review its current save status.")
+      default:
+        break
+      }
+    }
     if (error as? SourceMutation.MutationError) == .compositionActive {
       return String(
         localized: "Finish composition or Writing Tools before continuing. Your current draft is unchanged.")
@@ -1459,9 +1534,7 @@ final class NotebookModel {
     if let error = error as? URLError {
       switch error.code {
       case .notConnectedToInternet, .networkConnectionLost:
-        return String(
-          localized:
-            "You're offline. Reconnect to update your notebook. Existing local work is unchanged.")
+        return String(localized: "You're offline. Connect to the internet, then try again.")
       case .timedOut:
         return String(localized: "The request timed out. Try again when your connection is stable.")
       default:

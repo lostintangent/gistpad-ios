@@ -36,6 +36,8 @@ struct NotebookSurfaceHostTests {
     let window = UIWindow(windowScene: scene)
     window.frame = .init(x: 0, y: 0, width: 466, height: 1012)
     window.overrideUserInterfaceStyle = capture.dark ? .dark : .light
+    window.traitOverrides.preferredContentSizeCategory =
+      capture.accessibility ? .accessibilityExtraLarge : .large
     let host = UIHostingController(
       rootView: NotebookSurfaceCaptureWorkspace(screen: capture.screen)
         .environment(\.dynamicTypeSize, capture.accessibility ? .accessibility3 : .large))
@@ -74,7 +76,7 @@ struct NotebookSurfaceHostTests {
           #expect(key == .isAutoSaveEnabled)
           attempted = value
           throw URLError(.notConnectedToInternet)
-        }, connect: {}
+        }, connect: {}, signOut: {}
       ) {
         Text("Accent Color")
       })

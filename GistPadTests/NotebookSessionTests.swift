@@ -11,6 +11,63 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct NotebookSessionTests {
+  @Test func explicitlyConfirmingAnUnboundCreationPreservesTheEditorAndUsesOneManualPost() async throws {
+    let (controller, provider) = try await makeController(autosave: true, uncertainCreation: true)
+    let identity = controller.session.viewIdentity
+    let text = controller.session.text
+    let generation = controller.session.generation
+    controller.session.textView.selectedRange = .init(location: 2, length: 3)
+    #expect(controller.saveState == .creationUncertain)
+    #expect(controller.updateAutosave(isForeground: true) == nil)
+    try await controller.resolveUncertainCreation(.publishAsNew, expectedGeneration: generation)
+    #expect(controller.session.viewIdentity == identity)
+    #expect(controller.session.text.utf8.elementsEqual(text.utf8))
+    #expect(controller.session.generation == generation)
+    #expect(controller.session.textView.selectedRange == .init(location: 2, length: 3))
+    #expect(controller.draft.attemptedGeneration == nil)
+    #expect(controller.saveState == .savedLocally)
+    #expect(await provider.publishCount == 0)
+    let publication = Task { await controller.publish() }
+    await provider.waitForPublish()
+    #expect(await provider.publishCount == 1)
+    await provider.releasePublish()
+    await publication.value
+    #expect(await provider.publishCount == 1)
+    #expect(await provider.publicationReasons == [.manual])
+    #expect(controller.draft.gistID == "synthetic")
+    #expect(controller.saveState == .savedToGitHub)
+    #expect(controller.session.viewIdentity == identity)
+  }
+
+  @Test func discardingAnUnboundCreationRemovesOnlyItsLocalCopyAndNeverPublishes() async throws {
+    let (controller, provider) = try await makeController(autosave: true, uncertainCreation: true)
+    let other = try await provider.store.newDraft(
+      accountID: controller.draft.accountID, githubUserID: 1, text: "Keep this other copy")
+    try await controller.resolveUncertainCreation(
+      .discard, expectedGeneration: controller.session.generation)
+    await #expect(throws: DraftError.notFound) { _ = try await provider.snapshot() }
+    #expect(
+      try await provider.store.draft(id: other.id, accountID: other.accountID).text
+        == "Keep this other copy")
+    #expect(await provider.publishCount == 0)
+    #expect(controller.updateAutosave(isForeground: true) == nil)
+  }
+
+  @Test func aCreationChoiceCannotUseAnOlderGeneration() async throws {
+    let (controller, provider) = try await makeController(autosave: true, uncertainCreation: true)
+    let oldGeneration = controller.session.generation
+    edit(controller, to: "A newer unbound local thought")
+    #expect(await controller.waitForLocalSave())
+    for choice in [NotebookCreationChoice.publishAsNew, .discard] {
+      await #expect(throws: DraftError.staleGeneration) {
+        try await controller.resolveUncertainCreation(choice, expectedGeneration: oldGeneration)
+      }
+    }
+    #expect(try await provider.snapshot().text == "A newer unbound local thought")
+    #expect(controller.saveState == .creationUncertain)
+    #expect(await provider.publishCount == 0)
+  }
+
   @Test func productionFocusArrangementRetainsTheEditorSelectionAndUndo() async throws {
     let (controller, _) = try await makeController()
     let scene = try #require(
@@ -587,7 +644,7 @@ struct NotebookSessionTests {
 
   private func makeController(
     generation: UInt64 = 0, autosave: Bool? = nil, isReadOnly: Bool = false,
-    uncertainPublication: Bool = false
+    uncertainPublication: Bool = false, uncertainCreation: Bool = false
   ) async throws -> (NotebookSessionController, SessionNotebookProvider) {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
@@ -602,29 +659,39 @@ struct NotebookSessionTests {
         """.utf8))
     let accountID = UUID()
     let store = try DraftStore.open(inMemory: true)
-    var draft = try await store.openDraft(
-      accountID: accountID, githubUserID: 1, gistID: gist.id, filename: "README.md",
-      description: "Session fixture", content: "Base", revision: "1")
+    var draft: DraftSnapshot
+    if uncertainCreation {
+      draft = try await store.newDraft(
+        accountID: accountID, githubUserID: 1, text: "Unbound private note")
+    } else {
+      draft = try await store.openDraft(
+        accountID: accountID, githubUserID: 1, gistID: gist.id, filename: "README.md",
+        description: "Session fixture", content: "Base", revision: "1")
+    }
     if generation > 0 {
       draft = try await store.persist(
         id: draft.id, accountID: accountID, text: "Restored local draft", generation: generation)
     }
-    if uncertainPublication {
+    if uncertainPublication || uncertainCreation {
       try await store.beginAttempt(
         id: draft.id, accountID: accountID, content: draft.text,
         generation: draft.generation, remote: draft.baseContent)
-      try await store.setState(.failed(.publicationUncertain), id: draft.id, accountID: accountID)
+      try await store.setState(
+        .failed(uncertainCreation ? .creationUncertain : .publicationUncertain),
+        id: draft.id, accountID: accountID)
       draft = try await store.draft(id: draft.id, accountID: accountID)
     }
     let provider = SessionNotebookProvider(
       store: store, id: draft.id, accountID: accountID, autosave: autosave)
     let model = NotebookModel(provider: provider)
     if autosave != nil { await model.start() }
-    let document = NotebookDocument(
-      accountID: accountID, gist: gist, filename: "README.md", text: "Base",
-      chrome: NoteChrome(
-        title: "Session fixture", files: [.init(id: "README.md", filename: "README.md")],
-        selectedFileID: "README.md"))
+    let document = uncertainCreation
+      ? NotebookDocument(draft: draft)
+      : NotebookDocument(
+        accountID: accountID, gist: gist, filename: "README.md", text: "Base",
+        chrome: NoteChrome(
+          title: "Session fixture", files: [.init(id: "README.md", filename: "README.md")],
+          selectedFileID: "README.md"))
     return (
       NotebookSessionController(
         document: document, draft: draft, notebook: model, autosaveDelay: .milliseconds(30)),
@@ -709,6 +776,16 @@ private actor SessionNotebookProvider: NotebookProviding {
     throw DraftError.notFound
   }
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
+    if case .confirmNewCreation(let id, let generation) = action {
+      return .review(
+        try await store.confirmNewCreation(
+          id: id, accountID: accountID, expectedGeneration: generation))
+    }
+    if case .discardUncertainCreation(let id, let generation) = action {
+      try await store.discardUncertainCreation(
+        id: id, accountID: accountID, expectedGeneration: generation)
+      return .discardedDraft(id)
+    }
     if case .inspectRemote(let id, let generation) = action {
       return .review(
         try await store.inspectRemoteChange(

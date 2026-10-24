@@ -353,6 +353,41 @@ final class NotebookSessionController {
     persist(text: session.text, generation: session.generation)
   }
 
+  func resolveUncertainCreation(
+    _ choice: NotebookCreationChoice, expectedGeneration: UInt64
+  ) async throws {
+    guard notebook.account?.id == draft.accountID, notebook.pendingAccount == nil else {
+      throw AccountError.accountChanged
+    }
+    guard session.generation == expectedGeneration else { throw DraftError.staleGeneration }
+    try beginDestructiveAction()
+    defer { endDestructiveAction() }
+    guard await waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
+    guard session.generation == expectedGeneration else { throw DraftError.staleGeneration }
+    let action: NotebookAction = switch choice {
+    case .publishAsNew:
+      .confirmNewCreation(draftID: draft.id, generation: expectedGeneration)
+    case .discard:
+      .discardUncertainCreation(draftID: draft.id, generation: expectedGeneration)
+    }
+    let result = try await notebook.perform(action)
+    switch (choice, result) {
+    case (.publishAsNew, .review(let confirmed)):
+      guard confirmed.id == draft.id, confirmed.accountID == draft.accountID,
+        confirmed.generation == session.generation,
+        confirmed.text.utf8.elementsEqual(session.text.utf8)
+      else { throw NotebookEditError.invalidCommittedEdit }
+      draft = confirmed
+      document.draft = confirmed
+      document.chrome = notebook.chrome(gist: nil, draft: confirmed)
+      saveState = NotebookModel.interfaceSaveState(confirmed.state)
+    case (.discard, .discardedDraft(let id)) where id == draft.id:
+      break
+    default:
+      throw NotebookEditError.invalidCommittedEdit
+    }
+  }
+
   func didReconnect() {
     if saveState == .reconnectRequired { saveState = .savedLocally }
   }

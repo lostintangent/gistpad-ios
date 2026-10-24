@@ -1,3 +1,4 @@
+import GistPadInterface
 import GistPadPlatform
 import GistPadSync
 import SwiftUI
@@ -59,6 +60,7 @@ struct AddToTodaySheet: View {
       .task { isFocused = true }
     }
     .presentationDetents([.medium, .large])
+    .tint(InterfaceTheme.accent)
   }
 
   private func add() {

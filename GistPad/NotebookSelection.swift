@@ -30,6 +30,11 @@ final class NotebookSelectionStore {
     }
   }
 
+  func clear(accountID: UUID) {
+    defaults?.removeObject(forKey: key(accountID))
+    memory[accountID] = nil
+  }
+
   private func key(_ accountID: UUID) -> String {
     "notebook.selection.\(accountID.uuidString)"
   }

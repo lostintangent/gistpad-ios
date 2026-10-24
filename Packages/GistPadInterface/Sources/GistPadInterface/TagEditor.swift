@@ -49,6 +49,13 @@ public struct TagEditor: View {
                                 : String(localized: "No matching tags.", bundle: .module))
                             .foregroundStyle(.secondary)
                     }
+                    if save != nil {
+                        Button(String(localized: "New Tag", bundle: .module), systemImage: "plus") {
+                            editingTag = LibraryTag(id: UUID().uuidString, name: "")
+                        }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("tag-create")
+                    }
                 } footer: {
                     Text("Tags apply to every file in this note.", bundle: .module)
                         .foregroundStyle(.secondary)
@@ -57,7 +64,6 @@ public struct TagEditor: View {
             .listStyle(.plain)
             .navigationTitle(Text("Tags", bundle: .module))
             .navigationBarTitleDisplayMode(.inline)
-            .tint(InterfaceTheme.accent)
             .searchable(text: $query, prompt: Text("Search tags", bundle: .module))
             .toolbar { toolbar }
             .disabled(isSaving)
@@ -90,6 +96,7 @@ public struct TagEditor: View {
                 }
             }
         }
+        .tint(InterfaceTheme.accent)
     }
 
     private var selectedTags: [LibraryTag] {
@@ -162,18 +169,15 @@ public struct TagEditor: View {
                 }
                 .accessibilityLabel(Text("Cancel", bundle: .module))
             }
-            ToolbarItem(placement: .primaryAction) {
-                Button(String(localized: "Add tag", bundle: .module), systemImage: "plus") {
-                    editingTag = LibraryTag(id: UUID().uuidString, name: "")
-                }
-            }
         }
+        DefaultToolbarItem(kind: .search, placement: .bottomBar)
         ToolbarItem(placement: .confirmationAction) {
             if isSaving {
                 ProgressView(String(localized: "Saving tags", bundle: .module))
             } else if save != nil {
-                Button(role: .confirm, action: commit)
+                Button(String(localized: "Save", bundle: .module), role: .confirm, action: commit)
                     .accessibilityLabel(Text("Save Tags", bundle: .module))
+                    .accessibilityIdentifier("tag-save")
             } else {
                 Button(role: .close) { dismiss() }
                     .accessibilityLabel(Text("Close", bundle: .module))
@@ -262,7 +266,6 @@ private struct TagEditForm: View {
             }
             .navigationTitle(Text(isNew ? String(localized: "New tag", bundle: .module) : String(localized: "Edit tag", bundle: .module)))
             .navigationBarTitleDisplayMode(.inline)
-            .tint(InterfaceTheme.accent)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .cancel) { dismiss() }
@@ -293,6 +296,7 @@ private struct TagEditForm: View {
             }
             .task { if isNew { nameFocused = true } }
         }
+        .tint(InterfaceTheme.accent)
     }
 
     private var color: Binding<Color> {

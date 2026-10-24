@@ -72,6 +72,7 @@ struct NotebookFailedOpeningView: View {
         .accessibilityIdentifier("note-open-retry")
     }
     .navigationTitle(failure.title)
+    .navigationSubtitle(failure.filename ?? "")
     .navigationBarTitleDisplayMode(.inline)
   }
 }
