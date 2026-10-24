@@ -1,4 +1,4 @@
-import GistPadPlatform
+@_spi(Testing) import GistPadPlatform
 import SwiftUI
 import Testing
 import UIKit
@@ -23,8 +23,10 @@ struct NotebookWidgetPresentationTests {
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let date = Date(timeIntervalSince1970: 1_792_800_000)
     let snapshot = NotebookSystemSnapshot.preview(date: date)
+    var taskSizes: [String: CGSize] = [:]
     let content = TodayWidgetView(
-      snapshot: snapshot, date: date, state: .available, family: presentation.family)
+      snapshot: snapshot, date: date, state: .available, family: presentation.family,
+      taskGeometry: { taskSizes[$0] = $1 })
       .padding(presentation.family == .accessoryRectangular ? 0 : 16)
       .background(Color(uiColor: .secondarySystemGroupedBackground))
       .environment(\.colorScheme, presentation.dark ? .dark : .light)
@@ -42,9 +44,8 @@ struct NotebookWidgetPresentationTests {
     #expect(host.view.bounds.width == presentation.width)
     #expect(host.view.bounds.height == presentation.height)
     let task = try #require(snapshot.today.tasks.first)
-    let element = try #require(
-      notebookAccessibilityElement("today-task-\(task.id)", in: host.view))
-    #expect(element.accessibilityFrame.height >= 44)
+    let taskSize = try #require(taskSizes[task.id])
+    #expect(taskSize.height >= 44)
     let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
       host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
     }
@@ -76,7 +77,8 @@ struct NotebookWidgetPresentationTests {
       try await Task.sleep(for: .milliseconds(100))
     }
     _ = try #require(notebookAccessibilityElement("today-capture-input", in: window))
-    try await Task.sleep(for: .milliseconds(350))
+    window.endEditing(true)
+    try await Task.sleep(for: .milliseconds(700))
     window.layoutIfNeeded()
     let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)

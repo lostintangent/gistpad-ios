@@ -12,6 +12,7 @@ public struct TodayWidgetView: View {
     public let date: Date
     public let state: TodayWidgetState
     private let familyOverride: WidgetFamily?
+    private var taskGeometry: (@MainActor (String, CGSize) -> Void)?
     @Environment(\.widgetFamily) private var widgetFamily
     @Environment(\.widgetRenderingMode) private var renderingMode
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -25,6 +26,15 @@ public struct TodayWidgetView: View {
         self.date = date
         self.state = state
         familyOverride = family
+    }
+
+    @_spi(Testing)
+    public init(
+        snapshot: NotebookSystemSnapshot?, date: Date, state: TodayWidgetState,
+        family: WidgetFamily, taskGeometry: @escaping @MainActor (String, CGSize) -> Void
+    ) {
+        self.init(snapshot: snapshot, date: date, state: state, family: family)
+        self.taskGeometry = taskGeometry
     }
 
     private var family: WidgetFamily { familyOverride ?? widgetFamily }
@@ -204,6 +214,9 @@ public struct TodayWidgetView: View {
             }
             .frame(minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                taskGeometry?(task.id, size)
+            }
         }
         .buttonStyle(.plain)
         .privacySensitive()

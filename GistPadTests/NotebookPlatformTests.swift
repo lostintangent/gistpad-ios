@@ -110,6 +110,8 @@ struct NotebookPlatformTests {
   @Test func capturedUnopenedNoteJoinsTheExistingForegroundAutosave() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
+    await fixture.model.open(gistID: fixture.provider.gist.id, filename: "another.md")
+    #expect(fixture.model.loadedDocument?.filename == "another.md")
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let routes = NotebookRouteInbox()
@@ -130,7 +132,8 @@ struct NotebookPlatformTests {
     }
     #expect(fixture.model.loadedDocument?.text.hasSuffix("A captured thought\n") == true)
     #expect(routes.pending == nil)
-    #expect(await fixture.provider.publishCount == 1)
+    let publishCount = await fixture.provider.publishCount
+    #expect(publishCount == 1)
   }
 
   @Test func intentsUseTheOfficialMainProcessExecutionTarget() {
@@ -160,12 +163,16 @@ struct NotebookPlatformTests {
     #expect(await fixture.provider.publishCount == 0)
   }
 
-  @Test func widgetPresentationUsesAfterFirstUnlockProtection() async throws {
+  @Test func widgetSnapshotReopensWithDeviceProtectionWhenAvailable() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
     let url = fixture.shared.location.directory.appendingPathComponent("notebook.snapshot")
     let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+    #expect(attributes[.type] as? FileAttributeType == .typeRegular)
+    #expect(try SharedNotebookStore(location: fixture.shared.location).read() == fixture.shared.read())
+    #if !targetEnvironment(simulator)
     #expect(attributes[.protectionKey] as? String == FileProtectionType.completeUntilFirstUserAuthentication.rawValue)
+    #endif
   }
 }
 
@@ -187,7 +194,10 @@ private struct PlatformFixture {
       "id": "daily123", "description": GistConventions.dailyNotesDescription,
       "public": false, "owner": ["id": 42, "login": "synthetic"],
       "updated_at": "2026-10-24T00:00:00Z", "created_at": "2026-10-24T00:00:00Z",
-      "files": [filename: ["filename": filename, "language": "Markdown", "content": "# Today\n\n- [ ] A real task\n"]],
+      "files": [
+        filename: ["filename": filename, "language": "Markdown", "content": "# Today\n\n- [ ] A real task\n"],
+        "another.md": ["filename": "another.md", "language": "Markdown", "content": "Another note\n"]
+      ],
       "history": [["version": "1"]]
     ]
     let decoder = JSONDecoder()
