@@ -43,6 +43,7 @@ Correct system components are the floor. A stock grouped list, readable fonts, a
 | Moment | Production direction and evidence |
 | --- | --- |
 | Opening the Library | A notebook collection with three visibly distinct compositions: a Today hero, an adaptive Pinned grid of little notebook cards, and an inset-grouped Notes list. Use the semantic grouped canvas with 20-pt outer margins and 32-pt section separation, not the rejected continuous flat list. Preserve native navigation, swipe, selection and accessibility semantics. Titles lead, metadata recedes, and cached excerpts add context without a new fetch. The signature-moves metrics below supersede earlier flat-list density targets |
+| Opening a scoped collection | Starred, Daily Notes and Archive show their name once in navigation, not again above their only list. Remove redundant header space without changing native grouping or row insets. Keep headings where they distinguish real groups, including Home's Pinned Gists and Your Gists |
 | Today feels like today | Give the current local date a deliberate typographic treatment beside Today. When actual current-day task data is available, show completed/total with a quiet progress indicator and an accessible text equivalent. No fabricated progress, streaks, weather, greetings, or carryover. Add a line is direct, with its target date pinned when composing starts |
 | Unfolding reveals context | The same page remains the visual and interaction anchor as Library appears beside it. Focus deliberately reveals source + preview at the relevant passage. Preserve text, selection, scroll and undo rather than crossfading to a fresh-looking copy. Judge this in motion through Closed, Partially Open and Open, not in independent screenshots |
 | Capturing a thought | A native, keyboard-ready composer with one clear commit action. After the durable local commit, reveal the inserted line in its real note rather than a generic success toast. An interrupted composer retains its text. Local capture never masquerades as GitHub publication |
@@ -112,7 +113,7 @@ The ink values below are exact sRGB assets. The accent values are the earlier sk
 
 Prefix each CSS suffix with `--gp-`. Personal `selectedSurface` now belongs to the Today date treatment, not Library/sidebar selection or OS text selection. Library selection uses native neutral surfaces and selected traits.
 
-Use personal accent only for Today content, authored Preview list/task marks and the preference swatch, as enumerated in the canonical direction. Enabled native chrome, keyboard tools, menu commands and sheet actions use primary adaptive monochrome ink, with native neutral prominent styling where needed. Secondary ink is for metadata/progress, not a dimmed enabled action. Preserve destructive red, tag colors, native text-entry blue and switch defaults. Do not apply personal tint at the app, navigation or sheet root. System controls own material/foreground and disabled-state adaptation. Links retain their semantic treatment and non-color affordance.
+Use personal accent only for Today content and the preference swatch, as enumerated in the canonical direction. The user's later October 24 feedback restores muted secondary gray for document bullets, numbers and task boxes, including checked boxes, in Edit and Preview. Enabled native chrome, keyboard tools, menu commands and sheet actions use primary adaptive monochrome ink, with native neutral prominent styling where needed. Secondary ink is for metadata/progress and document list markers, not a dimmed enabled action. Preserve destructive red, tag colors, native text-entry blue and switch defaults. Do not apply personal tint at the app, navigation or sheet root. System controls own material/foreground and disabled-state adaptation. Links retain their semantic treatment and non-color affordance.
 
 The decorative spine uses the original `#5AD1FA` to `#0EA5E9` gradient. Neither stop is suitable for small text on white (1.76:1 and 2.77:1). Library uses semantic grouped surfaces, with the icon's paper `#FFFFFF` to `#E2E8F0` gradient reserved for small original-artwork illustrations rather than overriding those surfaces. Keep the source and reading page semantic and flat. The icon's coral, amber and teal do not replace existing profile colors or force a new tag palette.
 
@@ -256,9 +257,10 @@ The editor is Markdown source, not a lossy rich-text conversion. Use familiar se
 | Quote | `#22863A` | `#7EE787` | `#155D27` | `#B0F5B7` |
 | HTML tag | `#116329` | `#7EE787` | `#0B4B1E` | `#B0F5B7` |
 | URL destination | `#032F62` | `#A5D6FF` | `#02234A` | `#D1ECFF` |
-| Ordered number marker | `#005CC5` | `#79C0FF` | `#004A9F` | `#B5DDFF` |
 
 These dynamic source colors replace the previous `syntaxMuted`/`syntaxCode` styling contract. Preserve the exact web-light quote on the white source page, where it measures 4.63:1. It is only 4.15:1 on the secondary gray reference; if a quote can appear on that surface, use `#1E7A34` there (4.84:1). Increased-contrast variants clear AA on both reference canvases. Resolve appearance through dynamic native colors, without rewriting or reparsing source solely to change appearance.
+
+List markers are the exception to the colored syntax palette. The user's later October 24 feedback restores the existing `InterfaceTheme.syntaxMuted` role for bullets, ordered numbers and task delimiters in every state. Preview uses `--gp-text-secondary` for the equivalent markers and task-box borders/checked fills, with a contrasting checkmark. Preserve ordinary item text, source bytes, task state, targets, wrapping and the native blue caret.
 
 | Source element | Style |
 | --- | --- |
@@ -266,9 +268,9 @@ These dynamic source colors replace the previous `syntaxMuted`/`syntaxCode` styl
 | Whole heading, including `#` markers | Body bold, heading token; preserve every source character |
 | Strong / emphasis | Their token color, with bold / italic respectively; compose both traits when nested |
 | Whole blockquote line, including `>` | Quote token; nested emphasis/strong/link/code retain their own valid styles |
-| Ordered number / unordered bullet | Ordered-number token / body ink; list-item text stays body ink |
+| Ordered number / unordered bullet | Muted source-marker ink; list-item text stays body ink |
 | Element punctuation | Same readable size and color as its owning element, not independently grayed |
-| Unchecked task marker | Existing ordered-number syntax token, same size; no personal accent |
+| Unchecked task marker | Muted source-marker ink, same size; no personal accent |
 | Checked marker | Muted source-marker ink; preserve explicit checked syntax and do not dim the task's text |
 | Inline/fenced code | Monospaced scaled body in ink; optional `surface` block background, no language-token rainbow |
 | Link label / wikilink | Underlined; URL color in light mode, inherited ink in dark mode as in the web theme; source delimiters remain visible |
