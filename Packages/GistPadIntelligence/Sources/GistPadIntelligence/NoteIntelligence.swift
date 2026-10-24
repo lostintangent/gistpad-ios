@@ -71,7 +71,7 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable {
     case .unverifiedQuotation:
       String(
         localized:
-          "A quotation could not be verified against your note. The response was not accepted.",
+          "A quoted passage didn't match your note. Try again.",
         bundle: .module)
     case .noEvidence:
       String(localized: "I couldn't find information about that in this note.", bundle: .module)

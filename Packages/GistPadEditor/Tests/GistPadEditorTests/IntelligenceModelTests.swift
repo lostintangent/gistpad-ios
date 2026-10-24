@@ -8,6 +8,27 @@
   @Suite(.serialized)
   @MainActor
   struct IntelligenceModelTests {
+    @Test func resultSummaryKeepsTheSubmittedRequestUntilTheRequestIsEdited() async {
+      let session = DocumentSession(documentID: "model-summary", text: "Unchanged source")
+      let model = NoteIntelligenceModel(
+        session: session, backend: SheetModel(), isCurrent: { true })
+      model.askPrompt = "What does this note say?"
+      #expect(!model.hasResults)
+      await model.checkAvailability()
+      model.generate()
+      await model.task?.value
+      #expect(model.hasResults)
+      #expect(model.submittedPrompt == "What does this note say?")
+      model.askPrompt = "Explain it more simply."
+      #expect(model.submittedPrompt == "What does this note say?")
+      model.clearResults()
+      #expect(!model.hasResults)
+      #expect(model.submittedPrompt == nil)
+      #expect(model.askPrompt == "Explain it more simply.")
+      #expect(session.text == "Unchanged source")
+      #expect(session.generation == 0)
+    }
+
     @Test func cancellingAStreamingAnswerClearsItsPartialTextAndPreservesTheRequest() async {
       let session = DocumentSession(documentID: "model-cancel", text: "Unchanged source")
       let backend = SheetModel()

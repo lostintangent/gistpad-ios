@@ -1,3 +1,4 @@
+import GistPadAppearance
 import GistPadEditor
 import Observation
 import SwiftUI
@@ -102,6 +103,7 @@ extension View {
 
 private struct NotebookIntelligenceModifier: ViewModifier {
   @Bindable var presentation: NotebookIntelligencePresentation
+  @Environment(\.personalAccent) private var personalAccent
 
   func body(content: Content) -> some View {
     content
@@ -111,7 +113,9 @@ private struct NotebookIntelligenceModifier: ViewModifier {
           isCurrent: target.isCurrent,
           revealSource: {
             target.reference = .init(range: $0, generation: target.session.generation)
-          })
+          }
+        )
+        .environment(\.personalAccent, personalAccent)
       }
       .onChange(of: presentation.target.map { $0.isCurrent() } ?? true) { _, current in
         if !current { presentation.target = nil }

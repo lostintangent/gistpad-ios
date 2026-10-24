@@ -1,5 +1,6 @@
 #if canImport(UIKit)
   import GistPadIntelligence
+  import GistPadInterface
   import SwiftUI
   import UIKit
 
@@ -8,7 +9,9 @@
     private let title: String
     private let filename: String
     private let revealSource: @MainActor (NSRange) -> Void
+    private let initialPromptFocus: Bool
     @State private var model: NoteIntelligenceModel
+    @State private var detent = PresentationDetent.medium
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -23,6 +26,7 @@
       self.title = title
       self.filename = filename
       self.revealSource = revealSource
+      initialPromptFocus = false
       _model = State(
         initialValue: NoteIntelligenceModel(
           session: session, backend: backend ?? AppleNoteModel(), isCurrent: isCurrent))
@@ -30,11 +34,13 @@
 
     init(
       model: NoteIntelligenceModel, title: String, filename: String,
+      initialPromptFocus: Bool = false,
       revealSource: @escaping @MainActor (NSRange) -> Void
     ) {
       self.title = title
       self.filename = filename
       self.revealSource = revealSource
+      self.initialPromptFocus = initialPromptFocus
       _model = State(initialValue: model)
     }
 
@@ -62,18 +68,22 @@
         ScrollView {
           VStack(alignment: .leading, spacing: 24) {
             identification
-            actionPicker
-              .disabled(model.isRunning)
-              .accessibilityIdentifier("intelligence-actions")
-            request
             if let reason = model.availabilityReason {
               issue(reason, symbol: "apple.intelligence")
               Button(String(localized: "Check Again", bundle: .module)) {
                 Task { await model.checkAvailability() }
               }
             }
-            if model.isRunning { generationProgress }
+            actionPicker
+              .disabled(model.isRunning)
+              .accessibilityIdentifier("intelligence-actions")
             if let error = model.errorMessage { issue(error, symbol: "exclamationmark.circle") }
+            if model.action != .review || !model.hasResults || model.isRunning
+              || !model.session.textView.isEditable
+            {
+              request
+            }
+            if model.isRunning { generationProgress }
             if model.isStale, model.snapshot != nil {
               issue(
                 String(
@@ -83,6 +93,14 @@
                 symbol: "arrow.clockwise")
             }
             if !model.answerParts.isEmpty { answer }
+            if model.action == .review, let proposal = model.proposal {
+              Text(
+                proposal.comments.count == 1
+                  ? String(localized: "1 suggestion", bundle: .module)
+                  : String(localized: "\(proposal.comments.count) suggestions", bundle: .module)
+              )
+              .font(.headline)
+            }
             if let proposal = model.appliedEdit ?? model.proposal { changes(proposal) }
             if let notice = model.notice {
               Label(
@@ -91,6 +109,9 @@
               .font(.callout)
               .foregroundStyle(.secondary)
             }
+            if model.hasResults, !model.isRunning {
+              generateButton
+            }
           }
           .padding(20)
           .frame(maxWidth: 680, alignment: .leading)
@@ -98,7 +119,7 @@
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Color(uiColor: .systemGroupedBackground))
-        .navigationTitle(String(localized: "Intelligence", bundle: .module))
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
           ToolbarItem(placement: .topBarTrailing) {
@@ -107,29 +128,53 @@
               dismiss()
             }
             .labelStyle(.iconOnly)
+            .tint(.primary)
           }
         }
       }
-      .presentationDetents([.large])
+      .tint(InterfaceTheme.accent)
+      .presentationDetents([.medium, .large], selection: $detent)
       .presentationDragIndicator(.visible)
       .sensoryFeedback(.success, trigger: model.applyFeedback)
-      .task { await model.checkAvailability() }
+      .task {
+        if dynamicTypeSize.isAccessibilitySize
+          || (model.action != .ask && model.hasResults)
+        {
+          detent = .large
+        }
+        await model.checkAvailability()
+        if initialPromptFocus, model.available, model.action != .review {
+          promptFocused = true
+        }
+      }
       .onChange(of: scenePhase) { _, phase in
         if phase == .active { Task { await model.checkAvailability() } }
       }
       .onChange(of: model.action) { _, _ in model.clearResults() }
+      .onChange(of: model.proposal != nil) { _, exists in
+        if exists { detent = .large }
+      }
+      .onChange(of: dynamicTypeSize) { _, size in
+        if size.isAccessibilitySize { detent = .large }
+      }
       .onDisappear { model.cancel() }
       .accessibilityIdentifier("note-intelligence-sheet")
     }
 
     private var identification: some View {
-      VStack(alignment: .leading, spacing: 6) {
-        Text(title).font(.headline)
-        Text(filename).font(.subheadline).foregroundStyle(.secondary)
-        Label(String(localized: "On device", bundle: .module), systemImage: "iphone")
-          .font(.caption)
-          .foregroundStyle(.secondary)
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: 12) {
+          Text(filename)
+          Label(String(localized: "On device", bundle: .module), systemImage: "iphone")
+        }
+        .fixedSize()
+        VStack(alignment: .leading, spacing: 6) {
+          Text(filename).fixedSize(horizontal: false, vertical: true)
+          Label(String(localized: "On device", bundle: .module), systemImage: "iphone")
+        }
       }
+      .font(.subheadline)
+      .foregroundStyle(.secondary)
       .accessibilityElement(children: .combine)
     }
 
@@ -137,12 +182,23 @@
       @Bindable var model = model
       return VStack(alignment: .leading, spacing: 12) {
         if model.action == .review {
-          Text(
-            "Find concrete errors, unclear wording and contradictions across this note.",
-            bundle: .module
-          )
-          .font(.callout)
-          .foregroundStyle(.secondary)
+          if !model.hasResults {
+            Text("Find errors and unclear wording.", bundle: .module)
+              .font(.callout)
+              .foregroundStyle(.secondary)
+          }
+        } else if model.hasResults {
+          VStack(alignment: .leading, spacing: 8) {
+            Text(model.submittedPrompt ?? model.prompt)
+              .font(.callout)
+              .foregroundStyle(.secondary)
+            Button(String(localized: "Edit Request", bundle: .module)) {
+              model.clearResults()
+              promptFocused = true
+            }
+            .font(.callout)
+            .disabled(model.isRunning)
+          }
         } else {
           TextField(
             model.action == .ask
@@ -162,14 +218,8 @@
         if model.isRunning {
           Button(String(localized: "Cancel", bundle: .module), role: .cancel) { model.cancel() }
             .disabled(model.isCancelling)
-        } else {
-          Button(generateLabel, systemImage: "sparkles") {
-            promptFocused = false
-            model.generate()
-          }
-          .buttonStyle(.glassProminent)
-          .disabled(!model.canGenerate)
-          .accessibilityIdentifier("intelligence-generate")
+        } else if !model.hasResults {
+          generateButton
         }
         if !model.session.textView.isEditable {
           Text(
@@ -181,8 +231,37 @@
       }
     }
 
+    @ViewBuilder
+    private var generateButton: some View {
+      if model.hasResults {
+        generateAction.buttonStyle(.glass)
+      } else {
+        generateAction
+          .buttonStyle(.glassProminent)
+          .tint(InterfaceTheme.accentFill)
+          .foregroundStyle(InterfaceTheme.onAccent)
+      }
+    }
+
+    private var generateAction: some View {
+      Button(generateLabel, systemImage: "sparkles") {
+        promptFocused = false
+        model.generate()
+      }
+      .disabled(!model.canGenerate)
+      .accessibilityIdentifier("intelligence-generate")
+    }
+
     private var generateLabel: String {
-      switch model.action {
+      if model.errorMessage != nil { return String(localized: "Try Again", bundle: .module) }
+      if model.hasResults {
+        return switch model.action {
+        case .ask: String(localized: "Ask Again", bundle: .module)
+        case .edit: String(localized: "Propose Again", bundle: .module)
+        case .review: String(localized: "Review Again", bundle: .module)
+        }
+      }
+      return switch model.action {
       case .ask: String(localized: "Ask", bundle: .module)
       case .edit: String(localized: "Propose Changes", bundle: .module)
       case .review: String(localized: "Review Note", bundle: .module)
@@ -328,6 +407,8 @@
             model.apply()
           }
           .buttonStyle(.glassProminent)
+          .tint(InterfaceTheme.accentFill)
+          .foregroundStyle(InterfaceTheme.onAccent)
           .disabled(!model.canApply)
           .accessibilityIdentifier("intelligence-apply")
         }

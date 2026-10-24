@@ -23,6 +23,7 @@
     var appliedCount = 0
     var applyFeedback = 0
     private(set) var snapshot: NoteSnapshot?
+    private(set) var submittedPrompt: String?
     private let backend: any NoteModelBackend
     private let engine: NoteIntelligenceEngine
     private let isCurrent: @MainActor () -> Bool
@@ -63,6 +64,10 @@
       !isRunning && !isStale && session.canFormat
     }
 
+    var hasResults: Bool {
+      !answerParts.isEmpty || proposal != nil || appliedEdit != nil
+    }
+
     func checkAvailability() async {
       do {
         _ = try await backend.modelInfo()
@@ -83,6 +88,7 @@
       appliedEdit = nil
       appliedCount = 0
       snapshot = nil
+      submittedPrompt = nil
     }
 
     func generate() {
@@ -92,6 +98,7 @@
       isCancelling = false
       let selectedAction = action
       let instruction = selectedAction == .review ? "" : prompt
+      submittedPrompt = selectedAction == .review ? nil : instruction
       task = Task { [weak self] in
         guard let self else { return }
         defer {
