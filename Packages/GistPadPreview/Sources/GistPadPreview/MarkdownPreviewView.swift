@@ -41,8 +41,10 @@ public struct MarkdownPreviewView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
-        webView.scrollView.bounces = false
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.underPageBackgroundColor = .clear
+        webView.scrollView.alwaysBounceVertical = true
+        webView.scrollView.contentInsetAdjustmentBehavior = .automatic
+        webView.scrollView.topEdgeEffect.style = .soft
         webView.scrollView.bottomEdgeEffect.style = .soft
         webView.allowsLinkPreview = false
         context.coordinator.webView = webView

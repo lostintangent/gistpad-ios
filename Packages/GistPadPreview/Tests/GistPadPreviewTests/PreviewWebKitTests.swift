@@ -9,16 +9,24 @@ import WebKit
 @MainActor
 @Suite("Offline WebKit renderer", .serialized)
 struct PreviewWebKitTests {
-    @Test("The native preview applies read-only capability and the soft bottom edge")
+    @Test("The native preview keeps tasks read-only while scrolling under native bars")
     func nativeReadOnlyHost() async throws {
         var events: [PreviewEvent] = []
+        let document = "# A calm beginning\n\n[Jump to the last section](#destination)\n\n"
+            + String(repeating: "A paragraph with enough room to read and scroll.\n\n", count: 30)
+            + "## Destination\n\n- [ ] Read-only task\n\n"
+            + String(repeating: "Space after the destination keeps the anchor reachable.\n\n", count: 10)
         let preview = MarkdownPreviewView(
-            document: "- [ ] Read-only task\n", documentID: "read-only", generation: 0,
+            document: document, documentID: "read-only", generation: 0,
             allowsTaskEdits: false
         ) { events.append($0) }
-        let controller = UIHostingController(rootView: preview)
+        let controller = UIHostingController(rootView: preview.ignoresSafeArea(.container, edges: .vertical))
+        controller.title = "Reading"
+        controller.toolbarItems = [UIBarButtonItem(systemItem: .flexibleSpace)]
+        let navigation = UINavigationController(rootViewController: controller)
+        navigation.setToolbarHidden(false, animated: false)
         let window = testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
-        window.rootViewController = controller
+        window.rootViewController = navigation
         window.makeKeyAndVisible()
         defer {
             window.isHidden = true
@@ -35,13 +43,53 @@ struct PreviewWebKitTests {
             return view.subviews.lazy.compactMap { findWebView(in: $0) }.first
         }
         let webView = try #require(findWebView(in: controller.view))
+        try await waitFor("native bar insets") {
+            webView.scrollView.adjustedContentInset.top > 0 &&
+                webView.scrollView.adjustedContentInset.bottom > 0
+        }
+        #expect(webView.scrollView.bounces)
+        #expect(webView.scrollView.alwaysBounceVertical)
+        #expect(webView.scrollView.contentInsetAdjustmentBehavior == .automatic)
+        #expect(webView.scrollView.topEdgeEffect.style == .soft)
         #expect(webView.scrollView.bottomEdgeEffect.style == .soft)
+        #expect(!webView.isOpaque)
+        #expect(webView.backgroundColor == .clear)
+        #expect(webView.scrollView.backgroundColor == .clear)
+        #expect(webView.underPageBackgroundColor == .clear)
+        let webFrame = webView.convert(webView.bounds, to: window)
+        let topBarFrame = navigation.navigationBar.convert(navigation.navigationBar.bounds, to: window)
+        let bottomBarFrame = navigation.toolbar.convert(navigation.toolbar.bounds, to: window)
+        #expect(webFrame.minY < topBarFrame.maxY)
+        #expect(webFrame.maxY > bottomBarFrame.minY)
+        #expect(webFrame.minY + webView.scrollView.adjustedContentInset.top >= topBarFrame.maxY - 1)
+        #expect(webFrame.maxY - webView.scrollView.adjustedContentInset.bottom <= bottomBarFrame.minY + 1)
+        #expect(abs(webView.scrollView.contentOffset.y + webView.scrollView.adjustedContentInset.top) <= 1)
+        let restingHeading = try await webView.callAsyncJavaScript(
+            "return document.querySelector('h1').getBoundingClientRect().top >= 24 && window.scrollY === 0;",
+            arguments: [:], in: nil, contentWorld: .page
+        ) as? Bool
+        #expect(restingHeading == true)
+        _ = try await webView.callAsyncJavaScript(
+            "document.querySelector('a[href=\"#destination\"]').click();",
+            arguments: [:], in: nil, contentWorld: .page
+        )
+        let anchorPosition = try await webView.callAsyncJavaScript(
+            """
+            const heading = document.getElementById('destination');
+            const top = heading.getBoundingClientRect().top;
+            return document.activeElement === heading && window.scrollY > 0 && top >= 0 && top <= 17;
+            """,
+            arguments: [:], in: nil, contentWorld: .page
+        ) as? Bool
+        #expect(anchorPosition == true)
         let readOnly = try await webView.callAsyncJavaScript(
             """
             const input = document.querySelector('input[type=checkbox]');
             const disabled = input.disabled && input.getAttribute('aria-label') === 'Read-only task: Read-only task';
+            input.scrollIntoView({block: 'center'});
+            const rect = input.getBoundingClientRect();
             input.click();
-            return disabled;
+            return disabled && rect.top >= 0 && rect.bottom <= window.innerHeight;
             """,
             arguments: [:], in: nil, contentWorld: .page
         ) as? Bool
