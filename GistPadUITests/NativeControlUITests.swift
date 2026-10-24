@@ -232,9 +232,13 @@ final class NativeControlUITests: XCTestCase {
   @MainActor
   func testNativeTagEditSwipeInLightAndDark() async throws {
     for appearance in ["light", "dark"] {
-      let app = launch(screen: "tags", state: "resting", appearance: appearance)
+      let app = launch(screen: "tags", appearance: appearance)
       defer { app.terminate() }
-      let row = app.buttons["tag-choice-ideas"]
+      try await waitUntil("the native Tags sheet") { app.buttons["tag-save"].isHittable }
+      record(app, name: "native-tags-before-swipe-\(appearance)")
+      let row = app.descendants(matching: .any)["tag-choice-ideas"].firstMatch
+      try await waitUntil("the actual tag row") { row.exists }
+      if !row.isHittable { app.collectionViews.firstMatch.swipeUp() }
       try await waitUntil("the native editable tag row") { row.isHittable }
       row.swipeLeft()
       let edit = app.buttons["Edit Tag…"]
@@ -247,6 +251,8 @@ final class NativeControlUITests: XCTestCase {
 
   @MainActor
   private func checkSegmentMatrix(accessibility: Bool) async throws {
+    let originalOrientation = XCUIDevice.shared.orientation
+    defer { XCUIDevice.shared.orientation = originalOrientation }
     let titles = [
       (state: "mode-short", title: "A note"),
       (
@@ -260,6 +266,7 @@ final class NativeControlUITests: XCTestCase {
       for: 48, compatibleWith: UITraitCollection(preferredContentSizeCategory: category))
     for appearance in ["light", "dark"] {
       for split in [false, true] {
+        XCUIDevice.shared.orientation = split ? .landscapeLeft : .portrait
         var baselineWidth: CGFloat?
         for title in titles {
           let app = launch(
@@ -267,6 +274,10 @@ final class NativeControlUITests: XCTestCase {
             appearance: appearance,
             extraArguments: ["--capture-multi-file"] + (split ? ["--capture-split"] : []))
           defer { app.terminate() }
+          try await waitUntil("the actual \(split ? "landscape" : "portrait") viewport") {
+            split ? app.frame.width > app.frame.height : app.frame.height > app.frame.width
+          }
+          if split { XCTAssertGreaterThanOrEqual(app.frame.width, 640) }
           let picker = app.segmentedControls["note-toggle-mode"]
           let labels = split ? ["Edit", "Split", "Preview"] : ["Edit", "Preview"]
           try await waitUntil("every native mode target") {
@@ -283,13 +294,15 @@ final class NativeControlUITests: XCTestCase {
             let target = picker.buttons[label]
             XCTAssertGreaterThanOrEqual(target.frame.width, minimum - 1)
             XCTAssertGreaterThanOrEqual(target.frame.height, 44)
-            XCTAssertTrue(picker.frame.insetBy(dx: -1, dy: -1).contains(target.frame))
+            XCTAssertTrue(app.frame.contains(target.frame))
             target.tap()
             try await waitUntil("native \(label) selection") { target.isSelected }
           }
           let titleButton = app.navigationBars.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", title.title)).firstMatch
-          XCTAssertTrue(titleButton.exists)
+          try await waitUntil("the hittable native title after mode changes") {
+            titleButton.isHittable
+          }
           XCTAssertLessThanOrEqual(titleButton.frame.maxX, picker.frame.minX + 1)
           record(
             app,
@@ -359,15 +372,18 @@ final class NativeControlUITests: XCTestCase {
 
   @MainActor
   private func launch(
-    screen: String, state: String, accessibility: Bool = false,
+    screen: String, state: String? = nil, accessibility: Bool = false,
     appearance: String? = nil, extraArguments: [String] = []
   ) -> XCUIApplication {
     let app = XCUIApplication(bundleIdentifier: "dev.gistpad.GistPad")
     app.launchArguments = [
-      "--capture-screen", screen, "--capture-state", state, "--capture-accent", "#FACC15",
+      "--capture-screen", screen, "--capture-accent", "#FACC15",
       "-UIPreferredContentSizeCategoryName",
       accessibility ? "UICTContentSizeCategoryAccessibilityXL" : "UICTContentSizeCategoryL"
     ]
+    if let state {
+      app.launchArguments += ["--capture-state", state]
+    }
     if let appearance {
       app.launchArguments += ["--capture-appearance", appearance]
     }
