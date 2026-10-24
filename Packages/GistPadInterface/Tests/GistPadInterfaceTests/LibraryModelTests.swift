@@ -54,6 +54,54 @@ struct LibraryModelTests {
         #expect(model.matchingNotes.map(\.id) == ["a", "b", "c"])
     }
 
+    @Test func appSearchResultsPreserveTargetsOrderAndFullTextMatches() {
+        let model = LibraryModel(snapshot: InterfaceFixtures.library)
+        model.query = "words that occur only in the body"
+        model.selectedTagIDs = ["unknown-to-local-filter"]
+        model.collection = .archive
+        let notes = [
+            LibraryNote(id: "new-draft", title: "A local note", updatedAt: .distantPast),
+            LibraryNote(id: "daily/2026-10-23.md", title: "Today", updatedAt: .now, isDailyNote: true)
+        ]
+        model.searchState = .results(
+            notes: notes,
+            coverage: .init(totalDocuments: 5, documentsWithCachedContent: 2, staleResultCount: 1)
+        )
+        #expect(model.matchingNotes == notes)
+        #expect(model.unpinnedNotes == notes)
+    }
+
+    @Test func searchFailuresAndPendingResultsNeverFallBackToTitleFiltering() {
+        let model = LibraryModel(snapshot: InterfaceFixtures.library)
+        model.searchState = .searching
+        #expect(model.matchingNotes.isEmpty)
+        model.searchState = .failed(message: "Unknown tag")
+        #expect(model.matchingNotes.isEmpty)
+        model.searchState = .inactive
+        #expect(model.matchingNotes.count == 4)
+    }
+
+    @Test func cachedCoverageDoesNotPromiseCurrentContent() {
+        #expect(LibrarySearchCoverage(totalDocuments: 0, documentsWithCachedContent: 0).isComplete)
+        #expect(!LibrarySearchCoverage(totalDocuments: 4, documentsWithCachedContent: 3).isComplete)
+        #expect(!LibrarySearchCoverage(
+            totalDocuments: 4, documentsWithCachedContent: 4, incompleteGistCount: 1
+        ).isComplete)
+        #expect(!LibrarySearchCoverage(
+            totalDocuments: 4, documentsWithCachedContent: 4, staleResultCount: 1
+        ).isComplete)
+    }
+
+    @Test func todayKeepsItsPinnedDateAndUnknownTaskProgress() throws {
+        let zone = try #require(TimeZone(secondsFromGMT: 0))
+        let summary = LibraryTodaySummary(date: InterfaceFixtures.referenceDate, timeZone: zone)
+        #expect(summary.progress == nil)
+        let model = LibraryModel(today: summary)
+        model.query = "something else"
+        #expect(model.today == summary)
+        #expect(LibraryTaskProgress(completed: 0, total: 0).total == 0)
+    }
+
     @Test func tagNamesDoNotDependOnSetOrder() {
         let model = LibraryModel(snapshot: InterfaceFixtures.library)
         #expect(model.tags(for: InterfaceFixtures.library.notes[0]).map(\.name) == ["Design", "Ideas"])

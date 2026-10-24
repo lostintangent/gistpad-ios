@@ -9,6 +9,8 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     private let source: Source
     private let preview: Preview
     @State private var showingFiles = false
+    @State private var showingDetails = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var showingSource: Bool { mode == .source && document.access.canEdit }
 
@@ -24,7 +26,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         self.source = source()
         self.preview = preview()
     }
-
     public var body: some View {
         ZStack {
             source
@@ -40,6 +41,11 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarTitleMenu {
+            if !document.tags.isEmpty {
+                Button(String(localized: "Note details", bundle: .module), systemImage: "info.circle") {
+                    showingDetails = true
+                }
+            }
             if document.files.count > 1 {
                 Button(String(localized: "Files in this gist", bundle: .module), systemImage: "doc.on.doc") {
                     showingFiles = true
@@ -58,6 +64,8 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 .background(Color(uiColor: .systemBackground))
         }
         .sheet(isPresented: $showingFiles) { files }
+        .sheet(isPresented: $showingDetails) { details }
+        .scrollEdgeEffectStyle(.soft, for: .bottom)
         .onChange(of: document.selectedFileID) { showingFiles = false }
         .onChange(of: showingSource) {
             actions.didChangeMode?(showingSource ? .source : .reading)
@@ -143,6 +151,14 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 )
             }
         }
+        if let delete = actions.delete, document.access.canEdit {
+            ToolbarItem(placement: .secondaryAction) {
+                Button(
+                    String(localized: "Delete gist", bundle: .module),
+                    systemImage: "trash", role: .destructive, action: delete
+                )
+            }
+        }
         if let copy = actions.copyLink {
             ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Copy Link", bundle: .module), systemImage: "link", action: copy)
@@ -163,7 +179,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                     systemImage: "exclamationmark.shield"
                 )
             } else if document.access == .readOnly {
-                Label(String(localized: "Read-only gist", bundle: .module), systemImage: "eye")
+                Label(String(localized: "Read-only note", bundle: .module), systemImage: "eye")
             }
             saveStatus
         }
@@ -171,6 +187,8 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("note-save-state")
+        .contentTransition(.opacity)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: saveState)
     }
 
     @ViewBuilder
@@ -284,12 +302,40 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                             add()
                         }
                     }
+
                 }
             }
             .navigationTitle(Text("Files in this gist", bundle: .module))
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(String(localized: "Done", bundle: .module)) { showingFiles = false }
+                }
+            }
+        }
+    }
+
+    private var details: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    Text(verbatim: document.title)
+                        .font(.title2.bold())
+                        .textSelection(.enabled)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Tags", bundle: .module)
+                            .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
+                        TagLabels(tags: document.tags)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(24)
+            }
+            .navigationTitle(Text("Note details", bundle: .module))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "Done", bundle: .module)) { showingDetails = false }
                 }
             }
         }

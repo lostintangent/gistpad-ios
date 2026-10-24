@@ -1,6 +1,34 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "" : {
+
+    },
+    "%lld gists have incomplete file lists." : {
+
+    },
+    "%lld of %lld tasks complete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld tasks complete"
+          }
+        }
+      }
+    },
+    "%lld results have older cached content." : {
+
+    },
+    "+%lld" : {
+
+    },
+    "A little space for today's thoughts." : {
+
+    },
+    "A quiet place to think. A precise engine beneath the page." : {
+
+    },
     "Account" : {
 
     },
@@ -31,6 +59,16 @@
     "Collection" : {
 
     },
+    "Content from %lld of %lld notes is available to search." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Content from %1$lld of %2$lld notes is available to search."
+          }
+        }
+      }
+    },
     "Continue with GitHub" : {
 
     },
@@ -43,10 +81,13 @@
     "Couldn't update from GitHub." : {
 
     },
-    "Create a gist" : {
+    "Create a note" : {
 
     },
     "Daily Notes" : {
+
+    },
+    "Delete gist" : {
 
     },
     "Done" : {
@@ -64,25 +105,28 @@
     "GistPad" : {
 
     },
-    "Gists" : {
-
-    },
     "GitHub returned an incomplete note. Editing is unavailable to protect the original." : {
 
     },
     "In-memory fixture. Not saved." : {
 
     },
-    "New gist" : {
+    "New note" : {
 
     },
-    "No gists here yet" : {
+    "No matching notes" : {
 
     },
-    "No matching gists" : {
+    "No notes here yet" : {
 
     },
     "Not saved yet" : {
+
+    },
+    "Note details" : {
+
+    },
+    "Notes" : {
 
     },
     "Offline. Showing notes on this iPhone." : {
@@ -103,13 +147,13 @@
     "Preview" : {
 
     },
-    "Read-only gist" : {
+    "Read-only note" : {
 
     },
     "Reconnect GitHub" : {
 
     },
-    "Reconnect your account to see your gists, tags and pins. Local drafts stay on this iPhone." : {
+    "Reconnect your account to see your notes, tags and pins. Local drafts stay on this iPhone." : {
 
     },
     "Rename" : {
@@ -148,10 +192,19 @@
     "Saving to GitHub" : {
 
     },
+    "Search needs attention" : {
+
+    },
+    "Search notes" : {
+
+    },
     "Search tags" : {
 
     },
-    "Search titles" : {
+    "Searching notes" : {
+
+    },
+    "Select a gist" : {
 
     },
     "Share" : {
@@ -169,6 +222,9 @@
     "Start today's note" : {
 
     },
+    "Start when you're ready. Nothing is created until you choose to begin." : {
+
+    },
     "Tag filters applied" : {
 
     },
@@ -176,6 +232,12 @@
 
     },
     "Tags: %@" : {
+
+    },
+    "The shape of a notebook" : {
+
+    },
+    "These are synthetic screen fixtures. Nothing is connected to GitHub." : {
 
     },
     "This note changed elsewhere." : {
@@ -188,6 +250,9 @@
 
     },
     "Unarchive" : {
+
+    },
+    "Unfinished tasks" : {
 
     },
     "Unpin" : {

@@ -9,7 +9,7 @@ public enum InterfaceTheme {
 extension LibraryCollection {
     var title: String {
         switch self {
-        case .gists: String(localized: "Gists", bundle: .module)
+        case .gists: String(localized: "Notes", bundle: .module)
         case .dailyNotes: String(localized: "Daily Notes", bundle: .module)
         case .starred: String(localized: "Starred", bundle: .module)
         case .archive: String(localized: "Archive", bundle: .module)
@@ -28,16 +28,17 @@ extension LibraryCollection {
 
 struct TagSwatch: View {
     let hex: String?
+    var size: CGFloat = 12
 
     var body: some View {
         Circle()
-            .fill(color)
-            .frame(width: 12, height: 12)
-            .overlay { Circle().strokeBorder(.primary.opacity(0.25), lineWidth: 1) }
+            .fill(Self.color(hex: hex))
+            .frame(width: size, height: size)
+            .overlay { Circle().strokeBorder(.primary, lineWidth: 0.75) }
             .accessibilityHidden(true)
     }
 
-    private var color: Color {
+    static func color(hex: String?) -> Color {
         guard let hex else { return .secondary }
         let value = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
         guard value.count == 6, let rgb = UInt32(value, radix: 16) else { return .secondary }

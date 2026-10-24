@@ -27,6 +27,8 @@ public struct LibraryView: View {
     private let footer: Text?
     @State private var showingTags = false
     @State private var tagQuery = ""
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(model: LibraryModel, actions: LibraryActions, footer: Text? = nil) {
         self.model = model
@@ -35,16 +37,49 @@ public struct LibraryView: View {
     }
 
     public var body: some View {
+        adaptiveList
+            .navigationTitle("GistPad")
+            .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 400)
+            .searchable(text: $model.query, prompt: Text("Search notes", bundle: .module))
+            .refreshable { await actions.refresh() }
+            .toolbar { libraryToolbar }
+            .sheet(isPresented: $showingTags) { tagFilters }
+            .scrollEdgeEffectStyle(.soft, for: .all)
+    }
+
+    @ViewBuilder
+    private var adaptiveList: some View {
+        if horizontalSizeClass == .regular {
+            libraryList.listStyle(.sidebar)
+        } else {
+            libraryList
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color(uiColor: .systemBackground))
+        }
+    }
+
+    private var libraryList: some View {
         List(selection: $model.selectedNoteID) {
             status
             if model.loadState != .signedOut {
                 if model.collection == .gists && !model.hasFilters {
                     Section {
                         Button(action: actions.today) {
-                            Label(String(localized: "Today", bundle: .module), systemImage: "calendar")
-                                .foregroundStyle(InterfaceTheme.accent)
-                                .padding(.vertical, 6)
+                            VStack(alignment: .leading, spacing: 12) {
+                                TodayHeading(summary: model.today)
+                                if let progress = model.today.progress {
+                                    TaskProgressLabel(progress: progress)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                         .accessibilityIdentifier("library-today")
                     }
                 }
@@ -56,13 +91,10 @@ public struct LibraryView: View {
                             Label(String(localized: "Clear filters", bundle: .module), systemImage: "line.3.horizontal.decrease")
                         }
                         if !model.selectedTagIDs.isEmpty {
-                            Label(
-                                model.snapshot.tags.filter { model.selectedTagIDs.contains($0.id) }
-                                    .map(\.name).sorted().joined(separator: ", "),
-                                systemImage: "tag"
+                            TagLabels(
+                                tags: model.snapshot.tags.filter { model.selectedTagIDs.contains($0.id) },
+                                isSelected: true
                             )
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                         }
                     } footer: {
                         if !model.selectedTagIDs.isEmpty {
@@ -70,39 +102,78 @@ public struct LibraryView: View {
                         }
                     }
                 }
+                searchStatus
                 if let open = model.openDocumentOutsideFilter {
                     Section(String(localized: "Open document", bundle: .module)) {
                         noteRow(open)
                     }
                 }
-                if !model.pinnedNotes.isEmpty {
-                    Section(String(localized: "Pinned", bundle: .module)) {
-                        ForEach(model.pinnedNotes) { noteRow($0, showsPin: false) }
+                if case .results = model.searchState {
+                    if !model.matchingNotes.isEmpty {
+                        Section(model.collection.title) {
+                            ForEach(model.matchingNotes) { noteRow($0) }
+                        }
                     }
+                } else {
+                    if !model.pinnedNotes.isEmpty {
+                        Section(String(localized: "Pinned", bundle: .module)) {
+                            ForEach(model.pinnedNotes) { noteRow($0, showsPin: false) }
+                        }
+                    }
+                    if !model.unpinnedNotes.isEmpty {
+                        Section(model.collection.title) {
+                            ForEach(model.unpinnedNotes) { noteRow($0) }
+                        }
+                    }
+                }
+                if model.matchingNotes.isEmpty && model.loadState != .loading && canShowEmptyState {
+                    emptyState
                 }
                 if let footer {
                     Section {} footer: { footer }
                 }
-                if !model.unpinnedNotes.isEmpty {
-                    Section(model.collection.title) {
-                        ForEach(model.unpinnedNotes) { noteRow($0) }
+            }
+        }
+    }
+
+    private var canShowEmptyState: Bool {
+        switch model.searchState {
+        case .inactive, .results: true
+        case .searching, .failed: false
+        }
+    }
+
+    @ViewBuilder
+    private var searchStatus: some View {
+        switch model.searchState {
+        case .inactive:
+            EmptyView()
+        case .searching:
+            Section {
+                ProgressView(String(localized: "Searching notes", bundle: .module))
+            }
+        case .failed(let message):
+            Section {
+                Label(String(localized: "Search needs attention", bundle: .module), systemImage: "exclamationmark.circle")
+                Text(verbatim: message).foregroundStyle(.secondary)
+            }
+        case .results(_, let coverage):
+            if !coverage.isComplete {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Content from \(coverage.documentsWithCachedContent) of \(coverage.totalDocuments) notes is available to search.", bundle: .module)
+                        if coverage.incompleteGistCount > 0 {
+                            Text("\(coverage.incompleteGistCount) gists have incomplete file lists.", bundle: .module)
+                        }
+                        if coverage.staleResultCount > 0 {
+                            Text("\(coverage.staleResultCount) results have older cached content.", bundle: .module)
+                        }
                     }
-                }
-                if model.matchingNotes.isEmpty && model.loadState != .loading {
-                    emptyState
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .navigationTitle("GistPad")
-        .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 400)
-        .searchable(
-            text: $model.query,
-            prompt: Text("Search titles", bundle: .module)
-        )
-        .refreshable { await actions.refresh() }
-        .toolbar { libraryToolbar }
-        .sheet(isPresented: $showingTags) { tagFilters }
     }
 
     @ViewBuilder
@@ -149,7 +220,7 @@ public struct LibraryView: View {
                 ContentUnavailableView {
                     Label(String(localized: "Your notebook, on GitHub", bundle: .module), systemImage: "book.closed")
                 } description: {
-                    Text("Reconnect your account to see your gists, tags and pins. Local drafts stay on this iPhone.", bundle: .module)
+                    Text("Reconnect your account to see your notes, tags and pins. Local drafts stay on this iPhone.", bundle: .module)
                 } actions: {
                     if let reconnect = actions.reconnect {
                         Button(String(localized: "Continue with GitHub", bundle: .module), action: reconnect)
@@ -167,8 +238,8 @@ public struct LibraryView: View {
             ContentUnavailableView {
                 Label(
                     model.hasFilters
-                        ? String(localized: "No matching gists", bundle: .module)
-                        : String(localized: "No gists here yet", bundle: .module),
+                        ? String(localized: "No matching notes", bundle: .module)
+                        : String(localized: "No notes here yet", bundle: .module),
                     systemImage: model.hasFilters ? "magnifyingglass" : model.collection.symbol
                 )
             } description: {
@@ -181,7 +252,7 @@ public struct LibraryView: View {
                 if model.hasFilters {
                     Button(String(localized: "Clear filters", bundle: .module)) { model.clearFilters() }
                 } else if model.collection == .gists {
-                    Button(String(localized: "Create a gist", bundle: .module), action: actions.create)
+                    Button(String(localized: "Create a note", bundle: .module), action: actions.create)
                 } else if model.collection == .dailyNotes {
                     Button(String(localized: "Start today's note", bundle: .module), action: actions.today)
                 }
@@ -204,22 +275,34 @@ public struct LibraryView: View {
                             .accessibilityLabel(Text("Pinned", bundle: .module))
                     }
                 }
+                if let excerpt = note.excerpt, !excerpt.isEmpty {
+                    Text(verbatim: excerpt)
+                        .font(.subheadline)
+                        .foregroundStyle(model.selectedNoteID == note.id ? .primary : .secondary)
+                        .lineLimit(2)
+                }
+                if !model.tags(for: note).isEmpty {
+                    TagLabels(tags: model.tags(for: note), limit: 2)
+                }
                 VStack(alignment: .leading, spacing: 4) {
                     if !note.isOwned, let owner = note.owner {
                         Text(verbatim: "@\(owner)")
                     }
                     Text(note.updatedAt, format: .relative(presentation: .named))
-                    if !model.tags(for: note).isEmpty {
-                        Text(verbatim: model.tags(for: note).map(\.name).joined(separator: ", "))
-                            .accessibilityLabel(
-                                Text("Tags: \(model.tags(for: note).map(\.name).joined(separator: ", "))", bundle: .module)
-                            )
+                    if let filename = note.filename, filename != note.title {
+                        Text(verbatim: filename)
+                    }
+                    if let progress = note.progress {
+                        TaskProgressLabel(progress: progress)
+                    }
+                    if note.isOverdue {
+                        Label(String(localized: "Unfinished tasks", bundle: .module), systemImage: "clock")
                     }
                 }
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(model.selectedNoteID == note.id ? .primary : .secondary)
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, 10)
         }
         .accessibilityValue(note.isPinned ? Text("Pinned", bundle: .module) : Text(""))
         .listRowBackground(model.selectedNoteID == note.id ? InterfaceTheme.selection : nil)
@@ -269,7 +352,7 @@ public struct LibraryView: View {
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
-            Button(String(localized: "New gist", bundle: .module), systemImage: "square.and.pencil", action: actions.create)
+            Button(String(localized: "New note", bundle: .module), systemImage: "square.and.pencil", action: actions.create)
                 .accessibilityIdentifier("library-create")
                 .disabled(model.loadState == .signedOut)
         }
@@ -325,12 +408,14 @@ public struct LibraryView: View {
                                 if model.selectedTagIDs.contains(tag.id) {
                                     Image(systemName: "checkmark")
                                         .foregroundStyle(InterfaceTheme.accent)
+                                        .transition(.opacity)
                                 }
                             }
                             .frame(minHeight: 44)
                             .contentShape(Rectangle())
                         }
                         .accessibilityAddTraits(model.selectedTagIDs.contains(tag.id) ? .isSelected : [])
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: model.selectedTagIDs.contains(tag.id))
                     }
                 } footer: {
                     Text("All selected tags must match. Tags apply to the whole gist.", bundle: .module)
