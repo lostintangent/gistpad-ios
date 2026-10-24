@@ -6,30 +6,30 @@ public enum InterfaceFixtures {
     public static let library = LibrarySnapshot(
         notes: [
             LibraryNote(
-                id: "shape", title: "The shape of a notebook", updatedAt: referenceDate,
+                id: "shape", title: "The shape of a notebook", updatedAt: referenceDate, gistID: "shape",
                 isPinned: true, tagIDs: ["ideas", "design"]
             ),
             LibraryNote(
-                id: "weekend", title: "A slower weekend", updatedAt: referenceDate.addingTimeInterval(-3_600),
+                id: "weekend", title: "A slower weekend", updatedAt: referenceDate.addingTimeInterval(-3_600), gistID: "weekend",
                 tagIDs: ["personal"]
             ),
             LibraryNote(
-                id: "words", title: "Words worth keeping", updatedAt: referenceDate.addingTimeInterval(-86_400),
+                id: "words", title: "Words worth keeping", updatedAt: referenceDate.addingTimeInterval(-86_400), gistID: "words",
                 tagIDs: ["ideas"]
             ),
             LibraryNote(
-                id: "mixed", title: "日本語のメモ · أفكار صغيرة", updatedAt: referenceDate.addingTimeInterval(-172_800),
+                id: "mixed", title: "日本語のメモ · أفكار صغيرة", updatedAt: referenceDate.addingTimeInterval(-172_800), gistID: "mixed",
                 tagIDs: ["personal"]
             ),
             LibraryNote(
-                id: "daily", title: "Daily notes", updatedAt: referenceDate, isDailyNote: true
+                id: "daily", title: "Daily notes", updatedAt: referenceDate, gistID: "daily", isDailyNote: true
             ),
             LibraryNote(
-                id: "starred", title: "An excellent Markdown field guide", updatedAt: referenceDate,
+                id: "starred", title: "An excellent Markdown field guide", updatedAt: referenceDate, gistID: "starred",
                 owner: "notebook-friend", isOwned: false, isSecret: false, isStarred: true
             ),
             LibraryNote(
-                id: "archived", title: "A finished chapter", updatedAt: referenceDate.addingTimeInterval(-604_800),
+                id: "archived", title: "A finished chapter", updatedAt: referenceDate.addingTimeInterval(-604_800), gistID: "archived",
                 isArchived: true
             )
         ],

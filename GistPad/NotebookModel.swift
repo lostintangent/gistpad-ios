@@ -607,7 +607,7 @@ final class NotebookModel {
     documentError = nil
     isOpeningDocument = false
     ownedGistIDs = []
-    library.snapshot = .init(notes: [])
+    library.replaceSnapshot(nil)
     library.selectedNoteID = nil
     library.clearFilters()
     do {
@@ -705,8 +705,8 @@ final class NotebookModel {
       guard request == libraryRequest, self.account?.id == account.id else { return }
       self.account = refreshed
       ownedGistIDs = Set(owned.map(\.id))
-      library.snapshot = Self.librarySnapshot(
-        owned: owned, starred: starred, account: refreshed, excluding: deletedGistIDs)
+      library.replaceSnapshot(Self.librarySnapshot(
+        owned: owned, starred: starred, account: refreshed, excluding: deletedGistIDs))
       library.loadState = .ready
       try await reloadLocalState(accountID: account.id)
       guard request == libraryRequest, self.account?.id == account.id else { return }
@@ -956,7 +956,8 @@ final class NotebookModel {
           gistID: match.gistID, filename: match.filename, draftID: match.draftID)
         if match.isRecovery { recoveries.insert(rowID) }
         return LibraryNote(
-          id: rowID, title: match.title, updatedAt: match.updatedAt, owner: gist?.owner?.login,
+          id: rowID, title: match.title, updatedAt: match.updatedAt,
+          gistID: match.isRecovery ? nil : match.gistID, owner: gist?.owner?.login,
           isOwned: match.isRecovery || (match.gistID.map { ownedGistIDs.contains($0) } ?? true),
           canDeleteFromGitHub: !match.isRecovery
             && (match.gistID.map { ownedGistIDs.contains($0) } ?? false),
@@ -1144,10 +1145,10 @@ final class NotebookModel {
     cachedLibrary = local.library.map(libraryExcludingDeletedGists)
     if let cached = cachedLibrary, let account {
       ownedGistIDs = Set(cached.owned.map(\.id))
-      library.snapshot = Self.librarySnapshot(
-        owned: cached.owned, starred: cached.starred, account: account, excluding: deletedGistIDs)
+      library.replaceSnapshot(Self.librarySnapshot(
+        owned: cached.owned, starred: cached.starred, account: account, excluding: deletedGistIDs))
     } else {
-      library.snapshot = .init(notes: [])
+      library.replaceSnapshot(nil)
     }
     let known = Set(library.snapshot.notes.map(\.id))
     library.snapshot.notes += localDrafts.filter {
@@ -1412,7 +1413,7 @@ final class NotebookModel {
     isOpeningDocument = false
     ownedGistIDs = []
     deletedGistIDs = []
-    library.snapshot = .init(notes: [])
+    library.replaceSnapshot(nil)
     library.selectedNoteID = nil
     library.clearFilters()
     library.loadState = .signedOut
@@ -1525,7 +1526,7 @@ final class NotebookModel {
     return LibrarySnapshot(
       notes: unique.values.map { gist in
         LibraryNote(
-          id: gist.id, title: gist.displayName, updatedAt: gist.updatedAt,
+          id: gist.id, title: gist.displayName, updatedAt: gist.updatedAt, gistID: gist.id,
           owner: gist.owner?.login, isOwned: ownedIDs.contains(gist.id),
           canDeleteFromGitHub: ownedIDs.contains(gist.id),
           isSecret: !gist.isPublic, isPinned: preferences.pinnedGists.contains(gist.id),

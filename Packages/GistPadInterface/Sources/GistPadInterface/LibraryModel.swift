@@ -21,6 +21,7 @@ public struct LibraryTag: Equatable, Identifiable, Sendable {
 
 public struct LibraryNote: Equatable, Identifiable, Sendable {
     public let id: String
+    public var gistID: String?
     public var title: String
     public var updatedAt: Date
     public var owner: String?
@@ -39,7 +40,7 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
     public var isOverdue: Bool
 
     public init(
-        id: String, title: String, updatedAt: Date, owner: String? = nil,
+        id: String, title: String, updatedAt: Date, gistID: String? = nil, owner: String? = nil,
         isOwned: Bool = true, canDeleteFromGitHub: Bool = false,
         isSecret: Bool = true, isPinned: Bool = false,
         isStarred: Bool = false, isArchived: Bool = false, isDailyNote: Bool = false,
@@ -47,6 +48,7 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
         progress: LibraryTaskProgress? = nil, isOverdue: Bool = false
     ) {
         self.id = id
+        self.gistID = gistID
         self.title = title
         self.updatedAt = updatedAt
         self.owner = owner
@@ -88,6 +90,7 @@ public enum LibraryLoadState: Equatable, Sendable {
 @MainActor @Observable
 public final class LibraryModel {
     public var snapshot: LibrarySnapshot
+    public private(set) var hasKnownGistSnapshot: Bool
     public var loadState: LibraryLoadState
     public var gitHubStatus: GitHubStatusState?
     public var collection: LibraryCollection = .gists
@@ -98,10 +101,11 @@ public final class LibraryModel {
     public var searchState: LibrarySearchState = .inactive
 
     public init(
-        snapshot: LibrarySnapshot = .init(notes: []), loadState: LibraryLoadState = .loading,
+        snapshot: LibrarySnapshot? = nil, loadState: LibraryLoadState = .loading,
         today: LibraryTodaySummary = .init(date: .now)
     ) {
-        self.snapshot = snapshot
+        self.snapshot = snapshot ?? .init(notes: [])
+        hasKnownGistSnapshot = snapshot != nil
         self.loadState = loadState
         self.today = today
     }
@@ -122,18 +126,48 @@ public final class LibraryModel {
         }
         let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return snapshot.notes.filter { note in
-            let inCollection: Bool
-            switch collection {
-            case .gists: inCollection = !note.isArchived && !note.isDailyNote && note.isOwned
-            case .dailyNotes: inCollection = note.isDailyNote && !note.isArchived && note.isOwned
-            case .starred: inCollection = note.isStarred && !note.isArchived
-            case .archive: inCollection = note.isArchived && note.isOwned
-            }
-            return inCollection && selectedTagIDs.isSubset(of: note.tagIDs)
+            return Self.includes(note, in: collection) && selectedTagIDs.isSubset(of: note.tagIDs)
                 && (search.isEmpty || note.title.localizedStandardContains(search))
         }.sorted {
             if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
             return $0.id < $1.id
+        }
+    }
+
+    public func replaceSnapshot(_ snapshot: LibrarySnapshot?) {
+        self.snapshot = snapshot ?? .init(notes: [])
+        hasKnownGistSnapshot = snapshot != nil
+    }
+
+    public var collectionGistCount: Int? {
+        guard hasKnownGistSnapshot else { return nil }
+        return Self.gistCount(in: snapshot.notes.filter { Self.includes($0, in: collection) })
+    }
+
+    public var resultGistCount: Int? {
+        switch searchState {
+        case .results(let notes, _): Self.gistCount(in: notes)
+        case .inactive: hasFilters && hasKnownGistSnapshot ? Self.gistCount(in: matchingNotes) : nil
+        case .searching, .failed: nil
+        }
+    }
+
+    public static func gistCount(in notes: [LibraryNote]) -> Int {
+        Set(notes.compactMap(\.gistID)).count
+    }
+
+    public static func gistCountLabel(_ count: Int) -> String {
+        count == 1
+            ? String(localized: "1 gist", bundle: .module)
+            : String(localized: "\(count) gists", bundle: .module)
+    }
+
+    private static func includes(_ note: LibraryNote, in collection: LibraryCollection) -> Bool {
+        switch collection {
+        case .gists: !note.isArchived && !note.isDailyNote && note.isOwned
+        case .dailyNotes: note.isDailyNote && !note.isArchived && note.isOwned
+        case .starred: note.isStarred && !note.isArchived
+        case .archive: note.isArchived && note.isOwned
         }
     }
 
