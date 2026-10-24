@@ -1,5 +1,7 @@
 import Foundation
+import GistPadEditor
 import GistPadInterface
+import SwiftUI
 import Synchronization
 import Testing
 import UIKit
@@ -47,6 +49,35 @@ struct NotebookPhotoTests {
     #expect(row.action == .chooseAnother)
     #expect(try await fixture.store.imageUploads(accountID: fixture.accountID).isEmpty)
     #expect(fixture.network.requests.withLock { $0.isEmpty })
+  }
+
+  @Test func presentingPrivacyOrThePickerEndsSourceInputBeforeShowingASheet() async throws {
+    let fixture = try await PhotoFixture()
+    defer { fixture.cleanup() }
+    let window = try EditorContinuityTests().host(fixture.session.session)
+    defer { window.isHidden = true }
+    fixture.session.session.textView.becomeFirstResponder()
+    #expect(fixture.session.session.textView.isFirstResponder)
+    fixture.session.session.textView.selectedRange = NSRange(location: 1, length: 2)
+    let selection = fixture.session.session.textView.selectedRange
+    fixture.photos.choosePhoto()
+    #expect(fixture.photos.isShowingNotice)
+    #expect(!fixture.session.session.textView.isFirstResponder)
+    #expect(fixture.session.session.textView.selectedRange == selection)
+    #expect(fixture.session.session.text == "Base")
+    #expect(fixture.session.session.generation == 0)
+    fixture.photos.acceptNotice()
+    fixture.photos.noticeDidDismiss()
+    fixture.photos.pickerCancelled()
+    fixture.session.session.textView.becomeFirstResponder()
+    fixture.photos.choosePhoto()
+    #expect(fixture.photos.isShowingPicker)
+    #expect(!fixture.session.session.textView.isFirstResponder)
+    fixture.photos.pickerCancelled()
+    fixture.session.session.textView.becomeFirstResponder()
+    fixture.photos.showPrivacy()
+    #expect(!fixture.session.session.textView.isFirstResponder)
+    #expect(fixture.photos.isShowingNotice)
   }
 
   @Test func failedLocalQueueRetainsBytesAndBlocksAnOverwritingSecondPick() async throws {
@@ -201,6 +232,87 @@ struct NotebookPhotoTests {
   }
 }
 
+@Suite(.serialized)
+@MainActor
+struct NotebookPhotoLayoutProbe {
+  @Test(arguments: [1, 3])
+  func accessibilityShelfCanScrollWithoutLosingTheEditor(photoCount: Int) async throws {
+    let fixture = try await PhotoFixture()
+    defer { fixture.cleanup() }
+    for _ in 0..<photoCount {
+      fixture.authorize()
+      await fixture.photos.receivePickedData(fixture.bytes)
+      fixture.photos.isShowingPicker = false
+    }
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = UIWindow(windowScene: scene)
+    let root = NavigationStack {
+      NoteScreen(
+        document: fixture.session.document.chrome, mode: .constant(.source),
+        saveState: .savedLocally
+      ) {
+        NotebookPhotoSurface(controller: fixture.photos, isSource: true) {
+          MarkdownEditorView(
+            session: fixture.session.session,
+            insertPhoto: { fixture.photos.choosePhoto() },
+            canInsertPhoto: fixture.photos.canChoosePhoto)
+        }
+      } preview: { Color.clear }
+    }
+    .environment(\.dynamicTypeSize, .accessibility3)
+    let host = UIHostingController(rootView: root)
+    host.traitOverrides.preferredContentSizeCategory = .accessibilityExtraLarge
+    window.rootViewController = host
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    try await Task.sleep(for: .milliseconds(300))
+    let editor = fixture.session.session.textView
+    editor.becomeFirstResponder()
+    try await Task.sleep(for: .milliseconds(700))
+    host.view.layoutIfNeeded()
+    #expect(editor.isFirstResponder)
+    #expect(editor.inputAccessoryView != nil)
+    let scrolls = descendants(of: host.view).compactMap { $0 as? UIScrollView }
+    let shelf = try #require(scrolls.first {
+      $0 !== editor && $0.bounds.height <= 181
+        && $0.bounds.height > 0 && $0.contentSize.height > $0.bounds.height
+    })
+    let prefix = "photos-ax3-\(photoCount)"
+    record(window, named: "\(prefix)-shelf-top")
+    let bottom = shelf.contentSize.height - shelf.bounds.height + shelf.adjustedContentInset.bottom
+    shelf.setContentOffset(CGPoint(x: 0, y: bottom), animated: false)
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(abs(shelf.contentOffset.y - bottom) < 1)
+    record(window, named: "\(prefix)-shelf-bottom")
+    let visibleSourceHeight =
+      editor.bounds.height - editor.adjustedContentInset.top - editor.adjustedContentInset.bottom
+    let twoLines = (editor.font?.lineHeight ?? UIFont.preferredFont(forTextStyle: .body).lineHeight) * 2
+    Attachment.record(
+      "source viewport: \(visibleSourceHeight) pt, two lines: \(twoLines) pt, "
+        + "shelf: \(shelf.bounds.height) pt, content: \(shelf.contentSize.height) pt, "
+        + "scroll bottom: \(shelf.contentOffset.y) pt",
+      named: "\(prefix)-geometry.txt")
+    #expect(visibleSourceHeight >= twoLines, "Keep at least two source lines above the shelf and keyboard.")
+    editor.selectedRange = NSRange(location: editor.text.utf16.count, length: 0)
+    editor.insertText(" Still editable")
+    #expect(fixture.session.session.text.hasSuffix(" Still editable"))
+    #expect(editor.isFirstResponder)
+    record(window, named: "\(prefix)-continued-edit")
+  }
+
+  private func descendants(of view: UIView) -> [UIView] {
+    view.subviews.flatMap { [$0] + descendants(of: $0) }
+  }
+
+  private func record(_ window: UIWindow, named name: String) {
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+    }
+    Attachment.record(image, named: "\(name).png", as: .png)
+  }
+}
+
 @MainActor
 private final class PhotoFixture {
   let accountID = UUID()
@@ -244,6 +356,7 @@ private final class PhotoFixture {
       guard await session.waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
     },
     publication: { nil },
+    preparePresentation: { [unowned self] in session.session.textView.resignFirstResponder() },
     defaults: defaults)
     retainedPhotos = controller
     return controller

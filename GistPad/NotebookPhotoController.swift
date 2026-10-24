@@ -53,6 +53,7 @@ final class NotebookPhotoController {
   @ObservationIgnored private let didInsert: @MainActor () -> Void
   @ObservationIgnored private let prepareQueue: @MainActor () async throws -> Void
   @ObservationIgnored private let publication: @MainActor () -> String?
+  @ObservationIgnored private let preparePresentation: @MainActor () -> Void
   @ObservationIgnored private var services: NotebookPhotoServices?
   @ObservationIgnored private var servicesTask: Task<NotebookPhotoServices, any Error>?
   @ObservationIgnored private var origin: NotebookPhotoTarget?
@@ -77,6 +78,7 @@ final class NotebookPhotoController {
     didInsert: @escaping @MainActor () -> Void = {},
     prepareQueue: @escaping @MainActor () async throws -> Void = {},
     publication: @escaping @MainActor () -> String? = { nil },
+    preparePresentation: @escaping @MainActor () -> Void = {},
     defaults: UserDefaults = .standard
   ) {
     self.accountID = accountID
@@ -88,6 +90,7 @@ final class NotebookPhotoController {
     self.didInsert = didInsert
     self.prepareQueue = prepareQueue
     self.publication = publication
+    self.preparePresentation = preparePresentation
     self.defaults = defaults
   }
 
@@ -121,7 +124,8 @@ final class NotebookPhotoController {
       prepareQueue: {
         guard await controller.waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
       },
-      publication: { controller.draft.gistID })
+      publication: { controller.draft.gistID },
+      preparePresentation: { controller.session.textView.resignFirstResponder() })
   }
 
   var canChoosePhoto: Bool { currentTarget?.canInsert == true && !isPreparing && pendingBytes == nil }
@@ -143,6 +147,7 @@ final class NotebookPhotoController {
   func choosePhoto() {
     guard canChoosePhoto, let currentTarget else { return }
     origin = currentTarget
+    preparePresentation()
     if hasAcknowledgedPublicStorage { isShowingPicker = true }
     else {
       noticeStartsPicker = true
@@ -151,6 +156,7 @@ final class NotebookPhotoController {
   }
 
   func showPrivacy() {
+    preparePresentation()
     noticeStartsPicker = false
     isShowingNotice = true
   }

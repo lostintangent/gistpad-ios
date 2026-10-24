@@ -37,7 +37,11 @@
               }
             }
           }
-          .task { session.session.textView.becomeFirstResponder() }
+          .task {
+            if !fixture.photos.isShowingNotice, !fixture.photos.isShowingPicker {
+              session.session.textView.becomeFirstResponder()
+            }
+          }
         } else if let failure {
           ContentUnavailableView(
             "Photo fixture unavailable", systemImage: "exclamationmark.triangle",
@@ -137,6 +141,7 @@
           }
         },
         reconnect: {}, didInsert: {}, prepareQueue: {}, publication: { session.draft.gistID },
+        preparePresentation: { session.session.textView.resignFirstResponder() },
         defaults: defaults)
       switch state {
       case "notice": photos.choosePhoto()
