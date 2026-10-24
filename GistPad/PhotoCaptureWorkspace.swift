@@ -84,17 +84,19 @@
     let session: NotebookSessionController
     let photos: NotebookPhotoController
     let captureState: String
+    let scrollFraction: CGFloat
     var keyboardHeight: CGFloat = 0
 
     var capturesInsertMenu: Bool { captureState == "insert" }
 
     init(
       session: NotebookSessionController, photos: NotebookPhotoController,
-      captureState: String
+      captureState: String, scrollFraction: CGFloat = 1
     ) {
       self.session = session
       self.photos = photos
       self.captureState = captureState
+      self.scrollFraction = scrollFraction
     }
 
     func markReady() async throws {
@@ -117,7 +119,7 @@
         "photoCount": photos.displayedAttachments.count,
         "lastPhotoHasRecoveryAction": photos.displayedAttachments.last?.action != nil,
       ]
-      if captureState == "notice-end" || captureState == "multiple-end" {
+      if captureState == "notice-end" || captureState == "multiple-end" || captureState == "multiple-scroll" {
         let scroll = try await scrollToEnd(in: window)
         readiness["scrollOffset"] = scroll.contentOffset.y
         readiness["scrollContentHeight"] = scroll.contentSize.height
@@ -126,6 +128,7 @@
           - scroll.adjustedContentInset.bottom
         readiness["keyboardHeight"] = keyboardHeight
         readiness["sourceFocused"] = textView.isFirstResponder
+        readiness["scrollFraction"] = scrollFraction
         readiness["scrollEndVisible"] =
           scroll.contentOffset.y + scroll.bounds.height - scroll.adjustedContentInset.bottom
           >= scroll.contentSize.height - 1
@@ -167,11 +170,12 @@
             scroll: scroll, window: window, source: session.session.textView,
             keyboardHeight: keyboardHeight)
           let shelfReady =
-            captureState != "multiple-end"
+            !captureState.hasPrefix("multiple")
             || (sample.viewportHeight <= 181 && sample.sourceFocused && sample.keyboardHeight >= 150)
-          if abs(sample.offset.y - sample.bottom) > 0.5 {
+          let target = -sample.insets.top + (sample.bottom + sample.insets.top) * scrollFraction
+          if abs(sample.offset.y - target) > 0.5 {
             scroll.setContentOffset(
-              CGPoint(x: sample.offset.x, y: sample.bottom), animated: false)
+              CGPoint(x: sample.offset.x, y: target), animated: false)
             stableSamples = 0
             stableSince = nil
           } else if shelfReady, sample == previous {
@@ -198,7 +202,7 @@
 
     private func captureScroll(in window: UIWindow) -> UIScrollView? {
       var root: UIView? =
-        captureState == "multiple-end" ? session.session.textView.superview : window
+        captureState.hasPrefix("multiple") ? session.session.textView.superview : window
       while let container = root {
         let candidates = descendants(of: container).compactMap { $0 as? UIScrollView }.filter {
           let height =
@@ -295,10 +299,21 @@
       guard
         [
           "editor", "insert", "notice", "notice-end", "picker", "pending", "multiple",
-          "multiple-end", "unpublished",
+          "multiple-end", "multiple-scroll", "unpublished",
         ].contains(state)
       else {
         throw ImageUploadError.targetChanged
+      }
+      let scrollFraction: CGFloat
+      if state == "multiple-scroll" {
+        guard let index = arguments.firstIndex(of: "--capture-scroll-fraction"),
+          arguments.indices.contains(index + 1),
+          let fraction = Double(arguments[index + 1]), fraction.isFinite,
+          (0...1).contains(fraction)
+        else { throw ImageUploadError.targetChanged }
+        scrollFraction = fraction
+      } else {
+        scrollFraction = 1
       }
       let accountID = UUID()
       let store = try DraftStore.open(inMemory: true)
@@ -324,7 +339,7 @@
       session.session.textView.selectedRange = NSRange(location: text.utf16.count, length: 0)
       let configuration = URLSessionConfiguration.ephemeral
       configuration.protocolClasses = [OfflinePhotoCaptureProtocol.self]
-      if ["multiple", "multiple-end"].contains(state) {
+      if state.hasPrefix("multiple") {
         configuration.httpAdditionalHeaders = ["X-GistPad-Capture-Failure": "retry"]
       }
       let storage = try ImageStorageClient(
@@ -357,7 +372,7 @@
         photos.choosePhoto()
         photos.acceptNotice()
         photos.noticeDidDismiss()
-      case "pending", "multiple", "multiple-end", "unpublished":
+      case "pending", "multiple", "multiple-end", "multiple-scroll", "unpublished":
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 160, height: 120))
         let bytes = renderer.pngData { context in
           UIColor.systemTeal.setFill()
@@ -372,14 +387,14 @@
           mountain.close()
           mountain.fill()
         }
-        for _ in 0..<(["multiple", "multiple-end"].contains(state) ? 3 : 1) {
+        for _ in 0..<(state.hasPrefix("multiple") ? 3 : 1) {
           photos.choosePhoto()
           photos.acceptNotice()
           photos.noticeDidDismiss()
           photos.isShowingPicker = false
           await photos.receivePickedData(bytes)
         }
-        if ["multiple", "multiple-end"].contains(state) {
+        if state.hasPrefix("multiple") {
           guard photos.displayedAttachments.count == 3,
             photos.displayedAttachments.last?.action == .retry
           else { throw PhotoCaptureFailure.recoveryActionUnavailable }
@@ -387,7 +402,7 @@
       default: break
       }
       return PhotoCaptureFixture(
-        session: session, photos: photos, captureState: state)
+        session: session, photos: photos, captureState: state, scrollFraction: scrollFraction)
     }
   }
 
