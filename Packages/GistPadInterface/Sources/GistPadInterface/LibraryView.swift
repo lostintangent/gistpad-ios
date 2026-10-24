@@ -5,6 +5,7 @@ public struct LibraryActions {
     public var refresh: @MainActor () async -> Void
     public var create: @MainActor () -> Void
     public var today: @MainActor () -> Void
+    public var select: (@MainActor (String) -> Void)?
     public var reconnect: (@MainActor () -> Void)?
     public var account: (@MainActor () -> Void)?
     public var togglePin: (@MainActor (String) -> Void)?
@@ -61,7 +62,7 @@ public struct LibraryView: View {
     }
 
     private var libraryList: some View {
-        List(selection: $model.selectedNoteID) {
+        List(selection: librarySelection) {
             status
             if model.loadState != .signedOut {
                 if model.collection == .gists && !model.hasFilters {
@@ -153,6 +154,19 @@ public struct LibraryView: View {
                 }
             }
         }
+    }
+
+    private var librarySelection: Binding<String?> {
+        Binding(
+            get: { model.selectedNoteID },
+            set: { selection in
+                if let selection, let select = actions.select {
+                    select(selection)
+                } else {
+                    model.selectedNoteID = selection
+                }
+            }
+        )
     }
 
     private func sectionHeading(_ title: String) -> some View {
