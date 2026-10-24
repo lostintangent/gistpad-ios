@@ -37,14 +37,18 @@ struct NotebookLayoutTests {
       #expect(!NotebookLayoutPreferences.allowsSplit(availableWidth: width))
     }
     #expect(NotebookLayoutPreferences.allowsSplit(availableWidth: 640))
-    #expect(layout.presentedMode(
-      availableWidth: 800, sessionMode: .reading, isEditing: false, canEdit: true) == .split)
-    #expect(layout.presentedMode(
-      availableWidth: 402, sessionMode: .reading, isEditing: true, canEdit: true) == .source)
-    #expect(layout.presentedMode(
-      availableWidth: 402, sessionMode: .reading, isEditing: false, canEdit: true) == .reading)
-    #expect(layout.presentedMode(
-      availableWidth: 800, sessionMode: .source, isEditing: true, canEdit: false) == .reading)
+    #expect(
+      layout.presentedMode(
+        availableWidth: 800, sessionMode: .reading, isEditing: false, canEdit: true) == .split)
+    #expect(
+      layout.presentedMode(
+        availableWidth: 402, sessionMode: .reading, isEditing: true, canEdit: true) == .source)
+    #expect(
+      layout.presentedMode(
+        availableWidth: 402, sessionMode: .reading, isEditing: false, canEdit: true) == .reading)
+    #expect(
+      layout.presentedMode(
+        availableWidth: 800, sessionMode: .source, isEditing: true, canEdit: false) == .reading)
     #expect(layout.preferredMode == .split)
   }
 
@@ -55,7 +59,8 @@ struct NotebookLayoutTests {
     let layout = NotebookLayoutPreferences(defaults: defaults)
     let store = try DraftStore.open(inMemory: true)
     let accountID = UUID()
-    let original = (1...80).map { "Paragraph \($0): a retained native notebook." }.joined(separator: "\n\n")
+    let original = (1...80).map { "Paragraph \($0): a retained native notebook." }.joined(
+      separator: "\n\n")
     let draft = try await store.newDraft(accountID: accountID, githubUserID: 42, text: original)
     let session = DocumentSession(documentID: draft.id.uuidString, text: draft.text)
     var persistence: Task<DraftSnapshot, any Error>?
@@ -83,7 +88,22 @@ struct NotebookLayoutTests {
     editor.undoManager?.endUndoGrouping()
     let text = session.text
     let selection = editor.selectedRange
-    for width: CGFloat in [402, 800, 639, 952, 402] {
+    try await Task.sleep(for: .milliseconds(350))
+    host.view.layoutIfNeeded()
+    if let manager = editor.textLayoutManager, let range = manager.textContentManager?.documentRange
+    {
+      manager.ensureLayout(for: range)
+    }
+    editor.layoutIfNeeded()
+    editor.scrollRangeToVisible(selection)
+    editor.layoutIfNeeded()
+    let baseline = try recordCaretGeometry(editor, in: host.view, named: "baseline-800")
+    try #require(
+      baseline.caret.minY >= baseline.viewport.minY
+        && baseline.caret.maxY <= baseline.viewport.maxY,
+      "Establish a fully visible caret before testing resize continuity.")
+    let widths: [CGFloat] = [402, 800, 639, 952, 402]
+    for (index, width) in widths.enumerated() {
       host.traitOverrides.horizontalSizeClass = width < 640 ? .compact : .regular
       host.rootView = LayoutNoteFixture(session: session, layout: layout, width: width)
       try await Task.sleep(for: .milliseconds(150))
@@ -95,9 +115,8 @@ struct NotebookLayoutTests {
       #expect(session.text.utf8.elementsEqual(text.utf8))
       #expect(descendants(of: host.view).compactMap { $0 as? WKWebView }.first === preview)
       #expect(layout.preferredMode == .split)
-      let position = try #require(editor.selectedTextRange?.start)
-      let caret = editor.caretRect(for: position)
-      let viewport = editor.bounds.inset(by: editor.adjustedContentInset)
+      let (caret, viewport) = try recordCaretGeometry(
+        editor, in: host.view, named: "resize-\(index)-\(Int(width))")
       #expect(caret.maxY >= viewport.minY && caret.minY <= viewport.maxY)
     }
     let write = try #require(persistence)
@@ -108,6 +127,41 @@ struct NotebookLayoutTests {
     editor.undoManager?.undo()
     #expect(session.text.utf8.elementsEqual(original.utf8))
     if let persistence { _ = try await persistence.value }
+  }
+
+  private func recordCaretGeometry(
+    _ editor: UITextView, in root: UIView, named name: String
+  ) throws -> (caret: CGRect, viewport: CGRect) {
+    let position = try #require(editor.selectedTextRange?.start)
+    let window = try #require(editor.window)
+    let caret = editor.caretRect(for: position)
+    let nativeViewport = editor.bounds.inset(by: editor.adjustedContentInset)
+    var viewport = nativeViewport.intersection(
+      editor.convert(window.bounds.inset(by: window.safeAreaInsets), from: window))
+    let bars = descendants(of: root).compactMap { $0 as? UINavigationBar }
+      .filter { !$0.isHidden && $0.alpha > 0 && $0.window === window }
+      .map { editor.convert($0.bounds, from: $0) }
+    for bar in bars where bar.intersects(viewport) {
+      let top = min(viewport.maxY, max(viewport.minY, bar.maxY))
+      viewport = CGRect(
+        x: viewport.minX, y: top, width: viewport.width, height: viewport.maxY - top)
+    }
+    Attachment.record(
+      """
+      phase: \(name)
+      editor frame in window: \(editor.convert(editor.bounds, to: window))
+      window bounds: \(window.bounds), safe area: \(window.safeAreaInsets)
+      bounds: \(editor.bounds), content size: \(editor.contentSize)
+      content offset: \(editor.contentOffset), content inset: \(editor.contentInset)
+      safe area: \(editor.safeAreaInsets), adjusted inset: \(editor.adjustedContentInset)
+      inset adjustment policy: \(editor.contentInsetAdjustmentBehavior.rawValue)
+      text container: \(editor.textContainer.size), text inset: \(editor.textContainerInset)
+      native viewport: \(nativeViewport), navigation bars in editor: \(bars)
+      unobscured viewport: \(viewport), caret: \(caret)
+      selection: \(editor.selectedRange), first responder: \(editor.isFirstResponder)
+      """,
+      named: "caret-layout-\(name).txt")
+    return (caret, viewport)
   }
 
   private func descendants(of view: UIView) -> [UIView] {
