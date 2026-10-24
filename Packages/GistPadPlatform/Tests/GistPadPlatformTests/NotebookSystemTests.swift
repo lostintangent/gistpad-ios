@@ -22,6 +22,8 @@ struct NotebookSystemTests {
             accountID: account, cache: cache(gist), drafts: [accepted], date: date, timeZone: zone)
         #expect(snapshot.today.tasks.map(\.title) == ["First", "Second"])
         #expect(snapshot.today.tasks.map(\.isCompleted) == [false, true])
+        #expect(snapshot.notes.first?.tags == ["Work"])
+        #expect(snapshot.accentHex == "#0EA5E9")
         let first = try #require(snapshot.today.tasks.first)
         let command = first.command(accountID: account, completed: true)
         #expect((source as NSString).substring(with: NSRange(location: command.edit.location, length: 1)) == " ")
@@ -118,6 +120,7 @@ struct NotebookSystemTests {
         CachedLibrarySnapshot(
             accountID: account, owned: [gist], starred: [],
             preferences: Preferences(metadata: [
+                "accentColor": .string("#0EA5E9"),
                 "tags": .object(["work": .object(["name": .string("Work")])]),
                 "gistTags": .object([gist.id: .array([.string("work")])])
             ]))

@@ -90,13 +90,10 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
                 for filename in gist.markdownFilenames {
                     let draft = drafts.first { $0.gistID == gist.id && $0.filename == filename }
                     let text = draft?.text ?? cache.content(gist: gist, filename: filename)
-                    let tagIDs = cache.preferences.gistTags[gist.id] ?? []
                     notes.append(SystemNote(
                         accountID: accountID, title: gist.displayName, filename: filename,
                         excerpt: excerpt(text),
-                        tags: tagIDs.compactMap {
-                            cache.preferences.tags[$0]?.objectValue?["name"]?.stringValue
-                        },
+                        tags: cache.preferences.tagNames(gistID: gist.id),
                         updatedAt: gist.updatedAt,
                         route: .note(gistID: gist.id, filename: filename, shared: false)))
                 }
@@ -146,7 +143,7 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
         }
         return Self(
             accountID: accountID, createdAt: date,
-            accentHex: cache?.preferences.metadata["accentColor"]?.stringValue,
+            accentHex: cache?.preferences.accentColor,
             notes: notes.sorted {
                 $0.updatedAt == $1.updatedAt
                     ? $0.id < $1.id : ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast)

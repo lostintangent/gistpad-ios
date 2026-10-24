@@ -20,6 +20,10 @@ public struct Preferences: Codable, Equatable, Sendable {
             $0.arrayValue?.compactMap(\.stringValue) ?? []
         }
     }
+
+    public func tagNames(gistID: String) -> [String] {
+        (gistTags[gistID] ?? []).compactMap { tags[$0]?.objectValue?["name"]?.stringValue }
+    }
 }
 
 public enum PreferenceError: Error, Equatable, Sendable {
