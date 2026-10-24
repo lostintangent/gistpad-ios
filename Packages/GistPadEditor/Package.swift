@@ -2,11 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "GistPadEditor",
-    platforms: [.iOS("27.1"), .macOS(.v15)],
-    products: [.library(name: "GistPadEditor", targets: ["GistPadEditor"])],
-    targets: [
-        .target(name: "GistPadEditor", resources: [.process("Resources")]),
-        .testTarget(name: "GistPadEditorTests", dependencies: ["GistPadEditor"])
-    ]
+  name: "GistPadEditor",
+  platforms: [.iOS("27.1"), .macOS(.v15)],
+  products: [.library(name: "GistPadEditor", targets: ["GistPadEditor"])],
+  dependencies: [.package(path: "../GistPadInterface")],
+  targets: [
+    .target(
+      name: "GistPadEditor", dependencies: ["GistPadInterface"],
+      resources: [.process("Resources")]),
+    .testTarget(name: "GistPadEditorTests", dependencies: ["GistPadEditor"]),
+  ]
 )

@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+  import GistPadInterface
   import Observation
   import SwiftUI
   import UIKit
@@ -16,7 +17,7 @@
     @ObservationIgnored public let textView: UITextView
     @ObservationIgnored public var onSourceChange: ((String, UInt64) -> Void)?
     @ObservationIgnored private var highlightTask: Task<Void, Never>?
-    @ObservationIgnored private var highlightedSize: UIContentSizeCategory?
+    @ObservationIgnored private var highlightedTraits: UITraitCollection?
 
     public init(documentID: String, text: String, generation: UInt64 = 0) {
       self.documentID = documentID
@@ -39,6 +40,12 @@
       textView.smartDashesType = .no
       textView.writingToolsBehavior = .complete
       textView.allowedWritingToolsResultOptions = .plainText
+      textView.registerForTraitChanges([
+        UITraitPreferredContentSizeCategory.self, UITraitUserInterfaceStyle.self,
+        UITraitAccessibilityContrast.self, UITraitLegibilityWeight.self,
+      ]) { (view: UITextView, _: UITraitCollection) in
+        (view.delegate as? DocumentSession)?.updateAppearanceIfNeeded()
+      }
       highlight()
     }
 
@@ -115,8 +122,12 @@
       let storage = textView.textStorage
       let bodyFont = UIFont.preferredFont(
         forTextStyle: .body, compatibleWith: textView.traitCollection)
-      let headingFont = UIFont.preferredFont(
-        forTextStyle: .headline, compatibleWith: textView.traitCollection)
+      let boldText = textView.traitCollection.legibilityWeight == .bold
+      let headingFont = UIFont.systemFont(
+        ofSize: bodyFont.pointSize, weight: boldText ? .bold : .semibold)
+      let codeFont = UIFont.monospacedSystemFont(
+        ofSize: bodyFont.pointSize, weight: boldText ? .semibold : .regular)
+      let muted = UIColor(InterfaceTheme.syntaxMuted)
       let selectedRange = textView.selectedRange
       let manager = textView.undoManager
       let undoWasEnabled = manager?.isUndoRegistrationEnabled == true
@@ -134,15 +145,17 @@
           attributes = [.foregroundColor: UIColor.label, .font: headingFont]
         case .code:
           attributes = [
-            .foregroundColor: UIColor.secondaryLabel,
-            .font: UIFont.monospacedSystemFont(ofSize: bodyFont.pointSize, weight: .regular),
+            .foregroundColor: UIColor(InterfaceTheme.syntaxCode),
+            .font: codeFont,
           ]
         case .frontmatter:
-          attributes = [.foregroundColor: UIColor.secondaryLabel]
+          attributes = [.foregroundColor: muted, .font: codeFont]
         case .link:
-          attributes = [.foregroundColor: UIColor.systemBlue]
+          attributes = [.foregroundColor: UIColor.link]
         case .task:
-          attributes = [.foregroundColor: UIColor.label]
+          attributes = [.foregroundColor: UIColor(InterfaceTheme.accent)]
+        case .checkedTask, .punctuation, .linkDestination:
+          attributes = [.foregroundColor: muted]
         }
         storage.addAttributes(attributes, range: span.range)
       }
@@ -155,11 +168,16 @@
         .font: bodyFont,
         .foregroundColor: UIColor.label,
       ]
-      highlightedSize = textView.traitCollection.preferredContentSizeCategory
+      highlightedTraits = textView.traitCollection
     }
 
     public func updateAppearanceIfNeeded() {
-      if highlightedSize != textView.traitCollection.preferredContentSizeCategory {
+      if highlightedTraits?.preferredContentSizeCategory
+        != textView.traitCollection.preferredContentSizeCategory
+        || highlightedTraits?.legibilityWeight != textView.traitCollection.legibilityWeight
+        || highlightedTraits?.hasDifferentColorAppearance(comparedTo: textView.traitCollection)
+          != false
+      {
         highlight()
       }
     }

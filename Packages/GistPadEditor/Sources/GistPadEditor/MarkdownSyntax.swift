@@ -2,7 +2,7 @@ import Foundation
 
 public enum MarkdownSyntax {
   public enum Kind: Sendable {
-    case heading, code, frontmatter, link, task
+    case heading, code, frontmatter, link, task, checkedTask, punctuation, linkDestination
   }
 
   public struct Span: Sendable {
@@ -10,16 +10,39 @@ public enum MarkdownSyntax {
     public let kind: Kind
   }
 
-  private static let inlinePatterns: [(NSRegularExpression, Kind)] = [
-    ("\\[[^\\]\\n]+\\]\\([^\\)\\n]+\\)", .link),
-    ("^\\s*[-*+] \\[[ xX]\\]", .task),
-  ].map { pattern, kind in
-    do {
-      return (try NSRegularExpression(pattern: pattern), kind)
-    } catch {
-      preconditionFailure("Invalid built-in Markdown highlighting expression: \(error)")
+  private static let inlinePatterns: [(NSRegularExpression, [(Int, Kind)])] = {
+    let patterns: [(String, [(Int, Kind)])] = [
+      (
+        "^ {0,3}(#{1,6})(?:[ \\t]+(.*?))?(?:[ \\t]+(#+))?[ \\t]*$",
+        [(1, .punctuation), (2, .heading), (3, .punctuation)]
+      ),
+      (
+        "(!?\\[)([^\\]\\n]+)(\\]\\()([^\\)\\n]+)(\\))",
+        [
+          (1, .punctuation), (2, .link), (3, .punctuation), (4, .linkDestination),
+          (5, .punctuation),
+        ]
+      ),
+      (
+        "(\\[\\[)([^\\]\\n]+)(\\]\\])",
+        [(1, .punctuation), (2, .link), (3, .punctuation)]
+      ),
+      ("^[ \\t]*(?:>[ \\t]*)*[-*+][ \\t]+(\\[[ xX]\\])", [(1, .task)]),
+      ("^[ \\t]*(?:>[ \\t]*)*((?:[-*+]|[0-9]{1,9}[.)]))(?=[ \\t])", [(1, .punctuation)]),
+      ("^(?:[ \\t]*>)+", [(0, .punctuation)]),
+      (
+        "(?<!\\\\)(\\*{1,3}|_{1,3}|~~)(?=\\S)(.+?\\S|\\S)(\\1)",
+        [(1, .punctuation), (3, .punctuation)]
+      ),
+    ]
+    return patterns.map { pattern, captures in
+      do {
+        return (try NSRegularExpression(pattern: pattern), captures)
+      } catch {
+        preconditionFailure("Invalid built-in Markdown highlighting expression: \(error)")
+      }
     }
-  }
+  }()
 
   private static let fencePatterns: (opening: NSRegularExpression, closing: NSRegularExpression) = {
     do {
@@ -36,6 +59,7 @@ public enum MarkdownSyntax {
   public static func spans(in text: String) -> [Span] {
     let source = text as NSString
     var result: [Span] = []
+    var codeDelimiters: [Span] = []
     var proseRanges: [NSRange] = []
     var proseStart: Int?
     var offset = 0
@@ -47,6 +71,7 @@ public enum MarkdownSyntax {
       let candidate = fencePatterns.opening.firstMatch(
         in: line, range: NSRange(location: 0, length: (line as NSString).length))
       var protectedKind: Kind?
+      var fenceDelimiter: NSRange?
       if offset == 0 && line == "---" {
         frontmatter = true
         protectedKind = .frontmatter
@@ -63,6 +88,7 @@ public enum MarkdownSyntax {
             delimiter.length >= currentFence.length
           {
             fence = nil
+            fenceDelimiter = closing.range(at: 1)
           }
         }
       } else if let candidate {
@@ -71,6 +97,7 @@ public enum MarkdownSyntax {
         if delimiter.character(at: 0) != 0x60 || !suffix.contains("`") {
           fence = (delimiter.character(at: 0), delimiter.length)
           protectedKind = .code
+          fenceDelimiter = candidate.range(at: 1)
         }
       }
       if protectedKind != nil || line.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -83,18 +110,28 @@ public enum MarkdownSyntax {
       }
       if let protectedKind {
         result.append(Span(range: range, kind: protectedKind))
-      } else {
-        if line.range(of: "^#{1,6}\\s", options: .regularExpression) != nil {
-          result.append(Span(range: range, kind: .heading))
+        if let delimiter = fenceDelimiter {
+          codeDelimiters.append(
+            Span(
+              range: NSRange(location: offset + delimiter.location, length: delimiter.length),
+              kind: .punctuation))
         }
-        for (expression, kind) in inlinePatterns {
+      } else {
+        for (expression, captures) in inlinePatterns {
           for match in expression.matches(
             in: line, range: NSRange(location: 0, length: (line as NSString).length))
           {
-            result.append(
-              Span(
-                range: NSRange(location: offset + match.range.location, length: match.range.length),
-                kind: kind))
+            for (group, kind) in captures {
+              let range = match.range(at: group)
+              guard range.location != NSNotFound, range.length > 0 else { continue }
+              let actualKind: Kind =
+                kind == .task && (line as NSString).substring(with: range) != "[ ]"
+                ? .checkedTask : kind
+              result.append(
+                Span(
+                  range: NSRange(location: offset + range.location, length: range.length),
+                  kind: actualKind))
+            }
           }
         }
       }
@@ -104,12 +141,19 @@ public enum MarkdownSyntax {
       proseRanges.append(NSRange(location: proseStart, length: source.length - proseStart))
     }
     for range in proseRanges {
-      result.append(
-        contentsOf: inlineCodeRanges(in: source, range: range).map {
-          Span(range: $0, kind: .code)
-        })
+      for code in inlineCodeRanges(in: source, range: range) {
+        result.append(Span(range: code, kind: .code))
+        var length = 0
+        while length < code.length, source.character(at: code.location + length) == 0x60 {
+          length += 1
+        }
+        for location in [code.location, NSMaxRange(code) - length] {
+          codeDelimiters.append(
+            Span(range: NSRange(location: location, length: length), kind: .punctuation))
+        }
+      }
     }
-    return result
+    return result + codeDelimiters
   }
 
   public static func ignoredWritingToolsRanges(in text: String, enclosing range: NSRange)

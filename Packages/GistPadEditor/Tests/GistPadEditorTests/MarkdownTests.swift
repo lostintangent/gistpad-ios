@@ -121,6 +121,42 @@ import Testing
   #expect(MarkdownSyntax.ignoredWritingToolsRanges(in: source, enclosing: full) == [full])
 }
 
+@Test func syntaxThemeSeparatesContentFromVisibleMarkdownDelimiters() {
+  let source = """
+    ## A heading ##
+    - [ ] Open task
+    - [X] Completed task
+    [Link label](https://example.com)
+    [[Wiki note]]
+    *emphasis* and **strong**
+    """
+  let spans = MarkdownSyntax.spans(in: source)
+  func strings(_ kind: MarkdownSyntax.Kind) -> [String] {
+    spans.filter { $0.kind == kind }.map { (source as NSString).substring(with: $0.range) }
+  }
+  #expect(strings(.heading) == ["A heading"])
+  #expect(strings(.task) == ["[ ]"])
+  #expect(strings(.checkedTask) == ["[X]"])
+  #expect(strings(.link) == ["Link label", "Wiki note"])
+  #expect(strings(.linkDestination) == ["https://example.com"])
+  #expect(strings(.punctuation).filter { $0 == "##" }.count == 2)
+  #expect(strings(.punctuation).filter { $0 == "*" }.count == 2)
+  #expect(strings(.punctuation).filter { $0 == "**" }.count == 2)
+}
+
+@Test func codeContentOverridesProseStylesButItsDelimitersStayDistinct() {
+  let source = "`[literal](url) **not emphasis**`\n```swift\nlet value = 1\n```\n"
+  let spans = MarkdownSyntax.spans(in: source)
+  let literal = (source as NSString).range(of: "literal")
+  #expect(spans.last { NSLocationInRange(literal.location, $0.range) }?.kind == .code)
+  let tick = NSRange(location: 0, length: 1)
+  #expect(spans.last { NSLocationInRange(tick.location, $0.range) }?.kind == .punctuation)
+  let fences = spans.filter {
+    $0.kind == .punctuation && (source as NSString).substring(with: $0.range) == "```"
+  }
+  #expect(fences.count == 2)
+}
+
 @Test func longFixtureIsSyntheticAndMultilingual() throws {
   let fixture = try EditorFixture.markdown()
   #expect(fixture.utf16.count > 60_000)
