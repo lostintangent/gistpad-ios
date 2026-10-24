@@ -36,21 +36,21 @@ public enum NoteSaveState: Equatable, Sendable {
         case .unsaved, .savedLocally, .offline, .cloudFailure: true
         default: false
         }
+    }
 
-        var needsAttention: Bool {
-            switch self {
-            case .cloudFailure, .localFailure, .remoteChange, .reconnectRequired,
-                 .creationUncertain, .publicationUncertain, .publicationBlocked:
-                true
-            case .inMemoryFixture, .unsaved, .savedLocally, .offline, .savingToGitHub, .savedToGitHub:
-                false
-            }
+    var needsAttention: Bool {
+        switch self {
+        case .cloudFailure, .localFailure, .remoteChange, .reconnectRequired,
+             .creationUncertain, .publicationUncertain, .publicationBlocked:
+            true
+        case .inMemoryFixture, .unsaved, .savedLocally, .offline, .savingToGitHub, .savedToGitHub:
+            false
         }
+    }
 
-        func showsManualSave(isAutoSaveEnabled: Bool) -> Bool {
-            if case .cloudFailure = self { return true }
-            return !isAutoSaveEnabled
-        }
+    func showsManualSave(isAutoSaveEnabled: Bool) -> Bool {
+        if case .cloudFailure = self { return true }
+        return !isAutoSaveEnabled
     }
 }
 
