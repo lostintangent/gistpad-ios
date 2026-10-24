@@ -381,8 +381,8 @@
           attributes = [.foregroundColor: SourceSyntaxColor.htmlTag]
         case .strikethrough:
           attributes = [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
-        case .orderedMarker:
-          attributes = [.foregroundColor: SourceSyntaxColor.orderedMarker]
+        case .orderedMarker, .task, .checkedTask, .punctuation:
+          attributes = [.foregroundColor: muted]
         case .code:
           attributes = [
             .foregroundColor: UIColor(InterfaceTheme.text),
@@ -402,12 +402,6 @@
             .foregroundColor: SourceSyntaxColor.destination,
             .underlineStyle: NSUnderlineStyle.single.rawValue,
           ]
-        case .task:
-          attributes = [.foregroundColor: SourceSyntaxColor.orderedMarker]
-        case .checkedTask:
-          attributes = [.foregroundColor: muted]
-        case .punctuation:
-          attributes = [:]
         }
         storage.addAttributes(attributes, range: span.range)
         if span.kind == .strong || span.kind == .emphasis {

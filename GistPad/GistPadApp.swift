@@ -58,7 +58,9 @@ struct GistPadApp: App {
           || LaunchArguments.captureScreen == "editor"
         if LaunchArguments.captureScreen != nil || longFixture || isTesting {
           let text: String
-          if let screen = LaunchArguments.captureScreen, ["library", "note"].contains(screen) {
+          if LaunchArguments.captureMarkerFixture {
+            text = try PreviewFixtures.listMarkers
+          } else if let screen = LaunchArguments.captureScreen, ["library", "note"].contains(screen) {
             text = try LaunchArguments.captureMangaFixture ? PreviewFixtures.mangaReading
               : LaunchArguments.captureReadingFixture
               ? PreviewFixtures.readingPolish : InterfaceCaptureWorkspace.markdown
@@ -139,6 +141,14 @@ struct GistPadApp: App {
       .gitHubStatusKeyboardPolicy()
       #if DEBUG
         .preferredColorScheme(LaunchArguments.captureColorScheme)
+        .background {
+          if LaunchArguments.captureMarkerFixture {
+            MarkerCaptureContrast(
+              increased: ProcessInfo.processInfo.arguments.contains("--capture-increased-contrast")
+            )
+            .frame(width: 0, height: 0)
+          }
+        }
       #endif
     }
   }
@@ -175,6 +185,9 @@ enum LaunchArguments {
 
   static let captureMangaFixture =
     ProcessInfo.processInfo.arguments.contains("--capture-manga-fixture")
+
+  static let captureMarkerFixture =
+    ProcessInfo.processInfo.arguments.contains("--capture-marker-fixture")
 
   static let captureScreen: String? = {
     let arguments = ProcessInfo.processInfo.arguments

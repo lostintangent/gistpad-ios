@@ -23,6 +23,7 @@ struct PreviewAppearance: Equatable {
             "--gp-text": Self.css(UIColor.label.resolvedColor(with: traits)),
             "--gp-syntax-code": code,
             "--gp-text-secondary": Self.css(UIColor.secondaryLabel.resolvedColor(with: traits)),
+            "--gp-list-marker": Self.listMarker(traits: traits),
             "--gp-link": Self.css(UIColor.link.resolvedColor(with: traits)),
             "--gp-separator": Self.css(UIColor.separator.resolvedColor(with: traits)),
             "--gp-boundary": Self.css(UIColor.opaqueSeparator.resolvedColor(with: traits)),
@@ -70,6 +71,21 @@ struct PreviewAppearance: Equatable {
         var alpha: CGFloat = 0
         color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
         return "rgba(\(Int((red * 255).rounded())),\(Int((green * 255).rounded())),\(Int((blue * 255).rounded())),\(alpha))"
+    }
+
+    private static func listMarker(traits: UITraitCollection) -> String {
+        let secondary = UIColor.secondaryLabel.resolvedColor(with: traits)
+        guard let page = RGBColor(uiColor: UIColor.systemBackground.resolvedColor(with: traits)),
+              let ink = RGBColor(uiColor: UIColor.label.resolvedColor(with: traits)),
+              let gray = RGBColor(uiColor: secondary.withAlphaComponent(1))
+        else { preconditionFailure("Native list-marker colors must resolve to sRGB.") }
+        let original = page.mixed(toward: gray, amount: Double(secondary.cgColor.alpha))
+        let minimum = traits.accessibilityContrast == .high ? 7.0 : 4.5
+        for step in 0...255 {
+            let candidate = original.mixed(toward: ink, amount: Double(step) / 255)
+            if candidate.contrast(with: page) >= minimum { return candidate.hex }
+        }
+        preconditionFailure("Native label ink must meet list-marker contrast against its page.")
     }
 }
 #endif

@@ -32,6 +32,39 @@ struct PreviewAppearanceTests {
         }
     }
 
+    @Test("List-marker gray is opaque, contrast-safe and independent of personal accent")
+    func listMarkerPalette() throws {
+        for style: UIUserInterfaceStyle in [.light, .dark] {
+            for contrast: UIAccessibilityContrast in [.normal, .high] {
+                var reference: String?
+                for saved in [nil, "#FACC15", "#FF00FF"] {
+                    let traits = UITraitCollection {
+                        $0.userInterfaceStyle = style
+                        $0.accessibilityContrast = contrast
+                        $0[PersonalAccentTrait.self] = PersonalAccent(savedHex: saved)
+                    }
+                    let appearance = PreviewAppearance(traits: traits)
+                    let value = try #require(appearance.variables["--gp-list-marker"])
+                    let marker = try #require(RGBColor(hex: value))
+                    let page = try #require(RGBColor(uiColor: UIColor.systemBackground.resolvedColor(with: traits)))
+                    #expect(marker.contrast(with: page) >= (contrast == .high ? 7 : 4.5))
+                    if let reference { #expect(value == reference) }
+                    else { reference = value }
+                    let secondary = UIColor.secondaryLabel.resolvedColor(with: traits)
+                    let gray = try #require(RGBColor(uiColor: secondary.withAlphaComponent(1)))
+                    let original = page.mixed(toward: gray, amount: Double(secondary.cgColor.alpha))
+                    if original.contrast(with: page) >= (contrast == .high ? 7 : 4.5) {
+                        #expect(marker == original)
+                    }
+                    var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+                    #expect(secondary.getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+                    #expect(appearance.variables["--gp-text-secondary"] ==
+                        "rgba(\(Int((red * 255).rounded())),\(Int((green * 255).rounded())),\(Int((blue * 255).rounded())),\(alpha))")
+                }
+            }
+        }
+    }
+
     @Test("Heading sizes preserve Large and follow native text-style point growth at every category")
     func systemHeadingMetrics() {
         let largeTraits = UITraitCollection { $0.preferredContentSizeCategory = .large }

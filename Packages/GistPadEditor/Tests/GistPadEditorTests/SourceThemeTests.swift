@@ -24,6 +24,9 @@
         14. Numbered item
         <span>HTML</span> and ~~deleted~~
         `code **literal** [code link](url) ~~not struck~~`
+        - Bullet
+          * Nested bullet
+        + Another bullet
         - [ ] Open
         - [x] Done
         """
@@ -68,15 +71,19 @@
               ("> Quoted", SourceSyntaxColor.quote),
               ("_emphasis_", SourceSyntaxColor.emphasis),
               ("**strong**", SourceSyntaxColor.emphasis),
-              ("14.", SourceSyntaxColor.orderedMarker),
-              ("2)", SourceSyntaxColor.orderedMarker),
+              ("14.", UIColor(InterfaceTheme.syntaxMuted)),
+              ("2)", UIColor(InterfaceTheme.syntaxMuted)),
+              ("- Bullet", UIColor(InterfaceTheme.syntaxMuted)),
+              ("* Nested", UIColor(InterfaceTheme.syntaxMuted)),
+              ("+ Another", UIColor(InterfaceTheme.syntaxMuted)),
+              ("Bullet", UIColor(InterfaceTheme.text)),
               ("Numbered", UIColor(InterfaceTheme.text)),
               ("<span>", SourceSyntaxColor.htmlTag),
               ("</span>", SourceSyntaxColor.htmlTag),
               ("code", UIColor(InterfaceTheme.text)),
               ("title", UIColor(InterfaceTheme.text)),
-              ("- [ ]", UIColor(InterfaceTheme.text)),
-              ("[ ]", SourceSyntaxColor.orderedMarker),
+              ("- [ ]", UIColor(InterfaceTheme.syntaxMuted)),
+              ("[ ]", UIColor(InterfaceTheme.syntaxMuted)),
               ("[x]", UIColor(InterfaceTheme.syntaxMuted)),
             ] {
               let actual = try #require(attributes(text)[.foregroundColor] as? UIColor)
@@ -120,7 +127,7 @@
         (SourceSyntaxColor.quote, [0x22863A, 0x7EE787, 0x155D27, 0xB0F5B7]),
         (SourceSyntaxColor.htmlTag, [0x116329, 0x7EE787, 0x0B4B1E, 0xB0F5B7]),
         (SourceSyntaxColor.destination, [0x032F62, 0xA5D6FF, 0x02234A, 0xD1ECFF]),
-        (SourceSyntaxColor.orderedMarker, [0x005CC5, 0x79C0FF, 0x004A9F, 0xB5DDFF]),
+        (UIColor(InterfaceTheme.syntaxMuted), [0x5B6B80, 0xCBD5E1, 0x475569, 0xE2E8F0]),
         (SourceSyntaxColor.link, [0x032F62, 0xE2E8F0, 0x02234A, 0xF8FAFC]),
       ]
       let appearances: [(UIUserInterfaceStyle, UIAccessibilityContrast)] = [
@@ -187,7 +194,7 @@
         #expect(retained === taskColor)
         #expect(
           retained.resolvedColor(with: view.traitCollection)
-            .isEqual(SourceSyntaxColor.orderedMarker.resolvedColor(with: view.traitCollection)))
+            .isEqual(UIColor(InterfaceTheme.syntaxMuted).resolvedColor(with: view.traitCollection)))
         #expect(
           view.tintColor.resolvedColor(with: view.traitCollection)
             .isEqual(UIColor.systemBlue.resolvedColor(with: view.traitCollection)))
@@ -198,6 +205,35 @@
         #expect(session.generation == 0)
         #expect(session.text == "# Heading\n**bold**\n- [ ] Task")
         #expect(view.undoManager?.canUndo != true)
+      }
+    }
+
+    @Test func mutedMarkersMeetEnhancedContrastWithEitherSavedAccent() throws {
+      let source = "- Bullet\n3. Numbered\n- [ ] Open\n- [x] Done"
+      for style in [UIUserInterfaceStyle.light, .dark] {
+        for contrast in [UIAccessibilityContrast.normal, .high] {
+          for saved in ["#FACC15", "#FF00FF"] {
+            let traits = UITraitCollection {
+              $0.userInterfaceStyle = style
+              $0.accessibilityContrast = contrast
+              $0[PersonalAccentTrait.self] = PersonalAccent(savedHex: saved)
+            }
+            let session = DocumentSession(documentID: "markers", text: source)
+            let view = session.textView
+            session.updateAppearanceIfNeeded()
+            let page = try #require(
+              RGBColor(uiColor: UIColor.systemBackground.resolvedColor(with: traits)))
+            for token in ["- Bullet", "3.", "[ ]", "[x]"] {
+              let color = try #require(view.textStorage.attribute(
+                .foregroundColor, at: (source as NSString).range(of: token).location,
+                effectiveRange: nil) as? UIColor)
+              let ink = try #require(RGBColor(uiColor: color.resolvedColor(with: traits)))
+              #expect(ink.contrast(with: page) >= (contrast == .high ? 7 : 4.5))
+              #expect(color.resolvedColor(with: traits).isEqual(
+                UIColor(InterfaceTheme.syntaxMuted).resolvedColor(with: traits)))
+            }
+          }
+        }
       }
     }
 

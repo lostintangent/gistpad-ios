@@ -618,13 +618,22 @@ struct PreviewWebKitTests {
                             [...document.querySelectorAll('article > ol > li, article > ul:not(.contains-task-list) li')].every(item => {
                                 const marker = getComputedStyle(item, '::marker');
                                 const text = getComputedStyle(item);
-                                return marker.color === resolveColor(styles.getPropertyValue('--gp-accent-text')) &&
+                                return marker.color === resolveColor(styles.getPropertyValue('--gp-list-marker')) &&
                                     ratio(marker.color, styles.backgroundColor) >=
                                         (document.documentElement.dataset.contrast === 'increased' ? 7 : 4.5) &&
                                     text.color === styles.color && marker.fontWeight === text.fontWeight;
                             }),
                             [...document.querySelectorAll('.markdown-toc li, li.task-list-item')].every(item =>
-                                getComputedStyle(item, '::marker').color === styles.color)
+                                getComputedStyle(item, '::marker').color === styles.color),
+                            [...document.querySelectorAll('.task-toggle input')].every(input => {
+                                const box = getComputedStyle(input);
+                                return box.borderTopColor === resolveColor(styles.getPropertyValue('--gp-list-marker')) &&
+                                    (!input.checked ||
+                                        (box.backgroundColor === resolveColor(styles.getPropertyValue('--gp-list-marker')) &&
+                                            ratio(getComputedStyle(input, '::after').borderTopColor, box.backgroundColor) >= 3)) &&
+                                    input.closest('.task-toggle').getBoundingClientRect().height >= 44 &&
+                                    getComputedStyle(input.closest('li')).color === styles.color;
+                            })
                         ];
                         """,
                         arguments: [:], in: nil, contentWorld: .page
@@ -675,6 +684,9 @@ struct PreviewWebKitTests {
                     let checks = try await webView.callAsyncJavaScript(
                         """
                         window.gistpadPreview.setAppearance(payload);
+                        for (let attempt = 0; window.innerWidth !== width && attempt < 100; attempt++) {
+                            await new Promise(resolve => setTimeout(resolve, 20));
+                        }
                         await new Promise(resolve => requestAnimationFrame(resolve));
                         const headings = ['h1', 'h2', 'h3'].map(selector => document.querySelector(selector));
                         const wholeWords = headings.every(heading => {

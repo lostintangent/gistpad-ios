@@ -229,8 +229,6 @@ public enum MarkdownSyntax {
       light: 0x116329, dark: 0x7EE787, highLight: 0x0B4B1E, highDark: 0xB0F5B7)
     static let destination = color(
       light: 0x032F62, dark: 0xA5D6FF, highLight: 0x02234A, highDark: 0xD1ECFF)
-    static let orderedMarker = color(
-      light: 0x005CC5, dark: 0x79C0FF, highLight: 0x004A9F, highDark: 0xB5DDFF)
     static let link: UIColor = {
       let ink = UIColor(InterfaceTheme.text)
       let urlColor = destination

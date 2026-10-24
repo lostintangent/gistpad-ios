@@ -108,6 +108,8 @@ async (page) => {
             "--gp-syntax-code": increasedContrast ? (dark ? "#f1f5f9" : "#334155") : (dark ? "#cbd5e1" : "#475569"),
             "--gp-text-secondary": increasedContrast
               ? (dark ? "#c2c2c6" : "#444447") : (dark ? "rgba(235,235,245,0.6)" : "rgba(60,60,67,0.6)"),
+            "--gp-list-marker": increasedContrast
+              ? (dark ? "#c2c2c6" : "#555559") : (dark ? "#8e8e93" : "#757579"),
             "--gp-link": dark ? "#64b4ff" : "#005dc2",
             "--gp-separator": dark ? "#38383a" : "#c6c6c8",
             "--gp-boundary": dark ? "#545458" : "#8e8e93",
@@ -183,6 +185,13 @@ async (page) => {
               ratio(current.color, current.backgroundColor) >= 4.5,
             taskContrast: ratio(mark.borderTopColor, taskStyle.backgroundColor) >= 3 &&
               ratio(taskStyle.borderTopColor, page.backgroundColor) >= 3,
+            neutralTasks: [...document.querySelectorAll(".task-toggle input")].every((input) => {
+              const box = getComputedStyle(input);
+              return box.borderTopColor === resolveColor(page.getPropertyValue("--gp-list-marker")) &&
+                (!input.checked || box.backgroundColor === resolveColor(page.getPropertyValue("--gp-list-marker"))) &&
+                input.closest(".task-toggle").getBoundingClientRect().height >= 44 &&
+                getComputedStyle(input.closest("li")).color === page.color;
+            }),
             bodyTables: getComputedStyle(document.querySelector("td")).fontSize === page.fontSize,
             headingScale: ["h1", "h2", "h3"].every((selector, index) =>
               Math.abs(parseFloat(getComputedStyle(document.querySelector(selector)).fontSize) -
@@ -206,7 +215,7 @@ async (page) => {
             listMarkers: [...document.querySelectorAll("article > ol > li, article > ul:not(.contains-task-list) li")].every((item) => {
               const marker = getComputedStyle(item, "::marker");
               const text = getComputedStyle(item);
-              return marker.color === resolveColor(page.getPropertyValue("--gp-accent-text")) &&
+              return marker.color === resolveColor(page.getPropertyValue("--gp-list-marker")) &&
                 ratio(marker.color, page.backgroundColor) >=
                   (document.documentElement.dataset.contrast === "increased" ? 7 : 4.5) &&
                 text.color === page.color && marker.fontWeight === text.fontWeight;

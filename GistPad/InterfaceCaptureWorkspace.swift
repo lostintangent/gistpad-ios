@@ -75,7 +75,8 @@ struct InterfaceCaptureWorkspace: View {
             && ["markers", "rules", "bullets"].contains(state))
         _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
         _selectedFileID = State(initialValue: state == "header-file" ? "Ideas.md" : "README.md")
-        if state == "mode-long" || state == "mode-emoji" {
+        if state == "mode-long" || state == "mode-emoji" ||
+            (LaunchArguments.captureMarkerFixture && arguments.contains("--capture-source")) {
             _modes = State(initialValue: ["README.md": .source])
         }
         var snapshot = state == "empty" ? LibrarySnapshot(notes: []) : InterfaceFixtures.library
