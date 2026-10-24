@@ -1,5 +1,4 @@
 #if os(iOS)
-import OSLog
 import UIKit
 import GistPadAppearance
 
@@ -39,15 +38,7 @@ struct PreviewAppearance: Equatable {
             ("title3", .title3), ("headline", .headline), ("footnote", .footnote)
         ]
         for (name, style) in styles {
-            var font = UIFont.preferredFont(forTextStyle: style, compatibleWith: traits)
-            if name == "title1" || name == "title2" {
-                if let descriptor = font.fontDescriptor.withDesign(.serif) {
-                    font = UIFont(descriptor: descriptor, size: font.pointSize)
-                } else {
-                    Logger(subsystem: "dev.gistpad.GistPad", category: "MarkdownPreview")
-                        .error("The system serif heading descriptor was unavailable.")
-                }
-            }
+            let font = UIFont.preferredFont(forTextStyle: style, compatibleWith: traits)
             values["--gp-\(name)-size"] = "\(font.pointSize)px"
             values["--gp-\(name)-line-height"] = "\(font.lineHeight)px"
         }

@@ -32,17 +32,15 @@ struct PreviewAppearanceTests {
         }
     }
 
-    @Test("Rendered heading metrics follow native system serif at Large and AX3")
-    func serifHeadingMetrics() throws {
+    @Test("Native typography metrics retain system sans at Large and AX3")
+    func systemHeadingMetrics() {
         for size: UIContentSizeCategory in [.large, .accessibilityExtraLarge] {
             let traits = UITraitCollection { $0.preferredContentSizeCategory = size }
             let appearance = PreviewAppearance(traits: traits)
             for (name, style): (String, UIFont.TextStyle) in [("title1", .title1), ("title2", .title2)] {
-                let base = UIFont.preferredFont(forTextStyle: style, compatibleWith: traits)
-                let descriptor = try #require(base.fontDescriptor.withDesign(.serif))
-                let serif = UIFont(descriptor: descriptor, size: base.pointSize)
-                #expect(appearance.variables["--gp-\(name)-size"] == "\(serif.pointSize)px")
-                #expect(appearance.variables["--gp-\(name)-line-height"] == "\(serif.lineHeight)px")
+                let font = UIFont.preferredFont(forTextStyle: style, compatibleWith: traits)
+                #expect(appearance.variables["--gp-\(name)-size"] == "\(font.pointSize)px")
+                #expect(appearance.variables["--gp-\(name)-line-height"] == "\(font.lineHeight)px")
             }
         }
     }

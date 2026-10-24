@@ -62,6 +62,9 @@ async (page) => {
   await page.getByRole("button", { name: "Ideas", exact: true }).click();
   await page.getByRole("link", { name: "the link", exact: true }).click();
   await page.getByRole("button", { name: "Reveal spoiler", exact: true }).click();
+  await page.locator('img[src^="data:image/png"]').first().scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => [...document.images].some((image) =>
+    image.src.startsWith("data:image/png") && image.naturalWidth === 1));
   await page.evaluate(() => window.gistpadPreview.setViewportInsets({ top: 64, bottom: 82 }));
   const contents = page.locator("details.markdown-toc");
   if (await contents.evaluate((node) => node.open)) throw new Error("Contents must start collapsed");

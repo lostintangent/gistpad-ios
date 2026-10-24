@@ -588,11 +588,41 @@ struct PreviewWebKitTests {
                                 getComputedStyle(document.querySelector('.text-blue-500')).color === resolveColor(styles.getPropertyValue('--gp-accent-text')),
                             getComputedStyle(document.querySelector('.diagram-scroll .nodeLabel')).color === styles.color,
                             Math.abs(document.querySelector('.markdown-toc').nextElementSibling.getBoundingClientRect().top -
-                                document.querySelector('.markdown-toc').getBoundingClientRect().bottom - 28 * parseFloat(styles.fontSize) / 17) < 1,
+                                document.querySelector('.markdown-toc').getBoundingClientRect().bottom - 3 * parseFloat(styles.fontSize)) < 1,
                             authored.fill === 'rgb(255, 240, 204)' && authored.stroke === 'rgb(118, 88, 0)',
                             current.backgroundColor === resolveColor(styles.getPropertyValue('--gp-selected-surface')) &&
                                 previous.backgroundColor === resolveColor(styles.getPropertyValue('--gp-surface')),
-                            document.documentElement.scrollWidth <= window.innerWidth
+                            document.documentElement.scrollWidth <= window.innerWidth,
+                            ['h1', 'h2', 'h3'].every((selector, index) => {
+                                const heading = getComputedStyle(document.querySelector(selector));
+                                return heading.fontFamily.includes('-apple-system') &&
+                                    Math.abs(parseFloat(heading.fontSize) -
+                                        parseFloat(styles.fontSize) * [2, 1.5, 1.25][index]) < .1;
+                            }),
+                            ['h1', 'h2'].every(selector => {
+                                const heading = getComputedStyle(document.querySelector(selector));
+                                return heading.borderBottomWidth === '1px' &&
+                                    heading.borderBottomColor === resolveColor(styles.getPropertyValue('--border')) &&
+                                    Math.abs(parseFloat(heading.paddingBottom) - parseFloat(styles.fontSize)) < .1;
+                            }),
+                            Math.abs(parseFloat(getComputedStyle(document.querySelector('article')).lineHeight) -
+                                1.75 * parseFloat(styles.fontSize)) < .1,
+                            Math.abs(parseFloat(getComputedStyle(document.querySelector('article > p')).marginBottom) -
+                                1.25 * parseFloat(styles.fontSize)) < .1,
+                            Math.abs(parseFloat(getComputedStyle(document.querySelector('li.task-list-item')).marginBottom) -
+                                .5 * parseFloat(styles.fontSize)) < .1,
+                            document.querySelector('article > ol').start === 3 &&
+                                document.querySelectorAll('article > ol > li, article > ul:not(.contains-task-list) li').length === 4,
+                            [...document.querySelectorAll('article > ol > li, article > ul:not(.contains-task-list) li')].every(item => {
+                                const marker = getComputedStyle(item, '::marker');
+                                const text = getComputedStyle(item);
+                                return marker.color === resolveColor(styles.getPropertyValue('--gp-accent-text')) &&
+                                    ratio(marker.color, styles.backgroundColor) >=
+                                        (document.documentElement.dataset.contrast === 'increased' ? 7 : 4.5) &&
+                                    text.color === styles.color && marker.fontWeight === text.fontWeight;
+                            }),
+                            [...document.querySelectorAll('.markdown-toc li, li.task-list-item')].every(item =>
+                                getComputedStyle(item, '::marker').color === styles.color)
                         ];
                         """,
                         arguments: [:], in: nil, contentWorld: .page

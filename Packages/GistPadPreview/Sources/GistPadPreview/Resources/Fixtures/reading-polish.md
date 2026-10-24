@@ -78,3 +78,11 @@ This authored disclosure starts open and must stay that way.
 
 - [ ] A quiet unfinished task
 - [x] A clear completed task
+
+## Lists at a glance
+
+3. A numbered thought with the authored starting value.
+4. Another line at the same reading rhythm.
+
+- A bullet that remains distinct from the words.
+  - A nested thought keeps its own marker and indentation.

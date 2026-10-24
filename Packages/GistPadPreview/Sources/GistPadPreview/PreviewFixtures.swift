@@ -11,6 +11,10 @@ public enum PreviewFixtures {
         get throws { try load("reading-polish") }
     }
 
+    public static var mangaReading: String {
+        get throws { try load("manga-reading") }
+    }
+
     private static func load(_ name: String) throws -> String {
         guard let url = Bundle.module.url(forResource: name, withExtension: "md", subdirectory: "Fixtures") else {
             throw PreviewFailure.renderer("The bundled Markdown fixture '\(name)' is missing.")

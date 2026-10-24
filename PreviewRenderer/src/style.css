@@ -41,24 +41,28 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 body { margin: 0; }
 main { padding: 24px 20px 40px; overflow-wrap: anywhere; }
-article { max-width: 64ch; margin-inline: auto; line-height: max(1.5em, var(--gp-body-line-height)); }
+article { max-width: 64ch; margin-inline: auto; line-height: max(1.75em, var(--gp-body-line-height)); }
 article > :first-child { margin-top: 0; }
 h1, h2, h3, h4, h5, h6 { scroll-margin-top: 16px; margin-block: 1.25em .55em; }
-.prose h1 { font-size: var(--gp-title1-size); line-height: var(--gp-title1-line-height); font-weight: 700; margin-block: 1.647059rem .941176rem; border: 0; padding: 0; }
-.prose h2 { font-size: var(--gp-title2-size); line-height: var(--gp-title2-line-height); font-weight: 600; margin-block: 1.647059rem .588235rem; border: 0; padding: 0; }
-.prose :is(h1, h2) { font-family: ui-serif, serif; }
-.prose h3 { font-size: var(--gp-title3-size); line-height: var(--gp-title3-line-height); font-weight: 600; margin-block: 1.411765rem .470588rem; }
+.prose h1 { font-size: 2rem; line-height: 1.111111; font-weight: 700; margin-block: 0 1.777778rem; }
+.prose h2 { font-size: 1.5rem; line-height: 1.333333; font-weight: 600; margin-block: 3rem 1.5rem; }
+.prose :is(h1, h2) { padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+.prose h3 { font-size: 1.25rem; line-height: 1.6; font-weight: 600; margin-block: 2rem .75rem; }
 .prose :is(h4,h5,h6) { font-size: var(--gp-headline-size); line-height: var(--gp-headline-line-height); font-weight: 600; margin-block: 1.411765rem .470588rem; }
 .prose > :first-child { margin-top: 0; }
-p { margin-block: 0 .85em; }
+p { margin-block: 1.25em; }
+.prose :is(h2, h3, h4) + * { margin-top: 0; }
 .prose a { color: var(--primary); text-decoration: underline; }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
 pre, code { font: var(--gp-code-size) ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--gp-syntax-code); direction: ltr; unicode-bidi: isolate; }
 pre { background: var(--muted); padding: 14px; border-radius: 12px; white-space: pre; overflow-x: auto; overflow-wrap: normal; }
 blockquote { border-inline-start: 3px solid var(--border); padding-inline-start: 16px; margin-inline: 0; color: var(--foreground); }
-ul, ol { padding-inline-start: 1.5em; }
-li { margin-block: .35em; }
+ul, ol { margin-block: 1.25em; padding-inline-start: 1.625em; }
+li { margin-block: .5em; padding-inline-start: .375em; }
+.prose li:not(.task-list-item, .markdown-toc li)::marker { color: var(--gp-accent-text); }
+li p { margin-block: .75em; }
+li :is(ul, ol) { margin-block: .75em; }
 .contains-task-list { padding-inline-start: .2em; }
 .task-list-item { min-height: 44px; }
 .task-toggle { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; vertical-align: middle; margin-inline: -8px 1px; }
@@ -110,6 +114,7 @@ img, svg { max-width: 100%; height: auto; }
 .prose .markdown-toc > summary { font: 600 var(--gp-headline-size)/var(--gp-headline-line-height) -apple-system, BlinkMacSystemFont, sans-serif; }
 .markdown-toc[open] { padding-bottom: 12px; }
 .markdown-toc li { margin: 0; padding: 0; }
+.markdown-toc :is(ul, ol) { margin: 0; }
 .prose .markdown-toc a { display: flex; align-items: center; min-height: 44px; padding: 8px; border-radius: 6px; color: var(--gp-text); text-decoration: none; word-break: normal; }
 .markdown-toc a:active { background: var(--gp-selected-surface); }
 .markdown-toc a:focus-visible { background: var(--gp-selected-surface); outline-offset: -2px; }

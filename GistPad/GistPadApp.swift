@@ -51,7 +51,8 @@ struct GistPadApp: App {
         if LaunchArguments.captureScreen != nil || longFixture || isTesting {
           let text: String
           if let screen = LaunchArguments.captureScreen, ["library", "note"].contains(screen) {
-            text = try LaunchArguments.captureReadingFixture
+            text = try LaunchArguments.captureMangaFixture ? PreviewFixtures.mangaReading
+              : LaunchArguments.captureReadingFixture
               ? PreviewFixtures.readingPolish : InterfaceCaptureWorkspace.markdown
           } else {
             text = try longFixture ? EditorFixture.markdown() : PreviewFixtures.allSyntax
@@ -140,11 +141,14 @@ enum LaunchArguments {
   static let captureReadingFixture =
     ProcessInfo.processInfo.arguments.contains("--capture-reading-fixture")
 
+  static let captureMangaFixture =
+    ProcessInfo.processInfo.arguments.contains("--capture-manga-fixture")
+
   static let captureScreen: String? = {
     let arguments = ProcessInfo.processInfo.arguments
     guard let index = arguments.firstIndex(of: "--capture-screen"), index + 1 < arguments.count
     else {
-      return captureReadingFixture ? "note" : nil
+      return captureReadingFixture || captureMangaFixture ? "note" : nil
     }
     return arguments[index + 1]
   }()

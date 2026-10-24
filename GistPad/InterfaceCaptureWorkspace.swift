@@ -4,6 +4,7 @@ import GistPadInterface
 import GistPadPreview
 import SwiftUI
 import UIKit
+import WebKit
 
 struct InterfaceCaptureWorkspace: View {
     static let markdown = """
@@ -67,7 +68,8 @@ struct InterfaceCaptureWorkspace: View {
             "populated", "empty", "error", "offline", "readonly", "tag-audit", "today",
             "tag-editor", "tag-readonly", "search", "search-active", "no-results", "filtered", "signed-out",
             "daily", "starred", "archive", "notes", "featured"
-        ].contains(state)
+        ].contains(state) || (LaunchArguments.captureMangaFixture && screen == "note"
+            && ["markers", "rules", "bullets"].contains(state))
         _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
         var snapshot = state == "empty" ? LibrarySnapshot(notes: []) : InterfaceFixtures.library
         if state != "empty" {
@@ -120,6 +122,10 @@ struct InterfaceCaptureWorkspace: View {
         if LaunchArguments.captureReadingFixture,
            let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
             snapshot.notes[index].title = "A considered page"
+        }
+        if LaunchArguments.captureMangaFixture,
+           let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
+            snapshot.notes[index].title = "📚 Manga reading list"
         }
         let model = LibraryModel(
             snapshot: snapshot,
@@ -353,10 +359,56 @@ struct InterfaceCaptureWorkspace: View {
                 previewError = "This synthetic fixture does not resolve linked notes."
             }
         case .rendered:
-            Task { await markReady() }
+            Task {
+                do {
+                    try await positionMangaCapture()
+                } catch {
+                    previewError = "Capture positioning failed: \(error.localizedDescription)"
+                }
+                await markReady()
+            }
         case .contentHeight:
             break
         }
+    }
+
+    private func positionMangaCapture() async throws {
+        guard LaunchArguments.captureMangaFixture, captureScreen == "note",
+              ["markers", "rules", "bullets"].contains(captureState) else { return }
+        func findPreview(in view: UIView) -> WKWebView? {
+            if let preview = view as? WKWebView { return preview }
+            return view.subviews.lazy.compactMap { findPreview(in: $0) }.first
+        }
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).filter { !$0.isHidden }
+        guard let preview = windows.lazy.compactMap({ findPreview(in: $0) }).first else {
+            throw PreviewFailure.renderer("The capture's native preview is not attached.")
+        }
+        let selector: String
+        switch captureState {
+        case "markers": selector = "article > ol"
+        case "bullets": selector = "article > ul"
+        default: selector = "article > h2"
+        }
+        let target = try await preview.callAsyncJavaScript(
+            """
+            const element = document.querySelector(selector);
+            if (!element) throw new Error('The capture target is missing.');
+            return element.getBoundingClientRect().top + window.scrollY;
+            """,
+            arguments: ["selector": selector],
+            in: nil, contentWorld: .page
+        ) as? Double
+        guard let target, target.isFinite else {
+            throw PreviewFailure.renderer("The capture target has no valid position.")
+        }
+        let scroll = preview.scrollView
+        let minimum = -scroll.adjustedContentInset.top
+        let maximum = max(minimum, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+        scroll.setContentOffset(
+            CGPoint(x: 0, y: min(maximum, max(minimum, target - scroll.adjustedContentInset.top - 24))),
+            animated: false
+        )
     }
 
     private func markReady() async {
@@ -378,7 +430,8 @@ struct InterfaceCaptureWorkspace: View {
                 "accent": captureAccent ?? "",
                 "searchFocused": searchFocused, "searchKeyboardVisible": searchKeyboardVisible,
                 "searchKeyboardHeight": searchKeyboardHeight,
-                "fixture": LaunchArguments.captureReadingFixture ? "reading-polish" : "notebook",
+                "fixture": LaunchArguments.captureMangaFixture ? "manga-reading"
+                    : LaunchArguments.captureReadingFixture ? "reading-polish" : "notebook",
                 "token": readinessToken, "previewError": previewError ?? ""
             ], options: [.sortedKeys])
             try data.write(to: url, options: .atomic)

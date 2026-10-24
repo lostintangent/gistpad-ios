@@ -49,21 +49,20 @@ async (page) => {
         parseFloat(chevron.borderTopWidth) > 0 && chevron.backgroundColor === "rgba(0, 0, 0, 0)",
       realDetails: summary.parentElement.tagName === "DETAILS" && !summary.parentElement.open,
       noPageOverflow: document.documentElement.scrollWidth <= window.innerWidth,
-      headingFamilies: ["h1", "h2"].every((selector) =>
-        getComputedStyle(document.querySelector(selector)).fontFamily.startsWith("ui-serif")) &&
-        getComputedStyle(document.querySelector("h3")).fontFamily.includes("-apple-system"),
+      headingFamilies: ["h1", "h2", "h3"].every((selector) =>
+        getComputedStyle(document.querySelector(selector)).fontFamily.includes("-apple-system")),
       compactContents: !document.querySelector("details.markdown-toc").open &&
         document.querySelector(".markdown-toc").getBoundingClientRect().height >= 44 &&
         document.querySelector(".markdown-toc").getBoundingClientRect().height <= 54 &&
         getComputedStyle(document.querySelector(".markdown-toc > summary")).fontFamily.includes("-apple-system"),
       authoredOpenState: document.querySelectorAll("details:not(.markdown-toc)")[1].open,
       pageRhythm: getComputedStyle(document.querySelector("main")).padding === "24px 20px 40px" &&
-        Math.abs(parseFloat(getComputedStyle(document.querySelector("h1")).marginBottom) - 16) < .1 &&
-        Math.abs(parseFloat(getComputedStyle(document.querySelector("h2")).marginTop) - 28) < .1 &&
-        Math.abs(parseFloat(getComputedStyle(document.querySelector("h2")).marginBottom) - 10) < .1 &&
-        Math.abs(parseFloat(getComputedStyle(document.querySelector("h3")).marginTop) - 24) < .1,
+        Math.abs(parseFloat(getComputedStyle(document.querySelector("h1")).marginBottom) - 17 * 16 / 9) < .1 &&
+        Math.abs(parseFloat(getComputedStyle(document.querySelector("h2")).marginTop) - 51) < .1 &&
+        Math.abs(parseFloat(getComputedStyle(document.querySelector("h2")).marginBottom) - 25.5) < .1 &&
+        Math.abs(parseFloat(getComputedStyle(document.querySelector("h3")).marginTop) - 34) < .1,
       contentsHeadingGap: Math.abs(document.querySelector(".markdown-toc").nextElementSibling.getBoundingClientRect().top -
-        document.querySelector(".markdown-toc").getBoundingClientRect().bottom - 28) < .1,
+        document.querySelector(".markdown-toc").getBoundingClientRect().bottom - 51) < .1,
     };
   });
   for (const [name, passed] of Object.entries(initial)) {
@@ -180,6 +179,35 @@ async (page) => {
             taskContrast: ratio(mark.borderTopColor, taskStyle.backgroundColor) >= 3 &&
               ratio(taskStyle.borderTopColor, page.backgroundColor) >= 3,
             bodyTables: getComputedStyle(document.querySelector("td")).fontSize === page.fontSize,
+            headingScale: ["h1", "h2", "h3"].every((selector, index) =>
+              Math.abs(parseFloat(getComputedStyle(document.querySelector(selector)).fontSize) -
+                parseFloat(page.fontSize) * [2, 1.5, 1.25][index]) < .1),
+            headingRules: ["h1", "h2"].every((selector) => {
+              const heading = getComputedStyle(document.querySelector(selector));
+              return heading.borderBottomWidth === "1px" &&
+                heading.borderBottomColor === resolveColor(page.getPropertyValue("--border")) &&
+                Math.abs(parseFloat(heading.paddingBottom) - parseFloat(page.fontSize)) < .1;
+            }),
+            sansHeadings: [...document.querySelectorAll("h1,h2,h3,h4,h5,h6")].every((heading) =>
+              getComputedStyle(heading).fontFamily.includes("-apple-system")),
+            proseRhythm: Math.abs(parseFloat(getComputedStyle(document.querySelector("article")).lineHeight) -
+              1.75 * parseFloat(page.fontSize)) < .1 &&
+              Math.abs(parseFloat(getComputedStyle(document.querySelector("article > p")).marginBottom) -
+                1.25 * parseFloat(page.fontSize)) < .1 &&
+              Math.abs(parseFloat(getComputedStyle(document.querySelector("li.task-list-item")).marginBottom) -
+                .5 * parseFloat(page.fontSize)) < .1,
+            authoredLists: document.querySelector("article > ol").start === 3 &&
+              document.querySelectorAll("article > ol > li, article > ul:not(.contains-task-list) li").length === 4,
+            listMarkers: [...document.querySelectorAll("article > ol > li, article > ul:not(.contains-task-list) li")].every((item) => {
+              const marker = getComputedStyle(item, "::marker");
+              const text = getComputedStyle(item);
+              return marker.color === resolveColor(page.getPropertyValue("--gp-accent-text")) &&
+                ratio(marker.color, page.backgroundColor) >=
+                  (document.documentElement.dataset.contrast === "increased" ? 7 : 4.5) &&
+                text.color === page.color && marker.fontWeight === text.fontWeight;
+            }),
+            markerExclusions: [...document.querySelectorAll(".markdown-toc li, li.task-list-item")].every((item) =>
+              getComputedStyle(item, "::marker").color === page.color),
             bodyDiagrams: parseFloat(document.querySelector(".diagram-scroll svg").style.width) >
               document.querySelector(".diagram-scroll svg").viewBox.baseVal.width,
             noPageOverflow: document.documentElement.scrollWidth <= window.innerWidth,
@@ -191,6 +219,33 @@ async (page) => {
       }
     }
   }
-  await page.getByRole("heading", { name: "A considered page", exact: true }).scrollIntoViewIfNeeded();
-  return { fixture: "reading-polish", themes: 4, textSizes: 2, externalRequests: "blocked" };
+  const mangaResponse = await page.request.get(`${base}/Fixtures/manga-reading.md`);
+  if (!mangaResponse.ok()) throw new Error("Manga reading fixture is missing");
+  await page.evaluate((markdown) =>
+    window.gistpadPreview.render({ version: 1, documentID: "manga-reading", generation: "1", markdown }),
+  await mangaResponse.text());
+  await page.getByRole("heading", { name: "👓 Currently reading (volume)", exact: true }).waitFor();
+  for (const width of [320, 382, 834]) {
+    await page.setViewportSize({ width, height: 874 });
+    const checks = await page.evaluate(() => {
+      const bodySize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+      const heading = document.querySelector("h1");
+      const list = document.querySelector("ol");
+      const item = list.querySelector("li");
+      return {
+        exactStart: list.start === 3 && item.textContent === "Billy Bat (14)",
+        coloredNumbers: getComputedStyle(item, "::marker").color !== getComputedStyle(item).color,
+        listRhythm: Math.abs(parseFloat(getComputedStyle(item).marginBottom) - .5 * bodySize) < .1 &&
+          Math.abs(parseFloat(getComputedStyle(list).paddingInlineStart) - 1.625 * bodySize) < .1,
+        singlePageInset: Math.abs(heading.getBoundingClientRect().top +
+          window.scrollY - 24) < .1,
+        noPageOverflow: document.documentElement.scrollWidth <= window.innerWidth,
+      };
+    });
+    for (const [name, passed] of Object.entries(checks)) {
+      if (!passed) throw new Error(`Manga check failed: ${width}/${name}`);
+    }
+  }
+  await page.getByRole("heading", { name: "👓 Currently reading (volume)", exact: true }).scrollIntoViewIfNeeded();
+  return { fixtures: ["reading-polish", "manga-reading"], themes: 4, textSizes: 2, externalRequests: "blocked" };
 }
