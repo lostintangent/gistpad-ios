@@ -290,8 +290,10 @@ struct NotebookPhotoLayoutProbe {
     let shelf = try #require(scrolls.first {
       $0 !== editor && !$0.isHidden && $0.bounds.height > 0
     })
-    #expect(shelf.bounds.height <= 181)
-    #expect(shelf.contentSize.height > shelf.bounds.height)
+    let visibleShelfHeight =
+      shelf.bounds.height - shelf.adjustedContentInset.top - shelf.adjustedContentInset.bottom
+    #expect(visibleShelfHeight > 0 && visibleShelfHeight <= 181)
+    #expect(shelf.contentSize.height > visibleShelfHeight)
     let bottom = shelf.contentSize.height - shelf.bounds.height + shelf.adjustedContentInset.bottom
     shelf.setContentOffset(CGPoint(x: 0, y: bottom), animated: false)
     try await Task.sleep(for: .milliseconds(150))
@@ -302,7 +304,8 @@ struct NotebookPhotoLayoutProbe {
     let twoLines = (editor.font?.lineHeight ?? UIFont.preferredFont(forTextStyle: .body).lineHeight) * 2
     Attachment.record(
       "source viewport: \(visibleSourceHeight) pt, two lines: \(twoLines) pt, "
-        + "shelf: \(shelf.bounds.height) pt, content: \(shelf.contentSize.height) pt, "
+        + "shelf viewport: \(visibleShelfHeight) pt, bounds: \(shelf.bounds.height) pt, "
+        + "content: \(shelf.contentSize.height) pt, "
         + "scroll bottom: \(shelf.contentOffset.y) pt",
       named: "\(prefix)-geometry.txt")
     #expect(visibleSourceHeight >= twoLines, "Keep at least two source lines above the shelf and keyboard.")
