@@ -200,7 +200,8 @@
       #expect(session.textView.keyCommands?.contains { $0.input == "]" } == true)
       let findCommand = try #require(
         session.textView.keyCommands?.first { $0.input == "f" && $0.modifierFlags == .command })
-      #expect(session.textView.canPerformAction(findCommand.action, withSender: findCommand))
+      let findAction = try #require(findCommand.action)
+      #expect(session.textView.canPerformAction(findAction, withSender: findCommand))
       let dismiss = try #require(items.first { $0.accessibilityLabel == "Hide Keyboard" })
       #expect(items.last === dismiss)
       for width in [320.0, 390.0, 800.0] {

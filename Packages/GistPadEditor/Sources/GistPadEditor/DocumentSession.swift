@@ -21,6 +21,7 @@
     @ObservationIgnored private var highlightTask: Task<Void, Never>?
     @ObservationIgnored private var highlightedTraits: UITraitCollection?
     @ObservationIgnored private var isApplyingSourceEdit = false
+    @ObservationIgnored private var pendingFocusAtEnd = false
 
     public init(documentID: String, text: String, generation: UInt64 = 0) {
       self.documentID = documentID
@@ -99,6 +100,30 @@
 
     public var canFormat: Bool {
       textView.isEditable && textView.markedTextRange == nil && !isComposing && !writingToolsActive
+    }
+
+    public func requestFocusAtEnd() {
+      guard canFormat else {
+        inputError = String(
+          localized: "Finish the current text edit before moving the caret.", bundle: .module)
+        return
+      }
+      selection = NSRange(location: text.utf16.count, length: 0)
+      textView.selectedRange = selection
+      pendingFocusAtEnd = true
+      completeFocusRequestIfAttached()
+    }
+
+    fileprivate func completeFocusRequestIfAttached() {
+      guard pendingFocusAtEnd, textView.window != nil else { return }
+      pendingFocusAtEnd = false
+      guard canFormat, textView.becomeFirstResponder() else {
+        inputError = String(
+          localized: "The editor couldn't receive focus. Tap the note to start writing.",
+          bundle: .module)
+        return
+      }
+      textView.scrollRangeToVisible(textView.selectedRange)
     }
 
     public func apply(_ edit: SourceEdit, generation: UInt64) throws {
@@ -345,6 +370,11 @@
     private var readingOffset = 0
     private var anchorDelta: CGFloat = 0
     private var restoringAnchor = false
+
+    override func didMoveToWindow() {
+      super.didMoveToWindow()
+      (delegate as? DocumentSession)?.completeFocusRequestIfAttached()
+    }
 
     override var keyCommands: [UIKeyCommand]? {
       let find = UIKeyCommand(input: "f", modifierFlags: .command, action: #selector(findText))
