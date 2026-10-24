@@ -16,7 +16,7 @@ This is the implementation specification and review gate, not a claim that the c
 - Local drafts and GitHub publication are different states. Keep local edits durable. Publish after five quiet seconds and on leaving a note when autosave is on; attempt publication on app background regardless of that preference, within the existing background-task lease and eligibility/safety checks.
 - Today contains the user's current dated note and template. **No Earlier days, task carryover, automatic journal text, or large-gist Git fallback.** A truncated response warns and blocks unsafe writes.
 - Tags apply to gists, not individual files or days. Secret gists and uploaded images are readable by URL.
-- Apple Intelligence is the only AI platform. V1 includes system Writing Tools plus exactly three whole-note actions: Ask, Edit and Review. Use the on-device model when the complete request fits its measured budget; Apple Private Cloud Compute is allowed otherwise. No app-owned tag suggestions, selection/section modes, third-party models or permanent chatbot. Generated changes remain proposals until Apply.
+- Apple Intelligence is the only AI platform. V1 includes system Writing Tools plus exactly three whole-note actions: Ask, Edit and Review. Run on device, with bounded passes covering long notes in full. The user's later October 24 decision skips Private Cloud Compute. No app-owned tag suggestions, selection/section modes, third-party models or permanent chatbot. Generated changes remain proposals until Apply.
 
 The accepted recommendation governs scope. Earlier concept sketches are directional, not production geometry or an exception to these rules.
 

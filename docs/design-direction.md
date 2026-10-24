@@ -118,11 +118,11 @@ More starts with a compact Pin / Star / Share / Copy Link group. Then note/conte
 
 ### Intelligence has a place, not a new workbench
 
-**V1 scope is approved, including Apple Private Cloud Compute, on October 24.** Exactly three app-owned actions, **Ask, Edit and Review**, work on the entire note. System Writing Tools remains the selection-based capability. There are no custom selection/section actions or tag suggestions. This is the surface to implement and review, not a claim that the custom engine already ships.
+**V1 has exactly three app-owned actions: Ask, Edit and Review, all on the entire note.** System Writing Tools remains the selection-based capability. There are no custom selection/section actions or tag suggestions. Following the user's later October 24 decision, skip Private Cloud Compute. This is the surface to implement and review, not a claim that the custom engine already ships.
 
 With these actions, the compact keyboard capsule becomes **Aa / Lists / Insert / Intelligence / Hide Keyboard**. Bold and Italic move into Aa; on a sufficiently wide surface they can reappear as direct targets. Do not bolt a seventh control onto the current compact bar. Intelligence uses a labeled `sparkles` action in the same control language, not a persistent multicolor orb. It is also reachable from the note's menu in Preview.
 
-The surface identifies the note and exact filename before the request. Whole-note scope includes all text of the open file, never a silently truncated passage or unrelated daily files/templates. There is no scope picker. Retain source selection and scroll while open and return to the same passage when dismissed. It grows to a large sheet for review, or a system popover when appropriate, not an always-present third pane.
+The surface identifies the note and exact filename before the request, with a quiet **On device** context label, never a model-name or token-budget display. Whole-note scope includes all text of the open file, never a silently truncated passage or unrelated daily files/templates. There is no scope picker. Retain source selection and scroll while open and return to the same passage when dismissed. It grows to a large sheet for review, or a system popover when appropriate, not an always-present third pane.
 
 Use a native three-action picker in this same surface, not an introductory dashboard. Ask is the initial action. Ask/Edit provides a focused prompt field; Review has one clear Generate action. Request, progress, cancellation and result stay in the same sheet. A compact diff stacks labeled Before/After hunks; a wide review can show them side by side. Added/deleted meaning must survive without color.
 
@@ -134,11 +134,28 @@ Use a native three-action picker in this same surface, not an introductory dashb
 
 Edit and Review share exact-quote replacement hunks against the captured source; do not require the model to regenerate a long note. Reject nonmatching or overlapping hunks and report the omitted count in the review. Never offer Apply for an unverified anchor. The app computes the diff, not the model.
 
-Use the on-device model when the entire note and instruction fit the measured request budget, PCC otherwise. Identify On Device or Private Cloud Compute in the request/result context, not as a permanent editor badge. **Product permission is not service access:** PCC requires Apple's eligibility and managed entitlement. Do not claim the installed build has it or add an unapproved entitlement that breaks signing. Engine availability and quota reasons must reach this surface; real generation remains hardware acceptance. [PCC access][pcc-access], [entitlement][pcc-entitlement].
+Everything runs on device. A note that fits the measured request budget takes one pass. Longer notes use bounded passes covering every section, with final synthesis for Ask and merged anchored replacements for Edit/Review. Show honest progress such as **Reviewing part 3 of 7**, then **Preparing changes**. Say "section" only when the units are actual authored sections. Do not claim a partial pass covers the whole note. Cancellation or a failed pass never partially applies source.
 
-If whole-note processing is unavailable, explain why. Do not quietly use an excerpt, introduce smaller-scope modes or expose token budgeting as the user's problem. Unavailability, quota or refusal preserves the request and original note. Never fall back to another provider. Read-only notes support Ask/Review, but source Apply is unavailable with a reason.
+If whole-note processing is unavailable, explain why. Do not quietly use an excerpt, introduce smaller-scope modes or expose token budgeting as the user's problem. Unavailability or refusal preserves the request and original note. Never fall back to another provider. Read-only notes support Ask/Review, but source Apply is unavailable with a reason. Real generation remains hardware acceptance.
 
-Proposals never enter the source or publish before Apply. A changed account, document or source generation invalidates a stale Apply and offers regeneration rather than overwriting newer work. Applied edits follow the normal saving policy. Availability, loading, cancellation and errors stay inside this surface, with the original note usable when it closes. No new intelligence-generated sync states or permanent dashboard.
+Proposals never enter the source or publish before Apply. A changed account, document or unrelated source edit invalidates stale Apply and offers regeneration rather than overwriting newer work. Applying one Review comment deterministically updates the remaining verified anchors; it must not require a model rerun for every comment. Applied edits follow the normal saving policy. Availability, loading, cancellation and errors stay inside this surface, with the original note usable when it closes. No new intelligence-generated sync states or permanent dashboard.
+
+## M4: the same notebook outside the app
+
+These are focused entrances to Today and existing notes, not miniature copies of Library. Use native widget margins, text styles and rendering modes. Profile accent belongs in full-color presentation; system tinted, clear and StandBy night appearances retain their own treatment. Personal task/excerpt content is privacy-sensitive. [Widgets][widgets].
+
+| Surface | Treatment |
+| --- | --- |
+| Small Today widget | Rounded date, Today and one useful task with a real check target. If there are no tasks, show a genuine short excerpt or Start Today, never an invented task |
+| Medium Today widget | Date/count at leading, up to two readable task rows alongside. Prefer fewer rows over tiny labels/targets. Tapping the background opens Today; task controls perform the real action in place |
+| Lock Screen | Rectangular: date and one legible task/check where space permits. Inline/circular: date or remaining count, opening Today rather than cramming in a checklist |
+| StandBy | Adapt the small widget, emphasizing date and one useful task at distance. Let the system remove the background and apply its night treatment. No extra clock or custom glow |
+| Add to Today | One `square.and.pencil` control named Add to Today. Open a native quick-capture sheet when text is needed: destination date, focused input, Text/Task choice, Cancel/Add. The shortcut accepts provided text and the same choice without redundant UI. No blank/placeholder insertion |
+| Spotlight and links | Real note title, useful cached snippet and exact filename when needed. Open the target through one router, with the same immediate cached selection and truthful loading/error states as Library. Preserve a pending destination through sign-in. Never substitute Today or create a note for a missing target |
+
+Interactive checks bind to the displayed date/file and task anchor, never a row index in whichever note is now open. A stale task is not modified and offers Open Today. Locked-device interaction follows system authentication. Missing account/content gets a clear sign-in/open invitation; timeline refresh never creates a note. Widget/control mutations use existing durable-draft behavior, not a separate publication path. [Widget interactivity][widget-interactivity], [Controls][controls].
+
+Universal links need the website's deployed AASA association as well as the app entitlement. A prepared local file is not live link acceptance. Keep the browser fallback truthful until that deployment; `gistpad://` serves app-owned routes. [Associated domains][associated-domains].
 
 ## States and movement are part of the design
 
@@ -156,6 +173,14 @@ Proposals never enter the source or publish before Apply. A changed account, doc
 Loading guidance supports useful content and truthful progress, not a rule to animate every cache hit. [Loading][loading].
 
 Use the native transition from a collection into its detail, native menu/sheet presentation and the glass control's touch response. Do not put a custom cover animation ahead of a ready caret. Card zoom is optional only where its matched source remains stable and cancellation is correct. A direct task completion or pin can have one brief symbol/haptic response **after** the local action succeeds. No haptic for background saving, refresh, initial appearance or every keystroke. Reduce Motion uses the settled state without loss of meaning. [Motion][motion].
+
+### Three signature moments
+
+1. **Today turns a page.** The Rounded date changes with one roughly 250-ms numeric transition only when the actual day changes, not on every Library appearance. Opening uses the system transition from its stable feature source. No midnight haptic or decorative cover flip.
+2. **A task lands.** After a successful local toggle, replace the circle with its check in one roughly 200-ms symbol transition and one light impact. Keep the note line in place. Widgets use supported content transitions after the intent succeeds; system feedback, not promised custom widget haptics. No confetti or success before persistence.
+3. **A new page is already yours.** Compose presents the real source through native navigation, with the caret visible and keyboard requested on attachment. One soft impact acknowledges accepted local creation. No naming interstitial, delayed reveal or haptic on restoration. Input is never held for the animation.
+
+Reduce Motion replaces the first two with their settled state. The keyboard and navigation keep system behavior.
 
 ## What we cut, and what earns approval
 
@@ -223,5 +248,7 @@ Research accessed October 24, 2026. Platform facts above come from Apple. GistPa
 [awards24]: https://developer.apple.com/design/awards/2024/
 [awards25]: https://developer.apple.com/design/awards/2025/
 [awards26]: https://developer.apple.com/design/awards/
-[pcc-access]: https://developer.apple.com/private-cloud-compute/
-[pcc-entitlement]: https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.private-cloud-compute
+[widgets]: https://developer.apple.com/design/human-interface-guidelines/widgets
+[controls]: https://developer.apple.com/design/human-interface-guidelines/controls
+[widget-interactivity]: https://developer.apple.com/documentation/widgetkit/adding-interactivity-to-widgets-and-live-activities
+[associated-domains]: https://developer.apple.com/documentation/xcode/supporting-associated-domains
