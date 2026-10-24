@@ -40,7 +40,7 @@ public struct LibraryView: View {
         adaptiveList
             .environment(\.defaultMinListHeaderHeight, 0)
             .navigationTitle("GistPad")
-            .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 400)
+            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
             .searchable(text: $model.query, prompt: Text("Search notes", bundle: .module))
             .refreshable { await actions.refresh() }
             .toolbar { libraryToolbar }

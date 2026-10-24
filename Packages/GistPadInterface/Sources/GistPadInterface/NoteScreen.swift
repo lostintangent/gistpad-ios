@@ -9,10 +9,19 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     private let source: Source
     private let preview: Preview
     private let isFocused: Bool
+    private let allowsSplit: Bool
+    private let isSidebarHidden: Bool
     @State private var showingTags = false
+    @State private var showingOfflineExplanation = false
+    @State private var saveDetails: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private var showingSource: Bool { mode == .source && document.access.canEdit }
+    private var showingSplit: Bool { document.access.canEdit && (isFocused || (allowsSplit && mode == .split)) }
+    private var showingSource: Bool { document.access.canEdit && (showingSplit || mode != .reading) }
+    private var paneLayout: AnyLayout {
+        showingSplit ? AnyLayout(HStackLayout(spacing: 1)) : AnyLayout(ZStackLayout())
+    }
     private var showsFiles: Bool {
         document.files.count > 1 || (document.access.canEdit && (actions.addFile != nil || actions.renameFile != nil))
     }
@@ -20,6 +29,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     public init(
         document: NoteChrome, mode: Binding<NoteMode>, saveState: NoteSaveState,
         actions: NoteActions = .init(), isFocused: Bool = false,
+        allowsSplit: Bool = false, isSidebarHidden: Bool = false,
         @ViewBuilder source: () -> Source, @ViewBuilder preview: () -> Preview
     ) {
         self.document = document
@@ -27,34 +37,39 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         self.saveState = saveState
         self.actions = actions
         self.isFocused = isFocused
+        self.allowsSplit = allowsSplit
+        self.isSidebarHidden = isSidebarHidden
         self.source = source()
         self.preview = preview()
     }
     public var body: some View {
-        Group {
-            if isFocused {
-                ArrangementView {
-                    source
-                } secondary: {
-                    preview
-                }
-                .arrangementViewStyle(.split)
-            } else {
-                ZStack {
-                    source
-                        .opacity(showingSource ? 1 : 0)
-                        .allowsHitTesting(showingSource)
-                        .accessibilityHidden(!showingSource)
-                    preview
-                        .opacity(showingSource ? 0 : 1)
-                        .allowsHitTesting(!showingSource)
-                        .accessibilityHidden(showingSource)
-                }
+        paneLayout {
+            source
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(showingSource ? 1 : 0)
+                .allowsHitTesting(showingSource)
+                .accessibilityHidden(!showingSource)
+            preview
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(!showingSource || showingSplit ? 1 : 0)
+                .allowsHitTesting(!showingSource || showingSplit)
+                .accessibilityHidden(showingSource && !showingSplit)
+        }
+        .overlay {
+            if showingSplit {
+                Rectangle().fill(Color(uiColor: .separator)).frame(width: 1)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
         }
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
         .background(Color(uiColor: .systemBackground))
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationSubtitle(
+            document.files.count > 1
+                ? document.files.first(where: { $0.id == document.selectedFileID })?.filename ?? "" : ""
+        )
         .toolbarTitleMenu {
             if showsFiles {
                 fileChoices
@@ -65,17 +80,32 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         }
         .toolbar { noteToolbar }
         .safeAreaBar(edge: .bottom, spacing: 0) {
-            status
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if issue != nil {
+                status
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .sheet(isPresented: $showingTags) {
             TagEditor(tags: document.tags, selectedTagIDs: Set(document.tags.map(\.id)))
         }
         .scrollEdgeEffectStyle(.soft, for: .bottom)
-        .onChange(of: showingSource) {
-            actions.didChangeMode?(showingSource ? .source : .reading)
+        .alert(String(localized: "Offline changes", bundle: .module), isPresented: $showingOfflineExplanation) {
+            if let retry = actions.retry {
+                Button(String(localized: "Retry", bundle: .module), action: retry)
+            }
+            Button(String(localized: "Close", bundle: .module), role: .cancel) {}
+        } message: {
+            Text("Changes are saved on this iPhone but haven't synced to GitHub. Reconnect, then try saving again.", bundle: .module)
+        }
+        .alert(
+            String(localized: "Save details", bundle: .module),
+            isPresented: Binding(get: { saveDetails != nil }, set: { if !$0 { saveDetails = nil } })
+        ) {
+            Button(String(localized: "Close", bundle: .module), role: .cancel) { saveDetails = nil }
+        } message: {
+            Text(verbatim: saveDetails ?? "")
         }
     }
 
@@ -89,200 +119,232 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     private var primaryToolbar: some ToolbarContent {
         if document.access.canEdit, !isFocused {
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    mode = mode == .reading ? .source : .reading
-                } label: {
-                    Label(
-                        mode == .reading ? String(localized: "Edit", bundle: .module) : String(localized: "Preview", bundle: .module),
-                        systemImage: mode == .reading ? "square.and.pencil" : "doc.richtext"
+                Picker(
+                    String(localized: "Note mode", bundle: .module),
+                    selection: Binding(
+                        get: { mode == .split && !allowsSplit ? .source : mode },
+                        set: {
+                            mode = $0
+                            actions.didChangeMode?($0)
+                        }
                     )
+                ) {
+                    Label(String(localized: "Edit", bundle: .module), systemImage: "square.and.pencil").tag(NoteMode.source)
+                    if allowsSplit {
+                        Label(String(localized: "Split", bundle: .module), systemImage: "rectangle.split.2x1").tag(NoteMode.split)
+                    }
+                    Label(String(localized: "Preview", bundle: .module), systemImage: "doc.richtext").tag(NoteMode.reading)
                 }
+                .pickerStyle(.segmented)
+                .labelStyle(.iconOnly)
                 .accessibilityIdentifier("note-toggle-mode")
             }
         }
-        if let save = actions.save, document.access.canEdit {
+        if let save = actions.save, document.access.canEdit, showsManualSave {
             ToolbarItem(placement: .primaryAction) {
                 Button(String(localized: "Save to GitHub", bundle: .module), systemImage: "arrow.up.doc", action: save)
                     .disabled(!saveState.canPublish)
                     .accessibilityIdentifier("note-save")
+            }
+            if saveState == .offline {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingOfflineExplanation = true
+                    } label: {
+                        Label(String(localized: "Offline changes haven't synced", bundle: .module), systemImage: "icloud.slash")
+                    }
+                    .accessibilityIdentifier("note-offline")
+                }
             }
         }
     }
 
     @ToolbarContentBuilder
     private var secondaryToolbar: some ToolbarContent {
-        if let share = actions.share {
-            ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up", action: share)
-            }
-        }
-        if showsFiles {
-            ToolbarItem(placement: .secondaryAction) {
+        if hasMoreActions {
+            ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    fileChoices
+                    if actions.togglePin != nil || actions.toggleStar != nil || actions.share != nil || actions.copyLink != nil {
+                        ControlGroup {
+                            if let pin = actions.togglePin {
+                                Button(
+                                    document.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
+                                    systemImage: document.isPinned ? "pin.fill" : "pin", action: pin
+                                )
+                            }
+                            if let star = actions.toggleStar {
+                                Button(
+                                    document.isStarred ? String(localized: "Unstar", bundle: .module) : String(localized: "Star", bundle: .module),
+                                    systemImage: document.isStarred ? "star.fill" : "star", action: star
+                                )
+                            }
+                            if let share = actions.share {
+                                Button(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up", action: share)
+                            }
+                            if let copy = actions.copyLink {
+                                Button(String(localized: "Copy Link", bundle: .module), systemImage: "link", action: copy)
+                            }
+                        }
+                        .controlGroupStyle(.compactMenu)
+                    }
+                    if showsFiles || actions.focus != nil || actions.find != nil || actions.tags != nil || !document.tags.isEmpty {
+                        Section {
+                            if let tags = actions.tags {
+                                Button(String(localized: "Tags", bundle: .module), systemImage: "tag", action: tags)
+                            } else if !document.tags.isEmpty {
+                                Button(String(localized: "Tags", bundle: .module), systemImage: "tag") { showingTags = true }
+                            }
+                            if showsFiles {
+                                Menu {
+                                    fileChoices
+                                } label: {
+                                    Label(String(localized: "Files in this gist", bundle: .module), systemImage: "doc.on.doc")
+                                }
+                            }
+                            if let focus = actions.focus, document.access.canEdit {
+                                Button(
+                                    isSidebarHidden ? String(localized: "Show Library", bundle: .module) : String(localized: "Hide Library", bundle: .module),
+                                    systemImage: "sidebar.left", action: focus
+                                )
+                            }
+                            if let find = actions.find, document.access.canEdit {
+                                Button(String(localized: "Find and Replace", bundle: .module), systemImage: "text.magnifyingglass", action: find)
+                            }
+                        }
+                    }
+                    if let open = actions.openInGitHub {
+                        Section {
+                            Button(String(localized: "Open in GitHub", bundle: .module), systemImage: "arrow.up.right", action: open)
+                        }
+                    }
+                    if let archive = actions.toggleArchive {
+                        Section {
+                            Button(
+                                document.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
+                                systemImage: "archivebox", action: archive
+                            )
+                        }
+                    }
+                    if let delete = actions.delete, document.access.canEdit {
+                        Section {
+                            Button(String(localized: "Delete gist", bundle: .module), systemImage: "trash", role: .destructive, action: delete)
+                        }
+                    }
                 } label: {
-                    Label(String(localized: "Files in this gist", bundle: .module), systemImage: "doc.on.doc")
+                    Label(String(localized: "Note actions", bundle: .module), systemImage: "ellipsis")
                 }
-            }
-        }
-        if let focus = actions.focus {
-            ToolbarItem(placement: .secondaryAction) {
-                Button(
-                    isFocused ? String(localized: "Library", bundle: .module) : String(localized: "Source & Preview", bundle: .module),
-                    systemImage: isFocused ? "sidebar.left" : "rectangle.split.2x1", action: focus)
-                    .disabled(!document.access.canEdit)
-            }
-        }
-        if let tags = actions.tags {
-            ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Tags", bundle: .module), systemImage: "tag", action: tags)
-            }
-        } else if !document.tags.isEmpty {
-            ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Tags", bundle: .module), systemImage: "tag") { showingTags = true }
-            }
-        }
-        if let pin = actions.togglePin {
-            ToolbarItem(placement: .secondaryAction) {
-                Button(
-                    document.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
-                    systemImage: document.isPinned ? "pin.slash" : "pin", action: pin
-                )
-            }
-        }
-        if let star = actions.toggleStar {
-            ToolbarItem(placement: .secondaryAction) {
-                Button(
-                    document.isStarred ? String(localized: "Unstar", bundle: .module) : String(localized: "Star", bundle: .module),
-                    systemImage: document.isStarred ? "star.slash" : "star", action: star
-                )
-            }
-        }
-        if let archive = actions.toggleArchive {
-            ToolbarItem(placement: .secondaryAction) {
-                Button(
-                    document.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
-                    systemImage: "archivebox", action: archive
-                )
-            }
-        }
-        if let delete = actions.delete, document.access.canEdit {
-            ToolbarItem(placement: .secondaryAction) {
-                Button(
-                    String(localized: "Delete gist", bundle: .module),
-                    systemImage: "trash", role: .destructive, action: delete
-                )
-            }
-        }
-        if let copy = actions.copyLink {
-            ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Copy Link", bundle: .module), systemImage: "link", action: copy)
-            }
-        }
-        if let open = actions.openInGitHub {
-            ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Open in GitHub", bundle: .module), systemImage: "arrow.up.right", action: open)
+                .accessibilityIdentifier("note-actions")
             }
         }
     }
 
+    private var showsManualSave: Bool {
+        saveState.showsManualSave(isAutoSaveEnabled: document.isAutoSaveEnabled)
+    }
+
+    private var hasMoreActions: Bool {
+        showsFiles || actions.focus != nil || actions.find != nil || actions.tags != nil || !document.tags.isEmpty
+            || actions.togglePin != nil || actions.toggleStar != nil || actions.share != nil || actions.copyLink != nil
+            || actions.openInGitHub != nil || actions.toggleArchive != nil || (actions.delete != nil && document.access.canEdit)
+    }
+
     private var status: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if document.access == .truncated {
-                Label(
-                    String(localized: "GitHub returned an incomplete note. Editing is unavailable to protect the original.", bundle: .module),
-                    systemImage: "exclamationmark.shield"
-                )
-            } else if document.access == .readOnly {
-                Label(String(localized: "Read-only note", bundle: .module), systemImage: "eye")
+        Group {
+            if let issue {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(issue.title, systemImage: issue.symbol)
+                        HStack(spacing: 16) { recoveryButton; detailsButton(issue.details) }
+                    }
+                } else {
+                    HStack(spacing: 12) {
+                        Label(issue.title, systemImage: issue.symbol)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        recoveryButton
+                        detailsButton(issue.details)
+                    }
+                }
             }
-            saveStatus
         }
         .font(.footnote)
-        .foregroundStyle(.primary)
-        .fixedSize(horizontal: false, vertical: true)
+        .foregroundStyle(InterfaceTheme.text)
         .accessibilityIdentifier("note-save-state")
         .contentTransition(.opacity)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: saveState)
     }
 
-    @ViewBuilder
-    private var saveStatus: some View {
+    private var issue: (title: String, symbol: String, details: String?)? {
+        if document.access == .truncated {
+            return (
+                String(localized: "Incomplete note. Editing is unavailable.", bundle: .module), "exclamationmark.shield",
+                String(localized: "GitHub returned an incomplete note. Editing is unavailable to protect the original.", bundle: .module)
+            )
+        }
+        guard saveState.needsAttention else { return nil }
         switch saveState {
-        case .inMemoryFixture:
-            Text("In-memory fixture. Not saved.", bundle: .module)
-        case .unsaved:
-            Label(String(localized: "Not saved yet", bundle: .module), systemImage: "doc")
-        case .savedLocally:
-            Label(String(localized: "Saved on this iPhone", bundle: .module), systemImage: "iphone")
-        case .offline:
-            Label(String(localized: "Offline. Changes haven't synced to GitHub.", bundle: .module), systemImage: "icloud.slash")
-        case .savingToGitHub:
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Saving to GitHub", bundle: .module)
-            }
-            .accessibilityElement(children: .combine)
-        case .savedToGitHub:
-            Label(String(localized: "Saved to GitHub", bundle: .module), systemImage: "checkmark")
         case .cloudFailure(let message):
-            Label(
-                String(localized: "Saved on this iPhone. Couldn't save to GitHub.", bundle: .module),
-                systemImage: "exclamationmark.circle"
-            )
-            Text(verbatim: message)
-            retryButton
+            return (String(localized: "Couldn't sync to GitHub.", bundle: .module), "exclamationmark.circle", message)
         case .localFailure(let message):
-            Label(
-                String(localized: "Couldn't save on this iPhone. Keep the editor open.", bundle: .module),
-                systemImage: "exclamationmark.triangle"
-            )
-            Text(verbatim: message)
-            retryButton
+            return (String(localized: "Changes aren't saved. Keep this note open.", bundle: .module), "exclamationmark.triangle", message)
         case .remoteChange:
-            Label(String(localized: "This note changed elsewhere.", bundle: .module), systemImage: "exclamationmark.circle")
-            if let review = actions.reviewChanges {
-                Button(String(localized: "Review changes", bundle: .module), action: review)
-                    .frame(minHeight: 44)
-            }
+            return (String(localized: "This note changed elsewhere.", bundle: .module), "exclamationmark.circle", nil)
         case .reconnectRequired:
-            Label(
-                String(localized: "Saved on this iPhone. Reconnect GitHub to publish changes.", bundle: .module),
-                systemImage: "person.crop.circle"
-            )
-            if let reconnect = actions.reconnect {
-                Button(String(localized: "Reconnect GitHub", bundle: .module), action: reconnect)
-                    .frame(minHeight: 44)
-            }
+            return (String(localized: "Reconnect GitHub to sync.", bundle: .module), "person.crop.circle", nil)
         case .creationUncertain:
-            Label(
-                String(localized: "Saved on this iPhone. GitHub may already have created this gist. Check GitHub before trying again.", bundle: .module),
-                systemImage: "exclamationmark.circle"
+            return (
+                String(localized: "GitHub couldn't confirm creation.", bundle: .module), "exclamationmark.circle",
+                String(localized: "GitHub may already have created this gist. Check GitHub before trying again.", bundle: .module)
             )
-            if let open = actions.openInGitHub {
-                Button(String(localized: "Check GitHub", bundle: .module), action: open)
-                    .frame(minHeight: 44)
-            }
         case .publicationUncertain:
-            Label(
-                String(localized: "Saved on this iPhone. GitHub couldn't confirm the last save.", bundle: .module),
-                systemImage: "exclamationmark.circle"
-            )
-            if let retry = actions.retry {
-                Button(String(localized: "Check save status", bundle: .module), action: retry)
-                    .frame(minHeight: 44)
-            }
+            return (String(localized: "GitHub couldn't confirm the last save.", bundle: .module), "exclamationmark.circle", nil)
         case .publicationBlocked(let message):
-            Label(String(localized: "Saved on this iPhone. Publishing is unavailable.", bundle: .module), systemImage: "exclamationmark.shield")
-            Text(verbatim: message)
+            return (String(localized: "Publishing is unavailable.", bundle: .module), "exclamationmark.shield", message)
+        case .inMemoryFixture, .unsaved, .savedLocally, .offline, .savingToGitHub, .savedToGitHub:
+            return nil
         }
     }
 
     @ViewBuilder
-    private var retryButton: some View {
-        if let retry = actions.retry {
-            Button(String(localized: "Retry", bundle: .module), action: retry)
-                .frame(minHeight: 44)
+    private var recoveryButton: some View {
+        switch saveState {
+        case .cloudFailure, .localFailure:
+            if let retry = actions.retry {
+                Button(String(localized: "Retry", bundle: .module), action: retry).frame(minHeight: 44)
+            }
+        case .remoteChange:
+            if let review = actions.reviewChanges {
+                Button(String(localized: "Review", bundle: .module), action: review).frame(minHeight: 44)
+            }
+        case .reconnectRequired:
+            if let reconnect = actions.reconnect {
+                Button(String(localized: "Reconnect", bundle: .module), action: reconnect).frame(minHeight: 44)
+            }
+        case .creationUncertain:
+            if let open = actions.openInGitHub {
+                Button(String(localized: "Check GitHub", bundle: .module), action: open).frame(minHeight: 44)
+            }
+        case .publicationUncertain:
+            if let retry = actions.retry {
+                Button(String(localized: "Check Status", bundle: .module), action: retry).frame(minHeight: 44)
+            }
+        default:
+            if document.access == .truncated, let open = actions.openInGitHub {
+                Button(String(localized: "Open in GitHub", bundle: .module), action: open).frame(minHeight: 44)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func detailsButton(_ details: String?) -> some View {
+        if let details, !details.isEmpty {
+            Button {
+                saveDetails = details
+            } label: {
+                Label(String(localized: "Details", bundle: .module), systemImage: "info.circle")
+            }
+            .labelStyle(.iconOnly)
+            .frame(minWidth: 44, minHeight: 44)
         }
     }
 

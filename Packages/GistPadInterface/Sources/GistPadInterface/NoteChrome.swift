@@ -1,7 +1,7 @@
 import Foundation
 
 public enum NoteMode: String, Sendable {
-    case reading, source
+    case reading, source, split
 }
 
 public struct NoteFile: Equatable, Identifiable, Sendable {
@@ -35,6 +35,21 @@ public enum NoteSaveState: Equatable, Sendable {
         switch self {
         case .unsaved, .savedLocally, .offline, .cloudFailure: true
         default: false
+        }
+
+        var needsAttention: Bool {
+            switch self {
+            case .cloudFailure, .localFailure, .remoteChange, .reconnectRequired,
+                 .creationUncertain, .publicationUncertain, .publicationBlocked:
+                true
+            case .inMemoryFixture, .unsaved, .savedLocally, .offline, .savingToGitHub, .savedToGitHub:
+                false
+            }
+        }
+
+        func showsManualSave(isAutoSaveEnabled: Bool) -> Bool {
+            if case .cloudFailure = self { return true }
+            return !isAutoSaveEnabled
         }
     }
 }
