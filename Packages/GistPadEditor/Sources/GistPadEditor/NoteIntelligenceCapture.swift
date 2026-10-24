@@ -40,7 +40,7 @@
       "# Saturday walk\n\nTake teh river path.\nLeave at 9am, before the cafe opens at 8am."
     static let supportedStates: Set<String> = [
       "ask", "ask-keyboard", "answer", "edit", "review", "review-end", "readonly",
-      "unavailable", "error", "edit-applied", "review-applied", "working",
+      "unavailable", "error", "edit-applied", "review-applied", "working", "edit-long-request",
     ]
     let state: String
     let session: DocumentSession
@@ -59,6 +59,15 @@
       model = NoteIntelligenceModel(session: session, backend: backend, isCurrent: { true })
       model.askPrompt = "What's the plan for this morning?"
       model.editPrompt = "Fix the spelling without changing the meaning."
+      if state == "edit-long-request" {
+        model.editPrompt =
+          """
+          Fix the spelling without changing the meaning, voice or structure of this note. Keep the \
+          route, departure time and cafe opening time exactly as written. Preserve the Markdown \
+          heading and paragraph breaks. Explain each suggested change so I can review it before \
+          applying anything. Do not add information, remove details or make the note more formal.
+          """
+      }
       if state.hasPrefix("edit") {
         model.action = .edit
       } else if state.hasPrefix("review") || state == "readonly" {

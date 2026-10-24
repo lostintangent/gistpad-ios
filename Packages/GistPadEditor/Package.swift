@@ -16,6 +16,8 @@ let package = Package(
       resources: [.process("Resources")]),
     .testTarget(
       name: "GistPadEditorTests",
-      dependencies: ["GistPadEditor", "GistPadIntelligence", "GistPadAppearance"]),
+      dependencies: [
+        "GistPadEditor", "GistPadIntelligence", "GistPadInterface", "GistPadAppearance",
+      ]),
   ]
 )

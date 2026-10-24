@@ -192,6 +192,11 @@
             Text(model.submittedPrompt ?? model.prompt)
               .font(.callout)
               .foregroundStyle(.secondary)
+              .lineLimit(2)
+              .truncationMode(.tail)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .accessibilityLabel(model.submittedPrompt ?? model.prompt)
+              .accessibilityIdentifier("intelligence-submitted-request")
             Button(String(localized: "Edit Request", bundle: .module)) {
               model.clearResults()
               promptFocused = true
@@ -199,6 +204,7 @@
             .font(.callout)
             .disabled(model.isRunning)
           }
+          .frame(maxWidth: .infinity, alignment: .leading)
         } else {
           TextField(
             model.action == .ask
@@ -357,6 +363,9 @@
           Text("No changes suggested.", bundle: .module).foregroundStyle(.secondary)
         }
         ForEach(proposal.comments) { comment in
+          let comparison = comment.replacement.map {
+            NoteTextDiff(before: comment.quote, after: $0)
+          }
           VStack(alignment: .leading, spacing: 12) {
             Text(comment.reason).font(.headline)
             VStack(alignment: .leading, spacing: 6) {
@@ -369,16 +378,22 @@
               if comment.quote.isEmpty {
                 Text("Empty note", bundle: .module).foregroundStyle(.secondary)
               } else {
-                Text(comment.quote).textSelection(.enabled)
+                if let comparison {
+                  Text(NoteIntelligenceDiffText.attributed(comparison.before))
+                    .textSelection(.enabled)
+                } else {
+                  Text(comment.quote).textSelection(.enabled)
+                }
               }
             }
-            if let replacement = comment.replacement {
+            if let replacement = comment.replacement, let comparison {
               VStack(alignment: .leading, spacing: 6) {
                 Text("After", bundle: .module).font(.caption).fontWeight(.semibold)
                 if replacement.isEmpty {
                   Text("Remove this text", bundle: .module).foregroundStyle(.secondary)
                 } else {
-                  Text(replacement).textSelection(.enabled)
+                  Text(NoteIntelligenceDiffText.attributed(comparison.after))
+                    .textSelection(.enabled)
                 }
               }
             }
@@ -426,6 +441,27 @@
       guard model.canReveal(range) else { return }
       revealSource(range)
       dismiss()
+    }
+  }
+
+  enum NoteIntelligenceDiffText {
+    static func attributed(_ runs: [NoteTextDiff.Run]) -> AttributedString {
+      var result = AttributedString()
+      for run in runs {
+        var text = AttributedString(run.text)
+        switch run.kind {
+        case .unchanged:
+          text.foregroundColor = .primary
+        case .removed:
+          text.foregroundColor = .secondary
+          text.strikethroughStyle = Text.LineStyle(pattern: .solid)
+        case .added:
+          text.foregroundColor = InterfaceTheme.accent
+          text.font = .body.weight(.semibold)
+        }
+        result += text
+      }
+      return result
     }
   }
 #endif

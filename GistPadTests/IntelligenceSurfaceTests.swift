@@ -32,6 +32,7 @@
       Capture(state: "answer", accent: "#FACC15"),
       Capture(state: "answer", dark: true, accent: "#FACC15"),
       Capture(state: "edit", dark: true, accent: "#FACC15"),
+      Capture(state: "edit-long-request", accessibility: true),
     ])
     func nativeSheetContentWithAnExplicitFakeModel(capture: Capture) async throws {
       let fixture = NoteIntelligenceCaptureFixture(state: capture.state)
