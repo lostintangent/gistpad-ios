@@ -32,13 +32,25 @@ struct PreviewAppearanceTests {
         }
     }
 
-    @Test("Native typography metrics retain system sans at Large and AX3")
+    @Test("Heading sizes preserve Large and follow native text-style point growth at every category")
     func systemHeadingMetrics() {
-        for size: UIContentSizeCategory in [.large, .accessibilityExtraLarge] {
+        let largeTraits = UITraitCollection { $0.preferredContentSizeCategory = .large }
+        let categories: [UIContentSizeCategory] = [
+            .extraSmall, .small, .medium, .large, .extraLarge, .extraExtraLarge, .extraExtraExtraLarge,
+            .accessibilityMedium, .accessibilityLarge, .accessibilityExtraLarge,
+            .accessibilityExtraExtraLarge, .accessibilityExtraExtraExtraLarge
+        ]
+        for size in categories {
             let traits = UITraitCollection { $0.preferredContentSizeCategory = size }
             let appearance = PreviewAppearance(traits: traits)
-            for (name, style): (String, UIFont.TextStyle) in [("title1", .title1), ("title2", .title2)] {
-                let font = UIFont.preferredFont(forTextStyle: style, compatibleWith: traits)
+            let headings: [(String, UIFont.TextStyle, CGFloat)] = [
+                ("title1", .largeTitle, 34), ("title2", .title2, 25.5), ("title3", .title3, 21.25)
+            ]
+            for (name, style, largeSize) in headings {
+                let preferred = UIFont.preferredFont(forTextStyle: style, compatibleWith: traits)
+                let reference = UIFont.preferredFont(forTextStyle: style, compatibleWith: largeTraits)
+                let expectedSize = largeSize + preferred.pointSize - reference.pointSize
+                let font = UIFont(descriptor: preferred.fontDescriptor, size: expectedSize)
                 #expect(appearance.variables["--gp-\(name)-size"] == "\(font.pointSize)px")
                 #expect(appearance.variables["--gp-\(name)-line-height"] == "\(font.lineHeight)px")
             }

@@ -14,11 +14,11 @@
   --gp-selected-surface: light-dark(#e7f6fd, #0b3548);
   --gp-body-size: 17px;
   --gp-body-line-height: 22px;
-  --gp-title1-size: 28px;
+  --gp-title1-size: 34px;
   --gp-title1-line-height: 34px;
-  --gp-title2-size: 22px;
+  --gp-title2-size: 25.5px;
   --gp-title2-line-height: 28px;
-  --gp-title3-size: 20px;
+  --gp-title3-size: 21.25px;
   --gp-title3-line-height: 25px;
   --gp-headline-size: 17px;
   --gp-headline-line-height: 22px;
@@ -43,11 +43,11 @@ body { margin: 0; }
 main { padding: 24px 20px 40px; overflow-wrap: anywhere; }
 article { max-width: 64ch; margin-inline: auto; line-height: max(1.75em, var(--gp-body-line-height)); }
 article > :first-child { margin-top: 0; }
-h1, h2, h3, h4, h5, h6 { scroll-margin-top: 16px; margin-block: 1.25em .55em; }
-.prose h1 { font-size: 2rem; line-height: 1.111111; font-weight: 700; margin-block: 0 1.777778rem; }
-.prose h2 { font-size: 1.5rem; line-height: 1.333333; font-weight: 600; margin-block: 3rem 1.5rem; }
+h1, h2, h3, h4, h5, h6 { scroll-margin-top: 16px; margin-block: 1.25em .55em; word-break: normal; overflow-wrap: break-word; }
+.prose h1 { font-size: var(--gp-title1-size); line-height: 1.111111; font-weight: 700; margin-block: 0 1.777778rem; }
+.prose h2 { font-size: var(--gp-title2-size); line-height: 1.333333; font-weight: 600; margin-block: 3rem 1.5rem; }
 .prose :is(h1, h2) { padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
-.prose h3 { font-size: 1.25rem; line-height: 1.6; font-weight: 600; margin-block: 2rem .75rem; }
+.prose h3 { font-size: var(--gp-title3-size); line-height: 1.6; font-weight: 600; margin-block: 2rem .75rem; }
 .prose :is(h4,h5,h6) { font-size: var(--gp-headline-size); line-height: var(--gp-headline-line-height); font-weight: 600; margin-block: 1.411765rem .470588rem; }
 .prose > :first-child { margin-top: 0; }
 p { margin-block: 1.25em; }

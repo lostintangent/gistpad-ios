@@ -221,7 +221,8 @@ struct PreviewWebKitTests {
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 402, height: 874), configuration: configuration)
         webView.navigationDelegate = receiver
         let controller = UIViewController()
-        controller.view = webView
+        controller.view = UIView(frame: webView.frame)
+        controller.view.addSubview(webView)
         let window = testWindow(frame: webView.frame)
         window.rootViewController = controller
         window.makeKeyAndVisible()
@@ -461,6 +462,7 @@ struct PreviewWebKitTests {
         }
 
         try await verifyReadingPolish(in: webView, receiver: receiver)
+        try await verifyHeadingWrapping(in: webView, receiver: receiver)
 
         let stress = "# A long synthetic note\n" + (0..<500).map { index in
             "\n## Section \(index)\n\nNative source remains canonical. 👩🏽‍💻 café é 日本語のメモ。中文笔记。مرحبا بالعالم. שלום עולם.\n\n- [ ] Repeated task \(index)\n\nA paragraph with **emphasis**, `inline code`, [[Ideas]], and a [safe link](https://gistpad.dev).\n"
@@ -492,7 +494,7 @@ struct PreviewWebKitTests {
         }
         for style: UIUserInterfaceStyle in [.light, .dark] {
             for contrast: UIAccessibilityContrast in [.normal, .high] {
-                for size: UIContentSizeCategory in [.large, .accessibilityExtraLarge] {
+                for size: UIContentSizeCategory in [.large, .accessibilityExtraLarge, .accessibilityExtraExtraExtraLarge] {
                     let traits = UITraitCollection {
                         $0.userInterfaceStyle = style
                         $0.accessibilityContrast = contrast
@@ -597,7 +599,7 @@ struct PreviewWebKitTests {
                                 const heading = getComputedStyle(document.querySelector(selector));
                                 return heading.fontFamily.includes('-apple-system') &&
                                     Math.abs(parseFloat(heading.fontSize) -
-                                        parseFloat(styles.fontSize) * [2, 1.5, 1.25][index]) < .1;
+                                        parseFloat(styles.getPropertyValue(`--gp-title${index + 1}-size`))) < .1;
                             }),
                             ['h1', 'h2'].every(selector => {
                                 const heading = getComputedStyle(document.querySelector(selector));
@@ -648,6 +650,69 @@ struct PreviewWebKitTests {
             arguments: [:], in: nil, contentWorld: .page
         ) as? Bool
         #expect(disclosureWorks == true)
+    }
+
+    private func verifyHeadingWrapping(in webView: WKWebView, receiver: MessageReceiver) async throws {
+        let document = PreviewDocument(text: try PreviewFixtures.headingWrapping, id: "heading-wrapping", generation: 0)
+        _ = try await webView.callAsyncJavaScript(
+            "window.gistpadPreview.render(payload);",
+            arguments: ["payload": document.arguments], in: nil, contentWorld: .page
+        )
+        try await waitFor("heading wrapping fixture") {
+            receiver.bodies.contains { $0["type"] as? String == "rendered" && $0["documentID"] as? String == "heading-wrapping" }
+        }
+        let originalFrame = webView.frame
+        defer { webView.frame = originalFrame }
+        for width: CGFloat in [382, 834] {
+            webView.frame.size.width = width
+            for size: UIContentSizeCategory in [.large, .accessibilityExtraLarge, .accessibilityExtraExtraExtraLarge] {
+                for style: UIUserInterfaceStyle in [.light, .dark] {
+                    let traits = UITraitCollection {
+                        $0.preferredContentSizeCategory = size
+                        $0.userInterfaceStyle = style
+                    }
+                    let appearance = PreviewAppearance(traits: traits)
+                    let checks = try await webView.callAsyncJavaScript(
+                        """
+                        window.gistpadPreview.setAppearance(payload);
+                        await new Promise(resolve => requestAnimationFrame(resolve));
+                        const headings = ['h1', 'h2', 'h3'].map(selector => document.querySelector(selector));
+                        const wholeWords = headings.every(heading => {
+                            if (heading.textContent !== 'The shape of a notebook') return false;
+                            const text = heading.firstChild;
+                            return [...text.textContent.matchAll(/\\S+/g)].every(word => {
+                                const range = document.createRange();
+                                range.setStart(text, word.index);
+                                range.setEnd(text, word.index + word[0].length);
+                                return range.getClientRects().length === 1;
+                            });
+                        });
+                        const oversized = document.querySelectorAll('h1')[1];
+                        const range = document.createRange();
+                        range.selectNodeContents(oversized);
+                        return [
+                            window.innerWidth === width,
+                            wholeWords,
+                            headings.every(heading => getComputedStyle(heading).wordBreak === 'normal' &&
+                                getComputedStyle(heading).overflowWrap === 'break-word'),
+                            range.getClientRects().length > 1,
+                            document.documentElement.scrollWidth <= window.innerWidth
+                        ];
+                        """,
+                        arguments: ["payload": appearance.arguments, "width": width], in: nil, contentWorld: .page
+                    ) as? [Bool]
+                    for (index, passed) in try #require(checks).enumerated() {
+                        #expect(passed, "Heading wrapping check \(index), \(width)/\(size.rawValue)/\(style.rawValue)")
+                    }
+                    if width == 382, style == .dark {
+                        Attachment.record(
+                            String(describing: appearance.variables),
+                            named: "heading-metrics-\(size.rawValue).txt"
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private func testWindow(frame: CGRect) -> UIWindow {

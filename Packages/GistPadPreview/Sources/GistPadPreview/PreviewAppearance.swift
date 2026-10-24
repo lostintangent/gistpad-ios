@@ -34,11 +34,24 @@ struct PreviewAppearance: Equatable {
             "--gp-selected-surface": accent.selectedSurface.hex
         ]
         let styles: [(String, UIFont.TextStyle)] = [
-            ("body", .body), ("title1", .title1), ("title2", .title2),
-            ("title3", .title3), ("headline", .headline), ("footnote", .footnote)
+            ("body", .body), ("headline", .headline), ("footnote", .footnote)
         ]
         for (name, style) in styles {
             let font = UIFont.preferredFont(forTextStyle: style, compatibleWith: traits)
+            values["--gp-\(name)-size"] = "\(font.pointSize)px"
+            values["--gp-\(name)-line-height"] = "\(font.lineHeight)px"
+        }
+        let largeTraits = UITraitCollection { $0.preferredContentSizeCategory = .large }
+        let largeBody = UIFont.preferredFont(forTextStyle: .body, compatibleWith: largeTraits)
+        let headings: [(String, UIFont.TextStyle, CGFloat)] = [
+            ("title1", .largeTitle, 2), ("title2", .title2, 1.5), ("title3", .title3, 1.25)
+        ]
+        for (name, style, largeRatio) in headings {
+            let preferred = UIFont.preferredFont(forTextStyle: style, compatibleWith: traits)
+            let reference = UIFont.preferredFont(forTextStyle: style, compatibleWith: largeTraits)
+            // Preserve the approved Large baseline and UIKit's per-style point growth.
+            let size = largeBody.pointSize * largeRatio + preferred.pointSize - reference.pointSize
+            let font = UIFont(descriptor: preferred.fontDescriptor, size: size)
             values["--gp-\(name)-size"] = "\(font.pointSize)px"
             values["--gp-\(name)-line-height"] = "\(font.lineHeight)px"
         }

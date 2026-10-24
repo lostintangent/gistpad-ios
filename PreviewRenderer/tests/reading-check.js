@@ -93,7 +93,11 @@ async (page) => {
 
   for (const dark of [false, true]) {
     for (const increasedContrast of [false, true]) {
-      for (const bodySize of [17, 36]) {
+      for (const { bodySize, headingSizes } of [
+        { bodySize: 17, headingSizes: [34, 25.5, 21.25] },
+        { bodySize: 40, headingSizes: [52, 47.5, 44.25] },
+        { bodySize: 53, headingSizes: [60, 59.5, 56.25] },
+      ]) {
         const payload = {
           colorScheme: dark ? "dark" : "light", increasedContrast, boldText: false,
           variables: {
@@ -108,9 +112,9 @@ async (page) => {
             "--gp-separator": dark ? "#38383a" : "#c6c6c8",
             "--gp-boundary": dark ? "#545458" : "#8e8e93",
             "--gp-error": "#ff3b30", "--gp-success": "#34c759",
-            "--gp-accent-text": bodySize === 36 ? (dark ? "#facc15" : "#665200")
+            "--gp-accent-text": bodySize !== 17 ? (dark ? "#facc15" : "#665200")
               : increasedContrast ? (dark ? "#bae6fd" : "#075985") : (dark ? "#7dd3fc" : "#0369a1"),
-            "--gp-accent-fill": bodySize === 36 ? "#facc15"
+            "--gp-accent-fill": bodySize !== 17 ? "#facc15"
               : increasedContrast ? (dark ? "#7dd3fc" : "#0ea5e9") : (dark ? "#38bdf8" : "#0ea5e9"),
             "--gp-on-accent": "#0f172a",
             "--gp-selected-surface": increasedContrast ? (dark ? "#134b63" : "#d4eefc") : (dark ? "#0b3548" : "#e7f6fd"),
@@ -118,6 +122,7 @@ async (page) => {
               "title2-size", "title2-line-height", "title3-size", "title3-line-height",
               "headline-size", "headline-line-height", "footnote-size", "footnote-line-height", "code-size"]
               .map((name) => [`--gp-${name}`, `${bodySize}px`])),
+            ...Object.fromEntries(headingSizes.map((size, index) => [`--gp-title${index + 1}-size`, `${size}px`])),
           },
         };
         await page.evaluate((payload) => window.gistpadPreview.setAppearance(payload), payload);
@@ -181,7 +186,7 @@ async (page) => {
             bodyTables: getComputedStyle(document.querySelector("td")).fontSize === page.fontSize,
             headingScale: ["h1", "h2", "h3"].every((selector, index) =>
               Math.abs(parseFloat(getComputedStyle(document.querySelector(selector)).fontSize) -
-                parseFloat(page.fontSize) * [2, 1.5, 1.25][index]) < .1),
+                parseFloat(page.getPropertyValue(`--gp-title${index + 1}-size`))) < .1),
             headingRules: ["h1", "h2"].every((selector) => {
               const heading = getComputedStyle(document.querySelector(selector));
               return heading.borderBottomWidth === "1px" &&
@@ -246,6 +251,36 @@ async (page) => {
       if (!passed) throw new Error(`Manga check failed: ${width}/${name}`);
     }
   }
-  await page.getByRole("heading", { name: "👓 Currently reading (volume)", exact: true }).scrollIntoViewIfNeeded();
-  return { fixtures: ["reading-polish", "manga-reading"], themes: 4, textSizes: 2, externalRequests: "blocked" };
+  const wrappingResponse = await page.request.get(`${base}/Fixtures/heading-wrapping.md`);
+  if (!wrappingResponse.ok()) throw new Error("Heading wrapping fixture is missing");
+  await page.evaluate((markdown) =>
+    window.gistpadPreview.render({ version: 1, documentID: "heading-wrapping", generation: "1", markdown }),
+  await wrappingResponse.text());
+  await page.getByRole("heading", { level: 3, name: "The shape of a notebook", exact: true }).waitFor();
+  for (const width of [382, 834]) {
+    await page.setViewportSize({ width, height: 874 });
+    const checks = await page.evaluate(() => {
+      const headings = ["h1", "h2", "h3"].map((selector) => document.querySelector(selector));
+      const oversized = document.querySelectorAll("h1")[1];
+      const oversizedRange = document.createRange();
+      oversizedRange.selectNodeContents(oversized);
+      return {
+        wholeWords: headings.every((heading) => {
+          const text = heading.firstChild;
+          return [...text.textContent.matchAll(/\S+/g)].every((word) => {
+            const range = document.createRange();
+            range.setStart(text, word.index);
+            range.setEnd(text, word.index + word[0].length);
+            return range.getClientRects().length === 1;
+          });
+        }),
+        emergencyWrapping: oversizedRange.getClientRects().length > 1,
+        noPageOverflow: document.documentElement.scrollWidth <= window.innerWidth,
+      };
+    });
+    for (const [name, passed] of Object.entries(checks)) {
+      if (!passed) throw new Error(`Heading wrapping check failed: ${width}/${name}`);
+    }
+  }
+  return { fixtures: ["reading-polish", "manga-reading", "heading-wrapping"], themes: 4, textSizes: 3, externalRequests: "blocked" };
 }
