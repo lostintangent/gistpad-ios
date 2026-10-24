@@ -4,6 +4,7 @@ import SwiftUI
 import Testing
 import UIKit
 import WebKit
+import GistPadAppearance
 @testable import GistPadPreview
 
 @MainActor
@@ -20,7 +21,7 @@ struct PreviewWebKitTests {
             document: document, documentID: "read-only", generation: 0,
             allowsTaskEdits: false
         ) { events.append($0) }
-        let controller = UIHostingController(rootView: preview)
+        let controller = UIHostingController(rootView: preview.environment(\.personalAccent, PersonalAccent()))
         let container = UIViewController()
         container.title = "Reading"
         container.toolbarItems = [UIBarButtonItem(systemItem: .action)]
@@ -111,6 +112,7 @@ struct PreviewWebKitTests {
             document: document + "\n", documentID: "read-only", generation: 1,
             allowsTaskEdits: false
         ) { events.append($0) }
+            .environment(\.personalAccent, PersonalAccent())
         try await waitFor("same-document update") {
             events.contains {
                 if case .rendered(documentID: "read-only", generation: 1) = $0 { return true }
@@ -120,6 +122,42 @@ struct PreviewWebKitTests {
         let updated = try await viewportGeometry(in: webView, selector: "input[type=checkbox]")
         Attachment.record(String(describing: updated), named: "native-preview-updated-geometry.txt")
         #expect(findWebView(in: controller.view) === webView)
+        #expect(abs(webView.scrollView.contentOffset.y - readingOffset.y) <= 1)
+        _ = try await webView.callAsyncJavaScript(
+            """
+            window.accentParagraph = document.querySelector('article > p');
+            const range = document.createRange();
+            range.selectNodeContents(window.accentParagraph);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            window.accentSelection = selection.toString();
+            """,
+            arguments: [:], in: nil, contentWorld: .page
+        )
+        controller.rootView = MarkdownPreviewView(
+            document: document + "\n", documentID: "read-only", generation: 1,
+            allowsTaskEdits: false
+        ) { events.append($0) }
+            .environment(\.personalAccent, PersonalAccent(savedHex: "#FACC15"))
+        let personalTraits = webView.traitCollection.modifyingTraits {
+            $0[PersonalAccentTrait.self] = PersonalAccent(savedHex: "#FACC15")
+        }
+        let expectedAccent = PersonalAccent(savedHex: "#FACC15").roles(traits: personalTraits).text.hex
+        var accentApplied = false
+        for _ in 0..<100 {
+            accentApplied = try await webView.callAsyncJavaScript(
+                """
+                return getComputedStyle(document.documentElement).getPropertyValue('--gp-accent-text').trim() === expected &&
+                    document.querySelector('article > p') === window.accentParagraph &&
+                    window.getSelection().toString() === window.accentSelection;
+                """,
+                arguments: ["expected": expectedAccent], in: nil, contentWorld: .page
+            ) as? Bool == true
+            if accentApplied { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(accentApplied)
         #expect(abs(webView.scrollView.contentOffset.y - readingOffset.y) <= 1)
         try await Task.sleep(for: .milliseconds(100))
         #expect(!events.contains {

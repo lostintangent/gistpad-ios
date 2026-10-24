@@ -1,11 +1,12 @@
 #if os(iOS)
 import SwiftUI
+import GistPadAppearance
 
 public enum InterfaceTheme {
-    public static let accent = Color("AccentText", bundle: .module)
-    public static let accentFill = Color("AccentFill", bundle: .module)
-    public static let onAccent = Color("OnAccent", bundle: .module)
-    public static let selection = Color("SelectedSurface", bundle: .module)
+    public static let accent = Color(uiColor: AccentRole.text.uiColor)
+    public static let accentFill = Color(uiColor: AccentRole.fill.uiColor)
+    public static let onAccent = Color(uiColor: AccentRole.onFill.uiColor)
+    public static let selection = Color(uiColor: AccentRole.selectedSurface.uiColor)
     public static let syntaxMuted = Color("SyntaxMuted", bundle: .module)
     public static let syntaxCode = Color("SyntaxCode", bundle: .module)
     public static let text = Color("Ink", bundle: .module)
@@ -13,6 +14,12 @@ public enum InterfaceTheme {
         colors: [Color("SpineTop", bundle: .module), Color("SpineBottom", bundle: .module)],
         startPoint: .top, endPoint: .bottom
     )
+}
+
+extension View {
+    public func personalAccent(savedHex: String?) -> some View {
+        environment(\.personalAccent, PersonalAccent(savedHex: savedHex))
+    }
 }
 
 extension LibraryCollection {

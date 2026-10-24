@@ -1,6 +1,7 @@
 #if os(iOS)
 import OSLog
 import UIKit
+import GistPadAppearance
 
 struct PreviewAppearance: Equatable {
     let variables: [String: String]
@@ -14,9 +15,7 @@ struct PreviewAppearance: Equatable {
         self.boldText = boldText ?? UIAccessibility.isBoldTextEnabled
         let dark = traits.userInterfaceStyle == .dark
         colorScheme = dark ? "dark" : "light"
-        let accent = increasedContrast ? (dark ? "#BAE6FD" : "#075985") : (dark ? "#7DD3FC" : "#0369A1")
-        let fill = increasedContrast ? (dark ? "#7DD3FC" : "#0EA5E9") : (dark ? "#38BDF8" : "#0EA5E9")
-        let selected = increasedContrast ? (dark ? "#134B63" : "#D4EEFC") : (dark ? "#0B3548" : "#E7F6FD")
+        let accent = traits[PersonalAccentTrait.self].roles(traits: traits)
         let ink = increasedContrast ? (dark ? "#F8FAFC" : "#0F172A") : (dark ? "#E2E8F0" : "#1E293B")
         let code = increasedContrast ? (dark ? "#F1F5F9" : "#334155") : (dark ? "#CBD5E1" : "#475569")
         var values = [
@@ -31,10 +30,10 @@ struct PreviewAppearance: Equatable {
             "--gp-boundary": Self.css(UIColor.opaqueSeparator.resolvedColor(with: traits)),
             "--gp-error": Self.css(UIColor.systemRed.resolvedColor(with: traits)),
             "--gp-success": Self.css(UIColor.systemGreen.resolvedColor(with: traits)),
-            "--gp-accent-text": accent,
-            "--gp-accent-fill": fill,
-            "--gp-on-accent": "#0F172A",
-            "--gp-selected-surface": selected
+            "--gp-accent-text": accent.text.hex,
+            "--gp-accent-fill": accent.fill.hex,
+            "--gp-on-accent": accent.onFill.hex,
+            "--gp-selected-surface": accent.selectedSurface.hex
         ]
         let styles: [(String, UIFont.TextStyle)] = [
             ("body", .body), ("title1", .title1), ("title2", .title2),

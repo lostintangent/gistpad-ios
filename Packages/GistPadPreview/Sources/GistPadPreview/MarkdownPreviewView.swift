@@ -2,6 +2,7 @@
 import SwiftUI
 import WebKit
 import OSLog
+import GistPadAppearance
 
 public struct MarkdownPreviewView: View {
     private let document: PreviewDocument
@@ -40,6 +41,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.legibilityWeight) private var legibilityWeight
+    @Environment(\.personalAccent) private var personalAccent
 
     init(
         document: PreviewDocument, allowsTaskEdits: Bool, verticalInsets: EdgeInsets,
@@ -89,6 +91,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             $0.userInterfaceStyle = colorScheme == .dark ? .dark : .light
             $0.accessibilityContrast = contrast == .increased ? .high : .normal
             $0.preferredContentSizeCategory = dynamicTypeSize.contentSizeCategory
+            $0[PersonalAccentTrait.self] = personalAccent
         }
         context.coordinator.appearance = PreviewAppearance(traits: traits, boldText: legibilityWeight == .bold)
         context.coordinator.update(document, allowsTaskEdits: allowsTaskEdits)
@@ -180,6 +183,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                 Task { @MainActor [weak self, weak webView] in
                     guard let webView else { return }
                     do {
+                        // Initial CSS metrics can still reset WebKit's native scroll origin.
                         _ = try await webView.callAsyncJavaScript(
                             "window.gistpadPreview.setAppearance(payload);",
                             arguments: ["payload": appearance.arguments],
@@ -227,13 +231,33 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                     Logger(subsystem: "dev.gistpad.GistPad", category: "MarkdownPreview")
                         .debug("Discarded a task edit after preview editing became unavailable.")
                 case .event(let event):
-                    if case .rendered = event, needsInitialScroll, let webView {
-                        webView.layoutIfNeeded()
-                        let insets = webView.scrollView.adjustedContentInset
-                        webView.scrollView.setContentOffset(CGPoint(x: -insets.left, y: -insets.top), animated: false)
-                        needsInitialScroll = false
+                    if case .rendered(let id, let generation) = event, needsInitialScroll, let webView {
+                        Task { @MainActor [weak self, weak webView] in
+                            guard let webView else { return }
+                            do {
+                                _ = try await webView.callAsyncJavaScript(
+                                    "await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));",
+                                    arguments: [:], in: nil, contentWorld: .page
+                                )
+                                guard let self, self.document.id == id, self.document.generation == generation else { return }
+                                if self.needsInitialScroll {
+                                    webView.layoutIfNeeded()
+                                    if !webView.scrollView.isTracking, !webView.scrollView.isDecelerating {
+                                        let insets = webView.scrollView.adjustedContentInset
+                                        webView.scrollView.setContentOffset(
+                                            CGPoint(x: -insets.left, y: -insets.top), animated: false
+                                        )
+                                    }
+                                    self.needsInitialScroll = false
+                                }
+                                self.onEvent(event)
+                            } catch {
+                                self?.onEvent(.failure(.webKit(error)))
+                            }
+                        }
+                    } else {
+                        onEvent(event)
                     }
-                    onEvent(event)
                 }
             } catch let failure as PreviewFailure {
                 onEvent(.failure(failure))

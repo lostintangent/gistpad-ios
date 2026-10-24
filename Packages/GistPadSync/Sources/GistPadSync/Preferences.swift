@@ -9,6 +9,8 @@ public struct Preferences: Codable, Equatable, Sendable {
     public init(metadata: [String: MetadataValue]) { self.metadata = metadata }
 
     public var isAutoSaveEnabled: Bool { metadata["isAutoSaveEnabled"]?.boolValue ?? true }
+    public var accentColor: String? { metadata["accentColor"]?.stringValue }
+    public var hasMalformedAccentColor: Bool { metadata["accentColor"] != nil && accentColor == nil }
     public var pinnedGists: [String] {
         metadata["pinnedGists"]?.arrayValue?.compactMap(\.stringValue) ?? []
     }
@@ -35,6 +37,7 @@ public enum BooleanPreference: String, Sendable {
 
 public enum PreferenceOperation: Sendable {
     case setBoolean(BooleanPreference, Bool)
+    case setAccentColor(String)
     case setPinned(gistID: String, pinned: Bool)
     case upsertTag(id: String, name: String, color: String?)
     case deleteTag(id: String)
@@ -44,6 +47,12 @@ public enum PreferenceOperation: Sendable {
         switch self {
         case .setBoolean(let preference, let value):
             return [preference.rawValue: .bool(value)]
+        case .setAccentColor(let hex):
+            guard hex.first == "#", hex.utf8.count == 7,
+                  hex.dropFirst().utf8.allSatisfy({
+                      (48...57).contains($0) || (65...70).contains($0) || (97...102).contains($0)
+                  }) else { throw PreferenceError.invalidShape("accentColor") }
+            return ["accentColor": .string(hex)]
         case .setPinned(let gistID, let pinned):
             try requireID(gistID)
             var pins = try strings(metadata["pinnedGists"], key: "pinnedGists")
