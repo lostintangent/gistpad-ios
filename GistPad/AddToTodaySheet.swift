@@ -101,7 +101,7 @@ struct AddToTodaySheet: View {
       }
       .disabled(isAdding)
       .interactiveDismissDisabled(isAdding)
-      .task { isFocused = true }
+      .task { isFocused = errorMessage == nil }
     }
     .presentationDetents([.medium, .large])
     .tint(InterfaceTheme.accent)

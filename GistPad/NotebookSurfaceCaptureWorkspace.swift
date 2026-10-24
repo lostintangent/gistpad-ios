@@ -145,7 +145,8 @@ struct NotebookSurfaceCaptureWorkspace: View {
 
   private var readinessMarker: some View {
     NotebookSurfaceReadinessMarker(
-      requiresKeyboard: screen == "capture-today", keyboardHeight: keyboardHeight,
+      requiresKeyboard: screen == "capture-today" && captureState != "error",
+      keyboardHeight: keyboardHeight,
       menuState: screen == "note-chrome" ? captureState : nil,
       failed: { readinessError = $0 }
     ) { window, keyboardHeight in
@@ -156,14 +157,23 @@ struct NotebookSurfaceCaptureWorkspace: View {
       else { return }
       let token = arguments[index + 1]
       do {
-        let data = try JSONSerialization.data(withJSONObject: [
+        var metadata: [String: Any] = [
           "screen": screen, "fixture": "native-surfaces", "token": token,
           "state": captureState ?? "resting",
           "accent": preferences.accentColor ?? "",
           "contentSizeCategory": window.traitCollection.preferredContentSizeCategory.rawValue,
           "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
           "keyboardHeight": keyboardHeight,
-        ], options: [.sortedKeys])
+        ]
+        if screen == "capture-today",
+          let writing = TodayCaptureWritingMetrics(window: window, keyboardHeight: keyboardHeight)
+        {
+          metadata["writingLineCount"] = writing.visibleLineCount
+          metadata["writingLineHeight"] = writing.lineHeight
+          metadata["writingVisibleHeight"] = writing.visibleHeight
+          metadata["captureCharacterCount"] = writing.characterCount
+        }
+        let data = try JSONSerialization.data(withJSONObject: metadata, options: [.sortedKeys])
         try data.write(
           to: FileManager.default.temporaryDirectory
             .appendingPathComponent("gistpad-capture-\(token).ready"),
@@ -299,6 +309,7 @@ private final class NotebookSurfaceReadinessController: UIViewController {
     readiness = Task { @MainActor in
       let deadline = ContinuousClock.now.advanced(by: .seconds(10))
       var previousHeight: CGFloat = 0
+      var previousWriting: TodayCaptureWritingMetrics?
       var stableSamples = 0
       do {
         while ContinuousClock.now < deadline {
@@ -306,18 +317,22 @@ private final class NotebookSurfaceReadinessController: UIViewController {
           guard view.window === window, !window.isHidden else { return }
           window.layoutIfNeeded()
           let height = keyboardHeight
-          if height >= 150, hasFocusedTextEditor(window) {
-            stableSamples = abs(height - previousHeight) < 0.5 ? stableSamples + 1 : 0
+          let writing = TodayCaptureWritingMetrics(window: window, keyboardHeight: height)
+          if height >= 150, let writing, writing.visibleLineCount >= 2 {
+            stableSamples =
+              abs(height - previousHeight) < 0.5 && writing == previousWriting
+              ? stableSamples + 1 : 0
             if stableSamples >= 3 { ready(window, height); return }
           } else {
             stableSamples = 0
           }
+          previousWriting = writing
           previousHeight = height
           try await Task.sleep(for: .milliseconds(16))
         }
         failed(
-          "The native Today editor did not acquire a visible, settled keyboard. "
-            + "Focused: \(hasFocusedTextEditor(window)), keyboard height: \(keyboardHeight).")
+          "The native Today editor needs a settled keyboard and two visible writing lines. "
+            + "Keyboard height: \(keyboardHeight), visible lines: \(previousWriting?.visibleLineCount ?? 0).")
       } catch is CancellationError {
         return
       } catch {
@@ -330,10 +345,6 @@ private final class NotebookSurfaceReadinessController: UIViewController {
     readiness?.cancel()
     readiness = nil
     super.viewWillDisappear(animated)
-  }
-
-  private func hasFocusedTextEditor(_ view: UIView) -> Bool {
-    (view is UITextView && view.isFirstResponder) || view.subviews.contains(where: hasFocusedTextEditor)
   }
 
   private func openMenu(_ menu: NotebookMenuCapture, in window: UIWindow) {
