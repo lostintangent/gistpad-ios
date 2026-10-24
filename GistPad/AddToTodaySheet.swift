@@ -10,7 +10,9 @@ struct AddToTodaySheet: View {
   @State private var isAdding = false
   @State private var errorMessage: String?
   @FocusState private var isFocused: Bool
+  @ScaledMetric(relativeTo: .body) private var writingLineHeight = 22.0
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   init(target: DailyNoteTarget = DailyNoteTarget()) {
     self.target = target
@@ -21,24 +23,41 @@ struct AddToTodaySheet: View {
       Form {
         Section {
           TextEditor(text: $text)
-            .frame(minHeight: 140)
+            .font(.body)
+            .frame(minHeight: max(140, writingLineHeight * 2 + 16))
             .focused($isFocused)
-            .accessibilityLabel("Text to add to Today")
+            .overlay(alignment: .topLeading) {
+              if text.isEmpty {
+                Text(asTask ? "Add a task…" : "Write a thought…")
+                  .foregroundStyle(.secondary)
+                  .padding(.horizontal, 5)
+                  .padding(.vertical, 8)
+                  .allowsHitTesting(false)
+                  .accessibilityHidden(true)
+              }
+            }
+            .accessibilityLabel(asTask ? Text("Task to add to Today") : Text("Text to add to Today"))
             .accessibilityIdentifier("today-capture-input")
-          Picker("Add as", selection: $asTask) {
-            Text("Text").tag(false)
-            Text("Task").tag(true)
+          if dynamicTypeSize.isAccessibilitySize {
+            kindPicker.pickerStyle(.menu)
+          } else {
+            kindPicker.pickerStyle(.segmented)
           }
-          .pickerStyle(.segmented)
-          .accessibilityIdentifier("today-capture-kind")
         } header: {
-          Text(target.filename.replacingOccurrences(of: ".md", with: ""))
+          destinationDate
         }
         if let errorMessage {
           Section {
-            Label(errorMessage, systemImage: "exclamationmark.triangle")
-              .foregroundStyle(.red)
-              .accessibilityIdentifier("today-capture-error")
+            Label {
+              VStack(alignment: .leading, spacing: 4) {
+                Text("Couldn't Add to Today").font(.headline)
+                Text(errorMessage).foregroundStyle(.secondary)
+              }
+            } icon: {
+              Image(systemName: "exclamationmark.circle")
+            }
+            .foregroundStyle(.primary)
+            .accessibilityIdentifier("today-capture-error")
           }
         }
       }
@@ -46,13 +65,20 @@ struct AddToTodaySheet: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel", role: .cancel) { dismiss() }
+          Button(role: .cancel) { dismiss() }
+            .accessibilityLabel("Cancel")
+            .tint(.primary)
             .disabled(isAdding)
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Add", systemImage: "plus") { add() }
-            .disabled(isAdding || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .accessibilityIdentifier("today-capture-add")
+          if isAdding {
+            ProgressView("Adding to Today")
+          } else {
+            Button(role: .confirm, action: add)
+              .accessibilityLabel("Add")
+              .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+              .accessibilityIdentifier("today-capture-add")
+          }
         }
       }
       .disabled(isAdding)
@@ -61,6 +87,30 @@ struct AddToTodaySheet: View {
     }
     .presentationDetents([.medium, .large])
     .tint(InterfaceTheme.accent)
+  }
+
+  private var kindPicker: some View {
+    Picker("Add as", selection: $asTask) {
+      Text("Text").tag(false)
+      Text("Task").tag(true)
+    }
+    .accessibilityIdentifier("today-capture-kind")
+  }
+
+  @ViewBuilder
+  private var destinationDate: some View {
+    let timeZone = TimeZone(identifier: target.timeZoneIdentifier) ?? .current
+    if let date = DailyNotesIndex.parseDateFilename(target.filename, timeZone: timeZone) {
+      Text(
+        date,
+        format: Date.FormatStyle(calendar: Calendar(identifier: .gregorian), timeZone: timeZone)
+          .weekday(.abbreviated).month(.abbreviated).day()
+      )
+      .font(.caption)
+      .textCase(nil)
+    } else {
+      Text(target.filename)
+    }
   }
 
   private func add() {
@@ -73,7 +123,7 @@ struct AddToTodaySheet: View {
         NotebookRouteInbox.shared.submit(destination)
         dismiss()
       } catch {
-        errorMessage = error.localizedDescription
+        errorMessage = NotebookModel.message(for: error)
         isAdding = false
       }
     }

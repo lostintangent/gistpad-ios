@@ -155,6 +155,8 @@ These are focused entrances to Today and existing notes, not miniature copies of
 
 At accessibility text sizes, Small uses a compact date and the real remaining-task summary, with the whole widget opening Today. Medium retains one readable interactive task. Do not cap Dynamic Type to preserve a checkbox whose task cannot be identified. Completed task labels use secondary ink alongside the filled check.
 
+Quick capture shows the pinned destination as a localized short date. Text and Task use quiet, non-inserting prompts, native cancel/confirm roles and retained input on failure. At accessibility sizes, the kind picker becomes a labeled native menu, with at least two scaled writing lines kept above the keyboard. Errors use the shared friendly mapping and normal semantic text, not raw red diagnostics.
+
 Interactive checks bind to the displayed date/file and task anchor, never a row index in whichever note is now open. A stale task is not modified and offers Open Today. Locked-device interaction follows system authentication. Missing account/content gets a clear sign-in/open invitation; timeline refresh never creates a note. Widget/control mutations use existing durable-draft behavior, not a separate publication path. [Widget interactivity][widget-interactivity], [Controls][controls].
 
 Universal links need the website's deployed AASA association as well as the app entitlement. A prepared local file is not live link acceptance. Keep the browser fallback truthful until that deployment; `gistpad://` serves app-owned routes. [Associated domains][associated-domains].
