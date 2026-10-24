@@ -82,12 +82,45 @@ struct NotebookPlatformTests {
     #expect(try fixture.shared.read()?.today.tasks.count == 3)
   }
 
+  @Test func captureReturnsTheExactPinnedDraftAndCachesItsEditableMetadata() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    let target = DailyNoteTarget(date: .now.addingTimeInterval(-86_400))
+    let draft = try await fixture.store.newFileDraft(
+      accountID: fixture.account.id, githubUserID: 42, gistID: fixture.provider.gist.id,
+      filename: target.filename, description: GistConventions.dailyNotesDescription,
+      text: "# Pinned day\n")
+    try await fixture.store.cacheLibrary(
+      owned: [], starred: [], preferences: fixture.account.preferences,
+      accountID: fixture.account.id)
+    try await fixture.model.reloadPlatformState(accountID: fixture.account.id)
+    let destination = try await fixture.bridge.addToToday(
+      text: "A late thought", asTask: false, target: target)
+    #expect(destination == .draft(accountID: fixture.account.id, draftID: draft.id))
+    await fixture.model.openLocalDraft(id: draft.id)
+    let document = try #require(fixture.model.loadedDocument)
+    #expect(document.filename == target.filename)
+    #expect(document.gist?.id == fixture.provider.gist.id)
+    #expect(!document.isRecovery)
+    #expect(document.text.hasSuffix("A late thought\n"))
+    #expect(document.chrome.access.canEdit)
+    #expect(await fixture.provider.publishCount == 0)
+  }
+
   @Test func intentsUseTheOfficialMainProcessExecutionTarget() {
     #expect(SetTodayTaskIntent.allowedExecutionTargets == .main)
     #expect(AddToTodayIntent.allowedExecutionTargets == .main)
     #expect(CaptureTodayIntent.allowedExecutionTargets == .main)
     #expect(NoteEntityQuery.allowedExecutionTargets == .main)
     #expect(SetTodayTaskIntent.authenticationPolicy == .requiresAuthentication)
+  }
+
+  @Test func widgetPresentationUsesAfterFirstUnlockProtection() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    let url = fixture.shared.location.directory.appendingPathComponent("notebook.snapshot")
+    let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+    #expect(attributes[.protectionKey] as? String == FileProtectionType.completeUntilFirstUserAuthentication.rawValue)
   }
 }
 
@@ -132,7 +165,7 @@ private struct PlatformFixture {
 
   func controller() async throws -> NotebookSessionController {
     let draft = try #require(try await store.drafts(accountID: account.id).first)
-    let document = NotebookDocument(draft: draft, gist: await provider.gist)
+    let document = NotebookDocument(draft: draft, gist: provider.gist)
     let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
     bridge.register(controller)
     return controller

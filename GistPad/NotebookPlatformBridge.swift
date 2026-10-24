@@ -141,17 +141,32 @@ final class NotebookPlatformBridge: NotebookIntentServing {
     }
   }
 
-  func addToToday(text: String, asTask: Bool, target: DailyNoteTarget) async throws {
+  @discardableResult
+  func addToToday(
+    text: String, asTask: Bool, target: DailyNoteTarget
+  ) async throws -> NotebookRoute {
     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       throw NotebookPlatformError.emptyText
     }
-    try await serially {
+    return try await serially {
       guard let account = try await self.provider.cachedAccount() else {
         throw NotebookPlatformError.accountChanged
       }
       try await self.validateAccount(account.id)
       let today = try await self.provider.today(accountID: account.id, target: target)
       try await self.validateAccount(account.id)
+      if let gist = today.gist {
+        guard gist.owner?.id == today.draft.githubUserID else { throw DraftError.readOnly }
+        let cache = try await self.store.cachedLibrary(accountID: account.id)
+        var owned = cache?.owned ?? []
+        owned.removeAll { $0.id == gist.id }
+        owned.append(gist)
+        owned.sort { $0.updatedAt == $1.updatedAt ? $0.id < $1.id : $0.updatedAt > $1.updatedAt }
+        try await self.store.cacheLibrary(
+          owned: owned, starred: cache?.starred ?? [], preferences: account.preferences,
+          accountID: account.id)
+        try await self.store.cacheGist(gist, accountID: account.id)
+      }
       if let session = self.sessions[today.draft.id]?.value {
         guard session.canMutate, await session.waitForLocalSave() else {
           throw NotebookPlatformError.editingInProgress
@@ -160,6 +175,7 @@ final class NotebookPlatformBridge: NotebookIntentServing {
       let draft = try await self.store.draft(id: today.draft.id, accountID: account.id)
       let command = try TodayAppend.command(draft: draft, text: text, asTask: asTask)
       try await self.apply(command)
+      return .draft(accountID: account.id, draftID: draft.id)
     }
   }
 
@@ -222,15 +238,17 @@ final class NotebookPlatformBridge: NotebookIntentServing {
     }
   }
 
-  private func serially(_ action: @escaping @MainActor () async throws -> Void) async throws {
+  private func serially<Value: Sendable>(
+    _ action: @escaping @MainActor () async throws -> Value
+  ) async throws -> Value {
     let previous = operation
     let id = UUID()
     let task = Task {
       if let previous { _ = await previous.result }
       try Task.checkCancellation()
-      try await action()
+      return try await action()
     }
-    operation = task
+    operation = Task { _ = try await task.value }
     operationID = id
     defer {
       if operationID == id {
@@ -238,7 +256,7 @@ final class NotebookPlatformBridge: NotebookIntentServing {
         operationID = nil
       }
     }
-    try await withTaskCancellationHandler {
+    return try await withTaskCancellationHandler {
       try await task.value
     } onCancel: {
       task.cancel()

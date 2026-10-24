@@ -27,6 +27,9 @@ Open Note, Open Today and Add to Today are App Shortcuts. The Add to Today contr
 opens the native capture sheet. Provided shortcut text needs no duplicate sheet.
 Captures pin the destination date, then use `TodayAppend` and the same validated
 `SharedDraftCommand` transaction as editor integrations.
+The capture sheet opens the exact accepted draft after Add. This hands its
+five-second autosave and leave-app publication to the existing editor lifecycle,
+including when that daily note was not already open.
 
 Both targets use `group.dev.gistpad.GistPad`. `SharedNotebookStore` is a protected,
 atomically replaced presentation snapshot under the existing `SharedStoreLocation`.
@@ -42,9 +45,14 @@ the mutation. A checked widget task means the local source committed, not that a
 GitHub write was acknowledged. Publication uses the existing foreground/background
 save paths. A publication failure remains durable and visible in the next snapshot.
 
+The presentation file uses after-first-unlock protection so Lock Screen and
+StandBy timeline reads remain available after locking. Widget reads do not create
+directories or change attributes. Canonical drafts and credentials retain their
+existing unlocked-device-only policies.
+
 The Today widget supports small, medium, all three Lock Screen accessory families
 and the system's small-widget StandBy presentation. Timelines never create a note.
-Personal task/excerpt content is privacy-sensitive. Locked or unavailable content
+Personal task/excerpt content is privacy-sensitive. Before-first-unlock or unavailable content
 shows an explicit invitation instead of fabricated tasks.
 
 ## Validation

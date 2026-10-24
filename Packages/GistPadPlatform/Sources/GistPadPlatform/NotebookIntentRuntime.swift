@@ -5,7 +5,8 @@ import GistPadSync
 public protocol NotebookIntentServing: AnyObject, Sendable {
     func validateAccount(_ accountID: UUID) async throws
     func setTask(id: String, completed: Bool) async throws
-    func addToToday(text: String, asTask: Bool, target: DailyNoteTarget) async throws
+    @discardableResult
+    func addToToday(text: String, asTask: Bool, target: DailyNoteTarget) async throws -> NotebookRoute
 }
 
 @MainActor

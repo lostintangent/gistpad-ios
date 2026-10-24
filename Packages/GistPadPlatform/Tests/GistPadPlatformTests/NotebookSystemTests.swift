@@ -53,6 +53,24 @@ struct NotebookSystemTests {
         await #expect(throws: DraftError.staleGeneration) { try await store.apply(stale) }
     }
 
+    @Test(arguments: ["\n", "\r\n", "\r", "\u{2028}"])
+    func taskAnchorsPreserveEveryLineEnding(lineEnding: String) async throws {
+        let store = try DraftStore.open(inMemory: true)
+        let source = [
+            "日本語 👩🏽‍💻", "- [ ] First", "```md", "- [ ] Not a task", "```", "  - [x] Second"
+        ].joined(separator: lineEnding)
+        let draft = try await store.newDraft(
+            accountID: account, githubUserID: 42,
+            filename: DailyNoteTarget(date: date, timeZone: zone).filename,
+            description: GistConventions.dailyNotesDescription, text: source)
+        let snapshot = try NotebookSystemSnapshot.make(
+            accountID: account, cache: nil, drafts: [draft], date: date, timeZone: zone)
+        #expect(snapshot.today.tasks.map(\.title) == ["First", "Second"])
+        let task = try #require(snapshot.today.tasks.last)
+        let updated = try await store.apply(task.command(accountID: account, completed: false))
+        #expect(updated.text == source.replacingOccurrences(of: "- [x] Second", with: "- [ ] Second"))
+    }
+
     @Test func foreignAccountsNeverEnterTheSharedSnapshot() async throws {
         let gist = try dailyGist(filename: "2026-10-24.md", text: "Private source")
         let store = try DraftStore.open(inMemory: true)
@@ -74,11 +92,13 @@ struct NotebookSystemTests {
         let container = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: container) }
-        let location = try SharedStoreLocation(containerURL: container)
+        let location = try SharedStoreLocation(containerURL: container, prepareDirectory: false)
         let store = SharedNotebookStore(location: location)
         #expect(try store.read() == nil)
+        #expect(!FileManager.default.fileExists(atPath: location.directory.path))
         let snapshot = NotebookSystemSnapshot.preview(date: date)
         try store.write(snapshot)
+        #expect(FileManager.default.fileExists(atPath: location.directory.path))
         #expect(try SharedNotebookStore(location: location).read() == snapshot)
         try Data("not a snapshot".utf8).write(
             to: location.directory.appendingPathComponent("notebook.snapshot"))

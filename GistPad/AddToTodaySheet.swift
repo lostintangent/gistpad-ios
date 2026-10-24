@@ -63,8 +63,9 @@ struct AddToTodaySheet: View {
     errorMessage = nil
     Task {
       do {
-        try await NotebookIntentRuntime.service().addToToday(
+        let destination = try await NotebookIntentRuntime.service().addToToday(
           text: text, asTask: asTask, target: target)
+        NotebookRouteInbox.shared.submit(destination)
         dismiss()
       } catch {
         errorMessage = error.localizedDescription

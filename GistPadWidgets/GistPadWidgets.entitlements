@@ -6,7 +6,5 @@
     <array>
         <string>group.dev.gistpad.GistPad</string>
     </array>
-    <key>com.apple.developer.default-data-protection</key>
-    <string>NSFileProtectionComplete</string>
 </dict>
 </plist>

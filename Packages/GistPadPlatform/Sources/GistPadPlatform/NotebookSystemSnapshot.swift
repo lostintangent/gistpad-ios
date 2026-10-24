@@ -188,11 +188,12 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
 
     private static func tasks(in draft: DraftSnapshot) -> [TodayTask] {
         let source = draft.text as NSString
-        var offset = 0
         var fence: (Character, Int)?
         var result: [TodayTask] = []
-        for line in draft.text.split(separator: "\n", omittingEmptySubsequences: false) {
-            let value = String(line)
+        source.enumerateSubstrings(
+            in: NSRange(location: 0, length: source.length), options: .byLines
+        ) { line, range, _, _ in
+            guard let value = line else { return }
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
             let first = trimmed.first
             if first == "`" || first == "~" {
@@ -204,13 +205,12 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
                             fence = nil
                         }
                     } else { fence = (marker, count) }
-                    offset += (value as NSString).length + 1
-                    continue
+                    return
                 }
             }
             if fence == nil, trimmed.hasPrefix("- [ ] ") || trimmed.hasPrefix("- [x] ") {
                 let prefixLength = String(value.prefix(while: \.isWhitespace)).utf16.count
-                let markerLocation = offset + prefixLength + 3
+                let markerLocation = range.location + prefixLength + 3
                 if markerLocation < source.length {
                     result.append(TodayTask(
                         draftID: draft.id, generation: draft.generation,
@@ -219,7 +219,6 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
                         isCompleted: trimmed.hasPrefix("- [x]")))
                 }
             }
-            offset += (value as NSString).length + 1
         }
         return result
     }

@@ -11,7 +11,8 @@ public struct SharedNotebookStore: Sendable {
     }
 
     public init() throws {
-        self.init(location: try SharedStoreLocation(appGroupIdentifier: Self.appGroupIdentifier))
+        self.init(location: try SharedStoreLocation(
+            appGroupIdentifier: Self.appGroupIdentifier, prepareDirectory: false))
     }
 
     public func read() throws -> NotebookSystemSnapshot? {
@@ -28,8 +29,15 @@ public struct SharedNotebookStore: Sendable {
     }
 
     public func write(_ snapshot: NotebookSystemSnapshot) throws {
+        try FileManager.default.createDirectory(
+            at: location.directory, withIntermediateDirectories: true,
+            attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+        try FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: location.directory.path)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        try encoder.encode(snapshot).write(to: url, options: [.atomic, .completeFileProtection])
+        try encoder.encode(snapshot).write(
+            to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 }
