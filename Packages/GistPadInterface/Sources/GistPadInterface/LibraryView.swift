@@ -44,6 +44,48 @@ extension View {
     }
 }
 
+@MainActor
+public struct LibraryDeletionConfirmation {
+    public let rowID: String
+    public let title: String
+    let confirm: () -> Void
+    let dismiss: () -> Void
+
+    public init(
+        rowID: String, title: String, confirm: @escaping () -> Void,
+        dismiss: @escaping () -> Void
+    ) {
+        self.rowID = rowID
+        self.title = title
+        self.confirm = confirm
+        self.dismiss = dismiss
+    }
+}
+
+private struct LibraryRowDeletionConfirmation: ViewModifier {
+    let rowID: String
+    let target: LibraryDeletionConfirmation?
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
+            String(localized: "Delete “\(target?.title ?? "")” from GitHub?", bundle: .module),
+            isPresented: Binding(
+                get: { target?.rowID == rowID },
+                set: { if !$0, target?.rowID == rowID { target?.dismiss() } }),
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Delete from GitHub", bundle: .module), role: .destructive) {
+                target?.confirm()
+            }
+            Button(String(localized: "Cancel", bundle: .module), role: .cancel) {}
+        } message: {
+            Text(
+                "This deletes every file in the gist. Unsynced local drafts and recovery copies are kept on this iPhone.",
+                bundle: .module)
+        }
+    }
+}
+
 public struct LibraryActions {
     public var refresh: @MainActor () async -> Void
     public var create: @MainActor () -> Void
@@ -54,6 +96,8 @@ public struct LibraryActions {
     public var account: (@MainActor () -> Void)?
     public var togglePin: (@MainActor (String) -> Void)?
     public var toggleArchive: (@MainActor (String) -> Void)?
+    public var delete: (@MainActor (String) -> Void)?
+    public var deletionConfirmation: LibraryDeletionConfirmation?
 
     public init(
         refresh: @escaping @MainActor () async -> Void,
@@ -63,6 +107,12 @@ public struct LibraryActions {
         self.refresh = refresh
         self.create = create
         self.today = today
+    }
+
+    @MainActor
+    func deletionAction(for note: LibraryNote) -> (() -> Void)? {
+        guard note.isOwned, note.canDeleteFromGitHub, let delete else { return nil }
+        return { delete(note.id) }
     }
 }
 
@@ -427,6 +477,7 @@ public struct LibraryView: View {
                     .accessibilityAddTraits(model.selectedNoteID == note.id ? .isSelected : [])
                     .accessibilityIdentifier("library-featured-\(note.id)")
                     .contextMenu { rowActions(note) }
+                    .modifier(LibraryRowDeletionConfirmation(rowID: note.id, target: actions.deletionConfirmation))
                 }
             }
             .listRowInsets(EdgeInsets())
@@ -444,6 +495,7 @@ public struct LibraryView: View {
                 .listRowSeparator(.hidden)
                 .listRowBackground(!isSidebar && model.selectedNoteID == note.id ? InterfaceTheme.neutralSelection : nil)
                 .contextMenu { rowActions(note) }
+                .modifier(LibraryRowDeletionConfirmation(rowID: note.id, target: actions.deletionConfirmation))
             }
         }
     }
@@ -711,7 +763,13 @@ public struct LibraryView: View {
         .listRowSeparator(.visible)
         .listRowBackground(!isSidebar && model.selectedNoteID == note.id ? InterfaceTheme.neutralSelection : nil)
         .contextMenu { rowActions(note) }
+        .modifier(LibraryRowDeletionConfirmation(rowID: note.id, target: actions.deletionConfirmation))
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if let delete = actions.deletionAction(for: note) {
+                // The confirmation owns the destructive role, not this pending swipe.
+                Button(String(localized: "Delete", bundle: .module), systemImage: "trash", action: delete)
+                    .tint(.red)
+            }
             if note.isOwned, let archive = actions.toggleArchive {
                 Button {
                     archive(note.id)
@@ -750,6 +808,12 @@ public struct LibraryView: View {
                 note.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
                 systemImage: "archivebox"
             ) { archive(note.id) }
+        }
+        if let delete = actions.deletionAction(for: note) {
+            Divider()
+            Button(
+                String(localized: "Delete", bundle: .module), systemImage: "trash",
+                role: .destructive, action: delete)
         }
     }
 

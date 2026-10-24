@@ -12,6 +12,62 @@ import WebKit
 
 @MainActor
 struct NotebookModelTests {
+  @Test func libraryDeleteResolvesOwnedGistsAndSearchFilesButNeverLocalOrRecoveryRows() async throws {
+    let owned = try makeGist(
+      id: "a", title: "An owned notebook", content: "Find this thought",
+      additionalFiles: ["日本語.md": "Find this other thought"])
+    let shared = try makeGist(id: "shared", title: "A friend's notebook", owner: "a-friend")
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [owned], starred: [shared])
+    let recovery = try await provider.stageExistingDraft(gistID: "missing", text: "Find my recovery")
+    let local = try await provider.createDraft(accountID: fixtureAccount.id)
+    _ = try await provider.persist(
+      draftID: local.id, accountID: local.accountID, text: "Find my local draft", generation: 1)
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    let target = try #require(model.libraryDeletionTarget(for: "a"))
+    #expect(target.id == "a")
+    #expect(target.title == owned.displayName)
+    #expect(target.accountID == fixtureAccount.id)
+    #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.canDeleteFromGitHub == true)
+    for id in [local.id.uuidString, recovery.id.uuidString, "missing", "unknown", "shared"] {
+      #expect(model.libraryDeletionTarget(for: id) == nil)
+      #expect(model.library.snapshot.notes.first(where: { $0.id == id })?.canDeleteFromGitHub != true)
+    }
+    model.library.query = "Find"
+    await model.search()
+    for note in model.library.matchingNotes {
+      if model.searchTargets[note.id]?.gistID == owned.id {
+        #expect(note.canDeleteFromGitHub)
+        #expect(model.libraryDeletionTarget(for: note.id)?.id == owned.id)
+        #expect(model.libraryDeletionTarget(for: note.id)?.title == owned.displayName)
+      } else {
+        #expect(!note.canDeleteFromGitHub)
+        #expect(model.libraryDeletionTarget(for: note.id) == nil)
+      }
+    }
+    #expect(model.library.matchingNotes.filter(\.canDeleteFromGitHub).count == 2)
+    #expect(await provider.deletedIDs.isEmpty)
+    #expect(model.localDrafts.first(where: { $0.id == local.id })?.text == "Find my local draft")
+    #expect(model.localDrafts.first(where: { $0.id == recovery.id })?.text == "Find my recovery")
+  }
+
+  @Test func deletingALibraryGistRemovesItsRowAndClearsTheOpenDetail() async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount, gists: [try makeGist(id: "a", title: "A published note")])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await model.open(gistID: "a")
+    _ = try await model.openDraft(for: #require(model.loadedDocument))
+    let target = try #require(model.libraryDeletionTarget(for: "a"))
+    #expect(await provider.deletedIDs.isEmpty)
+    _ = try await model.perform(.delete(gistID: target.id))
+    #expect(await provider.deletedIDs == ["a"])
+    #expect(model.loadedDocument == nil)
+    #expect(model.library.selectedNoteID == nil)
+    #expect(model.library.snapshot.notes.allSatisfy { $0.id != "a" })
+    #expect(model.libraryDeletionTarget(for: "a") == nil)
+  }
+
   @Test(arguments: [Optional<Bool>.none, false, true])
   func sourceUsesTheSavedFrontMatterPreferenceWithoutChangingTheDraft(shown: Bool?) async throws {
     let prefix = "---\nedit:\n  instructions: Preserve source bytes\n---\n\n"
@@ -378,6 +434,7 @@ struct NotebookModelTests {
     #expect(snapshot.notes.count == 2)
     let note = try #require(snapshot.notes.first { $0.id == "a" })
     #expect(note.isOwned)
+    #expect(note.canDeleteFromGitHub)
     #expect(note.isStarred)
     #expect(note.isPinned)
     #expect(note.isSecret)
@@ -385,6 +442,7 @@ struct NotebookModelTests {
     #expect(note.fileCount == 1)
     #expect(snapshot.tags == [.init(id: "ideas", name: "Ideas", colorHex: "#EBC85A")])
     #expect(snapshot.notes.first { $0.id == "b" }?.isOwned == false)
+    #expect(snapshot.notes.first { $0.id == "b" }?.canDeleteFromGitHub == false)
   }
 
   @Test func fileCountsUseKnownMetadataAndDoNotInventCompleteness() async throws {
@@ -1787,6 +1845,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding {
   private(set) var account: NotebookAccount
   var signInAccount: NotebookAccount
   var notes: [Gist]
+  var starredNotes: [Gist]
   var shouldFail = false
   var heldID: String?
   var heldRead: CheckedContinuation<Void, Never>?
@@ -1799,6 +1858,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding {
   private(set) var todayTargets: [DailyNoteTarget] = []
   private(set) var readIDs: [String] = []
   private(set) var publicationReasons: [PublishReason] = []
+  private(set) var deletedIDs: [String] = []
   private var failingReadIDs: Set<String> = []
   private var isSignedOut = false
   private var failsSignOutAfterCleanup = false
@@ -1810,10 +1870,13 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding {
   private(set) var cachedAccountReads = 0
   private(set) var refreshAccountReads = 0
 
-  init(account: NotebookAccount, gists: [Gist], cachesContent: Bool = true) {
+  init(
+    account: NotebookAccount, gists: [Gist], cachesContent: Bool = true, starred: [Gist] = []
+  ) {
     self.account = account
     self.signInAccount = account
     self.notes = gists
+    self.starredNotes = starred
     self.cachesContent = cachesContent
   }
 
@@ -1857,7 +1920,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding {
     return account
   }
   func gists(accountID: UUID) -> [Gist] { notes }
-  func starredGists(accountID: UUID) -> [Gist] { [] }
+  func starredGists(accountID: UUID) -> [Gist] { starredNotes }
   func gist(id: String, accountID: UUID) async throws -> Gist {
     readIDs.append(id)
     if id == heldID {
@@ -1922,6 +1985,14 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding {
       content: current.text, revision: "synthetic-revision", generation: current.generation)
   }
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
+    if case .delete(let id) = action {
+      deletedIDs.append(id)
+      notes.removeAll { $0.id == id }
+      return .deleted(
+        gistID: id,
+        drafts: try await draftStore().removeCleanDraftsForDeletedGist(
+          gistID: id, accountID: accountID))
+    }
     if case .signOut = action {
       if rejectsSignOut { throw URLError(.notConnectedToInternet) }
       isSigningOut = true

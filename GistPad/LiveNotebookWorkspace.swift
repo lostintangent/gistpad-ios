@@ -22,6 +22,7 @@ struct LiveNotebookWorkspace: View {
   @State private var tagTarget: NotebookTagTarget?
   @State private var nameTarget: NotebookNameTarget?
   @State private var deletionTarget: NotebookDeletionTarget?
+  @State private var libraryDeletionRowID: String?
   @State private var creationChoiceTarget: NotebookCreationChoiceTarget?
   @State private var reviewTarget: NotebookConflictTarget?
   @State private var isPerformingAction = false
@@ -80,8 +81,8 @@ struct LiveNotebookWorkspace: View {
       .confirmationDialog(
         String(localized: "Delete “\(deletionTarget?.title ?? "")” from GitHub?"),
         isPresented: Binding(
-          get: { deletionTarget != nil },
-          set: { if !$0 { deletionTarget = nil } }),
+          get: { deletionTarget != nil && libraryDeletionRowID == nil },
+          set: { if !$0, libraryDeletionRowID == nil { deletionTarget = nil } }),
         titleVisibility: .visible
       ) {
         if let target = deletionTarget {
@@ -490,6 +491,23 @@ struct LiveNotebookWorkspace: View {
       }
       run(.archive(gistID: id, archived: !gist.isArchived), accountID: account.id)
     }
+    actions.delete = { rowID in
+      guard let target = notebook.libraryDeletionTarget(for: rowID) else {
+        actionMessage = String(localized: "Only a gist you own on GitHub can be deleted.")
+        return
+      }
+      libraryDeletionRowID = rowID
+      deletionTarget = target
+    }
+    if let rowID = libraryDeletionRowID, let target = deletionTarget {
+      actions.deletionConfirmation = .init(
+        rowID: rowID, title: target.title,
+        confirm: { run(.delete(gistID: target.id), accountID: target.accountID) },
+        dismiss: {
+          deletionTarget = nil
+          libraryDeletionRowID = nil
+        })
+    }
     return actions
   }
 
@@ -707,6 +725,7 @@ struct LiveNotebookWorkspace: View {
               accountID: controller.draft.accountID)
           }
           actions.delete = {
+            libraryDeletionRowID = nil
             deletionTarget = .init(
               id: gistID, accountID: controller.draft.accountID,
               title: controller.document.chrome.title)

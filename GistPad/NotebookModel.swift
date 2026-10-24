@@ -390,6 +390,17 @@ final class NotebookModel {
     return false
   }
 
+  func libraryDeletionTarget(for rowID: String) -> NotebookDeletionTarget? {
+    guard let account, pendingAccount == nil, !recoverySearchRows.contains(rowID) else {
+      return nil
+    }
+    let gistID = searchTargets[rowID]?.gistID ?? rowID
+    guard !deletedGistIDs.contains(gistID),
+      let gist = cachedLibrary?.owned.first(where: { $0.id == gistID })
+    else { return nil }
+    return .init(id: gist.id, accountID: account.id, title: gist.displayName)
+  }
+
   func cachedDocument(rowID: String) -> NotebookDocument? {
     if let target = searchTargets[rowID] {
       if let draftID = target.draftID, let draft = localDrafts.first(where: { $0.id == draftID }) {
@@ -939,6 +950,8 @@ final class NotebookModel {
         return LibraryNote(
           id: rowID, title: match.title, updatedAt: match.updatedAt, owner: gist?.owner?.login,
           isOwned: match.isRecovery || (match.gistID.map { ownedGistIDs.contains($0) } ?? true),
+          canDeleteFromGitHub: !match.isRecovery
+            && (match.gistID.map { ownedGistIDs.contains($0) } ?? false),
           isSecret: match.isSecret, isPinned: match.isPinned, isStarred: match.isStarred,
           isArchived: match.isArchived, isDailyNote: match.isDailyNote, tagIDs: match.tagIDs,
           filename: match.filename, fileCount: gist?.truncated == true ? nil : gist?.files.count,
@@ -1476,6 +1489,7 @@ final class NotebookModel {
         LibraryNote(
           id: gist.id, title: gist.displayName, updatedAt: gist.updatedAt,
           owner: gist.owner?.login, isOwned: ownedIDs.contains(gist.id),
+          canDeleteFromGitHub: ownedIDs.contains(gist.id),
           isSecret: !gist.isPublic, isPinned: preferences.pinnedGists.contains(gist.id),
           isStarred: starredIDs.contains(gist.id), isArchived: gist.isArchived,
           isDailyNote: gist.isDailyNote, tagIDs: Set(preferences.gistTags[gist.id] ?? []),
