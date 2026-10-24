@@ -141,6 +141,25 @@ struct NotebookPlatformTests {
     #expect(SetTodayTaskIntent.authenticationPolicy == .requiresAuthentication)
   }
 
+  @Test func providedShortcutTextAndWidgetIntentReachTheDurableOwnerWithoutASheet() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    NotebookIntentRuntime.configure { fixture.bridge }
+    defer { NotebookPlatformBootstrap.install() }
+    let previousRoute = NotebookRouteInbox.shared.pending?.id
+    _ = try await AddToTodayIntent(text: "One captured task", asTask: true).perform()
+    let snapshot = try #require(try fixture.shared.read())
+    #expect(snapshot.today.tasks.map(\.title) == ["A real task", "One captured task"])
+    #expect(await fixture.provider.targets.count == 1)
+    let task = try #require(snapshot.today.tasks.first)
+    _ = try await SetTodayTaskIntent(task: task, completed: true).perform()
+    let draft = try await fixture.store.draft(id: task.draftID, accountID: fixture.account.id)
+    #expect(draft.generation == 2)
+    #expect(draft.text.contains("- [x] A real task"))
+    #expect(NotebookRouteInbox.shared.pending?.id == previousRoute)
+    #expect(await fixture.provider.publishCount == 0)
+  }
+
   @Test func widgetPresentationUsesAfterFirstUnlockProtection() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
