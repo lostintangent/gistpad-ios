@@ -138,7 +138,7 @@ struct LibraryHostTests {
       image.draw(at: .zero)
     }
     let expected = PersonalAccent().roles(traits: window.traitCollection).text
-    let counts = try accentPixels(in: sidebarImage, expected: expected)
+    let counts = try nativeAccentPixels(in: sidebarImage, expected: expected)
     #expect(counts.personal > 30, "Today and sidebar selection must use the personal accent.")
     #expect(counts.systemBlue == 0, "The native sidebar must not retain a system-blue Today symbol.")
     Attachment.record(
@@ -298,7 +298,7 @@ struct LibraryHostTests {
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
     let expected = PersonalAccent(savedHex: savedHex).roles(traits: window.traitCollection).text
-    let counts = try accentPixels(in: image, expected: expected)
+    let counts = try nativeAccentPixels(in: image, expected: expected)
     #expect(counts.personal > 30, "The scope and Clear actions must render the account accent.")
     #expect(counts.systemBlue == 0, "Library content must not fall back to system-blue controls.")
     Attachment.record(
@@ -333,35 +333,51 @@ struct LibraryHostTests {
     }
   }
 
-  private func accentPixels(in image: UIImage, expected: RGBColor) throws
-    -> (personal: Int, systemBlue: Int)
-  {
-    let source = try #require(image.cgImage)
-    let width = source.width
-    let height = source.height
-    let space = try #require(CGColorSpace(name: CGColorSpace.sRGB))
-    var pixels = [UInt8](repeating: 0, count: width * height * 4)
-    try pixels.withUnsafeMutableBytes { bytes in
-      let context = try #require(
-        CGContext(
-          data: bytes.baseAddress, width: width, height: height, bitsPerComponent: 8,
-          bytesPerRow: width * 4, space: space,
-          bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue))
-      context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
-    }
-    return stride(from: 0, to: pixels.count, by: 4).reduce(into: (0, 0)) { counts, index in
-      let red = Int(pixels[index])
-      let green = Int(pixels[index + 1])
-      let blue = Int(pixels[index + 2])
-      if abs(red - Int(expected.red)) <= 6, abs(green - Int(expected.green)) <= 6,
-        abs(blue - Int(expected.blue)) <= 6, pixels[index + 3] > 250
-      {
-        counts.0 += 1
+  @Test(arguments: [false, true], [false, true])
+  func searchCoverageRetainsSemanticSecondaryColor(dark: Bool, increasedContrast: Bool) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = UIWindow(windowScene: scene)
+    window.overrideUserInterfaceStyle = dark ? .dark : .light
+    window.traitOverrides.accessibilityContrast = increasedContrast ? .high : .normal
+    window.rootViewController = UIHostingController(
+      rootView: ZStack {
+        Color(uiColor: .systemGroupedBackground)
+        VStack {
+          LibraryView.SearchSummary(
+            coverage: .init(totalDocuments: 8, documentsWithCachedContent: 2), selectedTagCount: 0)
+            .frame(width: 324, alignment: .leading)
+          Spacer()
+        }
+        .padding(20)
+        .foregroundStyle(.secondary)
       }
-      if red < 30, green > 90, green < 160, blue > 245, pixels[index + 3] > 250 {
-        counts.1 += 1
-      }
+      .environment(\.dynamicTypeSize, .large)
+      .environment(\.colorScheme, dark ? .dark : .light))
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    try await Task.sleep(for: .milliseconds(300))
+    window.layoutIfNeeded()
+    let background = try #require(
+      RGBColor(uiColor: UIColor.systemGroupedBackground.resolvedColor(with: window.traitCollection)))
+    let label = UIColor.secondaryLabel.resolvedColor(with: window.traitCollection)
+    var red: CGFloat = 0
+    var green: CGFloat = 0
+    var blue: CGFloat = 0
+    var alpha: CGFloat = 0
+    try #require(label.getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+    let expected = RGBColor(
+      red: UInt8((red * alpha * 255 + CGFloat(background.red) * (1 - alpha)).rounded()),
+      green: UInt8((green * alpha * 255 + CGFloat(background.green) * (1 - alpha)).rounded()),
+      blue: UInt8((blue * alpha * 255 + CGFloat(background.blue) * (1 - alpha)).rounded()))
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
+    let pixels = try nativeAccentPixels(in: image, expected: expected)
+    #expect(pixels.personal > 30, "Section-header styling must not dim the semantic caption again.")
+    Attachment.record(
+      image, named: "coverage-secondary-\(dark ? "Dark" : "Light")-\(increasedContrast ? "High" : "Normal").png",
+      as: .png)
   }
 
   private func descendants(_ view: UIView) -> [UIView] {
