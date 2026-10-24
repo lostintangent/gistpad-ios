@@ -66,15 +66,26 @@ struct NotebookSurfaceHostTests {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.windows.first(where: \.isKeyWindow)
+    let hadOverride = scene.traitOverrides.contains(PersonalAccentTrait.self)
+    let original = scene.traitCollection[PersonalAccentTrait.self]
     let window = UIWindow(windowScene: scene)
     window.overrideUserInterfaceStyle = dark ? .dark : .light
     window.rootViewController = UIHostingController(
       rootView: NotebookSurfaceCaptureWorkspace(screen: screen, accent: "#FACC15")
-        .environment(\.dynamicTypeSize, .large))
+        .environment(\.dynamicTypeSize, .large)
+        .tint(InterfaceTheme.accent)
+        .background {
+          NotebookSceneAccent(savedHex: "#FACC15").frame(width: 0, height: 0)
+        })
     window.makeKeyAndVisible()
     defer {
       window.rootViewController?.dismiss(animated: false)
       window.isHidden = true
+      if hadOverride {
+        scene.traitOverrides[PersonalAccentTrait.self] = original
+      } else {
+        scene.traitOverrides.remove(PersonalAccentTrait.self)
+      }
       previous?.makeKeyAndVisible()
     }
     try await Task.sleep(for: .milliseconds(800))
@@ -91,7 +102,8 @@ struct NotebookSurfaceHostTests {
     let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
       canvas.drawHierarchy(in: canvas.bounds, afterScreenUpdates: true)
     }
-    let expected = PersonalAccent(savedHex: "#FACC15").roles(traits: canvas.traitCollection).text
+    let roles = PersonalAccent(savedHex: "#FACC15").roles(traits: canvas.traitCollection)
+    let expected = screen == "note-failed" ? roles.fill : roles.text
     let pixels = try nativeAccentPixels(in: image, expected: expected)
     #expect(pixels.personal > 40)
     #expect(pixels.systemBlue < 20)
@@ -123,11 +135,16 @@ struct NotebookSurfaceHostTests {
     root.view.addSubview(bridge)
     let presented = UIViewController()
     root.present(presented, animated: false)
-    await Task.yield()
+    try await Task.sleep(for: .milliseconds(250))
+    window.layoutIfNeeded()
     #expect(presented.traitCollection[PersonalAccentTrait.self].color.hex == "#FACC15")
     bridge.updateAccent(PersonalAccent(savedHex: "#DB9E47"))
+    try await Task.sleep(for: .milliseconds(100))
+    window.layoutIfNeeded()
     #expect(presented.traitCollection[PersonalAccentTrait.self].color.hex == "#DB9E47")
     bridge.updateAccent(PersonalAccent())
+    try await Task.sleep(for: .milliseconds(100))
+    window.layoutIfNeeded()
     #expect(presented.traitCollection[PersonalAccentTrait.self].color == .sky)
   }
 

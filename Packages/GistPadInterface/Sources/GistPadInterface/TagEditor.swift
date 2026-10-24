@@ -53,10 +53,20 @@ public struct TagEditor: View {
                             .foregroundStyle(.secondary)
                     }
                     if save != nil {
-                        Button(String(localized: "New Tag", bundle: .module), systemImage: "plus") {
+                        Button {
                             editingTag = LibraryTag(id: UUID().uuidString, name: "")
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "plus")
+                                    .foregroundStyle(InterfaceTheme.accent)
+                                    .frame(width: min(swatchSize, 24))
+                                Text("New Tag", bundle: .module)
+                                    .foregroundStyle(.primary)
+                            }
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         }
-                        .frame(minHeight: 44)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
                         .accessibilityIdentifier("tag-create")
                     }
                 } footer: {

@@ -356,17 +356,27 @@ private final class NotebookSurfaceReadinessController: UIViewController {
       do {
         let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         var opened = false
+        var activeSamples = 0
         var stableSamples = 0
         while ContinuousClock.now < deadline {
           try Task.checkCancellation()
           guard view.window === window, !window.isHidden else { return }
           window.layoutIfNeeded()
-          if !opened, let control = menuControl(menu, in: window) {
-            control.performPrimaryAction()
-            opened = true
+          if !opened {
+            if UIApplication.shared.applicationState == .active, window.isKeyWindow,
+              let control = menuControl(menu, in: window), isVisible(control)
+            {
+              activeSamples += 1
+              if activeSamples >= 3 {
+                control.performPrimaryAction()
+                opened = true
+              }
+            } else {
+              activeSamples = 0
+            }
           }
           let titles = Set(scene.windows.filter { !$0.isHidden }.flatMap {
-            descendants($0).compactMap { ($0 as? UILabel)?.text }
+            descendants($0).filter(isVisible).compactMap { ($0 as? UILabel)?.text }
           })
           stableSamples = opened && titles.isSuperset(of: menu.expectedTitles) ? stableSamples + 1 : 0
           if stableSamples >= 4 {
@@ -408,6 +418,11 @@ private final class NotebookSurfaceReadinessController: UIViewController {
     [view] + view.subviews.flatMap(descendants)
   }
 
+  private func isVisible(_ view: UIView) -> Bool {
+    guard !view.isHidden, view.alpha > 0.99 else { return false }
+    return view.superview.map(isVisible) ?? true
+  }
+
   private func menuTitles(_ menu: UIMenu) -> [String] {
     menu.children.flatMap { item in
       if let menu = item as? UIMenu { return menuTitles(menu) }
@@ -422,7 +437,7 @@ private enum NotebookMenuCapture: String {
 
   var expectedTitles: Set<String> {
     switch self {
-    case .title: ["README.md", "Ideas.md", "Rename Current File…", "Add File…"]
+    case .title: ["README.md", "Ideas.md", "Rename File…", "Add File…"]
     case .more: ["Rename Note…", "Intelligence…", "Archive", "Delete Note…"]
     }
   }

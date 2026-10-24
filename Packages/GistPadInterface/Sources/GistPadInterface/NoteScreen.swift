@@ -249,6 +249,8 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                     if let delete = actions.delete, document.access.canEdit {
                         Section {
                             Button(String(localized: "Delete Note…", bundle: .module), systemImage: "trash", role: .destructive, action: delete)
+                                .tint(.red)
+                                .foregroundStyle(.red)
                         }
                     }
                 } label: {
@@ -398,7 +400,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             Section {
                 if let rename = actions.renameFile {
                     Button(
-                        String(localized: "Rename Current File…", bundle: .module),
+                        String(localized: "Rename File…", bundle: .module),
                         systemImage: "pencil", action: rename
                     )
                     .accessibilityIdentifier("note-rename-file")

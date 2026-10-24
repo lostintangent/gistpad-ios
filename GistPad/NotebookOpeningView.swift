@@ -71,6 +71,8 @@ struct NotebookFailedOpeningView: View {
       Button("Try Again", action: retry)
         .frame(minHeight: 44)
         .buttonStyle(.borderedProminent)
+        .tint(InterfaceTheme.accentFill)
+        .foregroundStyle(InterfaceTheme.onAccent)
         .accessibilityIdentifier("note-open-retry")
     }
     .navigationTitle(failure.title)

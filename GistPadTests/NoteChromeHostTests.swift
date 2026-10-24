@@ -93,7 +93,7 @@ struct NoteChromeHostTests {
       descendants($0).compactMap { ($0 as? UILabel)?.text }
     })
     let expected: Set<String> = capture.titleMenu
-      ? ["README.md", "Ideas.md", "Rename Current File…", "Add File…"]
+      ? ["README.md", "Ideas.md", "Rename File…", "Add File…"]
       : ["Rename Note…", "Intelligence…", "Archive", "Delete Note…"]
     #expect(titles.isSuperset(of: expected))
     let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
@@ -207,7 +207,7 @@ struct NoteChromeHostTests {
       let titles = menuTitles(menu)
       #expect(titles.contains("README.md"))
       #expect(titles.contains("Ideas.md"))
-      #expect(titles.contains("Rename Current File…"))
+      #expect(titles.contains("Rename File…"))
       #expect(titles.contains("Add File…"))
       #expect(!titles.contains("Rename Note…"))
     }
