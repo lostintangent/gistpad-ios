@@ -17,9 +17,7 @@ struct PreviewWebKitTests {
             allowsTaskEdits: false
         ) { events.append($0) }
         let controller = UIHostingController(rootView: preview)
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-        let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        let window = testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
         window.rootViewController = controller
         window.makeKeyAndVisible()
         defer {
@@ -80,9 +78,7 @@ struct PreviewWebKitTests {
         webView.navigationDelegate = receiver
         let controller = UIViewController()
         controller.view = webView
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-        let window = UIWindow(windowScene: scene)
-        window.frame = webView.frame
+        let window = testWindow(frame: webView.frame)
         window.rootViewController = controller
         window.makeKeyAndVisible()
         defer {
@@ -459,6 +455,16 @@ struct PreviewWebKitTests {
             arguments: [:], in: nil, contentWorld: .page
         ) as? Bool
         #expect(disclosureWorks == true)
+    }
+
+    private func testWindow(frame: CGRect) -> UIWindow {
+        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
+            let window = UIWindow(windowScene: scene)
+            window.frame = frame
+            return window
+        }
+        // Swift package runners can host UIKit without an application scene.
+        return UIWindow(frame: frame)
     }
 
     private func waitFor(_ description: String, condition: () -> Bool) async throws {
