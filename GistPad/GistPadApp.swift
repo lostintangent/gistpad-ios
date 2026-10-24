@@ -11,7 +11,9 @@ struct GistPadApp: App {
   @ViewBuilder
   private func fixtureWorkspace(session: DocumentSession) -> some View {
     #if DEBUG
-      if let screen = LaunchArguments.captureScreen, ["library", "note"].contains(screen) {
+      if LaunchArguments.captureScreen == "photos" {
+        PhotoCaptureWorkspace()
+      } else if let screen = LaunchArguments.captureScreen, ["library", "note"].contains(screen) {
         InterfaceCaptureWorkspace(session: session)
       } else {
         NotebookWorkspace(session: session)
