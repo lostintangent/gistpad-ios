@@ -205,7 +205,7 @@
 
     func presentDetails() async throws {
       let summary = try await settledSummary()
-      guard summary.accessibilityActivate() else {
+      guard PhotoCaptureAccessibility.activate(summary) else {
         throw PhotoCaptureFailure.summaryDidNotActivate
       }
       activatedSummary = true
@@ -475,6 +475,14 @@
 
   @MainActor
   enum PhotoCaptureAccessibility {
+    static func activate(_ element: NSObject) -> Bool {
+      if let control = element as? UIControl, control.isEnabled {
+        control.performPrimaryAction()
+        return true
+      }
+      return element.accessibilityActivate()
+    }
+
     static func element(id: String, in root: NSObject) -> NSObject? {
       var visited = Set<ObjectIdentifier>()
       return element(id: id, in: root, visited: &visited)
@@ -485,6 +493,10 @@
     ) -> NSObject? {
       guard visited.insert(ObjectIdentifier(root)).inserted else { return nil }
       if let view = root as? UIView, view.isHidden || view.alpha <= 0 { return nil }
+      if let view = root as? UIView, view.accessibilityIdentifier == id { return view }
+      if let element = root as? UIAccessibilityElement, element.accessibilityIdentifier == id {
+        return element
+      }
       if let identified = root as? any UIAccessibilityIdentification,
         identified.accessibilityIdentifier == id
       {
@@ -493,6 +505,13 @@
       if let view = root as? UIView {
         for child in view.subviews {
           if let result = element(id: id, in: child, visited: &visited) { return result }
+        }
+      }
+      for child in root.accessibilityElements ?? [] {
+        if let child = child as? NSObject,
+          let result = element(id: id, in: child, visited: &visited)
+        {
+          return result
         }
       }
       let count = max(0, min(500, root.accessibilityElementCount()))

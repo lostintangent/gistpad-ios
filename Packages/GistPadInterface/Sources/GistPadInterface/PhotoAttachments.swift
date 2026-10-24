@@ -142,7 +142,17 @@ public struct PhotoAttachmentShelf: View {
     }
 
     private var summary: some View {
-        Button(action: details) {
+        PhotoActionButton(
+            id: "pending-photos-summary",
+            title: attachments.count == 1
+                ? String(localized: "1 photo", bundle: .module)
+                : String(localized: "\(attachments.count) photos", bundle: .module),
+            value: attachments.contains(where: \.hasFailure)
+                ? String(localized: "\(attachments.filter(\.hasFailure).count) couldn't upload", bundle: .module)
+                : String(localized: "Upload statuses in Details", bundle: .module),
+            hint: String(localized: "Show photo details", bundle: .module),
+            action: details
+        ) {
             ViewThatFits {
                 summaryLabel(showsStatus: true, usesPhotoSymbol: false)
                 summaryLabel(showsStatus: false, usesPhotoSymbol: false)
@@ -154,14 +164,8 @@ public struct PhotoAttachmentShelf: View {
                 maxWidth: .infinity, minHeight: 44,
                 maxHeight: shelfHeight - 2 * verticalPadding, alignment: .leading)
             .contentShape(.rect(cornerRadius: 16))
+            .environment(\.dynamicTypeSize, typeSize)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(photoCount)
-        .accessibilityValue(attachments.contains(where: \.hasFailure)
-            ? Text("\(attachments.filter(\.hasFailure).count) couldn't upload", bundle: .module)
-            : Text("Upload statuses in Details", bundle: .module))
-        .accessibilityHint(Text("Show photo details", bundle: .module))
-        .accessibilityIdentifier("pending-photos-summary")
     }
 
     private func summaryLabel(showsStatus: Bool, usesPhotoSymbol: Bool) -> some View {
@@ -372,12 +376,79 @@ private struct PhotoAttachmentRow: View {
     private func recoveryButton(
         _ recovery: PhotoAttachmentAction, attachment: PhotoAttachment, date: Date
     ) -> some View {
-        Button(actionTitle(recovery)) { action(attachment.id, recovery) }
-            .font(.body)
-            .foregroundStyle(InterfaceTheme.accent)
-            .frame(minHeight: 44)
-            .disabled(!attachment.isActionEnabled(at: date))
-            .accessibilityIdentifier("photo-recovery-\(attachment.id)")
+        PhotoActionButton(
+            id: "photo-recovery-\(attachment.id)", title: actionTitle(recovery),
+            isEnabled: attachment.isActionEnabled(at: date),
+            action: { action(attachment.id, recovery) }
+        ) {
+            Text(actionTitle(recovery))
+                .font(.body)
+                .foregroundStyle(InterfaceTheme.accent)
+                .frame(minHeight: 44)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+private struct PhotoActionButton<Label: View>: UIViewRepresentable {
+    let id: String
+    let title: String
+    var value: String?
+    var hint: String?
+    var isEnabled = true
+    let action: () -> Void
+    @ViewBuilder let label: () -> Label
+
+    func makeUIView(context: Context) -> PhotoActionControl {
+        let button = PhotoActionControl(type: .custom)
+        button.isAccessibilityElement = true
+        button.addAction(UIAction { [weak button] _ in button?.activate?() }, for: .primaryActionTriggered)
+        return button
+    }
+
+    func updateUIView(_ button: PhotoActionControl, context: Context) {
+        button.activate = action
+        button.isEnabled = isEnabled
+        button.accessibilityIdentifier = id
+        button.accessibilityLabel = title
+        button.accessibilityValue = value
+        button.accessibilityHint = hint
+        let configuration = UIHostingConfiguration { label() }.margins(.all, 0)
+        if let content = button.hostedContent {
+            content.configuration = configuration
+        } else {
+            let content = configuration.makeContentView()
+            content.isUserInteractionEnabled = false
+            content.accessibilityElementsHidden = true
+            content.translatesAutoresizingMaskIntoConstraints = false
+            button.addSubview(content)
+            NSLayoutConstraint.activate([
+                content.leadingAnchor.constraint(equalTo: button.leadingAnchor),
+                content.trailingAnchor.constraint(equalTo: button.trailingAnchor),
+                content.topAnchor.constraint(equalTo: button.topAnchor),
+                content.bottomAnchor.constraint(equalTo: button.bottomAnchor),
+            ])
+            button.hostedContent = content
+        }
+        button.hostedContent?.alpha = isEnabled ? 1 : 0.4
+        button.invalidateIntrinsicContentSize()
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: PhotoActionControl, context: Context) -> CGSize? {
+        guard let content = uiView.hostedContent else { return nil }
+        return content.systemLayoutSizeFitting(
+            CGSize(width: proposal.width ?? UIView.layoutFittingExpandedSize.width, height: 0),
+            withHorizontalFittingPriority: proposal.width == nil ? .fittingSizeLevel : .required,
+            verticalFittingPriority: .fittingSizeLevel)
+    }
+}
+
+private final class PhotoActionControl: UIButton {
+    var activate: (() -> Void)?
+    var hostedContent: (UIView & UIContentView)?
+
+    override var isHighlighted: Bool {
+        didSet { hostedContent?.alpha = isHighlighted ? 0.55 : (isEnabled ? 1 : 0.4) }
     }
 }
 #endif

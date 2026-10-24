@@ -267,9 +267,7 @@ struct NotebookPhotoTests {
   }
 }
 
-@Suite(.serialized)
-@MainActor
-struct NotebookPhotoLayoutProbe {
+extension NotebookPhotoTests {
   @Test(arguments: [1, 3], [false, true])
   func shelfKeepsWritingSpaceAndAccessibilityDetails(photoCount: Int, accessibility: Bool) async throws {
     let fixture = try await PhotoFixture()
@@ -405,7 +403,7 @@ struct NotebookPhotoLayoutProbe {
     do {
       let selection = editor.selectedRange
       let text = fixture.session.session.text
-      #expect(summary.accessibilityActivate())
+      #expect(PhotoCaptureAccessibility.activate(summary))
       try await Task.sleep(for: .milliseconds(600))
       #expect(fixture.photos.isShowingDetails)
       #expect(!editor.isFirstResponder)
