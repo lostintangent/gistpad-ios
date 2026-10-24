@@ -56,14 +56,20 @@ This reset replaces the olive/gold direction. Build in the priority order below,
 | Priority / surface | Memorable move and concrete delta |
 | --- | --- |
 | 1 / Library | A tabbed notebook shelf, not the previous ruled list. Keep the roomier 12-pt rows and divider removal. Replace olive selection/pins with sky, black custom content with adaptive slate ink, and generic rounded tag pills with notebook tabs. Pinned remains a distinct headline above the continuous Notes list. Do not add icons or cards to every note |
-| 1 / Today | One notebook leaf with a 3-pt leading sky-gradient spine, 16-pt internal inset and 12-pt corners. Keep the date block beside Today/weekday, then up to two real cached excerpt lines and actual task progress. No excerpt fetch or appearance-time creation. An existing note opens directly; an absent note has one explicit Start action. Stack at accessibility sizes. Reuse the date/spine identity on the empty Today landing, without enclosing the whole screen in a card |
+| 1 / Today | One notebook leaf with a 3-pt leading sky-gradient spine, 16-pt internal inset and 12-pt corners. Give the day numeral native SF Rounded, bold at the scaled large-title size; month/weekday stay SF. Keep that date beside Today/weekday, then up to two real cached excerpt lines and actual task progress. No excerpt fetch or appearance-time creation. An existing note opens directly; an absent note has one explicit Start action. Stack at accessibility sizes. Reuse the date/spine identity on the empty Today landing, without enclosing the whole screen in a card |
 | 1 / Tags | Small index tabs identify notes: 3-pt leading corners, 8-pt trailing corners, a 3-pt own-color leading strip and an opaque tinted body with readable ink. The Tags sheet itself gets lighter, not bigger: remove its duplicate selected-chip panel, grouped cards and All tags heading. Use one plain searchable list with 44-pt minimum total rows, color/name/check and one quiet scope footer. Native medium/large detents, initially large at accessibility sizes. Keep editing behind swipe/context. Mirror tabs in RTL and preserve user colors; coral, amber and teal are new-tag presets, never a migration |
-| 2 / Reading | A composed, uninterrupted page. Carry the same adaptive ink, readable heading scale and 1.5-body line height into the real preview. Fix the hard footer cut with native scroll-edge underlap and enough end space to reveal the final line. Keep tasks fully legible when read-only. No page texture, permanent contents rail or decorative card around prose |
+| 2 / Reading | A composed, uninterrupted page, with New York for rendered H1/H2 only, SF prose, adaptive ink and 1.5-body line height. Keep the existing heading scales and language fallback. Fix the hard footer cut with native scroll-edge underlap and enough end space to reveal the final line. Keep tasks fully legible when read-only. No page texture, permanent contents rail or decorative card around prose |
 | 2 / Editing | Inked source: proportional native body text, body-sized semibold headings, monospaced code and quieter but legible Markdown punctuation. No rainbow code or reduced-opacity content. The single native accessory is immediately visible with the keyboard. Keep the current passage anchored when moving between source and reading, with caret/selection/Undo intact |
 | 2 / File switching | The current exact filename is the native subtitle for a multi-file note; its title menu exposes ordinary files directly and dates in newest-first year/month groups. The selected file has a check. Choosing a file changes the actual mounted document, not just its title. No intermediate Files sheet or custom tab strip |
 | 3 / Motion and feedback | Use the native zoom only for the Today leaf into its note on compact push navigation, with stable identity, interactive cancellation and a Reduce Motion alternative. Plain text rows retain native navigation; side-by-side selection does not zoom. Pin gets one restrained symbol response after commit. Archive retains its real Undo. Manual Save may acknowledge a successful GitHub write once; autosave never buzzes or celebrates. Do not delay opening to animate [9-11, 14] |
 
 Palette and Library/Today/tab composition land first. Reading/editor/file chrome follow in the same connected flow. Motion is last, not a substitute for composition. The source-identity safety fix ships independently of this design pass.
+
+Three daily moments make the notebook feel alive:
+
+- **A friendly date:** the rounded day numeral is expressive immediately, before any animation. Include it in the first Library/Today pass. Use the native rounded design, not a fixed font name or an oversized date that squeezes the excerpt. [15]
+- **A task clicks into place:** a direct task-toggle action gets one short checkmark response and light haptic only after its local source commit succeeds. The native host owns the haptic; the reading checkbox resolves once rather than replaying on render. Today's real progress fills to the committed value when that leaf is visible. No row movement, refresh/relaunch feedback, or haptic for every typed character. Reduce Motion uses the settled check/progress immediately. [9-11]
+- **A fresh page:** deliberate local-note creation opens the real, focused editor immediately. After durable creation, briefly reveal its leading sky spine once, around 180-220 ms, without moving text or delaying the keyboard. Reduce Motion shows the settled page without the reveal. Empty-notebook and first-run invitations use the original notebook artwork at 48-64 pt, not a generic document symbol or a giant hero. Do not substitute it for offline, error or no-search-results states.
 
 ## 2. Color: one set of roles, four appearances
 
@@ -141,13 +147,13 @@ For custom state changes, start around 160-220 ms ease-out and evaluate on the d
 
 ## 3. Typography and Dynamic Type
 
-Use SF through system font APIs, with language fallback. No bundled system fonts, fixed-size UI typography, condensed prose, manual tracking on body text, or all-uppercase labels needed to understand the product. [3]
+Use system font APIs with language fallback: SF by default, SF Rounded for the Today day numeral, and New York for rendered H1/H2. Keep Library titles, native chrome, reading body and source in SF. No bundled system fonts, fixed-size UI typography, condensed prose, manual tracking on body text, or all-uppercase labels needed to understand the product. [3, 15]
 
 | Role | Native text style | Treatment at default Large |
 | --- | --- | --- |
 | Screen title | System navigation title | Let navigation adapt size and placement |
-| Document H1 | `.title` / `UIFont.TextStyle.title1` | Bold, approximately 28 pt |
-| H2 | `.title2` | Semibold, approximately 22 pt |
+| Document H1 | `.title` / `UIFont.TextStyle.title1`, serif design | New York bold, approximately 28 pt |
+| H2 | `.title2`, serif design | New York semibold, approximately 22 pt |
 | H3 | `.title3` | Semibold, approximately 20 pt |
 | H4-H6 / section heading | `.headline` | Semibold, approximately 17 pt, preserve semantic heading levels |
 | Prose / source / task | `.body` | Regular, approximately 17 pt |
@@ -155,6 +161,7 @@ Use SF through system font APIs, with language fallback. No bundled system fonts
 | Secondary metadata | `.subheadline` or `.footnote` | Not smaller merely to preserve a tight row |
 | Code | Monospaced system font at scaled body size | Regular, no `.88em` reduction |
 | Status / footnotes | `.footnote` | Approximately 13 pt, scales, remains readable |
+| Today day numeral | `.largeTitle`, rounded design | Bold; other date components remain SF |
 
 Point sizes are reference values only. Native style APIs determine actual size. All labels wrap/grow at large categories. Required actions must not truncate to identical labels. Source headings stay body-sized semibold, not the large rendered heading sizes.
 
@@ -171,6 +178,8 @@ The payload needs:
 - Bold Text state and layout direction when relevant to typography. Content direction remains determined by the content, not forced from the app language.
 
 CSS metric names: `--gp-body-size`, `--gp-body-line-height`, `--gp-title1-size`, `--gp-title1-line-height`, `--gp-title2-size`, `--gp-title2-line-height`, `--gp-title3-size`, `--gp-title3-line-height`, `--gp-headline-size`, `--gp-headline-line-height`, `--gp-footnote-size`, `--gp-footnote-line-height`, `--gp-code-size`.
+
+Resolve title1/title2 metrics using the preferred font descriptor's `.serif` design, which Apple maps to New York. Apply `font-family: ui-serif, serif` only to rendered H1/H2 in WebKit. Keep native language fallback and Bold Text. Do not bundle the font or hard-code an installed/private face name. [15, 16]
 
 The preview's existing transport names remain stable: `background` -> `--gp-page`, `foreground` -> `--gp-text`, `secondaryForeground` -> `--gp-text-secondary`, `link` -> `--gp-link`, `separator` -> `--gp-separator`, `secondaryBackground` -> `--gp-surface`, `accentText` -> `--gp-accent-text`, `accentBackground` -> `--gp-selected-surface`. Retain `bodyFontSize` and `increasedContrast`, and add the preferred text-style metrics when integrating the complete appearance theme. `accentBackground` means a selected content surface, not the opaque primary-button fill.
 
@@ -434,3 +443,5 @@ Review outcomes: **Approved**, **Approved for a named spike only**, or **Changes
 12. [Bringing Photos picker to your SwiftUI app](https://developer.apple.com/documentation/photokit/bringing-photos-picker-to-your-swiftui-app)
 13. [`ButtonRole`](https://developer.apple.com/documentation/swiftui/buttonrole), including [confirm](https://developer.apple.com/documentation/swiftui/buttonrole/confirm)
 14. [`NavigationTransition.zoom(sourceID:in:)`](https://developer.apple.com/documentation/swiftui/navigationtransition/zoom(sourceid:in:))
+15. [`UIFontDescriptor.SystemDesign.serif`](https://developer.apple.com/documentation/uikit/uifontdescriptor/systemdesign/serif), [`Font.Design.rounded`](https://developer.apple.com/documentation/swiftui/font/design/rounded), and [Apple platform fonts](https://developer.apple.com/fonts/)
+16. [WebKit platform font keywords](https://webkit.org/blog/10247/new-webkit-features-in-safari-13-1/)
