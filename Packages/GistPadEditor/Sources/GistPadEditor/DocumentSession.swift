@@ -13,11 +13,13 @@
     public private(set) var generation: UInt64
     public private(set) var selection = NSRange(location: 0, length: 0)
     public private(set) var isComposing = false
+    public private(set) var isEditing = false
     public private(set) var writingToolsActive = false
     @ObservationIgnored public let textView: UITextView
     @ObservationIgnored public var onSourceChange: ((String, UInt64) -> Void)?
     @ObservationIgnored private var highlightTask: Task<Void, Never>?
     @ObservationIgnored private var highlightedTraits: UITraitCollection?
+    @ObservationIgnored private var isApplyingSourceEdit = false
 
     public init(documentID: String, text: String, generation: UInt64 = 0) {
       self.documentID = documentID
@@ -50,6 +52,12 @@
     }
 
     public func apply(_ mutation: SourceMutation, documentID: String, generation: UInt64) throws {
+      try apply(mutation, documentID: documentID, generation: generation, finalSelection: nil)
+    }
+
+    private func apply(
+      _ mutation: SourceMutation, documentID: String, generation: UInt64, finalSelection: NSRange?
+    ) throws {
       guard self.documentID == documentID else {
         throw SourceMutation.MutationError.documentMismatch
       }
@@ -69,16 +77,48 @@
       else {
         throw SourceMutation.MutationError.invalidRange
       }
+      isApplyingSourceEdit = true
       textView.undoManager?.beginUndoGrouping()
       textView.replace(range, withText: mutation.replacement)
-      textView.undoManager?.endUndoGrouping()
       let delta = mutation.replacement.utf16.count - mutation.range.length
-      if NSMaxRange(previousSelection) <= mutation.range.location {
+      if let finalSelection {
+        textView.selectedRange = finalSelection
+      } else if NSMaxRange(previousSelection) <= mutation.range.location {
         textView.selectedRange = previousSelection
       } else if previousSelection.location >= NSMaxRange(mutation.range) {
         textView.selectedRange = NSRange(
           location: previousSelection.location + delta, length: previousSelection.length)
       }
+      textView.undoManager?.endUndoGrouping()
+      isApplyingSourceEdit = false
+      synchronizeText()
+    }
+
+    public var canFormat: Bool {
+      textView.isEditable && textView.markedTextRange == nil && !isComposing && !writingToolsActive
+    }
+
+    public func apply(_ edit: SourceEdit, generation: UInt64) throws {
+      guard canFormat else { throw SourceMutation.MutationError.compositionActive }
+      guard self.generation == generation else {
+        throw SourceMutation.MutationError.staleGeneration
+      }
+      let result = try edit.mutation.applying(to: text)
+      guard edit.selection.location >= 0, edit.selection.length >= 0,
+        edit.selection.location <= result.utf16.count,
+        edit.selection.length <= result.utf16.count - edit.selection.location,
+        Range(edit.selection, in: result) != nil
+      else { throw SourceMutation.MutationError.invalidRange }
+      try apply(
+        edit.mutation, documentID: documentID, generation: generation,
+        finalSelection: edit.selection)
+      textView.scrollRangeToVisible(edit.selection)
+    }
+
+    public func textViewDidBeginEditing(_ textView: UITextView) { isEditing = true }
+
+    public func textViewDidEndEditing(_ textView: UITextView) {
+      isEditing = false
       synchronizeText()
     }
 
@@ -184,14 +224,14 @@
 
     private func synchronizeText() {
       // Inline previews are transient. UIKit owns their selection and native undo history.
-      guard !writingToolsActive else { return }
+      guard !writingToolsActive && !isApplyingSourceEdit else { return }
+      selection = textView.selectedRange
+      isComposing = textView.markedTextRange != nil
       if !text.utf8.elementsEqual(textView.text.utf8) {
         text = textView.text
         generation += 1
         onSourceChange?(text, generation)
       }
-      selection = textView.selectedRange
-      isComposing = textView.markedTextRange != nil
       scheduleHighlight()
     }
 
@@ -209,19 +249,6 @@
         }
         self?.highlight()
       }
-    }
-  }
-
-  public struct MarkdownEditorView: UIViewRepresentable {
-    public let session: DocumentSession
-
-    public init(session: DocumentSession) { self.session = session }
-
-    public func makeUIView(context: Context) -> UITextView { session.textView }
-
-    public func updateUIView(_ uiView: UITextView, context: Context) {
-      // The session owns text and selection. SwiftUI updates must never replace either.
-      session.updateAppearanceIfNeeded()
     }
   }
 

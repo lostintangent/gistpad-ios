@@ -212,7 +212,11 @@ struct LiveNotebookWorkspace: View {
       saveState: controller.saveState, actions: noteActions(controller)
     ) {
       NotebookPhotoSurface(controller: photos, isSource: true) {
-        MarkdownEditorView(session: controller.session)
+        MarkdownEditorView(
+          session: controller.session,
+          insertPhoto: { photos.choosePhoto() },
+          photoPrivacy: { photos.showPrivacy() },
+          canInsertPhoto: photos.canChoosePhoto)
       }
     } preview: {
       NotebookPhotoSurface(controller: photos, isSource: false) {

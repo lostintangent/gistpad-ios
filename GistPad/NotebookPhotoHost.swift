@@ -96,20 +96,5 @@ struct NotebookPhotoSurface<Content: View>: View {
           }
         }
       }
-      .toolbar {
-        if isSource {
-          ToolbarItemGroup(placement: .keyboard) {
-            Menu {
-              Button("Photo", systemImage: "photo") { controller.choosePhoto() }
-                .disabled(!controller.canChoosePhoto)
-              Button("Photos are public", systemImage: "info.circle") { controller.showPrivacy() }
-            } label: {
-              Label("Insert", systemImage: "plus")
-            }
-            .accessibilityIdentifier("insert-photo-menu")
-            Spacer()
-          }
-        }
-      }
   }
 }
