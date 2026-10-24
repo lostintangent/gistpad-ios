@@ -26,11 +26,11 @@
       SourceTextView(
         session: session,
         actions: SourceToolbarActions(
-          format: format, link: beginLink, indent: indent, find: find,
+          format: format, link: beginLink, indent: indent,
           photo: insertPhoto, photoPrivacy: photoPrivacy,
           dismiss: { session.textView.resignFirstResponder() }),
         configuration: SourceToolbarConfiguration(
-          canFormat: session.canFormat, canFind: !session.writingToolsActive,
+          canFormat: session.canFormat,
           canInsertPhoto: canInsertPhoto, hasPhoto: insertPhoto != nil,
           hasPhotoPrivacy: photoPrivacy != nil)
       )
@@ -56,7 +56,7 @@
         }
       }
       .alert(
-        String(localized: "Couldn't Format Text", bundle: .module),
+        String(localized: "Couldn't Complete Action", bundle: .module),
         isPresented: Binding(
           get: { actionError != nil || session.inputError != nil },
           set: {
@@ -117,13 +117,6 @@
       }
     }
 
-    private func find(replacing: Bool) {
-      guard let interaction = session.textView.findInteraction else {
-        actionError = String(localized: "Find is unavailable in this editor.", bundle: .module)
-        return
-      }
-      interaction.presentFindNavigator(showingReplace: replacing)
-    }
   }
 
   private struct SourceTextView: UIViewRepresentable {

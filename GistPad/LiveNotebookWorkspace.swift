@@ -422,6 +422,10 @@ struct LiveNotebookWorkspace: View {
         controller.session.textView.resignFirstResponder()
       }
     }
+    actions.find = {
+      controller.mode = .source
+      controller.session.presentFind(replacing: true)
+    }
     actions.share = { presentSharing(controller, copiesLink: false) }
     actions.copyLink = { presentSharing(controller, copiesLink: true) }
     if !controller.document.isRecovery, let gist = controller.document.gist {

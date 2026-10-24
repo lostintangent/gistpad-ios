@@ -95,6 +95,12 @@ struct NotebookWorkspace: View {
       }
       .accessibilityIdentifier("toggle-focus")
     }
+    ToolbarItem(placement: .secondaryAction) {
+      Button("Find and Replace", systemImage: "magnifyingglass") {
+        state.editing = true
+        session.presentFind(replacing: true)
+      }
+    }
   }
 
   private var library: some View {

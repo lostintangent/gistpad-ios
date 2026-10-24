@@ -204,6 +204,10 @@ struct InterfaceCaptureWorkspace: View {
                 activeSession.textView.resignFirstResponder()
             }
         }
+        actions.find = {
+            mode.wrappedValue = .source
+            activeSession.presentFind(replacing: true)
+        }
         return actions
     }
 

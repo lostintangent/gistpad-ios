@@ -36,6 +36,7 @@
       textView.tintColor = UIColor(InterfaceTheme.accent)
       textView.textContainerInset = UIEdgeInsets(top: 24, left: 20, bottom: 40, right: 20)
       textView.alwaysBounceVertical = true
+      textView.topEdgeEffect.style = .soft
       textView.bottomEdgeEffect.style = .soft
       textView.isFindInteractionEnabled = true
       textView.accessibilityIdentifier = "source-editor"
@@ -160,6 +161,24 @@
       }
     }
 
+    var canFind: Bool {
+      !writingToolsActive && !isComposing && textView.markedTextRange == nil
+    }
+
+    public func presentFind(replacing: Bool = false) {
+      guard canFind else {
+        inputError = String(
+          localized: "Finish the current text edit before finding text.", bundle: .module)
+        return
+      }
+      guard let interaction = textView.findInteraction else {
+        inputError = String(localized: "Find is unavailable in this editor.", bundle: .module)
+        return
+      }
+      textView.becomeFirstResponder()
+      interaction.presentFindNavigator(showingReplace: replacing)
+    }
+
     public func textViewDidChangeSelection(_ textView: UITextView) {
       selection = textView.selectedRange
       isComposing = textView.markedTextRange != nil
@@ -198,7 +217,7 @@
         forTextStyle: .body, compatibleWith: textView.traitCollection)
       let boldText = textView.traitCollection.legibilityWeight == .bold
       let headingFont = UIFont.systemFont(
-        ofSize: bodyFont.pointSize, weight: boldText ? .bold : .semibold)
+        ofSize: bodyFont.pointSize, weight: .bold)
       let codeFont = UIFont.monospacedSystemFont(
         ofSize: bodyFont.pointSize, weight: boldText ? .semibold : .regular)
       let muted = UIColor(InterfaceTheme.syntaxMuted)
@@ -216,22 +235,56 @@
         let attributes: [NSAttributedString.Key: Any]
         switch span.kind {
         case .heading:
-          attributes = [.foregroundColor: UIColor(InterfaceTheme.text), .font: headingFont]
+          attributes = [.foregroundColor: SourceSyntaxColor.emphasis, .font: headingFont]
+        case .strong, .emphasis:
+          attributes = [.foregroundColor: SourceSyntaxColor.emphasis]
+        case .blockquote:
+          attributes = [.foregroundColor: SourceSyntaxColor.quote]
+        case .htmlTag:
+          attributes = [.foregroundColor: SourceSyntaxColor.htmlTag]
+        case .strikethrough:
+          attributes = [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
+        case .orderedMarker:
+          attributes = [.foregroundColor: SourceSyntaxColor.orderedMarker]
         case .code:
           attributes = [
-            .foregroundColor: UIColor(InterfaceTheme.syntaxCode),
+            .foregroundColor: UIColor(InterfaceTheme.text),
             .font: codeFont,
+            .underlineStyle: 0,
+            .strikethroughStyle: 0,
           ]
         case .frontmatter:
-          attributes = [.foregroundColor: muted, .font: codeFont]
+          attributes = [.foregroundColor: UIColor(InterfaceTheme.text), .font: codeFont]
         case .link:
-          attributes = [.foregroundColor: UIColor.link]
+          attributes = [
+            .foregroundColor: SourceSyntaxColor.link,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+          ]
+        case .linkDestination:
+          attributes = [
+            .foregroundColor: SourceSyntaxColor.destination,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+          ]
         case .task:
           attributes = [.foregroundColor: UIColor(InterfaceTheme.accent)]
-        case .checkedTask, .punctuation, .linkDestination:
+        case .checkedTask:
           attributes = [.foregroundColor: muted]
+        case .punctuation:
+          attributes = [:]
         }
         storage.addAttributes(attributes, range: span.range)
+        if span.kind == .strong || span.kind == .emphasis {
+          let addedTrait: UIFontDescriptor.SymbolicTraits =
+            span.kind == .strong ? .traitBold : .traitItalic
+          storage.enumerateAttribute(.font, in: span.range) { value, range, _ in
+            guard let font = value as? UIFont,
+              let descriptor = font.fontDescriptor.withSymbolicTraits(
+                font.fontDescriptor.symbolicTraits.union(addedTrait))
+            else { preconditionFailure("The system source font must support Markdown emphasis.") }
+            storage.addAttribute(
+              .font, value: UIFont(descriptor: descriptor, size: font.pointSize), range: range)
+          }
+        }
       }
       storage.endEditing()
       if undoWasEnabled { manager?.enableUndoRegistration() }
@@ -249,10 +302,10 @@
       if highlightedTraits?.preferredContentSizeCategory
         != textView.traitCollection.preferredContentSizeCategory
         || highlightedTraits?.legibilityWeight != textView.traitCollection.legibilityWeight
-        || highlightedTraits?.hasDifferentColorAppearance(comparedTo: textView.traitCollection)
-          != false
       {
         highlight()
+      } else {
+        highlightedTraits = textView.traitCollection
       }
     }
 
@@ -294,16 +347,24 @@
     private var restoringAnchor = false
 
     override var keyCommands: [UIKeyCommand]? {
+      let find = UIKeyCommand(input: "f", modifierFlags: .command, action: #selector(findText))
+      find.discoverabilityTitle = String(localized: "Find", bundle: .module)
       let indent = UIKeyCommand(
         input: "]", modifierFlags: .command, action: #selector(increaseIndent))
       indent.discoverabilityTitle = String(localized: "Increase Indent", bundle: .module)
       let outdent = UIKeyCommand(
         input: "[", modifierFlags: .command, action: #selector(decreaseIndent))
       outdent.discoverabilityTitle = String(localized: "Decrease Indent", bundle: .module)
-      return (super.keyCommands ?? []) + [indent, outdent]
+      let inherited = (super.keyCommands ?? []).filter {
+        !($0.input == "f" && $0.modifierFlags == .command)
+      }
+      return inherited + [find, indent, outdent]
     }
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+      if action == #selector(findText) {
+        return (delegate as? DocumentSession)?.canFind == true
+      }
       if action == #selector(increaseIndent) || action == #selector(decreaseIndent) {
         return (delegate as? DocumentSession)?.canFormat == true
       }
@@ -312,6 +373,7 @@
 
     @objc private func increaseIndent() { changeIndent(outdent: false) }
     @objc private func decreaseIndent() { changeIndent(outdent: true) }
+    @objc private func findText() { (delegate as? DocumentSession)?.presentFind() }
 
     private func changeIndent(outdent: Bool) {
       guard let session = delegate as? DocumentSession else { return }

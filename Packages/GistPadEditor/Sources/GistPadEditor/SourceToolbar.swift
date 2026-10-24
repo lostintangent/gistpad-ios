@@ -7,7 +7,6 @@
     let format: @MainActor (MarkdownFormat) -> Void
     let link: @MainActor () -> Void
     let indent: @MainActor (Bool) -> Void
-    let find: @MainActor (Bool) -> Void
     let photo: (@MainActor () -> Void)?
     let photoPrivacy: (@MainActor () -> Void)?
     let dismiss: @MainActor () -> Void
@@ -15,24 +14,77 @@
 
   struct SourceToolbarConfiguration: Equatable {
     let canFormat: Bool
-    let canFind: Bool
     let canInsertPhoto: Bool
     let hasPhoto: Bool
     let hasPhotoPrivacy: Bool
   }
 
   @MainActor
+  final class SourceAccessoryView: UIView {
+    let buttons = UIStackView()
+    let glass: UIVisualEffectView
+
+    override var intrinsicContentSize: CGSize {
+      CGSize(width: UIView.noIntrinsicMetric, height: 72)
+    }
+
+    init() {
+      let effect = UIGlassEffect(style: .regular)
+      effect.isInteractive = true
+      glass = UIVisualEffectView(effect: effect)
+      super.init(frame: CGRect(x: 0, y: 0, width: 320, height: 72))
+      autoresizingMask = [.flexibleWidth]
+      backgroundColor = .clear
+      tintColor = UIColor(InterfaceTheme.accent)
+      accessibilityIdentifier = "editor-keyboard-bar"
+      glass.cornerConfiguration = .capsule()
+      glass.translatesAutoresizingMaskIntoConstraints = false
+      addSubview(glass)
+      buttons.axis = .horizontal
+      buttons.distribution = .fillEqually
+      buttons.translatesAutoresizingMaskIntoConstraints = false
+      glass.contentView.addSubview(buttons)
+      let preferredWidth = glass.widthAnchor.constraint(equalTo: widthAnchor, constant: -32)
+      preferredWidth.priority = .defaultHigh
+      NSLayoutConstraint.activate([
+        glass.centerXAnchor.constraint(equalTo: centerXAnchor),
+        glass.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 16),
+        glass.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
+        glass.widthAnchor.constraint(lessThanOrEqualToConstant: 380),
+        preferredWidth,
+        glass.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+        glass.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
+        buttons.leadingAnchor.constraint(equalTo: glass.contentView.leadingAnchor, constant: 6),
+        buttons.trailingAnchor.constraint(equalTo: glass.contentView.trailingAnchor, constant: -6),
+        buttons.topAnchor.constraint(equalTo: glass.contentView.topAnchor),
+        buttons.bottomAnchor.constraint(equalTo: glass.contentView.bottomAnchor),
+      ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Use init()") }
+
+    func setButtons(_ items: [UIButton]) {
+      for view in buttons.arrangedSubviews {
+        buttons.removeArrangedSubview(view)
+        view.removeFromSuperview()
+      }
+      for item in items {
+        buttons.addArrangedSubview(item)
+        item.widthAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+      }
+    }
+  }
+
+  @MainActor
   final class SourceToolbarCoordinator: NSObject {
-    let toolbar = UIToolbar(frame: CGRect(x: 0, y: 0, width: 0, height: 44))
+    let toolbar = SourceAccessoryView()
     private var actions: SourceToolbarActions
     private var configuration: SourceToolbarConfiguration?
 
     init(actions: SourceToolbarActions) {
       self.actions = actions
       super.init()
-      toolbar.autoresizingMask = [.flexibleWidth]
-      toolbar.tintColor = UIColor(InterfaceTheme.accent)
-      toolbar.accessibilityIdentifier = "editor-keyboard-bar"
     }
 
     func update(actions: SourceToolbarActions, configuration: SourceToolbarConfiguration) {
@@ -91,52 +143,50 @@
           })
       }
       insert.append(UIMenu(options: .displayInline, children: photos))
-      let find = [
-        action(String(localized: "Find", bundle: .module), image: "magnifyingglass") {
-          $0.actions.find(false)
-        },
-        action(
-          String(localized: "Find and Replace", bundle: .module),
-          image: "arrow.triangle.2.circlepath"
-        ) {
-          $0.actions.find(true)
-        },
-      ]
       let style = item("Text Style", image: "textformat", menu: UIMenu(children: headings))
       let bold = command("Bold", image: "bold") { $0.actions.format(.bold) }
       let italic = command("Italic", image: "italic") { $0.actions.format(.italic) }
       let list = item("Lists", image: "list.bullet", menu: UIMenu(children: lists))
       let insertion = item("Insert", image: "plus", menu: UIMenu(children: insert))
       insertion.accessibilityIdentifier = "editor-insert-menu"
-      let search = item("Find", image: "magnifyingglass", menu: UIMenu(children: find))
       let dismiss = command("Hide Keyboard", image: "keyboard.chevron.compact.down") {
         $0.actions.dismiss()
       }
       for item in [style, bold, italic, list, insertion] {
         item.isEnabled = configuration.canFormat
       }
-      search.isEnabled = configuration.canFind
-      toolbar.items = [style, bold, italic, list, insertion, .flexibleSpace(), search, dismiss]
+      toolbar.setButtons([style, bold, italic, list, insertion, dismiss])
     }
 
     private func item(
       _ title: String.LocalizationValue, image: String, menu: UIMenu
-    ) -> UIBarButtonItem {
-      let item = UIBarButtonItem(image: UIImage(systemName: image), menu: menu)
-      item.accessibilityLabel = String(localized: title, bundle: .module)
-      item.width = 44
-      return item
+    ) -> UIButton {
+      let button = UIButton(type: .system)
+      button.menu = menu
+      button.showsMenuAsPrimaryAction = true
+      style(button, title: String(localized: title, bundle: .module), image: image)
+      return button
     }
 
     private func command(
       _ title: String.LocalizationValue, image: String,
       perform: @escaping @MainActor (SourceToolbarCoordinator) -> Void
-    ) -> UIBarButtonItem {
+    ) -> UIButton {
       let title = String(localized: title, bundle: .module)
-      let item = UIBarButtonItem(primaryAction: action(title, image: image, perform: perform))
-      item.accessibilityLabel = title
-      item.width = 44
-      return item
+      let button = UIButton(type: .system)
+      button.addAction(action(title, image: image, perform: perform), for: .primaryActionTriggered)
+      style(button, title: title, image: image)
+      return button
+    }
+
+    private func style(_ button: UIButton, title: String, image: String) {
+      var configuration = UIButton.Configuration.plain()
+      configuration.image = UIImage(systemName: image)
+      configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(
+        pointSize: 18, weight: .medium)
+      configuration.contentInsets = .zero
+      button.configuration = configuration
+      button.accessibilityLabel = title
     }
 
     private func action(

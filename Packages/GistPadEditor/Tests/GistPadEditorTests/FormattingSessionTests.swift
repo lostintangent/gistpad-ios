@@ -65,12 +65,19 @@
         try MarkdownFormatting.edit(
           .bold, in: session.text, selection: NSRange(location: 0, length: 4)))
       session.textViewWritingToolsWillBegin(session.textView)
+      session.presentFind()
+      #expect(session.inputError != nil)
+      #expect(session.textView.findInteraction?.isFindNavigatorVisible == false)
+      session.inputError = nil
       #expect(throws: SourceMutation.MutationError.compositionActive) {
         try session.apply(edit, generation: 0)
       }
       session.textViewWritingToolsDidEnd(session.textView)
       session.textView.setMarkedText("日本", selectedRange: NSRange(location: 2, length: 0))
       #expect(!session.canFormat)
+      session.presentFind()
+      #expect(session.inputError != nil)
+      #expect(session.textView.findInteraction?.isFindNavigatorVisible == false)
       #expect(throws: SourceMutation.MutationError.compositionActive) {
         try session.apply(edit, generation: 0)
       }
@@ -89,6 +96,8 @@
       #expect(session.isEditing)
       #expect(session.textView.isFindInteractionEnabled)
       #expect(session.textView.findInteraction != nil)
+      #expect(session.textView.topEdgeEffect.style == .soft)
+      #expect(session.textView.bottomEdgeEffect.style == .soft)
       session.textView.resignFirstResponder()
       #expect(!session.isEditing)
     }
@@ -167,17 +176,16 @@
       let session = DocumentSession(documentID: "accessory", text: "A note")
       let window = host(session)
       defer { window.isHidden = true }
-      let toolbar = try #require(session.textView.inputAccessoryView as? UIToolbar)
+      let toolbar = try #require(session.textView.inputAccessoryView as? SourceAccessoryView)
       #expect(toolbar.accessibilityIdentifier == "editor-keyboard-bar")
-      let items = try #require(toolbar.items)
-      #expect(items.count == 8)
+      #expect(toolbar.glass.effect is UIGlassEffect)
+      let items = toolbar.buttons.arrangedSubviews.compactMap { $0 as? UIButton }
+      #expect(items.count == 6)
+      #expect(items.allSatisfy { $0.title(for: .normal) == nil })
       let bold = try #require(items.first { $0.accessibilityLabel == "Bold" })
-      let boldAction = try #require(bold.primaryAction)
       session.textView.selectedRange = NSRange(location: 2, length: 4)
       session.textView.undoManager?.removeAllActions()
-      let control = UIControl()
-      control.addAction(boldAction, for: .primaryActionTriggered)
-      control.sendActions(for: .primaryActionTriggered)
+      bold.sendActions(for: .primaryActionTriggered)
       #expect(session.text == "A **note**")
       #expect(session.generation == 1)
       session.textView.undoManager?.undo()
@@ -188,13 +196,29 @@
         items.first { $0.accessibilityIdentifier == "editor-insert-menu" })
       #expect(insertion.menu != nil)
       #expect(items.first { $0.accessibilityLabel == "Lists" }?.menu?.children.count == 5)
-      #expect(items.first { $0.accessibilityLabel == "Find" }?.menu?.children.count == 2)
+      #expect(!items.contains { $0.accessibilityLabel == "Find" })
       #expect(session.textView.keyCommands?.contains { $0.input == "]" } == true)
+      let findCommand = try #require(
+        session.textView.keyCommands?.first { $0.input == "f" && $0.modifierFlags == .command })
+      #expect(session.textView.canPerformAction(findCommand.action, withSender: findCommand))
       let dismiss = try #require(items.first { $0.accessibilityLabel == "Hide Keyboard" })
-      let hide = try #require(dismiss.primaryAction)
-      let dismissControl = UIControl()
-      dismissControl.addAction(hide, for: .primaryActionTriggered)
-      dismissControl.sendActions(for: .primaryActionTriggered)
+      #expect(items.last === dismiss)
+      for width in [320.0, 390.0, 800.0] {
+        toolbar.frame = CGRect(x: 0, y: 0, width: width, height: 72)
+        toolbar.layoutIfNeeded()
+        #expect(toolbar.glass.frame.minX >= 16)
+        #expect(toolbar.bounds.maxX - toolbar.glass.frame.maxX >= 16)
+        #expect(toolbar.glass.frame.minY >= 12)
+        #expect(toolbar.bounds.maxY - toolbar.glass.frame.maxY >= 12)
+        #expect(toolbar.glass.frame.width <= 380)
+        for item in items {
+          let frame = item.convert(item.bounds, to: toolbar)
+          #expect(frame.width >= 44 && frame.height >= 44)
+          #expect(toolbar.bounds.contains(frame))
+          #expect(!item.isHidden)
+        }
+      }
+      dismiss.sendActions(for: .primaryActionTriggered)
       #expect(!session.textView.isFirstResponder)
     }
 
@@ -203,7 +227,7 @@
       let window = host(session)
       defer { window.isHidden = true }
       let interaction = try #require(session.textView.findInteraction)
-      interaction.presentFindNavigator(showingReplace: true)
+      session.presentFind(replacing: true)
       defer { interaction.dismissFindNavigator() }
       try await Task.sleep(for: .milliseconds(150))
       #expect(interaction.isFindNavigatorVisible)

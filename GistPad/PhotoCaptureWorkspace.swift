@@ -78,6 +78,10 @@
           session.session.textView.resignFirstResponder()
         }
       }
+      value.find = { [session] in
+        session.mode = .source
+        session.session.presentFind(replacing: true)
+      }
       return value
     }
 
