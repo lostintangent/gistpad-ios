@@ -66,6 +66,16 @@
           failure = error.localizedDescription
         }
       }
+      .onReceive(
+        NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)
+      ) { notification in
+        guard let fixture,
+          let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+          let scene = fixture.session.session.textView.window?.windowScene
+        else { return }
+        fixture.keyboardHeight = max(
+          0, scene.effectiveGeometry.coordinateSpace.bounds.intersection(frame).height)
+      }
     }
   }
 
@@ -74,6 +84,7 @@
     let session: NotebookSessionController
     let photos: NotebookPhotoController
     let captureState: String
+    var keyboardHeight: CGFloat = 0
 
     var capturesInsertMenu: Bool { captureState == "insert" }
 
@@ -102,6 +113,7 @@
         "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
         "contentSizeCategory": textView.traitCollection.preferredContentSizeCategory.rawValue,
         "sourceFocused": textView.isFirstResponder,
+        "keyboardHeight": keyboardHeight,
         "photoCount": photos.displayedAttachments.count,
         "lastPhotoHasRecoveryAction": photos.displayedAttachments.last?.action != nil,
       ]
@@ -112,7 +124,7 @@
         readiness["scrollViewportHeight"] =
           scroll.bounds.height - scroll.adjustedContentInset.top
           - scroll.adjustedContentInset.bottom
-        readiness["keyboardHeight"] = window.keyboardLayoutGuide.layoutFrame.height
+        readiness["keyboardHeight"] = keyboardHeight
         readiness["sourceFocused"] = textView.isFirstResponder
         readiness["scrollEndVisible"] =
           scroll.contentOffset.y + scroll.bounds.height - scroll.adjustedContentInset.bottom
@@ -151,7 +163,9 @@
         try Task.checkCancellation()
         window.layoutIfNeeded()
         if let scroll = captureScroll(in: window) {
-          let sample = ScrollSample(scroll: scroll, window: window, source: session.session.textView)
+          let sample = ScrollSample(
+            scroll: scroll, window: window, source: session.session.textView,
+            keyboardHeight: keyboardHeight)
           let shelfReady =
             captureState != "multiple-end"
             || (sample.viewportHeight <= 181 && sample.sourceFocused && sample.keyboardHeight >= 150)
@@ -221,7 +235,7 @@
       let sourceFocused: Bool
 
       @MainActor
-      init(scroll: UIScrollView, window: UIWindow, source: UITextView) {
+      init(scroll: UIScrollView, window: UIWindow, source: UITextView, keyboardHeight: CGFloat) {
         scrollID = ObjectIdentifier(scroll)
         offset = scroll.contentOffset
         contentSize = scroll.contentSize
@@ -229,7 +243,7 @@
         insets = scroll.adjustedContentInset
         viewportHeight = scroll.bounds.height - insets.top - insets.bottom
         bottom = max(-insets.top, contentSize.height - scroll.bounds.height + insets.bottom)
-        keyboardHeight = window.keyboardLayoutGuide.layoutFrame.height
+        self.keyboardHeight = keyboardHeight
         sourceFocused = source.isFirstResponder
       }
     }
