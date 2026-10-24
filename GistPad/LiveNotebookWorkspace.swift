@@ -43,6 +43,29 @@ struct LiveNotebookWorkspace: View {
   }
 
   var body: some View {
+    workspaceSheets
+      .sheet(isPresented: accountSwitchPresented) { accountSwitchSheet }
+      .confirmationDialog(
+        String(localized: "Delete “\(deletionTarget?.title ?? "")” from GitHub?"),
+        isPresented: Binding(
+          get: { deletionTarget != nil },
+          set: { if !$0 { deletionTarget = nil } }),
+        titleVisibility: .visible
+      ) {
+        if let target = deletionTarget {
+          Button("Delete from GitHub", role: .destructive) {
+            run(.delete(gistID: target.id), accountID: target.accountID)
+          }
+        }
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text(
+          "This deletes every file in the gist. Unsynced local drafts and recovery copies are kept on this iPhone."
+        )
+      }
+  }
+
+  private var navigation: some View {
     NavigationSplitView(
       columnVisibility: $columnVisibility, preferredCompactColumn: $compactColumn
     ) {
@@ -67,6 +90,10 @@ struct LiveNotebookWorkspace: View {
     }
     .navigationSplitViewStyle(.balanced)
     .tint(InterfaceTheme.accent)
+  }
+
+  private var workspaceLifecycle: some View {
+    navigation
     .task { await notebook.start() }
     .task(id: notebook.loadedDocument?.id) {
       if notebook.loadedDocument == nil { activeID = nil } else { await activateLoadedDocument() }
@@ -119,6 +146,10 @@ struct LiveNotebookWorkspace: View {
     .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
       Task { await notebook.updateCalendar() }
     }
+  }
+
+  private var workspaceSheets: some View {
+    workspaceLifecycle
     .alert(
       "GistPad",
       isPresented: Binding(
@@ -173,47 +204,35 @@ struct LiveNotebookWorkspace: View {
     .sheet(item: $reviewTarget) { target in
       NotebookConflictReview(controller: target.controller, review: target.review)
     }
-    .sheet(
-      isPresented: Binding(
-        get: { notebook.pendingAccount != nil },
-        set: { if !$0, notebook.pendingAccount != nil { notebook.keepCurrentNotebook() } })
-    ) {
-      if let account = notebook.account, let pending = notebook.pendingAccount {
-        NotebookAccountSwitchSheet(
-          current: account.login, replacement: pending.login,
-          export: {
-            try await finishAccountPersistence(account.id)
-            return try await notebook.exportCurrentDrafts()
-          },
-          switchAccount: {
-            try await finishAccountPersistence(account.id)
-            for photos in photoControllers.values where photos.accountID == account.id {
-              await photos.stop()
-            }
-            activeID = nil
-            columnVisibility = .all
-            await notebook.acceptPendingAccount()
-          },
-          keepCurrent: { notebook.keepCurrentNotebook() })
-      }
-    }
-    .confirmationDialog(
-      String(localized: "Delete “\(deletionTarget?.title ?? "")” from GitHub?"),
-      isPresented: Binding(
-        get: { deletionTarget != nil },
-        set: { if !$0 { deletionTarget = nil } }),
-      titleVisibility: .visible
-    ) {
-      if let target = deletionTarget {
-        Button("Delete from GitHub", role: .destructive) {
-          run(.delete(gistID: target.id), accountID: target.accountID)
-        }
-      }
-      Button("Cancel", role: .cancel) {}
-    } message: {
-      Text(
-        "This deletes every file in the gist. Unsynced local drafts and recovery copies are kept on this iPhone."
-      )
+  }
+
+  private var accountSwitchPresented: Binding<Bool> {
+    Binding(
+      get: { notebook.pendingAccount != nil },
+      set: { presented in
+        if !presented, notebook.pendingAccount != nil { notebook.keepCurrentNotebook() }
+      })
+  }
+
+  @ViewBuilder
+  private var accountSwitchSheet: some View {
+    if let account = notebook.account, let pending = notebook.pendingAccount {
+      NotebookAccountSwitchSheet(
+        current: account.login, replacement: pending.login,
+        export: {
+          try await finishAccountPersistence(account.id)
+          return try await notebook.exportCurrentDrafts()
+        },
+        switchAccount: {
+          try await finishAccountPersistence(account.id)
+          for photos in photoControllers.values where photos.accountID == account.id {
+            await photos.stop()
+          }
+          activeID = nil
+          columnVisibility = .all
+          await notebook.acceptPendingAccount()
+        },
+        keepCurrent: { notebook.keepCurrentNotebook() })
     }
   }
 
