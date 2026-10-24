@@ -113,13 +113,7 @@ actor LiveNotebookProvider: NotebookProviding {
     guard let account = try await accounts.cachedAccount(), account.id == document.accountID else {
       throw AccountError.accountChanged
     }
-    let client = await client(accountID: document.accountID)
-    let githubUserID: Int64
-    if let id = account.githubUserID {
-      githubUserID = id
-    } else {
-      githubUserID = try await client.authenticatedUser().id
-    }
+    let githubUserID = try await verifiedUserID(accountID: document.accountID)
     let existing = try await drafts.drafts(accountID: document.accountID).first {
       $0.gistID == gist.id && $0.filename == document.filename
     }
@@ -131,16 +125,7 @@ actor LiveNotebookProvider: NotebookProviding {
         content: document.text, revision: gist.revision
       )
     }
-    guard existing.state == .savedToGitHub, existing.attemptedGeneration == nil else {
-      return existing
-    }
-    let generation = existing.generation
-    let remote = try await client.gist(id: gist.id)
-    let content = try await client.content(gist: remote, filename: document.filename)
-    return try await drafts.refreshCleanDraft(
-      id: existing.id, accountID: document.accountID, expectedGeneration: generation,
-      content: content, revision: remote.revision
-    ).snapshot
+    return existing
   }
 
   func persist(draftID: UUID, accountID: UUID, text: String, generation: UInt64) async throws
@@ -180,8 +165,7 @@ actor LiveNotebookProvider: NotebookProviding {
     if let previous = try await drafts.drafts(accountID: accountID).first {
       return previous.githubUserID
     }
-    let client = await client(accountID: accountID)
-    return try await client.authenticatedUser().id
+    throw AccountError.reconnectGitHub
   }
 
   func createDraft(accountID: UUID) async throws -> DraftSnapshot {
@@ -204,7 +188,7 @@ actor LiveNotebookProvider: NotebookProviding {
           store: drafts, coordinator: coordinator)
       dailyServices[accountID] = service
     }
-    return try await mutationQueue.run { try await service.openToday(target: target) }
+    return try await mutationQueue.run { try await service.stageToday(target: target) }
   }
 
   private func coordinator(accountID: UUID) async -> SyncCoordinator {
@@ -226,6 +210,7 @@ struct NotebookDocument: Equatable, Sendable, Identifiable {
   var draft: DraftSnapshot?
   var isRecovery: Bool
   var libraryRowID: String?
+  var opensForEditing = false
   let id: String
 
   init(accountID: UUID, gist: Gist, filename: String, text: String, chrome: NoteChrome) {
@@ -268,6 +253,18 @@ struct NotebookDocument: Equatable, Sendable, Identifiable {
   }
 
   var rowID: String { libraryRowID ?? gist?.id ?? draft?.id.uuidString ?? id }
+
+  func refersToSameFile(as other: NotebookDocument) -> Bool {
+    guard accountID == other.accountID, filename == other.filename else { return false }
+    if let draftID = draft?.id, draftID == other.draft?.id { return true }
+    if let gistID = selection.gistID { return gistID == other.selection.gistID }
+    return false
+  }
+}
+
+struct NotebookOpeningDocument: Equatable {
+  let rowID: String
+  let title: String
 }
 
 @MainActor @Observable
@@ -278,6 +275,7 @@ final class NotebookModel {
   private(set) var loadedDocument: NotebookDocument?
   private(set) var isSigningIn = false
   private(set) var isOpeningDocument = false
+  private(set) var openingDocument: NotebookOpeningDocument?
   private(set) var localDrafts: [DraftSnapshot] = []
   private(set) var cachedLibrary: CachedLibrarySnapshot?
   private(set) var isCreating = false
@@ -308,6 +306,149 @@ final class NotebookModel {
         accounts: try AccountService(publishableKey: publishableKey),
         drafts: try DraftStore.open()
       ), selections: NotebookSelectionStore(defaults: .standard))
+  }
+
+  var presentedDocument: NotebookDocument? {
+    if let openingDocument { return cachedDocument(rowID: openingDocument.rowID) }
+    guard let selected = library.selectedNoteID else { return loadedDocument }
+    if loadedDocument?.rowID == selected { return loadedDocument }
+    return cachedDocument(rowID: selected)
+  }
+
+  var openingTitle: String? {
+    if let openingDocument { return openingDocument.title }
+    guard let selected = library.selectedNoteID,
+      selected != loadedDocument?.rowID
+    else { return nil }
+    return opening(gistID: searchTargets[selected]?.gistID ?? selected, rowID: selected).title
+  }
+
+  @discardableResult
+  func beginOpeningRow(id: String) -> Bool {
+    guard account != nil, pendingAccount == nil else {
+      documentError = String(localized: "Reconnect GitHub before opening this note.")
+      return false
+    }
+    documentRequest = UUID()
+    documentError = nil
+    if let document = cachedDocument(rowID: id) {
+      openingDocument = nil
+      isOpeningDocument = false
+      do { try present(document) } catch {
+        report(error, operation: "remember-selection")
+        documentError = Self.message(for: error)
+      }
+      return true
+    }
+    openingDocument = opening(gistID: searchTargets[id]?.gistID ?? id, rowID: id)
+    isOpeningDocument = true
+    library.selectedNoteID = id
+    return false
+  }
+
+  func cachedDocument(rowID: String) -> NotebookDocument? {
+    if let target = searchTargets[rowID] {
+      if let draftID = target.draftID, let draft = localDrafts.first(where: { $0.id == draftID }) {
+        return localDocument(draft, rowID: rowID)
+      }
+      if let gistID = target.gistID {
+        return cachedDocument(gistID: gistID, filename: target.filename, rowID: rowID)
+      }
+      return nil
+    }
+    if let id = UUID(uuidString: rowID), let draft = localDrafts.first(where: { $0.id == id }) {
+      return localDocument(draft, rowID: rowID)
+    }
+    return cachedDocument(gistID: rowID, rowID: rowID)
+  }
+
+  private func cachedDocument(
+    gistID: String, filename: String? = nil, rowID: String? = nil
+  ) -> NotebookDocument? {
+    guard let account, pendingAccount == nil else { return nil }
+    let gist = cachedLibrary?.gists.first { $0.id == gistID }
+    let selectedFilename: String?
+    if let filename {
+      selectedFilename = filename
+    } else if let gist {
+      guard gist.truncated != true || gist.isDailyNote else { return nil }
+      selectedFilename = gist.isDailyNote ? GistConventions.todayFilename() : gist.defaultMarkdownFilename
+    } else {
+      let candidates = localDrafts.filter { $0.gistID == gistID }
+      selectedFilename = candidates.count == 1 ? candidates.first?.filename : nil
+    }
+    guard let selectedFilename, selectedFilename.hasSuffix(".md") else { return nil }
+    if let draft = localDrafts.first(where: {
+      $0.accountID == account.id && $0.gistID == gistID && $0.filename == selectedFilename
+    }) {
+      return localDocument(draft, rowID: rowID)
+    }
+    guard let gist, let text = cachedLibrary?.content(gist: gist, filename: selectedFilename) else {
+      return nil
+    }
+    let fileDates = gist.fileDatesForGrouping
+    var document = NotebookDocument(
+      accountID: account.id, gist: gist, filename: selectedFilename, text: text,
+      chrome: NoteChrome(
+        title: gist.displayName,
+        files: gist.markdownFilenames.map { .init(id: $0, filename: $0, date: fileDates[$0]) },
+        selectedFileID: selectedFilename,
+        access: ownedGistIDs.contains(gistID) ? .editable : .readOnly,
+        isPinned: account.preferences.pinnedGists.contains(gistID),
+        isStarred: cachedLibrary?.starred.contains(where: { $0.id == gistID }) ?? false,
+        isArchived: gist.isArchived,
+        isAutoSaveEnabled: account.preferences.isAutoSaveEnabled))
+    document.libraryRowID = rowID
+    return document
+  }
+
+  private func localDocument(_ draft: DraftSnapshot, rowID: String?) -> NotebookDocument {
+    let gist = cachedLibrary?.gists.first { $0.id == draft.gistID }
+    var document = NotebookDocument(
+      draft: draft, gist: gist,
+      isRecovery: draft.gistID.map { deletedGistIDs.contains($0) || gist == nil } ?? false)
+    document.chrome = chrome(gist: gist, draft: draft)
+    document.libraryRowID = rowID
+    return document
+  }
+
+  private func opening(gistID: String, rowID: String?) -> NotebookOpeningDocument {
+    let id = rowID ?? gistID
+    let results: [LibraryNote]
+    if case .results(let notes, _) = library.searchState { results = notes } else { results = [] }
+    return .init(
+      rowID: id,
+      title: (results + library.snapshot.notes).first(where: { $0.id == id })?.title
+        ?? cachedLibrary?.gists.first(where: { $0.id == gistID })?.displayName
+        ?? String(localized: "Note"))
+  }
+
+  private func present(_ document: NotebookDocument) throws {
+    loadedDocument = document
+    library.selectedNoteID = document.rowID
+    if document.isRecovery {
+      documentError = String(
+        localized:
+          "The GitHub note is unavailable. Your local draft is safe and can still be read or exported.")
+    }
+    try remember(document.selection)
+  }
+
+  private func recordLocalDraft(_ draft: DraftSnapshot) {
+    localDrafts.removeAll { $0.id == draft.id }
+    localDrafts.append(draft)
+    if !library.snapshot.notes.contains(where: {
+      $0.id == draft.gistID || $0.id == draft.id.uuidString
+    }) {
+      library.snapshot.notes.insert(
+        .init(
+          id: draft.id.uuidString,
+          title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
+          updatedAt: .now, isSecret: true,
+          isDailyNote: draft.description == GistConventions.dailyNotesDescription),
+        at: 0)
+    }
+    updateToday()
   }
 
   func start() async {
@@ -378,6 +519,7 @@ final class NotebookModel {
     deletedGistIDs = selections.deletedGistIDs(accountID: pendingAccount.id)
     self.pendingAccount = nil
     loadedDocument = nil
+    openingDocument = nil
     localDrafts = []
     cachedLibrary = nil
     documentError = nil
@@ -480,12 +622,23 @@ final class NotebookModel {
     let request = UUID()
     documentRequest = request
     isOpeningDocument = true
+    openingDocument = opening(gistID: gistID, rowID: rowID)
     documentError = nil
     defer {
-      if request == documentRequest { isOpeningDocument = false }
+      if request == documentRequest {
+        isOpeningDocument = false
+        openingDocument = nil
+      }
     }
     do {
+      if let document = cachedDocument(gistID: gistID, filename: filename, rowID: rowID) {
+        try present(document)
+        return
+      }
       let gist = try await provider.gist(id: gistID, accountID: account.id)
+      guard request == documentRequest, self.account?.id == account.id, pendingAccount == nil else {
+        return
+      }
       let filenames = gist.markdownFilenames
       let fileDates = gist.fileDatesForGrouping
       let selectedFilename: String?
@@ -506,7 +659,7 @@ final class NotebookModel {
       let owned =
         ownedGistIDs.contains(gist.id)
         || gist.owner?.login.caseInsensitiveCompare(account.login) == .orderedSame
-      loadedDocument = NotebookDocument(
+      var document = NotebookDocument(
         accountID: account.id, gist: gist, filename: selectedFilename, text: text,
         chrome: NoteChrome(
           title: gist.displayName,
@@ -520,27 +673,23 @@ final class NotebookModel {
           isAutoSaveEnabled: account.preferences.isAutoSaveEnabled
         )
       )
-      loadedDocument?.libraryRowID = rowID
-      library.selectedNoteID = loadedDocument?.rowID
-      if let document = loadedDocument { try remember(document.selection) }
+      document.libraryRowID = rowID
+      try present(document)
     } catch is CancellationError {
       if request == documentRequest { library.selectedNoteID = loadedDocument?.rowID }
     } catch {
       guard request == documentRequest else { return }
       report(error, operation: "open")
-      if let local = localDrafts.first(where: {
-        $0.gistID == gistID && (filename == nil || $0.filename == filename)
-      }) {
+      if var local = cachedDocument(gistID: gistID, filename: filename, rowID: rowID) {
         let missingGist: Bool
         if case GitHubClientError.http(let status, _) = error {
           missingGist = status == 404
         } else {
           missingGist = false
         }
-        loadedDocument = NotebookDocument(
-          draft: local,
-          gist: cachedLibrary?.gists.first { $0.id == gistID },
-          isRecovery: missingGist || (local.baseContent != nil && Self.isMissingRemote(error)))
+        local.isRecovery =
+          missingGist || (local.draft?.baseContent != nil && Self.isMissingRemote(error))
+        loadedDocument = local
         library.selectedNoteID = loadedDocument?.rowID
         documentError =
           Self.isMissingRemote(error)
@@ -560,9 +709,23 @@ final class NotebookModel {
     guard let account, pendingAccount == nil else { return }
     documentRequest = UUID()
     let request = documentRequest
+    isOpeningDocument = true
+    openingDocument = .init(
+      rowID: rowID ?? id.uuidString,
+      title: localDrafts.first(where: { $0.id == id })?.description ?? String(localized: "Note"))
+    defer {
+      if request == documentRequest {
+        isOpeningDocument = false
+        openingDocument = nil
+      }
+    }
     do {
-      try await reloadLocalState(accountID: account.id)
-      guard request == documentRequest, self.account?.id == account.id else { return }
+      if !localDrafts.contains(where: { $0.id == id }) {
+        try await reloadLocalState(accountID: account.id)
+      }
+      guard request == documentRequest, self.account?.id == account.id, pendingAccount == nil else {
+        return
+      }
       guard let draft = localDrafts.first(where: { $0.id == id }) else {
         throw DraftError.notFound
       }
@@ -573,10 +736,9 @@ final class NotebookModel {
       if let id = draft.gistID, deletedGistIDs.contains(id) {
         loadedDocument?.isRecovery = true
       }
-      library.selectedNoteID = loadedDocument?.rowID
-      try remember(
-        NotebookSelection(gistID: draft.gistID, filename: draft.filename, draftID: draft.id))
+      if let document = loadedDocument { try present(document) }
     } catch {
+      guard request == documentRequest, self.account?.id == account.id else { return }
       report(error, operation: "open-local")
       documentError = Self.message(for: error)
     }
@@ -615,8 +777,9 @@ final class NotebookModel {
       searchTargets = [:]
       recoverySearchRows = []
       if loadedDocument?.libraryRowID != nil {
+        let isSelected = library.selectedNoteID == loadedDocument?.rowID
         loadedDocument?.libraryRowID = nil
-        library.selectedNoteID = loadedDocument?.rowID
+        if isSelected, openingDocument == nil { library.selectedNoteID = loadedDocument?.rowID }
       }
       return
     }
@@ -659,7 +822,7 @@ final class NotebookModel {
           isOwned: match.isRecovery || (match.gistID.map { ownedGistIDs.contains($0) } ?? true),
           isSecret: match.isSecret, isPinned: match.isPinned, isStarred: match.isStarred,
           isArchived: match.isArchived, isDailyNote: match.isDailyNote, tagIDs: match.tagIDs,
-          filename: match.filename,
+          filename: match.filename, fileCount: gist?.truncated == true ? nil : gist?.files.count,
           excerpt: match.text.map {
             String($0.split(whereSeparator: \.isNewline).joined(separator: " ").prefix(160))
           },
@@ -698,14 +861,21 @@ final class NotebookModel {
     isCreating = true
     documentRequest = UUID()
     let request = documentRequest
-    defer { isCreating = false }
+    openingDocument = .init(rowID: "new/\(request)", title: String(localized: "Untitled"))
+    isOpeningDocument = false
+    defer {
+      isCreating = false
+      if request == documentRequest { openingDocument = nil }
+    }
     do {
       let draft = try await provider.createDraft(accountID: account.id)
-      try await reloadLocalState(accountID: account.id)
+      if self.account?.id == account.id { recordLocalDraft(draft) }
       guard request == documentRequest, self.account?.id == account.id else { return }
-      loadedDocument = NotebookDocument(draft: draft)
-      library.selectedNoteID = loadedDocument?.rowID
-      try remember(NotebookSelection(gistID: nil, filename: draft.filename, draftID: draft.id))
+      var document = NotebookDocument(draft: draft)
+      document.opensForEditing = true
+      openingDocument = nil
+      isOpeningDocument = false
+      try present(document)
     } catch {
       report(error, operation: "create")
       documentError = Self.message(for: error)
@@ -717,15 +887,21 @@ final class NotebookModel {
     isCreating = true
     documentRequest = UUID()
     let request = documentRequest
-    defer { isCreating = false }
+    openingDocument = .init(rowID: "today/\(request)", title: String(localized: "Today"))
+    isOpeningDocument = false
+    defer {
+      isCreating = false
+      if request == documentRequest { openingDocument = nil }
+    }
     do {
       let today = try await provider.today(accountID: account.id, target: target)
+      if self.account?.id == account.id { recordLocalDraft(today.draft) }
       guard request == documentRequest, self.account?.id == account.id else { return }
-      let document = NotebookDocument(draft: today.draft, gist: today.gist)
-      loadedDocument = document
-      library.selectedNoteID = document.rowID
-      try remember(document.selection)
-      await refresh()
+      var document = NotebookDocument(draft: today.draft, gist: today.gist)
+      document.opensForEditing = true
+      openingDocument = nil
+      isOpeningDocument = false
+      try present(document)
     } catch {
       report(error, operation: "today")
       documentError = Self.message(for: error)
@@ -747,6 +923,8 @@ final class NotebookModel {
 
   func showToday() async {
     documentRequest = UUID()
+    openingDocument = nil
+    isOpeningDocument = false
     documentError = nil
     let daily = cachedLibrary?.owned.first(where: \.isDailyNote)
     let filename = GistConventions.todayFilename()
@@ -1044,7 +1222,8 @@ final class NotebookModel {
           owner: gist.owner?.login, isOwned: ownedIDs.contains(gist.id),
           isSecret: !gist.isPublic, isPinned: preferences.pinnedGists.contains(gist.id),
           isStarred: starredIDs.contains(gist.id), isArchived: gist.isArchived,
-          isDailyNote: gist.isDailyNote, tagIDs: Set(preferences.gistTags[gist.id] ?? [])
+          isDailyNote: gist.isDailyNote, tagIDs: Set(preferences.gistTags[gist.id] ?? []),
+          fileCount: gist.truncated == true ? nil : gist.files.count
         )
       }.sorted {
         if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }

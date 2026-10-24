@@ -42,7 +42,7 @@ Open `GistPad.xcodeproj` to run interactively. Choose the shared **GistPad** sch
 
 Debug capture launches accept `--capture-screen library|note|editor|focus`. Library and note use a short interface-review fixture and the actual screen package, with populated/empty/error/offline/readonly states. Editor uses the long multilingual source fixture. Focus uses the shared all-syntax renderer fixture. `--long-fixture` also selects the long document outside interface captures. All fixture content is synthetic.
 
-Focus uses `ArrangementView` to adapt source and preview around the available display regions, backed by the same document session.
+The live workspace keeps one native navigation container and a device-local Reading/Edit/Split preference. Split requires at least 640 points of actual detail width. Folding preserves an active edit and the preferred Split arrangement, backed by the same retained source and preview. Real reserved-region and posture acceptance remain device gates.
 
 The native source editor uses the web GitHub theme's Markdown token colors with adaptive Increased Contrast variants. Headings, emphasis, quotations, HTML and ordered markers keep their visible delimiters in the element's color. Code remains monochrome and monospaced. Appearance-only changes resolve dynamic colors without reparsing or changing source, selection or Undo.
 
@@ -64,6 +64,8 @@ For manual continuity testing, edit the long fixture, begin Japanese composition
 The connected app preserves one source session per durable draft and serializes each local generation before acknowledging a device save. It restores the last account-scoped note/file, otherwise opens an existing Today, otherwise shows a dated landing with an explicit Start action. Launching and changing display posture never create or publish a note. New notes begin as durable local drafts, without a synthetic remote gist. Missing remote notes keep recoverable local text.
 
 Ordinary multi-file notes follow the web default: the newest file in a consistently dated Markdown series, otherwise `README.md`, otherwise the first supported file. Explicit file selection is preserved. Daily Notes remains an intentional exception: its default is today's file, never an older-day fallback.
+
+Selecting a note replaces the detail target before asynchronous opening begins. Retained drafts and cached source open without a blocking GitHub read. Only an uncached note shows a native redacted placeholder with its own title, never the previous note's editor. Remote inspection happens after presentation and does not replace retained source. Create and Start open durable local content in Edit with a one-shot caret-at-end/keyboard request after the editor attaches. Ordinary creation uses the account's cached GitHub identity and does not wait for a Library reload, search or network response.
 
 Today's availability, first two source lines and task progress come from account-local metadata, cached content and durable drafts. An empty existing note is not a missing note. An unpublished Today reopens its original local draft without another creation or remote read.
 

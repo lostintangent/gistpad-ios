@@ -28,6 +28,11 @@ struct LiveNotebookWorkspace: View {
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+  init(notebook: NotebookModel, layout: NotebookLayoutPreferences = NotebookLayoutPreferences()) {
+    self.notebook = notebook
+    _layout = State(initialValue: layout)
+  }
+
   private var active: NotebookSessionController? {
     activeID.flatMap { sessions[$0] }
   }
@@ -45,8 +50,14 @@ struct LiveNotebookWorkspace: View {
     } detail: {
       NavigationStack {
         GeometryReader { geometry in
-          if let active {
-            note(active, availableWidth: geometry.size.width)
+          if let document = notebook.presentedDocument {
+            if let active, active.document.refersToSameFile(as: document) {
+              note(active, availableWidth: geometry.size.width)
+            } else {
+              NotebookOpeningView(title: document.chrome.title, document: document)
+            }
+          } else if let title = notebook.openingTitle {
+            NotebookOpeningView(title: title)
           } else {
             TodayLanding(summary: notebook.library.today, start: { startToday() })
               .disabled(notebook.account == nil || notebook.isCreating)
@@ -56,14 +67,6 @@ struct LiveNotebookWorkspace: View {
     }
     .navigationSplitViewStyle(.balanced)
     .tint(InterfaceTheme.accent)
-    .overlay(alignment: .top) {
-      if notebook.isOpeningDocument {
-        ProgressView("Opening note")
-          .padding()
-          .background(.regularMaterial, in: .capsule)
-          .allowsHitTesting(false)
-      }
-    }
     .task { await notebook.start() }
     .task(id: notebook.loadedDocument?.id) {
       if notebook.loadedDocument == nil { activeID = nil } else { await activateLoadedDocument() }
@@ -75,12 +78,10 @@ struct LiveNotebookWorkspace: View {
       }
     }
     .onChange(of: notebook.library.selectedNoteID) { _, selected in
-      guard let selected, selected != notebook.loadedDocument?.rowID else { return }
-      guard canSwitchDocument else {
-        notebook.library.selectedNoteID = active?.document.rowID
-        return
-      }
-      Task { await notebook.openRow(id: selected) }
+      guard let selected, selected != notebook.loadedDocument?.rowID,
+        selected != notebook.openingDocument?.rowID
+      else { return }
+      selectRow(selected)
     }
     .onChange(of: scenePhase) { _, phase in
       if phase == .background { finishLocalPersistence() }
@@ -214,6 +215,7 @@ struct LiveNotebookWorkspace: View {
         guard canSwitchDocument else { return }
         Task { await notebook.showToday() }
       })
+    actions.select = { selectRow($0) }
     actions.reconnect = {
       Task {
         await notebook.signIn()
@@ -323,11 +325,7 @@ struct LiveNotebookWorkspace: View {
         .background(Color(uiColor: .systemBackground))
       }
     }
-    .task {
-      if controller.mode == .source, controller.draft.baseContent == nil {
-        controller.session.textView.becomeFirstResponder()
-      }
-    }
+    .task(id: controller.draft.id) { await controller.inspectRemoteChanges() }
     .onChange(of: NotebookLayoutPreferences.allowsSplit(availableWidth: availableWidth)) { _, allows in
       if !allows, layout.preferredMode == .split, controller.session.isEditing {
         controller.mode = .source
@@ -475,37 +473,37 @@ struct LiveNotebookWorkspace: View {
     }
   }
 
-  private func activateLoadedDocument() async {
-    guard let document = notebook.loadedDocument else { return }
-    if let existing = sessions.values.first(where: {
-      $0.draft.accountID == document.accountID
-        && ($0.draft.id == document.draft?.id
-          || (document.gist?.id != nil && $0.draft.gistID == document.gist?.id
-            && $0.draft.filename == document.filename))
-    }) {
-      existing.adoptPresentation(document)
-      existing.mode = layout.initialMode(isUnpublished: existing.draft.baseContent == nil)
-      preparePhotos(for: existing)
-      activeID = existing.draft.id.uuidString
-      compactColumn = .detail
-      await existing.inspectRemoteChanges()
+  private func selectRow(_ id: String) {
+    guard canSwitchDocument else {
+      notebook.library.selectedNoteID = active?.document.rowID
       return
     }
+    let request = UUID()
+    openRequest = request
+    let isPrepared = notebook.beginOpeningRow(id: id)
+    compactColumn = .detail
+    if isPrepared {
+      if let document = notebook.loadedDocument { _ = activatePreparedDocument(document) }
+      return
+    }
+    Task {
+      guard request == openRequest, notebook.library.selectedNoteID == id else { return }
+      await notebook.openRow(id: id)
+    }
+  }
+
+  private func activateLoadedDocument() async {
+    guard let document = notebook.loadedDocument else { return }
+    if activatePreparedDocument(document) { return }
     do {
       let draft = try await notebook.openDraft(for: document)
       guard !Task.isCancelled, notebook.loadedDocument?.id == document.id,
-        notebook.account?.id == document.accountID
+        notebook.account?.id == document.accountID,
+        notebook.presentedDocument?.refersToSameFile(as: document) == true
       else { return }
-      let controller = NotebookSessionController(
-        document: document, draft: draft, notebook: notebook)
-      controller.mode = layout.initialMode(isUnpublished: draft.baseContent == nil)
-      sessions[draft.id.uuidString] = controller
-      preparePhotos(for: controller)
-      activeID = draft.id.uuidString
-      try notebook.remember(
-        NotebookSelection(
-          gistID: draft.gistID, filename: draft.filename, draftID: draft.id))
-      compactColumn = .detail
+      var prepared = document
+      prepared.draft = draft
+      _ = activatePreparedDocument(prepared)
     } catch is CancellationError {
       return
     } catch {
@@ -516,6 +514,43 @@ struct LiveNotebookWorkspace: View {
           "This note couldn't be opened with durable local storage. Editing has not started.")
       notebook.library.selectedNoteID = active?.document.rowID
     }
+  }
+
+  @discardableResult
+  private func activatePreparedDocument(_ document: NotebookDocument) -> Bool {
+    guard notebook.account?.id == document.accountID,
+      notebook.presentedDocument?.refersToSameFile(as: document) == true
+    else { return false }
+    let controller: NotebookSessionController
+    if let existing = sessions.values.first(where: {
+      $0.document.refersToSameFile(as: document)
+    }) {
+      existing.adoptPresentation(document)
+      controller = existing
+    } else if let draft = document.draft {
+      controller = NotebookSessionController(
+        document: document, draft: draft, notebook: notebook)
+      sessions[draft.id.uuidString] = controller
+    } else {
+      return false
+    }
+    controller.mode = layout.initialMode(isUnpublished: controller.draft.baseContent == nil)
+    controller.requestCreationFocus()
+    preparePhotos(for: controller)
+    activeID = controller.draft.id.uuidString
+    compactColumn = .detail
+    do {
+      try notebook.remember(
+        NotebookSelection(
+          gistID: controller.draft.gistID, filename: controller.draft.filename,
+          draftID: controller.draft.id))
+    } catch {
+      Logger(subsystem: "dev.gistpad.GistPad", category: "Document")
+        .error("Remembering document failed: \(String(reflecting: type(of: error)), privacy: .public)")
+      actionMessage = String(
+        localized: "This note is open, but its selection couldn't be remembered for next time.")
+    }
+    return true
   }
 
   private func publish(_ controller: NotebookSessionController) {

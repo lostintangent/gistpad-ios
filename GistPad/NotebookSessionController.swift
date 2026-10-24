@@ -30,6 +30,7 @@ final class NotebookSessionController {
   @ObservationIgnored private var autosaveTask: Task<Void, Never>?
   @ObservationIgnored private var scheduledAutosave: AutosaveRequest?
   @ObservationIgnored private var isForeground = false
+  @ObservationIgnored private var didRequestCreationFocus = false
   @ObservationIgnored private let autosaveDelay: Duration
   @ObservationIgnored private let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "Document")
@@ -66,6 +67,13 @@ final class NotebookSessionController {
     document.chrome.access.canEdit && !session.isComposing && !session.writingToolsActive
       && !isPerformingDestructiveAction
       && !isApplyingDurableEdit
+  }
+
+  func requestCreationFocus() {
+    guard document.opensForEditing, !didRequestCreationFocus, canMutate else { return }
+    didRequestCreationFocus = true
+    mode = .source
+    session.requestFocusAtEnd()
   }
 
   struct AutosaveRequest: Equatable {
@@ -174,6 +182,7 @@ final class NotebookSessionController {
       incoming.gist?.id == document.gist?.id, incoming.filename == draft.filename
     else { return }
     document.libraryRowID = incoming.libraryRowID
+    document.opensForEditing = incoming.opensForEditing
     if let gist = incoming.gist { document.gist = gist }
     document.chrome = notebook.chrome(gist: document.gist, draft: draft)
   }
