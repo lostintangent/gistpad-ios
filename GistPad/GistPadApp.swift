@@ -19,6 +19,8 @@ struct GistPadApp: App {
     #if DEBUG
       if LaunchArguments.captureScreen == "photos" {
         PhotoCaptureWorkspace()
+      } else if LaunchArguments.captureScreen == "scroll-edges" {
+        ScrollEdgeCaptureWorkspace()
       } else if let screen = LaunchArguments.captureScreen, ["library", "note"].contains(screen) {
         InterfaceCaptureWorkspace(session: session)
       } else if let screen = LaunchArguments.captureScreen,
