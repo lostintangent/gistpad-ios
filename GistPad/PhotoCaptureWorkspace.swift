@@ -38,16 +38,19 @@
             }
           }
           .task {
-            if !fixture.photos.isShowingNotice, !fixture.photos.isShowingPicker {
-              session.session.requestFocusAtEnd()
-              if fixture.capturesInsertMenu {
-                do { try await fixture.presentInsertMenu() } catch is CancellationError {
-                  return
-                } catch {
-                  self.fixture = nil
-                  failure = "The actual keyboard Insert menu couldn't be presented."
+            do {
+              if !fixture.photos.isShowingNotice, !fixture.photos.isShowingPicker {
+                session.session.requestFocusAtEnd()
+                if fixture.capturesInsertMenu {
+                  try await fixture.presentInsertMenu()
                 }
               }
+              try await fixture.markReady()
+            } catch is CancellationError {
+              return
+            } catch {
+              self.fixture = nil
+              failure = "The photo capture couldn't finish preparing."
             }
           }
         } else if let failure {
@@ -71,28 +74,60 @@
   private final class PhotoCaptureFixture {
     let session: NotebookSessionController
     let photos: NotebookPhotoController
-    let capturesInsertMenu: Bool
+    let captureState: String
+
+    var capturesInsertMenu: Bool { captureState == "insert" }
 
     init(
       session: NotebookSessionController, photos: NotebookPhotoController,
-      capturesInsertMenu: Bool = false
+      captureState: String
     ) {
       self.session = session
       self.photos = photos
-      self.capturesInsertMenu = capturesInsertMenu
+      self.captureState = captureState
+    }
+
+    func markReady() async throws {
+      let arguments = ProcessInfo.processInfo.arguments
+      guard let index = arguments.firstIndex(of: "--capture-ready-token"),
+        arguments.indices.contains(index + 1),
+        UUID(uuidString: arguments[index + 1]) != nil
+      else { return }
+      let token = arguments[index + 1]
+      try await Task.sleep(for: .milliseconds(500))
+      let textView = session.session.textView
+      guard let window = textView.window else { throw ImageUploadError.targetChanged }
+      let data = try JSONSerialization.data(
+        withJSONObject: [
+          "screen": "photos", "state": captureState,
+          "fixture": "offline-photos", "token": token,
+          "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
+          "contentSizeCategory": textView.traitCollection.preferredContentSizeCategory.rawValue,
+          "sourceFocused": textView.isFirstResponder,
+        ], options: [.sortedKeys])
+      let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("gistpad-capture-\(token).ready")
+      try data.write(to: url, options: .atomic)
     }
 
     func presentInsertMenu() async throws {
-      try await Task.sleep(for: .milliseconds(500))
       func descendants(_ view: UIView) -> [UIView] {
         view.subviews.flatMap { [$0] + descendants($0) }
       }
-      guard let accessory = session.session.textView.inputAccessoryView,
-        let insert = descendants(accessory).compactMap({ $0 as? UIButton }).first(where: {
-          $0.accessibilityIdentifier == "editor-insert-menu" && $0.window != nil
-        })
-      else { throw ImageUploadError.targetChanged }
-      insert.performPrimaryAction()
+      for _ in 0..<50 {
+        if let accessory = session.session.textView.inputAccessoryView,
+          let insert = descendants(accessory).compactMap({ $0 as? UIButton }).first(where: {
+            $0.accessibilityIdentifier == "editor-insert-menu" && $0.window != nil
+          })
+        {
+          // Let the keyboard finish positioning the native menu anchor.
+          try await Task.sleep(for: .milliseconds(700))
+          insert.performPrimaryAction()
+          return
+        }
+        try await Task.sleep(for: .milliseconds(100))
+      }
+      throw ImageUploadError.targetChanged
     }
 
     var actions: NoteActions {
@@ -121,7 +156,9 @@
       } else {
         state = "editor"
       }
-      guard ["editor", "insert", "notice", "picker", "pending", "multiple", "unpublished"].contains(state)
+      guard
+        ["editor", "insert", "notice", "picker", "pending", "multiple", "unpublished"].contains(
+          state)
       else {
         throw ImageUploadError.targetChanged
       }
@@ -204,7 +241,7 @@
       default: break
       }
       return PhotoCaptureFixture(
-        session: session, photos: photos, capturesInsertMenu: state == "insert")
+        session: session, photos: photos, captureState: state)
     }
   }
 
