@@ -285,6 +285,40 @@ Approved save language:
 
 Do not call queued or in-memory data Saved. Preserve the failed operation and give a recovery action. Status is accessible text, not just a colored dot. Errors remain long enough to act, not solely in an expiring toast.
 
+### Inserting a photo
+
+**Entry:** use **Insert > Photo** in the native keyboard formatting bar, with a labeled `plus` menu and `photo` item. Keep this entry reusable by the fuller formatting bar. Use the system PhotosPicker for one image, not a custom photo browser or an app-wide library-permission screen. [12] Preserve the originating account, draft, accepted generation and UTF-16 insertion location before presenting it. Insert after a selected passage rather than replacing its text. Disable mutation for read-only/incomplete notes and during IME or Writing Tools transactions.
+
+**Public-image notice:** before this account's first pick, present a native, dismissible sheet titled **Photos are public** with this body:
+
+> Photos you choose are uploaded to GistPad's public image storage. Anyone with an image link can view them, even in a secret gist. Location metadata is removed, but visible details remain.
+
+Use **Continue** and **Cancel**. Continue opens PhotosPicker, not an upload. Remember acknowledgement locally for this account only, and keep this disclosure available from the photo entry's help. A notice dismissal, picker cancellation or failed image load creates no upload. The notice must fit large type through natural scrolling, not smaller text. This is a privacy explanation, not a claim that a secret gist protects its images.
+
+**Pending presentation:** use a native attachment row within the note, above the save status. Show a small thumbnail when available, **Photo**, a scaled readable state, and the appropriate recovery action. It is not a modal progress screen, translucent card, or literal text attachment. Pending UI never adds provisional Markdown, object-replacement characters, invented URLs or hidden source markers. Copy, share, preview and canonical persistence continue to use the unchanged source. This note-local row is the safe first implementation rather than introducing unproved in-text decorations into the retained TextKit session.
+
+| Actual state | Row language and action |
+| --- | --- |
+| Loading a picker item / normalizing its pixels | **Preparing photo...** with indeterminate activity. No Saved claim until local queue persistence succeeds |
+| Picker transfer or image conversion failed | **Couldn't prepare this photo.** Explain an oversize/invalid image when known, with **Choose Another Photo**. No empty success-shaped row |
+| Protected bytes durably queued | **Photo saved on this iPhone**. Upload begins when eligible |
+| `.waitingForGist` | **Save this note to GitHub to upload the photo.** Use the existing deliberate Save action. Never create or publish a gist merely to release the queue |
+| `.offline` | **Saved on this iPhone. Waiting for connection.** No infinite active spinner |
+| `.uploading` | **Uploading photo...** with indeterminate activity, unless the transport exposes real progress. No guessed percentage |
+| `.uncertain` | **Checking upload...** while reconciling the existing stable asset ID. Do not offer a duplicate upload |
+| `.reconnect` | **Reconnect to upload** with **Reconnect GitHub**. Retain the local photo |
+| `.failed` | **Couldn't upload photo** with **Retry**, preserving the actual useful failure explanation. Respect a server retry delay rather than presenting an immediately actionable retry |
+| `.uploaded`, original target still valid | Commit insertion through the session's durable-edit hook, then reveal the actual inserted Markdown |
+| `.uploaded`, target or insertion generation changed / composition active | **Photo ready** with **Insert Here**, available only in its originating note at a fresh safe cursor. During composition, explain **Finish the current edit to insert the photo** |
+| Local queue/insertion persistence failed | **Couldn't save this photo on this iPhone** with **Retry**. Keep available image data and the failure visible, without claiming an inserted or durable result |
+| `.inserted` | Remove the pending row only after the durable receipt and source edit succeed. Normal note save state remains authoritative |
+
+Resume eligible work on foreground/reconnection for the same account. Never insert into whichever note happens to be open when an upload finishes. A stale anchor requires an explicit **Insert Here** using a fresh accepted generation and zero-length insertion range in the original draft. Do not guess a shifted offset or overwrite newer typing. Defer insertion during marked text or Writing Tools. Apply the verified URL as exactly one native undoable edit, retaining normal editable Markdown and alternative-text syntax. Reveal it once without stealing an unrelated selection. Undo removes the source insertion, not the public storage object, and must not trigger automatic reinsertion.
+
+Removing a pending item requires **Remove Pending Photo?** confirmation and must explain **This removes the pending photo from this note. It does not delete any uploaded image.** Do not promise upload cancellation or remote deletion that the queue API cannot perform. Disable removal during an active upload if cancellation is not supported. Multiple pending items remain reachable without letting a fixed accessory consume the whole AX3 editing viewport.
+
+Keep the thumbnail/status/action traversal logical for VoiceOver. Do not announce every progress update, move focus on background completion, or dim the entire row. Required evidence includes the first-use notice and cancellation, iCloud/picker-load failure, offline relaunch, an unpublished note with autosave off, upload reconciliation, stale insertion, switching account/note, a failed local commit, one Undo with no reinsertion, and Large/AX3 with the real keyboard. Live upload still requires the user's explicit test approval.
+
 ## 9. Conflict review: local choice before publication
 
 ### Entry and composition
@@ -364,3 +398,4 @@ Review outcomes: **Approved**, **Approved for a named spike only**, or **Changes
 9. [HIG: Motion](https://developer.apple.com/design/human-interface-guidelines/motion)
 10. [HIG: Playing haptics](https://developer.apple.com/design/human-interface-guidelines/playing-haptics)
 11. [`sensoryFeedback(_:trigger:)`](https://developer.apple.com/documentation/swiftui/view/sensoryfeedback(_:trigger:))
+12. [Bringing Photos picker to your SwiftUI app](https://developer.apple.com/documentation/photokit/bringing-photos-picker-to-your-swiftui-app)
