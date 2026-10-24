@@ -1,4 +1,5 @@
 import Foundation
+import GistPadComments
 
 public enum GitHubClientError: Error, Equatable, Sendable {
     case invalidIdentifier
@@ -126,6 +127,45 @@ public actor GitHubClient {
         _ = try await request(path: "/gists/\(try identifier(id))", method: "DELETE")
     }
 
+    public func listComments(gistID: String) async throws -> [GistComment] {
+        let comments: [GistComment] = try await pages(
+            path: "/gists/\(try identifier(gistID))/comments?per_page=100")
+        return GistComment.latestVersions(in: comments)
+    }
+
+    public func comment(gistID: String, commentID: Int64) async throws -> GistComment {
+        try await decoded(path: commentPath(gistID: gistID, commentID: commentID))
+    }
+
+    public func createComment(gistID: String, body: String) async throws -> GistComment {
+        try await decoded(
+            path: "/gists/\(try identifier(gistID))/comments", method: "POST",
+            body: commentData(body))
+    }
+
+    public func updateComment(
+        gistID: String, commentID: Int64, body: String
+    ) async throws -> GistComment {
+        try await decoded(
+            path: commentPath(gistID: gistID, commentID: commentID), method: "PATCH",
+            body: commentData(body))
+    }
+
+    public func deleteComment(gistID: String, commentID: Int64) async throws {
+        _ = try await request(
+            path: commentPath(gistID: gistID, commentID: commentID), method: "DELETE")
+    }
+
+    private func commentPath(gistID: String, commentID: Int64) throws -> String {
+        guard commentID > 0 else { throw GitHubClientError.invalidIdentifier }
+        return "/gists/\(try identifier(gistID))/comments/\(commentID)"
+    }
+
+    private func commentData(_ body: String) throws -> Data {
+        struct CommentChange: Encodable { let body: String }
+        return try JSONEncoder().encode(CommentChange(body: body))
+    }
+
     public func setStarred(_ starred: Bool, id: String) async throws {
         _ = try await request(
             path: "/gists/\(try identifier(id))/star", method: starred ? "PUT" : "DELETE"
@@ -146,23 +186,27 @@ public actor GitHubClient {
     }
 
     private func list(path: String, allowImages: Bool) async throws -> [Gist] {
-        var url: URL? = URL(string: "https://api.github.com\(path)")
-        var visited: Set<URL> = []
-        var result: [Gist] = []
+        let gists: [Gist] = try await pages(path: path)
         var ids: Set<String> = []
-        while let current = url {
-            guard visited.insert(current).inserted else { throw GitHubClientError.invalidResponse }
-            let (data, link) = try await request(url: current)
-            for gist in try decoder().decode([Gist].self, from: data)
-                where gist.matchesWebMarkdownFilter(allowImages: allowImages) {
-                if ids.insert(gist.id).inserted { result.append(gist) }
-            }
-            url = try nextPage(link)
-        }
-        return result.enumerated().sorted {
+        return gists.filter {
+            $0.matchesWebMarkdownFilter(allowImages: allowImages) && ids.insert($0.id).inserted
+        }.enumerated().sorted {
             if $0.element.updatedAt != $1.element.updatedAt { return $0.element.updatedAt > $1.element.updatedAt }
             return $0.offset < $1.offset
         }.map(\.element)
+    }
+
+    private func pages<Element: Decodable>(path: String) async throws -> [Element] {
+        var url: URL? = URL(string: "https://api.github.com\(path)")
+        var visited: Set<URL> = []
+        var result: [Element] = []
+        while let current = url {
+            guard visited.insert(current).inserted else { throw GitHubClientError.invalidResponse }
+            let (data, link) = try await request(url: current)
+            result += try decoder().decode([Element].self, from: data)
+            url = try nextPage(link)
+        }
+        return result
     }
 
     private func nextPage(_ link: String?) throws -> URL? {

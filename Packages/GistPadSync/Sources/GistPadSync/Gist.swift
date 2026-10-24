@@ -39,12 +39,14 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
     public let owner: GitHubUser?
     public let truncated: Bool?
     public let history: [GistRevision]?
+    public let commentCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, description, files, owner, truncated, history
         case updatedAt = "updated_at"
         case createdAt = "created_at"
         case isPublic = "public"
+        case commentCount = "comments"
     }
 
     public var isDailyNote: Bool { description == GistConventions.dailyNotesDescription }

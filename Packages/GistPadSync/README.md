@@ -21,6 +21,14 @@ Create a new client for each account. Its credential provider rejects an account
 
 The client paginates, applies the web's different owned/starred Markdown filters, and retains ETags in memory only. It preserves archive/daily-note markers, exact source bytes and the U+2064 empty-file sentinel. Secret gists are the create default. Updates are targeted file dictionaries, including rename and deletion. Truncated file content uses an unauthenticated HTTPS raw URL on `gist.githubusercontent.com`. A truncated overall file list is explicitly unsupported, never treated as complete. Production sessions reject redirects and never persist note responses to the URL cache.
 
+## Gist comments
+
+`GitHubClient.listComments(gistID:)` fetches every page without applying the Library's Markdown-gist filter. `comment(gistID:commentID:)`, `createComment(gistID:body:)`, `updateComment(gistID:commentID:body:)` and `deleteComment(gistID:commentID:)` use the [GitHub gist-comments API](https://docs.github.com/en/rest/gists/comments?apiVersion=2026-03-10), the same active-account credentials and the existing typed error/cache rules. A mutation invalidates comment and gist-count ETags. A failed read throws instead of becoming an empty conversation. POST is never automatically retried after an uncertain outcome.
+
+Bodies remain exact Markdown, including hidden quote/reply prefixes. Use the Foundation-only `GistPadComments` models and `GistCommentBody.replacingText(with:)` to edit only the visible body. Authors can edit, while authors and the gist owner can delete. Do not infer commenting permission from source editability, automatically publish on autosave, or silently turn a reply to a missing parent into a new root.
+
+`Gist.commentCount` decodes GitHub's `comments` total, including replies. Missing counts remain `nil`, distinct from a known zero and compatible with older durable caches. Hosts omit GitHub comments on Daily Notes and before a gist is published. Inspector drafts, cached conversations and uncertain-post recovery belong to the host integration, not these raw HTTP methods.
+
 ## Preferences
 
 ```swift

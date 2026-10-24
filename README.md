@@ -126,6 +126,7 @@ Live Focus hides the Library and arranges the retained source session beside pre
 - `Packages/GistPadPreview`: independent offline WebKit renderer and typed bridge
 - `Packages/GistPadInterface`: Library, note chrome, save states and reviewed theme assets
 - `Packages/GistPadSync`: authentication, typed GitHub operations, durable drafts and reconciliation
+- `Packages/GistPadComments`: shared comment bodies, thread structure and exact quote matching
 - `PreviewRenderer/`: web-renderer build tooling, sourced from sibling `../gistpad.dev`
 
 Keep feature implementation in local packages so independent work does not churn the project file. No credentials, real gist content or generated Xcode user state belong in this repository.
