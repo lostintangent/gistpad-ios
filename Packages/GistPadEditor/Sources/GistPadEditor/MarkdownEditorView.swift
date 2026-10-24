@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+  import GistPadAppearance
   import SwiftUI
   import UIKit
 
@@ -130,6 +131,7 @@
     let session: DocumentSession
     let actions: SourceToolbarActions
     let configuration: SourceToolbarConfiguration
+    @Environment(\.isNotebookPaneVisible) private var isPaneVisible
 
     func makeCoordinator() -> SourceToolbarCoordinator {
       SourceToolbarCoordinator(actions: actions)
@@ -142,6 +144,9 @@
     }
 
     func updateUIView(_ view: UITextView, context: Context) {
+      view.isHidden = !isPaneVisible
+      view.isAccessibilityElement = isPaneVisible
+      view.accessibilityElementsHidden = !isPaneVisible
       context.coordinator.update(actions: actions, configuration: configuration)
       session.updateAppearanceIfNeeded()
     }

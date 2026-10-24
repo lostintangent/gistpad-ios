@@ -19,10 +19,19 @@ private struct PersonalAccentEnvironmentKey: UITraitBridgedEnvironmentKey {
     }
 }
 
+private struct NotebookPaneVisibilityKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
 extension EnvironmentValues {
     public var personalAccent: PersonalAccent {
         get { self[PersonalAccentEnvironmentKey.self] }
         set { self[PersonalAccentEnvironmentKey.self] = newValue }
+    }
+
+    public var isNotebookPaneVisible: Bool {
+        get { self[NotebookPaneVisibilityKey.self] }
+        set { self[NotebookPaneVisibilityKey.self] = newValue }
     }
 }
 

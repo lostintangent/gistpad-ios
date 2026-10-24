@@ -235,6 +235,7 @@ struct LibraryHostTests {
   func searchOpensAsNativeUI(dark: Bool) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
     let window = UIWindow(windowScene: scene)
     window.overrideUserInterfaceStyle = dark ? .dark : .light
     let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
@@ -246,18 +247,24 @@ struct LibraryHostTests {
       rootView: NavigationStack {
         LibraryView(model: model, actions: .init(refresh: {}, create: {}, today: {}))
       }
+      .librarySearch(model: model, isPresented: .constant(true))
       .environment(\.dynamicTypeSize, .large)
       .environment(\.colorScheme, dark ? .dark : .light))
     window.makeKeyAndVisible()
     defer {
       window.endEditing(true)
+      window.rootViewController?.dismiss(animated: false)
       window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
     }
-    try await Task.sleep(for: .milliseconds(400))
-    let searchButton = try #require(
-      descendants(window).compactMap { $0 as? UIControl }.first { $0.accessibilityLabel == "Search" })
-    searchButton.performPrimaryAction()
-    try await Task.sleep(for: .milliseconds(1200))
+    let deadline = ContinuousClock.now + .seconds(5)
+    while !descendants(window).compactMap({ $0 as? UITextField }).contains(where: {
+      $0.window === window && $0.text == "notebook" && $0.isFirstResponder
+    }), .now < deadline {
+      try await Task.sleep(for: .milliseconds(20))
+      window.layoutIfNeeded()
+    }
     let field = try #require(
       descendants(window).compactMap { $0 as? UITextField }.first {
         $0.window != nil && $0.text == "notebook"

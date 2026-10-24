@@ -1,4 +1,5 @@
 #if os(iOS)
+import GistPadAppearance
 import SwiftUI
 
 public struct NoteScreen<Source: View, Preview: View>: View {
@@ -51,11 +52,13 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 .opacity(showingSource ? 1 : 0)
                 .allowsHitTesting(showingSource)
                 .accessibilityHidden(!showingSource)
+                .environment(\.isNotebookPaneVisible, showingSource)
             preview
                 .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
                 .opacity(!showingSource || showingSplit ? 1 : 0)
                 .allowsHitTesting(!showingSource || showingSplit)
                 .accessibilityHidden(showingSource && !showingSplit)
+                .environment(\.isNotebookPaneVisible, !showingSource || showingSplit)
         }
         .overlay {
             if showingSplit {

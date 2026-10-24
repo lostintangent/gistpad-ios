@@ -46,6 +46,8 @@ Identical failure explanations share one section footer instead of repeating in 
 
 App-hosted tests cover native geometry and document-state preservation, not virtual accessibility handles. `GistPadUITests/NativeControlUITests.swift` uses a real AX client for menu commands, Save/offline visibility, native Close, mode roles, scaled targets and selection. Its capture-only `--capture-appearance light|dark` and `--capture-split` arguments exercise the actual controls without changing production initialization.
 
+NoteScreen supplies `isNotebookPaneVisible` to retained children. Native editor, Preview and photo representables apply it to UIKit visibility and accessibility without replacing their views. XCUITest can list hidden native views in its full snapshot, so snapshot absence alone is not a VoiceOver gate. Native flags and UIKit hit testing pass, but XCUITest's retained-editor/Preview accessibility-hit discrepancy remains open in t76. Each visible photo disclosure retains the single `pending-photos-summary` identifier, without an outer identifier overriding it.
+
 Run the two `testNativeSegmentTargetsAcrossTitlesAndAppearances` methods with the Duo simulator in Closed posture (466 by 678 points). Run the two `testNativeWideSegmentTargetsAcrossTitlesAndAppearances` methods separately in Open posture (951 by 669 points), which covers both two- and three-segment controls. Change posture in Device Hub between runs, not through rotation. Each method requires the actual window size before testing native targets, title separation and selection in Light/Dark.
 
 ```sh

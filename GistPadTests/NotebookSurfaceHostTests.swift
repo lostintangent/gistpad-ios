@@ -1,15 +1,127 @@
 import GistPadAppearance
+import GistPadEditor
 import GistPadInterface
+import GistPadPreview
 import GistPadSync
 import SwiftUI
 import Testing
 import UIKit
+import WebKit
 
 @testable import GistPad
 
 @Suite(.serialized)
 @MainActor
 struct NotebookSurfaceHostTests {
+  @Test(arguments: [NoteMode.source, .reading, .split])
+  func retainedNativePanesFollowTheirVisibility(mode: NoteMode) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    let session = DocumentSession(documentID: "pane-visibility", text: "# Retained words")
+    window.rootViewController = UIHostingController(rootView: NavigationStack {
+      NoteScreen(
+        document: .init(
+          title: "A note", files: [.init(id: "README.md", filename: "README.md")],
+          selectedFileID: "README.md"),
+        mode: .constant(mode), saveState: .savedLocally, allowsSplit: true
+      ) {
+        MarkdownEditorView(session: session)
+          .safeAreaInset(edge: .bottom) {
+            PhotoAttachmentShelf(attachments: [.init(id: UUID(), phase: .queued)], details: {})
+          }
+      } preview: {
+        MarkdownPreviewView(
+          document: session.text, documentID: session.documentID,
+          generation: session.generation, onEvent: { _ in })
+          .safeAreaInset(edge: .bottom) {
+            PhotoAttachmentShelf(attachments: [.init(id: UUID(), phase: .queued)], details: {})
+          }
+      }
+    })
+    window.makeKeyAndVisible()
+    defer {
+      window.endEditing(true)
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(500))
+    window.layoutIfNeeded()
+    func descendants(_ view: UIView) -> [UIView] {
+      [view] + view.subviews.flatMap(descendants)
+    }
+    let preview = try #require(descendants(window).compactMap { $0 as? WKWebView }.first)
+    let editor = session.textView
+    Attachment.record(
+      """
+      \(mode): source hidden \(editor.isHidden), AX \(editor.isAccessibilityElement), \
+      children hidden \(editor.accessibilityElementsHidden), window \(editor.window != nil)
+      preview hidden \(preview.isHidden), AX \(preview.isAccessibilityElement), \
+      children hidden \(preview.accessibilityElementsHidden), window \(preview.window != nil)
+      """, named: "native-pane-visibility-\(mode).txt")
+    #expect(editor.window === window)
+    #expect(preview.window === window)
+    #expect(editor.isHidden == (mode == .reading))
+    #expect(editor.isAccessibilityElement == (mode != .reading))
+    #expect(editor.accessibilityElementsHidden == (mode == .reading))
+    #expect(preview.isHidden == (mode == .source))
+    #expect(preview.accessibilityElementsHidden == (mode == .source))
+    let sourcePoint = editor.convert(
+      CGPoint(x: editor.bounds.midX, y: editor.bounds.midY), to: window)
+    let previewPoint = preview.convert(
+      CGPoint(x: preview.bounds.midX, y: preview.bounds.midY), to: window)
+    #expect(window.hitTest(sourcePoint, with: nil)?.isDescendant(of: editor) == (mode != .reading))
+    #expect(window.hitTest(previewPoint, with: nil)?.isDescendant(of: preview) == (mode != .source))
+    let summaries = descendants(window).filter {
+      $0.accessibilityIdentifier == "pending-photos-summary"
+    }
+    #expect(summaries.count == 2)
+    #expect(summaries.filter { !$0.isHidden && $0.isAccessibilityElement }.count == (mode == .split ? 2 : 1))
+    for summary in summaries {
+      #expect(summary.accessibilityElementsHidden == summary.isHidden)
+      #expect(summary.isAccessibilityElement == !summary.isHidden)
+    }
+  }
+
+  @Test func captureWorkspaceKeepsTheRetainedSourceNativelyHidden() async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.rootViewController = UIHostingController(rootView:
+      NotebookSurfaceCaptureWorkspace(screen: "note-chrome")
+        .environment(\.dynamicTypeSize, .accessibility3))
+    window.makeKeyAndVisible()
+    defer {
+      window.endEditing(true)
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(800))
+    window.layoutIfNeeded()
+    func descendants(_ view: UIView) -> [UIView] {
+      [view] + view.subviews.flatMap(descendants)
+    }
+    let editor = try #require(descendants(window).compactMap { $0 as? UITextView }.first)
+    let preview = try #require(descendants(window).compactMap { $0 as? WKWebView }.first)
+    Attachment.record(
+      """
+      source hidden \(editor.isHidden), AX \(editor.isAccessibilityElement), \
+      children hidden \(editor.accessibilityElementsHidden)
+      preview hidden \(preview.isHidden), children hidden \(preview.accessibilityElementsHidden)
+      """, named: "capture-root-native-pane-visibility.txt")
+    #expect(editor.isHidden)
+    #expect(!editor.isAccessibilityElement)
+    #expect(editor.accessibilityElementsHidden)
+    #expect(!preview.isHidden)
+    #expect(!preview.accessibilityElementsHidden)
+    let point = editor.convert(CGPoint(x: editor.bounds.midX, y: editor.bounds.midY), to: window)
+    #expect(window.hitTest(point, with: nil)?.isDescendant(of: editor) == false)
+  }
+
   struct Capture: Sendable {
     let screen: String
     let dark: Bool

@@ -30,14 +30,11 @@ struct NotebookOpeningHostTests {
   func cachedWordsIncludingAnEmptyFileNeverWaitForProgress(text: String) async throws {
     let host = try Host(document: cachedDocument(text: text))
     defer { host.close() }
-    try await host.waitUntil {
-      notebookAccessibilityElement("opening-cached-note", in: host.window) != nil
-    }
+    try await host.waitUntil { host.cachedPreview != nil }
     #expect(host.progress == nil)
     try await Task.sleep(for: .milliseconds(450))
     #expect(host.progress == nil)
-    #expect(notebookAccessibilityElement("opening-uncached-note", in: host.window) == nil)
-    let webView = try #require(host.nativeViews.compactMap { $0 as? WKWebView }.first)
+    let webView = try #require(host.cachedPreview)
     try await host.waitUntil {
       webView.url != nil && !webView.isLoading
     }
@@ -64,9 +61,7 @@ struct NotebookOpeningHostTests {
     #expect(host.progress == nil)
     try await host.waitUntil { host.progress != nil }
     host.state.document = try cachedDocument(text: "# Ready now")
-    try await host.waitUntil {
-      notebookAccessibilityElement("opening-cached-note", in: host.window) != nil
-    }
+    try await host.waitUntil { host.cachedPreview != nil }
     #expect(host.progress == nil)
     try await Task.sleep(for: .milliseconds(400))
     #expect(host.progress == nil)
@@ -77,9 +72,7 @@ struct NotebookOpeningHostTests {
     defer { host.close() }
     try await host.waitUntil { host.state.appearedAt != nil }
     host.state.document = try cachedDocument(text: "# Already here")
-    try await host.waitUntil {
-      notebookAccessibilityElement("opening-cached-note", in: host.window) != nil
-    }
+    try await host.waitUntil { host.cachedPreview != nil }
     #expect(host.progress == nil)
     try await Task.sleep(for: .milliseconds(450))
     #expect(host.progress == nil)
@@ -130,6 +123,11 @@ struct NotebookOpeningHostTests {
     }
 
     var nativeViews: [UIView] { descendants(window) }
+    var cachedPreview: WKWebView? {
+      nativeViews.compactMap { $0 as? WKWebView }.first {
+        $0.window === window && !$0.bounds.isEmpty
+      }
+    }
     var progress: UIActivityIndicatorView? {
       nativeViews.compactMap { $0 as? UIActivityIndicatorView }.first { !$0.isHidden && $0.alpha > 0 }
     }

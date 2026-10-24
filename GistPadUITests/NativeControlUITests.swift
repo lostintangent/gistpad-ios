@@ -27,7 +27,11 @@ final class NativeControlUITests: XCTestCase {
     let editor = app.textViews.firstMatch
     try await waitUntil("the editable source") { editor.isHittable }
     let source = try XCTUnwrap(editor.value as? String)
-    try await waitUntil("the software keyboard") { app.keyboards.firstMatch.exists }
+    try await waitUntil("the software keyboard inside the actual window") {
+      let keyboard = app.keyboards.firstMatch
+      return keyboard.exists && keyboard.frame.height >= 150
+        && app.windows.firstMatch.frame.intersection(keyboard.frame).height >= 150
+    }
     record(app, name: "source-with-keyboard-before-status")
     try await waitUntil("the covered status leaving the accessibility tree") { !attention.exists }
     let hideKeyboard = app.buttons["Hide Keyboard"]
@@ -93,6 +97,105 @@ final class NativeControlUITests: XCTestCase {
   @MainActor
   func testEmojiTitleKeepsBothModesVisibleAtAccessibilitySize() async throws {
     try await checkNativeModes(accessibility: true)
+  }
+
+  @MainActor
+  func testCachedOpeningIsAccessibleWithoutAnIncidentalTintWrapper() async throws {
+    for appearance in ["light", "dark"] {
+      for empty in [false, true] {
+        let app = launch(
+          screen: "note-loading", state: empty ? "cached-empty" : "cached",
+          accessibility: true, appearance: appearance)
+        defer {
+          record(app, name: "native-cached-opening-\(empty ? "empty" : "words")-AX3-\(appearance)")
+          app.terminate()
+        }
+        let cached = app.descendants(matching: .any)["opening-cached-note"].firstMatch
+        try await waitUntil("the actual cached-note accessibility element") {
+          cached.exists && cached.isHittable
+        }
+        XCTAssertGreaterThan(cached.frame.width, 0)
+        XCTAssertGreaterThan(cached.frame.height, 0)
+        XCTAssertTrue(app.windows.firstMatch.frame.intersects(cached.frame))
+        XCTAssertFalse(app.descendants(matching: .any)["opening-note-progress"].exists)
+        if !empty {
+          try await waitUntil("the accessible rendered cached words") {
+            app.webViews.staticTexts["Saved words"].exists
+          }
+        }
+      }
+    }
+  }
+
+  @MainActor
+  func testPhotoShelfHasARealAccessibleTargetAtAccessibilitySize() async throws {
+    for appearance in ["light", "dark"] {
+      let app = launch(
+        screen: "photos", state: "multiple", accessibility: true, appearance: appearance)
+      defer {
+        record(app, name: "native-photo-summary-AX3-\(appearance)-final")
+        app.terminate()
+      }
+      func visibleSummaries() -> [XCUIElement] {
+        app.buttons.matching(identifier: "pending-photos-summary")
+          .allElementsBoundByIndex.filter(\.isHittable)
+      }
+      try await waitUntil("one actual accessible photo-summary target") { visibleSummaries().count == 1 }
+      let summary = try XCTUnwrap(visibleSummaries().first)
+      XCTAssertGreaterThan(summary.frame.width, 0)
+      XCTAssertGreaterThanOrEqual(summary.frame.height, 44)
+      XCTAssertLessThanOrEqual(summary.frame.height + 16, 180)
+      XCTAssertTrue(app.windows.firstMatch.frame.contains(summary.frame))
+      XCTAssertEqual(summary.label, "3 photos")
+      XCTAssertEqual(summary.value as? String, "3 couldn't upload")
+      record(app, name: "native-photo-summary-AX3-\(appearance)")
+      summary.tap()
+      try await waitUntil("the real photo Details presentation") {
+        app.navigationBars["Photos"].exists && !summary.isHittable
+      }
+      XCTAssertTrue(app.buttons.matching(
+        NSPredicate(format: "identifier BEGINSWITH %@", "photo-recovery-")).firstMatch.exists)
+    }
+  }
+
+  @MainActor
+  func testLibrarySearchActivatesTheNativeFieldInLightAndDark() async throws {
+    for appearance in ["light", "dark"] {
+      let app = launch(screen: "library", state: "search", appearance: appearance)
+      defer { app.terminate() }
+      let search = app.buttons["Search"].firstMatch
+      try await waitUntil("the real Library Search command") { search.isHittable }
+      search.tap()
+      let field = app.searchFields.firstMatch
+      try await waitUntil("the visible native search field") { field.isHittable }
+      XCTAssertEqual(field.value as? String, "notebook")
+      field.typeText(" thought")
+      XCTAssertEqual(field.value as? String, "notebook thought")
+      record(app, name: "native-library-search-\(appearance)")
+    }
+  }
+
+  @MainActor
+  func testQuickCaptureExposesTheNativeEditorAtBothTextSizes() async throws {
+    for appearance in ["light", "dark"] {
+      for accessibility in [false, true] {
+        let app = launch(
+          screen: "capture-today", accessibility: accessibility, appearance: appearance)
+        defer { app.terminate() }
+        let editor = app.textViews["today-capture-input"]
+        try await waitUntil("the actual Add to Today editor") { editor.isHittable }
+        XCTAssertEqual(editor.label, "Text to add to Today")
+        XCTAssertGreaterThanOrEqual(editor.frame.height, 44)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(editor.frame))
+        let add = app.buttons["today-capture-add"]
+        XCTAssertFalse(add.isEnabled)
+        editor.tap()
+        editor.typeText("A thought worth keeping.")
+        try await waitUntil("Add to enable after real text entry") { add.isHittable && add.isEnabled }
+        XCTAssertEqual(editor.value as? String, "A thought worth keeping.")
+        record(app, name: "native-quick-capture-\(accessibility ? "AX3" : "Large")-\(appearance)")
+      }
+    }
   }
 
   @MainActor

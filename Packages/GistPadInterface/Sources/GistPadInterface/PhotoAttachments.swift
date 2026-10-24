@@ -94,6 +94,7 @@ struct PhotoAttachmentSection: Identifiable, Sendable {
 }
 
 #if os(iOS)
+import GistPadAppearance
 import SwiftUI
 
 public struct PhotoPrivacyNotice: View {
@@ -169,7 +170,6 @@ public struct PhotoAttachmentShelf: View {
                 .background(Color(uiColor: .secondarySystemBackground), in: .rect(cornerRadius: 16))
                 .padding(.horizontal, 16)
                 .padding(.vertical, verticalPadding)
-                .accessibilityIdentifier("pending-photos")
         }
     }
 
@@ -446,6 +446,7 @@ private struct PhotoActionButton<Label: View>: UIViewRepresentable {
     var isEnabled = true
     let action: () -> Void
     @ViewBuilder let label: () -> Label
+    @Environment(\.isNotebookPaneVisible) private var isPaneVisible
 
     func makeUIView(context: Context) -> PhotoActionControl {
         let button = PhotoActionControl(type: .custom)
@@ -456,6 +457,9 @@ private struct PhotoActionButton<Label: View>: UIViewRepresentable {
 
     func updateUIView(_ button: PhotoActionControl, context: Context) {
         button.activate = action
+        button.isHidden = !isPaneVisible
+        button.isAccessibilityElement = isPaneVisible
+        button.accessibilityElementsHidden = !isPaneVisible
         button.isEnabled = isEnabled
         button.accessibilityIdentifier = id
         button.accessibilityLabel = title

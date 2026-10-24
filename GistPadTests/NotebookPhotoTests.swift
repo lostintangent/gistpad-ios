@@ -285,6 +285,7 @@ extension NotebookPhotoTests {
     #expect(fixture.photos.attachments.count == photoCount)
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
     let window = UIWindow(windowScene: scene)
     let accent = PersonalAccent(savedHex: "#FACC15")
     window.traitOverrides[PersonalAccentTrait.self] = accent
@@ -310,7 +311,13 @@ extension NotebookPhotoTests {
     host.traitOverrides.preferredContentSizeCategory = accessibility ? .accessibilityExtraLarge : .large
     window.rootViewController = host
     window.makeKeyAndVisible()
-    defer { window.isHidden = true }
+    defer {
+      window.endEditing(true)
+      window.rootViewController?.dismiss(animated: false)
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
     try await Task.sleep(for: .milliseconds(300))
     let editor = fixture.session.session.textView
     editor.becomeFirstResponder()
@@ -352,8 +359,7 @@ extension NotebookPhotoTests {
     }
     let summary = try #require(PhotoCaptureAccessibility.element(
       id: "pending-photos-summary", in: host.view))
-    let summaryFrame = window.convert(
-      summary.accessibilityFrame, from: scene.effectiveGeometry.coordinateSpace)
+    let summaryFrame = try #require(PhotoCaptureAccessibility.frame(of: summary, in: window))
     let visibleShelfHeight = summaryFrame.height
     let image = record(window, named: "\(prefix)-shelf-top")
     #expect(visibleShelfHeight >= 44 && visibleShelfHeight + 16 <= (accessibility ? 180 : 128))
@@ -423,14 +429,12 @@ extension NotebookPhotoTests {
       let last = try #require(fixture.photos.attachments.last)
       let recovery = try #require(PhotoCaptureAccessibility.element(
         id: "photo-recovery-\(last.id)", in: details.view))
-      let recoveryFrame = details.view.convert(
-        recovery.accessibilityFrame, from: scene.effectiveGeometry.coordinateSpace)
+      let recoveryFrame = try #require(PhotoCaptureAccessibility.frame(of: recovery, in: details.view))
       #expect(recoveryFrame.height >= 44)
       #expect(recoveryFrame.minY >= details.view.safeAreaInsets.top)
       #expect(recoveryFrame.maxY <= details.view.bounds.maxY - details.view.safeAreaInsets.bottom + 1)
       let detailsImage = record(window, named: "\(prefix)-details-end")
-      let recoveryInWindow = window.convert(
-        recovery.accessibilityFrame, from: scene.effectiveGeometry.coordinateSpace)
+      let recoveryInWindow = try #require(PhotoCaptureAccessibility.frame(of: recovery, in: window))
       let recoveryImage = try #require(detailsImage.cgImage?.cropping(to: recoveryInWindow.applying(
         CGAffineTransform(scaleX: detailsImage.scale, y: detailsImage.scale))))
       let recoveryPixels = try nativeAccentPixels(

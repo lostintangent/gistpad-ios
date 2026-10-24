@@ -37,6 +37,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
   @State private var selectedTagIDs: Set<String> = ["ideas", "everyday"]
   @State private var readinessError: String?
   @State private var keyboardHeight: CGFloat = 0
+  @State private var cachedOpeningDocument: NotebookDocument?
 
   init(screen: String, accent: String? = nil) {
     self.screen = screen
@@ -107,6 +108,17 @@ struct NotebookSurfaceCaptureWorkspace: View {
       Text(readinessError ?? "")
     }
     .task {
+      if screen == "note-loading", ["cached", "cached-empty"].contains(captureState ?? "") {
+        do {
+          let store = try DraftStore.open(inMemory: true)
+          let draft = try await store.newDraft(
+            accountID: UUID(), githubUserID: 42,
+            text: captureState == "cached-empty" ? "" : "# Saved words\n\nAvailable offline.")
+          cachedOpeningDocument = NotebookDocument(draft: draft)
+        } catch {
+          readinessError = "The isolated cached-opening fixture failed: \(error.localizedDescription)"
+        }
+      }
       if screen.hasPrefix("settings") { presentedSheet = .settings }
       if screen == "tags" { presentedSheet = .tags }
       if screen == "account" { presentedSheet = .account }
@@ -126,7 +138,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
   private var surface: some View {
     Group {
       if screen == "note-loading" {
-        NotebookOpeningView(title: "A place for good ideas")
+        NotebookOpeningView(title: "A place for good ideas", document: cachedOpeningDocument)
       } else if screen == "note-failed" {
         NotebookFailedOpeningView(
           failure: .init(

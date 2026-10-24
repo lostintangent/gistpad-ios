@@ -44,6 +44,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.legibilityWeight) private var legibilityWeight
     @Environment(\.personalAccent) private var personalAccent
+    @Environment(\.isNotebookPaneVisible) private var isPaneVisible
 
     init(
         document: PreviewDocument, allowsTaskEdits: Bool, viewportView: PreviewViewportView,
@@ -88,6 +89,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: InsetAwareWebView, context: Context) {
+        webView.isHidden = !isPaneVisible
+        webView.accessibilityElementsHidden = !isPaneVisible
         context.coordinator.onEvent = onEvent
         viewportView.webView = webView
         webView.updateViewportView(viewportView)

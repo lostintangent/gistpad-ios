@@ -81,6 +81,7 @@ struct NotebookWidgetPresentationTests {
   func capturesNativeQuickCapture(dark: Bool, accessibility: Bool) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
     let content = Color.clear
       .sheet(isPresented: .constant(true)) {
         AddToTodaySheet()
@@ -91,14 +92,28 @@ struct NotebookWidgetPresentationTests {
     window.rootViewController = UIHostingController(rootView: content)
     window.overrideUserInterfaceStyle = dark ? .dark : .light
     window.makeKeyAndVisible()
-    defer { window.isHidden = true }
+    defer {
+      window.endEditing(true)
+      window.rootViewController?.dismiss(animated: false)
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
+    func descendants(_ view: UIView) -> [UIView] {
+      [view] + view.subviews.flatMap(descendants)
+    }
     let deadline = ContinuousClock.now.advanced(by: .seconds(3))
-    while notebookAccessibilityElement("today-capture-input", in: window) == nil,
+    while !descendants(window).compactMap({ $0 as? UITextView }).contains(where: {
+      $0.window === window && !$0.bounds.isEmpty && $0.isEditable
+    }),
       ContinuousClock.now < deadline
     {
       try await Task.sleep(for: .milliseconds(100))
     }
-    _ = try #require(notebookAccessibilityElement("today-capture-input", in: window))
+    let editor = try #require(descendants(window).compactMap { $0 as? UITextView }.first {
+      $0.window === window && !$0.bounds.isEmpty && $0.isEditable
+    })
+    #expect(editor.bounds.height >= 44)
     window.endEditing(true)
     try await Task.sleep(for: .milliseconds(700))
     window.layoutIfNeeded()

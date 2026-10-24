@@ -12,7 +12,7 @@ let package = Package(
   ],
   targets: [
     .target(
-      name: "GistPadEditor", dependencies: ["GistPadInterface", "GistPadIntelligence"],
+      name: "GistPadEditor", dependencies: ["GistPadAppearance", "GistPadInterface", "GistPadIntelligence"],
       resources: [.process("Resources")]),
     .testTarget(
       name: "GistPadEditorTests",

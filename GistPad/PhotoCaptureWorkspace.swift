@@ -125,7 +125,10 @@
         "lastPhotoHasRecoveryAction": photos.displayedAttachments.last?.action != nil,
       ]
       if let summary {
-        readiness["summaryFrame"] = frameValues(summary.accessibilityFrame)
+        guard let frame = PhotoCaptureAccessibility.frame(of: summary, in: window) else {
+          throw PhotoCaptureFailure.summaryDidNotSettle
+        }
+        readiness["summaryFrame"] = frameValues(frame)
         readiness["summaryLabel"] = summary.accessibilityLabel
         readiness["summaryStatus"] = summary.accessibilityValue
       }
@@ -149,10 +152,8 @@
           let last = photos.displayedAttachments.last,
           let recovery = PhotoCaptureAccessibility.element(
             id: "photo-recovery-\(last.id)", in: window),
-          let scene = window.windowScene
+          let frame = PhotoCaptureAccessibility.frame(of: recovery, in: window)
         {
-          let frame = window.convert(
-            recovery.accessibilityFrame, from: scene.effectiveGeometry.coordinateSpace)
           guard frame.height >= 44, frame.minY >= 0,
             frame.maxY <= window.bounds.height - window.safeAreaInsets.bottom + 1
           else { throw PhotoCaptureFailure.recoveryActionUnavailable }
@@ -178,9 +179,9 @@
         if let window = session.session.textView.window,
           let summary = PhotoCaptureAccessibility.element(
             id: "pending-photos-summary", in: window),
+          let frame = PhotoCaptureAccessibility.frame(of: summary, in: window),
           session.session.textView.isFirstResponder, keyboardHeight >= 150
         {
-          let frame = summary.accessibilityFrame
           if frame.height >= 44, frame.width > 0, frame == previous {
             stableSamples += 1
             if stableSamples >= 20, let stableSince,
@@ -475,6 +476,14 @@
 
   @MainActor
   enum PhotoCaptureAccessibility {
+    static func frame(of element: NSObject, in view: UIView) -> CGRect? {
+      if let native = element as? UIView {
+        return native.convert(native.bounds, to: view)
+      }
+      guard let scene = view.window?.windowScene ?? (view as? UIWindow)?.windowScene else { return nil }
+      return view.convert(element.accessibilityFrame, from: scene.effectiveGeometry.coordinateSpace)
+    }
+
     static func activate(_ element: NSObject) -> Bool {
       if let control = element as? UIControl, control.isEnabled {
         control.performPrimaryAction()
