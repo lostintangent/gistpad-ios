@@ -160,7 +160,7 @@ final class NotebookSessionController {
 
   func inspectRemoteChanges() async {
     guard !isInspectingRemote, !isPublishing, canMutate, !document.isRecovery,
-      draft.gistID != nil, draft.attemptedGeneration == nil,
+      draft.gistID != nil,
       notebook.account?.id == draft.accountID, notebook.pendingAccount == nil
     else { return }
     if case .conflict = draft.state { return }
@@ -170,13 +170,14 @@ final class NotebookSessionController {
     let generation = session.generation
     do {
       guard
-        case .review(let inspected) = try await notebook.perform(
+        case .review = try await notebook.perform(
           .inspectRemote(draftID: draft.id, generation: generation))
       else { throw NotebookActionError.staleReview }
       let current = try await notebook.draftSnapshot(id: draft.id, accountID: draft.accountID)
       guard current.generation == session.generation else { return }
       draft = current
-      if case .conflict = inspected.state { saveState = .remoteChange }
+      document.draft = current
+      saveState = NotebookModel.interfaceSaveState(current.state)
       remoteInspectionError = nil
     } catch is CancellationError {
       return

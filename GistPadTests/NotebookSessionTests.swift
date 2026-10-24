@@ -64,6 +64,31 @@ struct NotebookSessionTests {
     #expect(controller.saveState == .remoteChange)
   }
 
+  @Test(arguments: [true, false])
+  func restoredPublicationInspectionAdoptsOnlyAnExactMatchWithoutPublishing(matches: Bool) async throws {
+    let (controller, provider) = try await makeController(
+      generation: 1, autosave: true, uncertainPublication: true)
+    #expect(controller.saveState == .publicationUncertain)
+    let editor = controller.session.textView
+    let text = controller.session.text
+    let generation = controller.session.generation
+    editor.selectedRange = NSRange(location: 4, length: 3)
+    let undo = editor.undoManager?.canUndo
+    await provider.setRemoteContent(matches ? text : "Another remote value")
+    await controller.inspectRemoteChanges()
+    #expect(controller.session.textView === editor)
+    #expect(controller.session.text.utf8.elementsEqual(text.utf8))
+    #expect(controller.session.generation == generation)
+    #expect(editor.selectedRange == NSRange(location: 4, length: 3))
+    #expect(editor.undoManager?.canUndo == undo)
+    #expect(controller.saveState == (matches ? .savedToGitHub : .publicationUncertain))
+    #expect(controller.document.draft?.state == controller.draft.state)
+    #expect(controller.draft.attemptedGeneration == (matches ? nil : 1))
+    #expect(controller.remoteInspectionError == nil)
+    #expect(controller.updateAutosave(isForeground: true) == nil)
+    #expect(await provider.publishCount == 0)
+  }
+
   @Test func autosavePublishesOnlyADurableQuietForegroundGeneration() async throws {
     let (controller, provider) = try await makeController(autosave: true)
     edit(controller, to: "Quiet accepted draft")
@@ -561,7 +586,8 @@ struct NotebookSessionTests {
   }
 
   private func makeController(
-    generation: UInt64 = 0, autosave: Bool? = nil, isReadOnly: Bool = false
+    generation: UInt64 = 0, autosave: Bool? = nil, isReadOnly: Bool = false,
+    uncertainPublication: Bool = false
   ) async throws -> (NotebookSessionController, SessionNotebookProvider) {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
@@ -582,6 +608,13 @@ struct NotebookSessionTests {
     if generation > 0 {
       draft = try await store.persist(
         id: draft.id, accountID: accountID, text: "Restored local draft", generation: generation)
+    }
+    if uncertainPublication {
+      try await store.beginAttempt(
+        id: draft.id, accountID: accountID, content: draft.text,
+        generation: draft.generation, remote: draft.baseContent)
+      try await store.setState(.failed(.publicationUncertain), id: draft.id, accountID: accountID)
+      draft = try await store.draft(id: draft.id, accountID: accountID)
     }
     let provider = SessionNotebookProvider(
       store: store, id: draft.id, accountID: accountID, autosave: autosave)
