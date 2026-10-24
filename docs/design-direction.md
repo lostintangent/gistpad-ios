@@ -56,7 +56,7 @@ The current shell establishes native sidebar collapse and retained editor/previe
 
 This is based on the real contract in `gistpad.dev/src/features/account/queries.tsx`: the web declares `accentColor`, defaults it to `#facc15`, and saves preference changes to Supabase user metadata. Native currently preserves that key in `Packages/GistPadSync/Sources/GistPadSync/Preferences.swift` but does not consume it. A fixed native yellow or blue theme is not profile support.
 
-The accent affects actions, selection, the date accent, caret and app-owned interactive marks. It does not recolor body text, semantic errors, tag colors or the Markdown syntax palette. External prose links retain their underlined semantic link treatment. Sky is the default, not a requirement that every person's notebook stay blue.
+The accent affects actions, selection, the date accent, caret, app-owned interactive marks and authored list markers in Preview. It does not recolor body text, semantic errors, tag colors or the Markdown syntax palette. External prose links retain their underlined semantic link treatment. Sky is the default, not a requirement that every person's notebook stay blue.
 
 Derive one shared native/preview role set from the saved RGB value:
 
@@ -100,13 +100,15 @@ The current screenshots fail first on **where the page starts**, then on composi
 | H1 | System sans bold, 2 times the native-scaled body reference. No top margin when first. A quiet semantic separator spans the text measure below the heading, with 1rem of padding above the rule |
 | H2 | System sans semibold, 1.5 times the native-scaled body reference. About 3rem before a new section, except at the page start. The same padded separator treatment as H1 |
 | H3 and lower | System sans, H3 at 1.25 times the native-scaled body reference. Preserve the lower-heading hierarchy without adding rules to every level |
-| Lists/tasks | A clear marker gutter, consistent wrapped-line alignment and 0.5-em gaps between items, still tighter than the section rhythm. Task targets remain at least 44 pt without dimming read-only labels |
+| Lists/tasks | A clear marker gutter, consistent wrapped-line alignment and 0.5-em gaps between items, still tighter than the section rhythm. Authored numbers and bullets use personal `accentText`, with ordinary marker weight and normal item ink. Task targets remain at least 44 pt without dimming read-only labels |
 | Code/tables | Scaled monospace and quiet opaque surfaces. Horizontal overflow stays local to the code/table, never shifts the page |
 | Anchors | Land the target about 16 pt below the actual unobscured top, not below an assumed browser origin |
 
 One deliberate native preview adaptation is proposed: an authored/generated table-of-contents module starts as a compact **Contents disclosure**, rather than a large expanded card occupying the opening screen. Its expanded links keep usable targets. Never inject it into a note that did not request it, and do not change the authored open state of ordinary HTML details. The module label uses ordinary SF interface hierarchy, not the larger authored-heading treatment.
 
 The ratios and spacing follow the user's web reference and `gistpad.dev/src/features/markdown/index.css`, not a fixed desktop pixel size. Here `rem` follows the native-scaled body reference. H1/H2 rules are one CSS pixel, resolved from the semantic separator role in all four appearances. They organize the document, not the navigation header. Preserve authored emoji, ordered-list starts, native accent roles, generous wrapping and the existing safe-area contract.
+
+The user's request for colored list markers uses the existing `--gp-accent-text` role, not the raw saved color, added opacity or a new pastel palette. Its small area supplies restrained personality while meeting 4.5:1 normally and 7:1 with Increased Contrast. Apply it to authored ordered/unordered list markers, including nesting. Keep numbering, marker-to-text separation and wrapped alignment intact. Do not recolor item text, task checkboxes, generated Contents or Source syntax as part of this treatment.
 
 Keep native bounce and responsive scrolling. One soft edge treatment per pane where controls actually overlap. No CSS masks, painted gradients, hard content cutoff above a nonexistent footer, doubled safe areas or scroll reset on each source generation. Preview refresh must preserve the current passage. [Materials][materials], [New design system][new-system].
 
