@@ -42,9 +42,9 @@ Open `GistPad.xcodeproj` to run interactively. Choose the shared **GistPad** sch
 
 Native fixture tests link the existing Supabase Auth product directly because they construct raw profile metadata. Production code uses typed Sync preferences instead. When updating Supabase, keep the exact version in `Packages/GistPadSync/Package.swift` and the Xcode project's test-only package reference aligned.
 
-The app root updates the personal-accent trait on its own window scene when the account preference changes and resets it to Sky on sign-out. Sheet content also receives the explicit profile value, including nested tag forms. Dismissal controls stay neutral. Debug captures use `--capture-accent` for the same scene trait, rather than only changing the displayed picker swatch.
+The app root updates the personal-accent trait on its own window scene when the account preference changes and resets it to Sky on sign-out. Sheet content also receives the explicit profile value, including nested tag forms. Sheet dismissal controls stay neutral, while native alert actions keep the system tint. Debug captures use `--capture-accent` for the same scene trait, rather than only changing the displayed picker swatch.
 
-Sign Out uses a native alert with a short account-specific draft-retention message, neutral Cancel and destructive Sign Out. It never publishes drafts. Tag form titles and action labels use consistent Title Case.
+Sign Out uses a native alert with a short account-specific draft-retention message, a system-tinted Cancel action and destructive Sign Out. It never publishes drafts. Tag form titles and action labels use consistent Title Case.
 
 Debug capture launches accept `--capture-screen library|note|editor|focus`. Library and note use a short interface-review fixture and the actual screen package, with populated/empty/error/offline/readonly states. Editor uses the long multilingual source fixture. Focus uses the shared all-syntax renderer fixture. `--long-fixture` also selects the long document outside interface captures. All fixture content is synthetic.
 
