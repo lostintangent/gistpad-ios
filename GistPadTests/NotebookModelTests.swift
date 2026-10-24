@@ -7,6 +7,12 @@ import Testing
 
 @MainActor
 struct NotebookModelTests {
+  @Test func offlinePresentationStaysTypedAndRetryable() {
+    let state = NotebookModel.interfaceSaveState(.offline)
+    #expect(state == .offline)
+    #expect(state.canPublish)
+  }
+
   @Test func todaySummaryDistinguishesEmptyExistingMissingAndUnknownWithoutExtraRequests() async throws {
     let filename = GistConventions.todayFilename()
     let provider = StubNotebookProvider(

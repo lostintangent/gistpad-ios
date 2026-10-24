@@ -516,7 +516,8 @@ final class NotebookModel {
           selectedFileID: selectedFilename, access: owned ? .editable : .readOnly,
           isPinned: account.preferences.pinnedGists.contains(gist.id),
           isStarred: library.snapshot.notes.first { $0.id == gist.id }?.isStarred ?? false,
-          isArchived: gist.isArchived
+          isArchived: gist.isArchived,
+          isAutoSaveEnabled: account.preferences.isAutoSaveEnabled
         )
       )
       loadedDocument?.libraryRowID = rowID
@@ -940,7 +941,11 @@ final class NotebookModel {
 
   func chrome(gist: Gist?, draft: DraftSnapshot) -> NoteChrome {
     guard let gist, let account, account.id == draft.accountID else {
-      return NotebookDocument(draft: draft).chrome
+      var chrome = NotebookDocument(draft: draft).chrome
+      chrome.isAutoSaveEnabled =
+        account?.id == draft.accountID && account?.preferences.isAutoSaveEnabled == true
+        && !draft.autosavePaused
+      return chrome
     }
     let owned = ownedGistIDs.contains(gist.id) || gist.owner?.id == draft.githubUserID
     let fileDates = gist.fileDatesForGrouping
@@ -962,7 +967,8 @@ final class NotebookModel {
       isArchived: gist.isArchived,
       tags: library.snapshot.tags.filter {
         account.preferences.gistTags[gist.id]?.contains($0.id) == true
-      })
+      },
+      isAutoSaveEnabled: account.preferences.isAutoSaveEnabled && !draft.autosavePaused)
   }
 
   func refreshedGist(id: String, accountID: UUID) async throws -> Gist {
@@ -1058,9 +1064,7 @@ final class NotebookModel {
     case .savedLocally: .savedLocally
     case .savingToGitHub: .savingToGitHub
     case .savedToGitHub: .savedToGitHub
-    case .offline:
-      .cloudFailure(
-        message: String(localized: "You're offline. Reconnect before saving to GitHub."))
+    case .offline: .offline
     case .reconnect: .reconnectRequired
     case .conflict: .remoteChange
     case .failed(let failure):

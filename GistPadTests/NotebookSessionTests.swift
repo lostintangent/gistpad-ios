@@ -314,7 +314,8 @@ struct NotebookSessionTests {
   }
 
   @Test func keepingMyReviewedDraftDoesNotCreateAFakeGenerationOrUndo() async throws {
-    let (controller, provider) = try await makeController(generation: 1)
+    let (controller, provider) = try await makeController(generation: 1, autosave: true)
+    #expect(controller.document.chrome.isAutoSaveEnabled)
     _ = try await provider.introduceConflict(remote: "From GitHub")
     try await controller.refreshMetadata()
     let window = try EditorContinuityTests().host(controller.session)
@@ -335,6 +336,8 @@ struct NotebookSessionTests {
     #expect(controller.session.generation == 1)
     #expect(!undo.canUndo)
     #expect(controller.saveState == .savedLocally)
+    #expect(!controller.document.chrome.isAutoSaveEnabled)
+    #expect(controller.saveState.canPublish)
     #expect(
       try await provider.store.recoveries(
         id: controller.draft.id, accountID: controller.draft.accountID
@@ -343,7 +346,8 @@ struct NotebookSessionTests {
   }
 
   @Test func adoptingAReviewedVersionIsOneRecoverableLocalUndo() async throws {
-    let (controller, provider) = try await makeController(generation: 1)
+    let (controller, provider) = try await makeController(generation: 1, autosave: true)
+    #expect(controller.document.chrome.isAutoSaveEnabled)
     _ = try await provider.introduceConflict(remote: "From GitHub 日本語")
     try await controller.refreshMetadata()
     let window = try EditorContinuityTests().host(controller.session)
@@ -361,6 +365,8 @@ struct NotebookSessionTests {
     }
     #expect(controller.session.text == "From GitHub 日本語")
     #expect(controller.saveState == .savedLocally)
+    #expect(!controller.document.chrome.isAutoSaveEnabled)
+    #expect(controller.saveState.canPublish)
     #expect(await provider.publishCount == 0)
     controller.session.textView.undoManager?.undo()
     #expect(controller.session.text == original)

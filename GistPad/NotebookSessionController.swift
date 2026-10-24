@@ -314,6 +314,7 @@ final class NotebookSessionController {
     }
     draft = committed
     document.draft = committed
+    document.chrome = notebook.chrome(gist: document.gist, draft: committed)
     saveState = NotebookModel.interfaceSaveState(committed.state)
     guard await waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
   }
