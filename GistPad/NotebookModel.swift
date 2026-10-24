@@ -981,6 +981,14 @@ final class NotebookModel {
     }
   }
 
+  func showLibrary() {
+    documentRequest = UUID()
+    openingDocument = nil
+    isOpeningDocument = false
+    failedOpen = nil
+    library.selectedNoteID = nil
+  }
+
   func showToday() async {
     documentRequest = UUID()
     openingDocument = nil

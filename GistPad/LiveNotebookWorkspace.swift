@@ -46,6 +46,14 @@ struct LiveNotebookWorkspace: View {
     _layout = State(initialValue: layout)
   }
 
+  #if DEBUG
+  func captureColumnVisibility(_ visibility: NavigationSplitViewVisibility) -> Self {
+    var workspace = self
+    workspace._columnVisibility = State(initialValue: visibility)
+    return workspace
+  }
+  #endif
+
   private var active: NotebookSessionController? {
     activeID.flatMap { sessions[$0] }
   }
@@ -119,7 +127,8 @@ struct LiveNotebookWorkspace: View {
     ) {
       LibraryView(
         model: notebook.library, actions: libraryActions,
-        isTodaySelected: notebook.failedOpen == nil && notebook.presentedDocument == nil
+        isTodaySelected: (horizontalSizeClass == .regular || compactColumn == .detail)
+          && notebook.failedOpen == nil && notebook.presentedDocument == nil
           && notebook.openingTitle == nil,
         isSidebar: horizontalSizeClass == .regular)
     } detail: {
@@ -431,6 +440,7 @@ struct LiveNotebookWorkspace: View {
       today: {
         guard canSwitchDocument else { return }
         sharedPreviewGistID = nil
+        compactColumn = .detail
         Task { await notebook.showToday() }
       })
     actions.select = { selectRow($0) }
@@ -797,7 +807,8 @@ struct LiveNotebookWorkspace: View {
     controller.requestCreationFocus()
     preparePhotos(for: controller)
     activeID = controller.draft.id.uuidString
-    compactColumn = .detail
+    // A completed restoration must not reopen detail after returning to Library.
+    if notebook.library.selectedNoteID != nil { compactColumn = .detail }
     do {
       try notebook.remember(
         NotebookSelection(
@@ -1079,6 +1090,12 @@ struct LiveNotebookWorkspace: View {
       let request = routes.pending
     else { return }
     if case .library = request.route {
+      if horizontalSizeClass != .regular {
+        openRequest = UUID()
+        notebook.showLibrary()
+        active?.session.textView.resignFirstResponder()
+      }
+      columnVisibility = .all
       compactColumn = .sidebar
       routes.acknowledge(request.id)
       return
