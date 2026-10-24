@@ -265,7 +265,7 @@ The editor is Markdown source, not a lossy rich-text conversion. Use familiar se
 
 These dynamic source colors replace the previous `syntaxMuted`/`syntaxCode` styling contract. Preserve the exact web-light quote on the white source page, where it measures 4.63:1. It is only 4.15:1 on the secondary gray reference; if a quote can appear on that surface, use `#1E7A34` there (4.84:1). Increased-contrast variants clear AA on both reference canvases. Resolve appearance through dynamic native colors, without rewriting or reparsing source solely to change appearance.
 
-List markers are the exception to the colored syntax palette. The user's later October 24 feedback restores the existing `InterfaceTheme.syntaxMuted` role for bullets, ordered numbers and task delimiters in every state. Preview uses the marker-only `--gp-list-marker` for equivalent markers and task-box borders/checked fills, with a contrasting checkmark. Resolve an opaque native secondary gray against the page and minimally adjust for 4.5:1 normally and 7:1 with Increased Contrast. Do not globally recolor secondary captions or copy Source's slate palette to them. Preserve ordinary item text, source bytes, task state, targets, wrapping and the native blue caret.
+List markers are the exception to the colored syntax palette. The user's latest October 24 web-match request uses exact normal-contrast bullets `#D4D4D4` Light / `#525252` Dark and numbers `#737373` Light / `#A1A1A1` Dark in both Source and Preview. The intentionally soft decorative bullet is a normal-contrast visual exception, not an item-text or control-opacity change. Increased Contrast retains a stronger step targeting 7:1. Source task delimiters keep `InterfaceTheme.syntaxMuted`; Preview task boxes retain their existing opaque contrast-safe gray and contrasting checkmark. Keep these marker-only roles separate from secondary captions. Preserve ordinary item text, source bytes, task state, targets, wrapping and the native blue caret.
 
 | Source element | Style |
 | --- | --- |
@@ -273,7 +273,7 @@ List markers are the exception to the colored syntax palette. The user's later O
 | Whole heading, including `#` markers | Body bold, heading token; preserve every source character |
 | Strong / emphasis | Their token color, with bold / italic respectively; compose both traits when nested |
 | Whole blockquote line, including `>` | Quote token; nested emphasis/strong/link/code retain their own valid styles |
-| Ordered number / unordered bullet | Muted source-marker ink; list-item text stays body ink |
+| Ordered number / unordered bullet | Separate exact web grays in normal contrast, stronger at Increased Contrast; list-item text stays body ink |
 | Element punctuation | Same readable size and color as its owning element, not independently grayed |
 | Unchecked task marker | Muted source-marker ink, same size; no personal accent |
 | Checked marker | Muted source-marker ink; preserve explicit checked syntax and do not dim the task's text |
