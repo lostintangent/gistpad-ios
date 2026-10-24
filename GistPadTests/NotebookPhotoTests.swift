@@ -1,0 +1,364 @@
+import Foundation
+import GistPadInterface
+import Synchronization
+import Testing
+import UIKit
+@testable import GistPad
+@testable import GistPadSync
+
+@Suite(.serialized)
+@MainActor
+struct NotebookPhotoTests {
+  @Test func consentCancellationAndPickerCancellationDoNotQueueOrUpload() async throws {
+    let fixture = try await PhotoFixture()
+    defer { fixture.cleanup() }
+    let photos = fixture.photos
+    photos.choosePhoto()
+    #expect(photos.isShowingNotice)
+    #expect(!photos.isShowingPicker)
+    photos.dismissNotice()
+    photos.noticeDidDismiss()
+    #expect(!photos.isShowingPicker)
+    #expect(!photos.hasAcknowledgedPublicStorage)
+    photos.choosePhoto()
+    photos.acceptNotice()
+    photos.noticeDidDismiss()
+    #expect(photos.isShowingPicker)
+    photos.pickerCancelled()
+    await photos.receivePickedData(fixture.bytes)
+    #expect(try await fixture.store.imageUploads(accountID: fixture.accountID).isEmpty)
+    #expect(fixture.network.requests.withLock { $0.isEmpty })
+
+    let other = try await PhotoFixture(defaults: fixture.defaults)
+    #expect(!other.photos.hasAcknowledgedPublicStorage)
+  }
+
+  @Test func preparationFailureNeverCreatesAQueueOrASavedClaim() async throws {
+    let fixture = try await PhotoFixture()
+    defer { fixture.cleanup() }
+    fixture.authorize()
+    fixture.photos.beginPreparing()
+    await fixture.photos.receivePickedData(Data("invalid image".utf8))
+    let row = try #require(fixture.photos.attachments.first)
+    guard case .preparationFailed = row.phase else {
+      Issue.record("A failed Photos load must remain a preparation failure")
+      return
+    }
+    #expect(row.action == .chooseAnother)
+    #expect(try await fixture.store.imageUploads(accountID: fixture.accountID).isEmpty)
+    #expect(fixture.network.requests.withLock { $0.isEmpty })
+  }
+
+  @Test func failedLocalQueueRetainsBytesAndBlocksAnOverwritingSecondPick() async throws {
+    let fixture = try await PhotoFixture()
+    defer { fixture.cleanup() }
+    fixture.authorize()
+    fixture.queueFails = true
+    await fixture.photos.receivePickedData(fixture.bytes)
+    let row = try #require(fixture.photos.attachments.first)
+    guard case .localFailure = row.phase else {
+      Issue.record("Uncommitted image bytes cannot be described as saved")
+      return
+    }
+    #expect(!fixture.photos.canChoosePhoto)
+    #expect(try await fixture.store.imageUploads(accountID: fixture.accountID).isEmpty)
+    fixture.queueFails = false
+    await fixture.photos.perform(.retry, id: row.id)
+    let queued = try #require(try await fixture.store.imageUploads(accountID: fixture.accountID).first)
+    #expect(try await fixture.store.imageData(id: queued.id, accountID: fixture.accountID) == fixture.normalized)
+    #expect(queued.state == .offline)
+    #expect(fixture.session.session.text == "Base")
+  }
+
+  @Test func unpublishedAutosaveOffNoteDoesNotPublishToUploadAPhoto() async throws {
+    let fixture = try await PhotoFixture(unpublished: true)
+    defer { fixture.cleanup() }
+    fixture.authorize()
+    fixture.network.mode.withLock { $0 = .online }
+    await fixture.photos.receivePickedData(fixture.bytes)
+    #expect(fixture.photos.attachments.first?.phase == .waitingForNote)
+    #expect(fixture.network.requests.withLock { $0.isEmpty })
+    #expect(await fixture.provider.publishCount == 0)
+    #expect(fixture.session.session.text == "Base")
+  }
+
+  @Test func changedCursorRequiresExplicitInsertHereAndOneUndoDoesNotReinsert() async throws {
+    let fixture = try await PhotoFixture()
+    defer { fixture.cleanup() }
+    let window = try EditorContinuityTests().host(fixture.session.session)
+    defer { window.isHidden = true }
+    fixture.authorize()
+    fixture.session.session.textView.selectedRange = NSRange(location: 1, length: 0)
+    await fixture.photos.receivePickedData(fixture.bytes)
+    #expect(fixture.photos.attachments.first?.phase == .offline)
+    fixture.network.mode.withLock { $0 = .online }
+    await fixture.photos.resume()
+    let ready = try #require(fixture.photos.attachments.first)
+    #expect(ready.phase == .ready)
+    #expect(fixture.session.session.text == "Base")
+    await fixture.photos.perform(.insertHere, id: ready.id)
+    #expect(fixture.session.session.text.hasPrefix("B![Image]("))
+    #expect(fixture.session.session.text.hasSuffix("ase"))
+    #expect(fixture.photos.attachments.isEmpty)
+    #expect(fixture.session.session.textView.undoManager?.canUndo == true)
+    fixture.session.session.textView.undoManager?.undo()
+    #expect(fixture.session.session.text == "Base")
+    #expect(await fixture.session.waitForLocalSave())
+    await fixture.photos.resume()
+    #expect(fixture.session.session.text == "Base")
+    #expect(fixture.photos.attachments.isEmpty)
+    #expect(await fixture.provider.publishCount == 0)
+  }
+
+  @Test func switchedNoteOrAccountKeepsThePhotoLocalWithoutChangingAnotherEditor() async throws {
+    let fixture = try await PhotoFixture()
+    defer { fixture.cleanup() }
+    fixture.authorize()
+    fixture.isCurrent = false
+    fixture.network.mode.withLock { $0 = .online }
+    await fixture.photos.receivePickedData(fixture.bytes)
+    await fixture.photos.resume()
+    #expect(fixture.network.requests.withLock { $0.isEmpty })
+    #expect(fixture.photos.attachments.first?.phase == .queued)
+    #expect(fixture.session.session.text == "Base")
+    #expect(try await fixture.store.imageUploads(accountID: UUID()).isEmpty)
+  }
+
+  @Test func uncertainUploadShowsRetryInsteadOfAnIdleCheckingSpinner() async throws {
+    let fixture = try await PhotoFixture()
+    defer { fixture.cleanup() }
+    fixture.authorize()
+    fixture.network.mode.withLock { $0 = .delayedVisibility }
+    await fixture.photos.receivePickedData(fixture.bytes)
+    let uncertain = try #require(fixture.photos.attachments.first)
+    guard case .failed = uncertain.phase else {
+      Issue.record("No reconciliation is running after its request returned")
+      return
+    }
+    #expect(uncertain.action == .retry)
+    fixture.network.mode.withLock { $0 = .online }
+    await fixture.photos.perform(.retry, id: uncertain.id)
+    #expect(fixture.photos.attachments.isEmpty)
+    #expect(fixture.network.requests.withLock { $0.filter { $0 == "POST" }.count } == 1)
+  }
+
+  @Test func failedInsertionKeepsSourceAndSelectionWithAnExplicitLocalFailure() async throws {
+    let fixture = try await PhotoFixture()
+    defer { fixture.cleanup() }
+    fixture.authorize()
+    fixture.network.mode.withLock { $0 = .online }
+    fixture.commitFails = true
+    let selection = fixture.session.session.selection
+    await fixture.photos.receivePickedData(fixture.bytes)
+    let failed = try #require(fixture.photos.attachments.first)
+    guard case .localFailure = failed.phase else {
+      Issue.record("An uploaded image is not proof that its source insertion was saved")
+      return
+    }
+    #expect(failed.action == .insertHere)
+    #expect(fixture.session.session.text == "Base")
+    #expect(fixture.session.session.selection == selection)
+    #expect(fixture.session.session.generation == 0)
+    fixture.commitFails = false
+    await fixture.photos.perform(.insertHere, id: failed.id)
+    #expect(fixture.photos.attachments.isEmpty)
+    #expect(fixture.session.session.text.hasPrefix("Base![Image]("))
+  }
+
+  @Test func removingAPendingPhotoNeverSendsARemoteDelete() async throws {
+    let fixture = try await PhotoFixture()
+    defer { fixture.cleanup() }
+    fixture.authorize()
+    await fixture.photos.receivePickedData(fixture.bytes)
+    let row = try #require(fixture.photos.attachments.first)
+    fixture.photos.removalID = row.id
+    await fixture.photos.removePendingPhoto()
+    #expect(fixture.photos.attachments.isEmpty)
+    #expect(try await fixture.store.imageUploads(accountID: fixture.accountID).isEmpty)
+    #expect(!fixture.network.requests.withLock { $0.contains("DELETE") })
+    #expect(fixture.session.session.text == "Base")
+  }
+
+  @Test func writingToolsAndRecoveryCannotPickOrInsertPhotos() async throws {
+    let fixture = try await PhotoFixture()
+    defer { fixture.cleanup() }
+    fixture.authorize()
+    await fixture.photos.receivePickedData(fixture.bytes)
+    let queued = try #require(try await fixture.store.imageUploads(accountID: fixture.accountID).first)
+    _ = try await fixture.store.setImageUploadState(.uploaded, id: queued.id, accountID: fixture.accountID)
+    fixture.session.session.textViewWritingToolsWillBegin(fixture.session.session.textView)
+    await fixture.photos.reload()
+    #expect(!fixture.photos.canChoosePhoto)
+    #expect(fixture.photos.displayedAttachments.first?.actionEnabled == false)
+    await fixture.photos.perform(.insertHere, id: queued.id)
+    #expect(fixture.session.session.text == "Base")
+    fixture.session.session.textViewWritingToolsDidEnd(fixture.session.session.textView)
+    #expect(fixture.photos.displayedAttachments.first?.actionEnabled == true)
+    fixture.session.markRecovery()
+    #expect(!fixture.photos.canChoosePhoto)
+    await fixture.photos.perform(.insertHere, id: queued.id)
+    #expect(fixture.session.session.text == "Base")
+  }
+}
+
+@MainActor
+private final class PhotoFixture {
+  let accountID = UUID()
+  let store: DraftStore
+  let session: NotebookSessionController
+  let provider: PhotoNotebookProvider
+  let defaults: UserDefaults
+  let bytes: Data
+  let normalized: Data
+  let uploads: ImageUploadCoordinator
+  let network: PhotoNetwork = PhotoNetwork()
+  private let defaultsName: String?
+  var queueFails = false
+  var commitFails = false
+  var isCurrent = true
+
+  private var retainedPhotos: NotebookPhotoController?
+  var photos: NotebookPhotoController {
+    if let retainedPhotos { return retainedPhotos }
+    let controller = NotebookPhotoController(
+    accountID: accountID, draftID: session.draft.id,
+    services: { [unowned self] in NotebookPhotoServices(store: store, uploads: uploads) },
+    target: { [unowned self] in
+      guard isCurrent else { return nil }
+      return NotebookPhotoTarget(
+        accountID: accountID, draftID: session.draft.id,
+        generation: session.session.generation,
+        insertionLocation: NSMaxRange(session.session.selection),
+        canInsert: session.canMutate && !session.document.isRecovery)
+    },
+    insert: { [unowned self] command, store in
+      try await session.applyDurableEdit(command) {
+        if commitFails { throw URLError(.cannotWriteToFile) }
+        return try await store.applyImageInsertion(id: command.id, accountID: accountID, command: command)
+      }
+    },
+    reconnect: {},
+    didInsert: {},
+    prepareQueue: { [unowned self] in
+      if queueFails { throw URLError(.cannotWriteToFile) }
+      guard await session.waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
+    },
+    publication: { nil },
+    defaults: defaults)
+    retainedPhotos = controller
+    return controller
+  }
+
+  init(unpublished: Bool = false, defaults suppliedDefaults: UserDefaults? = nil) async throws {
+    if let suppliedDefaults {
+      defaults = suppliedDefaults
+      defaultsName = nil
+    } else {
+      let name = "dev.gistpad.photos.tests.\(UUID().uuidString)"
+      defaultsName = name
+      defaults = try #require(UserDefaults(suiteName: name))
+    }
+    store = try DraftStore.open(inMemory: true)
+    let draft: DraftSnapshot
+    if unpublished {
+      draft = try await store.newDraft(accountID: accountID, githubUserID: 42, text: "Base")
+    } else {
+      draft = try await store.openDraft(
+        accountID: accountID, githubUserID: 42, gistID: "abc123", filename: "README.md",
+        description: "Photo fixture", content: "Base", revision: "one")
+    }
+    provider = PhotoNotebookProvider(store: store)
+    session = NotebookSessionController(
+      document: NotebookDocument(draft: draft), draft: draft, notebook: NotebookModel(provider: provider))
+    session.session.textView.selectedRange = NSRange(location: 4, length: 0)
+    bytes = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).pngData { renderer in
+      UIColor.systemBlue.setFill()
+      renderer.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+    }
+    normalized = try PhotoImage.pngData(from: bytes)
+    let network = self.network
+    let normalized = self.normalized
+    PhotoTestURLProtocol.handler.withLock { handler in
+      handler = { request in
+        network.requests.withLock { $0.append(request.httpMethod ?? "") }
+        let current = network.mode.withLock { $0 }
+        if current == .offline { throw URLError(.notConnectedToInternet) }
+        let isPublic = request.httpMethod == "GET"
+        let status = isPublic && current == .delayedVisibility ? 404 : 200
+        guard let url = request.url,
+          let response = HTTPURLResponse(
+            url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil)
+        else { throw URLError(.badServerResponse) }
+        return (response, isPublic ? normalized : Data())
+      }
+    }
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [PhotoTestURLProtocol.self]
+    let storage = try ImageStorageClient(
+      publishableKey: "sb_publishable_fake", session: URLSession(configuration: configuration)
+    ) { "fake-supabase-access" }
+    uploads = ImageUploadCoordinator(accountID: accountID, store: store, storage: storage)
+  }
+
+  fileprivate final class PhotoNetwork: Sendable {
+    enum Mode: Equatable, Sendable { case offline, online, delayedVisibility }
+    let mode = Mutex(Mode.offline)
+    let requests = Mutex<[String]>([])
+  }
+
+  func authorize() {
+    photos.choosePhoto()
+    photos.acceptNotice()
+    photos.noticeDidDismiss()
+  }
+
+  func cleanup() {
+    if let defaultsName { defaults.removePersistentDomain(forName: defaultsName) }
+  }
+}
+
+private final class PhotoTestURLProtocol: URLProtocol {
+  static let handler = Mutex<(@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?>(nil)
+  override class func canInit(with request: URLRequest) -> Bool { true }
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+  override func startLoading() {
+    do {
+      let handler = try #require(Self.handler.withLock { $0 })
+      let (response, data) = try handler(request)
+      client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+      client?.urlProtocol(self, didLoad: data)
+      client?.urlProtocolDidFinishLoading(self)
+    } catch {
+      client?.urlProtocol(self, didFailWithError: error)
+    }
+  }
+  override func stopLoading() {}
+}
+
+private actor PhotoNotebookProvider: NotebookProviding {
+  let store: DraftStore
+  private(set) var publishCount = 0
+  init(store: DraftStore) { self.store = store }
+  func cachedAccount() -> NotebookAccount? { nil }
+  func signIn() throws -> NotebookAccount { throw AccountError.signedOut }
+  func refreshAccount() throws -> NotebookAccount { throw AccountError.signedOut }
+  func gists(accountID: UUID) -> [Gist] { [] }
+  func starredGists(accountID: UUID) -> [Gist] { [] }
+  func gist(id: String, accountID: UUID) throws -> Gist { throw DraftError.notFound }
+  func content(gist: Gist, filename: String, accountID: UUID) throws -> String { throw DraftError.notFound }
+  func openDraft(for document: NotebookDocument) throws -> DraftSnapshot { throw DraftError.notFound }
+  func persist(draftID: UUID, accountID: UUID, text: String, generation: UInt64) async throws -> DraftSnapshot {
+    try await store.persist(id: draftID, accountID: accountID, text: text, generation: generation)
+  }
+  func publish(draftID: UUID, accountID: UUID) throws -> DraftSnapshot {
+    publishCount += 1
+    throw DraftError.readOnly
+  }
+  func localState(accountID: UUID) async throws -> NotebookLocalState {
+    NotebookLocalState(library: nil, drafts: try await store.drafts(accountID: accountID))
+  }
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) {}
+  func createDraft(accountID: UUID) throws -> DraftSnapshot { throw DraftError.notFound }
+  func today(accountID: UUID, target: DailyNoteTarget) throws -> TodayNote { throw DraftError.notFound }
+  func perform(_ action: NotebookAction, accountID: UUID) throws -> NotebookActionResult { throw DraftError.notFound }
+}
