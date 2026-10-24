@@ -44,7 +44,7 @@ The current shell establishes native sidebar collapse and retained editor/previe
 
 **Three layers, each with a job.** Library uses the semantic grouped canvas with opaque, clearly separated content surfaces. Reading and source use an uninterrupted semantic page. Native Liquid Glass belongs to navigation, menus and the small floating editing accessory. No glass note cards, translucent paragraphs, custom fog overlays or glass-on-glass.
 
-**Type is expressive in specific places.** SF supplies all interface text and prose. The Today day numeral uses system Rounded, about 44 pt at standard type. Rendered authored H1/H2 use system New York, not a bundled imitation. Other headings, navigation labels and generated "Contents" controls remain SF. Code uses scaled system monospace. Use Dynamic Type and language fallback throughout, not fixed font names. [Typography][typography].
+**Type is expressive in specific places.** SF supplies all interface text, prose and rendered headings. The user's October 24 morning direction supersedes the earlier New York H1/H2 treatment: use system sans throughout the reading page, with quiet rules below H1/H2 and the web reference's more generous rhythm. The Today day numeral uses system Rounded, about 44 pt at standard type. Code uses scaled system monospace. Use Dynamic Type and language fallback throughout, not fixed font names. [Typography][typography].
 
 **Density has a rhythm.** Use 4/8/12/16/24/32-pt relationships, with 20-pt outer content margins as the normal compact starting point. Keep 32 pt between major Library sections and 8 pt between a section heading and its content. Internal spacing is smaller than the gap between sections. Controls have at least 44-pt targets, but a control's target is not an instruction to add another 44-pt container around it.
 
@@ -96,21 +96,23 @@ The current screenshots fail first on **where the page starts**, then on composi
 | --- | --- |
 | Measure | Full useful compact width minus a single 20-pt gutter on each side, capped at 64ch on wider pages. A narrow split pane may use 16 pt. Never stack native and CSS gutters |
 | Page start/end | 24 pt after the unobscured top boundary. At least 40 pt of page breathing room at the end, with native bottom inset additionally keeping the last line above actual controls |
-| Body | SF, 17-pt body reference, approximately 1.5-em leading, paragraph gap around 0.85 em. Scale with resolved native metrics |
-| H1 | New York bold, native title1 reference around 28/34 pt, 16 pt after. No top margin when first |
-| H2 | New York semibold, title2 reference around 22/28 pt, about 28 pt before / 10 pt after |
-| H3 and lower | SF with the existing title3/headline hierarchy, about 24 pt before / 8 pt after |
-| Lists/tasks | A clear marker gutter, consistent wrapped-line alignment and tighter rhythm within a list than between sections. Task targets remain at least 44 pt without dimming read-only labels |
+| Body | SF, 17-pt body reference, 1.75-em leading and 1.25-em paragraph gaps. Scale with resolved native metrics |
+| H1 | System sans bold, 2 times the native-scaled body reference. No top margin when first. A quiet semantic separator spans the text measure below the heading, with 1rem of padding above the rule |
+| H2 | System sans semibold, 1.5 times the native-scaled body reference. About 3rem before a new section, except at the page start. The same padded separator treatment as H1 |
+| H3 and lower | System sans, H3 at 1.25 times the native-scaled body reference. Preserve the lower-heading hierarchy without adding rules to every level |
+| Lists/tasks | A clear marker gutter, consistent wrapped-line alignment and 0.5-em gaps between items, still tighter than the section rhythm. Task targets remain at least 44 pt without dimming read-only labels |
 | Code/tables | Scaled monospace and quiet opaque surfaces. Horizontal overflow stays local to the code/table, never shifts the page |
 | Anchors | Land the target about 16 pt below the actual unobscured top, not below an assumed browser origin |
 
-One deliberate native preview adaptation is proposed: an authored/generated table-of-contents module starts as a compact **Contents disclosure**, rather than a large expanded card occupying the opening screen. Its expanded links keep usable targets. Never inject it into a note that did not request it, and do not change the authored open state of ordinary HTML details. The module label uses SF, not the authored-heading serif.
+One deliberate native preview adaptation is proposed: an authored/generated table-of-contents module starts as a compact **Contents disclosure**, rather than a large expanded card occupying the opening screen. Its expanded links keep usable targets. Never inject it into a note that did not request it, and do not change the authored open state of ordinary HTML details. The module label uses ordinary SF interface hierarchy, not the larger authored-heading treatment.
+
+The ratios and spacing follow the user's web reference and `gistpad.dev/src/features/markdown/index.css`, not a fixed desktop pixel size. Here `rem` follows the native-scaled body reference. H1/H2 rules are one CSS pixel, resolved from the semantic separator role in all four appearances. They organize the document, not the navigation header. Preserve authored emoji, ordered-list starts, native accent roles, generous wrapping and the existing safe-area contract.
 
 Keep native bounce and responsive scrolling. One soft edge treatment per pane where controls actually overlap. No CSS masks, painted gradients, hard content cutoff above a nonexistent footer, doubled safe areas or scroll reset on each source generation. Preview refresh must preserve the current passage. [Materials][materials], [New design system][new-system].
 
 ### Menus: make object scope obvious
 
-**The title cluster is for file navigation, not miscellaneous actions.** On a multi-file note, identify the note and show the exact selected filename as the subtitle. Its native menu lists files directly with the current file checked, then a separate file-management group: **Rename Current File...** and **Add File...**. Daily files retain newest-first date grouping.
+**The title cluster is for file navigation, not miscellaneous actions.** On a multi-file note, identify the note and show the exact selected filename as the subtitle, except when the selected filename is `README.md` in any case. Then show only the note title while retaining the file menu and its chevron. For other filenames, add a 4-pt body-scaled gap above the native subtitle rather than squeezing it against the title. Its native menu lists files directly with the current file checked, then a separate file-management group: **Rename Current File...** and **Add File...**. Daily files retain newest-first date grouping.
 
 **Rename Note... belongs in the note's More menu.** The same visible menu must not offer an ambiguous Rename and Rename File with identical pencils. This fixes information architecture, not just the choice of symbol. For a single-file note, omit an unnecessary title chevron; Files remains available in More for management.
 
@@ -166,7 +168,7 @@ Universal links need the website's deployed AASA association as well as the app 
 | Situation | Required experience |
 | --- | --- |
 | Existing cached note | Selected title and real content immediately. No previous-note frame, placeholder or network-dependent entrance |
-| Uncached first open | Selected title immediately, then a few static, accessibility-hidden redacted body lines at the real page margin. No floating progress capsule, shimmer or fake text. Announce loading accessibly. Replace with content using a short crossfade, never a second navigation |
+| Uncached first open | Selected title and uninterrupted semantic page immediately. After 350 ms of genuine waiting, show a small native circular progress indicator and "Opening note..." in the usable detail area. No skeleton, shimmer, fabricated text or progress capsule. Show ready content immediately, with no forced hold or second entrance animation |
 | Create / Today Start | Real locally durable source session, Edit, caret ready and keyboard requested on attachment. Create requires no network. Normal cached Today is immediate. If Today must discover its remote identity or required template, show that genuine pending state rather than inventing content |
 | Failed read / offline without cache | Keep the selected identity, state the problem and offer Retry. Do not reveal another note or substitute an empty document that looks editable |
 | Empty notebook / first run | Original notebook artwork at a modest size, a short invitation and one clear sign-in/create action. No marketing carousel. Signed-in emptiness must not look signed out |
@@ -174,7 +176,19 @@ Universal links need the website's deployed AASA association as well as the app 
 | Healthy saving | No footer, status pill, reserved empty bar or recurring haptic. Manual Save appears when genuinely needed. Offline pending work gets a quiet explainable icon; actionable failures get one compact notice and recovery action |
 | Conflict / local failure / Photos | Preserve their explicit safety and privacy behavior. Compact native problem surfaces, not decoration. Public-image notice must remain legible above the keyboard. A pending shelf is bounded and scrollable without eliminating the writing viewport |
 
-Loading guidance supports useful content and truthful progress, not a rule to animate every cache hit. [Loading][loading].
+### Opening a note: real identity, quiet progress, then words
+
+**Remove the skeleton, not the existing native opening transition.** A note has no predictable paragraph layout before its bytes arrive. Fake lines preview the wrong document shape and add a second visual event to a good transition. The known title and native navigation already establish where the person is.
+
+Cached content wins: show the selected note's real available words immediately, including offline. Never replace them with a skeleton, dim them behind a spinner or wait for a network refresh before showing them. A brief handoff to the retained editor must not flash progress or an empty editable document.
+
+For an uncached request, keep the actual page background and known native title from the first frame. If it is still pending after **350 ms**, show one system circular `ProgressView` at its regular control size, in semantic secondary ink, with **"Opening note..."** below it in Dynamic Type subheadline, also secondary, separated by 12 pt. Center that compact group inside the remaining safe-area detail viewport, not the physical display or a guessed region beside the Duo rail. Do not put it in a card, capsule, sheet or scrim, repeat the title in the body, use a custom spinner, invent percentages or add timed loading slogans.
+
+The delay belongs to the current opening request. Cancel it on success, failure, replacement or navigation away so a late indicator or document cannot take over another destination. Back and Library navigation remain available. Do not expose editable content commands or request the keyboard before the real document session is ready. Ready content replaces progress immediately without a minimum display time, second navigation, scale, slide or deliberately delayed input.
+
+Expose the progress as one accessible element labeled "Opening [note title]", without announcing every spinner update or stealing focus from navigation. The visible label wraps naturally at AX sizes. Native progress remains meaningful with Reduce Motion, and the app adds no shimmer, pulse or custom movement. A genuinely failed read, including offline without cache, uses the existing selected-identity recovery with **Try Again**. A slow request is not a fake error or an empty note.
+
+Acceptance covers a cache hit with no loading flash, an uncached open completing before the delay, a delayed open, content becoming ready, failure/retry and leaving or changing notes before completion. Inspect Light/Dark, AX3, Increased Contrast and Reduce Motion. Cached/offline content, a real empty file and a pending request must remain distinguishable. The 350-ms delay and composition are GistPad decisions, not Apple-prescribed metrics. Apple's guidance supports immediate useful context, system progress for an unknown duration and continued navigation while content loads. [Loading][loading], [Progress indicators][progress].
 
 Use the native transition from a collection into its detail, native menu/sheet presentation and the glass control's touch response. Do not put a custom cover animation ahead of a ready caret. Card zoom is optional only where its matched source remains stable and cancellation is correct. A direct task completion or pin can have one brief symbol/haptic response **after** the local action succeeds. No haptic for background saving, refresh, initial appearance or every keystroke. Reduce Motion uses the settled state without loss of meaning. [Motion][motion].
 
@@ -235,6 +249,7 @@ Research accessed October 24, 2026. Platform facts above come from Apple. GistPa
 [menus]: https://developer.apple.com/design/human-interface-guidelines/menus
 [search]: https://developer.apple.com/design/human-interface-guidelines/search-fields
 [loading]: https://developer.apple.com/design/human-interface-guidelines/loading
+[progress]: https://developer.apple.com/design/human-interface-guidelines/progress-indicators
 [motion]: https://developer.apple.com/design/human-interface-guidelines/motion
 [notes]: https://support.apple.com/guide/iphone/change-the-notes-view-iph65637affe/ios
 [reminders]: https://support.apple.com/guide/iphone/use-smart-lists-iphe882772ed/ios
