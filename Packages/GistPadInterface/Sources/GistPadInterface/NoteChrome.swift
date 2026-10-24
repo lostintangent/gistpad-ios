@@ -102,6 +102,7 @@ public struct NoteActions {
     public var openInGitHub: (() -> Void)?
     public var focus: (() -> Void)?
     public var find: (() -> Void)?
+    public var intelligence: (() -> Void)?
     public var tags: (() -> Void)?
     public var rename: (() -> Void)?
     public var renameFile: (() -> Void)?
