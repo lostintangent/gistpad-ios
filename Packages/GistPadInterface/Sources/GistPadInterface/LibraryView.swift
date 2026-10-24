@@ -38,8 +38,8 @@ public struct LibraryView: View {
 
     public var body: some View {
         adaptiveList
-            .listSectionMargins(.top, 16)
-            .listSectionMargins(.bottom, 8)
+            .listSectionMargins(.top, 12)
+            .listSectionMargins(.bottom, 4)
             .environment(\.defaultMinListHeaderHeight, 0)
             .navigationTitle("GistPad")
             .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 400)
@@ -76,11 +76,11 @@ public struct LibraryView: View {
                                         .foregroundStyle(.primary)
                                 }
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                         .accessibilityIdentifier("library-today")
@@ -102,6 +102,7 @@ public struct LibraryView: View {
                     } footer: {
                         if !model.selectedTagIDs.isEmpty {
                             Text("All selected tags must match.", bundle: .module)
+                                .foregroundStyle(InterfaceTheme.text)
                         }
                     }
                 }
@@ -322,9 +323,10 @@ public struct LibraryView: View {
                 .font(.footnote)
                 .foregroundStyle(.primary)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 4)
         }
         .accessibilityValue(note.isPinned ? Text("Pinned", bundle: .module) : Text(""))
+        .navigationLinkIndicatorVisibility(.hidden)
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
         .listRowBackground(model.selectedNoteID == note.id ? InterfaceTheme.selection : nil)
         .contextMenu { rowActions(note) }

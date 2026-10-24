@@ -38,7 +38,7 @@ public struct TagEditor: View {
                     Text("On this note", bundle: .module).foregroundStyle(InterfaceTheme.text)
                 } footer: {
                     Text("Tags apply to every file in this gist.", bundle: .module)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(InterfaceTheme.text)
                 }
                 if let saveError {
                     Section {
@@ -154,13 +154,10 @@ public struct TagEditor: View {
     private var toolbar: some ToolbarContent {
         if save != nil {
             ToolbarItem(placement: .cancellationAction) {
-                Button(
-                    draft.hasAttemptedChanges
-                        ? String(localized: "Close", bundle: .module)
-                        : String(localized: "Cancel", bundle: .module)
-                ) {
+                Button(role: .cancel) {
                     if draft.edits.isEmpty { dismiss() } else { confirmingDiscard = true }
                 }
+                .accessibilityLabel(Text("Cancel", bundle: .module))
             }
             ToolbarItem(placement: .primaryAction) {
                 Button(String(localized: "Add tag", bundle: .module), systemImage: "plus") {
@@ -171,8 +168,12 @@ public struct TagEditor: View {
         ToolbarItem(placement: .confirmationAction) {
             if isSaving {
                 ProgressView(String(localized: "Saving tags", bundle: .module))
+            } else if save != nil {
+                Button(role: .confirm, action: commit)
+                    .accessibilityLabel(Text("Save Tags", bundle: .module))
             } else {
-                Button(String(localized: "Done", bundle: .module), action: commit)
+                Button(role: .close) { dismiss() }
+                    .accessibilityLabel(Text("Close", bundle: .module))
             }
         }
     }
@@ -252,7 +253,7 @@ private struct TagEditForm: View {
                         }
                     } footer: {
                         Text("Deleting a tag removes it from every note. Note content is unchanged.", bundle: .module)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(InterfaceTheme.text)
                     }
                 }
             }
@@ -261,10 +262,11 @@ private struct TagEditForm: View {
             .tint(InterfaceTheme.accent)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "Cancel", bundle: .module)) { dismiss() }
+                    Button(role: .cancel) { dismiss() }
+                        .accessibilityLabel(Text("Cancel", bundle: .module))
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Done", bundle: .module)) {
+                    Button(role: .confirm) {
                         do {
                             try update(LibraryTag(id: tag.id, name: name, colorHex: colorHex))
                             dismiss()
@@ -272,6 +274,7 @@ private struct TagEditForm: View {
                             self.error = error.localizedDescription
                         }
                     }
+                    .accessibilityLabel(Text("Save tag", bundle: .module))
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }

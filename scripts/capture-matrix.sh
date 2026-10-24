@@ -12,6 +12,7 @@ CONTRAST="standard"
 OUTPUT=""
 POSTURE_HOOK=""
 POSTURE_READY=false
+READING_FIXTURE=false
 SETTLE=10
 
 usage() {
@@ -26,6 +27,7 @@ Use only synthetic capture fixtures, never an active account or document.
   --device UDID          Duo simulator (default: CAPTURE_DEVICE or Capture Duo)
   --screen NAME          App capture route, such as library, note, or editor
   --state NAME           Synthetic fixture state (default: populated)
+  --capture-reading-fixture  Focused Markdown reading fixture (note route only)
   --output PATH          Evidence directory (default: DerivedData/Captures/...)
   --pose both|cover|open  Presentations to capture (default: both)
   --contrast standard|increased|both
@@ -49,6 +51,7 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         --help) usage; exit 0 ;;
         --posture-ready) POSTURE_READY=true; shift ;;
+        --capture-reading-fixture) READING_FIXTURE=true; shift ;;
         --app|--device|--screen|--state|--output|--pose|--contrast|--posture-hook|--settle)
             [ "$#" -ge 2 ] || fail "Missing value for $1"
             case "$1" in
@@ -70,6 +73,7 @@ done
 
 [[ "$SCREEN" =~ ^[a-zA-Z0-9_-]+$ ]] || fail "--screen is required and must be a route name"
 [[ "$STATE" =~ ^[a-zA-Z0-9_-]+$ ]] || fail "Invalid --state"
+[ "$READING_FIXTURE" = false ] || [ "$SCREEN" = note ] || fail "--capture-reading-fixture requires --screen note"
 [[ "$SETTLE" =~ ^[0-9]+$ ]] || fail "--settle must be a nonnegative integer"
 case "$POSE" in both) POSES=(cover open) ;; cover|open) POSES=("$POSE") ;; *) fail "Invalid --pose" ;; esac
 case "$CONTRAST" in
@@ -118,6 +122,7 @@ printf 'appearance=%s\nincrease_contrast=%s\ncontent_size=%s\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$DEVICE" "$BUNDLE_ID" "$SCREEN" "$STATE" "$APP"
     printf 'app_executable_sha256='
     shasum -a 256 "$APP/$("/usr/libexec/PlistBuddy" -c 'Print CFBundleExecutable' "$APP/Info.plist")"
+    printf 'reading_fixture=%s\n' "$READING_FIXTURE"
     if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         git -C "$ROOT" --no-pager log -1 --format='revision=%H'
         git -C "$ROOT" --no-pager status --short
@@ -152,8 +157,12 @@ for pose in "${POSES[@]}"; do
             for size in large accessibility-extra-large; do
                 xcrun simctl ui "$DEVICE" content_size "$size"
                 token="$(uuidgen)"
+                launch_arguments=(--capture-screen "$SCREEN" --capture-state "$STATE" --capture-ready-token "$token")
+                if [ "$READING_FIXTURE" = true ]; then
+                    launch_arguments+=(--capture-reading-fixture)
+                fi
                 xcrun simctl launch --terminate-running-process "$DEVICE" "$BUNDLE_ID" \
-                    --capture-screen "$SCREEN" --capture-state "$STATE" --capture-ready-token "$token"
+                    "${launch_arguments[@]}"
                 filename="$SCREEN-$STATE-$pose-$appearance-contrast-$increased-$size.png"
                 if [ "$SCREEN" = library ] || [ "$SCREEN" = note ]; then
                     container="$(xcrun simctl get_app_container "$DEVICE" "$BUNDLE_ID" data)"

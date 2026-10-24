@@ -29,6 +29,7 @@ public struct TodayLanding: View {
             .padding(24)
         }
         .background(Color(uiColor: .systemBackground))
+        .tint(InterfaceTheme.accent)
         .scrollEdgeEffectStyle(.soft, for: .all)
         .navigationTitle(Text("Today", bundle: .module))
         .navigationBarTitleDisplayMode(.inline)

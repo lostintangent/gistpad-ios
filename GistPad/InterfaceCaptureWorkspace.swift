@@ -36,6 +36,7 @@ struct InterfaceCaptureWorkspace: View {
     @State private var previewError: String?
     @State private var previewReload = 0
     @State private var actionMessage: String?
+    @State private var showingTagEditor: Bool
     private let captureState: String
     private let captureScreen: String
     private let readinessToken: String?
@@ -50,20 +51,55 @@ struct InterfaceCaptureWorkspace: View {
             guard let index = arguments.firstIndex(of: name), arguments.indices.contains(index + 1) else { return fallback }
             return arguments[index + 1]
         }
-        let screen = argument("--capture-screen", default: "library")
+        let screen = LaunchArguments.captureScreen ?? "library"
         let state = argument("--capture-state", default: "populated")
         captureScreen = screen
         let token = argument("--capture-ready-token", default: "")
         readinessToken = UUID(uuidString: token) == nil ? nil : token
         captureState = state
-        supportedState = ["populated", "empty", "error", "offline", "readonly"].contains(state)
+        supportedState = [
+            "populated", "empty", "error", "offline", "readonly", "tag-audit", "today",
+            "tag-editor", "tag-readonly"
+        ].contains(state)
+        _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
+        var snapshot = state == "empty" ? LibrarySnapshot(notes: []) : InterfaceFixtures.library
+        if state == "tag-audit" {
+            snapshot = LibrarySnapshot(
+                notes: [
+                    .init(
+                        id: "shape", title: "Labels with room", updatedAt: InterfaceFixtures.referenceDate,
+                        isPinned: true, tagIDs: ["long", "yellow", "missing"]
+                    ),
+                    .init(
+                        id: "white-black", title: "Black and white", updatedAt: InterfaceFixtures.referenceDate,
+                        tagIDs: ["black", "white"]
+                    ),
+                    .init(
+                        id: "missing-color", title: "An unspecified color", updatedAt: InterfaceFixtures.referenceDate,
+                        tagIDs: ["missing"]
+                    )
+                ],
+                tags: [
+                    .init(id: "long", name: "A longer label that must wrap, not truncate", colorHex: "#548C80"),
+                    .init(id: "yellow", name: "Bright yellow", colorHex: "#FFFF00"),
+                    .init(id: "white", name: "White", colorHex: "#FFFFFF"),
+                    .init(id: "black", name: "Black", colorHex: "#000000"),
+                    .init(id: "missing", name: "No color")
+                ]
+            )
+        }
+        if LaunchArguments.captureReadingFixture,
+           let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
+            snapshot.notes[index].title = "A considered page"
+        }
         let model = LibraryModel(
-            snapshot: state == "empty" ? .init(notes: []) : InterfaceFixtures.library,
+            snapshot: snapshot,
             loadState: state == "error"
                 ? .failed(message: "Synthetic connection failure. No account request was made.")
-                : state == "offline" ? .offline : .ready
+                : state == "offline" ? .offline : .ready,
+            today: .init(date: InterfaceFixtures.referenceDate)
         )
-        model.selectedNoteID = state == "empty" || screen == "library" ? nil : "shape"
+        model.selectedNoteID = state == "empty" || state == "today" || screen == "library" ? nil : "shape"
         _library = State(initialValue: model)
         _compactColumn = State(initialValue: screen == "library" ? .sidebar : .detail)
         _previewError = State(initialValue: state == "error" ? "Synthetic preview failure. Your source is unchanged." : nil)
@@ -78,7 +114,11 @@ struct InterfaceCaptureWorkspace: View {
                 )
             } detail: {
                 NavigationStack {
-                    if library.selectedNoteID != nil {
+                    if captureState == "today" {
+                        TodayLanding(summary: library.today) {
+                            actionMessage = "This synthetic landing cannot create a note."
+                        }
+                    } else if library.selectedNoteID != nil {
                         NoteScreen(
                             document: chrome, mode: mode, saveState: .inMemoryFixture,
                             actions: noteActions
@@ -93,6 +133,12 @@ struct InterfaceCaptureWorkspace: View {
                 }
             }
             .navigationSplitViewStyle(.balanced)
+            .sheet(isPresented: $showingTagEditor) {
+                TagEditor(
+                    tags: library.snapshot.tags, selectedTagIDs: Set(chrome.tags.map(\.id)),
+                    save: captureTagSave
+                )
+            }
             .onChange(of: library.selectedNoteID) {
                 if library.selectedNoteID != nil { compactColumn = .detail }
             }
@@ -100,7 +146,7 @@ struct InterfaceCaptureWorkspace: View {
                 if captureScreen == "library", horizontalSizeClass == .regular, captureState != "empty" {
                     library.selectedNoteID = "shape"
                 }
-                if captureScreen == "library" || captureState == "error" {
+                if captureScreen == "library" || captureState == "error" || captureState == "today" {
                     await markReady()
                 }
             }
@@ -119,9 +165,10 @@ struct InterfaceCaptureWorkspace: View {
     private var chrome: NoteChrome {
         var chrome = InterfaceFixtures.note
         chrome.selectedFileID = selectedFileID
-        chrome.access = captureState == "readonly" ? .readOnly : .editable
+        chrome.access = ["readonly", "tag-readonly"].contains(captureState) ? .readOnly : .editable
         if let note = library.snapshot.notes.first(where: { $0.id == library.selectedNoteID }) {
             chrome.title = note.title
+            chrome.tags = library.tags(for: note)
         }
         return chrome
     }
@@ -158,6 +205,11 @@ struct InterfaceCaptureWorkspace: View {
             }
         }
         return actions
+    }
+
+    private var captureTagSave: (@MainActor ([TagEdit]) async throws -> Void)? {
+        guard captureState == "tag-editor" else { return nil }
+        return { _ in throw CaptureTagSaveFailure() }
     }
 
     private var preview: some View {
@@ -227,6 +279,7 @@ struct InterfaceCaptureWorkspace: View {
                 .appendingPathComponent("gistpad-capture-\(readinessToken).ready")
             let data = try JSONSerialization.data(withJSONObject: [
                 "screen": captureScreen, "state": captureState,
+                "fixture": LaunchArguments.captureReadingFixture ? "reading-polish" : "notebook",
                 "token": readinessToken, "previewError": previewError ?? ""
             ], options: [.sortedKeys])
             try data.write(to: url, options: .atomic)
@@ -235,6 +288,12 @@ struct InterfaceCaptureWorkspace: View {
         } catch {
             actionMessage = "Capture readiness could not be recorded: \(error.localizedDescription)"
         }
+    }
+}
+
+private struct CaptureTagSaveFailure: LocalizedError {
+    var errorDescription: String? {
+        "Synthetic tag save failure. Your choices remain in this sheet. No account request was made."
     }
 }
 #endif
