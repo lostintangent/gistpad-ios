@@ -244,6 +244,7 @@ struct NotebookPhotoLayoutProbe {
       await fixture.photos.receivePickedData(fixture.bytes)
       fixture.photos.isShowingPicker = false
     }
+    #expect(fixture.photos.attachments.count == photoCount)
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
@@ -273,13 +274,24 @@ struct NotebookPhotoLayoutProbe {
     host.view.layoutIfNeeded()
     #expect(editor.isFirstResponder)
     #expect(editor.inputAccessoryView != nil)
-    let scrolls = descendants(of: host.view).compactMap { $0 as? UIScrollView }
-    let shelf = try #require(scrolls.first {
-      $0 !== editor && $0.bounds.height <= 181
-        && $0.bounds.height > 0 && $0.contentSize.height > $0.bounds.height
-    })
     let prefix = "photos-ax3-\(photoCount)"
     record(window, named: "\(prefix)-shelf-top")
+    let views = descendants(of: host.view)
+    Attachment.record(
+      views.map { view in
+        let geometry =
+          "\(type(of: view)): frame \(view.frame), bounds \(view.bounds), "
+          + "hidden \(view.isHidden), alpha \(view.alpha), id \(view.accessibilityIdentifier ?? "-")"
+        guard let scroll = view as? UIScrollView else { return geometry }
+        return geometry + ", content \(scroll.contentSize), insets \(scroll.adjustedContentInset)"
+      }.joined(separator: "\n"),
+      named: "\(prefix)-hierarchy.txt")
+    let scrolls = views.compactMap { $0 as? UIScrollView }
+    let shelf = try #require(scrolls.first {
+      $0 !== editor && !$0.isHidden && $0.bounds.height > 0
+    })
+    #expect(shelf.bounds.height <= 181)
+    #expect(shelf.contentSize.height > shelf.bounds.height)
     let bottom = shelf.contentSize.height - shelf.bounds.height + shelf.adjustedContentInset.bottom
     shelf.setContentOffset(CGPoint(x: 0, y: bottom), animated: false)
     try await Task.sleep(for: .milliseconds(150))

@@ -133,6 +133,7 @@ public struct PhotoAttachmentShelf: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func row(_ attachment: PhotoAttachment) -> some View {
