@@ -28,7 +28,96 @@ private func authSession(includeProvider: Bool = true) throws -> Data {
     return try JSONSerialization.data(withJSONObject: body)
 }
 
+private final class ProviderRemovalFailureCredentials: AuthLocalStorage, Sendable {
+    let memory = MemoryCredentials()
+    let failsProviderRemoval = Mutex(false)
+
+    func store(key: String, value: Data) throws { try memory.store(key: key, value: value) }
+    func retrieve(key: String) throws -> Data? { try memory.retrieve(key: key) }
+    func remove(key: String) throws {
+        if key.hasPrefix("github-provider-"), failsProviderRemoval.withLock({ $0 }) {
+            throw AccountError.keychain(-25308)
+        }
+        try memory.remove(key: key)
+    }
+}
+
 @Suite struct AccountTests {
+    @Test(arguments: [200, 400])
+    func signOutBlocksCachedRestorationAndClearsBothCredentialsAfterSuspension(status: Int) async throws {
+        let credentials = MemoryCredentials()
+        let (started, start) = AsyncStream<Void>.makeStream()
+        let (permitted, permit) = AsyncStream<Void>.makeStream()
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            session: FakeURLProtocol.session { request in
+                if request.url?.path.hasSuffix("/logout") == true {
+                    #expect(request.url?.query == "scope=local")
+                    start.yield(())
+                    for await _ in permitted { break }
+                    return FakeResponse(status: status)
+                }
+                return FakeResponse(data: try authSession())
+            },
+            automaticallyRefreshesToken: false)
+        _ = try await account.signIn { _ in URL(string: "gistpad://auth-callback?code=fake")! }
+        let key = "github-provider-\(testAccountID.uuidString)"
+        let savedSession = try credentials.retrieve(key: "gistpad-supabase-session")
+        let session = try #require(savedSession)
+        let signingOut = Task { try await account.signOut(accountID: testAccountID) }
+        for await _ in started { break }
+        try credentials.store(key: "gistpad-supabase-session", value: session)
+        #expect(try credentials.retrieve(key: key) == nil)
+        await #expect(throws: AccountError.signInInProgress) { try await account.cachedAccount() }
+        #expect(try credentials.retrieve(key: key) == nil)
+        try credentials.store(key: key, value: Data("late-fake-provider".utf8))
+        permit.yield(())
+        if status == 200 {
+            try await signingOut.value
+        } else {
+            await #expect(throws: (any Error).self) { try await signingOut.value }
+        }
+        #expect(try credentials.retrieve(key: key) == nil)
+        #expect(try credentials.retrieve(key: "gistpad-supabase-session") == nil)
+        #expect(try await account.cachedAccount() == nil)
+        await #expect(throws: AccountError.signedOut) {
+            try await account.githubToken(accountID: testAccountID)
+        }
+        let reopened = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            automaticallyRefreshesToken: false)
+        #expect(try await reopened.cachedAccount() == nil)
+    }
+
+    @Test func finalProviderCleanupFailureStillRemovesTheLocalSessionAndSurfacesTheError() async throws {
+        let credentials = ProviderRemovalFailureCredentials()
+        let persisted = Mutex<Data?>(nil)
+        let providerKey = "github-provider-\(testAccountID.uuidString)"
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            session: FakeURLProtocol.session { request in
+                if request.url?.path.hasSuffix("/logout") == true {
+                    let session = try #require(persisted.withLock { $0 })
+                    try credentials.store(key: "gistpad-supabase-session", value: session)
+                    try credentials.store(key: providerKey, value: Data("late-fake-provider".utf8))
+                    credentials.failsProviderRemoval.withLock { $0 = true }
+                    return FakeResponse()
+                }
+                return FakeResponse(data: try authSession())
+            },
+            automaticallyRefreshesToken: false)
+        _ = try await account.signIn { _ in URL(string: "gistpad://auth-callback?code=fake")! }
+        let savedSession = try credentials.retrieve(key: "gistpad-supabase-session")
+        let session = try #require(savedSession)
+        persisted.withLock { $0 = session }
+        await #expect(throws: AccountError.keychain(-25308)) {
+            try await account.signOut(accountID: testAccountID)
+        }
+        #expect(try credentials.retrieve(key: "gistpad-supabase-session") == nil)
+        #expect(try await account.cachedAccount() == nil)
+        #expect(try credentials.retrieve(key: providerKey) != nil)
+    }
+
     @Test func pkceRequestsGistScopeAndPersistsProviderAcrossRefreshAndRelaunch() async throws {
         let credentials = MemoryCredentials()
         let exchanges = Mutex(0)

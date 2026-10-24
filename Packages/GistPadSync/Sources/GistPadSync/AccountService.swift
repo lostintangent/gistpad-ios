@@ -109,6 +109,7 @@ public actor AccountService {
     }
 
     public func cachedAccount() async throws -> AccountSnapshot? {
+        guard !signingOut else { throw AccountError.signInInProgress }
         guard let session = try persistedSession() else { return nil }
         try retainProviderToken(session)
         return snapshot(session.user)
@@ -233,13 +234,23 @@ public actor AccountService {
         do {
             try await auth.signOut(scope: .local)
         } catch {
-            try credentials.remove(key: Self.sessionKey)
+            try removeLocalCredentials(accountID: accountID)
             throw error
         }
-        try credentials.remove(key: Self.sessionKey)
+        try removeLocalCredentials(accountID: accountID)
+    }
+
+    private func removeLocalCredentials(accountID: UUID) throws {
+        let providerRemoval = Result { try credentials.remove(key: providerKey(accountID)) }
+        let sessionRemoval = Result { try credentials.remove(key: Self.sessionKey) }
+        try providerRemoval.get()
+        try sessionRemoval.get()
     }
 
     private func retainProviderToken(_ session: Session) throws {
+        guard !signingOut, try persistedSession()?.user.id == session.user.id else {
+            throw AccountError.accountChanged
+        }
         if let token = session.providerToken, !token.isEmpty {
             try credentials.store(key: providerKey(session.user.id), value: Data(token.utf8))
         }
