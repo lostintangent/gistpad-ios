@@ -24,6 +24,14 @@ public struct TagEditor: View {
         _draft = State(initialValue: TagEditorDraft(tags: tags, selectedTagIDs: selectedTagIDs))
     }
 
+    #if DEBUG
+    public func captureQuery(_ value: String) -> Self {
+        var editor = self
+        editor._query = State(initialValue: value)
+        return editor
+    }
+    #endif
+
     public var body: some View {
         NavigationStack {
             List {
@@ -51,6 +59,7 @@ public struct TagEditor: View {
                                 ? String(localized: "No tags yet.", bundle: .module)
                                 : String(localized: "No matching tags.", bundle: .module))
                             .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("tag-empty")
                     }
                     if save != nil {
                         Button {

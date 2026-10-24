@@ -19,6 +19,14 @@ public struct PersonalAccentColorRow: View {
         self.save = save
     }
 
+    #if DEBUG
+    public func capturePendingColor(_ value: RGBColor) -> Self {
+        var row = self
+        row._chosenColor = State(initialValue: value)
+        return row
+    }
+    #endif
+
     private var preference: PersonalAccent { PersonalAccent(savedHex: savedHex) }
     private var selected: RGBColor { chosenColor ?? preference.color }
 

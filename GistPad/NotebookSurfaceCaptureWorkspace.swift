@@ -1,4 +1,5 @@
 #if DEBUG
+import GistPadAppearance
 import GistPadEditor
 import GistPadInterface
 import GistPadSync
@@ -78,6 +79,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
               }
             }
           }
+          .captureQuery(tagCaptureQuery)
         case .account:
           NotebookAccountSwitchSheet(
             current: "octavia", replacement: "mira", export: { Data("[]".utf8) },
@@ -105,7 +107,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
       if screen == "capture-today" { presentedSheet = .captureToday }
     }
     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)) { notification in
-      guard screen == "capture-today",
+      guard capturesKeyboard,
         let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
         let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first
       else { return }
@@ -147,15 +149,10 @@ struct NotebookSurfaceCaptureWorkspace: View {
     NotebookSurfaceReadinessMarker(
       requiresKeyboard: screen == "capture-today" && captureState != "error",
       keyboardHeight: keyboardHeight,
-      menuState: screen == "note-chrome" ? captureState : nil,
-      failed: { readinessError = $0 }
-    ) { window, keyboardHeight in
-      let arguments = ProcessInfo.processInfo.arguments
-      guard let index = arguments.firstIndex(of: "--capture-ready-token"),
-        arguments.indices.contains(index + 1),
-        UUID(uuidString: arguments[index + 1]) != nil
-      else { return }
-      let token = arguments[index + 1]
+      step: captureStep,
+      failed: recordCaptureFailure
+    ) { window, keyboardHeight, evidence in
+      guard let token = captureToken else { return }
       do {
         var metadata: [String: Any] = [
           "screen": screen, "fixture": "native-surfaces", "token": token,
@@ -165,6 +162,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
           "windowWidth": window.bounds.width, "windowHeight": window.bounds.height,
           "keyboardHeight": keyboardHeight,
         ]
+        metadata.merge(evidence.metadata) { _, value in value }
         if screen == "capture-today",
           let writing = TodayCaptureWritingMetrics(window: window, keyboardHeight: keyboardHeight)
         {
@@ -184,6 +182,64 @@ struct NotebookSurfaceCaptureWorkspace: View {
     }
     .allowsHitTesting(false)
     .accessibilityHidden(true)
+  }
+
+  private var captureToken: String? {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard let index = arguments.firstIndex(of: "--capture-ready-token"),
+      arguments.indices.contains(index + 1),
+      UUID(uuidString: arguments[index + 1]) != nil
+    else { return nil }
+    return arguments[index + 1]
+  }
+
+  private func recordCaptureFailure(_ message: String) {
+    readinessError = message
+    guard let token = captureToken else { return }
+    do {
+      let data = try JSONSerialization.data(
+        withJSONObject: [
+          "token": token, "screen": screen, "state": captureState ?? "resting",
+          "error": message,
+        ], options: [.sortedKeys])
+      try data.write(
+        to: FileManager.default.temporaryDirectory
+          .appendingPathComponent("gistpad-capture-\(token).failed"), options: .atomic)
+    } catch {
+      readinessError = "\(message)\nThe capture failure could not be recorded: \(error.localizedDescription)"
+    }
+  }
+
+  private var tagCaptureQuery: String {
+    switch captureState {
+    case "search": "Ideas"
+    case "search-empty": "No matching tag"
+    default: ""
+    }
+  }
+
+  private var capturesKeyboard: Bool {
+    (screen == "capture-today" && captureState != "error")
+      || (screen == "tags" && ["search", "search-empty", "new-tag"].contains(captureState ?? ""))
+  }
+
+  private var captureStep: NotebookSurfaceCaptureStep? {
+    guard let captureState else { return nil }
+    switch (screen, captureState) {
+    case ("note-chrome", _): return .menu(captureState)
+    case ("tags", "search"): return .tagSearch(query: tagCaptureQuery, expectedTagID: "ideas")
+    case ("tags", "search-empty"): return .tagSearch(query: tagCaptureQuery, expectedTagID: nil)
+    case ("tags", "new-tag"): return .newTag
+    case ("tags", "edit-tag"): return .editTag
+    case ("settings", "end"): return .end(requiredID: "settings-sign-out")
+    case ("account", "end"): return .end(requiredID: "account-switch-export")
+    case ("settings", "sign-out"): return .signOut
+    case ("settings", "error"): return .accentError
+    case ("settings", "accent-save"): return .accentSave
+    case ("tags", _), ("settings", _), ("account", _):
+      return .unsupported("\(screen)/\(captureState)")
+    default: return nil
+    }
   }
 
   private var chrome: NoteChrome {
@@ -233,8 +289,17 @@ struct NotebookSurfaceCaptureWorkspace: View {
       connect: { presentedSheet = .account },
       signOut: { presentedSheet = nil }
     ) {
-      PersonalAccentColorRow(savedHex: preferences.accentColor) {
+      let row = PersonalAccentColorRow(savedHex: preferences.accentColor) {
+        if captureState == "error" {
+          throw NotebookSurfaceCaptureFailure(
+            message: NotebookModel.message(for: URLError(.notConnectedToInternet)))
+        }
         preferences = try preferences.applying(.setAccentColor($0))
+      }
+      if ["error", "accent-save"].contains(captureState ?? "") {
+        row.capturePendingColor(PersonalAccent(savedHex: "#DB9E47").color)
+      } else {
+        row
       }
     }
   }
@@ -245,7 +310,7 @@ struct NotebookSurfaceCaptureWorkspace: View {
     var id: Self { self }
   }
 
-  private static let tags = [
+  fileprivate static let tags = [
     LibraryTag(id: "everyday", name: "Everyday", colorHex: "#0EA5E9"),
     LibraryTag(id: "ideas", name: "Ideas", colorHex: "#DB9E47"),
     LibraryTag(id: "making", name: "Making things", colorHex: "#6DAD8B"),
@@ -257,13 +322,13 @@ struct NotebookSurfaceCaptureWorkspace: View {
 private struct NotebookSurfaceReadinessMarker: UIViewControllerRepresentable {
   let requiresKeyboard: Bool
   let keyboardHeight: CGFloat
-  let menuState: String?
+  let step: NotebookSurfaceCaptureStep?
   let failed: @MainActor (String) -> Void
-  let ready: @MainActor (UIWindow, CGFloat) -> Void
+  let ready: @MainActor (UIWindow, CGFloat, NotebookSurfaceCaptureEvidence) -> Void
 
   func makeUIViewController(context: Context) -> NotebookSurfaceReadinessController {
     NotebookSurfaceReadinessController(
-      requiresKeyboard: requiresKeyboard, menuState: menuState, failed: failed, ready: ready)
+      requiresKeyboard: requiresKeyboard, step: step, failed: failed, ready: ready)
   }
 
   func updateUIViewController(_ controller: NotebookSurfaceReadinessController, context: Context) {
@@ -273,19 +338,19 @@ private struct NotebookSurfaceReadinessMarker: UIViewControllerRepresentable {
 
 private final class NotebookSurfaceReadinessController: UIViewController {
   private let requiresKeyboard: Bool
-  private let menuState: String?
+  private let step: NotebookSurfaceCaptureStep?
   private let failed: @MainActor (String) -> Void
-  private let ready: @MainActor (UIWindow, CGFloat) -> Void
+  private let ready: @MainActor (UIWindow, CGFloat, NotebookSurfaceCaptureEvidence) -> Void
   private var readiness: Task<Void, Never>?
   var keyboardHeight: CGFloat = 0
 
   init(
-    requiresKeyboard: Bool, menuState: String?,
+    requiresKeyboard: Bool, step: NotebookSurfaceCaptureStep?,
     failed: @escaping @MainActor (String) -> Void,
-    ready: @escaping @MainActor (UIWindow, CGFloat) -> Void
+    ready: @escaping @MainActor (UIWindow, CGFloat, NotebookSurfaceCaptureEvidence) -> Void
   ) {
     self.requiresKeyboard = requiresKeyboard
-    self.menuState = menuState
+    self.step = step
     self.failed = failed
     self.ready = ready
     super.init(nibName: nil, bundle: nil)
@@ -295,17 +360,25 @@ private final class NotebookSurfaceReadinessController: UIViewController {
 
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
+    guard readiness == nil else { return }
     guard let window = view.window else { return }
     window.layoutIfNeeded()
-    if let menuState {
-      guard let menu = NotebookMenuCapture(rawValue: menuState) else {
-        failed("Unsupported native note menu capture: \(menuState).")
-        return
+    if let step {
+      switch step {
+      case .menu(let state):
+        guard let menu = NotebookMenuCapture(rawValue: state) else {
+          failed("Unsupported native note menu capture: \(state).")
+          return
+        }
+        openMenu(menu, in: window)
+      case .unsupported(let state):
+        failed("Unsupported native surface capture: \(state).")
+      default:
+        preparePresentation(step, in: window)
       }
-      openMenu(menu, in: window)
       return
     }
-    guard requiresKeyboard else { ready(window, 0); return }
+    guard requiresKeyboard else { ready(window, 0, .init()); return }
     readiness = Task { @MainActor in
       let deadline = ContinuousClock.now.advanced(by: .seconds(10))
       var previousHeight: CGFloat = 0
@@ -322,7 +395,7 @@ private final class NotebookSurfaceReadinessController: UIViewController {
             stableSamples =
               abs(height - previousHeight) < 0.5 && writing == previousWriting
               ? stableSamples + 1 : 0
-            if stableSamples >= 3 { ready(window, height); return }
+            if stableSamples >= 3 { ready(window, height, .init()); return }
           } else {
             stableSamples = 0
           }
@@ -342,9 +415,187 @@ private final class NotebookSurfaceReadinessController: UIViewController {
   }
 
   override func viewWillDisappear(_ animated: Bool) {
-    readiness?.cancel()
-    readiness = nil
+    if step?.waitsForChildPresentation != true {
+      readiness?.cancel()
+      readiness = nil
+    }
     super.viewWillDisappear(animated)
+  }
+
+  private func preparePresentation(_ step: NotebookSurfaceCaptureStep, in window: UIWindow) {
+    readiness = Task { @MainActor in
+      do {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(12))
+        var activated = false
+        var stableSamples = 0
+        var previousEvidence: NotebookSurfaceCaptureEvidence?
+        while ContinuousClock.now < deadline {
+          try Task.checkCancellation()
+          guard !window.isHidden else { return }
+          window.layoutIfNeeded()
+          var evidence = NotebookSurfaceCaptureEvidence()
+          var complete = false
+          if UIApplication.shared.applicationState == .active {
+            switch step {
+            case .tagSearch(let query, let expectedTagID):
+              if !activated, let control = descendants(window).compactMap({ $0 as? UIControl })
+                .first(where: { $0.accessibilityLabel == "Search" && isVisible($0) })
+              {
+                control.performPrimaryAction()
+                activated = true
+              }
+              let field = descendants(window).compactMap { $0 as? UITextField }.first {
+                $0.isFirstResponder && $0.text == query
+              }
+              let visibleTags = NotebookSurfaceCaptureWorkspace.tags.filter {
+                visibleElement("tag-choice-\($0.id)", in: window) != nil
+              }.map(\.id)
+              let expected = expectedTagID.map { [$0] } ?? []
+              let emptyVisible = expectedTagID != nil || visibleElement("tag-empty", in: window) != nil
+              complete = activated && field != nil && keyboardHeight >= 150
+                && visibleTags == expected && emptyVisible
+              evidence.focusedFieldText = field?.text
+              evidence.matchedTagCount = visibleTags.count
+            case .newTag, .editTag:
+              if !activated {
+                if step == .newTag, let button = visibleElement("tag-create", in: window) {
+                  activated = try activate(button, description: "New Tag")
+                } else if step == .editTag,
+                  let row = visibleElement("tag-choice-everyday", in: window),
+                  let action = row.accessibilityCustomActions?.first(where: {
+                    $0.name == "Edit tag Everyday"
+                  })
+                {
+                  if let handler = action.actionHandler {
+                    activated = handler(action)
+                  } else if let target = action.target {
+                    activated = UIApplication.shared.sendAction(
+                      action.selector, to: target, from: action, for: nil)
+                  }
+                  guard activated else {
+                    throw NotebookSurfaceCaptureFailure(message: "The native Edit Tag action was not handled.")
+                  }
+                }
+              }
+              let expectedTitle = step == .newTag ? "New tag" : "Edit tag"
+              let bar = descendants(window).compactMap { $0 as? UINavigationBar }.first {
+                $0.topItem?.title == expectedTitle && isVisible($0)
+              }
+              let field = descendants(window).compactMap { $0 as? UITextField }.first {
+                $0.isFirstResponder
+              }
+              complete = activated && bar != nil
+                && (step != .newTag || (field != nil && keyboardHeight >= 150))
+              evidence.formTitle = bar?.topItem?.title
+              evidence.focusedFieldText = field?.text
+            case .end, .signOut, .accentError, .accentSave:
+              let scroll = scrollToEnd(in: window)
+              evidence.scrollEndVisible = scroll?.atEnd == true
+              evidence.scrollOffset = scroll?.offset
+              evidence.scrollMaximum = scroll?.maximum
+              if step == .signOut, !activated, scroll?.atEnd == true,
+                let button = visibleElement("settings-sign-out", in: window)
+              {
+                activated = try activate(button, description: "Sign Out confirmation")
+              }
+              if step == .accentError, !activated, scroll?.atEnd == true,
+                let button = visibleElement("settings-save-accent", in: window)
+              {
+                activated = try activate(button, description: "Save Accent Color")
+              }
+              switch step {
+              case .end(let requiredID):
+                if visibleElement(requiredID, in: window) != nil {
+                  evidence.endElementID = requiredID
+                }
+                complete = scroll?.atEnd == true && evidence.endElementID != nil
+              case .accentSave:
+                evidence.pendingAccentVisible = visibleElement("settings-save-accent", in: window) != nil
+                complete = scroll?.atEnd == true
+                  && evidence.pendingAccentVisible
+              case .accentError:
+                evidence.errorVisible = visibleElement("settings-accent-error", in: window) != nil
+                evidence.pendingAccentVisible = visibleElement("settings-save-accent", in: window) != nil
+                complete = activated && evidence.errorVisible && evidence.pendingAccentVisible && scroll?.atEnd == true
+              case .signOut:
+                let alert = topController(in: window) as? UIAlertController
+                evidence.confirmationVisible =
+                  alert?.title == "Sign out of @octavia?"
+                  && alert?.actions.contains(where: { $0.title == "Sign Out" && $0.style == .destructive }) == true
+                  && alert?.viewIfLoaded?.window != nil
+                complete = activated && evidence.confirmationVisible
+              default:
+                break
+              }
+            case .menu, .unsupported:
+              throw NotebookSurfaceCaptureFailure(message: "Unexpected presentation capture step.")
+            }
+          }
+          stableSamples = complete && evidence == previousEvidence ? stableSamples + 1 : 0
+          previousEvidence = evidence
+          if stableSamples >= 3 {
+            ready(window, keyboardHeight, evidence)
+            return
+          }
+          try await Task.sleep(for: .milliseconds(100))
+        }
+        throw NotebookSurfaceCaptureFailure(
+          message: "The native \(step) capture did not reach a settled, visible state.")
+      } catch is CancellationError {
+        return
+      } catch {
+        failed(error.localizedDescription)
+      }
+    }
+  }
+
+  private func activate(_ element: NSObject, description: String) throws -> Bool {
+    if let control = element as? UIControl {
+      control.performPrimaryAction()
+      return true
+    }
+    guard element.accessibilityActivate() else {
+      throw NotebookSurfaceCaptureFailure(message: "The native \(description) control could not be activated.")
+    }
+    return true
+  }
+
+  private func topController(in window: UIWindow) -> UIViewController? {
+    var controller = window.rootViewController
+    while let presented = controller?.presentedViewController { controller = presented }
+    return controller
+  }
+
+  private func scrollToEnd(in window: UIWindow) -> (atEnd: Bool, offset: CGFloat, maximum: CGFloat)? {
+    guard let surface = window.rootViewController?.presentedViewController?.viewIfLoaded,
+      let scroll = descendants(surface).compactMap({ $0 as? UIScrollView })
+        .filter({ isVisible($0) && $0.bounds.height > 0 && $0.contentSize.height > 0 })
+        .max(by: { $0.bounds.height < $1.bounds.height })
+    else { return nil }
+    let maximum = max(
+      -scroll.adjustedContentInset.top,
+      scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+    if abs(scroll.contentOffset.y - maximum) > 0.5 {
+      scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: maximum), animated: false)
+      scroll.layoutIfNeeded()
+    }
+    return (abs(scroll.contentOffset.y - maximum) <= 0.5, scroll.contentOffset.y, maximum)
+  }
+
+  private func visibleElement(_ identifier: String, in window: UIWindow) -> NSObject? {
+    guard let element = notebookAccessibilityElement(identifier, in: window),
+      let scene = window.windowScene
+    else { return nil }
+    let frame: CGRect
+    if let view = element as? UIView {
+      guard view.window != nil, isVisible(view) else { return nil }
+      frame = window.convert(view.bounds, from: view)
+    } else {
+      frame = window.convert(element.accessibilityFrame, from: scene.effectiveGeometry.coordinateSpace)
+    }
+    let visible = window.bounds.inset(by: window.safeAreaInsets)
+      .intersection(CGRect(x: 0, y: 0, width: window.bounds.width, height: window.bounds.height - keyboardHeight))
+    return frame.width > 0 && frame.height > 0 && visible.contains(frame) ? element : nil
   }
 
   private func openMenu(_ menu: NotebookMenuCapture, in window: UIWindow) {
@@ -380,7 +631,7 @@ private final class NotebookSurfaceReadinessController: UIViewController {
           })
           stableSamples = opened && titles.isSuperset(of: menu.expectedTitles) ? stableSamples + 1 : 0
           if stableSamples >= 4 {
-            ready(window, 0)
+            ready(window, 0, .init())
             return
           }
           try await Task.sleep(for: .milliseconds(100))
@@ -429,6 +680,60 @@ private final class NotebookSurfaceReadinessController: UIViewController {
       return [(item as? UIAction)?.title].compactMap { $0 }
     }
   }
+}
+
+private enum NotebookSurfaceCaptureStep: Equatable {
+  case menu(String)
+  case tagSearch(query: String, expectedTagID: String?)
+  case newTag
+  case editTag
+  case end(requiredID: String)
+  case signOut
+  case accentError
+  case accentSave
+  case unsupported(String)
+
+  var waitsForChildPresentation: Bool {
+    switch self {
+    case .tagSearch, .newTag, .editTag, .signOut: true
+    default: false
+    }
+  }
+}
+
+private struct NotebookSurfaceCaptureEvidence: Equatable {
+  var matchedTagCount: Int?
+  var focusedFieldText: String?
+  var formTitle: String?
+  var endElementID: String?
+  var scrollEndVisible = false
+  var scrollOffset: CGFloat?
+  var scrollMaximum: CGFloat?
+  var errorVisible = false
+  var pendingAccentVisible = false
+  var confirmationVisible = false
+
+  var metadata: [String: Any] {
+    var values: [String: Any] = [:]
+    if let matchedTagCount { values["matchedTagCount"] = matchedTagCount }
+    if let focusedFieldText { values["focusedFieldText"] = focusedFieldText }
+    if let formTitle { values["formTitle"] = formTitle }
+    if let endElementID { values["endElementID"] = endElementID }
+    if let scrollOffset, let scrollMaximum {
+      values["scrollOffset"] = scrollOffset
+      values["scrollMaximum"] = scrollMaximum
+      values["scrollEndVisible"] = scrollEndVisible
+    }
+    if errorVisible { values["errorVisible"] = true }
+    if pendingAccentVisible { values["pendingAccentVisible"] = true }
+    if confirmationVisible { values["confirmationVisible"] = true }
+    return values
+  }
+}
+
+private struct NotebookSurfaceCaptureFailure: LocalizedError {
+  let message: String
+  var errorDescription: String? { message }
 }
 
 private enum NotebookMenuCapture: String {
