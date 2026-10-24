@@ -18,6 +18,7 @@ struct PreviewKeyboardHostTests {
             + "- [ ] Last task\n"
         var rendered = false
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previousKeyWindow = scene.keyWindow
         let window = UIWindow(windowScene: scene)
         let host = UIHostingController(rootView:
             NavigationStack {
@@ -40,6 +41,7 @@ struct PreviewKeyboardHostTests {
             input.resignFirstResponder()
             window.isHidden = true
             window.rootViewController = nil
+            previousKeyWindow?.makeKeyAndVisible()
         }
         try await waitFor("preview keyboard fixture") { rendered }
         let preview = try #require(findWebView(in: host.view))

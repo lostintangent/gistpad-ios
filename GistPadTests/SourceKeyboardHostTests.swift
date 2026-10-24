@@ -10,7 +10,7 @@ struct SourceKeyboardHostTests {
     @Test("Typing keeps the final caret above the real formatting capsule", arguments: ["large", "ax3"])
     func finalLineTyping(size: String) async throws {
         let source = Self.source
-        let fixture = try SourceKeyboardFixture(source: source, size: size)
+        let fixture = try await SourceKeyboardFixture(source: source, size: size)
         defer { fixture.close() }
         let identity = ObjectIdentifier(fixture.editor)
         fixture.session.requestFocusAtEnd()
@@ -34,7 +34,7 @@ struct SourceKeyboardHostTests {
 
     @Test("Native end scrolling reveals the last line above the formatting capsule", arguments: ["large", "ax3"])
     func lastLineScrollReachability(size: String) async throws {
-        let fixture = try SourceKeyboardFixture(source: Self.source, size: size)
+        let fixture = try await SourceKeyboardFixture(source: Self.source, size: size)
         defer { fixture.close() }
         fixture.editor.selectedRange = NSRange(location: 0, length: 0)
         try #require(fixture.editor.becomeFirstResponder())
@@ -88,7 +88,7 @@ private final class SourceKeyboardFixture {
     private weak var previousKeyWindow: UIWindow?
     var editor: UITextView { session.textView }
 
-    init(source: String, size: String) throws {
+    init(source: String, size: String) async throws {
         let scene = try #require(
             UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         )
@@ -97,7 +97,7 @@ private final class SourceKeyboardFixture {
         self.session = session
         let window = UIWindow(windowScene: scene)
         self.window = window
-        let controller = UIHostingController(rootView:
+        let controller = SourceKeyboardHostingController(rootView:
             NavigationStack {
                 NoteScreen(
                     document: .init(
@@ -119,8 +119,19 @@ private final class SourceKeyboardFixture {
         host = controller
         window.overrideUserInterfaceStyle = .light
         window.rootViewController = controller
+        var ready = false
+        defer { if !ready { close() } }
         window.makeKeyAndVisible()
         controller.view.layoutIfNeeded()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while !controller.hasAppeared {
+            guard ContinuousClock.now < deadline else {
+                throw SourceKeyboardFailure.unsettled("native source fixture appearance")
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        controller.view.layoutIfNeeded()
+        ready = true
     }
 
     func close() {
@@ -234,6 +245,16 @@ private final class SourceKeyboardFixture {
         let accessory: CGRect
         let keyboard: CGRect
         let caret: CGRect
+    }
+}
+
+@MainActor
+private final class SourceKeyboardHostingController<Content: View>: UIHostingController<Content> {
+    private(set) var hasAppeared = false
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        hasAppeared = true
     }
 }
 

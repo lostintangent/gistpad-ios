@@ -651,7 +651,7 @@ struct NotebookNavigationHostTests {
       account: fixtureAccount,
       gists: [try makeGist(id: "a", title: "A retained thought", content: "A little room to think.")])
     let host = try await NavigationHost(provider: provider)
-    defer { host.close() }
+    defer { await host.close() }
     await host.model.open(gistID: "a")
     try await host.waitUntil { host.editor(text: "A little room to think.") != nil }
     let editor = try #require(host.editor(text: "A little room to think."))
@@ -688,7 +688,7 @@ struct NotebookNavigationHostTests {
         try makeGist(id: "b", title: "Requested", additionalFiles: ["Other.md": "Retried source"]),
       ], cachesContent: false)
     let host = try await NavigationHost(provider: provider)
-    defer { host.close() }
+    defer { await host.close() }
     await host.model.open(gistID: "a")
     try await host.waitUntil { host.editor(text: "Previous source") != nil }
     await provider.setReadFailure(id: "b", fails: true)
@@ -716,7 +716,7 @@ struct NotebookNavigationHostTests {
       account: fixtureAccount,
       gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
     let host = try await NavigationHost(provider: provider, autosave: true, sizeClass: .compact)
-    defer { host.close() }
+    defer { await host.close() }
     await host.model.open(gistID: "a")
     try await host.waitUntil { host.editor(text: "Current source") != nil }
     let editor = try #require(host.editor(text: "Current source"))
@@ -751,7 +751,7 @@ struct NotebookNavigationHostTests {
       account: fixtureAccount,
       gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
     let host = try await NavigationHost(provider: provider, sizeClass: .compact)
-    defer { host.close() }
+    defer { await host.close() }
     await host.model.open(gistID: "a")
     try await host.waitUntil { host.editor(text: "Current source") != nil }
     let editor = try #require(host.editor(text: "Current source"))
@@ -776,13 +776,48 @@ struct NotebookNavigationHostTests {
     #expect(await provider.publicationReasons.isEmpty)
   }
 
+  @Test(arguments: [false, true])
+  func compactLibraryRoundTripBringsTheRealKeyboardBackOnScreen(
+    settledKeyboard: Bool
+  ) async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount,
+      gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
+    let host = try await NavigationHost(provider: provider, sizeClass: .compact)
+    defer { await host.close() }
+    await host.model.open(gistID: "a")
+    try await host.waitUntil { host.editor(text: "Current source") != nil }
+    let editor = try #require(host.editor(text: "Current source"))
+    editor.selectedRange = .init(location: 2, length: 6)
+    try #require(editor.becomeFirstResponder())
+    if settledKeyboard { try await host.waitForKeyboard(visible: true) }
+    host.recordKeyboard(named: "library-round-trip-before-pop")
+    host.routes.submit(try NotebookRoute(url: #require(URL(string: "gistpad://library"))))
+    try await host.waitUntil { host.routes.pending == nil && host.isLibraryVisible }
+    try await host.waitForKeyboard(visible: false)
+    host.recordKeyboard(named: "library-round-trip-after-pop")
+    #expect(!editor.isFirstResponder)
+    host.routes.submit(.note(gistID: "a", filename: nil, shared: false))
+    try await host.waitUntil {
+      host.routes.pending == nil && host.editor(text: "Current source") === editor
+        && !host.isLibraryVisible
+    }
+    try #require(editor.becomeFirstResponder())
+    try await host.waitForKeyboard(visible: true)
+    host.recordKeyboard(named: "library-round-trip-refocused")
+    #expect(editor.selectedRange == NSRange(location: 2, length: 6))
+    #expect(await provider.publicationReasons.isEmpty)
+    editor.resignFirstResponder()
+    try await host.waitForKeyboard(visible: false)
+  }
+
   @Test(arguments: ["gistpad://library", "https://gistpad.dev/"])
   func libraryLinksDoNotSelectTheTodayPlaceholderWhenNoNoteIsOpen(address: String) async throws {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let routes = NotebookRouteInbox()
     routes.submit(try NotebookRoute(url: #require(URL(string: address))))
     let host = try await NavigationHost(provider: provider, routes: routes, sizeClass: .compact)
-    defer { host.close() }
+    defer { await host.close() }
     try await host.waitUntil { routes.pending == nil && host.isLibraryVisible }
     try await Task.sleep(for: .milliseconds(300))
     #expect(host.isLibraryVisible)
@@ -804,7 +839,7 @@ struct NotebookNavigationHostTests {
     let host = try await NavigationHost(
       provider: provider, routes: routes, sizeClass: .compact,
       restoredSelection: cold ? .init(gistID: "a", filename: "README.md", draftID: nil) : nil)
-    defer { host.close() }
+    defer { await host.close() }
     if !cold {
       await host.model.open(gistID: "a")
       try await host.waitUntil { host.editor(text: "Current source") != nil }
@@ -827,7 +862,7 @@ struct NotebookNavigationHostTests {
         try makeGist(id: "b", title: "Held", content: "Held source"),
       ], cachesContent: false)
     let host = try await NavigationHost(provider: provider, sizeClass: .compact)
-    defer { host.close() }
+    defer { await host.close() }
     await host.model.open(gistID: "a")
     try await host.waitUntil { host.editor(text: "Current source") != nil }
     await provider.holdRead(id: "b")
@@ -855,7 +890,7 @@ struct NotebookNavigationHostTests {
       gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
     let host = try await NavigationHost(
       provider: provider, sizeClass: .regular, columnVisibility: .detailOnly)
-    defer { host.close() }
+    defer { await host.close() }
     await host.model.open(gistID: "a")
     try await host.waitUntil { host.editor(text: "Current source") != nil }
     let editor = try #require(host.editor(text: "Current source"))
@@ -883,7 +918,7 @@ struct NotebookNavigationHostTests {
     let routes = NotebookRouteInbox()
     routes.submit(.note(gistID: "b", filename: "Ideas.md", shared: false))
     let host = try await NavigationHost(provider: provider, routes: routes)
-    defer { host.close() }
+    defer { await host.close() }
     try await host.waitUntil {
       routes.pending == nil && host.editor(text: "Routed file source") != nil
     }
@@ -896,7 +931,7 @@ struct NotebookNavigationHostTests {
       account: fixtureAccount,
       gists: [try makeGist(id: "b", title: "Shared note", content: "Shared source")])
     let host = try await NavigationHost(provider: provider)
-    defer { host.close() }
+    defer { await host.close() }
     host.routes.submit(.note(gistID: "b", filename: nil, shared: true))
     try await host.waitUntil {
       host.routes.pending == nil
@@ -911,7 +946,7 @@ struct NotebookNavigationHostTests {
   @Test func aNewNoteRouteCreatesOneDurableEditingSessionAndAcknowledgesIt() async throws {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let host = try await NavigationHost(provider: provider)
-    defer { host.close() }
+    defer { await host.close() }
     host.routes.submit(.newNote)
     try await host.waitUntil {
       host.routes.pending == nil
@@ -927,7 +962,7 @@ struct NotebookNavigationHostTests {
       account: fixtureAccount,
       gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
     let host = try await NavigationHost(provider: provider)
-    defer { host.close() }
+    defer { await host.close() }
     await host.model.open(gistID: "a")
     try await host.waitUntil { host.editor(text: "Current source") != nil }
     let previous = host.model.loadedDocument?.id
@@ -945,7 +980,7 @@ struct NotebookNavigationHostTests {
         try makeGist(id: "b", title: "Latest", content: "Latest source"),
       ], cachesContent: false)
     let host = try await NavigationHost(provider: provider)
-    defer { host.close() }
+    defer { await host.close() }
     await provider.holdRead(id: "a")
     defer { Task { await provider.releaseRead() } }
     host.routes.submit(.note(gistID: "a", filename: nil, shared: false))
@@ -967,7 +1002,7 @@ struct NotebookNavigationHostTests {
       gists: [try makeGist(id: "a", title: "Held", content: "Held source")],
       cachesContent: false)
     let host = try await NavigationHost(provider: provider)
-    defer { host.close() }
+    defer { await host.close() }
     await provider.holdRead(id: "a")
     defer { Task { await provider.releaseRead() } }
     host.routes.submit(.note(gistID: "a", filename: nil, shared: false))
@@ -989,7 +1024,7 @@ struct NotebookNavigationHostTests {
         try makeGist(id: "b", title: "Second note", content: "Second note source"),
       ], cachesContent: false)
     let host = try await NavigationHost(provider: provider, autosave: true)
-    defer { host.close() }
+    defer { await host.close() }
     await host.model.open(gistID: "a")
     try await host.waitUntil { host.editor(text: "First note source") != nil }
     let editor = try #require(host.editor(text: "First note source"))
@@ -1022,7 +1057,7 @@ struct NotebookNavigationHostTests {
         try makeGist(id: "b", title: "Second note", content: "Second note source"),
       ], cachesContent: false)
     let host = try await NavigationHost(provider: provider)
-    defer { host.close() }
+    defer { await host.close() }
     await host.model.open(gistID: "a")
     try await host.waitUntil { host.editor(text: "First note source") != nil }
     let original = try #require(host.editor(text: "First note source"))
@@ -1055,7 +1090,7 @@ struct NotebookNavigationHostTests {
         try makeGist(id: "b", title: "Second note", content: "Second note source"),
       ])
     let host = try await NavigationHost(provider: provider)
-    defer { host.close() }
+    defer { await host.close() }
     #expect(host.model.beginOpeningRow(id: "a"))
     try await host.waitUntil { host.editor(text: "First note source") != nil }
     let first = try #require(host.editor(text: "First note source"))
@@ -1086,7 +1121,7 @@ struct NotebookNavigationHostTests {
       account: fixtureAccount,
       gists: [try makeGist(id: "a", title: "Previous note", content: "Previous source")])
     let host = try await NavigationHost(provider: provider)
-    defer { host.close() }
+    defer { await host.close() }
     await host.model.open(gistID: "a")
     try await host.waitUntil { host.editor(text: "Previous source") != nil }
     let previous = try #require(host.editor(text: "Previous source"))
@@ -1109,7 +1144,7 @@ struct NotebookNavigationHostTests {
   @Test func startingTodayFocusesTheCaretAfterItsDurableInitialContent() async throws {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let host = try await NavigationHost(provider: provider)
-    defer { host.close() }
+    defer { await host.close() }
     await host.model.startToday()
     let draft = try #require(host.model.presentedDocument?.draft)
     #expect(!draft.text.isEmpty)
@@ -1153,7 +1188,11 @@ private struct NavigationHost {
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     previousWindow = scene.windows.first(where: \.isKeyWindow)
     window = UIWindow(windowScene: scene)
-    window.frame = CGRect(x: 0, y: 0, width: sizeClass == .regular ? 1180 : 390, height: 844)
+    let sceneBounds = scene.effectiveGeometry.coordinateSpace.bounds
+    window.frame = CGRect(
+      origin: sceneBounds.origin,
+      size: CGSize(
+        width: sizeClass == .regular ? 1180 : sceneBounds.width, height: sceneBounds.height))
     if let sizeClass { window.traitOverrides.horizontalSizeClass = sizeClass }
     window.rootViewController = UIHostingController(
       rootView: LiveNotebookWorkspace(notebook: model, layout: layout, routes: routes)
@@ -1205,6 +1244,48 @@ private struct NavigationHost {
       .contains(view.convert(view.bounds, to: window))
   }
 
+  private var keyboardFrame: CGRect {
+    guard let view = window.rootViewController?.view else { return .null }
+    return view.convert(view.keyboardLayoutGuide.layoutFrame, to: window)
+  }
+
+  func waitForKeyboard(visible: Bool) async throws {
+    let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+    var previous: CGRect?
+    var stableSince = ContinuousClock.now
+    while ContinuousClock.now < deadline {
+      window.rootViewController?.view.layoutIfNeeded()
+      let frame = keyboardFrame
+      let matches = visible
+        ? frame.height > 100
+          && window.bounds.insetBy(dx: -0.5, dy: -0.5).contains(frame)
+        : !frame.isNull && frame.height <= window.safeAreaInsets.bottom + 1
+      if matches {
+        if previous == frame {
+          if ContinuousClock.now - stableSince >= .milliseconds(350) { return }
+        } else {
+          stableSince = ContinuousClock.now
+          previous = frame
+        }
+      } else {
+        previous = nil
+      }
+      try await Task.sleep(for: .milliseconds(20))
+    }
+    recordKeyboard(named: visible ? "keyboard-not-on-screen" : "keyboard-not-dismissed")
+    Issue.record("The real keyboard did not settle \(visible ? "on screen" : "off screen").")
+    throw HostError.presentationTimedOut
+  }
+
+  func recordKeyboard(named name: String) {
+    Attachment.record(
+      """
+      window: \(window.bounds), safe area: \(window.safeAreaInsets)
+      keyboard: \(keyboardFrame)
+      editors: \(descendants.compactMap { ($0 as? UITextView).map { "\($0.isFirstResponder): \($0.frame)" } })
+      """, named: "\(name).txt")
+  }
+
   func waitUntil(
     timeout: Duration = .seconds(5), _ predicate: @MainActor () -> Bool
   ) async throws {
@@ -1237,9 +1318,27 @@ private struct NavigationHost {
     }
   }
 
-  func close() {
+  func close() async {
+    window.endEditing(true)
     window.rootViewController?.dismiss(animated: false)
+    do {
+      try await waitForKeyboard(visible: false)
+    } catch {
+      Issue.record(error, "Navigation host teardown did not finish dismissing its keyboard.")
+    }
+    if let root = window.rootViewController {
+      func controllers(_ controller: UIViewController) -> [UIViewController] {
+        [controller] + controller.children.flatMap(controllers)
+          + (controller.presentedViewController.map(controllers) ?? [])
+      }
+      do {
+        try await waitUntil { controllers(root).allSatisfy { $0.transitionCoordinator == nil } }
+      } catch {
+        Issue.record(error, "Navigation host teardown interrupted a native transition.")
+      }
+    }
     window.isHidden = true
+    window.rootViewController = nil
     previousWindow?.makeKeyAndVisible()
     UserDefaults.standard.removePersistentDomain(forName: suite)
   }
