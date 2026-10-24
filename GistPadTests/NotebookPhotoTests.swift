@@ -273,7 +273,17 @@ struct NotebookPhotoLayoutProbe {
     try await Task.sleep(for: .milliseconds(700))
     host.view.layoutIfNeeded()
     #expect(editor.isFirstResponder)
-    #expect(editor.inputAccessoryView != nil)
+    let accessory = try #require(editor.inputAccessoryView)
+    let insertion = try #require(
+      descendants(of: accessory).compactMap { $0 as? UIButton }.first {
+        $0.accessibilityIdentifier == "editor-insert-menu"
+      })
+    let insertMenu = try #require(insertion.menu)
+    let insertActions = insertMenu.children.flatMap { ($0 as? UIMenu)?.children ?? [$0] }
+      .compactMap { $0 as? UIAction }
+    let photo = try #require(insertActions.first { $0.title == "Photo" })
+    #expect(photo.subtitle == "Public, even in a secret gist")
+    #expect(!insertActions.contains { $0.title == "Photos Are Public" })
     let prefix = "photos-ax3-\(photoCount)"
     let views = descendants(of: host.view)
     let bars = views.compactMap { $0 as? UINavigationBar }
