@@ -26,8 +26,10 @@ struct AddToTodaySheet: View {
     }
     var sheet = Self()
     sheet._asTask = State(initialValue: state == "task")
-    if state == "error" {
+    if state == "filled" || state == "error" {
       sheet._text = State(initialValue: "A thought worth keeping.")
+    }
+    if state == "error" {
       sheet._errorMessage = State(
         initialValue: NotebookModel.message(for: NotebookEditError.localPersistenceFailed))
     }
