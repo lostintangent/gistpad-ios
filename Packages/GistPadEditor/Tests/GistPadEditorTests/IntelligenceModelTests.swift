@@ -8,6 +8,62 @@
   @Suite(.serialized)
   @MainActor
   struct IntelligenceModelTests {
+    @Test func cancellingAStreamingAnswerClearsItsPartialTextAndPreservesTheRequest() async {
+      let session = DocumentSession(documentID: "model-cancel", text: "Unchanged source")
+      let backend = SheetModel()
+      backend.waitForCancellation = true
+      let model = NoteIntelligenceModel(session: session, backend: backend, isCurrent: { true })
+      model.askPrompt = "What does this note say?"
+      await model.checkAvailability()
+      await withCheckedContinuation { continuation in
+        backend.onAnswer = { continuation.resume() }
+        model.generate()
+      }
+      #expect(model.isRunning)
+      #expect(!model.answerParts.isEmpty)
+      model.cancel()
+      await model.task?.value
+      #expect(!model.isRunning)
+      #expect(!model.isCancelling)
+      #expect(model.answerParts.isEmpty)
+      #expect(model.proposal == nil)
+      #expect(model.notice != nil)
+      #expect(model.errorMessage == nil)
+      #expect(model.askPrompt == "What does this note say?")
+      #expect(session.text == "Unchanged source")
+      #expect(session.generation == 0)
+      #expect(model.applyFeedback == 0)
+    }
+
+    @Test func applyingAReviewCommentRebasesTheSheetWithoutGeneratingAgain() async throws {
+      let session = DocumentSession(documentID: "model-rebase", text: "bad and typo")
+      let backend = SheetModel()
+      backend.candidates = [
+        NoteReplacementCandidate(quote: "bad", replacement: "much better", reason: "Clarity"),
+        NoteReplacementCandidate(quote: "typo", replacement: "word", reason: "Correction"),
+      ]
+      let model = NoteIntelligenceModel(session: session, backend: backend, isCurrent: { true })
+      model.action = .review
+      await model.checkAvailability()
+      model.generate()
+      await model.task?.value
+      let original = try #require(model.proposal)
+      model.apply(commentID: original.comments[0].id)
+      let remaining = try #require(model.proposal)
+      #expect(backend.replacementCalls == 1)
+      #expect(!model.isStale)
+      #expect(remaining.comments.count == 1)
+      #expect(remaining.comments[0].id == original.comments[1].id)
+      #expect(remaining.comments[0].canApply)
+      model.apply(commentID: remaining.comments[0].id)
+      #expect(backend.replacementCalls == 1)
+      #expect(model.proposal?.comments.isEmpty == true)
+      #expect(model.appliedCount == 2)
+      #expect(model.errorMessage == nil)
+      #expect(session.text == "much better and word")
+      #expect(session.generation == 2)
+    }
+
     @Test func reviewDoesNotReuseAnEarlierAskInstruction() async throws {
       let session = DocumentSession(documentID: "model-review", text: "bad")
       let backend = SheetModel()
@@ -112,8 +168,14 @@
   @MainActor
   private final class SheetModel: NoteModelBackend {
     var available = true
+    var waitForCancellation = false
+    var onAnswer: (() -> Void)?
+    var replacementCalls = 0
     var lastPass: NoteModelPass?
     var parts = [ModelAnswerPart(kind: .prose, text: "An answer")]
+    var candidates = [
+      NoteReplacementCandidate(quote: "bad", replacement: "good", reason: "Clarity")
+    ]
 
     func modelInfo() async throws -> NoteModelInfo {
       guard available else { throw NoteIntelligenceError.unavailable("Model not ready") }
@@ -124,7 +186,8 @@
 
     func replacements(for pass: NoteModelPass) async throws -> [NoteReplacementCandidate] {
       lastPass = pass
-      return [NoteReplacementCandidate(quote: "bad", replacement: "good", reason: "Clarity")]
+      replacementCalls += 1
+      return candidates
     }
 
     func excerpts(for pass: NoteModelPass) async throws -> [String] { [] }
@@ -133,6 +196,8 @@
       for pass: NoteModelPass, onUpdate: @MainActor ([ModelAnswerPart]) -> Void
     ) async throws -> [ModelAnswerPart] {
       onUpdate(parts)
+      onAnswer?()
+      if waitForCancellation { try await Task.sleep(for: .seconds(5)) }
       return parts
     }
   }

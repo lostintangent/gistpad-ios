@@ -9,6 +9,34 @@
   @Suite(.serialized)
   @MainActor
   struct IntelligenceSessionTests {
+    @Test func applyingBehindAnIntelligenceSheetRetainsTheEditorsNativeUndo() throws {
+      let session = DocumentSession(documentID: "background-ai-undo", text: "bad")
+      let window = host(session)
+      defer { window.isHidden = true }
+      let undo = try #require(session.textView.undoManager)
+      undo.removeAllActions()
+      session.textView.resignFirstResponder()
+      let field = UITextField(frame: CGRect(x: 20, y: 20, width: 200, height: 44))
+      window.rootViewController?.view.addSubview(field)
+      #expect(field.becomeFirstResponder())
+      #expect(!session.textView.isFirstResponder)
+      #expect(session.textView.undoManager === undo)
+      let proposal = NoteProposal(
+        snapshot: try session.intelligenceSnapshot(),
+        candidates: [NoteReplacementCandidate(quote: "bad", replacement: "good", reason: "Clarity")]
+      )
+      try session.applyIntelligenceProposal(proposal)
+      #expect(session.text == "good")
+      #expect(undo.canUndo)
+      field.resignFirstResponder()
+      #expect(session.textView.becomeFirstResponder())
+      #expect(session.textView.undoManager === undo)
+      undo.undo()
+      session.textViewDidChange(session.textView)
+      #expect(session.text == "bad")
+      #expect(!undo.canUndo)
+    }
+
     @Test func intelligenceUndoDoesNotConsumeEarlierNativeTyping() async throws {
       let session = DocumentSession(documentID: "mixed-ai-undo", text: "bad")
       let window = host(session)
