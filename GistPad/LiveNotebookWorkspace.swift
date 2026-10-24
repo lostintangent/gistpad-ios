@@ -12,6 +12,7 @@ struct LiveNotebookWorkspace: View {
   @State private var sessions: [String: NotebookSessionController] = [:]
   @State private var photoControllers: [String: NotebookPhotoController] = [:]
   @State private var activity = NotebookWorkspaceActivity()
+  @State private var sourceDiagnostics = NotebookSourceDiagnostics()
   @State private var openRequest = UUID()
   @State private var compactColumn: NavigationSplitViewColumn = .sidebar
   @State private var actionMessage: String?
@@ -560,6 +561,31 @@ struct LiveNotebookWorkspace: View {
       }
     }
     .task(id: controller.draft.id) { await controller.inspectRemoteChanges() }
+    .task(id: SourcePresentation(
+      session: controller.session.viewIdentity, mode: mode.wrappedValue,
+      phase: scenePhase, width: availableWidth)
+    ) {
+      sourceDiagnostics.record(
+        controller.session, mode: mode.wrappedValue, phase: String(describing: scenePhase),
+        stage: .requested)
+      do {
+        try await Task.sleep(for: .milliseconds(650))
+      } catch is CancellationError {
+        return
+      } catch {
+        Logger(subsystem: "dev.gistpad.GistPad", category: "SourcePresentation")
+          .error("Source diagnostic timing failed: \(String(reflecting: type(of: error)), privacy: .public)")
+        return
+      }
+      sourceDiagnostics.record(
+        controller.session, mode: mode.wrappedValue, phase: String(describing: scenePhase),
+        stage: .settled)
+    }
+    .onDisappear {
+      sourceDiagnostics.record(
+        controller.session, mode: mode.wrappedValue, phase: String(describing: scenePhase),
+        stage: .disappeared)
+    }
     .onChange(of: NotebookLayoutPreferences.allowsSplit(availableWidth: availableWidth)) { _, allows in
       if !allows, layout.preferredMode == .split, controller.session.isEditing {
         controller.mode = .source
@@ -586,6 +612,13 @@ struct LiveNotebookWorkspace: View {
     let query: String
     let tags: Set<String>
     let collection: LibraryCollection
+  }
+
+  private struct SourcePresentation: Hashable {
+    let session: UUID
+    let mode: NoteMode
+    let phase: ScenePhase
+    let width: CGFloat
   }
 
   private struct AutosaveInput: Equatable {

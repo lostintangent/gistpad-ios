@@ -58,6 +58,8 @@ The live workspace keeps one native navigation container and a device-local Read
 
 The native source editor uses the web GitHub theme's Markdown token colors with adaptive Increased Contrast variants. Headings, emphasis, quotations, HTML and ordered markers keep their visible delimiters in the element's color. Code remains monochrome and monospaced. Appearance-only changes resolve dynamic colors without reparsing or changing source, selection or Undo.
 
+To diagnose a device-only blank editor, the live workspace keeps the latest 48 presentation records from the current process in `Library/Application Support/EditorDiagnostics/latest.json`. Opens, mode/width/scene changes and disappearance record source/editor byte counts and equality, mounting/ancestor visibility, window geometry, offsets/insets, native selection and the existing TextKit viewport state. No source, titles, filenames, gist/account IDs, tokens or user instructions are recorded. Diagnostics never force layout, move the selection or change scrolling. The file is suitable for read-only extraction after reproducing the issue.
+
 ## Checks
 
 ```sh

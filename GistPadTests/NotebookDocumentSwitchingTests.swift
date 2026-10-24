@@ -6,6 +6,58 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct NotebookDocumentSwitchingTests {
+  @Test func anOutgoingHostCannotDetachTheRetainedEditorFromItsNewHost() async throws {
+    let session = DocumentSession(documentID: "retained", text: "# Still visible\nA retained source.")
+    let other = DocumentSession(documentID: "other", text: "# A different source")
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.keyWindow
+    let window = UIWindow(windowScene: scene)
+    let root = UIViewController()
+    window.rootViewController = root
+    let outgoing = UIHostingController(rootView: MarkdownEditorView(session: session))
+    root.addChild(outgoing)
+    outgoing.view.frame = root.view.bounds
+    outgoing.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    root.view.addSubview(outgoing.view)
+    outgoing.didMove(toParent: root)
+    window.makeKeyAndVisible()
+    defer {
+      window.endEditing(true)
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKey()
+    }
+    try await Task.sleep(for: .milliseconds(150))
+    try #require(session.textView.isDescendant(of: outgoing.view))
+
+    let incoming = UIHostingController(rootView: MarkdownEditorView(session: session))
+    root.addChild(incoming)
+    incoming.view.frame = root.view.bounds
+    incoming.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    root.view.addSubview(incoming.view)
+    incoming.didMove(toParent: root)
+    try await Task.sleep(for: .milliseconds(150))
+    try #require(session.textView.isDescendant(of: incoming.view))
+
+    outgoing.rootView = MarkdownEditorView(session: other)
+    outgoing.view.setNeedsLayout()
+    outgoing.view.layoutIfNeeded()
+    try await Task.sleep(for: .milliseconds(150))
+    outgoing.willMove(toParent: nil)
+    outgoing.view.removeFromSuperview()
+    outgoing.removeFromParent()
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(session.textView.window === window)
+    #expect(session.textView.isDescendant(of: incoming.view))
+    #expect(session.textView.text == "# Still visible\nA retained source.")
+    #expect(session.generation == 0)
+    Attachment.record(
+      UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+        window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+      }, named: "retained-editor-after-outgoing-host-removal.png", as: .png)
+  }
+
   @Test func changingDocumentsMountsTheCorrectRetainedTextViewAndIsolatesUndo() async throws {
     let daily = DocumentSession(documentID: "daily", text: "# Today's note\nDaily source")
     let note = DocumentSession(documentID: "another-gist", text: "# Another gist\nIts raw source")

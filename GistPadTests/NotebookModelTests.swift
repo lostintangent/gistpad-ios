@@ -5,6 +5,7 @@ import GistPadPlatform
 import SwiftUI
 import Testing
 import UIKit
+import WebKit
 
 @testable import GistPad
 @testable import GistPadSync
@@ -730,6 +731,133 @@ struct NotebookModelTests {
 @MainActor
 struct NotebookNavigationHostTests {
   @Test(arguments: [false, true])
+  func reopeningPreviewThenEditKeepsTheSourceGlyphsOnScreen(startsInPreview: Bool) async throws {
+    let source = """
+      ---
+      edit:
+        commands:
+          progress: Update a reading entry
+        instructions: >-
+          Preserve the reading list's existing sections and entries.
+      ---
+
+      # A visible reading list
+
+      ## In progress
+
+      """
+      + (1...300).map { "\($0). A retained reading entry \($0)\n" }.joined()
+      + "\n## Another section\n\nAn exact final source line."
+    let other = "# Another note\n\nA different retained source."
+    let provider = StubNotebookProvider(
+      account: fixtureAccount,
+      gists: [
+        try makeGist(
+          id: "reading", title: "Reading list", content: source,
+          additionalFiles: ["Calendar.md": "# A second file"]),
+        try makeGist(id: "other", title: "Another note", content: other),
+      ])
+    let host = try await NavigationHost(
+      provider: provider, sizeClass: .compact, initialMode: startsInPreview ? .reading : .source)
+    defer { await host.close() }
+    host.window.overrideUserInterfaceStyle = .dark
+    var retained: UITextView?
+    var checkedWidthChange = false
+    for id in ["reading", "other", "reading", "other", "reading"] {
+      let text = id == "reading" ? source : other
+      host.model.library.selectedNoteID = id
+      try await host.waitUntil {
+        host.model.presentedDocument?.gist?.id == id && host.editor(text: text) != nil
+          && host.descendants.contains { $0 is UISegmentedControl }
+      }
+      let editor = try #require(host.editor(text: text))
+      if id == "reading" {
+        if let retained { #expect(editor === retained) } else { retained = editor }
+      }
+      try await Task.sleep(for: .milliseconds(450))
+      Attachment.record(
+        UIGraphicsImageRenderer(bounds: host.window.bounds).image { _ in
+          host.window.drawHierarchy(in: host.window.bounds, afterScreenUpdates: true)
+        }, named: "initial-source-\(id).png", as: .png)
+      if !checkedWidthChange {
+        let compactWidth = host.window.frame.width
+        host.window.traitOverrides.horizontalSizeClass = .regular
+        host.window.frame.size.width = 1180
+        try await host.waitUntil {
+          host.descendants.compactMap { $0 as? UISegmentedControl }.last?.numberOfSegments == 3
+        }
+        host.layout.select(.split)
+        try await Task.sleep(for: .milliseconds(450))
+        try host.expectSourceInk(editor, named: "wide-split-source")
+        host.window.traitOverrides.horizontalSizeClass = .compact
+        host.window.frame.size.width = compactWidth
+        try await host.waitUntil {
+          host.descendants.compactMap { $0 as? UISegmentedControl }.last?.numberOfSegments == 2
+        }
+        host.layout.select(startsInPreview ? .reading : .source)
+        checkedWidthChange = true
+      }
+      for mode in [1, 0, 1, 0] {
+        let picker = try #require(host.descendants.compactMap { $0 as? UISegmentedControl }.last)
+        try #require(picker.numberOfSegments == 2)
+        picker.selectedSegmentIndex = mode
+        picker.sendActions(for: .valueChanged)
+        try await Task.sleep(for: .milliseconds(450))
+        if mode == 1 {
+          let preview = try #require(host.descendants.compactMap { $0 as? WKWebView }.first)
+          let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+          var rendered = false
+          repeat {
+            rendered = try await preview.callAsyncJavaScript(
+              "return document.body.innerText.includes('retained');",
+              arguments: [:], in: nil, contentWorld: .page) as? Bool == true
+            if !rendered { try await Task.sleep(for: .milliseconds(20)) }
+          } while !rendered && ContinuousClock.now < deadline
+          #expect(rendered == true)
+        } else {
+          try await host.waitForKeyboard(visible: true)
+          host.window.layoutIfNeeded()
+          editor.layoutIfNeeded()
+          let position = try #require(editor.selectedTextRange?.end)
+          let glyph = editor.convert(editor.caretRect(for: position), to: host.window)
+          let bar = try #require(host.descendants.compactMap { $0 as? UINavigationBar }.last)
+          let top = bar.convert(bar.bounds, to: host.window).maxY
+          Attachment.record(
+            """
+            note: \(id), editor: \(editor.convert(editor.bounds, to: host.window))
+            offset: \(editor.contentOffset), size: \(editor.contentSize)
+            insets: \(editor.adjustedContentInset), text inset: \(editor.textContainerInset)
+            selected glyph: \(glyph), navigation bottom: \(top), selection: \(editor.selectedRange)
+            mounted: \(editor.window === host.window), visible: \(host.isVisible(editor))
+            """, named: "source-mount-\(id).txt")
+          #expect(editor.window === host.window)
+          #expect(host.isVisible(editor))
+          #expect(glyph.height > 0)
+          #expect(glyph.minY >= top - 1)
+          #expect(glyph.maxY < editor.convert(editor.bounds, to: host.window).maxY
+            - editor.adjustedContentInset.bottom + 1)
+          #expect(editor.text.utf8.elementsEqual(text.utf8))
+          Attachment.record(
+            UIGraphicsImageRenderer(bounds: host.window.bounds).image { _ in
+              host.window.drawHierarchy(in: host.window.bounds, afterScreenUpdates: true)
+            }, named: "selected-source-\(id).png", as: .png)
+          editor.resignFirstResponder()
+          try await host.waitForKeyboard(visible: false)
+          try await Task.sleep(for: .milliseconds(150))
+          try host.expectSourceInk(editor, named: "dismissed-source-\(id)")
+        }
+      }
+      host.setScenePhase(.background)
+      try await Task.sleep(for: .milliseconds(150))
+      host.setScenePhase(.active)
+      try await Task.sleep(for: .milliseconds(450))
+      try host.expectSourceInk(editor, named: "foreground-source-\(id)")
+      host.routes.submit(.library)
+      try await host.waitUntil { host.routes.pending == nil && host.isLibraryVisible }
+    }
+  }
+
+  @Test(arguments: [false, true])
   func leavingANewBlankNoteDiscardsItsDraftWithoutPublishing(autosave: Bool) async throws {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let host = try await NavigationHost(
@@ -1309,6 +1437,7 @@ private struct NavigationHost {
   let window: UIWindow
   let routes: NotebookRouteInbox
   let layout: NotebookLayoutPreferences
+  private let controller: UIHostingController<NavigationHostRoot>
   private let suite: String
   private let previousWindow: UIWindow?
 
@@ -1317,14 +1446,15 @@ private struct NavigationHost {
     routes: NotebookRouteInbox = NotebookRouteInbox(),
     sizeClass: UIUserInterfaceSizeClass? = nil,
     columnVisibility: NavigationSplitViewVisibility = .all,
-    restoredSelection: NotebookSelection? = nil
+    restoredSelection: NotebookSelection? = nil,
+    initialMode: NoteMode = .source
   ) async throws {
     self.routes = routes
     await provider.setAutosaveEnabled(autosave)
     suite = "NotebookNavigationHost-\(UUID())"
     let defaults = try #require(UserDefaults(suiteName: suite))
     layout = NotebookLayoutPreferences(defaults: defaults)
-    layout.select(.source)
+    layout.select(initialMode)
     let selections = NotebookSelectionStore()
     if let restoredSelection {
       try selections.save(restoredSelection, accountID: fixtureAccount.id)
@@ -1340,10 +1470,10 @@ private struct NavigationHost {
       size: CGSize(
         width: sizeClass == .regular ? 1180 : sceneBounds.width, height: sceneBounds.height))
     if let sizeClass { window.traitOverrides.horizontalSizeClass = sizeClass }
-    window.rootViewController = UIHostingController(
-      rootView: LiveNotebookWorkspace(notebook: model, layout: layout, routes: routes)
-        .captureColumnVisibility(columnVisibility)
-        .environment(\.scenePhase, .active))
+    controller = UIHostingController(
+      rootView: NavigationHostRoot(
+        notebook: model, layout: layout, routes: routes, columnVisibility: columnVisibility))
+    window.rootViewController = controller
     window.makeKeyAndVisible()
     try await waitUntil { model.library.loadState == .ready && model.cachedLibrary != nil }
   }
@@ -1358,6 +1488,50 @@ private struct NavigationHost {
 
   func editor(text: String) -> UITextView? {
     descendants.compactMap { $0 as? UITextView }.first { $0.text == text && $0.window === window }
+  }
+
+  func setScenePhase(_ phase: ScenePhase) {
+    controller.rootView.phase = phase
+  }
+
+  func expectSourceInk(_ editor: UITextView, named name: String) throws {
+    window.layoutIfNeeded()
+    editor.layoutIfNeeded()
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+    }
+    Attachment.record(image, named: "\(name).png", as: .png)
+    let viewport = editor.convert(
+      editor.bounds.inset(by: editor.adjustedContentInset).insetBy(dx: 24, dy: 4), to: window
+    ).intersection(window.bounds)
+    try #require(!viewport.isEmpty)
+    let hit = try #require(window.hitTest(CGPoint(x: viewport.midX, y: viewport.midY), with: nil))
+    #expect(hit === editor || hit.isDescendant(of: editor),
+      "The visible pixels must belong to the source editor, not the preview behind it.")
+    let bitmap = try #require(image.cgImage?.cropping(to: CGRect(
+      x: viewport.minX * image.scale, y: viewport.minY * image.scale,
+      width: viewport.width * image.scale, height: viewport.height * image.scale)))
+    var pixels = [UInt8](repeating: 0, count: bitmap.width * bitmap.height * 4)
+    try pixels.withUnsafeMutableBytes { bytes in
+      let context = try #require(CGContext(
+        data: bytes.baseAddress, width: bitmap.width, height: bitmap.height,
+        bitsPerComponent: 8, bytesPerRow: bitmap.width * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+      context.draw(bitmap, in: CGRect(x: 0, y: 0, width: bitmap.width, height: bitmap.height))
+    }
+    let ink = stride(from: 0, to: pixels.count, by: 4).reduce(into: 0) { count, index in
+      if Int(pixels[index]) + Int(pixels[index + 1]) + Int(pixels[index + 2]) > 180,
+        pixels[index + 3] > 200
+      { count += 1 }
+    }
+    Attachment.record(
+      """
+      offset: \(editor.contentOffset), bounds: \(editor.bounds), content: \(editor.contentSize)
+      insets: \(editor.adjustedContentInset), viewport: \(viewport), ink pixels: \(ink)
+      first responder: \(editor.isFirstResponder), text viewport: \(String(describing: editor.textLayoutManager?.textViewportLayoutController.viewportRange))
+      """, named: "\(name)-geometry.txt")
+    #expect(ink > 100, "Edit must show actual source glyphs after the keyboard is dismissed.")
   }
 
   var isLibraryVisible: Bool {
@@ -1377,6 +1551,20 @@ private struct NavigationHost {
       }
     }
     return false
+  }
+
+  private struct NavigationHostRoot: View {
+    let notebook: NotebookModel
+    let layout: NotebookLayoutPreferences
+    let routes: NotebookRouteInbox
+    let columnVisibility: NavigationSplitViewVisibility
+    var phase: ScenePhase = .active
+
+    var body: some View {
+      LiveNotebookWorkspace(notebook: notebook, layout: layout, routes: routes)
+        .captureColumnVisibility(columnVisibility)
+        .environment(\.scenePhase, phase)
+    }
   }
 
   func isVisible(_ view: UIView) -> Bool {
@@ -1524,7 +1712,7 @@ private func makeGist(
   return try decoder.decode(Gist.self, from: JSONSerialization.data(withJSONObject: json))
 }
 
-private actor StubNotebookProvider: NotebookProviding {
+private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding {
   private(set) var account: NotebookAccount
   var signInAccount: NotebookAccount
   var notes: [Gist]
@@ -1562,6 +1750,16 @@ private actor StubNotebookProvider: NotebookProviding {
     cachedAccountReads += 1
     if isSigningOut { throw AccountError.signInInProgress }
     return isSignedOut ? nil : account
+  }
+  func photoServices(accountID: UUID) throws -> NotebookPhotoServices {
+    guard accountID == account.id else { throw AccountError.accountChanged }
+    let store = try draftStore()
+    let storage = try ImageStorageClient(publishableKey: "sb_publishable_fixture") {
+      throw URLError(.userAuthenticationRequired)
+    }
+    return NotebookPhotoServices(
+      store: store,
+      uploads: ImageUploadCoordinator(accountID: accountID, store: store, storage: storage))
   }
   func signIn() -> NotebookAccount {
     isSignedOut = false
