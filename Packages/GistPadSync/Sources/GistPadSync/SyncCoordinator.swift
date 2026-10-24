@@ -152,6 +152,12 @@ public actor SyncCoordinator {
             }
 
         } catch is CancellationError {
+            let latest = try await store.draft(id: id, accountID: accountID)
+            if latest.attemptedGeneration != nil {
+                try await store.setState(
+                    .failed(latest.gistID == nil ? .creationUncertain : .publicationUncertain),
+                    id: id, accountID: accountID)
+            }
             throw CancellationError()
         } catch {
             let latest = try await store.draft(id: id, accountID: accountID)

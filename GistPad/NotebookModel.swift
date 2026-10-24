@@ -1,5 +1,6 @@
 import AuthenticationServices
 import Foundation
+import GistPadEditor
 import GistPadInterface
 import GistPadSync
 import OSLog
@@ -254,7 +255,11 @@ struct NotebookDocument: Equatable, Sendable, Identifiable {
       title: gist?.displayName
         ?? (draft.description.isEmpty
           ? String(localized: "Untitled") : draft.description),
-      files: [.init(id: draft.filename, filename: draft.filename)],
+      files: [
+        .init(
+          id: draft.filename, filename: draft.filename,
+          date: gist?.fileDatesForGrouping[draft.filename])
+      ],
       selectedFileID: draft.filename, access: access)
   }
 
@@ -385,6 +390,45 @@ final class NotebookModel {
     await restoreSelectionIfNeeded()
   }
 
+  func keepCurrentNotebook() {
+    pendingAccount = nil
+    library.loadState = .reconnectRequired(
+      message: String(
+        localized:
+          "Your current notebook and drafts are kept. Reconnect its original GitHub account before publishing."
+      ))
+  }
+
+  func exportCurrentDrafts() async throws -> Data {
+    guard let account else { throw AccountError.signedOut }
+    struct Export: Encodable {
+      let formatVersion = 1
+      let accountID: UUID
+      let login: String
+      let drafts: [ExportedDraft]
+    }
+    struct ExportedDraft: Encodable {
+      let id: UUID
+      let gistID: String?
+      let filename: String
+      let title: String
+      let text: String
+      let generation: UInt64
+    }
+    let local = try await provider.localState(accountID: account.id)
+    guard self.account?.id == account.id else { throw AccountError.accountChanged }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+    return try encoder.encode(
+      Export(
+        accountID: account.id, login: account.login,
+        drafts: local.drafts.map {
+          ExportedDraft(
+            id: $0.id, gistID: $0.gistID, filename: $0.filename,
+            title: $0.description, text: $0.text, generation: $0.generation)
+        }))
+  }
+
   func updateCalendar() async {
     updateToday()
     await search()
@@ -450,7 +494,7 @@ final class NotebookModel {
         let today = GistConventions.todayFilename()
         selectedFilename = filenames.contains(today) ? today : nil
       } else {
-        selectedFilename = filenames.first
+        selectedFilename = gist.defaultMarkdownFilename
       }
       guard let selectedFilename else { throw GitHubClientError.missingFile }
       let text = try await provider.content(
@@ -465,7 +509,9 @@ final class NotebookModel {
         accountID: account.id, gist: gist, filename: selectedFilename, text: text,
         chrome: NoteChrome(
           title: gist.displayName,
-          files: filenames.map { NoteFile(id: $0, filename: $0) },
+          files: filenames.map {
+            NoteFile(id: $0, filename: $0, date: gist.fileDatesForGrouping[$0])
+          },
           selectedFileID: selectedFilename, access: owned ? .editable : .readOnly,
           isPinned: account.preferences.pinnedGists.contains(gist.id),
           isStarred: library.snapshot.notes.first { $0.id == gist.id }?.isStarred ?? false,
@@ -834,6 +880,12 @@ final class NotebookModel {
         try await provider.cacheLibrary(
           owned: cache.owned, starred: cache.starred, account: updated)
       }
+    case .archived(let gist, _):
+      if let cache = cachedLibrary {
+        try await provider.cacheLibrary(
+          owned: cache.owned.map { $0.id == gist.id ? gist : $0 },
+          starred: cache.starred.map { $0.id == gist.id ? gist : $0 }, account: account)
+      }
     case .gist(let gist, let starred):
       if var cache = cachedLibrary {
         cache.owned = cache.owned.map { $0.id == gist.id ? gist : $0 }
@@ -889,7 +941,9 @@ final class NotebookModel {
     ).sorted()
     return NoteChrome(
       title: gist.displayName,
-      files: files.map { .init(id: $0, filename: $0) }, selectedFileID: draft.filename,
+      files: files.map {
+        .init(id: $0, filename: $0, date: gist.fileDatesForGrouping[$0])
+      }, selectedFileID: draft.filename,
       access: owned ? .editable : .readOnly,
       isPinned: account.preferences.pinnedGists.contains(gist.id),
       isStarred: cachedLibrary?.starred.contains(where: { $0.id == gist.id }) ?? false,
@@ -1037,6 +1091,10 @@ final class NotebookModel {
   }
 
   static func message(for error: any Error) -> String {
+    if (error as? SourceMutation.MutationError) == .compositionActive {
+      return String(
+        localized: "Finish composition or Writing Tools before continuing. Your current draft is unchanged.")
+    }
     if isAuthorizationError(error) {
       return String(
         localized: "GitHub access needs to be reconnected. Your local work has not been removed.")
@@ -1084,7 +1142,7 @@ final class NotebookModel {
         String(localized: "Enter a Markdown filename ending in .md, without a slash.")
       case .filenameExists: String(localized: "A file or local draft already uses that name.")
       case .publicationInProgress:
-        String(localized: "Finish or reconcile the current GitHub save before renaming.")
+        String(localized: "Finish or reconcile the current GitHub save before changing this note.")
       case .remoteChangedLocalUpdateFailed:
         String(
           localized:
@@ -1100,6 +1158,11 @@ final class NotebookModel {
       case .remoteReviewChanged:
         String(
           localized: "GitHub has a newer version. Refresh the review before applying this choice.")
+      case .archiveChangedElsewhere:
+        String(
+          localized:
+            "This note's details changed after archiving. Refresh the Library before changing its archive state. Nothing was overwritten."
+        )
       }
     }
     if let error = error as? GitHubClientError {

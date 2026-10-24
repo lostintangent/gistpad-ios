@@ -15,7 +15,7 @@ struct SessionPreview: View {
     ZStack {
       MarkdownPreviewView(
         document: session.text, documentID: session.documentID,
-        generation: session.generation, onEvent: handle
+        generation: session.generation, allowsTaskEdits: allowsMutations, onEvent: handle
       )
       .id(reload)
       .accessibilityHidden(renderError != nil)

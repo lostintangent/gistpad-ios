@@ -22,6 +22,8 @@ final class NotebookSessionController {
   private(set) var isPerformingDestructiveAction = false
   private(set) var metadataError: String?
   private(set) var isApplyingDurableEdit = false
+  private(set) var remoteInspectionError: String?
+  private(set) var isInspectingRemote = false
   var mode: NoteMode = .reading
   @ObservationIgnored private let notebook: NotebookModel
   @ObservationIgnored private var persistence: Task<Bool, Never>?
@@ -85,6 +87,7 @@ final class NotebookSessionController {
 
   private var autosaveAllowed: Bool {
     isForeground && notebook.account?.id == draft.accountID && notebook.pendingAccount == nil
+      && notebook.library.loadState == .ready
       && notebook.account?.preferences.isAutoSaveEnabled == true
       && canMutate && session.textView.markedTextRange == nil
       && !document.isRecovery && !draft.autosavePaused && draft.attemptedGeneration == nil
@@ -123,7 +126,8 @@ final class NotebookSessionController {
     if let gist { document.gist = gist }
     document.chrome = notebook.chrome(gist: document.gist, draft: draft)
     if let id = current.gistID, notebook.deletedGistIDs.contains(id) { markRecovery() }
-    session.textView.isEditable = document.chrome.access.canEdit && !isPerformingDestructiveAction
+    session.textView.isEditable =
+      document.chrome.access.canEdit && !isPerformingDestructiveAction && !isApplyingDurableEdit
   }
 
   func markRecovery() {
@@ -132,6 +136,46 @@ final class NotebookSessionController {
     saveState = .publicationBlocked(
       message: String(
         localized: "The original note is unavailable. This local copy is preserved for recovery."))
+  }
+
+  func inspectRemoteChanges() async {
+    guard !isInspectingRemote, !isPublishing, canMutate, !document.isRecovery,
+      draft.gistID != nil, draft.attemptedGeneration == nil,
+      notebook.account?.id == draft.accountID, notebook.pendingAccount == nil
+    else { return }
+    if case .conflict = draft.state { return }
+    isInspectingRemote = true
+    defer { isInspectingRemote = false }
+    guard await waitForLocalSave() else { return }
+    let generation = session.generation
+    do {
+      guard
+        case .review(let inspected) = try await notebook.perform(
+          .inspectRemote(draftID: draft.id, generation: generation))
+      else { throw NotebookActionError.staleReview }
+      let current = try await notebook.draftSnapshot(id: draft.id, accountID: draft.accountID)
+      guard current.generation == session.generation else { return }
+      draft = current
+      if case .conflict = inspected.state { saveState = .remoteChange }
+      remoteInspectionError = nil
+    } catch is CancellationError {
+      return
+    } catch DraftError.staleGeneration {
+      return
+    } catch {
+      logger.error(
+        "Remote inspection failed: \(String(reflecting: type(of: error)), privacy: .public)")
+      remoteInspectionError = NotebookModel.message(for: error)
+    }
+  }
+
+  func adoptPresentation(_ incoming: NotebookDocument) {
+    guard incoming.accountID == draft.accountID,
+      incoming.gist?.id == document.gist?.id, incoming.filename == draft.filename
+    else { return }
+    document.libraryRowID = incoming.libraryRowID
+    if let gist = incoming.gist { document.gist = gist }
+    document.chrome = notebook.chrome(gist: document.gist, draft: draft)
   }
 
   var hasUnpublishedChanges: Bool {
@@ -317,7 +361,13 @@ final class NotebookSessionController {
           }
           metadataError = nil
         } catch is CancellationError {
-          saveState = NotebookModel.interfaceSaveState(draft.state)
+          do {
+            draft = try await notebook.draftSnapshot(id: draft.id, accountID: draft.accountID)
+            saveState = NotebookModel.interfaceSaveState(draft.state)
+          } catch {
+            logger.error("Cancelled save state couldn't be read: \(String(reflecting: type(of: error)), privacy: .public)")
+            saveState = .localFailure(message: NotebookModel.message(for: error))
+          }
         } catch {
           logger.error(
             "Saved-note metadata refresh failed: \(String(reflecting: type(of: error)), privacy: .public)"

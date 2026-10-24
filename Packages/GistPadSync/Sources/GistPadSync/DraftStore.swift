@@ -550,6 +550,26 @@ public actor DraftStore {
         return try snapshot(draft)
     }
 
+    public func inspectRemoteChange(
+        id: UUID, accountID: UUID, expectedGeneration: UInt64,
+        remote: String?, revision: String?
+    ) throws -> DraftSnapshot {
+        let draft = try find(id, accountID: accountID)
+        guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
+        guard draft.attemptedGeneration == nil else { throw DraftError.publishInProgress }
+        if case .conflict = try decode(draft.stateData) { return try snapshot(draft) }
+        guard !sourceEqual(draft.baseContent, remote) else { return try snapshot(draft) }
+        let suggestion: String?
+        if let base = draft.baseContent, let remote {
+            suggestion = ThreeWayMerge.merge(base: base, local: draft.text, remote: remote)
+        } else { suggestion = nil }
+        draft.stateData = try encode(.conflict(DraftConflict(
+            generation: draft.generation, base: draft.baseContent, local: draft.text,
+            remote: remote, remoteRevision: revision, suggestedMerge: suggestion)))
+        try commit()
+        return try snapshot(draft)
+    }
+
     public func resolveConflict(
         id: UUID, accountID: UUID, expectedGeneration: UInt64,
         text: String, generation: UInt64

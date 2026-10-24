@@ -21,6 +21,8 @@ struct LiveNotebookWorkspace: View {
   @State private var deletionTarget: NotebookDeletionTarget?
   @State private var reviewTarget: NotebookConflictTarget?
   @State private var isPerformingAction = false
+  @State private var isFocused = false
+  @State private var archiveUndo: NotebookArchiveUndo?
   @Environment(\.openURL) private var openURL
   @Environment(\.scenePhase) private var scenePhase
 
@@ -34,19 +36,27 @@ struct LiveNotebookWorkspace: View {
   }
 
   var body: some View {
-    NavigationSplitView(preferredCompactColumn: $compactColumn) {
-      LibraryView(model: notebook.library, actions: libraryActions)
-    } detail: {
-      NavigationStack {
-        if let active {
+    Group {
+      if isFocused, let active {
+        NavigationStack {
           note(active)
-        } else {
-          TodayLanding(summary: notebook.library.today, start: { startToday() })
-            .disabled(notebook.account == nil || notebook.isCreating)
         }
+      } else {
+        NavigationSplitView(preferredCompactColumn: $compactColumn) {
+          LibraryView(model: notebook.library, actions: libraryActions)
+        } detail: {
+          NavigationStack {
+            if let active {
+              note(active)
+            } else {
+              TodayLanding(summary: notebook.library.today, start: { startToday() })
+                .disabled(notebook.account == nil || notebook.isCreating)
+            }
+          }
+        }
+        .navigationSplitViewStyle(.balanced)
       }
     }
-    .navigationSplitViewStyle(.balanced)
     .tint(InterfaceTheme.accent)
     .overlay(alignment: .top) {
       if notebook.isOpeningDocument {
@@ -76,9 +86,18 @@ struct LiveNotebookWorkspace: View {
     }
     .onChange(of: scenePhase) { _, phase in
       if phase == .background { finishLocalPersistence() }
-      if phase == .active { Task { await notebook.updateCalendar() } }
+      if phase == .active {
+        Task {
+          await notebook.updateCalendar()
+          await active?.inspectRemoteChanges()
+        }
+      }
+    }
+    .onChange(of: notebook.cachedLibrary?.cachedAt) {
+      Task { await active?.inspectRemoteChanges() }
     }
     .onChange(of: notebook.account?.id) { _, accountID in
+      archiveUndo = nil
       Task {
         for photos in photoControllers.values where photos.accountID != accountID {
           await photos.stop()
@@ -112,6 +131,27 @@ struct LiveNotebookWorkspace: View {
     .sheet(isPresented: $showingShare) {
       if let shareURL { NotebookActivitySheet(item: .url(shareURL)) }
     }
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      if let undo = archiveUndo, notebook.account?.id == undo.accountID {
+        HStack(spacing: 16) {
+          Label(
+            undo.wasArchived
+              ? String(localized: "Note unarchived") : String(localized: "Note archived"),
+            systemImage: "archivebox")
+          Spacer()
+          Button("Undo") {
+            run(.undoArchive(undo), accountID: undo.accountID)
+          }
+          .disabled(isPerformingAction)
+          Button("Dismiss", systemImage: "xmark") { archiveUndo = nil }
+            .labelStyle(.iconOnly)
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 20)
+        .frame(minHeight: 44)
+        .background(.bar)
+      }
+    }
     .sheet(item: $sharingTarget) { target in
       NotebookSharingSheet(controller: target.controller, copiesLink: target.copiesLink)
     }
@@ -123,6 +163,30 @@ struct LiveNotebookWorkspace: View {
     }
     .sheet(item: $reviewTarget) { target in
       NotebookConflictReview(controller: target.controller, review: target.review)
+    }
+    .sheet(
+      isPresented: Binding(
+        get: { notebook.pendingAccount != nil },
+        set: { if !$0, notebook.pendingAccount != nil { notebook.keepCurrentNotebook() } })
+    ) {
+      if let account = notebook.account, let pending = notebook.pendingAccount {
+        NotebookAccountSwitchSheet(
+          current: account.login, replacement: pending.login,
+          export: {
+            try await finishAccountPersistence(account.id)
+            return try await notebook.exportCurrentDrafts()
+          },
+          switchAccount: {
+            try await finishAccountPersistence(account.id)
+            for photos in photoControllers.values where photos.accountID == account.id {
+              await photos.stop()
+            }
+            activeID = nil
+            isFocused = false
+            await notebook.acceptPendingAccount()
+          },
+          keepCurrent: { notebook.keepCurrentNotebook() })
+      }
     }
     .confirmationDialog(
       String(localized: "Delete “\(deletionTarget?.title ?? "")” from GitHub?"),
@@ -214,7 +278,7 @@ struct LiveNotebookWorkspace: View {
     @Bindable var controller = controller
     return NoteScreen(
       document: controller.document.chrome, mode: $controller.mode,
-      saveState: controller.saveState, actions: noteActions(controller)
+      saveState: controller.saveState, actions: noteActions(controller), isFocused: isFocused
     ) {
       NotebookPhotoSurface(controller: photos, isSource: true) {
         MarkdownEditorView(
@@ -224,18 +288,26 @@ struct LiveNotebookWorkspace: View {
           canInsertPhoto: photos.canChoosePhoto)
       }
     } preview: {
-      NotebookPhotoSurface(controller: photos, isSource: false) {
-        SessionPreview(
-          session: controller.session, allowsMutations: controller.document.chrome.access.canEdit,
-          openWikilink: { target in
-            if let note = notebook.library.snapshot.notes.first(where: {
-              $0.title.localizedStandardCompare(target) == .orderedSame
-            }) {
-              open(gistID: note.id)
-            } else {
-              actionMessage = String(localized: "No note with that title is in your library.")
-            }
-          })
+      if isFocused {
+        preview(controller)
+      } else {
+        NotebookPhotoSurface(controller: photos, isSource: false) {
+          preview(controller)
+        }
+      }
+    }
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      if let error = controller.remoteInspectionError {
+        VStack(alignment: .leading, spacing: 6) {
+          Label("Couldn't check GitHub for changes", systemImage: "exclamationmark.circle")
+          Text(error)
+          Button("Retry") { Task { await controller.inspectRemoteChanges() } }
+            .frame(minHeight: 44)
+        }
+        .font(.footnote)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .background(Color(uiColor: .systemBackground))
       }
     }
     .task {
@@ -243,6 +315,20 @@ struct LiveNotebookWorkspace: View {
         controller.session.textView.becomeFirstResponder()
       }
     }
+  }
+
+  private func preview(_ controller: NotebookSessionController) -> some View {
+    SessionPreview(
+      session: controller.session, allowsMutations: controller.document.chrome.access.canEdit,
+      openWikilink: { target in
+        if let note = notebook.library.snapshot.notes.first(where: {
+          $0.title.localizedStandardCompare(target) == .orderedSame
+        }) {
+          open(gistID: note.id)
+        } else {
+          actionMessage = String(localized: "No note with that title is in your library.")
+        }
+      })
   }
 
   private struct SearchInput: Equatable {
@@ -264,6 +350,7 @@ struct LiveNotebookWorkspace: View {
 
   private func noteActions(_ controller: NotebookSessionController) -> NoteActions {
     var actions = NoteActions()
+    actions.focus = { isFocused.toggle() }
     actions.save = { publish(controller) }
     actions.reviewChanges = {
       do {
@@ -370,9 +457,11 @@ struct LiveNotebookWorkspace: View {
           || (document.gist?.id != nil && $0.draft.gistID == document.gist?.id
             && $0.draft.filename == document.filename))
     }) {
+      existing.adoptPresentation(document)
       preparePhotos(for: existing)
       activeID = existing.draft.id.uuidString
       compactColumn = .detail
+      await existing.inspectRemoteChanges()
       return
     }
     do {
@@ -509,10 +598,12 @@ struct LiveNotebookWorkspace: View {
       }
       let result = try await notebook.perform(action)
       switch result {
-      case .gist(let gist, _):
+      case .gist(let gist, _), .archived(let gist, _):
         for controller in sessions.values where controller.draft.gistID == gist.id {
           try await controller.refreshMetadata(gist: gist)
         }
+        if case .archived(_, let undo) = result { archiveUndo = undo }
+        if case .undoArchive = action { archiveUndo = nil }
       case .account:
         for controller in sessions.values where controller.draft.accountID == accountID {
           try await controller.refreshMetadata()
@@ -610,6 +701,20 @@ struct LiveNotebookWorkspace: View {
     Task {
       for document in documents { _ = await document.waitForLocalSave() }
       lease.end()
+    }
+  }
+
+  private func finishAccountPersistence(_ accountID: UUID) async throws {
+    for controller in sessions.values where controller.draft.accountID == accountID {
+      guard !controller.isPublishing, !controller.isApplyingDurableEdit else {
+        throw NotebookActionError.publicationInProgress
+      }
+      guard !controller.session.isComposing, !controller.session.writingToolsActive else {
+        throw SourceMutation.MutationError.compositionActive
+      }
+      guard await controller.waitForLocalSave() else {
+        throw NotebookEditError.localPersistenceFailed
+      }
     }
   }
 }

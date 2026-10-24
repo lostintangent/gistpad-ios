@@ -5,11 +5,13 @@ enum NotebookAction: Sendable {
   case preference(PreferenceOperation)
   case star(gistID: String, starred: Bool)
   case archive(gistID: String, archived: Bool)
+  case undoArchive(NotebookArchiveUndo)
   case rename(gistID: String, title: String)
   case renameLocal(draftID: UUID, title: String)
   case renameFile(gistID: String, filename: String, newFilename: String)
   case addFile(gistID: String, filename: String)
   case delete(gistID: String)
+  case inspectRemote(draftID: UUID, generation: UInt64)
   case refreshConflict(NotebookReviewContext)
   case resolveConflict(NotebookReviewContext, text: String, generation: UInt64)
 }
@@ -17,6 +19,7 @@ enum NotebookAction: Sendable {
 enum NotebookActionResult: Sendable {
   case account(NotebookAccount)
   case gist(Gist, starred: Bool? = nil)
+  case archived(Gist, undo: NotebookArchiveUndo)
   case draft(DraftSnapshot, gist: Gist? = nil)
   case deleted(gistID: String, drafts: DeletedGistDrafts)
   case review(DraftSnapshot)
@@ -31,6 +34,24 @@ enum NotebookActionError: Error, Equatable {
   case remoteDeletedLocalCleanupFailed(gistID: String)
   case staleReview
   case remoteReviewChanged
+  case archiveChangedElsewhere
+}
+
+struct NotebookArchiveUndo: Equatable, Sendable {
+  let accountID: UUID
+  let gistID: String
+  let originalDescription: String
+  let archivedDescription: String
+  let wasArchived: Bool
+
+  func validate(gist: Gist, accountID: UUID) throws {
+    guard self.accountID == accountID else { throw AccountError.accountChanged }
+    guard gist.id == gistID,
+      (gist.description ?? "").utf8.elementsEqual(archivedDescription.utf8)
+    else {
+      throw NotebookActionError.archiveChangedElsewhere
+    }
+  }
 }
 
 actor NotebookMutationQueue {
@@ -78,6 +99,21 @@ extension LiveNotebookProvider {
           filename: draft.filename, description: title))
     }
     let client = await accounts.githubClient(accountID: accountID)
+    if case .inspectRemote(let id, let generation) = action {
+      let current = try await drafts.draft(id: id, accountID: accountID)
+      guard let gistID = current.gistID else { return .review(current) }
+      let gist = try await client.gist(id: gistID)
+      guard gist.owner?.id == current.githubUserID else { throw DraftError.readOnly }
+      guard gist.truncated != true else { throw GitHubClientError.incompleteGist }
+      let remote: String? =
+        if gist.files[current.filename] != nil {
+          try await client.content(gist: gist, filename: current.filename)
+        } else { String?.none }
+      return .review(
+        try await drafts.inspectRemoteChange(
+          id: id, accountID: accountID, expectedGeneration: generation,
+          remote: remote, revision: gist.revision))
+    }
     switch action {
     case .refreshConflict(let review), .resolveConflict(let review, _, _):
       guard review.draft.accountID == accountID, let gistID = review.draft.gistID else {
@@ -119,10 +155,12 @@ extension LiveNotebookProvider {
     }
     let id: String
     switch action {
+    case .undoArchive(let undo):
+      id = undo.gistID
     case .archive(let gistID, _), .rename(let gistID, _),
       .renameFile(let gistID, _, _), .addFile(let gistID, _), .delete(let gistID):
       id = gistID
-    case .star, .preference, .renameLocal, .refreshConflict, .resolveConflict:
+    case .star, .preference, .renameLocal, .refreshConflict, .resolveConflict, .inspectRemote:
       preconditionFailure("Handled before the owner-only action boundary.")
     }
     let gist = try await client.gist(id: id)
@@ -135,7 +173,15 @@ extension LiveNotebookProvider {
     guard gist.owner?.id == userID else { throw DraftError.readOnly }
     switch action {
     case .archive(_, let archived):
-      return .gist(try await client.setArchived(archived, gist: gist))
+      let updated = try await client.setArchived(archived, gist: gist)
+      return .archived(
+        updated,
+        undo: NotebookArchiveUndo(
+          accountID: accountID, gistID: id, originalDescription: gist.description ?? "",
+          archivedDescription: updated.description ?? "", wasArchived: gist.isArchived))
+    case .undoArchive(let undo):
+      try undo.validate(gist: gist, accountID: accountID)
+      return .gist(try await client.updateGist(id: id, description: undo.originalDescription))
     case .rename(_, let title):
       guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         throw NotebookActionError.invalidTitle
@@ -195,7 +241,7 @@ extension LiveNotebookProvider {
       } catch {
         throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: id)
       }
-    case .star, .preference, .renameLocal, .refreshConflict, .resolveConflict:
+    case .star, .preference, .renameLocal, .refreshConflict, .resolveConflict, .inspectRemote:
       preconditionFailure("Handled before the owner-only action boundary.")
     }
 

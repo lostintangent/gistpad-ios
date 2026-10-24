@@ -7,6 +7,62 @@ import Testing
 
 @MainActor
 struct NotebookModelTests {
+  @Test func ordinaryGistOpensReadmeBeforeAnEarlierAlphabeticFileAndHonorsExplicitSelection() async throws {
+    let gist = try makeGist(
+      id: "multiple", title: "Multiple files", content: "Apple source", filename: "Apple.md",
+      additionalFiles: ["README.md": "The actual README", "Zebra.md": "Zebra source"])
+    let model = NotebookModel(provider: StubNotebookProvider(account: fixtureAccount, gists: [gist]))
+    await model.start()
+    await model.open(gistID: gist.id)
+    #expect(model.loadedDocument?.filename == "README.md")
+    #expect(model.loadedDocument?.text == "The actual README")
+    await model.open(gistID: gist.id, filename: "Zebra.md")
+    #expect(model.loadedDocument?.filename == "Zebra.md")
+    #expect(model.loadedDocument?.text == "Zebra source")
+  }
+
+  @Test func accountSwitchKeepsAndExportsExactOriginalAccountDrafts() async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount, gists: [try makeGist(id: "a", title: "Original account")])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    let text = "日本語 e\u{301}\r\n**Private draft**"
+    let local = try await provider.stageExistingDraft(gistID: "a", text: text)
+    let replacement = NotebookAccount(
+      id: UUID(), login: "other-account", preferences: .init(metadata: [:]))
+    await provider.setSignInAccount(replacement)
+    await model.signIn()
+    let export = try await model.exportCurrentDrafts()
+    let json = try #require(
+      try JSONSerialization.jsonObject(with: export) as? [String: Any])
+    let rows = try #require(json["drafts"] as? [[String: Any]])
+    #expect(json["accountID"] as? String == fixtureAccount.id.uuidString)
+    #expect(rows.count == 1)
+    #expect((rows.first?["text"] as? String)?.utf8.elementsEqual(text.utf8) == true)
+    model.keepCurrentNotebook()
+    #expect(model.account?.id == fixtureAccount.id)
+    #expect(model.pendingAccount == nil)
+    let state = try await provider.localState(accountID: fixtureAccount.id)
+    #expect(state.drafts.first?.id == local.id)
+    #expect(state.drafts.first?.text.utf8.elementsEqual(text.utf8) == true)
+    #expect(try await provider.localState(accountID: replacement.id).drafts.isEmpty)
+  }
+
+  @Test func archiveUndoRequiresTheExactAccountAndUnchangedRemoteMetadata() throws {
+    let original = try makeGist(id: "a", title: "Caf\u{E9} [Archived]")
+    let undo = NotebookArchiveUndo(
+      accountID: fixtureAccount.id, gistID: "a", originalDescription: "Caf\u{E9}",
+      archivedDescription: original.description ?? "", wasArchived: false)
+    try undo.validate(gist: original, accountID: fixtureAccount.id)
+    #expect(throws: AccountError.accountChanged) {
+      try undo.validate(gist: original, accountID: UUID())
+    }
+    let renamed = try makeGist(id: "a", title: "Cafe\u{301} [Archived]")
+    #expect(throws: NotebookActionError.archiveChangedElsewhere) {
+      try undo.validate(gist: renamed, accountID: fixtureAccount.id)
+    }
+  }
+
   @Test func mapsOwnedStarredAndWebMetadataWithoutDuplicates() throws {
     let owned = try makeGist(id: "a", title: "A note")
     let starred = try makeGist(id: "b", title: "A shared note", owner: "someone")
@@ -268,13 +324,19 @@ private let fixtureAccount = NotebookAccount(
 
 private func makeGist(
   id: String, title: String, content: String = "Synthetic text", owner: String = "notebook-owner",
-  filename: String = "README.md"
+  filename: String = "README.md", additionalFiles: [String: String] = [:]
 ) throws -> Gist {
+  var files = additionalFiles
+  files[filename] = content
+  var filePayload: [String: [String: String]] = [:]
+  for (name, source) in files {
+    filePayload[name] = ["filename": name, "language": "Markdown", "content": source]
+  }
   let json: [String: Any] = [
     "id": id, "description": title, "public": false,
     "updated_at": "2026-10-24T00:00:00Z", "created_at": "2026-10-23T00:00:00Z",
     "owner": ["id": 1, "login": owner],
-    "files": [filename: ["filename": filename, "language": "Markdown", "content": content]],
+    "files": filePayload,
     "history": [["version": "synthetic-revision"]],
   ]
   let decoder = JSONDecoder()

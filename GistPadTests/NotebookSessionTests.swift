@@ -1,7 +1,9 @@
 import Foundation
 import GistPadEditor
 import GistPadInterface
+import SwiftUI
 import Testing
+import UIKit
 
 @testable import GistPad
 @testable import GistPadSync
@@ -9,6 +11,59 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct NotebookSessionTests {
+  @Test func productionFocusArrangementRetainsTheEditorSelectionAndUndo() async throws {
+    let (controller, _) = try await makeController()
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = UIWindow(windowScene: scene)
+    let host = UIHostingController(
+      rootView: FocusNoteFixture(controller: controller, focused: false))
+    window.rootViewController = host
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    try await Task.sleep(for: .milliseconds(200))
+    let view = controller.session.textView
+    view.becomeFirstResponder()
+    view.selectedRange = NSRange(location: 2, length: 0)
+    view.undoManager?.beginUndoGrouping()
+    view.insertText("日本語 👩🏽‍💻")
+    view.undoManager?.endUndoGrouping()
+    let text = view.text
+    let selection = view.selectedRange
+    for focused in [true, false, true, false] {
+      host.rootView = FocusNoteFixture(controller: controller, focused: focused)
+      try await Task.sleep(for: .milliseconds(100))
+      host.view.layoutIfNeeded()
+      #expect(controller.session.textView === view)
+      #expect(view.window === window)
+      #expect(view.text == text)
+      #expect(view.selectedRange == selection)
+    }
+    view.undoManager?.undo()
+    #expect(view.text == "Base")
+  }
+
+  @Test func retainedRemoteChangeIsReviewedWithoutReplacingSourceSelectionOrUndo() async throws {
+    let (controller, provider) = try await makeController(autosave: true)
+    let identity = controller.session.viewIdentity
+    edit(controller, to: "Retained local draft")
+    controller.session.textView.selectedRange = NSRange(location: 4, length: 3)
+    #expect(await controller.waitForLocalSave())
+    await provider.setRemoteContent("Changed in the web app")
+    await controller.inspectRemoteChanges()
+    #expect(controller.session.viewIdentity == identity)
+    #expect(controller.session.text == "Retained local draft")
+    #expect(controller.session.textView.selectedRange == NSRange(location: 4, length: 3))
+    #expect(controller.saveState == .remoteChange)
+    let review = try controller.reviewContext()
+    #expect(review.conflict.remote == "Changed in the web app")
+    #expect(controller.updateAutosave(isForeground: true) == nil)
+    #expect(await provider.publishCount == 0)
+    edit(controller, to: "Typing continues safely")
+    #expect(await controller.waitForLocalSave())
+    #expect(controller.saveState == .remoteChange)
+  }
+
   @Test func autosavePublishesOnlyADurableQuietForegroundGeneration() async throws {
     let (controller, provider) = try await makeController(autosave: true)
     edit(controller, to: "Quiet accepted draft")
@@ -398,6 +453,24 @@ struct NotebookSessionTests {
   }
 }
 
+private struct FocusNoteFixture: View {
+  let controller: NotebookSessionController
+  let focused: Bool
+
+  var body: some View {
+    NavigationStack {
+      NoteScreen(
+        document: controller.document.chrome, mode: .constant(.source),
+        saveState: controller.saveState, isFocused: focused
+      ) {
+        MarkdownEditorView(session: controller.session)
+      } preview: {
+        Text("Preview companion")
+      }
+    }
+  }
+}
+
 private actor SessionNotebookProvider: NotebookProviding {
   let store: DraftStore
   let id: UUID
@@ -409,6 +482,7 @@ private actor SessionNotebookProvider: NotebookProviding {
   private var persistenceFails = false
   private var publicationRejected = false
   private var publicationFailure: SaveState?
+  private var remoteContent: String? = "Base"
   private var publishing: CheckedContinuation<Void, Never>?
   private var publishObserver: CheckedContinuation<Void, Never>?
 
@@ -448,9 +522,16 @@ private actor SessionNotebookProvider: NotebookProviding {
   func today(accountID: UUID, target: DailyNoteTarget) throws -> TodayNote {
     throw DraftError.notFound
   }
-  func perform(_ action: NotebookAction, accountID: UUID) throws -> NotebookActionResult {
+  func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
+    if case .inspectRemote(let id, let generation) = action {
+      return .review(
+        try await store.inspectRemoteChange(
+          id: id, accountID: accountID, expectedGeneration: generation,
+          remote: remoteContent, revision: "remote"))
+    }
     throw DraftError.notFound
   }
+  func setRemoteContent(_ content: String?) { remoteContent = content }
 
   func persist(
     draftID: UUID, accountID: UUID, text: String, generation: UInt64
