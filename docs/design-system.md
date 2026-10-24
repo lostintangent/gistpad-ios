@@ -100,7 +100,7 @@ System navigation/list materials retain their standard styles. `surface` is not 
 
 ### Custom roles
 
-These are exact sRGB assets, with light, dark, light increased-contrast, and dark increased-contrast variants. Use these names in a shared native theme and the appearance payload. SwiftUI uses the native asset/theme, not a separate set of inline RGB literals.
+The ink values below are exact sRGB assets. The accent values are the earlier sky reference, not a replacement for the saved profile color or permission to tint chrome. The current derivation and allowed uses are specified in [Color: personal content, neutral controls](design-direction.md#color-personal-content-neutral-controls). Keep shared native/preview roles with four appearances, not separate inline RGB literals.
 
 | Token / CSS suffix | Light | Dark | Light increased | Dark increased |
 | --- | --- | --- | --- | --- |
@@ -110,9 +110,9 @@ These are exact sRGB assets, with light, dark, light increased-contrast, and dar
 | `onAccent` / `on-accent` | `#0F172A` | `#0F172A` | `#0F172A` | `#0F172A` |
 | `selectedSurface` / `selected-surface` | `#E7F6FD` | `#0B3548` | `#D4EEFC` | `#134B63` |
 
-Prefix each CSS suffix with `--gp-`. `selectedSurface` uses `text` as its foreground and a selection trait/checkmark as appropriate. It is a row/anchor highlight, **not** the OS text-selection color.
+Prefix each CSS suffix with `--gp-`. Personal `selectedSurface` now belongs to the Today date treatment, not Library/sidebar selection or OS text selection. Library selection uses native neutral surfaces and selected traits.
 
-Use `accentText` for the app's action tint and task markers, consistently across native chrome, editor accessory and preview. Use `accentFill` with `onAccent` for an opaque custom primary control only. System prominent buttons own their foreground/material adaptation. Do not put white text on bright sky or apply the fill as a global text tint. Links remain system link blue with their non-color affordance.
+Use personal accent only for Today content, authored Preview list/task marks and the preference swatch, as enumerated in the canonical direction. Enabled native chrome, keyboard tools, menu commands and sheet actions use primary adaptive monochrome ink, with native neutral prominent styling where needed. Secondary ink is for metadata/progress, not a dimmed enabled action. Preserve destructive red, tag colors, native text-entry blue and switch defaults. Do not apply personal tint at the app, navigation or sheet root. System controls own material/foreground and disabled-state adaptation. Links retain their semantic treatment and non-color affordance.
 
 The decorative spine uses the original `#5AD1FA` to `#0EA5E9` gradient. Neither stop is suitable for small text on white (1.76:1 and 2.77:1). Library uses semantic grouped surfaces, with the icon's paper `#FFFFFF` to `#E2E8F0` gradient reserved for small original-artwork illustrations rather than overriding those surfaces. Keep the source and reading page semantic and flat. The icon's coral, amber and teal do not replace existing profile colors or force a new tag palette.
 
@@ -128,9 +128,9 @@ Tags are small colored labels, not a comma-separated gray sentence. Use one shar
 - **Library rows:** place labels below the title/excerpt, with 6-pt gaps. At standard sizes show up to two complete names plus a truthful `+N` overflow label. Never cut a chip midway or abbreviate two names into the same string. At accessibility sizes wrap/grow rather than compressing text. Row tags are metadata, not nested buttons inside the note's navigation link. The note's labeled Tags action reveals the complete set.
 - **Note metadata:** provide one labeled Tags route in native note chrome. Its editable sheet is a single plain native searchable list: color swatch, full name and selected check. No duplicated On this note chip shelf, All tags heading or rounded group cards. The total row target is at least 44 pt, not a 44-pt inner control plus List padding; grow for wrapping/accessibility. Offer medium/large native sheet detents, starting large at accessibility sizes. Use one scope footer, **Applies to every file in this gist.** A nonmutating presentation shows the assigned tags in the same compact list without toggle checks, plus the native Close action. GitHub source access is a separate capability: a signed-in user can tag someone else's gist, and incomplete source does not by itself block profile-only tag changes. Use a nonmutating presentation only when the account lacks profile-write capability or no safe account-scoped gist association exists. A transient offline/save failure preserves local choices with Retry rather than changing their permission. Avoid a separate information-only sheet that duplicates the Tags editor. Do not pin a new ribbon over the writing canvas or insert tags into the Markdown file.
 - **Filtering:** selected search/filter tokens use the same name and color identity plus a checkmark or explicit remove affordance. Show the matching rule and Clear filters. An interactive label has a nonoverlapping 44-pt target. The full tag picker remains a native searchable list with color dot, name and selected checkmark, not a wall of tiny pills.
-- **No color escalation:** a selected note uses the sky selection surface without recoloring its tabs blue. Preserve the user's actual web colors and distinguish a tag selection from a failed metadata save. An unsuccessful edit retains the user's choice with an inline Retry, not a silently reverted success state.
+- **No color escalation:** a selected note uses a native neutral selection surface without recoloring its tag labels. Preserve the user's actual web colors and distinguish a tag selection from a failed metadata save. An unsuccessful edit retains the user's choice with an inline Retry, not a silently reverted success state.
 
-The Tags sheet uses the sky action tint for selection checks. Keep each picker row to color dot, name and check. Expose **Edit Tag...** through swipe/context actions and a named accessibility action instead of a second pencil button in every row. Do not explain the conventional Cancel/Done interaction in a second paragraph. Library timestamps use scaled footnote regular, allowing titles to lead without fading small text below 4.5:1.
+The Tags sheet uses primary neutral ink for selection checks and actions, while preserving each tag's own color dot/fill. Keep each picker row to color dot, name and check. Expose **Edit Tag...** through swipe/context actions and a named accessibility action instead of a second pencil button in every row. Do not explain the conventional Cancel/Done interaction in a second paragraph. Library timestamps use scaled footnote regular, allowing titles to lead without fading small text below 4.5:1.
 
 Swatches are metadata, not radio controls. Do not add a universal primary/black outline. Use an unoutlined fill when it is distinct, with a subtle own-hue hairline only where separation is needed. White uses a neutral gray hairline rather than an invisible white edge. Increase Contrast can strengthen the necessary boundary without changing the tag's color identity. Selection remains a separate checkmark and accessibility state.
 
@@ -268,16 +268,16 @@ These dynamic source colors replace the previous `syntaxMuted`/`syntaxCode` styl
 | Whole blockquote line, including `>` | Quote token; nested emphasis/strong/link/code retain their own valid styles |
 | Ordered number / unordered bullet | Ordered-number token / body ink; list-item text stays body ink |
 | Element punctuation | Same readable size and color as its owning element, not independently grayed |
-| Unchecked task marker | `accentText`, same size; never changes by decoration alone |
-| Checked marker | Native task accent/state; do not dim the task's text |
+| Unchecked task marker | Existing ordered-number syntax token, same size; no personal accent |
+| Checked marker | Muted source-marker ink; preserve explicit checked syntax and do not dim the task's text |
 | Inline/fenced code | Monospaced scaled body in ink; optional `surface` block background, no language-token rainbow |
 | Link label / wikilink | Underlined; URL color in light mode, inherited ink in dark mode as in the web theme; source delimiters remain visible |
 | URL destination | URL token, underlined; no hide/replace without an explicit source view |
 | HTML tag | HTML token, without misclassifying autolinks or code as HTML |
 | Strikethrough | Line-through on the valid content span, with source markers intact |
 | Frontmatter | Monospaced scaled body in ink; explicit collapse affordance only |
-| Selection, caret, marked text | Native system behavior, no custom purple selection |
-| Proposed diff | Add/remove label and `+`/`-` or equivalent, not red/green alone |
+| Selection, caret, marked text | Native text-entry blue and selection behavior, independent of neutral chrome and saved accent; preserve marked-text handling |
+| Proposed diff | Before/After labels; added words primary semibold and underlined, removed words secondary and struck through. No personal accent or new red/green palette |
 
 Do not use opacity-faded entire code blocks, a rainbow of language tokens by default, giant source headings, or an active-line highlight that competes with selection. Valid inline code, fences and frontmatter remain protected from prose-role matching. Syntax changes must be pure attributes. No rewriting smart quotes, invisible delimiter removal, or automatic code formatting on appearance changes.
 
