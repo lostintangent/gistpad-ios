@@ -51,7 +51,9 @@ public struct TodayWidgetView: View {
             components.year ?? 0, components.month ?? 0, components.day ?? 0)
         return today.filename == filename ? today : nil
     }
-    private var destination: URL { today?.route.url ?? NotebookRoute.today.url }
+    private var destination: URL {
+        state == .available ? today?.route.url ?? NotebookRoute.today.url : NotebookRoute.today.url
+    }
     private var tasks: [TodayTask] { today?.tasks ?? [] }
     private var remaining: Int { tasks.filter { !$0.isCompleted }.count }
 
@@ -97,23 +99,38 @@ public struct TodayWidgetView: View {
             default:
                 VStack(alignment: .leading, spacing: 8) {
                     if dynamicTypeSize.isAccessibilitySize {
-                        compactDate
+                        Text(date, format: .dateTime.month(.abbreviated).day())
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                            .foregroundStyle(accent)
+                        Text(accessibleSummary)
+                            .font(.subheadline)
+                            .lineLimit(3)
+                            .privacySensitive()
+                        Spacer(minLength: 0)
                     } else {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(date, format: .dateTime.day())
-                                .font(.system(size: dateSize, weight: .semibold, design: .rounded))
-                                .foregroundStyle(accent)
-                                .contentTransition(.numericText())
+                        HStack(alignment: .bottom, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(date, format: .dateTime.month(.abbreviated))
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(accent)
+                                Text(date, format: .dateTime.day())
+                                    .font(.system(size: dateSize, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(accent)
+                                    .contentTransition(.numericText())
+                            }
                             VStack(alignment: .leading, spacing: 1) {
                                 Text("Today").font(.headline)
-                                Text(date, format: .dateTime.month(.abbreviated))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                if state == .available, !tasks.isEmpty {
+                                    Text("\(remaining) remaining")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .privacySensitive()
+                                }
                             }
                         }
+                        Spacer(minLength: 0)
+                        content(limit: 1)
                     }
-                    Spacer(minLength: 0)
-                    content(limit: 1)
                 }
             }
         }
@@ -142,7 +159,7 @@ public struct TodayWidgetView: View {
                 .foregroundStyle(accent)
                 .contentTransition(.numericText())
             Text("Today").font(.headline)
-            if !tasks.isEmpty {
+            if state == .available, !tasks.isEmpty {
                 Text("\(remaining) remaining")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -150,6 +167,14 @@ public struct TodayWidgetView: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var accessibleSummary: String {
+        guard state == .available else { return invitation }
+        guard !tasks.isEmpty else { return today?.excerpt ?? invitation }
+        return remaining == 1
+            ? String(localized: "1 task remaining")
+            : String(localized: "\(remaining) tasks remaining")
     }
 
     private var rectangular: some View {
@@ -207,7 +232,7 @@ public struct TodayWidgetView: View {
                     .frame(minWidth: compact ? 28 : 32)
                 Text(task.title)
                     .font(compact ? .caption : .subheadline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(task.isCompleted ? .secondary : .primary)
                     .multilineTextAlignment(.leading)
                     .lineLimit(compact ? 1 : 2)
                     .frame(maxWidth: .infinity, alignment: .leading)

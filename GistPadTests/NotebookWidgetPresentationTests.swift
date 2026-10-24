@@ -16,16 +16,24 @@ struct NotebookWidgetPresentationTests {
     WidgetPresentation(family: .systemMedium, width: 398, height: 186, dark: true, accessibility: false),
     WidgetPresentation(family: .systemSmall, width: 186, height: 186, dark: false, accessibility: true),
     WidgetPresentation(family: .systemMedium, width: 398, height: 186, dark: true, accessibility: true),
-    WidgetPresentation(family: .accessoryRectangular, width: 172, height: 76, dark: true, accessibility: false)
+    WidgetPresentation(family: .accessoryRectangular, width: 172, height: 76, dark: true, accessibility: false),
+    WidgetPresentation(family: .systemSmall, width: 186, height: 186, dark: false, accessibility: false, empty: true),
+    WidgetPresentation(family: .systemMedium, width: 398, height: 186, dark: true, accessibility: false, empty: true),
+    WidgetPresentation(family: .systemSmall, width: 186, height: 186, dark: true, accessibility: false, state: .locked),
+    WidgetPresentation(family: .systemMedium, width: 398, height: 186, dark: false, accessibility: false, state: .locked),
+    WidgetPresentation(family: .systemSmall, width: 186, height: 186, dark: false, accessibility: true, state: .signedOut),
+    WidgetPresentation(family: .systemMedium, width: 398, height: 186, dark: true, accessibility: false, state: .signedOut)
   ])
   func capturesSupportedWidgetPresentations(presentation: WidgetPresentation) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let date = Date(timeIntervalSince1970: 1_792_800_000)
-    let snapshot = NotebookSystemSnapshot.preview(date: date)
+    let snapshot = try presentation.empty
+      ? NotebookSystemSnapshot.make(accountID: UUID(), cache: nil, drafts: [], date: date)
+      : NotebookSystemSnapshot.preview(date: date)
     var taskSizes: [String: CGSize] = [:]
     let content = TodayWidgetView(
-      snapshot: snapshot, date: date, state: .available, family: presentation.family,
+      snapshot: snapshot, date: date, state: presentation.state, family: presentation.family,
       taskGeometry: { taskSizes[$0] = $1 })
       .padding(presentation.family == .accessoryRectangular ? 0 : 16)
       .background(Color(uiColor: .secondarySystemGroupedBackground))
@@ -43,15 +51,22 @@ struct NotebookWidgetPresentationTests {
     host.view.layoutIfNeeded()
     #expect(host.view.bounds.width == presentation.width)
     #expect(host.view.bounds.height == presentation.height)
-    let task = try #require(snapshot.today.tasks.first)
-    let taskSize = try #require(taskSizes[task.id])
-    #expect(taskSize.height >= 44)
+    if presentation.state == .available, !presentation.empty,
+      !(presentation.family == .systemSmall && presentation.accessibility)
+    {
+      for task in snapshot.today.tasks.prefix(presentation.family == .systemMedium && !presentation.accessibility ? 2 : 1) {
+        let taskSize = try #require(taskSizes[task.id])
+        #expect(taskSize.height >= 44)
+      }
+    } else {
+      #expect(taskSizes.isEmpty)
+    }
     let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
       host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
     }
     Attachment.record(
       image,
-      named: "widget-\(presentation.family.rawValue)-\(Int(presentation.width))-\(presentation.dark ? "Dark" : "Light")-\(presentation.accessibility ? "AX3" : "Large").png",
+      named: "widget-\(presentation.family.rawValue)-\(Int(presentation.width))-\(presentation.dark ? "Dark" : "Light")-\(presentation.accessibility ? "AX3" : "Large")-\(presentation.state)-\(presentation.empty ? "Empty" : "Tasks").png",
       as: .png)
   }
 
@@ -95,4 +110,6 @@ struct WidgetPresentation: Sendable {
   let height: CGFloat
   let dark: Bool
   let accessibility: Bool
+  var state: TodayWidgetState = .available
+  var empty = false
 }
