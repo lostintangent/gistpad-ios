@@ -118,7 +118,6 @@ struct NotebookSettingsSheet<Appearance: View>: View {
       ) {
         Button("Sign Out", role: .destructive, action: confirmSignOut)
         Button("Cancel", role: .cancel) {}
-          .tint(.primary)
       } message: {
         Text("Drafts for @\(account?.login ?? "") stay on this iPhone. Nothing is published.")
       }
