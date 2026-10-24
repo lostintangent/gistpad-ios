@@ -21,10 +21,12 @@ struct LiveNotebookWorkspace: View {
   @State private var deletionTarget: NotebookDeletionTarget?
   @State private var reviewTarget: NotebookConflictTarget?
   @State private var isPerformingAction = false
-  @State private var isFocused = false
+  @State private var columnVisibility: NavigationSplitViewVisibility = .all
+  @State private var layout = NotebookLayoutPreferences()
   @State private var archiveUndo: NotebookArchiveUndo?
   @Environment(\.openURL) private var openURL
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   private var active: NotebookSessionController? {
     activeID.flatMap { sessions[$0] }
@@ -36,27 +38,23 @@ struct LiveNotebookWorkspace: View {
   }
 
   var body: some View {
-    Group {
-      if isFocused, let active {
-        NavigationStack {
-          note(active)
-        }
-      } else {
-        NavigationSplitView(preferredCompactColumn: $compactColumn) {
-          LibraryView(model: notebook.library, actions: libraryActions)
-        } detail: {
-          NavigationStack {
-            if let active {
-              note(active)
-            } else {
-              TodayLanding(summary: notebook.library.today, start: { startToday() })
-                .disabled(notebook.account == nil || notebook.isCreating)
-            }
+    NavigationSplitView(
+      columnVisibility: $columnVisibility, preferredCompactColumn: $compactColumn
+    ) {
+      LibraryView(model: notebook.library, actions: libraryActions)
+    } detail: {
+      NavigationStack {
+        GeometryReader { geometry in
+          if let active {
+            note(active, availableWidth: geometry.size.width)
+          } else {
+            TodayLanding(summary: notebook.library.today, start: { startToday() })
+              .disabled(notebook.account == nil || notebook.isCreating)
           }
         }
-        .navigationSplitViewStyle(.balanced)
       }
     }
+    .navigationSplitViewStyle(.balanced)
     .tint(InterfaceTheme.accent)
     .overlay(alignment: .top) {
       if notebook.isOpeningDocument {
@@ -182,7 +180,7 @@ struct LiveNotebookWorkspace: View {
               await photos.stop()
             }
             activeID = nil
-            isFocused = false
+            columnVisibility = .all
             await notebook.acceptPendingAccount()
           },
           keepCurrent: { notebook.keepCurrentNotebook() })
@@ -259,10 +257,14 @@ struct LiveNotebookWorkspace: View {
       collection: notebook.library.collection)
   }
 
-  private func note(_ controller: NotebookSessionController) -> some View {
+  private func note(
+    _ controller: NotebookSessionController, availableWidth: CGFloat
+  ) -> some View {
     Group {
       if let photos = photoControllers[controller.draft.id.uuidString] {
-        NotebookPhotoHost(controller: photos) { noteScreen(controller, photos: photos) }
+        NotebookPhotoHost(controller: photos) {
+          noteScreen(controller, photos: photos, availableWidth: availableWidth)
+        }
       } else {
         ContentUnavailableView(
           "This note couldn't be prepared", systemImage: "exclamationmark.circle",
@@ -273,12 +275,25 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func noteScreen(
-    _ controller: NotebookSessionController, photos: NotebookPhotoController
+    _ controller: NotebookSessionController, photos: NotebookPhotoController,
+    availableWidth: CGFloat
   ) -> some View {
-    @Bindable var controller = controller
+    let mode = Binding(
+      get: {
+        layout.presentedMode(
+          availableWidth: availableWidth, sessionMode: controller.mode,
+          isEditing: controller.session.isEditing,
+          canEdit: controller.document.chrome.access.canEdit)
+      },
+      set: {
+        layout.select($0)
+        if $0 != .split { controller.mode = $0 }
+      })
     return NoteScreen(
-      document: controller.document.chrome, mode: $controller.mode,
-      saveState: controller.saveState, actions: noteActions(controller), isFocused: isFocused
+      document: controller.document.chrome, mode: mode,
+      saveState: controller.saveState, actions: noteActions(controller),
+      allowsSplit: NotebookLayoutPreferences.allowsSplit(availableWidth: availableWidth),
+      isSidebarHidden: columnVisibility == .detailOnly
     ) {
       NotebookPhotoSurface(controller: photos, isSource: true) {
         MarkdownEditorView(
@@ -288,12 +303,10 @@ struct LiveNotebookWorkspace: View {
           canInsertPhoto: photos.canChoosePhoto)
       }
     } preview: {
-      if isFocused {
+      NotebookPhotoSurface(
+        controller: photos, isSource: false, showsAttachments: mode.wrappedValue != .split
+      ) {
         preview(controller)
-      } else {
-        NotebookPhotoSurface(controller: photos, isSource: false) {
-          preview(controller)
-        }
       }
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -313,6 +326,11 @@ struct LiveNotebookWorkspace: View {
     .task {
       if controller.mode == .source, controller.draft.baseContent == nil {
         controller.session.textView.becomeFirstResponder()
+      }
+    }
+    .onChange(of: NotebookLayoutPreferences.allowsSplit(availableWidth: availableWidth)) { _, allows in
+      if !allows, layout.preferredMode == .split, controller.session.isEditing {
+        controller.mode = .source
       }
     }
   }
@@ -350,7 +368,11 @@ struct LiveNotebookWorkspace: View {
 
   private func noteActions(_ controller: NotebookSessionController) -> NoteActions {
     var actions = NoteActions()
-    actions.focus = { isFocused.toggle() }
+    actions.focus = {
+      withAnimation(reduceMotion ? nil : .snappy) {
+        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+      }
+    }
     actions.save = { publish(controller) }
     actions.reviewChanges = {
       do {
@@ -418,7 +440,7 @@ struct LiveNotebookWorkspace: View {
     actions.didChangeMode = { mode in
       if mode == .source {
         controller.session.textView.becomeFirstResponder()
-      } else {
+      } else if mode == .reading {
         controller.session.textView.resignFirstResponder()
       }
     }
@@ -462,6 +484,7 @@ struct LiveNotebookWorkspace: View {
             && $0.draft.filename == document.filename))
     }) {
       existing.adoptPresentation(document)
+      existing.mode = layout.initialMode(isUnpublished: existing.draft.baseContent == nil)
       preparePhotos(for: existing)
       activeID = existing.draft.id.uuidString
       compactColumn = .detail
@@ -475,6 +498,7 @@ struct LiveNotebookWorkspace: View {
       else { return }
       let controller = NotebookSessionController(
         document: document, draft: draft, notebook: notebook)
+      controller.mode = layout.initialMode(isUnpublished: draft.baseContent == nil)
       sessions[draft.id.uuidString] = controller
       preparePhotos(for: controller)
       activeID = draft.id.uuidString
