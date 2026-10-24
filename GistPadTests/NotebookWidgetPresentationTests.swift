@@ -32,9 +32,11 @@ struct NotebookWidgetPresentationTests {
       ? NotebookSystemSnapshot.make(accountID: UUID(), cache: nil, drafts: [], date: date)
       : NotebookSystemSnapshot.preview(date: date)
     var taskSizes: [String: CGSize] = [:]
+    var layoutFrames: [String: CGRect] = [:]
     let content = TodayWidgetView(
       snapshot: snapshot, date: date, state: presentation.state, family: presentation.family,
-      taskGeometry: { taskSizes[$0] = $1 })
+      taskGeometry: { taskSizes[$0] = $1 },
+      layoutGeometry: { layoutFrames[$0] = $1 })
       .padding(presentation.family == .accessoryRectangular ? 0 : 16)
       .background(Color(uiColor: .secondarySystemGroupedBackground))
       .environment(\.colorScheme, presentation.dark ? .dark : .light)
@@ -60,6 +62,11 @@ struct NotebookWidgetPresentationTests {
       }
     } else {
       #expect(taskSizes.isEmpty)
+    }
+    if presentation.family == .systemSmall, !presentation.accessibility {
+      let calendar = try #require(layoutFrames["small-calendar"])
+      let content = try #require(layoutFrames["small-content"])
+      #expect(abs(content.minY - calendar.maxY - 12) < 0.5)
     }
     let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
       host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)

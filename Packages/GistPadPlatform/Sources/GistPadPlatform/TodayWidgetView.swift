@@ -13,6 +13,7 @@ public struct TodayWidgetView: View {
     public let state: TodayWidgetState
     private let familyOverride: WidgetFamily?
     private var taskGeometry: (@MainActor (String, CGSize) -> Void)?
+    private var layoutGeometry: (@MainActor (String, CGRect) -> Void)?
     @Environment(\.widgetFamily) private var widgetFamily
     @Environment(\.widgetRenderingMode) private var renderingMode
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -31,10 +32,12 @@ public struct TodayWidgetView: View {
     @_spi(Testing)
     public init(
         snapshot: NotebookSystemSnapshot?, date: Date, state: TodayWidgetState,
-        family: WidgetFamily, taskGeometry: @escaping @MainActor (String, CGSize) -> Void
+        family: WidgetFamily, taskGeometry: @escaping @MainActor (String, CGSize) -> Void,
+        layoutGeometry: (@MainActor (String, CGRect) -> Void)? = nil
     ) {
         self.init(snapshot: snapshot, date: date, state: state, family: family)
         self.taskGeometry = taskGeometry
+        self.layoutGeometry = layoutGeometry
     }
 
     private var family: WidgetFamily { familyOverride ?? widgetFamily }
@@ -97,7 +100,7 @@ public struct TodayWidgetView: View {
                     }
                 }
             default:
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: dynamicTypeSize.isAccessibilitySize ? 8 : 12) {
                     if dynamicTypeSize.isAccessibilitySize {
                         Text(date, format: .dateTime.month(.abbreviated).day())
                             .font(.system(.caption, design: .rounded, weight: .semibold))
@@ -108,28 +111,36 @@ public struct TodayWidgetView: View {
                             .privacySensitive()
                         Spacer(minLength: 0)
                     } else {
-                        HStack(alignment: .bottom, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 1) {
+                        Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 1) {
+                            GridRow {
                                 Text(date, format: .dateTime.month(.abbreviated))
                                     .font(.caption2.weight(.semibold))
                                     .foregroundStyle(accent)
+                            }
+                            GridRow(alignment: .top) {
                                 Text(date, format: .dateTime.day())
                                     .font(.system(size: dateSize, weight: .semibold, design: .rounded))
                                     .foregroundStyle(accent)
                                     .contentTransition(.numericText())
-                            }
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Today").font(.headline)
-                                if state == .available, !tasks.isEmpty {
-                                    Text("\(remaining) remaining")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .privacySensitive()
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("Today").font(.headline)
+                                    if state == .available, !tasks.isEmpty {
+                                        Text("\(remaining) remaining")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .privacySensitive()
+                                    }
                                 }
                             }
                         }
-                        Spacer(minLength: 0)
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                            layoutGeometry?("small-calendar", frame)
+                        }
                         content(limit: 1)
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                                layoutGeometry?("small-content", frame)
+                            }
+                        Spacer(minLength: 0)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

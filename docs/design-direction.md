@@ -146,7 +146,7 @@ These are focused entrances to Today and existing notes, not miniature copies of
 
 | Surface | Treatment |
 | --- | --- |
-| Small Today widget | Rounded date, Today and one useful task with a real check target. If there are no tasks, show a genuine short excerpt or Start Today, never an invented task |
+| Small Today widget | Rounded date with Today pinned beside the numeral in every state. Place one useful task or invitation 12 pt below the calendar header, with flexible space after it. If there are no tasks, show a genuine short excerpt or Start Today, never an invented task |
 | Medium Today widget | Date/count at leading, up to two readable task rows alongside. Prefer fewer rows over tiny labels/targets. Tapping the background opens Today; task controls perform the real action in place |
 | Lock Screen | Rectangular: date and one legible task/check where space permits. Inline/circular: date or remaining count, opening Today rather than cramming in a checklist |
 | StandBy | Adapt the small widget, emphasizing date and one useful task at distance. Let the system remove the background and apply its night treatment. No extra clock or custom glow |
