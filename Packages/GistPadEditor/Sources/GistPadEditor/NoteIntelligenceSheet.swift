@@ -129,6 +129,7 @@
             }
             .labelStyle(.iconOnly)
             .tint(.primary)
+            .accessibilityIdentifier("intelligence-close")
           }
         }
       }
