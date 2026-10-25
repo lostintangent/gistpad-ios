@@ -87,15 +87,17 @@ extension View {
 public struct LibraryDeletionConfirmation {
     public let rowID: String
     public let title: String
+    public let isLocalCopy: Bool
     let confirm: () -> Void
     let dismiss: () -> Void
 
     public init(
-        rowID: String, title: String, confirm: @escaping () -> Void,
+        rowID: String, title: String, isLocalCopy: Bool = false, confirm: @escaping () -> Void,
         dismiss: @escaping () -> Void
     ) {
         self.rowID = rowID
         self.title = title
+        self.isLocalCopy = isLocalCopy
         self.confirm = confirm
         self.dismiss = dismiss
     }
@@ -107,20 +109,33 @@ private struct LibraryRowDeletionConfirmation: ViewModifier {
 
     func body(content: Content) -> some View {
         content.confirmationDialog(
-            String(localized: "Delete “\(target?.title ?? "")” from GitHub?", bundle: .module),
+            target?.isLocalCopy == true
+                ? String(localized: "Delete local copy of “\(target?.title ?? "")”?", bundle: .module)
+                : String(localized: "Delete “\(target?.title ?? "")” from GitHub?", bundle: .module),
             isPresented: Binding(
                 get: { target?.rowID == rowID },
                 set: { if !$0, target?.rowID == rowID { target?.dismiss() } }),
             titleVisibility: .visible
         ) {
-            Button(String(localized: "Delete from GitHub", bundle: .module), role: .destructive) {
+            Button(
+                target?.isLocalCopy == true
+                    ? String(localized: "Delete Local Copy", bundle: .module)
+                    : String(localized: "Delete from GitHub", bundle: .module),
+                role: .destructive
+            ) {
                 target?.confirm()
             }
             Button(String(localized: "Cancel", bundle: .module), role: .cancel) {}
         } message: {
-            Text(
-                "This deletes every file from GitHub and this iPhone, including unsynced drafts and local history. This cannot be undone.",
-                bundle: .module)
+            if target?.isLocalCopy == true {
+                Text(
+                    "This removes this local copy, its pending photos and local history from this iPhone. It doesn't delete anything on GitHub. This cannot be undone.",
+                    bundle: .module)
+            } else {
+                Text(
+                    "This deletes every file from GitHub and this iPhone, including unsynced drafts and local history. This cannot be undone.",
+                    bundle: .module)
+            }
         }
     }
 }
@@ -167,7 +182,7 @@ public struct LibraryActions {
 
     @MainActor
     func deletionAction(for note: LibraryNote) -> (() -> Void)? {
-        guard note.isOwned, note.canDeleteFromGitHub, let delete else { return nil }
+        guard note.isOwned, note.canDeleteFromGitHub || note.isRecovery, let delete else { return nil }
         return { delete(note.id) }
     }
 }
@@ -803,7 +818,7 @@ public struct LibraryView: View {
                 Button(String(localized: "Delete", bundle: .module), systemImage: "trash", action: delete)
                     .tint(.red)
             }
-            if note.isOwned, let archive = actions.toggleArchive {
+            if note.isOwned, !note.isRecovery, let archive = actions.toggleArchive {
                 Button {
                     archive(note.id)
                 } label: {
@@ -816,7 +831,7 @@ public struct LibraryView: View {
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            if note.isOwned, let pin = actions.togglePin {
+            if note.isOwned, !note.isRecovery, let pin = actions.togglePin {
                 Button {
                     pin(note.id)
                 } label: {
@@ -837,13 +852,13 @@ public struct LibraryView: View {
                 String(localized: "Open Comments", bundle: .module), systemImage: "text.bubble"
             ) { openComments(note.id) }
         }
-        if note.isOwned, let pin = actions.togglePin {
+        if note.isOwned, !note.isRecovery, let pin = actions.togglePin {
             Button(
                 note.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
                 systemImage: note.isPinned ? "pin.slash" : "pin"
             ) { pin(note.id) }
         }
-        if note.isOwned, let archive = actions.toggleArchive {
+        if note.isOwned, !note.isRecovery, let archive = actions.toggleArchive {
             Button(
                 note.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
                 systemImage: "archivebox"

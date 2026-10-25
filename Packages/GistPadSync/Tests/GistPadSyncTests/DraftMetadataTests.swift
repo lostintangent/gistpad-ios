@@ -4,6 +4,125 @@ import Testing
 @testable import GistPadSync
 
 @Suite struct DraftMetadataTests {
+    @Test func legacyUnknownEditTimesAreNotReplacedByReadOrRefreshTimes() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("drafts.store")
+        let store = try DraftStore.open(url: url)
+        let account = UUID()
+        let draft = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "legacy", filename: "README.md",
+            description: "Legacy copy", content: "base", revision: "one")
+        let context = ModelContext(store.modelContainer)
+        let record = try #require(context.fetch(FetchDescriptor<StoredDraft>()).first)
+        record.updatedAt = nil
+        try context.save()
+        let reopened = try DraftStore.open(url: url)
+        #expect(try await reopened.draft(id: draft.id, accountID: account).updatedAt == nil)
+        let refreshed = try await reopened.refreshCleanDraft(
+            id: draft.id, accountID: account, expectedGeneration: 0,
+            content: "remote change", revision: "two")
+        guard case .refreshed(let refreshedDraft) = refreshed else {
+            Issue.record("Expected the legacy copy to refresh without a fabricated local edit.")
+            return
+        }
+        #expect(refreshedDraft.updatedAt == nil)
+        #expect(try await reopened.persist(
+            id: draft.id, accountID: account, text: "a local edit",
+            generation: refreshedDraft.generation + 1).updatedAt != nil)
+    }
+
+    @Test func draftEditTimeSurvivesReadsPublicationAndReopening() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("drafts.store")
+        let store = try DraftStore.open(url: url)
+        let account = UUID()
+        let draft = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "abc123", filename: "README.md",
+            description: "Note", content: "base", revision: "one")
+        let edited = try await store.persist(id: draft.id, accountID: account, text: "edit", generation: 1)
+        #expect(edited.updatedAt != nil)
+        #expect(edited.updatedAt != draft.updatedAt)
+        let same = try await store.persist(id: draft.id, accountID: account, text: "edit", generation: 1)
+        #expect(same.updatedAt == edited.updatedAt)
+        try await store.beginAttempt(
+            id: draft.id, accountID: account, content: "edit", generation: 1, remote: "base")
+        let published = try await store.acknowledge(
+            id: draft.id, accountID: account, gistID: "abc123", content: "edit",
+            revision: "two", generation: 1)
+        #expect(published.updatedAt == edited.updatedAt)
+        #expect(try await DraftStore.open(url: url).draft(
+            id: draft.id, accountID: account).updatedAt == edited.updatedAt)
+    }
+
+    @Test func cleanLocalDiscardPreservesUnpublishedBytesUncertaintyAndPendingImages() async throws {
+        let store = try DraftStore.open(inMemory: true)
+        let account = UUID()
+        func make(_ gistID: String) async throws -> DraftSnapshot {
+            try await store.openDraft(
+                accountID: account, githubUserID: 42, gistID: gistID, filename: "README.md",
+                description: "Note", content: "Cafe\u{301}", revision: "one")
+        }
+        let clean = try await make("clean")
+        try await store.beginAttempt(
+            id: clean.id, accountID: account, content: clean.text, generation: 0, remote: clean.text)
+        _ = try await store.acknowledge(
+            id: clean.id, accountID: account, gistID: "clean", content: clean.text,
+            revision: "two", generation: 0)
+        #expect(try await store.discardLocalCopy(
+            id: clean.id, accountID: account, expectedGeneration: 0, onlyIfClean: true))
+        let dirty = try await make("dirty")
+        _ = try await store.persist(id: dirty.id, accountID: account, text: "Caf\u{e9}", generation: 1)
+        #expect(!(try await store.discardLocalCopy(
+            id: dirty.id, accountID: account, expectedGeneration: 1, onlyIfClean: true)))
+        let uncertain = try await make("uncertain")
+        try await store.beginAttempt(
+            id: uncertain.id, accountID: account, content: uncertain.text, generation: 0, remote: uncertain.text)
+        try await store.setState(.failed(.publicationUncertain), id: uncertain.id, accountID: account)
+        #expect(!(try await store.discardLocalCopy(
+            id: uncertain.id, accountID: account, expectedGeneration: 0, onlyIfClean: true)))
+        let image = try await make("image")
+        _ = try await store.enqueueImage(
+            pngData: testPNG(), draftID: image.id, accountID: account,
+            expectedGeneration: 0, insertionLocation: 0)
+        #expect(!(try await store.discardLocalCopy(
+            id: image.id, accountID: account, expectedGeneration: 0, onlyIfClean: true)))
+        #expect(try await store.drafts(accountID: account).count == 3)
+    }
+
+    @Test func explicitLocalDiscardRemovesOnlyTheConfirmedDraftAndItsLinkedBytes() async throws {
+        let store = try DraftStore.open(inMemory: true)
+        let account = UUID()
+        let first = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "gone", filename: "One.md",
+            description: "Gone", content: "base", revision: "one")
+        let second = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "gone", filename: "Two.md",
+            description: "Gone", content: "other file", revision: "one")
+        _ = try await store.persist(id: first.id, accountID: account, text: "unpublished", generation: 1)
+        try await store.beginAttempt(
+            id: first.id, accountID: account, content: "unpublished", generation: 1, remote: "base")
+        try await store.setState(.failed(.publicationUncertain), id: first.id, accountID: account)
+        _ = try await store.enqueueImage(
+            pngData: testPNG(), draftID: first.id, accountID: account,
+            expectedGeneration: 1, insertionLocation: 0)
+        await #expect(throws: DraftError.staleGeneration) {
+            try await store.discardLocalCopy(id: first.id, accountID: account, expectedGeneration: 0)
+        }
+        await #expect(throws: DraftError.accountMismatch) {
+            try await store.discardLocalCopy(id: first.id, accountID: UUID(), expectedGeneration: 1)
+        }
+        #expect(try await store.discardLocalCopy(
+            id: first.id, accountID: account, expectedGeneration: 1))
+        #expect(try await store.drafts(accountID: account).map(\.id) == [second.id])
+        #expect(try await store.imageUploads(accountID: account).isEmpty)
+        let context = ModelContext(store.modelContainer)
+        #expect(try context.fetchCount(FetchDescriptor<StoredRecovery>()) == 0)
+    }
+
     @Test func metadataChangesRetainSourceGenerationAndRecoveryHistory() async throws {
         let account = UUID()
         let store = try DraftStore.open(inMemory: true)

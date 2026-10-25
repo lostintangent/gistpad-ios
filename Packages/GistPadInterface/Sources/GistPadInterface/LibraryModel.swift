@@ -23,10 +23,11 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
     public let id: String
     public var gistID: String?
     public var title: String
-    public var updatedAt: Date
+    public var updatedAt: Date?
     public var owner: String?
     public var isOwned: Bool
     public var canDeleteFromGitHub: Bool
+    public var isRecovery: Bool
     public var isSecret: Bool
     public var isPinned: Bool
     public var isStarred: Bool
@@ -49,8 +50,8 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
     }
 
     public init(
-        id: String, title: String, updatedAt: Date, gistID: String? = nil, owner: String? = nil,
-        isOwned: Bool = true, canDeleteFromGitHub: Bool = false,
+        id: String, title: String, updatedAt: Date?, gistID: String? = nil, owner: String? = nil,
+        isOwned: Bool = true, canDeleteFromGitHub: Bool = false, isRecovery: Bool = false,
         isSecret: Bool = true, isPinned: Bool = false,
         isStarred: Bool = false, isArchived: Bool = false, isDailyNote: Bool = false,
         tagIDs: Set<String> = [], filename: String? = nil, fileCount: Int? = nil, excerpt: String? = nil,
@@ -64,6 +65,7 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
         self.owner = owner
         self.isOwned = isOwned
         self.canDeleteFromGitHub = canDeleteFromGitHub
+        self.isRecovery = isRecovery
         self.isSecret = isSecret
         self.isPinned = isPinned
         self.isStarred = isStarred
@@ -162,7 +164,9 @@ public final class LibraryModel {
             return Self.includes(note, in: collection) && selectedTagIDs.isSubset(of: note.tagIDs)
                 && (search.isEmpty || note.title.localizedStandardContains(search))
         }.sorted {
-            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+            if $0.updatedAt != $1.updatedAt {
+                return ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast)
+            }
             return $0.id < $1.id
         }
     }

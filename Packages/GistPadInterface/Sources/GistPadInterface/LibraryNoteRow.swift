@@ -126,22 +126,28 @@ struct LibraryNoteRow: View {
                         .captureFrame("note-secondary-\(note.id)")
                 }
             } else {
-                let updated = LibraryDatePresentation.updateLabel(
-                    for: note.updatedAt, relativeTo: now, locale: locale, calendar: displayCalendar)
+                let updated = note.updatedAt.map {
+                    LibraryDatePresentation.updateLabel(
+                        for: $0, relativeTo: now, locale: locale, calendar: displayCalendar)
+                }
                 Group {
                     if dynamicTypeSize.isAccessibilitySize {
                         VStack(alignment: .leading, spacing: titleSpacing) {
-                            Text(verbatim: updated)
-                                .captureFrame("note-date-\(note.id)")
+                            if let updated {
+                                Text(verbatim: updated)
+                                    .captureFrame("note-date-\(note.id)")
+                            }
                             if let excerpt = note.excerpt, !excerpt.isEmpty {
                                 excerptText(excerpt)
                             }
                         }
                     } else {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(verbatim: updated)
-                                .fixedSize(horizontal: true, vertical: false)
-                                .captureFrame("note-date-\(note.id)")
+                            if let updated {
+                                Text(verbatim: updated)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .captureFrame("note-date-\(note.id)")
+                            }
                             if let excerpt = note.excerpt, !excerpt.isEmpty {
                                 excerptText(excerpt)
                             }

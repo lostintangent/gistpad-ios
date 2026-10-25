@@ -36,5 +36,18 @@ struct LibraryDeletionTests {
         #expect(!note.canDeleteFromGitHub)
         #expect(actions.deletionAction(for: note) == nil)
     }
+
+    @Test func recoveryRowsOfferOnlyALocalDeletionCallback() {
+        let note = LibraryNote(
+            id: UUID().uuidString, title: "A local copy", updatedAt: nil, isRecovery: true)
+        var targets: [String] = []
+        var actions = LibraryActions(refresh: {}, create: {}, today: {})
+        actions.delete = { targets.append($0) }
+        #expect(!note.canDeleteFromGitHub)
+        let delete = actions.deletionAction(for: note)
+        #expect(delete != nil)
+        delete?()
+        #expect(targets == [note.id])
+    }
 }
 #endif

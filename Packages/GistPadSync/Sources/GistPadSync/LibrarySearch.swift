@@ -73,7 +73,7 @@ public struct LibrarySearchMatch: Equatable, Identifiable, Sendable {
     public let filename: String
     public let title: String
     public let text: String?
-    public let updatedAt: Date
+    public let updatedAt: Date?
     public let isPinned: Bool
     public let isStarred: Bool
     public let isArchived: Bool
@@ -166,8 +166,8 @@ public enum LibrarySearch {
                     id: draft.id.uuidString, gistID: draft.gistID, draftID: draft.id,
                     filename: draft.filename, title: draft.description.isEmpty
                         ? GistConventions.fileDisplayName(draft.filename) : draft.description,
-                    text: draft.text, updatedAt: library.cachedAt,
-                    isPinned: draft.gistID.map(pinned.contains) ?? false, isStarred: false,
+                    text: draft.text, updatedAt: draft.updatedAt,
+                    isPinned: false, isStarred: false,
                     isArchived: archived, isDailyNote: daily, isSecret: true, isRecovery: draft.gistID != nil,
                     tagIDs: tags, progress: progress,
                     isOverdue: day.map { $0 < today && progress.remaining > 0 } ?? false,
@@ -187,7 +187,9 @@ public enum LibrarySearch {
                 if left != right { return left > right }
             }
             if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
-            if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+            if lhs.updatedAt != rhs.updatedAt {
+                return (lhs.updatedAt ?? .distantPast) > (rhs.updatedAt ?? .distantPast)
+            }
             return lhs.id < rhs.id
         }
         return LibrarySearchResult(

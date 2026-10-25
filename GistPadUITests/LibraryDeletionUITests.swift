@@ -2,6 +2,98 @@ import XCTest
 
 final class LibraryDeletionUITests: XCTestCase {
   @MainActor
+  func testLocalCopiesOfferDeleteWithoutRemoteActionsInBothAppearances() async throws {
+    for dark in [false, true] {
+      let app = launch(dark: dark, localCopies: true)
+      defer { app.terminate() }
+      let title = app.staticTexts["A local copy"].firstMatch
+      try await waitUntil("the orphaned local copy") { title.isHittable }
+      title.press(forDuration: 0.8)
+      try await waitUntil("the local copy context menu") { app.buttons["Delete"].isHittable }
+      XCTAssertFalse(app.buttons["Archive"].exists)
+      XCTAssertFalse(app.buttons["Pin"].exists)
+      record(app, name: "local-copy-menu-\(dark ? "Dark" : "Light")")
+      app.buttons["Delete"].tap()
+      let confirmation = app.buttons["Delete Local Copy"]
+      try await waitUntil("the local-only deletion confirmation") { confirmation.isHittable }
+      XCTAssertFalse(app.buttons["Delete from GitHub"].exists)
+      record(app, name: "local-copy-confirmation-\(dark ? "Dark" : "Light")")
+      let cancel = app.buttons["Cancel"]
+      if cancel.exists { cancel.tap() }
+      else { app.otherElements["PopoverDismissRegion"].tap() }
+      try await waitUntil("the local copy after cancellation") { title.isHittable }
+      title.swipeLeft()
+      try await waitUntil("Delete as the local copy's only trailing action") {
+        app.buttons["Delete"].isHittable
+      }
+      XCTAssertFalse(app.buttons["Archive"].exists)
+      try await Task.sleep(for: .milliseconds(450))
+      record(app, name: "local-copy-swipe-\(dark ? "Dark" : "Light")")
+      app.buttons["Delete"].tap()
+      try await waitUntil("the local-only swipe confirmation") { confirmation.isHittable }
+      confirmation.tap()
+      try await waitUntil("the deleted local copy to leave") { !title.exists }
+      XCTAssertTrue(app.staticTexts["A thought to keep"].exists)
+    }
+  }
+
+  @MainActor
+  func testLocalCopyNoteMenuUsesTheSameLocalOnlyConfirmation() async throws {
+    let app = launch(dark: true, localCopies: true)
+    defer { app.terminate() }
+    let title = app.staticTexts["A local copy"].firstMatch
+    try await waitUntil("the local copy") { title.isHittable }
+    title.tap()
+    let actions = app.buttons["note-actions"]
+    try await waitUntil("the local copy's recovery explanation or note menu") {
+      app.alerts.buttons["OK"].isHittable || actions.isHittable
+    }
+    if app.alerts.buttons["OK"].isHittable { app.alerts.buttons["OK"].tap() }
+    try await waitUntil("the recovery note's menu") { actions.isHittable }
+    actions.tap()
+    let delete = app.buttons["Delete Note…"]
+    try await waitUntil("the local copy's note Delete") { delete.isHittable }
+    XCTAssertFalse(app.buttons["Archive"].exists)
+    XCTAssertFalse(app.buttons["Pin"].exists)
+    delete.tap()
+    let confirmation = app.buttons["Delete Local Copy"]
+    try await waitUntil("the local-only note confirmation") { confirmation.isHittable }
+    XCTAssertFalse(app.buttons["Delete from GitHub"].exists)
+    record(app, name: "local-copy-note-confirmation")
+  }
+
+  @MainActor
+  func testANewlyPublishedNoteImmediatelyOffersSwipeDelete() async throws {
+    let app = launch(dark: true)
+    defer { app.terminate() }
+    let create = app.buttons["library-create"]
+    try await waitUntil("the Library New Note button") { create.isHittable }
+    create.tap()
+    let editor = app.textViews["source-editor"]
+    try await waitUntil("the new note's retained source editor") { editor.isHittable }
+    editor.typeText("A freshly published thought")
+    if app.buttons["Hide Keyboard"].isHittable { app.buttons["Hide Keyboard"].tap() }
+    let save = app.buttons["note-save"]
+    try await waitUntil("the explicit Publish action") { save.isHittable && save.isEnabled }
+    save.tap()
+    try await waitUntil("the newly published row") {
+      app.descendants(matching: .any)["library-note-newcapture"].firstMatch.exists
+        || app.buttons["note-comments"].exists
+    }
+    if app.buttons["BackButton"].isHittable { app.buttons["BackButton"].tap() }
+    let row = app.descendants(matching: .any)["library-note-newcapture"].firstMatch
+    try await waitUntil("the published Library row without a full refresh") { row.isHittable }
+    row.swipeLeft()
+    try await waitUntil("Delete on the just-published note") { app.buttons["Delete"].isHittable }
+    try await Task.sleep(for: .milliseconds(450))
+    record(app, name: "newly-published-swipe-delete")
+    app.buttons["Delete"].tap()
+    try await waitUntil("the just-published note's GitHub confirmation") {
+      app.buttons["Delete from GitHub"].isHittable
+    }
+  }
+
+  @MainActor
   func testOwnedGistMenuAndConfirmationInLight() async throws {
     try await checkMenuAndConfirmation(dark: false)
   }
@@ -84,13 +176,14 @@ final class LibraryDeletionUITests: XCTestCase {
   }
 
   @MainActor
-  private func launch(dark: Bool) -> XCUIApplication {
+  private func launch(dark: Bool, localCopies: Bool = false) -> XCUIApplication {
     let app = XCUIApplication(bundleIdentifier: "dev.gistpad.GistPad")
     app.launchArguments = [
       "--capture-screen", "library-delete", "--capture-stale-deletion",
       "--capture-appearance", dark ? "dark" : "light",
       "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL",
     ]
+    if localCopies { app.launchArguments.append("--capture-local-copies") }
     app.launch()
     return app
   }

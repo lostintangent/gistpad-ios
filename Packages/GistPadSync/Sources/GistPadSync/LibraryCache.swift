@@ -75,6 +75,22 @@ final class StoredLibrary {
 }
 
 extension DraftStore {
+    func publicationCache(
+        gist: Gist, accountID: UUID, githubUserID: Int64, filename: String, content: String
+    ) throws -> (StoredLibrary, Data)? {
+        guard let record = try libraryRecord(accountID) else { return nil }
+        var cached = try JSONDecoder().decode(CachedLibrarySnapshot.self, from: record.payload)
+        if gist.owner?.id == githubUserID {
+            cached.owned.removeAll { $0.id == gist.id }
+            cached.owned.insert(gist, at: 0)
+        }
+        cached.starred = cached.starred.map { $0.id == gist.id ? gist : $0 }
+        cached.details[gist.id] = gist
+        cached.fileContent["\(gist.id)/\(filename)"] = .init(
+            text: content, revision: gist.revision, updatedAt: gist.updatedAt)
+        return (record, try JSONEncoder().encode(cached))
+    }
+
     public func cachedLibrary(accountID: UUID) throws -> CachedLibrarySnapshot? {
         guard let stored = try libraryRecord(accountID) else { return nil }
         return try JSONDecoder().decode(CachedLibrarySnapshot.self, from: stored.payload)

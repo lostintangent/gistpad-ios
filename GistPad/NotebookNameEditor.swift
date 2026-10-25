@@ -1,3 +1,4 @@
+import GistPadSync
 import SwiftUI
 
 struct NotebookNameEditor: View {
@@ -100,4 +101,13 @@ struct NotebookDeletionTarget: Identifiable {
   let id: String
   let accountID: UUID
   let title: String
+  var localDraft: DraftSnapshot? = nil
+
+  var action: NotebookAction {
+    if let localDraft {
+      .discardLocalCopy(draftID: localDraft.id, generation: localDraft.generation)
+    } else {
+      .delete(gistID: id)
+    }
+  }
 }

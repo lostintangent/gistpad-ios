@@ -84,22 +84,31 @@ struct LiveNotebookWorkspace: View {
           .personalAccent(savedHex: notebook.account?.preferences.accentColor)
       }
       .confirmationDialog(
-        String(localized: "Delete “\(deletionTarget?.title ?? "")” from GitHub?"),
+        deletionTarget?.localDraft != nil
+          ? String(localized: "Delete local copy of “\(deletionTarget?.title ?? "")”?")
+          : String(localized: "Delete “\(deletionTarget?.title ?? "")” from GitHub?"),
         isPresented: Binding(
           get: { deletionTarget != nil && libraryDeletionRowID == nil },
           set: { if !$0, libraryDeletionRowID == nil { deletionTarget = nil } }),
         titleVisibility: .visible
       ) {
         if let target = deletionTarget {
-          Button("Delete from GitHub", role: .destructive) {
-            run(.delete(gistID: target.id), accountID: target.accountID)
+          Button(
+            target.localDraft == nil ? String(localized: "Delete from GitHub")
+              : String(localized: "Delete Local Copy"), role: .destructive
+          ) {
+            run(target.action, accountID: target.accountID)
           }
         }
         Button("Cancel", role: .cancel) {}
       } message: {
-        Text(
-          "This deletes every file from GitHub and this iPhone, including unsynced drafts and local history. This cannot be undone."
-        )
+        if deletionTarget?.localDraft != nil {
+          Text("This removes this local copy, its pending photos and local history from this iPhone. It doesn't delete anything on GitHub. This cannot be undone.")
+        } else {
+          Text(
+            "This deletes every file from GitHub and this iPhone, including unsynced drafts and local history. This cannot be undone."
+          )
+        }
       }
       .confirmationDialog(
         creationChoiceTarget?.choice == .discard
@@ -582,7 +591,7 @@ struct LiveNotebookWorkspace: View {
     }
     actions.delete = { rowID in
       guard let target = notebook.libraryDeletionTarget(for: rowID) else {
-        actionMessage = String(localized: "Only a gist you own on GitHub can be deleted.")
+        actionMessage = String(localized: "This note is no longer available to delete.")
         return
       }
       libraryDeletionRowID = rowID
@@ -590,8 +599,8 @@ struct LiveNotebookWorkspace: View {
     }
     if let rowID = libraryDeletionRowID, let target = deletionTarget {
       actions.deletionConfirmation = .init(
-        rowID: rowID, title: target.title,
-        confirm: { run(.delete(gistID: target.id), accountID: target.accountID) },
+        rowID: rowID, title: target.title, isLocalCopy: target.localDraft != nil,
+        confirm: { run(target.action, accountID: target.accountID) },
         dismiss: {
           deletionTarget = nil
           libraryDeletionRowID = nil
@@ -1043,6 +1052,14 @@ struct LiveNotebookWorkspace: View {
     if controller.document.chrome.access.canEdit, !controller.document.isRecovery {
       actions.rename = { requestName(.title, controller: controller) }
     }
+    if controller.document.isRecovery {
+      actions.delete = {
+        libraryDeletionRowID = nil
+        deletionTarget = .init(
+          id: controller.draft.id.uuidString, accountID: controller.draft.accountID,
+          title: controller.document.chrome.title, localDraft: controller.draft)
+      }
+    }
     actions.didChangeMode = { mode in
       if mode == .source {
         controller.session.requestFocusAtContentStart()
@@ -1378,6 +1395,7 @@ struct LiveNotebookWorkspace: View {
       for controller in sessions.values {
         let requiresLock: Bool = switch action {
         case .delete(let gistID): controller.draft.gistID == gistID
+        case .discardLocalCopy(let draftID, _): controller.draft.id == draftID
         case .signOut: controller.draft.accountID == accountID
         default: false
         }

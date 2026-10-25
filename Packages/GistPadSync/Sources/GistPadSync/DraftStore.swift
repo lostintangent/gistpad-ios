@@ -44,6 +44,7 @@ public struct DraftSnapshot: Equatable, Sendable, Identifiable {
     public let attemptedGeneration: UInt64?
     public let autosavePaused: Bool
     public let state: SaveState
+    public let updatedAt: Date?
 
     public var isDiscardableBlank: Bool {
         guard baseContent == nil, baseRevision == nil, attemptedContent == nil,
@@ -116,6 +117,7 @@ final class StoredDraft {
     var attemptedGeneration: UInt64?
     var autosavePaused: Bool = false
     var stateData: Data
+    var updatedAt: Date? = nil
 
     init(
         id: UUID, accountID: UUID, githubUserID: Int64, gistID: String?,
@@ -133,6 +135,7 @@ final class StoredDraft {
         self.baseContent = baseContent
         self.baseRevision = baseRevision
         self.stateData = stateData
+        updatedAt = .now
     }
 }
 
@@ -291,8 +294,11 @@ public actor DraftStore {
             ))
             guard !duplicates.contains(where: { $0.id != id }) else { throw DraftMetadataError.filenameInUse }
         }
-        draft.filename = filename
-        draft.gistDescription = description
+        if draft.filename != filename || !sourceEqual(draft.gistDescription, description) {
+            draft.updatedAt = .now
+            draft.filename = filename
+            draft.gistDescription = description
+        }
         try commit()
         return try snapshot(draft)
     }
@@ -346,6 +352,39 @@ public actor DraftStore {
                 remote: $0.remote, sent: $0.sent, generation: $0.generation
             )
         }
+    }
+
+    @discardableResult
+    public func discardLocalCopy(
+        id: UUID, accountID: UUID, expectedGeneration: UInt64, onlyIfClean: Bool = false
+    ) throws -> Bool {
+        let draft = try find(id, accountID: accountID)
+        guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
+        guard draft.gistID != nil else { throw DraftError.ambiguousCreation }
+        if case .savingToGitHub = try decode(draft.stateData) { throw DraftError.publishInProgress }
+        let images = try modelContext.fetch(FetchDescriptor<StoredImageUpload>(
+            predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }))
+        if onlyIfClean {
+            guard draft.attemptedGeneration == nil, sourceEqual(draft.text, draft.baseContent),
+                  try images.allSatisfy({
+                      if case .inserted = try JSONDecoder().decode(ImageUploadState.self, from: $0.stateData) {
+                          return true
+                      }
+                      return false
+                  }) else { return false }
+        }
+        let recoveries = try modelContext.fetch(FetchDescriptor<StoredRecovery>(
+            predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }))
+        let receipts = try modelContext.fetch(FetchDescriptor<StoredCommandReceipt>()).filter {
+            let command = try JSONDecoder().decode(SharedDraftCommand.self, from: $0.payload)
+            return command.accountID == accountID && command.draftID == id
+        }
+        for image in images { modelContext.delete(image) }
+        for recovery in recoveries { modelContext.delete(recovery) }
+        for receipt in receipts { modelContext.delete(receipt) }
+        modelContext.delete(draft)
+        try commit()
+        return true
     }
 
     public func openDraft(
@@ -499,6 +538,7 @@ public actor DraftStore {
 
     private func replaceText(_ draft: StoredDraft, text: String, generation: UInt64) throws {
         let previousState = try decode(draft.stateData)
+        if !sourceEqual(draft.text, text) { draft.updatedAt = .now }
         draft.text = text
         draft.generation = generation
         if case .conflict(let conflict) = previousState {
@@ -539,10 +579,19 @@ public actor DraftStore {
 
     func acknowledge(
         id: UUID, accountID: UUID, gistID: String, content: String,
-        revision: String?, generation: UInt64
+        revision: String?, generation: UInt64, publishedGist: Gist? = nil
     ) throws -> DraftSnapshot {
         let draft = try find(id, accountID: accountID)
         guard draft.gistID == nil || draft.gistID == gistID else { throw DraftError.staleGeneration }
+        let publicationCache: (StoredLibrary, Data)?
+        if let publishedGist {
+            guard publishedGist.id == gistID else { throw DraftError.remoteDidNotAcknowledge }
+            publicationCache = try self.publicationCache(
+                gist: publishedGist, accountID: accountID, githubUserID: draft.githubUserID,
+                filename: draft.filename, content: content)
+        } else {
+            publicationCache = nil
+        }
         draft.gistID = gistID
         draft.baseContent = content
         draft.baseRevision = revision
@@ -550,6 +599,7 @@ public actor DraftStore {
         draft.attemptedGeneration = nil
         let currentIsAcknowledged = draft.generation == generation && sourceEqual(draft.text, content)
         draft.stateData = try encode(currentIsAcknowledged ? .savedToGitHub : .savedLocally)
+        if let (record, payload) = publicationCache { record.payload = payload }
         try commit()
         return try snapshot(draft)
     }
@@ -686,6 +736,7 @@ public actor DraftStore {
         ))
         draft.baseContent = conflict.remote
         draft.baseRevision = conflict.remoteRevision
+        if !sourceEqual(draft.text, text) { draft.updatedAt = .now }
         draft.text = text
         draft.generation = generation
         draft.attemptedContent = nil
@@ -725,7 +776,7 @@ public actor DraftStore {
             baseContent: draft.baseContent, baseRevision: draft.baseRevision,
             attemptedContent: draft.attemptedContent, attemptedGeneration: draft.attemptedGeneration,
             autosavePaused: draft.autosavePaused,
-            state: try decode(draft.stateData)
+            state: try decode(draft.stateData), updatedAt: draft.updatedAt
         )
     }
 

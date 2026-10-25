@@ -28,6 +28,28 @@ private func editedDraft(
 }
 
 @Suite struct SyncTests {
+    @Test func creationAcknowledgementImmediatelyPromotesItsCachedLibraryRowWithoutAnotherGet() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        try await store.cacheLibrary(owned: [], starred: [], preferences: .init(metadata: [:]), accountID: account)
+        let draft = try await store.newDraft(
+            accountID: account, githubUserID: 42, description: "New note", text: "published")
+        let methods = Mutex<[String]>([])
+        let client = GitHubClient(session: FakeURLProtocol.session { request in
+            methods.withLock { $0.append(request.httpMethod ?? "") }
+            #expect(request.httpMethod == "POST")
+            return FakeResponse(data: try gistData(content: "published", description: "New note"))
+        }) { "fake" }
+        let saved = try await SyncCoordinator(client: client, store: store, mutationInterval: .zero)
+            .publish(id: draft.id, accountID: account)
+        let cached = try #require(await store.cachedLibrary(accountID: account))
+        #expect(saved.gistID == "abc123")
+        #expect(cached.owned.map(\.id) == ["abc123"])
+        #expect(cached.details["abc123"]?.owner?.id == 42)
+        #expect(cached.fileContent["abc123/README.md"]?.text == "published")
+        #expect(methods.withLock { $0 } == ["POST"])
+    }
+
     @Test func durableDraftSurvivesContainerReopenAndIsAccountIsolated() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

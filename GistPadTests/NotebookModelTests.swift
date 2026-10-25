@@ -13,6 +13,131 @@ import WebKit
 
 @MainActor
 struct NotebookModelTests {
+  @Test func orphanedEditedCopiesHaveStableDatesAndLocalDeletionTargets() async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    await provider.failToday(true)
+    let draft = try await provider.stageExistingDraft(gistID: "gone", text: "An unpublished edit")
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    let row = try #require(model.library.snapshot.notes.first { $0.id == draft.id.uuidString })
+    #expect(row.updatedAt == draft.updatedAt)
+    #expect(row.updatedAt != nil)
+    #expect(row.isRecovery)
+    #expect(!row.canDeleteFromGitHub)
+    let target = try #require(model.libraryDeletionTarget(for: row.id))
+    #expect(target.localDraft?.id == draft.id)
+    await model.refresh()
+    #expect(model.library.snapshot.notes.first { $0.id == row.id }?.updatedAt == row.updatedAt)
+    model.library.query = "unpublished"
+    await model.search()
+    #expect(model.library.matchingNotes.first?.updatedAt == row.updatedAt)
+    #expect(model.library.matchingNotes.first?.isRecovery == true)
+    await model.openLocalDraft(id: draft.id)
+    #expect(model.loadedDocument?.isRecovery == true)
+    _ = try await model.perform(target.action)
+    #expect(await provider.deletedIDs.isEmpty)
+    #expect(model.localDrafts.allSatisfy { $0.id != draft.id })
+    #expect(model.library.matchingNotes.isEmpty)
+    #expect(model.loadedDocument == nil)
+    #expect(model.library.selectedNoteID != row.id)
+    await model.refresh()
+    #expect(model.library.snapshot.notes.allSatisfy { $0.id != draft.id.uuidString })
+  }
+
+  @Test func cleanOrphansAreRemovedOnlyAfterAConfirmedRemoteAbsence() async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    await provider.failToday(true)
+    let clean = try await provider.stageExistingDraft(gistID: "gone", text: "Base")
+    let dirty = try await provider.stageExistingDraft(gistID: "also-gone", text: "An edit")
+    let selections = NotebookSelectionStore()
+    try selections.save(
+      .init(gistID: "gone", filename: "README.md", draftID: nil), accountID: fixtureAccount.id)
+    let model = NotebookModel(provider: provider, selections: selections)
+    await model.start()
+    #expect(model.localDrafts.allSatisfy { $0.id != clean.id })
+    #expect(model.localDrafts.contains { $0.id == dirty.id })
+    #expect(await provider.deletedIDs.isEmpty)
+    #expect(try selections.selection(accountID: fixtureAccount.id) == nil)
+
+    let online = StubNotebookProvider(
+      account: fixtureAccount, gists: [try makeGist(id: "existing", title: "Still on GitHub")])
+    await online.failToday(true)
+    let unlisted = try await online.stageExistingDraft(gistID: "existing", text: "Base")
+    await online.setListResponses(owned: [], starred: [])
+    let unlistedModel = NotebookModel(provider: online)
+    await unlistedModel.start()
+    #expect(unlistedModel.localDrafts.contains { $0.id == unlisted.id })
+
+    let offline = StubNotebookProvider(account: fixtureAccount, gists: [])
+    await offline.failToday(true)
+    let offlineCopy = try await offline.stageExistingDraft(gistID: "unknown", text: "Base")
+    await offline.failRequests()
+    let offlineModel = NotebookModel(provider: offline, remoteReadRetryDelays: [])
+    await offlineModel.start()
+    #expect(offlineModel.localDrafts.contains { $0.id == offlineCopy.id })
+  }
+
+  @Test func aCleanCopyWithALiveUnboundEditorIsNeverAutomaticallyDiscarded() async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount, gists: [try makeGist(id: "active", title: "In progress")])
+    await provider.failToday(true)
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await model.open(gistID: "active")
+    let document = try #require(model.loadedDocument)
+    #expect(document.draft == nil)
+    let draft = try await model.openDraft(for: document)
+    await provider.setGists([])
+    await model.refresh()
+    #expect(model.localDrafts.contains { $0.id == draft.id })
+    #expect(model.loadedDocument?.id == document.id)
+  }
+
+  @Test func openingALocalCopyWhileItsMissingGistReadIsPendingCancelsAutomaticDiscard() async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    await provider.failToday(true)
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    let draft = try await provider.stageExistingDraft(gistID: "gone", text: "Base")
+    await provider.holdRead(id: "gone")
+    let refresh = Task { await model.refresh() }
+    await provider.waitForHeldRead()
+    await model.openLocalDraft(id: draft.id)
+    await provider.releaseRead()
+    await refresh.value
+    #expect(model.loadedDocument?.draft?.id == draft.id)
+    #expect(model.localDrafts.contains { $0.id == draft.id })
+    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.contains { $0.id == draft.id })
+  }
+
+  @Test func aNewlyPublishedDraftImmediatelyHasTheSameDeleteTargetAsItsNote() async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    await provider.failToday(true)
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await model.createNote()
+    let draft = try #require(model.loadedDocument?.draft)
+    _ = try await model.persist(
+      draftID: draft.id, accountID: draft.accountID, text: "A new published note", generation: 1)
+    let published = try await model.publish(draftID: draft.id, accountID: draft.accountID)
+    let gistID = try #require(published.gistID)
+    let row = try #require(model.library.snapshot.notes.first { $0.id == gistID })
+    #expect(row.canDeleteFromGitHub)
+    #expect(!row.isRecovery)
+    #expect(model.library.snapshot.notes.allSatisfy { $0.id != draft.id.uuidString })
+    #expect(model.libraryDeletionTarget(for: row.id)?.id == gistID)
+    #expect(model.libraryDeletionTarget(for: draft.id.uuidString)?.id == gistID)
+    #expect(model.libraryDeletionTarget(for: row.id)?.localDraft == nil)
+    #expect(model.loadedDocument?.gist?.id == gistID)
+    #expect(model.library.selectedNoteID == gistID)
+    #expect(await provider.readIDs.isEmpty)
+    model.library.query = "new published"
+    await model.search()
+    #expect(model.library.matchingNotes.first?.canDeleteFromGitHub == true)
+    let searchRow = try #require(model.library.matchingNotes.first)
+    #expect(model.libraryDeletionTarget(for: searchRow.id)?.id == gistID)
+  }
+
   @Test func deletedGistCommentControllersCannotReopenOrRecreateTheirDrafts() async throws {
     let gist = try makeGist(id: "a", title: "A conversation")
     let model = NotebookModel(provider: StubNotebookProvider(account: fixtureAccount, gists: [gist]))
@@ -139,7 +264,7 @@ struct NotebookModelTests {
     #expect(controller.session.generation == draft.generation)
   }
 
-  @Test func libraryDeleteResolvesOwnedGistsAndSearchFilesButNeverLocalOrRecoveryRows() async throws {
+  @Test func libraryDeleteSeparatesRemoteGistsAndLocalCopiesFromUnpublishedAndSharedRows() async throws {
     let owned = try makeGist(
       id: "a", title: "An owned notebook", content: "Find this thought",
       additionalFiles: ["日本語.md": "Find this other thought"])
@@ -156,7 +281,9 @@ struct NotebookModelTests {
     #expect(target.title == owned.displayName)
     #expect(target.accountID == fixtureAccount.id)
     #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.canDeleteFromGitHub == true)
-    for id in [local.id.uuidString, recovery.id.uuidString, "missing", "unknown", "shared"] {
+    #expect(model.libraryDeletionTarget(for: recovery.id.uuidString)?.localDraft?.id == recovery.id)
+    #expect(model.library.snapshot.notes.first(where: { $0.id == recovery.id.uuidString })?.canDeleteFromGitHub == false)
+    for id in [local.id.uuidString, "missing", "unknown", "shared"] {
       #expect(model.libraryDeletionTarget(for: id) == nil)
       #expect(model.library.snapshot.notes.first(where: { $0.id == id })?.canDeleteFromGitHub != true)
     }
@@ -167,6 +294,9 @@ struct NotebookModelTests {
         #expect(note.canDeleteFromGitHub)
         #expect(model.libraryDeletionTarget(for: note.id)?.id == owned.id)
         #expect(model.libraryDeletionTarget(for: note.id)?.title == owned.displayName)
+      } else if note.isRecovery {
+        #expect(!note.canDeleteFromGitHub)
+        #expect(model.libraryDeletionTarget(for: note.id)?.localDraft?.id == recovery.id)
       } else {
         #expect(!note.canDeleteFromGitHub)
         #expect(model.libraryDeletionTarget(for: note.id) == nil)
@@ -2468,12 +2598,55 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
         updatedAt: gist.updatedAt, createdAt: gist.createdAt,
         isPublic: gist.isPublic, owner: gist.owner, truncated: gist.truncated, history: gist.history,
         commentCount: gist.commentCount)
+    } else if current.gistID == nil {
+      notes.insert(
+        Gist(
+          id: "created-\(draftID)", description: current.description,
+          files: [current.filename: GistFile(
+            filename: current.filename, language: "Markdown", content: current.text,
+            truncated: false, rawURL: nil, size: current.text.utf8.count)],
+          updatedAt: .now, createdAt: .now, isPublic: false,
+          owner: .init(id: 1, login: account.login, avatarURL: nil), truncated: false,
+          history: [], commentCount: nil),
+        at: 0)
+    }
+    let publishedGist = notes.first { $0.id == (current.gistID ?? "created-\(draftID)") }
+    if let publishedGist, var cached {
+      cached.owned.removeAll { $0.id == publishedGist.id }
+      cached.owned.insert(publishedGist, at: 0)
+      cached.details[publishedGist.id] = publishedGist
+      self.cached = cached
     }
     return try await store.acknowledge(
       id: draftID, accountID: accountID, gistID: current.gistID ?? "created-\(draftID)",
-      content: current.text, revision: "synthetic-revision", generation: current.generation)
+      content: current.text, revision: "synthetic-revision", generation: current.generation,
+      publishedGist: publishedGist)
   }
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
+    switch action {
+    case .discardLocalCopy(let id, let generation):
+      try await draftStore().discardLocalCopy(
+        id: id, accountID: accountID, expectedGeneration: generation)
+      return .discardedDraft(id)
+    case .discardCleanMissingCopy(let id, let generation, let shouldDiscard):
+      let store = try draftStore()
+      let draft = try await store.draft(id: id, accountID: accountID)
+      if shouldFail { throw URLError(.notConnectedToInternet) }
+      guard let gistID = draft.gistID else { throw DraftError.ambiguousCreation }
+      do {
+        _ = try await gist(id: gistID, accountID: accountID)
+        return .review(draft)
+      } catch GitHubClientError.missingFile {}
+      guard await shouldDiscard() else { return .review(draft) }
+      if try await store.discardLocalCopy(
+        id: id, accountID: accountID, expectedGeneration: generation, onlyIfClean: true)
+      {
+        return .discardedDraft(id)
+      }
+      return .review(draft)
+    default:
+      break
+    }
     if case .delete(let id) = action {
       deletedIDs.append(id)
       notes.removeAll { $0.id == id }

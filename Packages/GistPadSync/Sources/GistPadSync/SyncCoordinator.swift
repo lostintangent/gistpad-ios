@@ -86,7 +86,7 @@ public actor SyncCoordinator {
                     if sourceEqual(remote, attempted) {
                         draft = try await store.acknowledge(
                             id: id, accountID: accountID, gistID: gistID, content: attempted,
-                            revision: remoteGist.revision, generation: generation
+                            revision: remoteGist.revision, generation: generation, publishedGist: remoteGist
                         )
                         if case .savedToGitHub = draft.state { return draft }
                     } else {
@@ -96,7 +96,7 @@ public actor SyncCoordinator {
                 if sourceEqual(remote, draft.text) {
                     return try await store.acknowledge(
                         id: id, accountID: accountID, gistID: gistID, content: draft.text,
-                        revision: remoteGist.revision, generation: draft.generation
+                        revision: remoteGist.revision, generation: draft.generation, publishedGist: remoteGist
                     )
                 }
                 guard sourceEqual(remote, draft.baseContent) else {
@@ -127,7 +127,7 @@ public actor SyncCoordinator {
                 notBefore = .now.addingTimeInterval(durationSeconds(mutationInterval))
                 return try await store.acknowledge(
                     id: id, accountID: accountID, gistID: gistID, content: acknowledged,
-                    revision: result.revision, generation: draft.generation
+                    revision: result.revision, generation: draft.generation, publishedGist: result
                 )
             } else {
                 try await validatePublication(
@@ -147,7 +147,7 @@ public actor SyncCoordinator {
                 notBefore = .now.addingTimeInterval(durationSeconds(mutationInterval))
                 return try await store.acknowledge(
                     id: id, accountID: accountID, gistID: result.id, content: acknowledged,
-                    revision: result.revision, generation: draft.generation
+                    revision: result.revision, generation: draft.generation, publishedGist: result
                 )
             }
 
@@ -233,7 +233,7 @@ public actor SyncCoordinator {
         guard sourceEqual(content, attempted) else { throw DraftError.remoteDidNotAcknowledge }
         return try await store.acknowledge(
             id: id, accountID: accountID, gistID: gist.id,
-            content: content, revision: gist.revision, generation: generation
+            content: content, revision: gist.revision, generation: generation, publishedGist: gist
         )
     }
 

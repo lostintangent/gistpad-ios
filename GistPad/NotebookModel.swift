@@ -406,10 +406,18 @@ final class NotebookModel {
   }
 
   func libraryDeletionTarget(for rowID: String) -> NotebookDeletionTarget? {
-    guard let account, pendingAccount == nil, !recoverySearchRows.contains(rowID) else {
-      return nil
+    guard let account, pendingAccount == nil else { return nil }
+    let draftID = searchTargets[rowID]?.draftID ?? UUID(uuidString: rowID)
+    if let draftID, let draft = localDrafts.first(where: { $0.id == draftID }),
+      let gistID = draft.gistID, cachedLibrary?.gists.contains(where: { $0.id == gistID }) != true
+    {
+      return .init(
+        id: draft.id.uuidString, accountID: account.id,
+        title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
+        localDraft: draft)
     }
-    let gistID = searchTargets[rowID]?.gistID ?? rowID
+    let gistID = searchTargets[rowID]?.gistID
+      ?? draftID.flatMap { id in localDrafts.first(where: { $0.id == id })?.gistID } ?? rowID
     guard !deletedGistIDs.contains(gistID),
       let gist = cachedLibrary?.owned.first(where: { $0.id == gistID })
     else { return nil }
@@ -519,7 +527,10 @@ final class NotebookModel {
         .init(
           id: draft.id.uuidString,
           title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
-          updatedAt: .now, isSecret: true,
+          updatedAt: draft.updatedAt,
+          isRecovery: draft.gistID != nil
+            && cachedLibrary?.gists.contains(where: { $0.id == draft.gistID }) != true,
+          isSecret: true,
           isDailyNote: draft.description == GistConventions.dailyNotesDescription),
         at: 0)
     }
@@ -723,6 +734,32 @@ final class NotebookModel {
       library.replaceSnapshot(Self.librarySnapshot(
         owned: owned, starred: starred, account: refreshed, excluding: deletedGistIDs))
       library.loadState = .ready
+      let remoteIDs = Set((ownedGists + starredGists).map(\.id))
+      let local = try await provider.localState(accountID: account.id)
+      for draft in local.drafts where draft.gistID.map({ !remoteIDs.contains($0) }) == true {
+        guard request == libraryRequest, self.account?.id == account.id else { return }
+        guard draft.attemptedGeneration == nil,
+          draft.baseContent.map({ $0.utf8.elementsEqual(draft.text.utf8) }) == true,
+          loadedDocument?.draft?.id != draft.id,
+          loadedDocument?.selection.gistID != draft.gistID,
+          openingDocument == nil, !isDraftSelected(draft.id)
+        else { continue }
+        do {
+          if case .discardedDraft(let id) = try await provider.perform(
+            .discardCleanMissingCopy(
+              draftID: draft.id, generation: draft.generation,
+              shouldDiscard: { [weak self] in
+                await self?.canAutomaticallyDiscard(draft, accountID: account.id, request: request)
+                  == true
+              }),
+            accountID: account.id)
+          {
+            clearDiscardedDraft(id, accountID: account.id)
+          }
+        } catch DraftError.staleGeneration {
+          continue
+        }
+      }
       try await reloadLocalState(accountID: account.id)
       guard request == libraryRequest, self.account?.id == account.id else { return }
       let confirmed = deletionsToConfirm.subtracting(Set((ownedGists + starredGists).map(\.id)))
@@ -983,6 +1020,7 @@ final class NotebookModel {
           isOwned: match.isRecovery || (match.gistID.map { ownedGistIDs.contains($0) } ?? true),
           canDeleteFromGitHub: !match.isRecovery
             && (match.gistID.map { ownedGistIDs.contains($0) } ?? false),
+          isRecovery: match.isRecovery,
           isSecret: match.isSecret, isPinned: match.isPinned, isStarred: match.isStarred,
           isArchived: match.isArchived, isDailyNote: match.isDailyNote, tagIDs: match.tagIDs,
           filename: match.filename, fileCount: gist?.truncated == true ? nil : gist?.files.count,
@@ -1167,7 +1205,7 @@ final class NotebookModel {
       LibraryNote(
         id: draft.id.uuidString,
         title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
-        updatedAt: local.library?.cachedAt ?? .now,
+        updatedAt: draft.updatedAt, isRecovery: draft.gistID != nil,
         isSecret: true, isDailyNote: draft.description == GistConventions.dailyNotesDescription,
         excerpt: Self.libraryExcerpt(draft.text, title: draft.description))
     }
@@ -1411,19 +1449,51 @@ final class NotebookModel {
     case .review:
       break
     case .discardedDraft(let id):
-      if loadedDocument?.draft?.id == id {
-        loadedDocument = nil
-        openingDocument = nil
-        failedOpen = nil
-        library.selectedNoteID = nil
-      }
-      if try selections.selection(accountID: account.id)?.draftID == id {
-        selections.clear(accountID: account.id)
-      }
+      clearDiscardedDraft(id, accountID: account.id)
     }
     try await reloadLocalState(accountID: account.id)
     await restoreSelectionIfNeeded()
     return result
+  }
+
+  private func clearDiscardedDraft(_ id: UUID, accountID: UUID) {
+    let discarded = localDrafts.first { $0.id == id }
+    if loadedDocument?.draft?.id == id {
+      loadedDocument = nil
+      openingDocument = nil
+      failedOpen = nil
+      library.selectedNoteID = nil
+    }
+
+    do {
+      if let selection = try selections.selection(accountID: accountID),
+        selection.draftID == id
+          || (discarded?.gistID != nil && selection.gistID == discarded?.gistID
+            && selection.filename == discarded?.filename)
+      {
+        selections.clear(accountID: accountID)
+      }
+    } catch {
+      report(error, operation: "clear-discarded-selection")
+    }
+    localDrafts.removeAll { $0.id == id }
+    library.snapshot.notes.removeAll { $0.id == id.uuidString }
+    searchRequest = UUID()
+    if case .results(let notes, let coverage) = library.searchState {
+      library.searchState = .results(
+        notes: notes.filter { searchTargets[$0.id]?.draftID != id && $0.id != id.uuidString },
+        coverage: coverage)
+    }
+    searchTargets = searchTargets.filter { $0.value.draftID != id }
+  }
+
+  private func canAutomaticallyDiscard(
+    _ draft: DraftSnapshot, accountID: UUID, request: UUID
+  ) -> Bool {
+    account?.id == accountID && pendingAccount == nil && libraryRequest == request
+      && loadedDocument?.draft?.id != draft.id
+      && loadedDocument?.selection.gistID != draft.gistID
+      && openingDocument == nil && !isDraftSelected(draft.id)
   }
 
   private func recordDeletedGist(_ id: String, accountID: UUID) {
@@ -1564,6 +1634,9 @@ final class NotebookModel {
     if account?.id == accountID {
       localDrafts.removeAll { $0.id == saved.id }
       localDrafts.append(saved)
+      if let index = library.snapshot.notes.firstIndex(where: { $0.id == saved.id.uuidString }) {
+        library.snapshot.notes[index].updatedAt = saved.updatedAt
+      }
       updateLibraryExcerpt(for: saved)
       updateToday()
       await search()
@@ -1579,9 +1652,32 @@ final class NotebookModel {
     guard account?.id == accountID || reason == .manual, pendingAccount == nil else {
       throw AccountError.accountChanged
     }
-    return try await provider.publish(
+    let saved = try await provider.publish(
       draftID: draftID, accountID: accountID, reason: reason,
       expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
+    if account?.id == accountID {
+      libraryRequest = UUID()
+      isRefreshingRemote = false
+      if library.loadState == .loading { library.loadState = .ready }
+      try await reloadLocalState(accountID: accountID)
+      if loadedDocument?.draft?.id == saved.id,
+        let gist = cachedLibrary?.gists.first(where: { $0.id == saved.gistID })
+      {
+        let wasSelected = library.selectedNoteID == loadedDocument?.rowID
+        loadedDocument?.gist = gist
+        loadedDocument?.draft = saved
+        loadedDocument?.chrome = chrome(gist: gist, draft: saved)
+        if loadedDocument?.libraryRowID == saved.id.uuidString {
+          loadedDocument?.libraryRowID = nil
+        }
+        if wasSelected {
+          library.selectedNoteID = loadedDocument?.rowID
+          try remember(NotebookSelection(
+            gistID: saved.gistID, filename: saved.filename, draftID: saved.id))
+        }
+      }
+    }
+    return saved
   }
 
   static func librarySnapshot(
@@ -1610,7 +1706,9 @@ final class NotebookModel {
           commentCount: gist.commentCount
         )
       }.sorted {
-        if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+        if $0.updatedAt != $1.updatedAt {
+          return ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast)
+        }
         return $0.id < $1.id
       },
       tags: preferences.tagDefinitions.map { tag in

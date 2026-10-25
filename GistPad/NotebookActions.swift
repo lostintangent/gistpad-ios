@@ -15,6 +15,9 @@ enum NotebookAction: Sendable {
   case inspectRemote(draftID: UUID, generation: UInt64)
   case confirmNewCreation(draftID: UUID, generation: UInt64)
   case discardUncertainCreation(draftID: UUID, generation: UInt64)
+  case discardLocalCopy(draftID: UUID, generation: UInt64)
+  case discardCleanMissingCopy(
+    draftID: UUID, generation: UInt64, shouldDiscard: @Sendable () async -> Bool)
   case refreshConflict(NotebookReviewContext)
   case resolveConflict(NotebookReviewContext, text: String, generation: UInt64)
 }
@@ -112,6 +115,30 @@ extension LiveNotebookProvider {
         id: id, accountID: accountID, expectedGeneration: generation)
       return .discardedDraft(id)
     }
+    switch action {
+    case .discardLocalCopy(let id, let generation):
+      try await drafts.discardLocalCopy(
+        id: id, accountID: accountID, expectedGeneration: generation)
+      return .discardedDraft(id)
+    case .discardCleanMissingCopy(let id, let generation, let shouldDiscard):
+      let draft = try await drafts.draft(id: id, accountID: accountID)
+      guard let gistID = draft.gistID else { throw DraftError.ambiguousCreation }
+      do {
+        let client = await client(accountID: accountID)
+        _ = try await client.gist(id: gistID)
+        return .review(draft)
+      } catch GitHubClientError.http(status: 404, retryAfter: _) {
+        guard await shouldDiscard() else { return .review(draft) }
+        if try await drafts.discardLocalCopy(
+          id: id, accountID: accountID, expectedGeneration: generation, onlyIfClean: true)
+        {
+          return .discardedDraft(id)
+        }
+        return .review(try await drafts.draft(id: id, accountID: accountID))
+      }
+    default:
+      break
+    }
     if case .renameLocal(let id, let title) = action {
       guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         throw NotebookActionError.invalidTitle
@@ -185,7 +212,8 @@ extension LiveNotebookProvider {
       .renameFile(let gistID, _, _), .addFile(let gistID, _), .delete(let gistID):
       id = gistID
     case .star, .preference, .renameLocal, .refreshConflict, .resolveConflict, .inspectRemote,
-      .signOut, .confirmNewCreation, .discardUncertainCreation:
+      .signOut, .confirmNewCreation, .discardUncertainCreation, .discardLocalCopy,
+      .discardCleanMissingCopy:
       preconditionFailure("Handled before the owner-only action boundary.")
     }
     let gist = try await client.gist(id: id)
@@ -269,7 +297,8 @@ extension LiveNotebookProvider {
         throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: id)
       }
     case .star, .preference, .renameLocal, .refreshConflict, .resolveConflict, .inspectRemote,
-      .signOut, .confirmNewCreation, .discardUncertainCreation:
+      .signOut, .confirmNewCreation, .discardUncertainCreation, .discardLocalCopy,
+      .discardCleanMissingCopy:
       preconditionFailure("Handled before the owner-only action boundary.")
     }
 

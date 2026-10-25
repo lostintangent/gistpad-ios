@@ -1,4 +1,5 @@
 #if DEBUG
+import Foundation
 import GistPadSync
 import GistPadPlatform
 import SwiftUI
@@ -18,6 +19,8 @@ private actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoPr
   private var cache: CachedLibrarySnapshot?
   private var store: DraftStore?
   private var deleted: Set<String> = []
+  private var published: [Gist] = []
+  private var seededCopies = false
 
   func cachedAccount() -> NotebookAccount? { account }
   func signIn() -> NotebookAccount { account }
@@ -65,15 +68,36 @@ private actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoPr
   func publish(
     draftID: UUID, accountID: UUID, reason: PublishReason, expectedGeneration: UInt64?,
     shouldPublish: @escaping @Sendable () async -> Bool
-  ) throws -> DraftSnapshot {
-    throw CaptureError.unsupported
+  ) async throws -> DraftSnapshot {
+    let store = try draftStore()
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [LibraryPublicationCaptureProtocol.self]
+    let client = GitHubClient(session: URLSession(configuration: configuration)) { "synthetic" }
+    let saved = try await SyncCoordinator(client: client, store: store, mutationInterval: .zero)
+      .publish(
+        id: draftID, accountID: accountID, reason: reason,
+        expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
+    cache = try await store.cachedLibrary(accountID: accountID)
+    if let id = saved.gistID, let gist = cache?.details[id] { published = [gist] }
+    return saved
   }
 
   func localState(accountID: UUID) async throws -> NotebookLocalState {
-    .init(library: cache, drafts: try await store?.drafts(accountID: accountID) ?? [])
+    if ProcessInfo.processInfo.arguments.contains("--capture-local-copies"), !seededCopies {
+      seededCopies = true
+      let store = try draftStore()
+      let draft = try await store.openDraft(
+        accountID: accountID, githubUserID: 1, gistID: "missing", filename: "README.md",
+        description: "A local copy", content: "Published text", revision: "one")
+      _ = try await store.persist(
+        id: draft.id, accountID: accountID, text: "An unpublished thought to keep", generation: 1)
+    }
+    return .init(library: cache, drafts: try await store?.drafts(accountID: accountID) ?? [])
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) async throws {
+    try await draftStore().cacheLibrary(
+      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id)
     cache = .init(
       accountID: account.id, owned: owned, starred: starred, preferences: account.preferences)
   }
@@ -93,6 +117,23 @@ private actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoPr
 
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
     guard accountID == account.id else { throw AccountError.accountChanged }
+    if case .discardLocalCopy(let id, let generation) = action {
+      try await draftStore().discardLocalCopy(
+        id: id, accountID: accountID, expectedGeneration: generation)
+      return .discardedDraft(id)
+    }
+    if case .discardCleanMissingCopy(let id, let generation, let shouldDiscard) = action {
+      let store = try draftStore()
+      let draft = try await store.draft(id: id, accountID: accountID)
+      guard try fixtureGists().allSatisfy({ $0.id != draft.gistID }) else { return .review(draft) }
+      guard await shouldDiscard() else { return .review(draft) }
+      if try await store.discardLocalCopy(
+        id: id, accountID: accountID, expectedGeneration: generation, onlyIfClean: true)
+      {
+        return .discardedDraft(id)
+      }
+      return .review(draft)
+    }
     guard case .delete(let id) = action, id != "shared",
       try fixtureGists().contains(where: { $0.id == id })
     else { throw CaptureError.unsupported }
@@ -140,11 +181,62 @@ private actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoPr
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     return try decoder.decode([Gist].self, from: JSONSerialization.data(withJSONObject: payload))
+      + published.filter { !deleted.contains($0.id) }
   }
 
   private enum CaptureError: LocalizedError {
     case unsupported
     var errorDescription: String? { "This synthetic fixture does not perform that account action." }
   }
+}
+
+private final class LibraryPublicationCaptureProtocol: URLProtocol {
+  override class func canInit(with request: URLRequest) -> Bool { true }
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+  override func startLoading() {
+    do {
+      guard request.httpMethod == "POST", let url = request.url, url.path == "/gists" else {
+        throw URLError(.unsupportedURL)
+      }
+      var body = request.httpBody ?? Data()
+      if body.isEmpty, let stream = request.httpBodyStream {
+        stream.open()
+        defer { stream.close() }
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+          let count = stream.read(&buffer, maxLength: buffer.count)
+          guard count >= 0 else { throw stream.streamError ?? URLError(.cannotDecodeRawData) }
+          if count == 0 { break }
+          body.append(contentsOf: buffer.prefix(count))
+        }
+      }
+      guard let creation = try JSONSerialization.jsonObject(with: body) as? [String: Any],
+        let files = creation["files"] as? [String: [String: Any]]
+      else { throw URLError(.cannotDecodeRawData) }
+      var responseFiles = files
+      for (filename, file) in files {
+        var response = file
+        response["filename"] = filename
+        response["language"] = "Markdown"
+        responseFiles[filename] = response
+      }
+      let payload: [String: Any] = [
+        "id": "newcapture", "description": creation["description"] ?? "",
+        "public": false, "files": responseFiles,
+        "updated_at": "2026-10-25T21:00:00Z", "created_at": "2026-10-25T21:00:00Z",
+        "owner": ["id": 1, "login": "synthetic-notebook"],
+        "history": [["version": "published"]],
+      ]
+      guard let response = HTTPURLResponse(
+        url: url, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)
+      else { throw URLError(.badServerResponse) }
+      client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+      client?.urlProtocol(self, didLoad: try JSONSerialization.data(withJSONObject: payload))
+      client?.urlProtocolDidFinishLoading(self)
+    } catch {
+      client?.urlProtocol(self, didFailWithError: error)
+    }
+  }
+  override func stopLoading() {}
 }
 #endif

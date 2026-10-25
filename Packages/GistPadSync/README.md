@@ -85,6 +85,10 @@ After an acknowledged remote rename, `updateDraftMetadata(id:accountID:expectedF
 
 After the user confirms deletion and GitHub acknowledges it, `removeDraftsForDeletedGist(gistID:accountID:)` permanently removes every draft for that account/gist, including unsynced text, publication attempts, recovery history, image-upload bytes and command receipts. It also removes the gist and its content from the durable library cache. Other accounts and gists remain unchanged. No recovery copy is retained after this explicit deletion.
 
+`discardLocalCopy` removes one explicitly confirmed recovery draft and its linked history, images and command receipts without a GitHub mutation. Its generation/account checks reject stale confirmations. The `onlyIfClean` form additionally requires byte-identical text/base, no unresolved publication attempt and no uninserted image. The host uses it only after a successful full list and an authoritative gist 404. Draft edit timestamps change only with actual local text or metadata edits, not reads, publishing or refreshes. The optional stored timestamp migrates existing drafts without fabricating a historical date.
+
+An acknowledged publication updates the cached owned gist, details and file content in the same store commit as its draft baseline. This makes newly created gists immediately available to Library actions even when a subsequent metadata GET is offline.
+
 `discardBlankDraft(id:accountID:expectedGeneration:)` quietly removes an unbound, locally saved draft with an empty description and whitespace-only source. It also accepts an untouched, generation-zero default daily date heading with no remote-file baseline, including a new day bound to an existing daily gist. Typed daily content, custom templates and published files are not blank. Neither case may have publication attempts, recovery history or photo records. The store rechecks the generation and commits only the local draft deletion before returning `true`. The host must finish pending local edits and exclude its current note before requesting cleanup. It must not automatically publish a discardable blank.
 
 ## Validation
