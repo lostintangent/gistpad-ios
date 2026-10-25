@@ -23,7 +23,7 @@ struct NotebookCommentsInspector: View {
         selectedRootRevision: threadRevealRevision,
         linkedRootIDs: linkedRootIDs, isRefreshing: conversation.isRefreshing,
         failure: conversation.loadFailure?.interfaceDescription ?? presentationProblem, actions: actions)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .safeAreaBar(edge: .bottom, spacing: 0) {
           composer
         }
         .navigationTitle("Comments")

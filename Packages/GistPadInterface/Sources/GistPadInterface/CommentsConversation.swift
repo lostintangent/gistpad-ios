@@ -74,14 +74,23 @@ public struct CommentsConversation: View {
                             .padding(.horizontal, 20)
                             .padding(.vertical, threadSpacing / 2)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                thread.id == selectedRootID
-                                    ? InterfaceTheme.neutralSelection : Color.clear)
+                            .background {
+                                if thread.id == selectedRootID {
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(InterfaceTheme.neutralSelection)
+                                        .padding(.horizontal, 8)
+                                }
+                            }
+                            .accessibilityElement(children: .contain)
+                            .accessibilityAddTraits(
+                                thread.id == selectedRootID ? .isSelected : [])
+                            .accessibilityIdentifier("comment-thread-\(thread.id)")
                             .id(thread.id)
                     }
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
             .refreshable { await actions.refresh() }
             .overlay { emptyState }
             .onChange(of: revealedRoot, initial: true) { _, root in
@@ -256,11 +265,16 @@ private struct CommentThreadContent: View {
                 Button {
                     reply(comment.id)
                 } label: {
-                    Text("Reply", bundle: .module)
+                    Label {
+                        Text("Reply", bundle: .module)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }
                         .frame(minHeight: 44)
                 }
-                .font(.subheadline)
-                .buttonStyle(.borderless)
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.bordered)
                 .disabled(!actions.areActionsEnabled)
                 .accessibilityLabel(Text("Reply to \(login)", bundle: .module))
                 .accessibilityIdentifier("comment-reply-\(comment.id)")
@@ -271,6 +285,16 @@ private struct CommentThreadContent: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 8) {
             CommentAvatar(author: comment.user)
+                .overlay(alignment: .leading) {
+                    if parentLogin == nil, selectedRootID == comment.id {
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(InterfaceTheme.accent)
+                            .frame(width: 3, height: 20)
+                            .offset(x: -8)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
             VStack(alignment: .leading, spacing: 3) {
                 Text(verbatim: login)
                     .font(.subheadline.weight(.semibold))
@@ -363,15 +387,20 @@ private struct CommentThreadContent: View {
                     Button {
                         showsFullQuote.toggle()
                     } label: {
-                        Text(
-                            showsFullQuote
-                                ? String(localized: "Show Less", bundle: .module)
-                                : String(localized: "Show Full Quote", bundle: .module)
-                        )
+                        Label {
+                            Text(
+                                showsFullQuote
+                                    ? String(localized: "Show Less", bundle: .module)
+                                    : String(localized: "Show Full Quote", bundle: .module)
+                            )
+                            .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: showsFullQuote ? "chevron.up" : "chevron.down")
+                        }
                         .frame(minHeight: 44)
                     }
-                    .font(.subheadline)
-                    .buttonStyle(.borderless)
+                    .font(.subheadline.weight(.semibold))
+                    .buttonStyle(.bordered)
                 }
                 if let linkedRootIDs {
                     if !linkedRootIDs.contains(comment.id) {

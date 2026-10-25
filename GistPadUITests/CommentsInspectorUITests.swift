@@ -290,6 +290,11 @@ final class CommentsInspectorUITests: XCTestCase {
           let name = "\(wide ? "open" : "closed")-\(appearance)-\(accessibility ? "AX3" : "Large")-\(increased ? "increased" : "normal")"
           record(app, name: "comments-library-\(name)")
           try openComments(in: app)
+          let passage = app.buttons["comment-passage-300"]
+          try wait("the verified passage action") { passage.isHittable }
+          passage.tap()
+          let selectedThread = app.descendants(matching: .any)["comment-thread-300"].firstMatch
+          try wait("the selected native thread") { selectedThread.isSelected }
           XCTAssertFalse(app.keyboards.firstMatch.exists)
           XCTAssertTrue(app.buttons["note-comments"].isSelected)
           if wide {
