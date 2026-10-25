@@ -34,19 +34,18 @@ private struct LibrarySearchModifier: ViewModifier {
     func body(content: Content) -> some View {
         searchableContent(content)
             .searchToolbarBehavior(isSidebar ? .minimize : .automatic)
-            .toolbar(removing: isSidebar || presentation.wrappedValue ? nil : .search)
             .environment(\.librarySearchManagedByContainer, true)
             .environment(\.librarySearchPresentation, presentation)
     }
 
     @ViewBuilder
     private func searchableContent(_ content: Content) -> some View {
-        if model.loadState == .signedOut {
+        if model.loadState == .signedOut || !isSidebar {
             content
         } else {
             content.searchable(
                 text: $model.query, isPresented: presentation,
-                placement: isSidebar ? .sidebar : .navigationBarDrawer(displayMode: .automatic),
+                placement: .sidebar,
                 prompt: Text("Search notes", bundle: .module)
             )
         }
@@ -235,6 +234,7 @@ public struct LibraryView: View {
     @State private var tagQuery = ""
     @State private var isPullRefreshing = false
     @State private var searchPresented = false
+    @State private var windowContentWidth: CGFloat?
     @ScaledMetric(relativeTo: .body) private var headingTopSpacing = 32
     @ScaledMetric(relativeTo: .body) private var headingBottomSpacing = 12
     @ScaledMetric(relativeTo: .body) private var headingCountSpacing = 4
@@ -265,36 +265,51 @@ public struct LibraryView: View {
     #endif
 
     public var body: some View {
-        navigationList
-            .navigationTitle(navigationTitle)
-            .navigationSubtitle(navigationSubtitle)
-            .toolbarTitleDisplayMode(.inline)
-            .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 400)
-            .refreshable {
-                isPullRefreshing = true
-                defer { isPullRefreshing = false }
-                await actions.refresh()
-            }
-            .toolbar { libraryToolbar }
-            .sheet(isPresented: $showingTags) { tagFilters }
-            .scrollEdgeEffectStyle(.soft, for: .all)
+        GeometryReader { geometry in
+            navigationList
+                .navigationTitle(navigationTitle)
+                .navigationSubtitle(navigationSubtitle)
+                .toolbarTitleDisplayMode(.inline)
+                .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 400)
+                .refreshable {
+                    isPullRefreshing = true
+                    defer { isPullRefreshing = false }
+                    await actions.refresh()
+                }
+                .toolbar { libraryToolbar }
+                .safeAreaBar(edge: .bottom, spacing: 0) {
+                    if !isSidebar, model.loadState != .signedOut {
+                        LibrarySearchField(
+                            text: $model.query,
+                            isPresented: containerSearchPresentation ?? $searchPresented,
+                            windowContentWidth: $windowContentWidth
+                        )
+                        .frame(height: dynamicTypeSize.isAccessibilitySize ? nil : 56)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 20)
+                        .ignoresSafeArea(
+                            .container, edges: hasSideToolbar(in: geometry) ? .bottom : [])
+                    }
+                }
+                .sheet(isPresented: $showingTags) { tagFilters }
+                .scrollEdgeEffectStyle(.soft, for: .all)
+        }
     }
 
     @ViewBuilder
     private var navigationList: some View {
         if model.loadState == .signedOut {
             signedOutInvitation
-        } else if searchManagedByContainer {
+        } else if searchManagedByContainer || !isSidebar {
             adaptiveList
                 .toolbarTitleMenu { collectionPicker }
         } else {
             adaptiveList
                 .searchable(
                     text: $model.query, isPresented: $searchPresented,
-                    placement: isSidebar ? .sidebar : .navigationBarDrawer(displayMode: .automatic),
+                    placement: .sidebar,
                     prompt: Text("Search notes", bundle: .module))
                 .searchToolbarBehavior(isSidebar ? .minimize : .automatic)
-                .toolbar(removing: isSidebar || searchPresented ? nil : .search)
                 .toolbarTitleMenu { collectionPicker }
         }
     }
@@ -312,6 +327,13 @@ public struct LibraryView: View {
     }
 
     private var isSidebar: Bool { sidebarOverride ?? (horizontalSizeClass == .regular) }
+
+    private func hasSideToolbar(in geometry: GeometryProxy) -> Bool {
+        guard let windowContentWidth else { return false }
+        let availableWidth = geometry.size.width
+            - geometry.safeAreaInsets.leading - geometry.safeAreaInsets.trailing
+        return windowContentWidth - availableWidth > 1
+    }
 
     private var navigationTitle: String {
         if model.loadState == .signedOut { return "" }
@@ -835,6 +857,9 @@ public struct LibraryView: View {
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
         if model.loadState != .signedOut {
+            if isSidebar {
+                DefaultToolbarItem(kind: .search, placement: .bottomBar)
+            }
             if !(containerSearchPresentation?.wrappedValue ?? searchPresented) {
                 if isGitHubStatusVisible, case .problem = remoteStatus {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
@@ -850,7 +875,15 @@ public struct LibraryView: View {
                             }
                         }
                     }
+                    .axisBehavior(.verticalPreferred)
                     .sharedBackgroundVisibility(.hidden)
+                }
+                if !isSidebar {
+                    ToolbarSpacer(.flexible, placement: .bottomBar)
+                    ToolbarItem(placement: .bottomBar) {
+                        tagFilterButton
+                            .labelStyle(.iconOnly)
+                    }
                 }
             }
             if !isSidebar {
@@ -859,23 +892,9 @@ public struct LibraryView: View {
                     if let account = actions.account {
                         settingsButton(account)
                     }
-                    if !(containerSearchPresentation?.wrappedValue ?? searchPresented) {
-                        tagFilterButton
-                            .labelStyle(.iconOnly)
-                        Button(String(localized: "Search", bundle: .module), systemImage: "magnifyingglass") {
-                            if let containerSearchPresentation {
-                                containerSearchPresentation.wrappedValue = true
-                            } else {
-                                searchPresented = true
-                            }
-                        }
-                        .tint(.primary)
-                        .accessibilityIdentifier("library-search")
-                    }
                 }
             }
             if isSidebar {
-                DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 ToolbarItem(placement: .secondaryAction) {
                     tagFilterButton
                 }

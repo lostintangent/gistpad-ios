@@ -301,6 +301,9 @@ struct InterfaceCaptureWorkspace: View {
                         }
                     }
                     .libraryCreateAction(
+            .toolbarVerticalBehavior(
+                ProcessInfo.processInfo.arguments.contains("--capture-horizontal-toolbar")
+                    ? .disabled : .automatic)
                         isVisible: horizontalSizeClass == .regular && library.loadState != .signedOut,
                         action: libraryActions.create)
                 }

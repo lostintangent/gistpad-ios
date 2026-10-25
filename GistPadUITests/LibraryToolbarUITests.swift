@@ -2,26 +2,26 @@ import XCTest
 
 final class LibraryToolbarUITests: XCTestCase {
   @MainActor
-  func testSearchStillOpensTheNativeFieldWhileCheckingGitHub() async throws {
+  func testBottomSearchStaysVisibleAndStableWhileCheckingGitHub() async throws {
     for appearance in ["light", "dark"] {
       let idle = launch(state: "populated", appearance: appearance)
-      let idleSearch = idle.buttons["Search"]
+      let idleSearch = idle.searchFields.firstMatch
       try await waitUntil { idleSearch.isHittable }
       let originalFrame = idleSearch.frame
       idle.terminate()
       let app = launch(state: "status-busy", appearance: appearance)
       defer { app.terminate() }
-      let search = app.buttons["Search"]
+      let search = app.searchFields.firstMatch
       try await waitUntil { search.isHittable }
       try await Task.sleep(for: .milliseconds(600))
-      XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "Search")).count, 1)
+      XCTAssertFalse(app.buttons["Search"].exists)
+      XCTAssertFalse(app.buttons["library-search"].exists)
       XCTAssertEqual(search.frame, originalFrame, "Background checks never move or resize Search")
       XCTAssertFalse(app.progressIndicators["github-status-checking"].exists)
       XCTAssertFalse(app.buttons["github-status-attention"].exists)
       assertTarget(search, in: app)
       record(app, name: "home-search-checking-\(appearance)")
       search.tap()
-      record(app, name: "home-search-immediately-after-checking-tap-\(appearance)")
       try await verifyNativeSearchAcceptsTyping(in: app)
       record(app, name: "home-search-active-while-checking-\(appearance)")
     }
@@ -32,10 +32,10 @@ final class LibraryToolbarUITests: XCTestCase {
     for appearance in ["light", "dark"] {
       let app = launch(state: "status-error", appearance: appearance)
       defer { app.terminate() }
-      let search = app.buttons["Search"]
+      let search = app.searchFields.firstMatch
       let attention = app.buttons["github-status-attention"]
       try await waitUntil { search.isHittable && attention.isHittable }
-      XCTAssertTrue((search.value as? String ?? "").isEmpty)
+      XCTAssertEqual(search.value as? String, search.placeholderValue)
       XCTAssertFalse(search.frame.intersects(attention.frame))
       assertTarget(search, in: app)
       assertTarget(attention, in: app)
@@ -47,7 +47,7 @@ final class LibraryToolbarUITests: XCTestCase {
       try await waitUntil { retry.exists && !retry.isEnabled }
       try await waitUntil { !retry.exists && !attention.exists }
       try await waitUntil { search.isHittable }
-      XCTAssertTrue((search.value as? String ?? "").isEmpty)
+      XCTAssertEqual(search.value as? String, search.placeholderValue)
       search.tap()
       try await verifyNativeSearchAcceptsTyping(in: app)
       record(app, name: "home-search-after-recovery-\(appearance)")
@@ -89,6 +89,148 @@ final class LibraryToolbarUITests: XCTestCase {
   }
 
   @MainActor
+  func testUnfoldedSearchKeepsNativeClearAndSubmission() async throws {
+    let app = launch(state: "populated", appearance: "light")
+    defer { app.terminate() }
+    let field = app.searchFields.firstMatch
+    try await waitUntil { field.isHittable }
+    field.tap()
+    try await verifyNativeSearchAcceptsTyping(in: app)
+    let clear = field.buttons["Clear text"]
+    try await waitUntil { clear.isHittable }
+    clear.tap()
+    try await waitUntil { (field.value as? String) == field.placeholderValue }
+    XCTAssertTrue(app.keyboards.firstMatch.exists)
+    field.typeText("notebook\n")
+    try await waitUntil { !app.keyboards.firstMatch.exists }
+    XCTAssertEqual(field.value as? String, "notebook")
+    field.tap()
+    try await waitUntil { app.keyboards.firstMatch.exists }
+    record(app, name: "home-open-native-active-field")
+  }
+
+  @MainActor
+  func testFoldedBottomSearchRidesAboveKeyboardAndCancelsResults() async throws {
+    for appearance in ["light", "dark"] {
+      let app = launch(state: "populated", appearance: appearance)
+      defer { app.terminate() }
+      let field = app.searchFields.firstMatch
+      try await waitUntil { field.isHittable }
+      assertBottomSearch(field, in: app)
+      field.tap()
+      record(app, name: "home-bottom-search-after-tap-\(appearance)")
+      try await verifyNativeSearchAcceptsTyping(in: app)
+      let keyboard = app.keyboards.firstMatch
+      XCTAssertLessThanOrEqual(field.frame.maxY, keyboard.frame.minY + 1)
+      XCTAssertLessThan(keyboard.frame.minY - field.frame.maxY, 100)
+      let cancel = app.buttons["Cancel"]
+      XCTAssertTrue(cancel.isHittable)
+      let matching = app.descendants(matching: .any)["library-note-shape"].firstMatch
+      let excluded = app.descendants(matching: .any)["library-note-weekend"].firstMatch
+      try await waitUntil { matching.exists && !excluded.exists }
+      record(app, name: "home-folded-bottom-search-keyboard-\(appearance)")
+      cancel.tap()
+      try await waitUntil {
+        !keyboard.exists && (field.value as? String == field.placeholderValue)
+      }
+      assertBottomSearch(field, in: app)
+      let tags = app.buttons["library-filter-tags"]
+      try await waitUntil { tags.isHittable }
+      XCTAssertFalse(field.frame.intersects(tags.frame))
+      record(app, name: "home-folded-bottom-search-cancelled-\(appearance)")
+      let last = app.descendants(matching: .any)["library-note-words"].firstMatch
+      app.collectionViews.firstMatch.swipeUp()
+      app.collectionViews.firstMatch.swipeUp()
+      try await waitUntil { last.isHittable }
+      XCTAssertLessThanOrEqual(last.frame.maxY, field.frame.minY)
+      record(app, name: "home-last-row-clears-bottom-search-\(appearance)")
+      field.tap()
+      try await verifyNativeSearchAcceptsTyping(in: app)
+      let clear = field.buttons["Clear text"]
+      try await waitUntil { clear.isHittable }
+      clear.tap()
+      try await waitUntil { (field.value as? String) == field.placeholderValue }
+      XCTAssertTrue(keyboard.exists)
+      field.typeText("notebook\n")
+      try await waitUntil { !keyboard.exists }
+      XCTAssertEqual(field.value as? String, "notebook")
+      XCTAssertTrue(tags.isHittable)
+      record(app, name: "home-bottom-search-submitted-\(appearance)")
+    }
+  }
+
+  @MainActor
+  func testBottomSearchRetainsQueryAcrossUnfoldAndRefold() async throws {
+    let app = launch(state: "populated", appearance: "light")
+    defer { app.terminate() }
+    let field = app.searchFields.firstMatch
+    try await waitUntil { field.isHittable }
+    field.tap()
+    try await verifyNativeSearchAcceptsTyping(in: app)
+    field.typeText("\n")
+    try await waitUntil { !app.keyboards.firstMatch.exists }
+    record(app, name: "home-query-before-unfold")
+    try await waitForWidth(951, in: app)
+    try await assertRetainedQuery(in: app)
+    record(app, name: "home-query-retained-open")
+    try await waitForWidth(466, in: app)
+    try await assertRetainedQuery(in: app)
+    assertBottomSearch(app.searchFields.firstMatch, in: app)
+    record(app, name: "home-query-retained-refolded")
+  }
+
+  @MainActor
+  func testCompactHorizontalToolbarKeepsBottomSearchSeparateAndAboveKeyboard() async throws {
+    for appearance in ["light", "dark"] {
+      let app = launch(state: "populated", appearance: appearance, horizontalToolbar: true)
+      defer { app.terminate() }
+      let field = app.searchFields.firstMatch
+      try await waitUntil { field.isHittable }
+      XCTAssertFalse(app.buttons["Search"].exists)
+      XCTAssertFalse(app.buttons["library-search"].exists)
+      assertTarget(field, in: app)
+      let tags = app.buttons["library-filter-tags"]
+      XCTAssertTrue(tags.isHittable)
+      XCTAssertFalse(field.frame.intersects(tags.frame))
+      XCTAssertLessThan(field.frame.maxY, tags.frame.minY)
+      XCTAssertGreaterThan(field.frame.minY, app.windows.firstMatch.frame.midY)
+      record(app, name: "home-compact-horizontal-toolbar-\(appearance)")
+      field.tap()
+      try await verifyNativeSearchAcceptsTyping(in: app)
+      XCTAssertLessThanOrEqual(field.frame.maxY, app.keyboards.firstMatch.frame.minY + 1)
+      record(app, name: "home-compact-horizontal-toolbar-keyboard-\(appearance)")
+      app.buttons["Cancel"].tap()
+      try await waitUntil { !app.keyboards.firstMatch.exists }
+      assertTarget(field, in: app)
+    }
+  }
+
+  @MainActor
+  private func assertRetainedQuery(in app: XCUIApplication) async throws {
+    try await waitUntil {
+      let field = app.searchFields.firstMatch
+      return field.isHittable && (field.value as? String) == "notebook"
+    }
+    XCTAssertEqual(app.searchFields.count, 1)
+    XCTAssertFalse(app.buttons["Search"].exists)
+    XCTAssertFalse(app.buttons["library-search"].exists)
+    XCTAssertFalse(app.keyboards.firstMatch.exists)
+    XCTAssertTrue(app.descendants(matching: .any)["library-note-shape"].firstMatch.exists)
+    XCTAssertFalse(app.descendants(matching: .any)["library-note-weekend"].firstMatch.exists)
+  }
+
+  @MainActor
+  private func waitForWidth(_ width: CGFloat, in app: XCUIApplication) async throws {
+    let deadline = ContinuousClock.now + .seconds(150)
+    while ContinuousClock.now < deadline {
+      if abs(app.windows.firstMatch.frame.width - width) < 1 { return }
+      try await Task.sleep(for: .milliseconds(250))
+    }
+    XCTFail("The expected posture width \(width) did not appear.")
+    throw ToolbarFailure.timedOut
+  }
+
+  @MainActor
   private func captureHome(wide: Bool) async throws {
     let appearances = wide
       ? [("light", false), ("dark", false)]
@@ -96,7 +238,9 @@ final class LibraryToolbarUITests: XCTestCase {
     for (appearance, accessibility) in appearances {
       let app = launch(state: "populated", appearance: appearance, accessibility: accessibility)
       defer { app.terminate() }
-      let search = wide ? app.searchFields.firstMatch : app.buttons["Search"]
+      try await waitUntil { app.navigationBars["GistPad"].exists }
+      record(app, name: "home-initial-\(wide ? "open" : "folded")-\(appearance)-\(accessibility ? "AX3" : "Large")")
+      let search = app.searchFields.firstMatch
       try await waitUntil {
         guard search.exists else { return false }
         let frame = search.frame
@@ -113,17 +257,18 @@ final class LibraryToolbarUITests: XCTestCase {
           && app.buttons["library-settings"].isHittable)
         XCTAssertGreaterThan(search.frame.width, 180)
       } else {
-        XCTAssertEqual(
-          app.buttons.matching(
-            NSPredicate(format: "label == %@", "Search")
-          ).count, 1, "Only the rail's Search command is present")
+        XCTAssertFalse(app.buttons["Search"].exists)
+        XCTAssertFalse(app.buttons["library-search"].exists)
+        assertBottomSearch(search, in: app)
         for id in ["library-filter-tags", "library-settings", "library-create"] {
           let target = app.buttons[id]
           XCTAssertTrue(target.isHittable, id)
           assertTarget(target, in: app)
         }
       }
-      let title = app.navigationBars["GistPad"].buttons["GistPad"]
+      let title = app.navigationBars["GistPad"].descendants(matching: .any).matching(
+        NSPredicate(format: "label BEGINSWITH %@", "GistPad")
+      ).firstMatch
       XCTAssertTrue(title.exists)
       if !wide {
         XCTAssertFalse(title.frame.intersects(app.buttons["library-settings"].frame))
@@ -133,13 +278,16 @@ final class LibraryToolbarUITests: XCTestCase {
         let tags = app.buttons["library-filter-tags"].frame
         XCTAssertLessThan(create.maxY, settings.midY)
         XCTAssertLessThan(settings.maxY, tags.midY)
-        XCTAssertLessThan(tags.maxY, search.frame.midY)
-        XCTAssertEqual(
-          search.frame.midY - tags.midY, tags.midY - settings.midY, accuracy: 2,
-          "Search belongs immediately beneath Tags, not at the bottom of the rail")
+        XCTAssertGreaterThan(tags.midY, app.windows.firstMatch.frame.maxY * 0.8)
+        XCTAssertGreaterThan(tags.midY - settings.midY, 150)
+        if accessibility {
+          XCTAssertEqual(tags.maxY, search.frame.maxY, accuracy: 2)
+        } else {
+          XCTAssertEqual(tags.midY, search.frame.midY, accuracy: 2)
+        }
+        XCTAssertFalse(tags.intersects(search.frame))
         XCTAssertEqual(create.midX, settings.midX, accuracy: 2)
         XCTAssertEqual(settings.midX, tags.midX, accuracy: 2)
-        XCTAssertEqual(tags.midX, search.frame.midX, accuracy: 2)
         XCTAssertGreaterThan(tags.midX, app.windows.firstMatch.frame.midX)
       }
       let pinned = app.descendants(matching: .any)["library-pinned-heading"].firstMatch
@@ -180,6 +328,17 @@ final class LibraryToolbarUITests: XCTestCase {
   }
 
   @MainActor
+  private func assertBottomSearch(
+    _ field: XCUIElement, in app: XCUIApplication,
+    file: StaticString = #filePath, line: UInt = #line
+  ) {
+    assertTarget(field, in: app, file: file, line: line)
+    XCTAssertGreaterThan(field.frame.width, 180, file: file, line: line)
+    XCTAssertGreaterThan(
+      field.frame.midY, app.windows.firstMatch.frame.maxY * 0.8, file: file, line: line)
+  }
+
+  @MainActor
   private func verifyNativeSearchAcceptsTyping(in app: XCUIApplication) async throws {
     let field = app.searchFields.firstMatch
     try await waitUntil {
@@ -193,7 +352,7 @@ final class LibraryToolbarUITests: XCTestCase {
 
   @MainActor
   private func launch(
-    state: String, appearance: String, accessibility: Bool = false
+    state: String, appearance: String, accessibility: Bool = false, horizontalToolbar: Bool = false
   ) -> XCUIApplication {
     let app = XCUIApplication(bundleIdentifier: "dev.gistpad.GistPad")
     app.launchArguments = [
@@ -202,6 +361,7 @@ final class LibraryToolbarUITests: XCTestCase {
       "-UIPreferredContentSizeCategoryName",
       accessibility ? "UICTContentSizeCategoryAccessibilityXL" : "UICTContentSizeCategoryL"
     ]
+    if horizontalToolbar { app.launchArguments.append("--capture-horizontal-toolbar") }
     app.launch()
     return app
   }
