@@ -1,13 +1,147 @@
-import GistPadEditor
+import GistPadInterface
 import SwiftUI
 import Testing
 import UIKit
 
+@testable import GistPadEditor
+
 @Suite(.serialized)
 @MainActor
 struct NotebookDocumentSwitchingTests {
+  @Test(arguments: [false, true])
+  func supersededContainersCannotReconfigureDetachOrReclaimTheEditor(composing: Bool) throws {
+    let source = "# A retained source\nAn editable thought."
+    let session = DocumentSession(documentID: "owned-source", text: source)
+    let fixture = try SourceHostWindow()
+    defer { fixture.close() }
+    let outgoing = SourceTextViewHost(session: session)
+    outgoing.frame = fixture.root.view.bounds
+    outgoing.configure { $0.isHidden = false }
+    fixture.root.view.addSubview(outgoing)
+    let editor = session.textView
+    try #require(editor.becomeFirstResponder())
+    editor.selectedRange = NSRange(location: 0, length: 0)
+    if composing {
+      editor.setMarkedText("draft", selectedRange: NSRange(location: 5, length: 0))
+      try #require(editor.markedTextRange != nil)
+    } else {
+      editor.undoManager?.beginUndoGrouping()
+      editor.insertText("An edit: ")
+      editor.undoManager?.endUndoGrouping()
+      try #require(editor.undoManager?.canUndo == true)
+    }
+    let text = editor.text
+    let selection = editor.selectedRange
+    let generation = session.generation
+    let accessory = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 72))
+    let incoming = SourceTextViewHost(session: session)
+    incoming.frame = fixture.root.view.bounds
+    incoming.configure {
+      $0.isHidden = false
+      $0.inputAccessoryView = accessory
+    }
+    try #require(editor.superview === outgoing)
+    fixture.root.view.addSubview(incoming)
+    try #require(editor.superview === incoming)
+
+    outgoing.configure {
+      $0.isHidden = true
+      $0.inputAccessoryView = nil
+    }
+    outgoing.setNeedsLayout()
+    outgoing.layoutIfNeeded()
+    outgoing.dismantle()
+    outgoing.removeFromSuperview()
+    incoming.layoutIfNeeded()
+
+    #expect(editor.superview === incoming)
+    #expect(editor.window === fixture.window)
+    #expect(editor.frame == incoming.bounds)
+    #expect(!editor.isHidden)
+    #expect(editor.inputAccessoryView === accessory)
+    #expect(editor.isFirstResponder)
+    #expect(editor.text == text)
+    #expect(editor.selectedRange == selection)
+    #expect(session.generation == generation)
+    #expect((editor.markedTextRange != nil) == composing)
+    if !composing {
+      editor.undoManager?.undo()
+      #expect(editor.text == source)
+    }
+  }
+
+  @Test func theActiveContainerReadoptsAnUnexpectedlyDetachedEditorOnLayout() throws {
+    let session = DocumentSession(documentID: "reattached", text: "# Still here")
+    let fixture = try SourceHostWindow()
+    defer { fixture.close() }
+    let host = SourceTextViewHost(session: session)
+    host.frame = fixture.root.view.bounds
+    fixture.root.view.addSubview(host)
+    let editor = session.textView
+    editor.removeFromSuperview()
+    try #require(editor.window == nil)
+    host.setNeedsLayout()
+    host.layoutIfNeeded()
+    #expect(session.textView === editor)
+    #expect(editor.superview === host)
+    #expect(editor.window === fixture.window)
+    #expect(editor.text == "# Still here")
+    #expect(session.generation == 0)
+  }
+
+  @Test(arguments: [false, true])
+  func animatedIdentityAndModeChangesKeepTheEditorMounted(splitNavigation: Bool) async throws {
+    let session = DocumentSession(
+      documentID: "animated-source", text: "# A visible source\nAn editable thought.")
+    let state = ReidentifiedSourceState()
+    let fixture = try SourceHostWindow()
+    defer { fixture.close() }
+    let host = UIHostingController(
+      rootView: ReidentifiedSourceFixture(
+        session: session, state: state, splitNavigation: splitNavigation))
+    fixture.root.addChild(host)
+    host.view.frame = fixture.root.view.bounds
+    host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    fixture.root.view.addSubview(host.view)
+    host.didMove(toParent: fixture.root)
+    try await Task.sleep(for: .milliseconds(200))
+    let editor = session.textView
+    editor.selectedRange = NSRange(location: 3, length: 0)
+    let selection = editor.selectedRange
+    for index in 0..<4 {
+      withAnimation(.easeInOut(duration: 0.1)) {
+        state.identity += 1
+      }
+      try await Task.sleep(for: .milliseconds(250))
+      host.traitOverrides.horizontalSizeClass = index.isMultiple(of: 2) ? .regular : .compact
+      for mode in [NoteMode.reading, .split, .source] {
+        state.mode = mode
+        try await Task.sleep(for: .milliseconds(150))
+        host.view.layoutIfNeeded()
+        #expect(session.textView === editor)
+        #expect(editor.window === fixture.window)
+        #expect(editor.isDescendant(of: host.view))
+        #expect(editor.bounds.width > 0)
+        #expect(editor.contentSize.width > 0)
+        #expect(editor.selectedRange == selection)
+        #expect(session.generation == 0)
+        if mode == .source {
+          #expect(!editor.isHidden)
+          let caret = editor.caretRect(for: editor.beginningOfDocument)
+          #expect(caret.height > 0)
+          #expect(editor.bounds.intersects(caret))
+        }
+      }
+    }
+    Attachment.record(
+      UIGraphicsImageRenderer(bounds: fixture.window.bounds).image { _ in
+        fixture.window.drawHierarchy(in: fixture.window.bounds, afterScreenUpdates: true)
+      }, named: "source-after-animated-rehosting-\(splitNavigation).png", as: .png)
+  }
+
   @Test func anOutgoingHostCannotDetachTheRetainedEditorFromItsNewHost() async throws {
-    let session = DocumentSession(documentID: "retained", text: "# Still visible\nA retained source.")
+    let session = DocumentSession(
+      documentID: "retained", text: "# Still visible\nA retained source.")
     let other = DocumentSession(documentID: "other", text: "# A different source")
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -15,7 +149,8 @@ struct NotebookDocumentSwitchingTests {
     let window = UIWindow(windowScene: scene)
     let root = UIViewController()
     window.rootViewController = root
-    let outgoing = UIHostingController(rootView: MarkdownEditorView(session: session))
+    let outgoing = UIHostingController(
+      rootView: MarkdownEditorView(session: session).environment(\.isNotebookPaneVisible, true))
     root.addChild(outgoing)
     outgoing.view.frame = root.view.bounds
     outgoing.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -28,6 +163,7 @@ struct NotebookDocumentSwitchingTests {
       window.rootViewController = nil
       previous?.makeKey()
     }
+
     try await Task.sleep(for: .milliseconds(150))
     try #require(session.textView.isDescendant(of: outgoing.view))
 
@@ -39,8 +175,17 @@ struct NotebookDocumentSwitchingTests {
     incoming.didMove(toParent: root)
     try await Task.sleep(for: .milliseconds(150))
     try #require(session.textView.isDescendant(of: incoming.view))
+    let incomingAccessory = session.textView.inputAccessoryView
+
+    outgoing.rootView = MarkdownEditorView(session: session)
+      .environment(\.isNotebookPaneVisible, false)
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(!session.textView.isHidden)
+    #expect(session.textView.isAccessibilityElement)
+    #expect(session.textView.inputAccessoryView === incomingAccessory)
 
     outgoing.rootView = MarkdownEditorView(session: other)
+      .environment(\.isNotebookPaneVisible, false)
     outgoing.view.setNeedsLayout()
     outgoing.view.layoutIfNeeded()
     try await Task.sleep(for: .milliseconds(150))
@@ -50,6 +195,8 @@ struct NotebookDocumentSwitchingTests {
     try await Task.sleep(for: .milliseconds(150))
     #expect(session.textView.window === window)
     #expect(session.textView.isDescendant(of: incoming.view))
+    #expect(!session.textView.isHidden)
+    #expect(session.textView.inputAccessoryView === incomingAccessory)
     #expect(session.textView.text == "# Still visible\nA retained source.")
     #expect(session.generation == 0)
     Attachment.record(
@@ -110,5 +257,70 @@ struct NotebookDocumentSwitchingTests {
     try await Task.sleep(for: .milliseconds(100))
     dailyView.undoManager?.undo()
     #expect(dailyView.text == "# Today's note\nDaily source")
+  }
+}
+
+@MainActor
+private final class SourceHostWindow {
+  let window: UIWindow
+  let root = UIViewController()
+  private weak var previous: UIWindow?
+
+  init() throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    previous = scene.keyWindow
+    window = UIWindow(windowScene: scene)
+    window.rootViewController = root
+    window.makeKeyAndVisible()
+    root.view.layoutIfNeeded()
+  }
+
+  func close() {
+    window.endEditing(true)
+    window.isHidden = true
+    window.rootViewController = nil
+    previous?.makeKey()
+  }
+}
+
+@MainActor
+@Observable
+private final class ReidentifiedSourceState {
+  var identity = 0
+  var mode = NoteMode.source
+}
+
+private struct ReidentifiedSourceFixture: View {
+  let session: DocumentSession
+  @Bindable var state: ReidentifiedSourceState
+  let splitNavigation: Bool
+
+  var body: some View {
+    if splitNavigation {
+      NavigationSplitView(preferredCompactColumn: .constant(.detail)) {
+        List { Text("A visible source") }
+      } detail: {
+        detail
+      }
+    } else {
+      NavigationStack { detail }
+    }
+  }
+
+  private var detail: some View {
+    NoteScreen(
+      document: .init(
+        title: "A visible source",
+        files: [.init(id: "README.md", filename: "README.md")],
+        selectedFileID: "README.md"),
+      mode: $state.mode, saveState: .inMemoryFixture
+    ) {
+      MarkdownEditorView(session: session)
+        .id(state.identity)
+        .transition(.opacity)
+    } preview: {
+      Text("A visible source\nAn editable thought.")
+    }
   }
 }

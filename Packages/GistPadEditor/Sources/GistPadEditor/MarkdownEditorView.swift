@@ -158,30 +158,91 @@
       SourceToolbarCoordinator(actions: actions)
     }
 
-    func makeUIView(context: Context) -> UITextView {
-      context.coordinator.update(actions: actions, configuration: configuration)
-      session.textView.traitOverrides[PersonalAccentTrait.self] = personalAccent
-      session.setCommentHighlights(
-        comments, onOpenCommentThreads: onOpenCommentThreads,
-        onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment)
-      session.textView.inputAccessoryView = context.coordinator.toolbar
-      return session.textView
+    func makeUIView(context: Context) -> SourceTextViewHost {
+      let host = SourceTextViewHost(session: session)
+      updateUIView(host, context: context)
+      return host
     }
 
-    func updateUIView(_ view: UITextView, context: Context) {
-      view.isHidden = !isPaneVisible
-      view.isAccessibilityElement = isPaneVisible
-      view.accessibilityElementsHidden = !isPaneVisible
-      context.coordinator.update(actions: actions, configuration: configuration)
-      view.traitOverrides[PersonalAccentTrait.self] = personalAccent
-      session.setCommentHighlights(
-        comments, onOpenCommentThreads: onOpenCommentThreads,
-        onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment)
+    func updateUIView(_ host: SourceTextViewHost, context: Context) {
+      let coordinator = context.coordinator
+      host.configure { view in
+        view.isHidden = !isPaneVisible
+        view.isAccessibilityElement = isPaneVisible
+        view.accessibilityElementsHidden = !isPaneVisible
+        coordinator.update(actions: actions, configuration: configuration)
+        if view.inputAccessoryView !== coordinator.toolbar {
+          view.inputAccessoryView = coordinator.toolbar
+          if view.isFirstResponder { view.reloadInputViews() }
+        }
+        view.traitOverrides[PersonalAccentTrait.self] = personalAccent
+        session.setCommentHighlights(
+          comments, onOpenCommentThreads: onOpenCommentThreads,
+          onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment)
+        session.updateAppearanceIfNeeded()
+      }
+    }
+
+    static func dismantleUIView(_ host: SourceTextViewHost, coordinator: SourceToolbarCoordinator) {
+      host.dismantle()
+    }
+  }
+
+  final class SourceTextViewHost: UIView {
+    private let session: DocumentSession
+    private var configuration: ((UITextView) -> Void)?
+    private var isDismantled = false
+
+    init(session: DocumentSession) {
+      self.session = session
+      super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Use init(session:)") }
+
+    func configure(_ configuration: @escaping (UITextView) -> Void) {
+      guard !isDismantled else { return }
+      self.configuration = configuration
+      if ownsEditor { configuration(session.textView) }
+    }
+
+    override func didMoveToWindow() {
+      super.didMoveToWindow()
+      guard window != nil, !isDismantled else { return }
+      session.sourceHost = self
+      adoptEditor()
+    }
+
+    override func layoutSubviews() {
+      super.layoutSubviews()
+      guard window != nil, session.sourceHost === self, !isDismantled else { return }
+      if !ownsEditor { adoptEditor() }
+      if session.textView.frame != bounds { session.textView.frame = bounds }
+    }
+
+    func dismantle() {
+      isDismantled = true
+      configuration = nil
+      guard ownsEditor else { return }
+      session.sourceHost = nil
+      session.setCommentHighlights(.init())
+      session.textView.inputAccessoryView = nil
+      session.textView.removeFromSuperview()
+    }
+
+    private var ownsEditor: Bool {
+      session.sourceHost === self && session.textView.superview === self
+    }
+
+    private func adoptEditor() {
+      // SwiftUI owns this container, never the text view shared with another host.
+      let editor = session.textView
+      editor.frame = bounds
+      editor.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      configuration?(editor)
+      addSubview(editor)
       session.updateAppearanceIfNeeded()
-    }
-
-    static func dismantleUIView(_ view: UITextView, coordinator: SourceToolbarCoordinator) {
-      (view.delegate as? DocumentSession)?.setCommentHighlights(.init())
     }
   }
 

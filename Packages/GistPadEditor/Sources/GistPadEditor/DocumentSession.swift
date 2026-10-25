@@ -24,6 +24,7 @@
     public private(set) var contentStart = 0
     public var inputError: String?
     @ObservationIgnored public let textView: UITextView
+    @ObservationIgnored weak var sourceHost: SourceTextViewHost?
     @ObservationIgnored public var onSourceChange: ((String, UInt64) -> Void)?
     @ObservationIgnored private var highlightTask: Task<Void, Never>?
     @ObservationIgnored private var highlightedTraits: UITraitCollection?
