@@ -6,6 +6,7 @@ import SwiftUI
 
 struct NotebookCommentsCaptureWorkspace: View {
   @State private var fixture = NotebookCommentsCaptureFixture()
+  @State private var holdsRefresh = false
 
   var body: some View {
     LiveNotebookWorkspace(
@@ -15,6 +16,32 @@ struct NotebookCommentsCaptureWorkspace: View {
         MarkerCaptureContrast(
           increased: ProcessInfo.processInfo.arguments.contains("--capture-increased-contrast"))
           .frame(width: 0, height: 0)
+      }
+      .overlay(alignment: .topLeading) {
+        if ProcessInfo.processInfo.arguments.contains("--capture-controlled-comment-refresh") {
+          HStack {
+            Button("Hold Refresh") {
+              Task {
+                await fixture.remote.holdNextRefresh()
+                holdsRefresh = true
+              }
+            }
+            .accessibilityIdentifier("comments-hold-refresh")
+            .accessibilityValue(holdsRefresh ? "Armed" : "Not armed")
+            .disabled(holdsRefresh)
+            Button("Finish Refresh") {
+              Task {
+                await fixture.remote.finishRefresh()
+                holdsRefresh = false
+              }
+            }
+            .accessibilityIdentifier("comments-finish-refresh")
+            .disabled(!holdsRefresh)
+          }
+          .buttonStyle(.bordered)
+          .padding(.top, 88)
+          .padding(.horizontal, 8)
+        }
       }
   }
 }
@@ -84,6 +111,33 @@ enum NotebookCommentsCaptureData {
     ]
   }
 
+  static let readingIdeas = (1...24).map { "Reading idea \($0): a place to begin" }
+
+  static func readingListMarkdown(title: String) -> String {
+    "# \(title)\n\nKeep the useful things close. Let the rest find their place.\n\n"
+      + readingIdeas.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
+      + "\n\nLeave room for the next idea.\n"
+  }
+
+  static var readingListComments: [GistComment] {
+    readingIdeas.enumerated().map { index, quote in
+      comment(
+        Int64(10_000 + (index * 7) % readingIdeas.count),
+        body: "> \(quote)\n\nReading thought \(index + 1). Keep this one close.", author: 1,
+        createdAt: Date(timeIntervalSince1970: 1_792_886_400 + Double(index)))
+    } + [
+      comment(
+        10_999, body: "> A passage removed from this reading list.\n\nAn older thought remains.",
+        author: 2, createdAt: Date(timeIntervalSince1970: 1_792_886_412.5)),
+      comment(
+        20_050, body: "> \(readingIdeas[5])\n\nAnother thought about reading idea 6.",
+        author: 2, createdAt: Date(timeIntervalSince1970: 1_792_886_405.5)),
+      comment(
+        20_051, body: "> Reading idea 6\n\nA narrower thought about reading idea 6.",
+        author: 2, createdAt: Date(timeIntervalSince1970: 1_792_886_405.6)),
+    ]
+  }
+
   static func comment(
     _ id: Int64, body: String, author: Int64, createdAt: Date? = nil
   ) -> GistComment {
@@ -136,11 +190,25 @@ actor NotebookCommentsCaptureRemote: CommentConversationRemote {
   private(set) var editedBodies: [String] = []
   private(set) var deletedIDs: [Int64] = []
   private(set) var listRequests = 0
+  private var holdsNextRefresh = false
+  private var pendingRefresh: CheckedContinuation<Void, Never>?
 
   init(scenario: String) { self.scenario = scenario }
 
+  func holdNextRefresh() { holdsNextRefresh = true }
+
+  func finishRefresh() {
+    holdsNextRefresh = false
+    pendingRefresh?.resume()
+    pendingRefresh = nil
+  }
+
   func listComments(gistID: String) async throws(CommentRemoteFailure) -> [GistComment] {
     listRequests += 1
+    if holdsNextRefresh {
+      holdsNextRefresh = false
+      await withCheckedContinuation { pendingRefresh = $0 }
+    }
     if scenario == "loading", listRequests == 1 {
       do { try await Task.sleep(for: .seconds(6)) }
       catch { throw .network }
@@ -183,7 +251,8 @@ actor NotebookCommentsCaptureRemote: CommentConversationRemote {
 
   private func comments(_ gistID: String) -> [GistComment] {
     records[gistID] ?? (scenario == "empty" || gistID == "quiet"
-      ? [] : NotebookCommentsCaptureData.comments)
+      ? [] : scenario == "reading-list"
+        ? NotebookCommentsCaptureData.readingListComments : NotebookCommentsCaptureData.comments)
   }
 }
 
@@ -301,13 +370,17 @@ actor NotebookCommentsCaptureProvider: NotebookProviding, NotebookCommentProvidi
     ].map { id, title -> [String: Any] in
       [
         "id": id, "description": title, "public": false,
-        "comments": id == "quiet" || scenario == "empty" ? 0 : NotebookCommentsCaptureData.comments.count,
+        "comments": id == "quiet" || scenario == "empty" ? 0
+          : scenario == "reading-list" ? NotebookCommentsCaptureData.readingListComments.count
+          : NotebookCommentsCaptureData.comments.count,
         "updated_at": "2026-10-24T00:00:00Z", "created_at": "2026-10-23T00:00:00Z",
         "owner": ["id": id == "shared" ? 9 : 1, "login": id == "shared" ? "a-friend" : account.login],
         "files": [
           "README.md": [
             "filename": "README.md", "language": "Markdown",
-            "content": NotebookCommentsCaptureData.markdown(title: title),
+            "content": scenario == "reading-list"
+              ? NotebookCommentsCaptureData.readingListMarkdown(title: title)
+              : NotebookCommentsCaptureData.markdown(title: title),
           ],
           "Appendix.md": [
             "filename": "Appendix.md", "language": "Markdown",

@@ -27,6 +27,9 @@ public struct CommentsConversation: View {
     private let failure: String?
     private let actions: CommentsConversationActions
     @State private var deletionTarget: GistComment?
+    @State private var position = ScrollPosition(edge: .top)
+    @State private var interruptedReveal: RevealedRoot?
+    @State private var selectedLayout: RevealLayout?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var threadSpacing = 16
 
@@ -59,47 +62,60 @@ public struct CommentsConversation: View {
     }
 
     public var body: some View {
-        ScrollViewReader { scroll in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    if comments != nil, failure != nil || isRefreshing {
-                        operationStatus
-                    }
-                    ForEach(threads) { thread in
-                        CommentThreadContent(
-                            thread: thread, parentLogin: nil, currentUserID: currentUserID,
-                            gistOwnerID: gistOwnerID, selectedRootID: selectedRootID,
-                            linkedRootIDs: linkedRootIDs, actions: actions,
-                            requestDelete: { deletionTarget = $0 })
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, threadSpacing / 2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background {
-                                if thread.id == selectedRootID {
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(InterfaceTheme.neutralSelection)
-                                        .padding(.horizontal, 8)
-                                }
+        let root = revealedRoot
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if comments != nil, failure != nil || isRefreshing {
+                    operationStatus
+                }
+                ForEach(threads) { thread in
+                    CommentThreadContent(
+                        thread: thread, parentLogin: nil, currentUserID: currentUserID,
+                        gistOwnerID: gistOwnerID, selectedRootID: selectedRootID,
+                        linkedRootIDs: linkedRootIDs, actions: actions,
+                        requestDelete: { deletionTarget = $0 })
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, threadSpacing / 2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background {
+                            if thread.id == selectedRootID {
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(InterfaceTheme.neutralSelection)
+                                    .padding(.horizontal, 8)
+                                    .onGeometryChange(for: RevealLayout.self) { geometry in
+                                        RevealLayout(
+                                            root: root,
+                                            minY: geometry.frame(in: .named(LayoutSpace.content)).minY,
+                                            width: geometry.size.width)
+                                    } action: { layout in
+                                        let isNewReveal = selectedLayout?.root != layout.root
+                                        selectedLayout = layout
+                                        reveal(layout, animated: isNewReveal)
+                                    }
+                                    .id(root)
                             }
-                            .accessibilityElement(children: .contain)
-                            .accessibilityAddTraits(
-                                thread.id == selectedRootID ? .isSelected : [])
-                            .accessibilityIdentifier("comment-thread-\(thread.id)")
-                            .id(thread.id)
-                    }
+                        }
+                        .accessibilityElement(children: .contain)
+                        .accessibilityAddTraits(
+                            thread.id == selectedRootID ? .isSelected : [])
+                        .accessibilityIdentifier("comment-thread-\(thread.id)")
                 }
             }
-            .scrollDismissesKeyboard(.interactively)
-            .scrollEdgeEffectStyle(.soft, for: .bottom)
-            .refreshable { await actions.refresh() }
-            .overlay { emptyState }
-            .onChange(of: revealedRoot, initial: true) { _, root in
-                guard root.exists, let id = root.id else { return }
-                withAnimation(reduceMotion ? nil : .snappy) {
-                    scroll.scrollTo(id, anchor: .top)
-                }
-            }
+            .coordinateSpace(name: LayoutSpace.content)
         }
+        .scrollPosition($position)
+        .onGeometryChange(for: RevealViewport.self) { geometry in
+            RevealViewport(frame: geometry.frame(in: .global), topInset: geometry.safeAreaInsets.top)
+        } action: { _ in
+            if let selectedLayout { reveal(selectedLayout, animated: false) }
+        }
+        .onScrollPhaseChange { _, phase in
+            if phase == .interacting { interruptedReveal = revealedRoot }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .scrollEdgeEffectStyle(.soft, for: .bottom)
+        .refreshable { await actions.refresh() }
+        .overlay { emptyState }
         .tint(.primary)
         .background(Color(uiColor: .systemBackground))
         .accessibilityIdentifier("comments-conversation")
@@ -191,10 +207,31 @@ public struct CommentsConversation: View {
         .accessibilityIdentifier("comments-retry")
     }
 
-    private struct RevealedRoot: Equatable {
+    private func reveal(_ layout: RevealLayout, animated: Bool) {
+        guard layout.width > 0, layout.root == revealedRoot, layout.root.exists,
+              layout.root != interruptedReveal else { return }
+        withAnimation(animated && !reduceMotion ? .snappy : nil) {
+            position.scrollTo(y: layout.minY)
+        }
+    }
+
+    private enum LayoutSpace: Hashable { case content }
+
+    private struct RevealedRoot: Hashable, Sendable {
         let id: Int64?
         let revision: UInt64
         let exists: Bool
+    }
+
+    private struct RevealLayout: Equatable, Sendable {
+        let root: RevealedRoot
+        let minY: CGFloat
+        let width: CGFloat
+    }
+
+    private struct RevealViewport: Equatable, Sendable {
+        let frame: CGRect
+        let topInset: CGFloat
     }
 }
 

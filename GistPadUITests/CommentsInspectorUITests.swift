@@ -201,49 +201,183 @@ final class CommentsInspectorUITests: XCTestCase {
     app.buttons["comments-close"].tap()
     try wait("the initial inspector dismissal") { !app.buttons["comments-close"].exists }
 
-    for (prefix, id) in [
+    for (index, target) in [
       ("Write something useful, then give it room to breathe.", 200),
       ("A good walk clears more than your head", 300),
       ("Write something useful, then give it room to breathe.", 200),
-    ] {
-      let passage = app.webViews.firstMatch.buttons.matching(
-        NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
-      let webView = app.webViews.firstMatch
-      for _ in 0..<8 {
-        let top = app.navigationBars.firstMatch.frame.maxY + 8
-        let bottom = webView.frame.maxY - 44
-        if passage.exists, passage.isHittable,
-          passage.frame.minY >= top, passage.frame.maxY <= bottom { break }
-        let center = (top + bottom) / 2
-        let step = (bottom - top) * 0.35
-        let distance = passage.exists
-          ? min(step, max(-step, center - passage.frame.midY)) : -step
-        let start = webView.coordinate(withNormalizedOffset: .zero)
-          .withOffset(.init(dx: webView.frame.width / 2, dy: center - webView.frame.minY))
-        start.press(
-          forDuration: 0.05, thenDragTo: start.withOffset(.init(dx: 0, dy: distance)),
-          withVelocity: .slow, thenHoldForDuration: 0.2)
-      }
-      try wait("the Preview passage for thread \(id), clear of native chrome") {
-        passage.isHittable
-          && passage.frame.minY >= app.navigationBars.firstMatch.frame.maxY + 8
-          && passage.frame.maxY <= webView.frame.maxY - 44
-      }
+    ].enumerated() {
+      let (prefix, id) = target
+      let passage = try revealPreviewPassage(prefix, in: app)
       record(app, name: "comments-preview-before-tapping-thread-\(id)")
       passage.tap()
-      let selected = app.descendants(matching: .any)["comment-thread-\(id)"].firstMatch
-      try wait("Preview to select thread \(id), not the previously opened thread") {
-        app.buttons["comments-close"].exists && selected.isSelected
-      }
-      XCTAssertTrue(selected.isHittable)
-      XCTAssertTrue(app.buttons["comment-passage-\(id)"].isSelected)
-      XCTAssertFalse(app.keyboards.firstMatch.exists)
+      try waitForSelectedThread(id, in: app)
       record(app, name: "comments-preview-opens-thread-\(id)")
+      if index == 0 {
+        let next = try revealPreviewPassage("A good walk clears more than your head", in: app)
+        next.tap()
+        try waitForSelectedThread(300, in: app)
+        record(app, name: "comments-preview-switches-thread-without-closing")
+      }
       app.buttons["comments-close"].tap()
       try wait("the inspector for thread \(id) to dismiss") {
         !app.buttons["comments-close"].exists && !app.buttons["note-comments"].isSelected
       }
     }
+  }
+
+  func testPreviewPassagesSelectReorderedOffscreenThreadsAndResolveOverlaps() throws {
+    let app = launch(scenario: "reading-list")
+    defer { app.terminate() }
+    try openComments(in: app, waitsForConversation: false)
+    try wait("the loaded reading-list comments") {
+      app.buttons["comment-actions-10017"].exists
+    }
+    app.buttons["comments-close"].tap()
+    try wait("the reading-list inspector dismissal") { !app.buttons["comments-close"].exists }
+
+    for (prefix, id, choice): (String, Int, String?) in [
+      ("Reading idea 1:", 10_000, nil),
+      ("Reading idea 24:", 10_017, nil),
+      ("Reading idea 6", 10_011, "octavia: Reading thought 6."),
+      ("Reading idea 6", 20_050, "mira: Another thought about reading idea 6."),
+      ("Reading idea 6", 20_051, "mira: A narrower thought about reading idea 6."),
+    ] {
+      let passage = try revealPreviewPassage(prefix, in: app)
+      record(app, name: "comments-reading-list-before-thread-\(id)")
+      passage.tap()
+      if let choice {
+        let action = app.buttons.matching(
+          NSPredicate(format: "label BEGINSWITH %@", choice)).firstMatch
+        try wait("the exact overlap choice for thread \(id)") { action.isHittable }
+        action.tap()
+      }
+      try waitForSelectedThread(id, in: app)
+      record(app, name: "comments-reading-list-opens-thread-\(id)")
+      if id == 10_000 {
+        for (nextPrefix, nextID) in [
+          ("Reading idea 2:", 10_007), ("Reading idea 1:", 10_000),
+        ] {
+          let next = try revealPreviewPassage(nextPrefix, in: app)
+          next.tap()
+          try waitForSelectedThread(nextID, in: app)
+        }
+        let selected = app.descendants(matching: .any)["comment-thread-\(id)"].firstMatch
+        let originalY = selected.frame.minY
+        app.descendants(matching: .any)["comments-conversation"].firstMatch.swipeDown()
+        XCTAssertGreaterThan(selected.frame.minY, originalY + 8, "Manual scrolling must not reanchor.")
+        let repeated = try revealPreviewPassage(prefix, in: app)
+        repeated.tap()
+        try waitForSelectedThread(id, in: app)
+        record(app, name: "comments-reading-list-repeats-selected-thread-\(id)")
+      }
+      app.buttons["comments-close"].tap()
+      try wait("the reading-list thread \(id) dismissal") {
+        !app.buttons["comments-close"].exists && !app.buttons["note-comments"].isSelected
+      }
+    }
+  }
+
+  func testPreviewSelectedThreadStaysVisibleAcrossRefresh() throws {
+    let app = launch(scenario: "reading-list", controlledRefresh: true)
+    defer { app.terminate() }
+    try openComments(in: app, waitsForConversation: false)
+    try wait("the loaded reading-list comments") {
+      app.buttons["comment-actions-10017"].exists
+    }
+    app.buttons["comments-close"].tap()
+    try wait("the reading-list inspector dismissal") { !app.buttons["comments-close"].exists }
+    let passage = try revealPreviewPassage("Reading idea 6", in: app)
+    passage.tap()
+    let choice = app.buttons.matching(
+      NSPredicate(format: "label BEGINSWITH %@", "octavia: Reading thought 6.")).firstMatch
+    try wait("the exact mid-list overlap choice") { choice.isHittable }
+    choice.tap()
+    try waitForSelectedThread(10_011, in: app)
+    let hold = app.buttons["comments-hold-refresh"]
+    try wait("the native fixture refresh control") { hold.isHittable }
+    hold.tap()
+    try wait("the controlled remote refresh to arm") { hold.value as? String == "Armed" }
+    app.buttons["comments-actions"].tap()
+    app.buttons["Refresh Comments"].tap()
+    try wait("the in-content refreshing status") { app.staticTexts["Updating comments"].exists }
+    try waitForSelectedThread(10_011, in: app)
+    record(app, name: "comments-selected-thread-during-refresh")
+    app.buttons["comments-finish-refresh"].tap()
+    try wait("the in-content status to be removed") { !app.staticTexts["Updating comments"].exists }
+    try waitForSelectedThread(10_011, in: app)
+    record(app, name: "comments-selected-thread-after-refresh")
+  }
+
+  func testConversationInteractionDoesNotRestoreTheOldSelection() throws {
+    let app = launch(controlledRefresh: true)
+    defer { app.terminate() }
+    try openComments(in: app)
+    app.buttons["comments-close"].tap()
+    try wait("the inspector dismissal") { !app.buttons["comments-close"].exists }
+    let passage = try revealPreviewPassage(
+      "Write something useful, then give it room to breathe.", in: app)
+    passage.tap()
+    try waitForSelectedThread(200, in: app)
+    let conversation = app.descendants(matching: .any)["comments-conversation"].firstMatch
+    let selected = app.descendants(matching: .any)["comment-thread-200"].firstMatch
+    let selectedY = selected.frame.minY
+    try reveal(app.buttons["comment-passage-300"], in: app)
+    try wait("manual scrolling away from the selected thread") {
+      selected.frame.minY > selectedY + 80
+    }
+    let replies = app.descendants(matching: .any)["comment-replies-300"].firstMatch
+    try reveal(replies, in: app)
+    replies.tap()
+    try wait("the other thread's replies") {
+      app.descendants(matching: .any)["comment-replies-301"].firstMatch.exists
+    }
+    XCTAssertGreaterThan(selected.frame.minY, app.navigationBars["Comments"].frame.maxY + 44)
+    record(app, name: "comments-user-scroll-survives-other-replies")
+
+    try reveal(app.buttons["comment-passage-300"], in: app)
+    let isExpanded = app.windows.firstMatch.frame.width > 640
+    if isExpanded { conversation.swipeDown() }
+    let hold = app.buttons["comments-hold-refresh"]
+    hold.tap()
+    try wait("the next remote refresh to be held") { hold.value as? String == "Armed" }
+    if isExpanded {
+      let start = conversation.coordinate(withNormalizedOffset: .zero)
+        .withOffset(
+          .init(
+            dx: conversation.frame.width / 2,
+            dy: app.navigationBars["Comments"].frame.maxY + 44 - conversation.frame.minY))
+      let end = conversation.coordinate(withNormalizedOffset: .zero)
+        .withOffset(
+          .init(
+            dx: conversation.frame.width / 2,
+            dy: app.otherElements["comments-composer"].firstMatch.frame.minY - 24
+              - conversation.frame.minY))
+      start.press(
+        forDuration: 0.05, thenDragTo: end,
+        withVelocity: .slow, thenHoldForDuration: 0.2)
+    } else {
+      app.buttons["comments-actions"].tap()
+      app.buttons["Refresh Comments"].tap()
+    }
+    try wait("refreshing at the user's reading position") {
+      app.staticTexts["Updating comments"].exists
+    }
+    XCTAssertGreaterThan(selected.frame.minY, app.navigationBars["Comments"].frame.maxY + 44)
+    app.buttons["comments-finish-refresh"].tap()
+    try wait("refresh completion without restoring the selected thread") {
+      !app.staticTexts["Updating comments"].exists
+        && selected.frame.minY > app.navigationBars["Comments"].frame.maxY + 44
+    }
+    XCTAssertTrue(app.buttons["comment-passage-300"].isHittable)
+    record(app, name: "comments-user-scroll-survives-refresh")
+    let reply = app.buttons["comment-reply-300"]
+    try reveal(reply, in: app)
+    reply.tap()
+    try wait("the other thread's reply composer and keyboard") {
+      app.staticTexts["Replying to @mira"].exists && app.keyboards.firstMatch.exists
+    }
+    XCTAssertGreaterThan(selected.frame.minY, app.navigationBars["Comments"].frame.maxY + 44)
+    record(app, name: "comments-user-scroll-survives-other-reply-keyboard")
   }
 
   func testFailedDraftSaveKeepsCloseOpenUntilRetry() throws {
@@ -370,7 +504,7 @@ final class CommentsInspectorUITests: XCTestCase {
 
   private func launch(
     scenario: String = "threads", appearance: String = "light",
-    accessibility: Bool = false, increased: Bool = false
+    accessibility: Bool = false, increased: Bool = false, controlledRefresh: Bool = false
   ) -> XCUIApplication {
     continueAfterFailure = false
     let app = XCUIApplication()
@@ -383,6 +517,7 @@ final class CommentsInspectorUITests: XCTestCase {
       "-dev.gistpad.workspace.compact-note-mode", "reading",
     ]
     if increased { app.launchArguments.append("--capture-increased-contrast") }
+    if controlledRefresh { app.launchArguments.append("--capture-controlled-comment-refresh") }
     app.launch()
     return app
   }
@@ -406,6 +541,63 @@ final class CommentsInspectorUITests: XCTestCase {
 
   private func composer(in app: XCUIApplication) -> XCUIElement {
     app.descendants(matching: .any)["comment-composer-text"].firstMatch
+  }
+
+  private func waitForSelectedThread(_ id: Int, in app: XCUIApplication) throws {
+    let thread = app.descendants(matching: .any)["comment-thread-\(id)"].firstMatch
+    let passage = app.buttons["comment-passage-\(id)"]
+    let anchorsAtTop = [10_011, 20_050, 20_051].contains(id)
+    try wait("Preview to select and visibly reveal thread \(id)") {
+      app.buttons["comments-close"].exists && thread.exists && thread.isSelected
+        && passage.exists && passage.isSelected && passage.isHittable
+        && thread.frame.minY >= conversationReadingTop(in: app) - 1
+        && (!anchorsAtTop || thread.frame.minY <= conversationReadingTop(in: app) + 8)
+        && passage.frame.midY >= conversationReadingTop(in: app)
+        && passage.frame.midY <= app.otherElements["comments-composer"].firstMatch.frame.minY
+    }
+    XCTAssertFalse(app.keyboards.firstMatch.exists)
+  }
+
+  private func conversationReadingTop(in app: XCUIApplication) -> CGFloat {
+    let navigation = app.navigationBars["Comments"]
+    // Compact rail-only chrome retains an empty AX bar above unobscured content.
+    if app.windows.firstMatch.frame.width < 600,
+      navigation.children(matching: .any).count == 0 {
+      return navigation.frame.minY
+    }
+    return navigation.frame.maxY
+  }
+
+  private func revealPreviewPassage(_ prefix: String, in app: XCUIApplication) throws -> XCUIElement {
+    let webView = app.webViews.firstMatch
+    let passage = webView.descendants(matching: .any).matching(
+      NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
+    let inspector = app.otherElements["comments-inspector"].firstMatch
+    let navigation = app.navigationBars["A place for good ideas"]
+    func visibleBounds() -> (top: CGFloat, bottom: CGFloat) {
+      let top = navigation.frame.maxY + 8
+      let bottom = inspector.exists && app.windows.firstMatch.frame.width < 600
+        ? inspector.frame.minY - 8 : webView.frame.maxY - 44
+      return (top, bottom)
+    }
+    for _ in 0..<12 {
+      let (top, bottom) = visibleBounds()
+      if passage.exists, passage.isHittable,
+        passage.frame.minX >= webView.frame.minX, passage.frame.maxX <= webView.frame.maxX,
+        passage.frame.minY >= top, passage.frame.maxY <= bottom { return passage }
+      let center = (top + bottom) / 2
+      let step = (bottom - top) * 0.35
+      let distance = passage.exists
+        ? min(step, max(-step, center - passage.frame.midY)) : -step
+      let start = webView.coordinate(withNormalizedOffset: .zero)
+        .withOffset(.init(dx: webView.frame.width / 2, dy: center - webView.frame.minY))
+      start.press(
+        forDuration: 0.05, thenDragTo: start.withOffset(.init(dx: 0, dy: distance)),
+        withVelocity: .slow, thenHoldForDuration: 0.2)
+    }
+    record(app, name: "comments-unreachable-preview-passage")
+    XCTFail("The Preview passage was not reachable clear of native navigation and the inspector.")
+    throw CommentsTestError.timedOut
   }
 
   private func reveal(
