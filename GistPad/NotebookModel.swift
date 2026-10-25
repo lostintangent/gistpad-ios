@@ -1395,17 +1395,11 @@ final class NotebookModel {
       loadedDocument = document
       library.selectedNoteID = document.rowID
       try selections.save(document.selection, accountID: account.id)
-    case .deleted(let id, let disposition):
+    case .deleted(let id, _):
       recordDeletedGist(id, accountID: account.id)
       if loadedDocument?.selection.gistID == id {
-        if let retained = disposition.retainedDrafts.first(where: {
-          $0.filename == loadedDocument?.filename
-        }) {
-          loadedDocument = NotebookDocument(draft: retained, isRecovery: true)
-        } else {
-          loadedDocument = nil
-        }
-        library.selectedNoteID = loadedDocument?.rowID
+        loadedDocument = nil
+        library.selectedNoteID = nil
       }
       if let cache = cachedLibrary {
         try await provider.cacheLibrary(
@@ -1437,8 +1431,36 @@ final class NotebookModel {
     isRefreshingRemote = false
     if library.loadState == .loading { library.loadState = .ready }
     ownedGistIDs.remove(id)
+    let removedDraftIDs = Set(localDrafts.filter { $0.gistID == id }.map(\.id))
+    localDrafts.removeAll { $0.gistID == id }
     cachedLibrary = cachedLibrary.map(libraryExcludingDeletedGists)
-    library.snapshot.notes.removeAll { $0.id == id }
+    library.snapshot.notes.removeAll {
+      $0.id == id || $0.gistID == id || UUID(uuidString: $0.id).map(removedDraftIDs.contains) == true
+    }
+    if let opening = openingDocument,
+      opening.rowID == id || searchTargets[opening.rowID]?.gistID == id
+    {
+      documentRequest = UUID()
+      openingDocument = nil
+      isOpeningDocument = false
+    }
+    if failedOpen?.gistID == id { failedOpen = nil }
+    do {
+      if let selection = try selections.selection(accountID: accountID),
+        selection.gistID == id || selection.draftID.map(removedDraftIDs.contains) == true
+      {
+        selections.clear(accountID: accountID)
+      }
+    } catch {
+      report(error, operation: "clear-deleted-selection")
+    }
+    searchRequest = UUID()
+    if case .results(let notes, let coverage) = library.searchState {
+      library.searchState = .results(
+        notes: notes.filter { $0.gistID != id && searchTargets[$0.id]?.gistID != id },
+        coverage: coverage)
+    }
+    searchTargets = searchTargets.filter { $0.value.gistID != id }
     library.gitHubStatus = remoteRefreshStatus
     updateToday()
   }
@@ -1715,7 +1737,7 @@ final class NotebookModel {
       case .remoteDeletedLocalCleanupFailed:
         String(
           localized:
-            "The note was deleted from GitHub, but local recovery cleanup couldn't finish. Local copies are preserved and publishing is blocked."
+            "The note was deleted from GitHub, but couldn't be fully removed from this iPhone. Local cleanup is incomplete."
         )
       case .staleReview:
         String(localized: "Your draft changed while this review was open. Review the latest draft.")

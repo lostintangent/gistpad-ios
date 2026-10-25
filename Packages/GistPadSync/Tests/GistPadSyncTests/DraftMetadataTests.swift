@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 @testable import GistPadSync
 
@@ -71,7 +72,7 @@ import Testing
         #expect(try await store.draft(id: one.id, accountID: account).filename == "One.md")
     }
 
-    @Test func confirmedDeletionRemovesOnlyCleanDraftsWithoutRecoveryCopies() async throws {
+    @Test func confirmedDeletionPurgesDirtyDraftsHistoryImagesReceiptsAndCachedContent() async throws {
         let account = UUID()
         let store = try DraftStore.open(inMemory: true)
         func open(_ filename: String, accountID: UUID) async throws -> DraftSnapshot {
@@ -91,11 +92,59 @@ import Testing
             id: historical.id, accountID: account, gistID: "abc123", content: "base", revision: "two", generation: 0
         )
         let foreign = try await open("Foreign.md", accountID: UUID())
-        let result = try await store.removeCleanDraftsForDeletedGist(gistID: "abc123", accountID: account)
-        #expect(result.removedDraftIDs == [clean.id])
-        #expect(Set(result.retainedDrafts.map(\.id)) == [dirty.id, historical.id])
-        #expect(try await store.recoveries(id: historical.id, accountID: account).count == 1)
+        try await store.beginAttempt(
+            id: foreign.id, accountID: foreign.accountID, content: "base", generation: 0, remote: "base")
+        _ = try await store.acknowledge(
+            id: foreign.id, accountID: foreign.accountID, gistID: "abc123",
+            content: "base", revision: "two", generation: 0)
+        let kept = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "other", filename: "README.md",
+            description: "Keep", content: "untouched", revision: "one")
+        let command = SharedDraftCommand(
+            accountID: account, draftID: dirty.id, expectedGeneration: 1,
+            edit: .init(location: 0, length: 0, expectedText: "", replacement: "new "))
+        _ = try await store.apply(command)
+        let image = try await store.enqueueImage(
+            pngData: testPNG(), draftID: dirty.id, accountID: account,
+            expectedGeneration: 2, insertionLocation: 0)
+        let keptCommand = SharedDraftCommand(
+            accountID: account, draftID: kept.id, expectedGeneration: 0,
+            edit: .init(location: 0, length: 0, expectedText: "", replacement: "kept "))
+        _ = try await store.apply(keptCommand)
+        let keptImage = try await store.enqueueImage(
+            pngData: testPNG(), draftID: kept.id, accountID: account,
+            expectedGeneration: 1, insertionLocation: 0)
+        let gist = try decodeGist(gistData())
+        let otherGist = try decodeGist(gistData(id: "other", content: "untouched"))
+        try await store.cacheLibrary(
+            owned: [gist, otherGist], starred: [gist], preferences: .init(metadata: [:]), accountID: account)
+        try await store.cacheGist(gist, accountID: account)
+        try await store.cacheGist(otherGist, accountID: account)
+        try await store.cacheContent("cached source", gist: gist, filename: "README.md", accountID: account)
+        try await store.cacheContent("untouched", gist: otherGist, filename: "README.md", accountID: account)
+        try await store.cacheLibrary(
+            owned: [gist], starred: [gist], preferences: .init(metadata: [:]), accountID: foreign.accountID)
+        let result = try await store.removeDraftsForDeletedGist(gistID: "abc123", accountID: account)
+        #expect(result.removedDraftIDs == [clean.id, dirty.id, historical.id])
+        #expect(try await store.drafts(accountID: account).map(\.id) == [kept.id])
         #expect(try await store.draft(id: foreign.id, accountID: foreign.accountID).text == "base")
+        #expect(try await store.imageUploads(accountID: account).map(\.id) == [keptImage.id])
+        #expect(try await store.recoveries(id: foreign.id, accountID: foreign.accountID).count == 1)
+        #expect(try await store.apply(keptCommand).generation == 1)
+        #expect(try await store.cachedLibrary(accountID: foreign.accountID)?.owned.map(\.id) == ["abc123"])
+        let cached = try #require(await store.cachedLibrary(accountID: account))
+        #expect(cached.owned.map(\.id) == ["other"])
+        #expect(cached.starred.isEmpty)
+        #expect(cached.details["abc123"] == nil)
+        #expect(cached.details["other"] != nil)
+        #expect(cached.fileContent.map(\.key) == ["other/README.md"])
+        let context = ModelContext(store.modelContainer)
+        #expect(try context.fetchCount(FetchDescriptor<StoredRecovery>()) == 1)
+        #expect(try context.fetchCount(FetchDescriptor<StoredCommandReceipt>()) == 1)
+        #expect(try context.fetchCount(FetchDescriptor<StoredImageUpload>()) == 1)
+        await #expect(throws: ImageUploadError.notFound) {
+            try await store.imageUpload(id: image.id, accountID: account)
+        }
         await #expect(throws: DraftError.notFound) {
             try await store.draft(id: clean.id, accountID: account)
         }

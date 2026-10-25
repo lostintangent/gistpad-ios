@@ -237,7 +237,7 @@ private func imageDraft(store: DraftStore, account: UUID) async throws -> DraftS
         }
     }
 
-    @Test func unpublishedDraftWaitsForItsGistAndQueuedImagePreventsCleanDeletion() async throws {
+    @Test func confirmedGistDeletionAlsoRemovesQueuedImageBytes() async throws {
         let account = UUID()
         let store = try DraftStore.open(inMemory: true)
         let draft = try await store.newDraft(accountID: account, githubUserID: 42, text: "")
@@ -258,10 +258,12 @@ private func imageDraft(store: DraftStore, account: UUID) async throws -> DraftS
         _ = try await store.acknowledge(
             id: draft.id, accountID: account, gistID: "abc123", content: "", revision: "one", generation: 0
         )
-        let cleanup = try await store.removeCleanDraftsForDeletedGist(gistID: "abc123", accountID: account)
-        #expect(cleanup.removedDraftIDs.isEmpty)
-        #expect(cleanup.retainedDrafts.first?.id == draft.id)
-        #expect(try await coordinator.upload(id: queued.id).state == .uploaded)
+        let cleanup = try await store.removeDraftsForDeletedGist(gistID: "abc123", accountID: account)
+        #expect(cleanup.removedDraftIDs == [draft.id])
+        #expect(try await store.imageUploads(accountID: account).isEmpty)
+        await #expect(throws: ImageUploadError.notFound) {
+            try await coordinator.upload(id: queued.id)
+        }
     }
 
     @Test func authenticationAndRateFailuresRemainExplicitAndDoNotMutateSource() async throws {

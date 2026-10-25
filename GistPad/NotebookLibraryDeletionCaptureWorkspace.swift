@@ -99,7 +99,7 @@ private actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoPr
     deleted.insert(id)
     return .deleted(
       gistID: id,
-      drafts: try await draftStore().removeCleanDraftsForDeletedGist(
+      drafts: try await draftStore().removeDraftsForDeletedGist(
         gistID: id, accountID: accountID))
   }
 

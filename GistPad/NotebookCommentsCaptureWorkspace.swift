@@ -95,6 +95,7 @@ enum NotebookCommentsCaptureData {
 }
 
 actor NotebookCommentsCaptureStore: CommentConversationStore {
+  private var deletedScopes: Set<CommentConversationScope> = []
   private var archives: [CommentConversationScope: CommentDraftArchive] = [:]
   private var failuresRemaining: Int
   private let failsReads: Bool
@@ -110,6 +111,7 @@ actor NotebookCommentsCaptureStore: CommentConversationStore {
   }
 
   func saveDrafts(_ archive: CommentDraftArchive) throws {
+    guard !deletedScopes.contains(archive.scope) else { throw CommentStoreFailure.unavailable }
     if failuresRemaining > 0, archive.drafts.contains(where: { !$0.text.isEmpty }) {
       failuresRemaining -= 1
       throw CommentStoreFailure.unavailable
@@ -118,6 +120,11 @@ actor NotebookCommentsCaptureStore: CommentConversationStore {
       throw CommentStoreFailure.staleWrite
     }
     archives[archive.scope] = archive
+  }
+
+  func removeDrafts(scope: CommentConversationScope) {
+    deletedScopes.insert(scope)
+    archives[scope] = nil
   }
 }
 

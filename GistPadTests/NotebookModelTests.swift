@@ -13,6 +13,27 @@ import WebKit
 
 @MainActor
 struct NotebookModelTests {
+  @Test func deletedGistCommentControllersCannotReopenOrRecreateTheirDrafts() async throws {
+    let gist = try makeGist(id: "a", title: "A conversation")
+    let model = NotebookModel(provider: StubNotebookProvider(account: fixtureAccount, gists: [gist]))
+    await model.start()
+    await model.open(gistID: gist.id)
+    let document = try #require(model.loadedDocument)
+    let store = NotebookCommentStoreFake()
+    let provider = NotebookCommentProvider(notebook: model, store: store)
+    let conversation = try await provider.conversation(for: document)
+    conversation.updateText("A comment draft to remove")
+    #expect(await conversation.flushDraft())
+    try await provider.discard(gistID: gist.id, accountID: fixtureAccount.id)
+    #expect(await store.loadDrafts(scope: conversation.scope) == nil)
+    #expect(!conversation.isPrepared)
+    await #expect(throws: NotebookCommentError.unavailable) {
+      try await provider.conversation(for: document)
+    }
+    #expect(await provider.flushDrafts())
+    #expect(await store.loadDrafts(scope: conversation.scope) == nil)
+  }
+
   @Test func unavailableCommentDraftReadsDoNotBlockDepartureButFailedWritesStillDo() async throws {
     let gist = try makeGist(id: "a", title: "A conversation")
     let model = NotebookModel(provider: StubNotebookProvider(account: fixtureAccount, gists: [gist]))
@@ -172,6 +193,45 @@ struct NotebookModelTests {
     #expect(model.library.selectedNoteID == nil)
     #expect(model.library.snapshot.notes.allSatisfy { $0.id != "a" })
     #expect(model.libraryDeletionTarget(for: "a") == nil)
+  }
+
+  @Test func deletingAnEditedPublishedGistPurgesItsDraftHistoryAndSearchResult() async throws {
+    let title = "A published and edited note"
+    let provider = StubNotebookProvider(
+      account: fixtureAccount, gists: [try makeGist(id: "a", title: title)])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await model.open(gistID: "a")
+    let draft = try await model.openDraft(for: #require(model.loadedDocument))
+    _ = try await model.persist(
+      draftID: draft.id, accountID: draft.accountID, text: "An accepted edit", generation: 1)
+    _ = try await model.publish(draftID: draft.id, accountID: draft.accountID)
+    #expect(try await provider.recoveryCount(draftID: draft.id) == 1)
+    model.library.query = "accepted edit"
+    await model.search()
+    #expect(model.library.matchingNotes.count == 1)
+    _ = try await model.perform(.delete(gistID: "a"))
+    #expect(await provider.deletedIDs == ["a"])
+    #expect(model.library.collectionGistCount == 0)
+    #expect(model.library.matchingNotes.isEmpty)
+    #expect(model.localDrafts.isEmpty)
+    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.isEmpty)
+    await #expect(throws: DraftError.notFound) {
+      try await provider.recoveryCount(draftID: draft.id)
+    }
+    await model.refresh()
+    await model.search()
+    #expect(model.library.matchingNotes.isEmpty)
+    #expect(model.library.snapshot.notes.isEmpty)
+    #expect(model.loadedDocument == nil)
+    #expect(model.library.selectedNoteID == nil)
+    let restarted = NotebookModel(provider: provider)
+    await restarted.start()
+    restarted.library.query = "accepted edit"
+    await restarted.search()
+    #expect(restarted.localDrafts.isEmpty)
+    #expect(restarted.library.matchingNotes.isEmpty)
+    #expect(restarted.library.snapshot.notes.isEmpty)
   }
 
   @Test(arguments: [false, true])
@@ -2041,6 +2101,7 @@ private func makeGist(
 }
 
 private actor NotebookCommentStoreFake: CommentConversationStore {
+  private var deletedScopes: Set<CommentConversationScope> = []
   private var failsReads = false
   private var failsWrites = false
   private var archives: [CommentConversationScope: CommentDraftArchive] = [:]
@@ -2052,9 +2113,14 @@ private actor NotebookCommentStoreFake: CommentConversationStore {
     return archives[scope]
   }
   func saveDrafts(_ archive: CommentDraftArchive) throws {
+    guard !deletedScopes.contains(archive.scope) else { throw CommentStoreFailure.unavailable }
     saveCount += 1
     if failsWrites { throw CommentStoreFailure.unavailable }
     archives[archive.scope] = archive
+  }
+  func removeDrafts(scope: CommentConversationScope) {
+    deletedScopes.insert(scope)
+    archives[scope] = nil
   }
 }
 
@@ -2246,7 +2312,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
       starredNotes.removeAll { $0.id == id }
       return .deleted(
         gistID: id,
-        drafts: try await draftStore().removeCleanDraftsForDeletedGist(
+        drafts: try await draftStore().removeDraftsForDeletedGist(
           gistID: id, accountID: accountID))
     }
     if case .signOut = action {
@@ -2324,6 +2390,9 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
       accountID: account.id, githubUserID: 1, gistID: gistID, filename: "README.md",
       description: "Recoverable note", content: "Base", revision: "1")
     return try await store.persist(id: draft.id, accountID: account.id, text: text, generation: 8)
+  }
+  func recoveryCount(draftID: UUID) async throws -> Int {
+    try await draftStore().recoveries(id: draftID, accountID: account.id).count
   }
   func setGists(_ gists: [Gist]) { notes = gists }
   func setReadFailure(id: String, fails: Bool) {

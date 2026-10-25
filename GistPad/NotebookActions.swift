@@ -259,9 +259,11 @@ extension LiveNotebookProvider {
     case .delete:
       try await client.deleteGist(id: id)
       do {
+        try await CommentConversationDiskStore.applicationStore().removeDrafts(
+          scope: .init(accountID: accountID, gistID: id))
         return .deleted(
           gistID: id,
-          drafts: try await drafts.removeCleanDraftsForDeletedGist(gistID: id, accountID: accountID)
+          drafts: try await drafts.removeDraftsForDeletedGist(gistID: id, accountID: accountID)
         )
       } catch {
         throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: id)

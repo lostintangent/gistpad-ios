@@ -124,7 +124,7 @@ private struct LibraryRowDeletionConfirmation: ViewModifier {
             Button(String(localized: "Cancel", bundle: .module), role: .cancel) {}
         } message: {
             Text(
-                "This deletes every file in the gist. Unsynced local drafts and recovery copies are kept on this iPhone.",
+                "This deletes every file from GitHub and this iPhone, including unsynced drafts and local history. This cannot be undone.",
                 bundle: .module)
         }
     }

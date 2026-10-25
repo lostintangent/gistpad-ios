@@ -4,6 +4,7 @@ import GistPadComments
 public actor CommentConversationDiskStore: CommentConversationStore {
     private let directory: URL
     private let files = FileManager.default
+    private var deletedScopes: Set<CommentConversationScope> = []
 
     public init(directory: URL) {
         self.directory = directory
@@ -25,6 +26,13 @@ public actor CommentConversationDiskStore: CommentConversationStore {
         return archive
     }
 
+    public func removeDrafts(scope: CommentConversationScope) throws {
+        let url = try location(scope: scope, name: "drafts")
+        deletedScopes.insert(scope)
+        do { try files.removeItem(at: url) }
+        catch let error as CocoaError where error.code == .fileNoSuchFile { return }
+    }
+
     private func validate(_ archive: CommentDraftArchive, scope: CommentConversationScope) throws {
         guard archive.scope == scope, archive.revision < UInt64.max,
               archive.drafts.contains(where: { $0.id == archive.activeDraftID }),
@@ -36,6 +44,7 @@ public actor CommentConversationDiskStore: CommentConversationStore {
     }
 
     public func saveDrafts(_ archive: CommentDraftArchive) throws {
+        guard !deletedScopes.contains(archive.scope) else { throw CommentStoreFailure.unavailable }
         try validate(archive, scope: archive.scope)
         if let previous = try loadDrafts(scope: archive.scope) {
             let encoder = JSONEncoder()

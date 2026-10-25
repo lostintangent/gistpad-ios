@@ -95,7 +95,6 @@ public enum DraftMetadataError: Error, Equatable, Sendable {
 
 public struct DeletedGistDrafts: Equatable, Sendable {
     public let removedDraftIDs: Set<UUID>
-    public let retainedDrafts: [DraftSnapshot]
 }
 
 @Model
@@ -295,29 +294,42 @@ public actor DraftStore {
         return try snapshot(draft)
     }
 
-    public func removeCleanDraftsForDeletedGist(gistID: String, accountID: UUID) throws -> DeletedGistDrafts {
+    public func removeDraftsForDeletedGist(gistID: String, accountID: UUID) throws -> DeletedGistDrafts {
         let candidates = try modelContext.fetch(FetchDescriptor<StoredDraft>(
             predicate: #Predicate { $0.accountID == accountID && $0.gistID == gistID }
         ))
-        var removed: Set<UUID> = []
-        var retained: [DraftSnapshot] = []
-        for draft in candidates {
-            let id = draft.id
-            let hasRecovery = try modelContext.fetchCount(FetchDescriptor<StoredRecovery>(
-                predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }
-            )) > 0
-            let value = try snapshot(draft)
-            let hasImage = try imageUploads(accountID: accountID).contains { $0.draftID == id && !$0.isInserted }
-            if value.state == .savedToGitHub, value.attemptedGeneration == nil,
-               sourceEqual(value.text, value.baseContent), !hasRecovery, !hasImage {
-                modelContext.delete(draft)
-                removed.insert(id)
-            } else {
-                retained.append(value)
-            }
+        let removed = Set(candidates.map(\.id))
+        let recoveries = try modelContext.fetch(FetchDescriptor<StoredRecovery>(
+            predicate: #Predicate { $0.accountID == accountID }
+        )).filter { removed.contains($0.draftID) }
+        let images = try modelContext.fetch(FetchDescriptor<StoredImageUpload>(
+            predicate: #Predicate { $0.accountID == accountID }
+        )).filter { $0.gistID == gistID || removed.contains($0.draftID) }
+        let receipts = try modelContext.fetch(FetchDescriptor<StoredCommandReceipt>()).filter {
+            let command = try JSONDecoder().decode(SharedDraftCommand.self, from: $0.payload)
+            return command.accountID == accountID && removed.contains(command.draftID)
         }
+        let library = try modelContext.fetch(FetchDescriptor<StoredLibrary>(
+            predicate: #Predicate { $0.accountID == accountID }
+        )).first
+        let libraryPayload: Data?
+        if let library {
+            var cached = try JSONDecoder().decode(CachedLibrarySnapshot.self, from: library.payload)
+            cached.owned.removeAll { $0.id == gistID }
+            cached.starred.removeAll { $0.id == gistID }
+            cached.details[gistID] = nil
+            cached.fileContent = cached.fileContent.filter { !$0.key.hasPrefix(gistID + "/") }
+            libraryPayload = try JSONEncoder().encode(cached)
+        } else {
+            libraryPayload = nil
+        }
+        for recovery in recoveries { modelContext.delete(recovery) }
+        for image in images { modelContext.delete(image) }
+        for receipt in receipts { modelContext.delete(receipt) }
+        for draft in candidates { modelContext.delete(draft) }
+        if let libraryPayload { library?.payload = libraryPayload }
         try commit()
-        return DeletedGistDrafts(removedDraftIDs: removed, retainedDrafts: retained)
+        return DeletedGistDrafts(removedDraftIDs: removed)
     }
 
     public func recoveries(id: UUID, accountID: UUID) throws -> [RecoverySnapshot] {

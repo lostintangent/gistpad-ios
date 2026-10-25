@@ -202,6 +202,8 @@ public enum CommentStoreFailure: Error, Equatable, Sendable {
 public protocol CommentConversationStore: Sendable {
     func loadDrafts(scope: CommentConversationScope) async throws -> CommentDraftArchive?
     func saveDrafts(_ archive: CommentDraftArchive) async throws
+    /// Retires this scope for the lifetime of the store, rejecting later saves from stale callers.
+    func removeDrafts(scope: CommentConversationScope) async throws
 }
 
 public protocol CommentConversationRemote: Sendable {

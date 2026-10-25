@@ -4,6 +4,27 @@ import Testing
 @testable import GistPadSync
 
 struct CommentConversationDiskStoreTests {
+    @Test func confirmedGistDeletionRemovesOnlyItsAccountScopedComposerArchive() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = CommentConversationDiskStore(directory: directory)
+        let scope = CommentConversationScope(accountID: UUID(), gistID: "a123")
+        let otherAccount = CommentConversationScope(accountID: UUID(), gistID: "a123")
+        let otherGist = CommentConversationScope(accountID: scope.accountID, gistID: "b456")
+        for item in [scope, otherAccount, otherGist] {
+            try await store.saveDrafts(CommentDraftArchive(scope: item))
+        }
+        try await store.removeDrafts(scope: scope)
+        try await store.removeDrafts(scope: scope)
+        #expect(try await store.loadDrafts(scope: scope) == nil)
+        #expect(try await store.loadDrafts(scope: otherAccount) != nil)
+        #expect(try await store.loadDrafts(scope: otherGist) != nil)
+        await #expect(throws: CommentStoreFailure.unavailable) {
+            try await store.saveDrafts(CommentDraftArchive(scope: scope))
+        }
+        #expect(try await CommentConversationDiskStore(directory: directory).loadDrafts(scope: scope) == nil)
+    }
+
     @Test func copyingCommentCountPreservesAllOtherGistBytes() throws {
         let data = Data("""
             {"id":"a123","description":"Synthetic [Archived]","public":false,

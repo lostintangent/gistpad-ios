@@ -4,6 +4,84 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct CommentConversationTests {
+    @Test func confirmedGistDeletionClearsCommentDraftsAndCannotBeAutosavedBack() async throws {
+        let (controller, remote, store) = make(comments: [comment(1)])
+        await controller.load()
+        controller.updateText("A comment draft to remove")
+        #expect(await controller.flushDraft())
+        try await controller.discardAfterGistDeletion()
+        #expect(await store.loadDrafts(scope: controller.scope) == nil)
+        #expect(controller.activeDraft.text.isEmpty)
+        #expect(controller.comments == nil)
+        #expect(!controller.composer.canEdit)
+        await controller.prepare()
+        controller.updateText("A stale UI callback")
+        await controller.post()
+        #expect(await store.loadDrafts(scope: controller.scope) == nil)
+        #expect(await remote.createCount == 0)
+    }
+
+    @Test func confirmedGistDeletionWaitsForAnAlreadyRunningAutosaveBeforeRemovingItsBytes() async throws {
+        let (controller, _, store) = make()
+        await controller.load()
+        await store.suspendNextSave()
+        controller.updateText("A draft with its autosave already running")
+        await store.waitForSave()
+        let deletion = Task { try await controller.discardAfterGistDeletion() }
+        while controller.isPrepared { await Task.yield() }
+        await store.resumeSave()
+        try await deletion.value
+        #expect(await store.loadDrafts(scope: controller.scope) == nil)
+        #expect(controller.activeDraft.text.isEmpty)
+        #expect(!controller.composer.canEdit)
+    }
+
+    @Test func aLateCommentReceiptCannotRestoreADeletedGistsConversation() async throws {
+        let (controller, remote, store) = make()
+        await controller.load()
+        controller.updateText("A comment already being sent")
+        await remote.suspendPosts()
+        let posting = Task { await controller.post() }
+        await remote.waitForPost()
+        try await controller.discardAfterGistDeletion()
+        await remote.resumePost()
+        await posting.value
+        #expect(await store.loadDrafts(scope: controller.scope) == nil)
+        #expect(controller.activeDraft.text.isEmpty)
+        #expect(controller.pendingMutation == nil)
+        #expect(controller.comments == nil)
+        #expect(!controller.composer.canEdit)
+    }
+
+    @Test func aLateExplicitFlushCannotRestoreADeletedGistsDrafts() async throws {
+        let (controller, _, store) = make()
+        await controller.prepare()
+        controller.updateText("An explicitly saving comment draft")
+        await store.suspendNextSave()
+        let saving = Task { await controller.flushDraft() }
+        await store.waitForSave()
+        try await controller.discardAfterGistDeletion()
+        await store.resumeSave()
+        #expect(!(await saving.value))
+        #expect(await store.loadDrafts(scope: controller.scope) == nil)
+        #expect(controller.activeDraft.text.isEmpty)
+    }
+
+    @Test func failedLocalDeletionThrowsAndCanBeRetriedWithoutEnablingTheOldController() async throws {
+        let (controller, _, store) = make()
+        await controller.prepare()
+        controller.updateText("A comment draft")
+        #expect(await controller.flushDraft())
+        await store.setFailSaves(true)
+        await #expect(throws: CommentStoreFailure.unavailable) {
+            try await controller.discardAfterGistDeletion()
+        }
+        #expect(!controller.composer.canEdit)
+        await store.setFailSaves(false)
+        try await controller.discardAfterGistDeletion()
+        #expect(await store.loadDrafts(scope: controller.scope) == nil)
+    }
+
     @Test func preservesKnownTotalsAndThreadsDuringFailedRefresh() async {
         let (controller, remote, _) = make(comments: [comment(1), comment(2, body: "> [comment:1]\n\nReply")])
         await controller.load()
@@ -422,6 +500,7 @@ struct CommentConversationTests {
 
 private actor ConversationStoreFake: CommentConversationStore {
     private var archives: [CommentConversationScope: CommentDraftArchive] = [:]
+    private var deletedScopes: Set<CommentConversationScope> = []
     private var failSaves = false
     private var shouldSuspend = false
     private var saveContinuation: CheckedContinuation<Void, Never>?
@@ -435,6 +514,11 @@ private actor ConversationStoreFake: CommentConversationStore {
     }
     func resumeSave() { saveContinuation?.resume(); saveContinuation = nil }
     func loadDrafts(scope: CommentConversationScope) -> CommentDraftArchive? { archives[scope] }
+    func removeDrafts(scope: CommentConversationScope) throws {
+        if failSaves { throw CommentStoreFailure.unavailable }
+        deletedScopes.insert(scope)
+        archives[scope] = nil
+    }
     func saveDrafts(_ archive: CommentDraftArchive) async throws {
         if shouldSuspend {
             shouldSuspend = false
@@ -443,6 +527,7 @@ private actor ConversationStoreFake: CommentConversationStore {
             await withCheckedContinuation { saveContinuation = $0 }
         }
         if failSaves { throw CommentStoreFailure.unavailable }
+        guard !deletedScopes.contains(archive.scope) else { throw CommentStoreFailure.unavailable }
         if let saved = archives[archive.scope], saved.revision > archive.revision {
             throw CommentStoreFailure.staleWrite
         }

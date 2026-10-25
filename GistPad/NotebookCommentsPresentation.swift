@@ -220,6 +220,11 @@ final class NotebookCommentsPresentation {
     return await provider.flushDrafts()
   }
 
+  func discard(gistID: String, accountID: UUID) async throws {
+    if activeScope == .init(accountID: accountID, gistID: gistID) { reset() }
+    try await provider?.discard(gistID: gistID, accountID: accountID)
+  }
+
   func reset() {
     hide()
     afterDismiss = nil

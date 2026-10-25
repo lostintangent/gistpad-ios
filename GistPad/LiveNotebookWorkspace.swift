@@ -98,7 +98,7 @@ struct LiveNotebookWorkspace: View {
         Button("Cancel", role: .cancel) {}
       } message: {
         Text(
-          "This deletes every file in the gist. Unsynced local drafts and recovery copies are kept on this iPhone."
+          "This deletes every file from GitHub and this iPhone, including unsynced drafts and local history. This cannot be undone."
         )
       }
       .confirmationDialog(
@@ -1408,13 +1408,8 @@ struct LiveNotebookWorkspace: View {
         if let controller = sessions[draft.id.uuidString] {
           try await controller.refreshMetadata(gist: gist)
         }
-      case .deleted(_, let disposition):
-        for id in disposition.removedDraftIDs {
-          sessions[id.uuidString]?.clearReview()
-          sessions[id.uuidString] = nil
-          photoControllers[id.uuidString] = nil
-        }
-        for draft in disposition.retainedDrafts { sessions[draft.id.uuidString]?.markRecovery() }
+      case .deleted(let gistID, _):
+        try await discardDeletedGistSessions(gistID: gistID, accountID: accountID)
       case .review:
         break
       case .discardedDraft(let id):
@@ -1426,14 +1421,37 @@ struct LiveNotebookWorkspace: View {
       }
       return result
     } catch {
-      for controller in sessions.values {
-        if let id = controller.draft.gistID, notebook.deletedGistIDs.contains(id) {
-          controller.markRecovery()
-        }
+      if case .delete(let id) = action, notebook.deletedGistIDs.contains(id) {
+        try await discardDeletedGistSessions(gistID: id, accountID: accountID)
       }
       Logger(subsystem: "dev.gistpad.GistPad", category: "Notebook")
         .error("Note action failed: \(String(reflecting: type(of: error)), privacy: .public)")
       throw error
+    }
+  }
+
+  private func discardDeletedGistSessions(gistID: String, accountID: UUID) async throws {
+    let keys = sessions.filter {
+      $0.value.draft.accountID == accountID && $0.value.draft.gistID == gistID
+    }.map(\.key)
+    for key in keys {
+      sessions[key]?.clearReview()
+      sessions[key] = nil
+      await photoControllers[key]?.stop()
+      photoControllers[key] = nil
+      if activeID == key {
+        activeID = nil
+        compactColumn = .sidebar
+      }
+    }
+    if archiveUndo?.gistID == gistID { archiveUndo = nil }
+    if sharedPreviewGistID == gistID { sharedPreviewGistID = nil }
+    do {
+      try await comments.discard(gistID: gistID, accountID: accountID)
+    } catch {
+      Logger(subsystem: "dev.gistpad.GistPad", category: "Notebook")
+        .error("Deleted comment cleanup failed: \(String(reflecting: type(of: error)), privacy: .public)")
+      throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: gistID)
     }
   }
 

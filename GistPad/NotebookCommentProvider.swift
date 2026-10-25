@@ -39,6 +39,7 @@ final class NotebookCommentProvider {
   private let notebook: NotebookModel
   private let store: any CommentConversationStore
   private var conversations: [CommentConversationScope: CommentConversationController] = [:]
+  private var deletedScopes: Set<CommentConversationScope> = []
 
   init(notebook: NotebookModel, store: any CommentConversationStore) {
     self.notebook = notebook
@@ -57,22 +58,26 @@ final class NotebookCommentProvider {
       throw NotebookCommentError.unavailable
     }
     let scope = CommentConversationScope(accountID: document.accountID, gistID: gist.id)
+    guard !deletedScopes.contains(scope) else { throw NotebookCommentError.unavailable }
     if let existing = conversations[scope] {
       await existing.prepare()
       guard notebook.account?.id == document.accountID, notebook.pendingAccount == nil else {
         throw AccountError.accountChanged
       }
+      guard !deletedScopes.contains(scope) else { throw NotebookCommentError.unavailable }
       return existing
     }
     let services = try await notebook.commentServices(accountID: document.accountID)
     guard notebook.account?.id == document.accountID, notebook.pendingAccount == nil else {
       throw AccountError.accountChanged
     }
+    guard !deletedScopes.contains(scope) else { throw NotebookCommentError.unavailable }
     if let existing = conversations[scope] {
       await existing.prepare()
       guard notebook.account?.id == document.accountID, notebook.pendingAccount == nil else {
         throw AccountError.accountChanged
       }
+      guard !deletedScopes.contains(scope) else { throw NotebookCommentError.unavailable }
       return existing
     }
     let controller = CommentConversationController(
@@ -83,6 +88,7 @@ final class NotebookCommentProvider {
     guard notebook.account?.id == document.accountID, notebook.pendingAccount == nil else {
       throw AccountError.accountChanged
     }
+    guard !deletedScopes.contains(scope) else { throw NotebookCommentError.unavailable }
     return controller
   }
 
@@ -93,5 +99,16 @@ final class NotebookCommentProvider {
       if !(await conversation.flushDraft()) { saved = false }
     }
     return saved
+  }
+
+  func discard(gistID: String, accountID: UUID) async throws {
+    let scope = CommentConversationScope(accountID: accountID, gistID: gistID)
+    deletedScopes.insert(scope)
+    if let conversation = conversations[scope] {
+      try await conversation.discardAfterGistDeletion()
+      conversations[scope] = nil
+    } else {
+      try await store.removeDrafts(scope: scope)
+    }
   }
 }

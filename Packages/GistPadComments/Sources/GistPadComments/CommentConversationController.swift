@@ -18,6 +18,7 @@ public final class CommentConversationController {
 
     private var archive: CommentDraftArchive
     private var remoteAvailable = false
+    private var isDeleted = false
     @ObservationIgnored private let remote: any CommentConversationRemote
     @ObservationIgnored private let store: any CommentConversationStore
     @ObservationIgnored private var saveTask: Task<Void, Never>?
@@ -63,6 +64,7 @@ public final class CommentConversationController {
     }
 
     public func prepare() async {
+        guard !isDeleted else { return }
         if let preparation { await preparation.value; return }
         guard !isPrepared else { return }
         let task = Task { await restore() }
@@ -78,7 +80,7 @@ public final class CommentConversationController {
 
     public func refresh() async {
         await prepare()
-        guard !isRefreshing, mutation != .working else { return }
+        guard !isDeleted, !isRefreshing, mutation != .working else { return }
         guard canRequest else { loadFailure = lastRemoteFailure.map(CommentConversationProblem.remote); return }
         isRefreshing = true
         defer { isRefreshing = false }
@@ -99,6 +101,25 @@ public final class CommentConversationController {
     }
 
     public func beginComment() { select(.root) }
+
+    public func discardAfterGistDeletion() async throws {
+        isDeleted = true
+        isPrepared = false
+        let saving = saveTask
+        saving?.cancel()
+        saveTask = nil
+        retryTask?.cancel()
+        await saving?.value
+        if let preparation { await preparation.value }
+        archive = CommentDraftArchive(scope: scope)
+        comments = nil
+        knownTotal = nil
+        remoteAvailable = false
+        mutation = .idle
+        composerProblem = nil
+        draftSaveState = .notSaved
+        try await store.removeDrafts(scope: scope)
+    }
 
     public func beginQuote(_ quote: CapturedCommentQuote) {
         guard GistCommentBody.trim(quote.text).utf16.count >= 4 else {
@@ -213,6 +234,7 @@ public final class CommentConversationController {
         }
         do {
             let current = try await remote.listComments(gistID: scope.gistID)
+            guard !isDeleted else { return }
             receive(current)
             if let problem = targetProblem(draft.target, in: current) {
                 composerProblem = problem
@@ -232,6 +254,7 @@ public final class CommentConversationController {
         guard await startMutation() else { return }
         do {
             let current = try await remote.listComments(gistID: scope.gistID)
+            guard !isDeleted else { return }
             receive(current)
             guard let comment = current.first(where: { $0.id == commentID }) else {
                 mutation = .failed(.missingTarget(commentID))
@@ -260,6 +283,7 @@ public final class CommentConversationController {
         var restoredDrafts = false
         do {
             if let saved = try await store.loadDrafts(scope: scope) {
+                guard !isDeleted else { return }
                 guard saved.scope == scope,
                       saved.drafts.contains(where: { $0.id == saved.activeDraftID }),
                       Set(saved.drafts.map(\.id)).count == saved.drafts.count else {
@@ -276,7 +300,7 @@ public final class CommentConversationController {
             draftSaveState = .failed
             composerProblem = .localStorage
         }
-        isPrepared = restoredDrafts
+        isPrepared = restoredDrafts && !isDeleted
     }
 
     private func select(_ target: CommentComposerTarget, text: String = "") {
@@ -313,9 +337,11 @@ public final class CommentConversationController {
     }
 
     private func persist(_ snapshot: CommentDraftArchive) async -> Bool {
+        guard !isDeleted else { return false }
         draftSaveState = .saving
         do {
             try await store.saveDrafts(snapshot)
+            guard !isDeleted else { return false }
             if snapshot.revision >= archive.revision {
                 draftSaveState = .saved
                 if composerProblem == .localStorage {
@@ -338,6 +364,7 @@ public final class CommentConversationController {
     }
 
     private func receive(_ loaded: [GistComment]) {
+        guard !isDeleted else { return }
         comments = GistComment.latestVersions(in: loaded)
         knownTotal = comments!.count
         remoteAvailable = true
@@ -434,6 +461,7 @@ public final class CommentConversationController {
     }
 
     private func acknowledge(comment: GistComment? = nil, deleted: Bool = false) async {
+        guard !isDeleted else { return }
         if var updated = comments {
             if let comment {
                 updated.removeAll { $0.id == comment.id }
@@ -501,6 +529,7 @@ public final class CommentConversationController {
     }
 
     private func reconcile(with current: [GistComment]) async {
+        guard !isDeleted else { return }
         guard let pending = archive.pendingMutation else { mutation = .idle; return }
         if pending.isAcknowledged { await finishAcknowledgedMutation(); return }
         switch pending.operation {
