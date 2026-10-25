@@ -7,6 +7,14 @@ import Testing
 
 @MainActor
 struct NotebookCommentsPresentationTests {
+  @Test func resizeFixtureContainsLongProseTablesCodeAndOfflineImages() {
+    let markdown = NotebookCommentsCaptureData.longReadingMarkdown(title: "Reading at scale")
+    #expect(markdown.split(whereSeparator: \.isWhitespace).count >= 4_500)
+    #expect(markdown.contains("| Thought | Next step | When |"))
+    #expect(markdown.components(separatedBy: "```swift").count - 1 == 4)
+    #expect(markdown.components(separatedBy: "data:image/png;base64,").count - 1 == 3)
+  }
+
   @Test func hiddenAnnotationsDoNotFetchForTheToolbarCount() async throws {
     let fixture = NotebookCommentsCaptureFixture()
     let controller = try await open(fixture)

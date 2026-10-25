@@ -119,6 +119,49 @@ enum NotebookCommentsCaptureData {
       + "\n\nLeave room for the next idea.\n"
   }
 
+  static func longReadingMarkdown(title: String) -> String {
+    let paragraph = """
+      Keep the useful things close and give each thought enough room to breathe. A walk can change \
+      the shape of a question before an answer arrives. Bring the notebook, notice the small details, \
+      and leave a little space for the next person to think. Good ideas grow through ordinary attention.
+      """
+    return "# \(title)\n\n\(passage).\n\n" + (1...18).map { section in
+      var text = "## Reading section \(section)\n\n"
+        + Array(repeating: paragraph, count: 5).joined(separator: "\n\n") + "\n\n"
+      if section.isMultiple(of: 3) {
+        text += """
+          | Thought | Next step | When |
+          | --- | --- | --- |
+          | A question worth keeping | Take a longer walk and return with a fresh perspective | Tomorrow |
+          | A small observation | Share the detail with someone who will notice it too | This week |
+
+
+          """
+      }
+      if section.isMultiple(of: 4) {
+        text += """
+          ```swift
+          struct ReadingThought: Identifiable {
+              let id: UUID
+              let question: String
+              let nextStep: String
+          }
+          ```
+
+
+          """
+      }
+      if (section - 2).isMultiple(of: 6) {
+        text += "![Two quiet shapes, reading illustration \(section)](data:image/png;base64,\(readingImage))\n\n"
+      }
+      return text
+    }.joined()
+  }
+
+  private static let readingImage = """
+    iVBORw0KGgoAAAANSUhEUgAAAeAAAADwCAIAAABXFyDtAAAEdklEQVR42u3bIVIrURCG0X+mZiXZAy4KE5FtZANZSTaQbUTEoOLYQ3TMuEgEAk9RFFTde/sc/0R64KNfw0yP9RkA2jMbAYBAAyDQAAINgEADCDQAAg2AQAMINAACDSDQAAg0AAININAACDSAQAMg0AACDYBAAyDQAAINgEADCDQAAg2AQAMINAACDSDQAAg0gEADINAACDSAQAMg0ABFLEbQpvPl9rt/eNhvTQ/GMD3Wpyn0m2PJBoGmpyLrNQg03URZrEGg6aPLSg0Crcv9UWoQaGmWaUCgpVmmQaB1eVRKDQItzTINxKve6uzzgg1aqqzSgEBLs0xDnDjUGdMAG7QYWaXBBo06mw/YoKXHKg3YoNXZxECgtQZzgzhxSEycO8AGrc6YJAi0ppgnINBqYqog0DpitmYLAq0gJgwCrR2YMwi0apg2CLReYOYg0Eqh0YBAa4T5Q7zqrQ7k798Fv19PBlXWZnc0hFqBVucuGq3LKPWXxeOnEbrM918YBUs9W59p4YmoM36Ep+yJQ52b9bq8GwJx9Ci7QauzOmOVFmhQZzRaoK3P6oxGC7Q6o85otECjzqDRNQJtfQYEWp2xPmOJFmjUGco0erY+Awg0ALUDbX2O+wZx5RBodQYQaACBtj4T9w3iyiHQAAg0gEDHfQNAoAEE2voMINAAjBJo6zMg0AAINIBAx30DQKABEGgAgY77BoBAAwg0AAINwHCBdoAGBBoAgQZAoAEEGoBKgfYbQkCgARBoAAQaQKABEGgAgY4/4QAQaACBBkCgARBoAIEGQKABBBoAgQZAoAEEGgCBBhBoAAQaQKABEGgABBpAoAEQaACBbtxhv/XkAIEGQKABEGgAgQZAoAEEOv6QA0CgAQQaAIEGQKABBDp+Twgg0AACDYBAAzBUoJ2hAYEGQKABGCPQrhyAQAMg0ACMEWhXDkCgARBoSzQg0EYAINCWaAAbNIBAAyDQceXo19vHiyHw3za7o0ADINCWaECgNZq4chD3DYEGoGygLdGAQENcOYj7hkBbojUa6tR58A1aowGBBks01meBtkRrNNSoc4kNWqM1GnUWaNBo1FmgLdEajToXMD3WZ5GPer7cfGU3+7Pzfj2ZBtJc98Rhj275iVT7xkOdf2Lx1Gnt2882TfEup+CJIw4dvf2HRql1ubhygdZo5yaIG7Q6YP4g0Bph8iDQSoGZg0DrhWmDQKsG5gwCrR0mDAi0gpgtCLSOYKog0GpiniDQmoJJQrzqHa+DSzNgg1YZcwOB1hoTA+LEEecOaQYbtPpgPmCDtkpLM9igjUCPTANs0FZpaQYEWqalGeLEYZH0eQEbtFVamkGgUWpdBoGWaWkGBFqmpRkEmv5Krcsg0Eqty4BAi7Uog0DTeK8VGQSaJpItxyDQAMSr3gACDYBAAyDQAAINgEADCDQAAg2AQAMINAACDSDQAAg0gEADINAACDSAQAMg0AACDYBAAyDQAAINgEADCDQAAg0g0AAINAACDSDQAAg0gEADINAACDRAXz4BB8K0FqdZwmsAAAAASUVORK5CYII=
+    """
+
   static var readingListComments: [GistComment] {
     readingIdeas.enumerated().map { index, quote in
       comment(
@@ -384,6 +427,7 @@ actor NotebookCommentsCaptureProvider: NotebookProviding, NotebookCommentProvidi
             "filename": "README.md", "language": "Markdown",
             "content": scenario == "reading-list"
               ? NotebookCommentsCaptureData.readingListMarkdown(title: title)
+              : scenario == "long-reading" ? NotebookCommentsCaptureData.longReadingMarkdown(title: title)
               : NotebookCommentsCaptureData.markdown(title: title),
           ],
           "Appendix.md": [
