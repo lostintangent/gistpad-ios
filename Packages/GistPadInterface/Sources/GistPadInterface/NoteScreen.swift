@@ -12,6 +12,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     private let isFocused: Bool
     private let allowsSplit: Bool
     private let isSidebarHidden: Bool
+    private let areCommentsPresented: Bool
     @State private var showingTags = false
     @State private var showingOfflineExplanation = false
     @State private var saveDetails: String?
@@ -33,6 +34,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         document: NoteChrome, mode: Binding<NoteMode>, saveState: NoteSaveState,
         actions: NoteActions = .init(), isFocused: Bool = false,
         allowsSplit: Bool = false, isSidebarHidden: Bool = false,
+        areCommentsPresented: Bool = false,
         @ViewBuilder source: () -> Source, @ViewBuilder preview: () -> Preview
     ) {
         self.document = document
@@ -42,6 +44,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         self.isFocused = isFocused
         self.allowsSplit = allowsSplit
         self.isSidebarHidden = isSidebarHidden
+        self.areCommentsPresented = areCommentsPresented
         self.source = source()
         self.preview = preview()
     }
@@ -72,6 +75,11 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationSubtitle(document.headerFilename ?? "")
         .background { NoteFileSubtitle(filename: document.headerFilename) }
+        .background {
+            if actions.comments != nil {
+                NoteCommentBadgeAppearance(label: commentsLabel)
+            }
+        }
         .modifier(NoteTitleMenu(isEnabled: document.files.count > 1) { fileChoices })
         .toolbar { noteToolbar }
         .safeAreaBar(edge: .bottom, spacing: 0) {
@@ -181,6 +189,25 @@ public struct NoteScreen<Source: View, Preview: View>: View {
 
     @ToolbarContentBuilder
     private var secondaryToolbar: some ToolbarContent {
+        if let comments = actions.comments {
+            ToolbarItem(placement: .primaryAction) {
+                Toggle(
+                    isOn: Binding(
+                        get: { areCommentsPresented },
+                        set: { _ in comments() })
+                ) {
+                    Label(commentsLabel, systemImage: "text.bubble")
+                }
+                .toggleStyle(.button)
+                .labelStyle(.iconOnly)
+                .symbolVariant(.none)
+                .badge(commentBadge)
+                .badgeProminence(.decreased)
+                .tint(.primary)
+                .accessibilityAddTraits(areCommentsPresented ? .isSelected : [])
+                .accessibilityIdentifier("note-comments")
+            }
+        }
         if hasMoreActions {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -278,6 +305,17 @@ public struct NoteScreen<Source: View, Preview: View>: View {
 
     private var showsManualSave: Bool {
         saveState.showsManualSave(isAutoSaveEnabled: document.isAutoSaveEnabled)
+    }
+
+    private var commentsLabel: String {
+        let title = String(localized: "Comments", bundle: .module)
+        guard let count = document.commentCount else { return title }
+        return title + ", " + String(localized: "\(count) comments", bundle: .module)
+    }
+
+    private var commentBadge: Text? {
+        guard let count = document.commentCount, count > 0 else { return nil }
+        return Text(count, format: .number).foregroundStyle(.primary)
     }
 
     private var hasMoreActions: Bool {

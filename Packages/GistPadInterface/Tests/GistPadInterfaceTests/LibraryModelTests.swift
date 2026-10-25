@@ -4,6 +4,22 @@ import Testing
 
 @MainActor
 struct LibraryModelTests {
+    @Test(arguments: [nil, -1, 0, 1, 42] as [Int?])
+    func commentMetadataOnlyExposesKnownPositiveGistTotals(count: Int?) {
+        var note = LibraryNote(
+            id: "gist", title: "A conversation", updatedAt: .now, gistID: "gist",
+            commentCount: count)
+        #expect(note.supportsComments)
+        #expect(note.visibleCommentCount == count.flatMap { $0 > 0 ? $0 : nil })
+        note.isDailyNote = true
+        #expect(!note.supportsComments)
+        #expect(note.visibleCommentCount == nil)
+        note.isDailyNote = false
+        note.gistID = nil
+        #expect(!note.supportsComments)
+        #expect(note.visibleCommentCount == nil)
+    }
+
     @Test func defaultCollectionExcludesDailyArchivedAndOtherOwners() {
         let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
         #expect(model.matchingNotes.map(\.id) == ["shape", "weekend", "words", "mixed"])

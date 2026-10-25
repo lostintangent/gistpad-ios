@@ -72,6 +72,7 @@ public struct NoteChrome: Equatable, Sendable {
     public var isArchived: Bool
     public var tags: [LibraryTag]
     public var isAutoSaveEnabled: Bool
+    public var commentCount: Int?
 
     var headerFilename: String? {
         guard files.count > 1,
@@ -84,7 +85,7 @@ public struct NoteChrome: Equatable, Sendable {
         title: String, files: [NoteFile], selectedFileID: String,
         access: NoteAccess = .editable, isPinned: Bool = false,
         isStarred: Bool = false, isArchived: Bool = false, tags: [LibraryTag] = [],
-        isAutoSaveEnabled: Bool = false
+        isAutoSaveEnabled: Bool = false, commentCount: Int? = nil
     ) {
         self.title = title
         self.files = files
@@ -95,6 +96,7 @@ public struct NoteChrome: Equatable, Sendable {
         self.isArchived = isArchived
         self.tags = tags
         self.isAutoSaveEnabled = isAutoSaveEnabled
+        self.commentCount = commentCount
     }
 }
 
@@ -112,6 +114,7 @@ public struct NoteActions {
     public var focus: (() -> Void)?
     public var find: (() -> Void)?
     public var intelligence: (() -> Void)?
+    public var comments: (() -> Void)?
     public var tags: (() -> Void)?
     public var rename: (() -> Void)?
     public var renameFile: (() -> Void)?

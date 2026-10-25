@@ -1,3 +1,4 @@
+import GistPadComments
 import GistPadEditor
 import GistPadInterface
 import GistPadPlatform
@@ -33,20 +34,24 @@ struct LiveNotebookWorkspace: View {
   @State private var showingAddToToday = false
   @State private var sharedPreviewGistID: String?
   @State private var intelligence = NotebookIntelligencePresentation()
+  @State private var comments: NotebookCommentsPresentation
   @State private var intelligenceAccountScope = UUID()
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.openURL) private var openURL
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.isGitHubStatusVisible) private var isGitHubStatusVisible
 
   init(
     notebook: NotebookModel, layout: NotebookLayoutPreferences = NotebookLayoutPreferences(),
-    routes: NotebookRouteInbox = .shared
+    routes: NotebookRouteInbox = .shared, commentsProvider: NotebookCommentProvider? = nil
   ) {
     self.notebook = notebook
     self.routes = routes
     _layout = State(initialValue: layout)
+    _comments = State(initialValue: NotebookCommentsPresentation(
+      notebook: notebook, provider: commentsProvider))
   }
 
   #if DEBUG
@@ -160,9 +165,63 @@ struct LiveNotebookWorkspace: View {
           isVisible: horizontalSizeClass == .regular && notebook.library.loadState != .signedOut,
           action: libraryActions.create)
       }
+      .frame(minWidth: comments.isPresented && horizontalSizeClass == .regular ? 320 : 0)
     }
     .navigationSplitViewStyle(.balanced)
     .librarySearch(model: notebook.library)
+    .toolbar(removing: comments.isPresented && horizontalSizeClass == .regular ? .sidebarToggle : nil)
+    .inspector(
+      isPresented: Binding(
+        get: { comments.isPresented },
+        set: { if !$0 { comments.hide() } })
+    ) {
+      commentsPanel
+        .inspectorColumnWidth(min: 280, ideal: 320, max: 360)
+        .presentationDetents(
+          dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large],
+          selection: Binding(
+            get: { dynamicTypeSize.isAccessibilitySize ? .large : comments.detent },
+            set: { comments.detent = $0 }))
+        .presentationDragIndicator(.visible)
+        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+        .onDisappear { comments.didDismiss() }
+    }
+    .onChange(of: comments.isPresented) { _, presented in
+      if presented, horizontalSizeClass == .regular {
+        comments.sidebarBeforeOpening = columnVisibility
+        columnVisibility = .detailOnly
+      } else if !presented, let previous = comments.sidebarBeforeOpening {
+        comments.sidebarBeforeOpening = nil
+        columnVisibility = previous
+      }
+    }
+    .onChange(of: horizontalSizeClass) { _, sizeClass in
+      if comments.isPresented, sizeClass == .regular {
+        if comments.sidebarBeforeOpening == nil {
+          comments.sidebarBeforeOpening = columnVisibility
+        }
+        columnVisibility = .detailOnly
+      }
+    }
+    .onChange(of: comments.errorMessage) { _, message in
+      if let message {
+        comments.errorMessage = nil
+        actionMessage = message
+      }
+    }
+    .onChange(of: commentCount, initial: true) { _, count in
+      if let count {
+        notebook.recordCommentCount(
+          accountID: count.scope.accountID, gistID: count.scope.gistID, total: count.total)
+      }
+    }
+    .confirmationDialog(
+      String(localized: "Choose Comment"),
+      isPresented: commentsChoicePresented(inInspector: false),
+      titleVisibility: .visible
+    ) {
+      commentChoices
+    }
   }
 
   private var workspaceNavigationLifecycle: some View {
@@ -196,6 +255,7 @@ struct LiveNotebookWorkspace: View {
     }
     .onChange(of: compactColumn) { previous, current in
       guard previous != current, current == .sidebar, let outgoing = active else { return }
+      if horizontalSizeClass == .compact { comments.hide() }
       finishLeavingNote(outgoing, preservingReview: true)
     }
   }
@@ -221,6 +281,7 @@ struct LiveNotebookWorkspace: View {
     .onChange(of: notebook.pendingAccount?.id) { _, pending in
       NotebookPlatformBootstrap.scheduleRefresh()
       if pending != nil {
+        comments.reset()
         for controller in sessions.values { controller.clearReview() }
       }
     }
@@ -228,6 +289,7 @@ struct LiveNotebookWorkspace: View {
       NotebookPlatformBootstrap.scheduleRefresh()
     }
     .onChange(of: notebook.account?.id) { _, accountID in
+      comments.reset()
       for controller in sessions.values { controller.clearReview() }
       archiveUndo = nil
       intelligenceAccountScope = UUID()
@@ -244,11 +306,15 @@ struct LiveNotebookWorkspace: View {
     }
     .onChange(of: notebook.isSigningIn) { _, signingIn in
       if signingIn {
+        comments.reset()
         for controller in sessions.values { controller.clearReview() }
         intelligenceAccountScope = UUID()
         intelligence.target = nil
         creationChoiceTarget = nil
       }
+    }
+    .onChange(of: notebook.isSigningOut) { _, signingOut in
+      if signingOut { comments.reset() }
     }
     .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
       Task { await notebook.updateCalendar() }
@@ -456,6 +522,11 @@ struct LiveNotebookWorkspace: View {
         Task { await notebook.showToday() }
       })
     actions.select = { selectRow($0) }
+    actions.openComments = { rowID in
+      guard canSwitchDocument else { return }
+      comments.requestedRowID = rowID
+      selectRow(rowID)
+    }
     actions.account = { showingSettings = true }
     actions.reconnect = {
       Task {
@@ -549,6 +620,9 @@ struct LiveNotebookWorkspace: View {
   ) -> some View {
     let mode = Binding(
       get: {
+        if comments.isPresented, comments.matches(controller.document) {
+          return comments.documentMode
+        }
         if let sharedPreviewGistID, sharedPreviewGistID == controller.draft.gistID {
           return NoteMode.reading
         }
@@ -558,22 +632,38 @@ struct LiveNotebookWorkspace: View {
           canEdit: controller.document.chrome.access.canEdit)
       },
       set: {
-        sharedPreviewGistID = nil
-        layout.select($0)
-        if $0 != .split { controller.mode = $0 }
+        if comments.isPresented, comments.matches(controller.document) {
+          comments.documentMode = $0
+        } else {
+          sharedPreviewGistID = nil
+          layout.select($0)
+          if $0 != .split { controller.mode = $0 }
+        }
       })
+    var chrome = controller.document.chrome
+    if comments.matches(controller.document) {
+      chrome.commentCount = comments.conversation?.knownTotal ?? chrome.commentCount
+    }
     return NoteScreen(
-      document: controller.document.chrome, mode: mode,
+      document: chrome, mode: mode,
       saveState: controller.saveState, actions: noteActions(controller),
-      allowsSplit: NotebookLayoutPreferences.allowsSplit(availableWidth: availableWidth),
-      isSidebarHidden: columnVisibility == .detailOnly
+      allowsSplit: !comments.isPresented && NotebookLayoutPreferences.allowsSplit(availableWidth: availableWidth),
+      isSidebarHidden: columnVisibility == .detailOnly,
+      areCommentsPresented: comments.isPresented && comments.matches(controller.document)
     ) {
       NotebookPhotoSurface(controller: photos, isSource: true) {
         MarkdownEditorView(
           session: controller.session,
-          insertPhoto: { photos.choosePhoto() },
+          insertPhoto: { comments.performAfterClosing { photos.choosePhoto() } },
           canInsertPhoto: photos.canChoosePhoto,
-          intelligence: { presentIntelligence(controller) })
+          intelligence: { comments.performAfterClosing { presentIntelligence(controller) } },
+          comments: commentConfiguration(controller),
+          onOpenCommentThreads: commentOpener(controller, origin: .source),
+          onLinkedCommentIDsChange: { ids in
+            guard comments.sessionID == controller.session.viewIdentity else { return }
+            comments.sourceLinkedIDs = ids
+          },
+          onAddComment: commentComposer(controller, origin: .source))
       }
     } preview: {
       NotebookPhotoSurface(
@@ -604,6 +694,21 @@ struct LiveNotebookWorkspace: View {
       }
     }
     .task(id: controller.draft.id) { await controller.inspectRemoteChanges() }
+    .task(id: CommentReadInput(
+      session: controller.session.viewIdentity, gistID: controller.document.gist?.id,
+      knownTotal: controller.document.gist?.commentCount,
+      isReady: notebook.account?.id == controller.draft.accountID
+        && notebook.pendingAccount == nil && !notebook.isSigningIn && !notebook.isSigningOut,
+      allowsComments: NotebookCommentsPresentation.supports(controller.document),
+      showsInline: notebook.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true)
+    ) {
+      guard notebook.account?.id == controller.draft.accountID, notebook.pendingAccount == nil,
+        !notebook.isSigningIn, !notebook.isSigningOut else { return }
+      comments.activate(controller)
+      await comments.prepareAnnotations(
+        for: controller,
+        showsInline: notebook.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true)
+    }
     .task(id: SourcePresentation(
       session: controller.session.viewIdentity, mode: mode.wrappedValue,
       phase: scenePhase, width: availableWidth)
@@ -639,6 +744,13 @@ struct LiveNotebookWorkspace: View {
   private func preview(_ controller: NotebookSessionController) -> some View {
     SessionPreview(
       session: controller.session, allowsMutations: controller.document.chrome.access.canEdit,
+      comments: commentConfiguration(controller),
+      onOpenCommentThreads: commentOpener(controller, origin: .reading),
+      onLinkedCommentIDsChange: { ids in
+        guard comments.sessionID == controller.session.viewIdentity else { return }
+        comments.previewLinkedIDs = ids
+      },
+      onAddComment: commentComposer(controller, origin: .reading),
       openWikilink: { target in
         if let note = notebook.library.snapshot.notes.first(where: {
           $0.title.localizedStandardCompare(target) == .orderedSame
@@ -651,10 +763,171 @@ struct LiveNotebookWorkspace: View {
       .id(controller.session.viewIdentity)
   }
 
+  @ViewBuilder
+  private var commentsPanel: some View {
+    Group {
+      if let conversation = comments.conversation, conversation.isPrepared {
+        NotebookCommentsInspector(
+          conversation: conversation, selectedRootID: comments.selectedRootID,
+          threadRevealRevision: comments.threadRevealRevision,
+          linkedRootIDs: comments.documentMode == .source
+            ? comments.sourceLinkedIDs : comments.previewLinkedIDs,
+          presentationProblem: comments.preparationFailure,
+          focusRequest: $comments.focusRequest,
+          close: {
+            if comments.conversation === conversation { await comments.close() }
+          },
+          revealPassage: { id in
+            comments.selectedRootID = id
+            comments.revealRevision &+= 1
+          },
+          didFocus: { comments.detent = .large })
+          .task {
+            await conversation.flushDraft()
+          }
+          .onChange(of: conversation.isPrepared, initial: true) { _, prepared in
+            if prepared { comments.applyPendingContext() }
+          }
+          .onChange(of: conversation.comments, initial: true) { _, _ in
+            comments.applyPendingContext()
+          }
+      } else {
+        NavigationStack {
+          Group {
+            if let failure = comments.preparationFailure
+              ?? (comments.conversation?.draftSaveState == .failed
+                ? String(localized: "Your saved comment drafts couldn’t be read. Try again before writing a new comment.")
+                : nil) {
+              VStack(alignment: .leading, spacing: 12) {
+                Text("Comments couldn’t be opened").font(.headline)
+                Text(verbatim: failure)
+                Button("Try Again") { comments.retryOpening() }
+                  .buttonStyle(.glass)
+              }
+              .padding(20)
+            } else {
+              ProgressView("Opening comments")
+            }
+          }
+          .navigationTitle("Comments")
+          .navigationSubtitle("All files in this gist")
+          .navigationBarTitleDisplayMode(.inline)
+          .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+              Button("Close", systemImage: "xmark") { comments.hide() }
+            }
+          }
+        }
+        .tint(.primary)
+      }
+    }
+    .onChange(of: dynamicTypeSize, initial: true) { _, size in
+      if size.isAccessibilitySize { comments.detent = .large }
+    }
+    .confirmationDialog(
+      String(localized: "Choose Comment"),
+      isPresented: commentsChoicePresented(inInspector: true),
+      titleVisibility: .visible
+    ) {
+      commentChoices
+    }
+  }
+
+  private func commentsChoicePresented(inInspector: Bool) -> Binding<Bool> {
+    Binding(
+      get: { comments.isPresented == inInspector && !comments.overlappingIDs.isEmpty },
+      set: { presented in
+        if !presented, comments.isPresented == inInspector { comments.overlappingIDs = [] }
+      })
+  }
+
+  @ViewBuilder
+  private var commentChoices: some View {
+    ForEach(comments.overlappingIDs, id: \.self) { id in
+      if let thread = comments.conversation?.threads.first(where: { $0.id == id }),
+        let active {
+        let author = thread.comment.user?.login ?? String(localized: "Unknown author")
+        let excerpt = String(thread.comment.parsedBody.text.prefix(80))
+        Button("\(author): \(excerpt)") {
+          comments.overlappingIDs = []
+          comments.open(for: active, origin: comments.documentMode, rootID: id)
+        }
+      }
+    }
+    Button("Cancel", role: .cancel) { comments.overlappingIDs = [] }
+  }
+
+  private func commentConfiguration(
+    _ controller: NotebookSessionController
+  ) -> CommentHighlightConfiguration {
+    guard NotebookCommentsPresentation.supports(controller.document),
+      comments.matches(controller.document), let conversation = comments.conversation
+    else { return .init() }
+    return .init(
+      quotes: conversation.threads.compactMap(\.quotedPassage),
+      selectedCommentID: comments.selectedRootID,
+      revealRevision: comments.revealRevision,
+      showsInlineComments:
+        notebook.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true)
+  }
+
+  private func commentOpener(
+    _ controller: NotebookSessionController, origin: NoteMode
+  ) -> (@MainActor ([Int64]) -> Void)? {
+    guard NotebookCommentsPresentation.supports(controller.document) else { return nil }
+    return { ids in
+      guard comments.sessionID == controller.session.viewIdentity else { return }
+      if ids.count == 1, let id = ids.first {
+        comments.open(for: controller, origin: origin, rootID: id)
+      } else if !ids.isEmpty {
+        comments.documentMode = origin
+        comments.overlappingIDs = ids
+      } else {
+        Logger(subsystem: "dev.gistpad.GistPad", category: "Comments")
+          .error("A comment activation arrived without a thread identifier.")
+      }
+    }
+  }
+
+  private func commentComposer(
+    _ controller: NotebookSessionController, origin: NoteMode
+  ) -> (@MainActor (String) -> Void)? {
+    guard NotebookCommentsPresentation.supports(controller.document) else { return nil }
+    return { selection in
+      guard comments.sessionID == controller.session.viewIdentity else { return }
+      comments.open(for: controller, origin: origin, quote: selection)
+    }
+  }
+
+  private func afterCommentsClose(_ action: (() -> Void)?) -> (() -> Void)? {
+    action.map { action in
+      { comments.performAfterClosing(action) }
+    }
+  }
+
   private struct SearchInput: Equatable {
     let query: String
     let tags: Set<String>
     let collection: LibraryCollection
+  }
+
+  private struct CommentReadInput: Hashable {
+    let session: UUID
+    let gistID: String?
+    let knownTotal: Int?
+    let isReady: Bool
+    let allowsComments: Bool
+    let showsInline: Bool
+  }
+
+  private struct CommentCount: Equatable {
+    let scope: CommentConversationScope
+    let total: Int
+  }
+
+  private var commentCount: CommentCount? {
+    guard let conversation = comments.conversation, let total = conversation.knownTotal else { return nil }
+    return .init(scope: conversation.scope, total: total)
   }
 
   private struct SourcePresentation: Hashable {
@@ -678,8 +951,22 @@ struct LiveNotebookWorkspace: View {
   private func noteActions(_ controller: NotebookSessionController) -> NoteActions {
     var actions = NoteActions()
     actions.focus = {
-      withAnimation(reduceMotion ? nil : .snappy) {
-        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+      let target: NavigationSplitViewVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+      comments.performAfterClosing {
+        withAnimation(reduceMotion ? nil : .snappy) {
+          columnVisibility = target
+        }
+      }
+    }
+    if NotebookCommentsPresentation.supports(controller.document) {
+      actions.comments = {
+        if comments.isPresented {
+          Task { await comments.close() }
+        } else {
+          comments.open(
+            for: controller,
+            origin: sharedPreviewGistID == controller.document.gist?.id ? .reading : nil)
+        }
       }
     }
     actions.save = { publish(controller) }
@@ -800,6 +1087,16 @@ struct LiveNotebookWorkspace: View {
           controller: controller, generation: generation, choice: .discard)
       }
     }
+    actions.intelligence = afterCommentsClose(actions.intelligence)
+    actions.tags = afterCommentsClose(actions.tags)
+    actions.rename = afterCommentsClose(actions.rename)
+    actions.renameFile = afterCommentsClose(actions.renameFile)
+    actions.addFile = afterCommentsClose(actions.addFile)
+    actions.share = afterCommentsClose(actions.share)
+    actions.copyLink = afterCommentsClose(actions.copyLink)
+    actions.find = afterCommentsClose(actions.find)
+    actions.reviewChanges = afterCommentsClose(actions.reviewChanges)
+    actions.delete = afterCommentsClose(actions.delete)
     return actions
   }
 
@@ -882,9 +1179,14 @@ struct LiveNotebookWorkspace: View {
       return false
     }
     controller.mode = layout.initialMode(isUnpublished: controller.draft.baseContent == nil)
+    comments.activate(controller)
     controller.requestCreationFocus()
     preparePhotos(for: controller)
     activeID = controller.draft.id.uuidString
+    if comments.requestedRowID == document.rowID {
+      comments.requestedRowID = nil
+      comments.open(for: controller)
+    }
     // A completed restoration must not reopen detail after returning to Library.
     if notebook.library.selectedNoteID != nil { compactColumn = .detail }
     do {
@@ -918,6 +1220,9 @@ struct LiveNotebookWorkspace: View {
   ) {
     if !preservingReview { controller.clearReview() }
     Task {
+      if !(await comments.flushDrafts()) {
+        actionMessage = String(localized: "A comment draft couldn’t be saved. Return to Comments for that note and try saving again.")
+      }
       guard await controller.finishLeavingNote() else { return }
       let id = controller.draft.id.uuidString
       controller.clearReview()
@@ -1273,6 +1578,9 @@ struct LiveNotebookWorkspace: View {
     let lease = NotebookBackgroundLease()
     let documents = Array(sessions.values)
     let saving = Task {
+      if !(await comments.flushDrafts()) {
+        actionMessage = String(localized: "A comment draft couldn’t be saved. Return to Comments for that note and try saving again.")
+      }
       await NotebookLifecycle.saveOnBackground(documents, shouldContinue: { lease.isActive })
       lease.end()
     }
@@ -1280,6 +1588,7 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func finishAccountPersistence(_ accountID: UUID) async throws {
+    guard await comments.flushDrafts() else { throw CommentConversationProblem.localStorage }
     for controller in sessions.values where controller.draft.accountID == accountID {
       guard !controller.isPublishing, !controller.isApplyingDurableEdit else {
         throw NotebookActionError.publicationInProgress

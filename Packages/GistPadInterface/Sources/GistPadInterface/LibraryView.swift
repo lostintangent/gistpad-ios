@@ -130,6 +130,22 @@ private struct LibraryRowDeletionConfirmation: ViewModifier {
     }
 }
 
+private struct LibraryCommentsAccessibilityAction: ViewModifier {
+    let note: LibraryNote
+    let action: (@MainActor (String) -> Void)?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if note.supportsComments, let action {
+            content.accessibilityAction(
+                named: Text("Open Comments", bundle: .module)
+            ) { action(note.id) }
+        } else {
+            content
+        }
+    }
+}
+
 public struct LibraryActions {
     public var refresh: @MainActor () async -> Void
     public var create: @MainActor () -> Void
@@ -140,6 +156,7 @@ public struct LibraryActions {
     public var account: (@MainActor () -> Void)?
     public var togglePin: (@MainActor (String) -> Void)?
     public var toggleArchive: (@MainActor (String) -> Void)?
+    public var openComments: (@MainActor (String) -> Void)?
     public var delete: (@MainActor (String) -> Void)?
     public var deletionConfirmation: LibraryDeletionConfirmation?
 
@@ -824,6 +841,7 @@ public struct LibraryView: View {
         .listRowSeparatorTint(Color(uiColor: .separator))
         .listRowBackground(isSidebar ? nil : Color.clear)
         .contextMenu { rowActions(note) }
+        .modifier(LibraryCommentsAccessibilityAction(note: note, action: actions.openComments))
         .modifier(LibraryRowDeletionConfirmation(rowID: note.id, target: actions.deletionConfirmation))
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if let delete = actions.deletionAction(for: note) {
@@ -860,6 +878,11 @@ public struct LibraryView: View {
 
     @ViewBuilder
     private func rowActions(_ note: LibraryNote) -> some View {
+        if note.supportsComments, let openComments = actions.openComments {
+            Button(
+                String(localized: "Open Comments", bundle: .module), systemImage: "text.bubble"
+            ) { openComments(note.id) }
+        }
         if note.isOwned, let pin = actions.togglePin {
             Button(
                 note.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),

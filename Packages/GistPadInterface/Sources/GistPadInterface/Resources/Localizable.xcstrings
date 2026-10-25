@@ -10,6 +10,105 @@
     "%lld notes" : {
 
     },
+    "%lld comments" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld comment"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld comments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld replies" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reply"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld replies"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Comments" : {},
+    "Comment actions" : {},
+    "Comments couldn’t be loaded" : {},
+    "Loading comments" : {},
+    "No comments yet" : {},
+    "Start a conversation about this gist." : {},
+    "Updating comments" : {},
+    "Unknown author" : {},
+    "this author" : {},
+    "Delete %@’s comment from GitHub?" : {},
+    "Delete Comment" : {},
+    "Delete Comment…" : {},
+    "Edit Comment" : {},
+    "“%@”\n\nOnly this comment is deleted. Its replies stay in the conversation." : {},
+    "Reply" : {},
+    "Reply to %@" : {},
+    "%@, reply to %@" : {},
+    "Show Passage" : {},
+    "Show Full Quote" : {},
+    "Show Less" : {},
+    "Not linked in this view" : {},
+    "Save Draft Again" : {},
+    "Write a reply" : {},
+    "Write a comment" : {},
+    "Edit your comment" : {},
+    "Post reply to GitHub" : {},
+    "Save comment to GitHub" : {},
+    "Post comment to GitHub" : {},
+    "On GitHub" : {},
+    "Replying to @%@" : {},
+    "Replying to a comment" : {},
+    "Selected from %@: %@" : {},
+    "Editing your comment" : {},
+    "Cancel editing comment" : {},
+    "Remove comment context" : {},
+    "Comments need an internet connection. Try again when you’re online." : {},
+    "Reconnect GitHub from your account in the Library, then refresh comments." : {},
+    "Your GitHub account doesn’t have permission to make this change." : {},
+    "This conversation is no longer available to your GitHub account." : {},
+    "GitHub couldn’t accept this comment. Check the text and try again." : {},
+    "GitHub is limiting requests. Try again after %@." : {},
+    "GitHub is limiting requests. Wait a moment, then try again." : {},
+    "GitHub couldn’t finish the request. Refresh comments and try again." : {},
+    "GitHub’s response couldn’t be read. Refresh comments before trying again." : {},
+    "Your draft isn’t saved on this device." : {},
+    "This comment is no longer available. Your draft has not been posted." : {},
+    "This reply is already at the deepest supported level. Reply to its parent instead." : {},
+    "Your GitHub account doesn’t have permission to change this comment." : {},
+    "This comment changed on GitHub. Your text is unchanged. Refresh before editing it again." : {},
+    "Write a comment before posting." : {},
+    "Select at least four characters to comment on a passage." : {},
+    "Wait for the current comment operation to finish." : {},
+    "Refresh comments to check the previous change before posting again." : {},
+    "GitHub hasn’t confirmed the change. Your draft is unchanged. You can try again." : {},
+    "You have an unfinished new comment. Choose New Comment to return to it." : {},
     "%@, %@" : {
 
     },
@@ -35,6 +134,9 @@
 
     },
     "On this iPhone" : {
+
+    },
+    "Open Comments" : {
 
     },
     "Public gist" : {

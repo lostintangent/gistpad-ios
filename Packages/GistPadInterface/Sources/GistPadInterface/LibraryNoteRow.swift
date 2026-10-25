@@ -95,6 +95,31 @@ struct LibraryNoteRow: View {
     @ViewBuilder
     private func secondaryLine(relativeTo now: Date) -> some View {
         Group {
+            if let count = note.visibleCommentCount {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: titleSpacing) {
+                        metadata(relativeTo: now)
+                        commentCount(count)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        metadata(relativeTo: now)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        commentCount(count)
+                    }
+                }
+            } else {
+                metadata(relativeTo: now)
+            }
+        }
+        .font(.footnote)
+        .foregroundStyle(Color(uiColor: .label))
+    }
+
+    @ViewBuilder
+    private func metadata(relativeTo now: Date) -> some View {
+        Group {
             if note.isDailyNote {
                 if let excerpt = note.excerpt, !excerpt.isEmpty {
                     excerptText(excerpt)
@@ -126,8 +151,19 @@ struct LibraryNoteRow: View {
                 .captureFrame("note-secondary-\(note.id)")
             }
         }
-        .font(.footnote)
-        .foregroundStyle(Color(uiColor: .label))
+    }
+
+    private func commentCount(_ count: Int) -> some View {
+        Label {
+            Text(count, format: .number)
+        } icon: {
+            Image(systemName: "text.bubble")
+        }
+        .fixedSize()
+        .accessibilityLabel(
+            Text("\(count) comments", bundle: .module)
+        )
+        .captureFrame("note-comment-count-\(note.id)")
     }
 
     private func excerptText(_ excerpt: String) -> some View {

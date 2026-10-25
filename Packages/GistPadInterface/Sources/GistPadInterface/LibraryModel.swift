@@ -39,6 +39,14 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
     public var progress: LibraryTaskProgress?
     public var isOverdue: Bool
     public var dailyDate: Date?
+    public var commentCount: Int?
+
+    public var supportsComments: Bool { gistID != nil && !isDailyNote }
+
+    public var visibleCommentCount: Int? {
+        guard supportsComments, let commentCount, commentCount > 0 else { return nil }
+        return commentCount
+    }
 
     public init(
         id: String, title: String, updatedAt: Date, gistID: String? = nil, owner: String? = nil,
@@ -46,7 +54,8 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
         isSecret: Bool = true, isPinned: Bool = false,
         isStarred: Bool = false, isArchived: Bool = false, isDailyNote: Bool = false,
         tagIDs: Set<String> = [], filename: String? = nil, fileCount: Int? = nil, excerpt: String? = nil,
-        progress: LibraryTaskProgress? = nil, isOverdue: Bool = false, dailyDate: Date? = nil
+        progress: LibraryTaskProgress? = nil, isOverdue: Bool = false, dailyDate: Date? = nil,
+        commentCount: Int? = nil
     ) {
         self.id = id
         self.gistID = gistID
@@ -67,6 +76,7 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
         self.progress = progress
         self.isOverdue = isOverdue
         self.dailyDate = dailyDate
+        self.commentCount = commentCount
     }
 }
 

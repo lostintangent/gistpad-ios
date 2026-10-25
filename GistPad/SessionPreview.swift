@@ -1,3 +1,4 @@
+import GistPadComments
 import GistPadEditor
 import GistPadPreview
 import SwiftUI
@@ -5,6 +6,10 @@ import SwiftUI
 struct SessionPreview: View {
   let session: DocumentSession
   var allowsMutations = true
+  var comments = CommentHighlightConfiguration()
+  var onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
+  var onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
+  var onAddComment: (@MainActor (String) -> Void)?
   var openWikilink: ((String) -> Void)?
   @State private var renderError: String?
   @State private var interactionError: String?
@@ -15,7 +20,10 @@ struct SessionPreview: View {
     ZStack {
       MarkdownPreviewView(
         document: session.text, documentID: session.documentID,
-        generation: session.generation, allowsTaskEdits: allowsMutations, onEvent: handle
+        generation: session.generation, allowsTaskEdits: allowsMutations,
+        comments: comments, onOpenCommentThreads: onOpenCommentThreads,
+        onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment,
+        onEvent: handle
       )
       .id(reload)
       .accessibilityHidden(renderError != nil)

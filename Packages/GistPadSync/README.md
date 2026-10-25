@@ -27,7 +27,9 @@ The client paginates, applies the web's different owned/starred Markdown filters
 
 Bodies remain exact Markdown, including hidden quote/reply prefixes. Use the Foundation-only `GistPadComments` models and `GistCommentBody.replacingText(with:)` to edit only the visible body. Authors can edit, while authors and the gist owner can delete. Do not infer commenting permission from source editability, automatically publish on autosave, or silently turn a reply to a missing parent into a new root.
 
-`Gist.commentCount` decodes GitHub's `comments` total, including replies. Missing counts remain `nil`, distinct from a known zero and compatible with older durable caches. Hosts omit GitHub comments on Daily Notes and before a gist is published. Inspector drafts, cached conversations and uncertain-post recovery belong to the host integration, not these raw HTTP methods.
+`Gist.commentCount` decodes GitHub's `comments` total, including replies. Missing counts remain `nil`, distinct from a known zero and compatible with older durable caches. `withCommentCount(_:)` copies only that total, preserving all other metadata and source bytes. Hosts omit GitHub comments on Daily Notes and before a gist is published.
+
+`GitHubCommentRemote` adapts these raw methods to the conversation controller's typed failures, preserving server retry deadlines and distinguishing definite rejections from uncertain write outcomes. `CommentConversationDiskStore.applicationStore()` provides an account/gist-scoped atomic draft and pending-attempt journal. Files and containing directories use complete file protection on iOS. Corrupt records, older writes and equal-generation byte changes throw instead of replacing a draft. Use one conversation provider for the workspace and await draft flushing on departure. Release 1.1 has no disk thread cache. The Foundation controller refreshes after an uncertain mutation before another explicit post can proceed.
 
 ## Preferences
 

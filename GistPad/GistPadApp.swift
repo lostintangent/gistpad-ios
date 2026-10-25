@@ -30,6 +30,8 @@ struct GistPadApp: App {
         ScrollEdgeCaptureWorkspace()
       } else if LaunchArguments.captureScreen == "comment-highlights" {
         CommentHighlightCaptureWorkspace(session: session)
+      } else if LaunchArguments.captureScreen == "comments-inspector" {
+        NotebookCommentsCaptureWorkspace()
       } else if let screen = LaunchArguments.captureScreen, ["library", "note"].contains(screen) {
         InterfaceCaptureWorkspace(session: session)
       } else if let screen = LaunchArguments.captureScreen,

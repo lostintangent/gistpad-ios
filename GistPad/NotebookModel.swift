@@ -1,5 +1,6 @@
 import AuthenticationServices
 import Foundation
+import GistPadComments
 import GistPadEditor
 import GistPadInterface
 import GistPadSync
@@ -948,6 +949,9 @@ final class NotebookModel {
       }
       var targets: [String: NotebookSelection] = [:]
       var recoveries: Set<String> = []
+      let commentCounts = Dictionary(uniqueKeysWithValues: (cachedLibrary?.gists ?? []).compactMap {
+        gist in gist.commentCount.map { (gist.id, $0) }
+      })
       let notes = result.matches.map { match in
         let gist = cache.gists.first { $0.id == match.gistID }
         let rowID =
@@ -970,7 +974,8 @@ final class NotebookModel {
           progress: match.progress.map { .init(completed: $0.completed, total: $0.total) },
           isOverdue: match.isOverdue,
           dailyDate: match.isDailyNote
-            ? DailyNotesIndex.parseDateFilename(match.filename, timeZone: timeZone) : nil)
+            ? DailyNotesIndex.parseDateFilename(match.filename, timeZone: timeZone) : nil,
+          commentCount: match.gistID.flatMap { commentCounts[$0] })
       }
       searchTargets = targets
       recoverySearchRows = recoveries
@@ -1290,6 +1295,45 @@ final class NotebookModel {
     return try await provider.photoServices(accountID: accountID)
   }
 
+  func commentServices(accountID: UUID) async throws -> NotebookCommentServices {
+    guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
+    guard let provider = provider as? any NotebookCommentProviding else {
+      throw NotebookCommentError.unavailable
+    }
+    return try await provider.commentServices(accountID: accountID)
+  }
+
+  func recordCommentCount(accountID: UUID, gistID: String, total: Int) {
+    guard total >= 0 else {
+      logger.error("Ignored a negative gist comment count.")
+      return
+    }
+    guard account?.id == accountID, pendingAccount == nil, !isSigningOut else { return }
+    guard cachedLibrary?.gists.first(where: { $0.id == gistID })?.isDailyNote != true else { return }
+    let updateGist: (Gist) -> Gist = { $0.id == gistID ? $0.withCommentCount(total) : $0 }
+    if var cache = cachedLibrary {
+      cache.owned = cache.owned.map(updateGist)
+      cache.starred = cache.starred.map(updateGist)
+      cache.details = cache.details.mapValues(updateGist)
+      cachedLibrary = cache
+    }
+    let updateNote: (LibraryNote) -> LibraryNote = {
+      guard $0.gistID == gistID, !$0.isDailyNote else { return $0 }
+      var note = $0
+      note.commentCount = total
+      return note
+    }
+    library.snapshot.notes = library.snapshot.notes.map(updateNote)
+    if case .results(let notes, let coverage) = library.searchState {
+      library.searchState = .results(notes: notes.map(updateNote), coverage: coverage)
+    }
+    if var document = loadedDocument, document.accountID == accountID, document.gist?.id == gistID {
+      document.gist = document.gist.map(updateGist)
+      document.chrome.commentCount = total
+      loadedDocument = document
+    }
+  }
+
   func perform(_ action: NotebookAction) async throws -> NotebookActionResult {
     guard let account, pendingAccount == nil else { throw AccountError.accountChanged }
     guard !isSigningOut else { throw NotebookActionError.publicationInProgress }
@@ -1452,7 +1496,8 @@ final class NotebookModel {
       tags: library.snapshot.tags.filter {
         account.preferences.gistTags[gist.id]?.contains($0.id) == true
       },
-      isAutoSaveEnabled: account.preferences.isAutoSaveEnabled && !draft.autosavePaused)
+      isAutoSaveEnabled: account.preferences.isAutoSaveEnabled && !draft.autosavePaused,
+      commentCount: gist.isDailyNote ? nil : gist.commentCount)
   }
 
   func refreshedGist(id: String, accountID: UUID) async throws -> Gist {
@@ -1536,7 +1581,8 @@ final class NotebookModel {
           isSecret: !gist.isPublic, isPinned: preferences.pinnedGists.contains(gist.id),
           isStarred: starredIDs.contains(gist.id), isArchived: gist.isArchived,
           isDailyNote: gist.isDailyNote, tagIDs: Set(preferences.gistTags[gist.id] ?? []),
-          fileCount: gist.truncated == true ? nil : gist.files.count
+          fileCount: gist.truncated == true ? nil : gist.files.count,
+          commentCount: gist.commentCount
         )
       }.sorted {
         if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
@@ -1596,6 +1642,9 @@ final class NotebookModel {
   }
 
   static func message(for error: any Error) -> String {
+    if let problem = error as? CommentConversationProblem {
+      return problem.interfaceDescription
+    }
     if let error = error as? DraftError {
       switch error {
       case .staleGeneration:
