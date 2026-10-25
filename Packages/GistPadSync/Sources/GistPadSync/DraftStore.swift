@@ -294,11 +294,11 @@ public actor DraftStore {
             ))
             guard !duplicates.contains(where: { $0.id != id }) else { throw DraftMetadataError.filenameInUse }
         }
-        if draft.filename != filename || !sourceEqual(draft.gistDescription, description) {
+        if !sourceEqual(draft.filename, filename) || !sourceEqual(draft.gistDescription, description) {
             draft.updatedAt = .now
-            draft.filename = filename
-            draft.gistDescription = description
         }
+        draft.filename = filename
+        draft.gistDescription = description
         try commit()
         return try snapshot(draft)
     }

@@ -4,6 +4,22 @@ import Testing
 @testable import GistPadSync
 
 @Suite struct DraftMetadataTests {
+    @Test func metadataEditTimesRecognizeByteDistinctUnicodeFilenames() async throws {
+        let store = try DraftStore.open(inMemory: true)
+        let account = UUID()
+        let original = try await store.newDraft(
+            accountID: account, githubUserID: 42, filename: "Caf\u{e9}.md", text: "note")
+        let renamed = try await store.updateDraftMetadata(
+            id: original.id, accountID: account, expectedFilename: original.filename,
+            filename: "Cafe\u{301}.md", description: original.description)
+        #expect(renamed.filename.utf8.elementsEqual("Cafe\u{301}.md".utf8))
+        #expect(renamed.updatedAt != original.updatedAt)
+        let unchanged = try await store.updateDraftMetadata(
+            id: renamed.id, accountID: account, expectedFilename: renamed.filename,
+            filename: renamed.filename, description: renamed.description)
+        #expect(unchanged.updatedAt == renamed.updatedAt)
+    }
+
     @Test func legacyUnknownEditTimesAreNotReplacedByReadOrRefreshTimes() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
