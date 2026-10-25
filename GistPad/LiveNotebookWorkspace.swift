@@ -168,7 +168,7 @@ struct LiveNotebookWorkspace: View {
       .frame(minWidth: comments.isPresented && horizontalSizeClass == .regular ? 320 : 0)
     }
     .navigationSplitViewStyle(.balanced)
-    .librarySearch(model: notebook.library)
+    .librarySearch(model: notebook.library, isSidebar: horizontalSizeClass == .regular)
     .toolbar(removing: comments.isPresented && horizontalSizeClass == .regular ? .sidebarToggle : nil)
     .inspector(
       isPresented: Binding(

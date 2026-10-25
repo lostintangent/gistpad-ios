@@ -1,5 +1,4 @@
 #if os(iOS)
-import OSLog
 import SwiftUI
 
 private struct LibrarySearchOwnerKey: EnvironmentKey {
@@ -8,10 +7,6 @@ private struct LibrarySearchOwnerKey: EnvironmentKey {
 
 private struct LibrarySearchPresentationKey: EnvironmentKey {
     static var defaultValue: Binding<Bool>? { nil }
-}
-
-private struct LibrarySearchProgressKey: EnvironmentKey {
-    static var defaultValue: String? { nil }
 }
 
 extension EnvironmentValues {
@@ -24,25 +19,22 @@ extension EnvironmentValues {
         get { self[LibrarySearchPresentationKey.self] }
         set { self[LibrarySearchPresentationKey.self] = newValue }
     }
-
-    fileprivate var librarySearchProgress: String? {
-        get { self[LibrarySearchProgressKey.self] }
-        set { self[LibrarySearchProgressKey.self] = newValue }
-    }
 }
 
 private struct LibrarySearchModifier: ViewModifier {
     @Bindable var model: LibraryModel
     var isPresented: Binding<Bool>?
+    var sidebarOverride: Bool?
     @State private var presented = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var presentation: Binding<Bool> { isPresented ?? $presented }
+    private var isSidebar: Bool { sidebarOverride ?? (horizontalSizeClass == .regular) }
 
     func body(content: Content) -> some View {
         searchableContent(content)
-            .searchToolbarBehavior(.minimize)
-            .toolbar(removing: horizontalSizeClass == .regular || presentation.wrappedValue ? nil : .search)
+            .searchToolbarBehavior(isSidebar ? .minimize : .automatic)
+            .toolbar(removing: isSidebar || presentation.wrappedValue ? nil : .search)
             .environment(\.librarySearchManagedByContainer, true)
             .environment(\.librarySearchPresentation, presentation)
     }
@@ -54,7 +46,8 @@ private struct LibrarySearchModifier: ViewModifier {
         } else {
             content.searchable(
                 text: $model.query, isPresented: presentation,
-                placement: .sidebar, prompt: Text("Search notes", bundle: .module)
+                placement: isSidebar ? .sidebar : .navigationBarDrawer(displayMode: .automatic),
+                prompt: Text("Search notes", bundle: .module)
             )
         }
     }
@@ -71,8 +64,11 @@ private struct LibraryCreateButton: View {
 }
 
 extension View {
-    public func librarySearch(model: LibraryModel, isPresented: Binding<Bool>? = nil) -> some View {
-        modifier(LibrarySearchModifier(model: model, isPresented: isPresented))
+    public func librarySearch(
+        model: LibraryModel, isPresented: Binding<Bool>? = nil, isSidebar: Bool? = nil
+    ) -> some View {
+        modifier(LibrarySearchModifier(
+            model: model, isPresented: isPresented, sidebarOverride: isSidebar))
     }
 
     public func libraryCreateAction(
@@ -195,73 +191,6 @@ public struct LibraryView: View {
         case note(String)
     }
 
-    struct SearchProgressModifier: ViewModifier {
-        let state: GitHubStatusState
-        @State private var checkingOperation: String?
-
-        private var operation: String? {
-            if case .checking(let operation) = state { operation } else { nil }
-        }
-
-        func body(content: Content) -> some View {
-            content
-                .environment(\.librarySearchProgress, checkingOperation)
-                .task(id: operation) {
-                    checkingOperation = nil
-                    guard let operation else { return }
-                    do {
-                        try await Task.sleep(for: .milliseconds(400))
-                        try Task.checkCancellation()
-                        checkingOperation = operation
-                    } catch is CancellationError {
-                        return
-                    } catch {
-                        Logger(subsystem: "dev.gistpad.GistPad", category: "Status")
-                            .error("Search progress delay failed: \(String(reflecting: type(of: error)), privacy: .public)")
-                    }
-                }
-        }
-    }
-
-    struct SearchButton: View {
-        let action: @MainActor () -> Void
-        @Environment(\.librarySearchProgress) private var checkingOperation
-        @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-        var body: some View {
-            Button(action: action) {
-                Label {
-                    Text("Search", bundle: .module)
-                } icon: {
-                    ZStack {
-                        if checkingOperation != nil {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(.secondary)
-                                .captureFrame("library-search-progress")
-                                .transition(.opacity)
-                        } else {
-                            Image(systemName: "magnifyingglass")
-                                .transition(.symbolEffect(.appear))
-                        }
-                    }
-                    .accessibilityHidden(true)
-                    .allowsHitTesting(false)
-                }
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(.rect)
-                .captureFrame("library-search")
-            }
-            .buttonStyle(.plain)
-            .labelStyle(.iconOnly)
-            .tint(.primary)
-            .accessibilityLabel(Text("Search", bundle: .module))
-            .accessibilityValue(checkingOperation ?? "")
-            .accessibilityIdentifier("library-search")
-            .animation(reduceMotion ? nil : .default, value: checkingOperation)
-        }
-    }
-
     struct SearchSummary: View {
         let coverage: LibrarySearchCoverage?
         let selectedTagCount: Int
@@ -349,7 +278,6 @@ public struct LibraryView: View {
             .toolbar { libraryToolbar }
             .sheet(isPresented: $showingTags) { tagFilters }
             .scrollEdgeEffectStyle(.soft, for: .all)
-            .modifier(SearchProgressModifier(state: isSidebar ? .idle : remoteStatus))
     }
 
     @ViewBuilder
@@ -363,8 +291,9 @@ public struct LibraryView: View {
             adaptiveList
                 .searchable(
                     text: $model.query, isPresented: $searchPresented,
+                    placement: isSidebar ? .sidebar : .navigationBarDrawer(displayMode: .automatic),
                     prompt: Text("Search notes", bundle: .module))
-                .searchToolbarBehavior(.minimize)
+                .searchToolbarBehavior(isSidebar ? .minimize : .automatic)
                 .toolbar(removing: isSidebar || searchPresented ? nil : .search)
                 .toolbarTitleMenu { collectionPicker }
         }
@@ -906,9 +835,6 @@ public struct LibraryView: View {
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
         if model.loadState != .signedOut {
-            if isSidebar {
-                DefaultToolbarItem(kind: .search, placement: .bottomBar)
-            }
             if !(containerSearchPresentation?.wrappedValue ?? searchPresented) {
                 if isGitHubStatusVisible, case .problem = remoteStatus {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
@@ -936,17 +862,20 @@ public struct LibraryView: View {
                     if !(containerSearchPresentation?.wrappedValue ?? searchPresented) {
                         tagFilterButton
                             .labelStyle(.iconOnly)
-                        SearchButton {
+                        Button(String(localized: "Search", bundle: .module), systemImage: "magnifyingglass") {
                             if let containerSearchPresentation {
                                 containerSearchPresentation.wrappedValue = true
                             } else {
                                 searchPresented = true
                             }
                         }
+                        .tint(.primary)
+                        .accessibilityIdentifier("library-search")
                     }
                 }
             }
             if isSidebar {
+                DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 ToolbarItem(placement: .secondaryAction) {
                     tagFilterButton
                 }

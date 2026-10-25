@@ -308,7 +308,8 @@ struct InterfaceCaptureWorkspace: View {
             .navigationSplitViewStyle(.balanced)
             .librarySearch(
                 model: library,
-                isPresented: captureState == "search-active" ? $searchPresented : nil
+                isPresented: captureState == "search-active" ? $searchPresented : nil,
+                isSidebar: horizontalSizeClass == .regular
             )
             .sheet(isPresented: $showingTagEditor) {
                 TagEditor(

@@ -4,13 +4,18 @@ final class LibraryToolbarUITests: XCTestCase {
   @MainActor
   func testSearchStillOpensTheNativeFieldWhileCheckingGitHub() async throws {
     for appearance in ["light", "dark"] {
+      let idle = launch(state: "populated", appearance: appearance)
+      let idleSearch = idle.buttons["Search"]
+      try await waitUntil { idleSearch.isHittable }
+      let originalFrame = idleSearch.frame
+      idle.terminate()
       let app = launch(state: "status-busy", appearance: appearance)
       defer { app.terminate() }
-      let search = app.buttons["library-search"]
-      try await waitUntil {
-        search.isHittable && app.otherElements["capture-frame-library-search-progress"].exists
-      }
-      XCTAssertEqual(app.buttons.matching(identifier: "library-search").count, 1)
+      let search = app.buttons["Search"]
+      try await waitUntil { search.isHittable }
+      try await Task.sleep(for: .milliseconds(600))
+      XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "Search")).count, 1)
+      XCTAssertEqual(search.frame, originalFrame, "Background checks never move or resize Search")
       XCTAssertFalse(app.progressIndicators["github-status-checking"].exists)
       XCTAssertFalse(app.buttons["github-status-attention"].exists)
       assertTarget(search, in: app)
@@ -27,7 +32,7 @@ final class LibraryToolbarUITests: XCTestCase {
     for appearance in ["light", "dark"] {
       let app = launch(state: "status-error", appearance: appearance)
       defer { app.terminate() }
-      let search = app.buttons["library-search"]
+      let search = app.buttons["Search"]
       let attention = app.buttons["github-status-attention"]
       try await waitUntil { search.isHittable && attention.isHittable }
       XCTAssertTrue((search.value as? String ?? "").isEmpty)
@@ -42,10 +47,7 @@ final class LibraryToolbarUITests: XCTestCase {
       try await waitUntil { retry.exists && !retry.isEnabled }
       try await waitUntil { !retry.exists && !attention.exists }
       try await waitUntil { search.isHittable }
-      try await waitUntil {
-        (search.value as? String ?? "").isEmpty
-          && !app.otherElements["capture-frame-library-search-progress"].exists
-      }
+      XCTAssertTrue((search.value as? String ?? "").isEmpty)
       search.tap()
       try await verifyNativeSearchAcceptsTyping(in: app)
       record(app, name: "home-search-after-recovery-\(appearance)")
@@ -94,7 +96,7 @@ final class LibraryToolbarUITests: XCTestCase {
     for (appearance, accessibility) in appearances {
       let app = launch(state: "populated", appearance: appearance, accessibility: accessibility)
       defer { app.terminate() }
-      let search = wide ? app.searchFields.firstMatch : app.buttons["library-search"]
+      let search = wide ? app.searchFields.firstMatch : app.buttons["Search"]
       try await waitUntil {
         guard search.exists else { return false }
         let frame = search.frame
@@ -111,7 +113,11 @@ final class LibraryToolbarUITests: XCTestCase {
           && app.buttons["library-settings"].isHittable)
         XCTAssertGreaterThan(search.frame.width, 180)
       } else {
-        for id in ["library-search", "library-filter-tags", "library-settings", "library-create"] {
+        XCTAssertEqual(
+          app.buttons.matching(
+            NSPredicate(format: "label == %@", "Search")
+          ).count, 1, "Only the rail's Search command is present")
+        for id in ["library-filter-tags", "library-settings", "library-create"] {
           let target = app.buttons[id]
           XCTAssertTrue(target.isHittable, id)
           assertTarget(target, in: app)
@@ -128,6 +134,9 @@ final class LibraryToolbarUITests: XCTestCase {
         XCTAssertLessThan(create.maxY, settings.midY)
         XCTAssertLessThan(settings.maxY, tags.midY)
         XCTAssertLessThan(tags.maxY, search.frame.midY)
+        XCTAssertEqual(
+          search.frame.midY - tags.midY, tags.midY - settings.midY, accuracy: 2,
+          "Search belongs immediately beneath Tags, not at the bottom of the rail")
         XCTAssertEqual(create.midX, settings.midX, accuracy: 2)
         XCTAssertEqual(settings.midX, tags.midX, accuracy: 2)
         XCTAssertEqual(tags.midX, search.frame.midX, accuracy: 2)
@@ -163,6 +172,9 @@ final class LibraryToolbarUITests: XCTestCase {
         reveal(callback, in: app)
         try await waitUntil { callback.exists }
         record(app, name: "home-open-overflow-routes-\(appearance)")
+        search.tap()
+        try await verifyNativeSearchAcceptsTyping(in: app)
+        record(app, name: "home-open-keyboard-search-\(appearance)")
       }
     }
   }
