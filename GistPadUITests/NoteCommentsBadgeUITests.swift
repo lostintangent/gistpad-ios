@@ -37,25 +37,31 @@ final class NoteCommentsBadgeUITests: XCTestCase {
         app.buttons["comments-close"].isHittable && app.buttons["comment-actions-300"].exists
       }
       app.buttons["comments-close"].tap()
-      try wait("the neutral late count on the same toolbar action") {
+      try wait("the high-contrast late count on the same toolbar action") {
         !app.buttons["comments-close"].exists && button.isHittable
           && button.label == "Comments, 5 comments"
       }
       XCTAssertEqual(button.frame, initialFrame)
       XCTAssertFalse(button.isSelected)
-      let frame = XCTAttachment(screenshot: app.screenshot())
-      frame.name = "comments-late-badge-\(wide ? "Open" : "Closed")-\(appearance)"
-      frame.lifetime = .keepAlways
-      add(frame)
-      let tree = XCTAttachment(string: app.debugDescription)
-      tree.name = "comments-late-badge-\(wide ? "Open" : "Closed")-\(appearance)-accessibility"
-      tree.lifetime = .keepAlways
-      add(tree)
+      record(app, wide: wide, appearance: appearance, selected: false)
       button.tap()
       try wait("the selected Comments action after the late update") {
         app.buttons["comments-close"].isHittable && button.isSelected
       }
+      record(app, wide: wide, appearance: appearance, selected: true)
     }
+  }
+
+  private func record(_ app: XCUIApplication, wide: Bool, appearance: String, selected: Bool) {
+    let name = "comments-late-badge-\(wide ? "Open" : "Closed")-\(appearance)-\(selected ? "selected" : "unselected")"
+    let frame = XCTAttachment(screenshot: app.screenshot())
+    frame.name = name
+    frame.lifetime = .keepAlways
+    add(frame)
+    let tree = XCTAttachment(string: app.debugDescription)
+    tree.name = "\(name)-accessibility"
+    tree.lifetime = .keepAlways
+    add(tree)
   }
 
   private func wait(_ description: String, _ ready: () -> Bool) throws {

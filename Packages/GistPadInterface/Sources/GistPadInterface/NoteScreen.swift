@@ -191,7 +191,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                         get: { areCommentsPresented },
                         set: { _ in comments() })
                 ) {
-                    NoteCommentsLabel(count: document.commentCount)
+                    NoteCommentsLabel(count: document.commentCount, isSelected: areCommentsPresented)
                 }
                 .toggleStyle(.button)
                 .labelStyle(.iconOnly)
