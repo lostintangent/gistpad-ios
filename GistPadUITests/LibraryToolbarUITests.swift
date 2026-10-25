@@ -85,6 +85,34 @@ final class LibraryToolbarUITests: XCTestCase {
   }
 
   @MainActor
+  func testAccessibilitySearchKeepsPlaceholderAndClearInsideGlass() async throws {
+    for textSize in [UIContentSizeCategory.large, .accessibilityExtraExtraExtraLarge] {
+      let sizeName = textSize == .large ? "Large" : "AX5"
+      let app = launch(state: "populated", appearance: "light", textSize: textSize)
+      defer { app.terminate() }
+      let field = app.searchFields.firstMatch
+      try await waitUntil { field.isHittable }
+      record(app, name: "home-search-placeholder-clearance-\(sizeName)")
+      field.tap()
+      try await verifyNativeSearchAcceptsTyping(in: app)
+      let clear = field.buttons["Clear text"]
+      try await waitUntil { clear.isHittable }
+      let magnifier = field.images["magnifyingglass"]
+      XCTAssertTrue(magnifier.exists)
+      let leadingClearance = magnifier.frame.minX - field.frame.minX
+      let trailingClearance = field.frame.maxX - clear.frame.maxX
+      XCTAssertGreaterThanOrEqual(trailingClearance, leadingClearance - 1)
+      record(app, name: "home-search-query-clearance-\(sizeName)")
+      clear.tap()
+      try await waitUntil { (field.value as? String) == field.placeholderValue }
+      XCTAssertTrue(app.keyboards.firstMatch.exists)
+      record(app, name: "home-search-cleared-placeholder-\(sizeName)")
+      app.buttons["Cancel"].tap()
+      try await waitUntil { !app.keyboards.firstMatch.exists }
+    }
+  }
+
+  @MainActor
   func testUnfoldedHomeKeepsNativeSearchAndOverflowInLightAndDark() async throws {
     try await captureHome(wide: true)
   }

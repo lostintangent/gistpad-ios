@@ -14,9 +14,14 @@ struct LibrarySearchField: UIViewRepresentable {
     func makeUIView(context: Context) -> SearchBar {
         let bar = SearchBar()
         bar.delegate = context.coordinator
-        bar.placeholder = String(localized: "Search notes", bundle: .module)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        bar.searchTextField.attributedPlaceholder = NSAttributedString(
+            string: String(localized: "Search notes", bundle: .module),
+            attributes: [.paragraphStyle: paragraph])
         bar.tintColor = .label
         bar.searchTextField.tintColor = .systemBlue
+        bar.searchTextField.adjustsFontSizeToFitWidth = false
         bar.searchTextField.accessibilityIdentifier = "library-search-field"
         bar.onWindowContentWidthChange = { windowContentWidth = $0 }
         return bar
@@ -29,6 +34,7 @@ struct LibrarySearchField: UIViewRepresentable {
         if bar.text != text, bar.searchTextField.markedTextRange == nil {
             bar.text = text
         }
+        bar.updateTrailingClearance()
         bar.wantsFocus = isPresented
         bar.setShowsCancelButton(isPresented, animated: !context.transaction.disablesAnimations)
         if isPresented, bar.window != nil, !bar.searchTextField.isFirstResponder {
@@ -90,6 +96,13 @@ struct LibrarySearchField: UIViewRepresentable {
             super.init(frame: frame)
             searchBarStyle = .minimal
             setSearchFieldBackgroundImage(UIImage(), for: .normal)
+            let trailingSpace = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 1))
+            trailingSpace.isUserInteractionEnabled = false
+            trailingSpace.accessibilityElementsHidden = true
+            searchTextField.rightView = trailingSpace
+            searchTextField.addTarget(
+                self, action: #selector(updateTrailingClearance), for: .editingChanged)
+            updateTrailingClearance()
             glass.cornerConfiguration = .capsule()
             glass.isUserInteractionEnabled = false
             glass.accessibilityElementsHidden = true
@@ -107,6 +120,10 @@ struct LibrarySearchField: UIViewRepresentable {
             fatalError("init(coder:) has not been implemented")
         }
 
+        @objc func updateTrailingClearance() {
+            searchTextField.rightViewMode = (text ?? "").isEmpty ? .always : .never
+        }
+
         override func didMoveToWindow() {
             super.didMoveToWindow()
             reportWindowContentWidth()
@@ -117,6 +134,10 @@ struct LibrarySearchField: UIViewRepresentable {
 
         override func layoutSubviews() {
             super.layoutSubviews()
+            // UISearchBar scales its placeholder independently of the text-fitting flag.
+            if let font = searchTextField.font, searchTextField.minimumFontSize != font.pointSize {
+                searchTextField.minimumFontSize = font.pointSize
+            }
             reportWindowContentWidth()
         }
 
