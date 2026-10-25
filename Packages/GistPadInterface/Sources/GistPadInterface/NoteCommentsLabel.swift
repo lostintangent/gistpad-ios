@@ -1,0 +1,58 @@
+#if os(iOS)
+import SwiftUI
+import UIKit
+
+struct NoteCommentsLabel: View {
+    let count: Int?
+    @ScaledMetric(relativeTo: .caption2) private var countSize = 11
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
+
+    var body: some View {
+        // A single image preserves the native adaptive toolbar item instead of a custom-view item.
+        Label {
+            Text("Comments", bundle: .module)
+        } icon: {
+            Image(uiImage: NoteCommentsIcon.image(
+                count: count, fontSize: min(countSize, 13),
+                dark: colorScheme == .dark, scale: displayScale))
+                .renderingMode(.original)
+        }
+    }
+}
+
+enum NoteCommentsIcon {
+    static func image(count: Int?, fontSize: CGFloat, dark: Bool, scale: CGFloat) -> UIImage {
+        let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+        let ink = UIColor.label.resolvedColor(with: traits)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        return UIGraphicsImageRenderer(size: CGSize(width: 36, height: 36), format: format).image { _ in
+            UIImage(systemName: "text.bubble", withConfiguration: UIImage.SymbolConfiguration(
+                pointSize: 21, weight: .regular))?
+                .withTintColor(ink, renderingMode: .alwaysOriginal)
+                .draw(in: CGRect(x: 3, y: 9, width: 24, height: 24))
+            guard let count, count > 0 else { return }
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .semibold),
+                .foregroundColor: ink,
+            ]
+            let text = (count > 99 ? "99+" : count.formatted(.number)) as NSString
+            let size = text.size(withAttributes: attributes)
+            let width = min(36, max(16, ceil(size.width) + 8))
+            let pill = CGRect(x: 36 - width, y: 0, width: width, height: 16)
+            let path = UIBezierPath(roundedRect: pill.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 8)
+            UIColor.secondarySystemBackground.resolvedColor(with: traits).setFill()
+            path.fill()
+            UIColor.systemBackground.resolvedColor(with: traits).setStroke()
+            path.lineWidth = 1
+            path.stroke()
+            text.draw(
+                at: CGPoint(x: pill.midX - size.width / 2, y: pill.midY - size.height / 2),
+                withAttributes: attributes)
+        }
+        .withAlignmentRectInsets(UIEdgeInsets(top: 9, left: 3, bottom: 3, right: 9))
+        .withRenderingMode(.alwaysOriginal)
+    }
+}
+#endif

@@ -75,11 +75,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationSubtitle(document.headerFilename ?? "")
         .background { NoteFileSubtitle(filename: document.headerFilename) }
-        .background {
-            if actions.comments != nil {
-                NoteCommentBadgeAppearance(label: commentsLabel)
-            }
-        }
         .modifier(NoteTitleMenu(isEnabled: document.files.count > 1) { fileChoices })
         .toolbar { noteToolbar }
         .safeAreaBar(edge: .bottom, spacing: 0) {
@@ -196,14 +191,13 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                         get: { areCommentsPresented },
                         set: { _ in comments() })
                 ) {
-                    Label(commentsLabel, systemImage: "text.bubble")
+                    NoteCommentsLabel(count: document.commentCount)
                 }
                 .toggleStyle(.button)
                 .labelStyle(.iconOnly)
                 .symbolVariant(.none)
-                .badge(commentBadge)
-                .badgeProminence(.decreased)
                 .tint(.primary)
+                .accessibilityLabel(commentsLabel)
                 .accessibilityAddTraits(areCommentsPresented ? .isSelected : [])
                 .accessibilityIdentifier("note-comments")
             }
@@ -311,11 +305,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         let title = String(localized: "Comments", bundle: .module)
         guard let count = document.commentCount else { return title }
         return title + ", " + String(localized: "\(count) comments", bundle: .module)
-    }
-
-    private var commentBadge: Text? {
-        guard let count = document.commentCount, count > 0 else { return nil }
-        return Text(count, format: .number).foregroundStyle(.primary)
     }
 
     private var hasMoreActions: Bool {

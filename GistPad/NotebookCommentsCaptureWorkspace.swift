@@ -205,6 +205,10 @@ actor NotebookCommentsCaptureRemote: CommentConversationRemote {
 
   func listComments(gistID: String) async throws(CommentRemoteFailure) -> [GistComment] {
     listRequests += 1
+    if scenario == "late-count", listRequests == 1 {
+      do { try await Task.sleep(for: .seconds(3)) }
+      catch { throw .network }
+    }
     if holdsNextRefresh {
       holdsNextRefresh = false
       await withCheckedContinuation { pendingRefresh = $0 }
@@ -368,7 +372,7 @@ actor NotebookCommentsCaptureProvider: NotebookProviding, NotebookCommentProvidi
       ("ideas", NotebookCommentsCaptureData.title),
       ("quiet", "A little quiet"), ("shared", "A friend’s field guide"),
     ].map { id, title -> [String: Any] in
-      [
+      var payload: [String: Any] = [
         "id": id, "description": title, "public": false,
         "comments": id == "quiet" || scenario == "empty" ? 0
           : scenario == "reading-list" ? NotebookCommentsCaptureData.readingListComments.count
@@ -389,6 +393,8 @@ actor NotebookCommentsCaptureProvider: NotebookProviding, NotebookCommentProvidi
         ],
         "history": [["version": "synthetic-comments-revision"]],
       ]
+      if scenario == "late-count" { payload.removeValue(forKey: "comments") }
+      return payload
     }
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
