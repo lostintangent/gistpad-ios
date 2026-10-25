@@ -194,6 +194,58 @@ final class CommentsInspectorUITests: XCTestCase {
     record(app, name: "comments-native-preview-selection-restored")
   }
 
+  func testPreviewPassageTapsSelectTheirOwnThreadAcrossReopening() throws {
+    let app = launch()
+    defer { app.terminate() }
+    try openComments(in: app)
+    app.buttons["comments-close"].tap()
+    try wait("the initial inspector dismissal") { !app.buttons["comments-close"].exists }
+
+    for (prefix, id) in [
+      ("Write something useful, then give it room to breathe.", 200),
+      ("A good walk clears more than your head", 300),
+      ("Write something useful, then give it room to breathe.", 200),
+    ] {
+      let passage = app.webViews.firstMatch.buttons.matching(
+        NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
+      let webView = app.webViews.firstMatch
+      for _ in 0..<8 {
+        let top = app.navigationBars.firstMatch.frame.maxY + 8
+        let bottom = webView.frame.maxY - 44
+        if passage.exists, passage.isHittable,
+          passage.frame.minY >= top, passage.frame.maxY <= bottom { break }
+        let center = (top + bottom) / 2
+        let step = (bottom - top) * 0.35
+        let distance = passage.exists
+          ? min(step, max(-step, center - passage.frame.midY)) : -step
+        let start = webView.coordinate(withNormalizedOffset: .zero)
+          .withOffset(.init(dx: webView.frame.width / 2, dy: center - webView.frame.minY))
+        start.press(
+          forDuration: 0.05, thenDragTo: start.withOffset(.init(dx: 0, dy: distance)),
+          withVelocity: .slow, thenHoldForDuration: 0.2)
+      }
+      try wait("the Preview passage for thread \(id), clear of native chrome") {
+        passage.isHittable
+          && passage.frame.minY >= app.navigationBars.firstMatch.frame.maxY + 8
+          && passage.frame.maxY <= webView.frame.maxY - 44
+      }
+      record(app, name: "comments-preview-before-tapping-thread-\(id)")
+      passage.tap()
+      let selected = app.descendants(matching: .any)["comment-thread-\(id)"].firstMatch
+      try wait("Preview to select thread \(id), not the previously opened thread") {
+        app.buttons["comments-close"].exists && selected.isSelected
+      }
+      XCTAssertTrue(selected.isHittable)
+      XCTAssertTrue(app.buttons["comment-passage-\(id)"].isSelected)
+      XCTAssertFalse(app.keyboards.firstMatch.exists)
+      record(app, name: "comments-preview-opens-thread-\(id)")
+      app.buttons["comments-close"].tap()
+      try wait("the inspector for thread \(id) to dismiss") {
+        !app.buttons["comments-close"].exists && !app.buttons["note-comments"].isSelected
+      }
+    }
+  }
+
   func testFailedDraftSaveKeepsCloseOpenUntilRetry() throws {
     let app = launch(scenario: "draft-failure")
     defer { app.terminate() }

@@ -98,6 +98,27 @@ struct NotebookCommentsPresentationTests {
     #expect(await fixture.remote.createdBodies.isEmpty)
   }
 
+  @Test func reopeningPassagesReplacesTheSelectedRootWithoutRequestingFocus() async throws {
+    let fixture = NotebookCommentsCaptureFixture()
+    let controller = try await open(fixture)
+    let presentation = NotebookCommentsPresentation(notebook: fixture.notebook, provider: fixture.comments)
+    presentation.activate(controller)
+    await presentation.prepareAnnotations(for: controller, showsInline: true)
+    for id: Int64 in [200, 300, 200] {
+      let revision = presentation.threadRevealRevision
+      presentation.open(for: controller, origin: .reading, rootID: id)
+      try await wait { presentation.selectedRootID == id }
+      #expect(presentation.isPresented)
+      #expect(presentation.threadRevealRevision == revision + 1)
+      #expect(presentation.focusRequest == 0)
+      #expect(presentation.documentMode == .reading)
+      await presentation.close()
+      #expect(!presentation.isPresented)
+      #expect(presentation.selectedRootID == nil)
+      presentation.didDismiss()
+    }
+  }
+
   @Test func initialReadFailureCanCloseWithoutBlockingAccountPersistence() async throws {
     let fixture = NotebookCommentsCaptureFixture(scenario: "store-unavailable")
     let controller = try await open(fixture)
