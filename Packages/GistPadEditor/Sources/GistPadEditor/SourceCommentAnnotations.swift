@@ -204,27 +204,61 @@
         session.textView.markedTextRange == nil, !session.writingToolsActive
       else { return }
       let inset = session.textView.textContainerInset
+      var selectedFrames: [CGRect] = []
+      var selectedFill: UIColor?
       for passage in passages {
-        let path = UIBezierPath()
+        var frames: [CGRect] = []
         for range in unselectedRanges(passage.highlight.range) {
           guard let native = nativeRange(range) else { continue }
           manager.enumerateTextSegments(
             in: native, type: .highlight, options: [.rangeNotRequired]
           ) { _, frame, _, _ in
             if frame.width > 0, frame.height > 0 {
-              path.append(UIBezierPath(
-                roundedRect: frame.offsetBy(dx: inset.left, dy: inset.top).insetBy(dx: -1, dy: 0),
-                cornerRadius: 3
-              ))
+              frames.append(
+                frame.offsetBy(dx: inset.left, dy: inset.top).insetBy(dx: -1, dy: 0))
             }
             return true
           }
         }
-        let layer = CAShapeLayer()
-        layer.path = path.cgPath
-        layer.fillColor = passage.fill.cgColor
-        backgroundLayer.addSublayer(layer)
+        if passage.selected {
+          selectedFrames.append(contentsOf: frames)
+          selectedFill = passage.fill
+        } else {
+          addBackground(frames: frames, fill: passage.fill)
+        }
       }
+      if let selectedFill {
+        addBackground(frames: Self.continuousLineRects(selectedFrames), fill: selectedFill)
+      }
+    }
+
+    static func continuousLineRects(_ frames: [CGRect]) -> [CGRect] {
+      var result: [CGRect] = []
+      for frame in frames.sorted(by: {
+        $0.minY == $1.minY ? $0.minX < $1.minX : $0.minY < $1.minY
+      }) {
+        if let previous = result.last,
+          abs(previous.minY - frame.minY) < 0.5,
+          abs(previous.maxY - frame.maxY) < 0.5,
+          frame.minX <= previous.maxX + 0.5, frame.maxX >= previous.minX
+        {
+          result[result.count - 1] = previous.union(frame)
+        } else {
+          result.append(frame)
+        }
+      }
+      return result
+    }
+
+    private func addBackground(frames: [CGRect], fill: UIColor) {
+      let path = UIBezierPath()
+      for frame in frames {
+        path.append(UIBezierPath(roundedRect: frame, cornerRadius: 3))
+      }
+      let layer = CAShapeLayer()
+      layer.path = path.cgPath
+      layer.fillColor = fill.cgColor
+      backgroundLayer.addSublayer(layer)
     }
 
     func editMenu(ranges: [NSRange], suggestedActions: [UIMenuElement]) -> UIMenu? {

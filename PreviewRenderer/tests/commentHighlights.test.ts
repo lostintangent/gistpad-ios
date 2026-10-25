@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import type { Root } from "hast";
 import {
-  CommentHighlightController, idleHighlight, type CommentThreadActivation,
+  CommentHighlightController, CommentText, idleHighlight, type CommentThreadActivation,
 } from "../src/commentHighlights";
 import type { RenderRequest } from "../src/protocol";
 
@@ -26,6 +28,41 @@ function state(highlights = [{
 }
 
 describe("native comment annotations", () => {
+  test("selected overlap partitions share one visual run without merging thread targets", () => {
+    const { controller } = fixture();
+    controller.setHighlights({
+      ...state([
+        { segment: 0, start: 2, end: 8, commentIDs: ["10"] },
+        { segment: 0, start: 8, end: 13, commentIDs: ["10", "20"] },
+      ]),
+      selectedCommentID: "10",
+    });
+    const html = renderToStaticMarkup(createElement(CommentText, {
+      controller, segment: 0, text: request.markdown,
+    }));
+    expect(html.match(/class="comment-selected-run"/g)).toHaveLength(1);
+    expect(html.match(/role="button"/g)).toHaveLength(2);
+    expect(html).toContain('data-comment-ids="10"');
+    expect(html).toContain('data-comment-ids="10 20"');
+    expect(html.replace(/<[^>]*>/g, "")).toBe(request.markdown);
+  });
+
+  test("selected visual runs do not bridge unhighlighted text", () => {
+    const { controller } = fixture();
+    controller.setHighlights({
+      ...state([
+        { segment: 0, start: 2, end: 8, commentIDs: ["10"] },
+        { segment: 0, start: 9, end: 13, commentIDs: ["10"] },
+      ]),
+      selectedCommentID: "10",
+    });
+    const html = renderToStaticMarkup(createElement(CommentText, {
+      controller, segment: 0, text: request.markdown,
+    }));
+    expect(html.match(/class="comment-selected-run"/g)).toHaveLength(2);
+    expect(html.replace(/<[^>]*>/g, "")).toBe(request.markdown);
+  });
+
   test("catalog preserves individual text nodes in document order and excludes code and SVG", () => {
     const { controller } = fixture();
     const tree: Root = {

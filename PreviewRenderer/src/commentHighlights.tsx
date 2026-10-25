@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import type { Element as HASTElement, Root } from "hast";
 import { isUInt64String, type RenderRequest } from "./protocol";
@@ -184,19 +184,31 @@ export function CommentText({ controller, segment, text }: {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const highlights = state.highlights.filter((highlight) => highlight.segment === segment);
   let cursor = 0;
-  const children = highlights.flatMap((highlight) => {
+  const children: ReactNode[] = [];
+  let selectedRun: ReactNode[] | undefined;
+  for (const highlight of highlights) {
     const before = text.slice(cursor, highlight.start);
     const quote = text.slice(highlight.start, highlight.end);
     cursor = highlight.end;
     const selected = highlight.commentIDs.includes(state.selectedCommentID ?? "");
-    return [
-      before,
-      state.showsInlineComments || selected
-        ? <CommentFragment key={highlight.start} controller={controller} highlight={highlight}
-          state={state} selected={selected}>{quote}</CommentFragment>
-        : quote,
-    ];
-  });
+    if (before || !selected) selectedRun = undefined;
+    children.push(before);
+    const fragment = state.showsInlineComments || selected
+      ? <CommentFragment key={highlight.start} controller={controller} highlight={highlight}
+        state={state} selected={selected}>{quote}</CommentFragment>
+      : quote;
+    if (selected) {
+      if (!selectedRun) {
+        selectedRun = [];
+        children.push(<span key={`selected-${highlight.start}`} className="comment-selected-run" data-comment-run="">
+          {selectedRun}
+        </span>);
+      }
+      selectedRun.push(fragment);
+    } else {
+      children.push(fragment);
+    }
+  }
   return <span className="comment-text" data-comment-segment={segment}>{children}{text.slice(cursor)}</span>;
 }
 

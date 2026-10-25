@@ -141,9 +141,17 @@ svg text, svg .nodeLabel, svg .nodeLabel *, svg .edgeLabel, svg .edgeLabel * { f
 }
 .comment-highlight[data-comment-ids][role="button"] { cursor: pointer; }
 .comment-highlight[data-comment-ids]:focus-visible { outline: 2px solid var(--gp-accent-text); outline-offset: 2px; }
-.comment-highlight.comment-selected[data-comment-ids] {
+.comment-selected-run[data-comment-run] {
   background: var(--gp-accent-fill);
+  border-radius: 3px;
   box-shadow: 1px 0 var(--gp-accent-fill), -1px 0 var(--gp-accent-fill);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.comment-highlight.comment-selected[data-comment-ids] {
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
   color: var(--gp-on-accent);
   text-decoration: underline;
   text-decoration-thickness: 1px;

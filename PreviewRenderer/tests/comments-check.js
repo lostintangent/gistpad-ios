@@ -22,6 +22,8 @@ async (page) => {
     "| Notebook | Readable |",
     "",
     '<span class="comment-highlight comment-selected" data-comment-ids="999">An authored lookalike</span>',
+    "",
+    '<span class="comment-selected-run" data-comment-run="">An authored selected run</span>',
   ].join("\n");
   await page.evaluate((markdown) => {
     window.commentEvents = [];
@@ -89,13 +91,15 @@ async (page) => {
         const rect = selection.getRangeAt(0).getBoundingClientRect();
         const before = window.commentOriginalRect;
         const spoof = document.querySelector('.comment-highlight:not([data-comment-ids])');
+        const spoofRun = document.querySelector('.comment-selected-run:not([data-comment-run])');
         return {
           selection: selection.toString(),
           sameParagraph: document.querySelector("article > p") === window.commentParagraph,
           sameText: document.querySelector("article").textContent === window.commentOriginalText,
           sameGeometry: ["x", "y", "width", "height"].every((key) => Math.abs(before[key] - rect[key]) < 0.1),
           validTables: !document.querySelector("table > span, thead > span, tbody > span, tr > span"),
-          noAuthoredAnnotation: spoof && getComputedStyle(spoof).backgroundColor === "rgba(0, 0, 0, 0)",
+          noAuthoredAnnotation: spoof && getComputedStyle(spoof).backgroundColor === "rgba(0, 0, 0, 0)" &&
+            spoofRun && getComputedStyle(spoofRun).backgroundColor === "rgba(0, 0, 0, 0)",
           bodyFill: getComputedStyle(document.querySelector('[data-comment-ids="10"]')).backgroundColor,
           linkFill: getComputedStyle(document.querySelector('[data-comment-ids="9223372036854775807"]')).backgroundColor,
           exactSelectionSnapshot: JSON.stringify(window.gistpadPreview.commentSelection()) === JSON.stringify({
@@ -156,14 +160,29 @@ async (page) => {
       }), highlights);
       await page.waitForFunction(() =>
         document.querySelectorAll(".comment-highlight[data-comment-ids]").length === 2);
-      const selected = await page.evaluate(() => [...document.querySelectorAll(".comment-highlight[data-comment-ids]")].every((span) => {
-        const style = getComputedStyle(span);
-        return span.getAttribute("aria-current") === "true" && !span.hasAttribute("aria-pressed") &&
-          span.getAttribute("aria-description").startsWith("Selected comment. ") &&
-          style.backgroundColor === "rgb(250, 204, 21)" && style.color === "rgb(0, 0, 0)" &&
-          style.textDecorationLine.includes("underline");
-      }));
+      const selected = await page.evaluate(() => {
+        const runs = [...document.querySelectorAll(".comment-selected-run[data-comment-run]")];
+        return runs.length === 1 && runs[0].textContent === "native note" &&
+          getComputedStyle(runs[0]).backgroundColor === "rgb(250, 204, 21)" &&
+          [...document.querySelectorAll(".comment-highlight[data-comment-ids]")].every((span) => {
+            const style = getComputedStyle(span);
+            return span.closest(".comment-selected-run[data-comment-run]") === runs[0] &&
+              span.getAttribute("aria-current") === "true" && !span.hasAttribute("aria-pressed") &&
+              span.getAttribute("aria-description").startsWith("Selected comment. ") &&
+              style.backgroundColor === "rgba(0, 0, 0, 0)" && style.color === "rgb(0, 0, 0)" &&
+              style.textDecorationLine.includes("underline");
+          });
+      });
       if (!selected) throw new Error("Selected-only annotations lost native accent or accessible state.");
+      await page.setViewportSize({ width: 100, height: 874 });
+      const wrapped = await page.evaluate(() => {
+        const run = document.querySelector(".comment-selected-run[data-comment-run]");
+        const style = getComputedStyle(run);
+        return run.getClientRects().length > 1 && style.borderRadius === "3px" &&
+          style.getPropertyValue("box-decoration-break") === "clone";
+      });
+      if (!wrapped) throw new Error("Selected overlap runs lost their per-line rounded treatment.");
+      await page.setViewportSize({ width: 402, height: 874 });
       results.push({ dark, increased, ...check });
     }
   }

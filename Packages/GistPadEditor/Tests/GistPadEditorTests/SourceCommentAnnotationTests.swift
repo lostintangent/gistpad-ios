@@ -9,6 +9,20 @@
   @Suite(.serialized)
   @MainActor
   struct SourceCommentAnnotationTests {
+    @Test func selectedLineBackgroundsMergeOverlapPartitionsWithoutBridgingLinesOrGaps() {
+      let frames = [
+        CGRect(x: 30, y: 10, width: 30, height: 20),
+        CGRect(x: 10, y: 35, width: 25, height: 20),
+        CGRect(x: 80, y: 10, width: 10, height: 20),
+        CGRect(x: 10, y: 10, width: 20, height: 20),
+      ]
+      #expect(SourceCommentAnnotations.continuousLineRects(frames) == [
+        CGRect(x: 10, y: 10, width: 50, height: 20),
+        CGRect(x: 80, y: 10, width: 10, height: 20),
+        CGRect(x: 10, y: 35, width: 25, height: 20),
+      ])
+    }
+
     @Test func annotationsPreserveExactSourceGenerationSelectionAndNativeUndo() throws {
       let session = DocumentSession(documentID: "comments", text: "A native note", generation: 7)
       let window = host(session)
