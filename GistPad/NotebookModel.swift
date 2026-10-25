@@ -224,7 +224,10 @@ struct NotebookDocument: Equatable, Sendable, Identifiable {
   var draft: DraftSnapshot?
   var isRecovery: Bool
   var libraryRowID: String?
-  var opensForEditing = false
+  var editingRequestID: UUID?
+  var revealsDetail = true
+  var opensForEditing: Bool { editingRequestID != nil }
+  var activationID: String { editingRequestID?.uuidString ?? id }
   let id: String
 
   init(accountID: UUID, gist: Gist, filename: String, text: String, chrome: NoteChrome) {
@@ -288,6 +291,8 @@ struct NotebookFailedOpen: Equatable {
   let filename: String?
   let draftID: UUID?
   let message: String
+  var todayTarget: DailyNoteTarget? = nil
+  var focusesEditor = false
 }
 
 @MainActor @Observable
@@ -365,6 +370,15 @@ final class NotebookModel {
       selected != loadedDocument?.rowID
     else { return nil }
     return opening(gistID: searchTargets[selected]?.gistID ?? selected, rowID: selected).title
+  }
+
+  var isTodaySelected: Bool {
+    if let openingDocument { return openingDocument.rowID.hasPrefix("today/") }
+    guard let document = presentedDocument,
+      document.filename == GistConventions.todayFilename()
+    else { return false }
+    return document.gist?.isDailyNote == true
+      || document.draft?.description == GistConventions.dailyNotesDescription
   }
 
   @discardableResult
@@ -896,7 +910,9 @@ final class NotebookModel {
 
   func retryFailedOpen() async {
     guard let failedOpen else { return }
-    if let gistID = failedOpen.gistID {
+    if let target = failedOpen.todayTarget {
+      await startToday(target: target, focusEditor: failedOpen.focusesEditor)
+    } else if let gistID = failedOpen.gistID {
       await open(
         gistID: gistID, filename: failedOpen.filename, rowID: failedOpen.rowID)
     } else if let draftID = failedOpen.draftID {
@@ -1021,7 +1037,7 @@ final class NotebookModel {
       if self.account?.id == account.id { recordLocalDraft(draft) }
       guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id else { return }
       var document = NotebookDocument(draft: draft)
-      document.opensForEditing = true
+      document.editingRequestID = UUID()
       openingDocument = nil
       isOpeningDocument = false
       try present(document)
@@ -1032,24 +1048,36 @@ final class NotebookModel {
     }
   }
 
-  func startToday(target: DailyNoteTarget = DailyNoteTarget()) async {
+  func startToday(target: DailyNoteTarget = DailyNoteTarget(), focusEditor: Bool = true) async {
     guard let account, pendingAccount == nil, !isCreating else { return }
-    isCreating = true
+    if focusEditor { isCreating = true }
     failedOpen = nil
+    documentError = nil
     documentRequest = UUID()
     let request = documentRequest
     openingDocument = .init(rowID: "today/\(request)", title: String(localized: "Today"))
     isOpeningDocument = false
     defer {
-      isCreating = false
+      if focusEditor { isCreating = false }
       if request == documentRequest { openingDocument = nil }
     }
     do {
-      let today = try await provider.today(accountID: account.id, target: target)
-      if self.account?.id == account.id { recordLocalDraft(today.draft) }
+      let daily = cachedLibrary?.owned.first(where: \.isDailyNote)
+      var document: NotebookDocument
+      if let draft = todayDraft(filename: target.filename, daily: daily) {
+        document = NotebookDocument(draft: draft, gist: daily)
+      } else if let daily,
+        let cached = cachedDocument(gistID: daily.id, filename: target.filename)
+      {
+        document = cached
+      } else {
+        let today = try await provider.today(accountID: account.id, target: target)
+        if self.account?.id == account.id { recordLocalDraft(today.draft) }
+        document = NotebookDocument(draft: today.draft, gist: today.gist)
+      }
       guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id else { return }
-      var document = NotebookDocument(draft: today.draft, gist: today.gist)
-      document.opensForEditing = true
+      document.editingRequestID = focusEditor ? UUID() : nil
+      document.revealsDetail = focusEditor
       openingDocument = nil
       isOpeningDocument = false
       failedOpen = nil
@@ -1057,20 +1085,11 @@ final class NotebookModel {
     } catch {
       guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id else { return }
       report(error, operation: "today")
-      documentError = Self.message(for: error)
-      do {
-        try await reloadLocalState(accountID: account.id)
-        if request == documentRequest,
-          let local = localDrafts.first(where: {
-            $0.filename == target.filename
-              && $0.description == GistConventions.dailyNotesDescription
-          })
-        {
-          loadedDocument = NotebookDocument(
-            draft: local, gist: cachedLibrary?.gists.first { $0.id == local.gistID })
-          library.selectedNoteID = loadedDocument?.rowID
-        }
-      } catch { report(error, operation: "reload-local") }
+      failedOpen = .init(
+        rowID: "today/\(target.filename)", title: String(localized: "Today"),
+        gistID: nil, filename: target.filename, draftID: nil,
+        message: Self.message(for: error), todayTarget: target, focusesEditor: focusEditor)
+      library.selectedNoteID = failedOpen?.rowID
     }
   }
 
@@ -1082,24 +1101,6 @@ final class NotebookModel {
     library.selectedNoteID = nil
   }
 
-  func showToday() async {
-    documentRequest = UUID()
-    openingDocument = nil
-    isOpeningDocument = false
-    failedOpen = nil
-    documentError = nil
-    let daily = cachedLibrary?.owned.first(where: \.isDailyNote)
-    let filename = GistConventions.todayFilename()
-    if let draft = todayDraft(filename: filename, daily: daily) {
-      await openLocalDraft(id: draft.id)
-    } else if let daily, daily.files[filename] != nil {
-      await open(gistID: daily.id, filename: filename)
-    } else {
-      loadedDocument = nil
-      library.selectedNoteID = nil
-    }
-  }
-
   func remember(_ selection: NotebookSelection) throws {
     guard let account else { throw AccountError.signedOut }
     try selections.save(selection, accountID: account.id)
@@ -1107,7 +1108,7 @@ final class NotebookModel {
 
   private func restoreSelectionIfNeeded() async {
     guard loadedDocument == nil, library.selectedNoteID == nil, let account,
-      pendingAccount == nil
+      pendingAccount == nil, openingDocument == nil, failedOpen == nil
     else { return }
     do {
       if let selection = try selections.selection(accountID: account.id) {
@@ -1123,7 +1124,7 @@ final class NotebookModel {
         }
       }
       guard loadedDocument == nil, library.selectedNoteID == nil else { return }
-      await showToday()
+      await startToday(focusEditor: false)
     } catch {
       report(error, operation: "restore-selection")
       documentError = String(
@@ -1284,6 +1285,7 @@ final class NotebookModel {
       loadedDocument = nil
     }
     await search()
+    if !isStarting, !isSigningIn, !isCreating { await restoreSelectionIfNeeded() }
     return true
   }
 
@@ -1420,6 +1422,7 @@ final class NotebookModel {
       }
     }
     try await reloadLocalState(accountID: account.id)
+    await restoreSelectionIfNeeded()
     return result
   }
 

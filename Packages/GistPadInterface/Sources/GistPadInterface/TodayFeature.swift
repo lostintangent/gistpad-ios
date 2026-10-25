@@ -1,42 +1,6 @@
 #if os(iOS)
 import SwiftUI
 
-public struct TodayLanding: View {
-    private let summary: LibraryTodaySummary
-    private let start: @MainActor () -> Void
-
-    public init(summary: LibraryTodaySummary, start: @escaping @MainActor () -> Void) {
-        self.summary = summary
-        self.start = start
-    }
-
-    public var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                TodayHeading(summary: summary)
-                Text("Make room for a thought.", bundle: .module)
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text("One place for the things you notice, the ideas you want to keep, and what comes next.", bundle: .module)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                Button(String(localized: "Start today's note", bundle: .module), systemImage: "square.and.pencil", action: start)
-                    .buttonStyle(.borderedProminent)
-                    .tint(InterfaceTheme.accentFill)
-                    .foregroundStyle(InterfaceTheme.onAccent)
-                    .accessibilityIdentifier("today-start")
-            }
-            .frame(maxWidth: 600, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(24)
-        }
-        .background(Color(uiColor: .systemBackground))
-        .scrollEdgeEffectStyle(.soft, for: .all)
-        .navigationTitle(Text("Today", bundle: .module))
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
 struct TodayHeading: View {
     let summary: LibraryTodaySummary
     var usesCompactLayout = false

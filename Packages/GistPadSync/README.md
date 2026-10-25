@@ -85,7 +85,7 @@ After an acknowledged remote rename, `updateDraftMetadata(id:accountID:expectedF
 
 After the user confirms deletion and GitHub acknowledges it, `removeDraftsForDeletedGist(gistID:accountID:)` permanently removes every draft for that account/gist, including unsynced text, publication attempts, recovery history, image-upload bytes and command receipts. It also removes the gist and its content from the durable library cache. Other accounts and gists remain unchanged. No recovery copy is retained after this explicit deletion.
 
-`discardBlankDraft(id:accountID:expectedGeneration:)` quietly removes only an unbound, locally saved draft with an empty description, whitespace-only source, no publication attempt or baseline, and no recovery or photo records. The store rechecks the generation and commits the deletion before returning `true`. A changed, meaningful or already removed draft returns `false`. The host must finish pending local edits and exclude its current note before requesting cleanup.
+`discardBlankDraft(id:accountID:expectedGeneration:)` quietly removes an unbound, locally saved draft with an empty description and whitespace-only source. It also accepts an untouched, generation-zero default daily date heading with no remote-file baseline, including a new day bound to an existing daily gist. Typed daily content, custom templates and published files are not blank. Neither case may have publication attempts, recovery history or photo records. The store rechecks the generation and commits only the local draft deletion before returning `true`. The host must finish pending local edits and exclude its current note before requesting cleanup. It must not automatically publish a discardable blank.
 
 ## Validation
 

@@ -46,10 +46,13 @@ public struct DraftSnapshot: Equatable, Sendable, Identifiable {
     public let state: SaveState
 
     public var isDiscardableBlank: Bool {
-        gistID == nil && baseContent == nil && attemptedContent == nil
-            && attemptedGeneration == nil && description.isEmpty
-            && text.allSatisfy(\.isWhitespace)
-            && state == .savedLocally
+        guard baseContent == nil, baseRevision == nil, attemptedContent == nil,
+              attemptedGeneration == nil, state == .savedLocally else { return false }
+        if description == GistConventions.dailyNotesDescription,
+           DailyNotesIndex.parseDateFilename(filename) != nil, generation == 0 {
+            return text == GistConventions.dailyContent(template: nil, dateFilename: filename)
+        }
+        return gistID == nil && description.isEmpty && text.allSatisfy(\.isWhitespace)
     }
 }
 

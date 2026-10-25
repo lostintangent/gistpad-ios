@@ -22,6 +22,8 @@ struct GistPadApp: App {
         NotebookIntelligenceEvaluationWorkspace()
       } else if LaunchArguments.captureScreen == "library-delete" {
         NotebookLibraryDeletionCaptureWorkspace()
+      } else if LaunchArguments.captureScreen == "today" {
+        NotebookTodayCaptureWorkspace()
       } else if LaunchArguments.captureScreen == "photos" {
         PhotoCaptureWorkspace()
       } else if LaunchArguments.captureScreen == "intelligence" {

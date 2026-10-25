@@ -3,6 +3,83 @@ import Testing
 @testable import GistPadSync
 
 @Suite struct BlankDraftTests {
+    @Test(arguments: [false, true])
+    func discardsAnUntouchedDailyTemplateWithoutDeletingItsGist(bound: Bool) async throws {
+        let store = try DraftStore.open(inMemory: true)
+        let account = UUID()
+        let target = DailyNoteTarget()
+        let draft: DraftSnapshot
+        if bound {
+            draft = try await store.newFileDraft(
+                accountID: account, githubUserID: 42, gistID: "daily",
+                filename: target.filename, description: GistConventions.dailyNotesDescription,
+                text: GistConventions.dailyContent(template: nil, dateFilename: target.filename))
+        } else {
+            draft = try await store.dailyGistDraft(
+                accountID: account, githubUserID: 42, target: target)
+        }
+        let yesterday = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "daily",
+            filename: "2026-10-01.md", description: GistConventions.dailyNotesDescription,
+            content: "Keep yesterday's thought.", revision: "one")
+        #expect(draft.isDiscardableBlank)
+        #expect(try await store.discardBlankDraft(
+            id: draft.id, accountID: account, expectedGeneration: draft.generation))
+        #expect(try await store.drafts(accountID: account) == [yesterday])
+    }
+
+    @Test(arguments: ["A real thought", "- [ ] A custom template", "# 2026-10-25\n\nKeep this."])
+    func preservesDailyContentAndCustomTemplates(text: String) async throws {
+        let store = try DraftStore.open(inMemory: true)
+        let draft = try await store.newFileDraft(
+            accountID: UUID(), githubUserID: 42, gistID: "daily",
+            filename: DailyNoteTarget().filename,
+            description: GistConventions.dailyNotesDescription, text: text)
+        #expect(!draft.isDiscardableBlank)
+        #expect(try await !store.discardBlankDraft(
+            id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation))
+    }
+
+    @Test func preservesEditedAndPublishedDailyTemplates() async throws {
+        let store = try DraftStore.open(inMemory: true)
+        let account = UUID()
+        let target = DailyNoteTarget()
+        let draft = try await store.dailyGistDraft(
+            accountID: account, githubUserID: 42, target: target)
+        let edited = try await store.persist(
+            id: draft.id, accountID: account, text: draft.text, generation: 1)
+        let published = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "daily",
+            filename: target.filename, description: GistConventions.dailyNotesDescription,
+            content: draft.text, revision: "one")
+        for kept in [edited, published] {
+            #expect(!kept.isDiscardableBlank)
+            #expect(try await !store.discardBlankDraft(
+                id: kept.id, accountID: account, expectedGeneration: kept.generation))
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func preservesDailyRecoveryAndPhotos(photo: Bool) async throws {
+        let store = try DraftStore.open(inMemory: true)
+        let account = UUID()
+        let draft = try await store.dailyGistDraft(
+            accountID: account, githubUserID: 42, target: DailyNoteTarget())
+        if photo {
+            _ = try await store.enqueueImage(
+                pngData: testPNG(), draftID: draft.id, accountID: account,
+                expectedGeneration: draft.generation, insertionLocation: 0)
+        } else {
+            try await store.beginAttempt(
+                id: draft.id, accountID: account, content: draft.text,
+                generation: draft.generation, remote: nil)
+            try await store.clearAttempt(id: draft.id, accountID: account)
+        }
+        #expect(try await !store.discardBlankDraft(
+            id: draft.id, accountID: account, expectedGeneration: draft.generation))
+        #expect(try await store.draft(id: draft.id, accountID: account).text == draft.text)
+    }
+
     @Test(arguments: ["", " \t\r\n\u{2003}"])
     func discardsOnlyTheExpectedBlankGeneration(text: String) async throws {
         let store = try DraftStore.open(inMemory: true)

@@ -85,7 +85,7 @@ struct InterfaceCaptureWorkspace: View {
         readinessToken = UUID(uuidString: token) == nil ? nil : token
         captureState = state
         supportedState = [
-            "populated", "empty", "error", "offline", "readonly", "tag-audit", "today",
+            "populated", "empty", "error", "offline", "readonly", "tag-audit",
             "tag-editor", "tag-readonly", "search", "search-active", "no-results", "filtered", "signed-out",
             "daily", "daily-progress", "starred", "archive", "notes", "featured", "header-file",
             "mode-long", "mode-emoji", "today-done", "today-no-tasks",
@@ -181,9 +181,9 @@ struct InterfaceCaptureWorkspace: View {
                 : state == "offline" ? .offline : state == "signed-out" ? .signedOut : .ready,
             today: .init(
                 date: InterfaceFixtures.referenceDate,
-                progress: state == "empty" || state == "today" ? nil : .init(completed: 1, total: 3),
-                availability: state == "empty" || state == "today" ? .missing : .existing,
-                excerpt: state == "empty" || state == "today" ? nil : "Keep the thought, not the interface."
+                progress: state == "empty" ? nil : .init(completed: 1, total: 3),
+                availability: state == "empty" ? .missing : .existing,
+                excerpt: state == "empty" ? nil : "Keep the thought, not the interface."
             )
         )
         if state == "today-done" {
@@ -246,7 +246,7 @@ struct InterfaceCaptureWorkspace: View {
             )
         default: break
         }
-        model.selectedNoteID = state == "empty" || state == "today" || screen == "library" ? nil : "shape"
+        model.selectedNoteID = state == "empty" || screen == "library" ? nil : "shape"
         _library = State(initialValue: model)
         _compactColumn = State(initialValue: screen == "library" ? .sidebar : .detail)
         _previewError = State(initialValue: state == "error" ? "Synthetic preview failure. Your source is unchanged." : nil)
@@ -259,7 +259,6 @@ struct InterfaceCaptureWorkspace: View {
                     LibraryView(
                         model: library, actions: libraryActions,
                         footer: Text(actionMessage ?? "Synthetic library. No account connected."),
-                        isTodaySelected: captureState == "today",
                         isSidebar: horizontalSizeClass == .regular
                     )
                     .captureTagFilters(captureState == "tag-filters")
@@ -274,11 +273,7 @@ struct InterfaceCaptureWorkspace: View {
             } detail: {
                 NavigationStack {
                     Group {
-                        if captureState == "today" {
-                            TodayLanding(summary: library.today) {
-                                actionMessage = "This synthetic landing cannot create a note."
-                            }
-                        } else if library.selectedNoteID != nil {
+                        if library.selectedNoteID != nil {
                             NoteScreen(
                                 document: chrome, mode: mode, saveState: .inMemoryFixture,
                                 actions: noteActions
@@ -301,14 +296,14 @@ struct InterfaceCaptureWorkspace: View {
                         }
                     }
                     .libraryCreateAction(
-            .toolbarVerticalBehavior(
-                ProcessInfo.processInfo.arguments.contains("--capture-horizontal-toolbar")
-                    ? .disabled : .automatic)
                         isVisible: horizontalSizeClass == .regular && library.loadState != .signedOut,
                         action: libraryActions.create)
                 }
             }
             .navigationSplitViewStyle(.balanced)
+            .toolbarVerticalBehavior(
+                ProcessInfo.processInfo.arguments.contains("--capture-horizontal-toolbar")
+                    ? .disabled : .automatic)
             .librarySearch(
                 model: library,
                 isPresented: captureState == "search-active" ? $searchPresented : nil,
@@ -330,7 +325,7 @@ struct InterfaceCaptureWorkspace: View {
                     library.selectedNoteID = "shape"
                 }
                 if (captureScreen == "library" && !["notes", "featured", "tag-audit", "row-anatomy"].contains(captureState))
-                    || captureState == "error" || captureState == "today" {
+                    || captureState == "error" {
                     await markReady()
                 }
             }

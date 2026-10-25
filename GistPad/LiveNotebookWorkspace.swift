@@ -130,14 +130,24 @@ struct LiveNotebookWorkspace: View {
   }
 
   private var navigation: some View {
+    Group {
+      if notebook.account == nil {
+        NavigationStack {
+          LibraryView(model: notebook.library, actions: libraryActions, isSidebar: false)
+        }
+      } else {
+        notebookNavigation
+      }
+    }
+  }
+
+  private var notebookNavigation: some View {
     NavigationSplitView(
       columnVisibility: $columnVisibility, preferredCompactColumn: $compactColumn
     ) {
       LibraryView(
         model: notebook.library, actions: libraryActions,
-        isTodaySelected: (horizontalSizeClass == .regular || compactColumn == .detail)
-          && notebook.failedOpen == nil && notebook.presentedDocument == nil
-          && notebook.openingTitle == nil,
+        isTodaySelected: notebook.isTodaySelected,
         isSidebar: horizontalSizeClass == .regular)
     } detail: {
       NavigationStack {
@@ -157,8 +167,7 @@ struct LiveNotebookWorkspace: View {
             NotebookOpeningView(title: title)
               .id(notebook.openingDocument?.rowID ?? notebook.library.selectedNoteID)
           } else {
-            TodayLanding(summary: notebook.library.today, start: { startToday() })
-              .disabled(notebook.account == nil || notebook.isCreating)
+            NotebookOpeningView(title: String(localized: "Today"))
           }
         }
         .libraryCreateAction(
@@ -231,7 +240,7 @@ struct LiveNotebookWorkspace: View {
   private var workspaceNavigationLifecycle: some View {
     navigation
     .task { await notebook.start() }
-    .task(id: notebook.loadedDocument?.id) {
+    .task(id: notebook.loadedDocument?.activationID) {
       if notebook.loadedDocument == nil { activeID = nil } else { await activateLoadedDocument() }
     }
     .task(id: searchInput) { await notebook.search() }
@@ -242,7 +251,8 @@ struct LiveNotebookWorkspace: View {
       }
     }
     .onChange(of: notebook.library.selectedNoteID) { _, selected in
-      guard let selected, selected != notebook.loadedDocument?.rowID,
+      guard let selected, selected == notebook.library.selectedNoteID,
+        selected != notebook.loadedDocument?.rowID,
         selected != notebook.openingDocument?.rowID, selected != notebook.failedOpen?.rowID
       else { return }
       selectRow(selected)
@@ -519,12 +529,7 @@ struct LiveNotebookWorkspace: View {
     var actions = LibraryActions(
       refresh: { await notebook.refresh() },
       create: { createNote() },
-      today: {
-        guard canSwitchDocument else { return }
-        sharedPreviewGistID = nil
-        compactColumn = .detail
-        Task { await notebook.showToday() }
-      })
+      today: { startToday() })
     actions.select = { selectRow($0) }
     actions.openComments = { rowID in
       guard canSwitchDocument else { return }
@@ -1192,7 +1197,7 @@ struct LiveNotebookWorkspace: View {
       comments.open(for: controller)
     }
     // A completed restoration must not reopen detail after returning to Library.
-    if notebook.library.selectedNoteID != nil { compactColumn = .detail }
+    if notebook.library.selectedNoteID != nil, document.revealsDetail { compactColumn = .detail }
     do {
       try notebook.remember(
         NotebookSelection(
@@ -1482,6 +1487,7 @@ struct LiveNotebookWorkspace: View {
   private func startToday() {
     guard canSwitchDocument else { return }
     sharedPreviewGistID = nil
+    compactColumn = .detail
     let target = DailyNoteTarget()
     Task { await notebook.startToday(target: target) }
   }

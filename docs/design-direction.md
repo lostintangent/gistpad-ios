@@ -27,7 +27,7 @@ These are views into one notebook, not four activities that require a permanent 
 
 In the default Library, show a pinned note once in its featured group, not again in Notes. Filtered/search results can use normal rows with a small pin indication.
 
-Without an explicit selection, restore the last accessible page and interrupted draft for the account. Otherwise show today's existing note, or its explicit Start invitation. Never create a file on launch/unfold or leave a wide detail at a generic Select a gist message.
+The user's October 25 direct-Today request supersedes the former Start landing. Without an explicit selection, restore the last accessible page and interrupted draft for the account. Otherwise ensure today's note, staging a durable local day if missing, and open it without raising the keyboard. An explicit Today action opens Edit ready to type. Never publish an untouched default day automatically or replace a newer selection. Unfolding alone does not create another note.
 
 | Available space and task | Composition |
 | --- | --- |

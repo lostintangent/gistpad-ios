@@ -30,9 +30,9 @@ An unselected wide detail must not open onto a generic Select a gist placeholder
 
 1. Restore the last accessible note and file for the current account, including its durable local draft and genuine interrupted editing state.
 2. With no restorable note, show the existing current-day note in reading mode.
-3. If today's note does not exist, show a composed Today landing with the local date and an explicit Start today's note action. This is an invitation, not an automatically created file.
+3. If today's note does not exist, stage it locally and open it quietly, without the keyboard. The user's October 25 request removes the Start interstitial. Explicit Today actions enter Edit with the keyboard.
 
-Opening the Library, restoring the app, or unfolding never creates or publishes a note. A default-detail read may fill only a still-unselected detail, never replace a newer user selection. An active note always wins over the fallback, even when it falls outside the current Library filter. A remotely removed note with a recoverable local draft needs a recovery state, not silent abandonment.
+Opening the Library or unfolding does not create an extra note. A no-selection default may stage Today locally but never automatically publishes its untouched default heading. It may fill only a still-unselected detail and must never replace a newer user selection or push a deliberately visible compact Library into detail. An active note always wins, even when it falls outside the current Library filter. A remotely removed note with a recoverable local draft needs a recovery state, not silent abandonment.
 
 Signed-out, offline-without-cache, loading and failed-read states explain the actual condition and provide an appropriate action. Do not conceal those states behind a decorative empty page. Use note in selection/reading copy. Retain gist where the GitHub object's scope matters, such as multiple files, gist-level tags, and unlisted-link warnings.
 

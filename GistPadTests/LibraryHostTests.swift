@@ -72,7 +72,8 @@ struct LibraryHostTests {
             isTodaySelected: true, isSidebar: true)
         } detail: {
           NavigationStack {
-            TodayLanding(summary: model.today) {}
+            Color(uiColor: .systemBackground)
+              .navigationTitle("Today")
           }
         }
         .librarySearch(model: model))

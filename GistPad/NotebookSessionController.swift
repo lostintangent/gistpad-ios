@@ -32,7 +32,7 @@ final class NotebookSessionController {
   @ObservationIgnored private var autosaveTask: Task<Void, Never>?
   @ObservationIgnored private var scheduledAutosave: AutosaveRequest?
   @ObservationIgnored private var isForeground = false
-  @ObservationIgnored private var didRequestCreationFocus = false
+  @ObservationIgnored private var lastEditingRequestID: UUID?
   @ObservationIgnored private var isDiscarded = false
   @ObservationIgnored private var reviewScope = UUID()
   @ObservationIgnored private var publicationWaiters: [CheckedContinuation<Void, Never>] = []
@@ -119,8 +119,9 @@ final class NotebookSessionController {
   }
 
   func requestCreationFocus() {
-    guard document.opensForEditing, !didRequestCreationFocus, canMutate else { return }
-    didRequestCreationFocus = true
+    guard let request = document.editingRequestID, request != lastEditingRequestID, canMutate
+    else { return }
+    lastEditingRequestID = request
     mode = .source
     session.requestFocusAtEnd()
   }
@@ -216,7 +217,7 @@ final class NotebookSessionController {
 
   func inspectRemoteChanges() async {
     guard !isInspectingRemote, !isPublishing, canMutate, !document.isRecovery,
-      draft.gistID != nil,
+      draft.gistID != nil, !draft.isDiscardableBlank,
       notebook.account?.id == draft.accountID, notebook.pendingAccount == nil
     else { return }
     if case .conflict = draft.state { return }
@@ -261,13 +262,15 @@ final class NotebookSessionController {
       incoming.gist?.id == document.gist?.id, incoming.filename == draft.filename
     else { return }
     document.libraryRowID = incoming.libraryRowID
-    document.opensForEditing = incoming.opensForEditing
+    document.editingRequestID = incoming.editingRequestID
+    document.revealsDetail = incoming.revealsDetail
     if let gist = incoming.gist { document.gist = gist }
     document.chrome = notebook.chrome(gist: document.gist, draft: draft)
   }
 
   var hasUnpublishedChanges: Bool {
     guard !isDiscarded else { return false }
+    if draft.isDiscardableBlank, session.text.utf8.elementsEqual(draft.text.utf8) { return false }
     guard let base = draft.baseContent else { return true }
     return !session.text.utf8.elementsEqual(base.utf8) || draft.attemptedGeneration != nil
   }

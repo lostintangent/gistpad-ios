@@ -474,7 +474,7 @@ public struct LibraryView: View {
             set: { selection in
                 switch selection {
                 case .today:
-                    if !isTodaySelected { actions.today() }
+                    actions.today()
                 case .note(let id):
                     if let select = actions.select {
                         select(id)
