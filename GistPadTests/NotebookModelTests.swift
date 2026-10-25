@@ -2097,7 +2097,8 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding {
       notes[index] = Gist(
         id: gist.id, description: gist.description, files: files,
         updatedAt: gist.updatedAt, createdAt: gist.createdAt,
-        isPublic: gist.isPublic, owner: gist.owner, truncated: gist.truncated, history: gist.history)
+        isPublic: gist.isPublic, owner: gist.owner, truncated: gist.truncated, history: gist.history,
+        commentCount: gist.commentCount)
     }
     return try await store.acknowledge(
       id: draftID, accountID: accountID, gistID: current.gistID ?? "created-\(draftID)",
@@ -2159,7 +2160,8 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding {
           truncated: $0.truncated, rawURL: $0.rawURL, size: $0.size)
       },
       updatedAt: gist.updatedAt, createdAt: gist.createdAt,
-      isPublic: gist.isPublic, owner: gist.owner, truncated: gist.truncated, history: gist.history)
+      isPublic: gist.isPublic, owner: gist.owner, truncated: gist.truncated, history: gist.history,
+      commentCount: gist.commentCount)
   }
   private func draftStore() throws -> DraftStore {
     if let store { return store }

@@ -121,7 +121,7 @@ struct LibraryGistCountTests {
         return .init(
             id: id, description: description, files: Dictionary(uniqueKeysWithValues: files),
             updatedAt: InterfaceFixtures.referenceDate, createdAt: InterfaceFixtures.referenceDate,
-            isPublic: false, owner: nil, truncated: false, history: nil)
+            isPublic: false, owner: nil, truncated: false, history: nil, commentCount: nil)
     }
 
     private func note(
