@@ -96,7 +96,9 @@ summary:active { background: var(--gp-selected-surface); }
 summary:focus-visible { outline: 3px solid var(--gp-link); outline-offset: 2px; }
 details[open] > summary { margin-bottom: 8px; }
 img, svg { max-width: 100%; height: auto; }
-.spoiler { border: 0; border-radius: 4px; background: var(--muted); padding: 0 5px; }
+.spoiler { display: inline-block; border-radius: 4px; background: var(--muted); padding: 0 5px; }
+.spoiler-toggle { border: 0; background: transparent; padding: 0; }
+.spoiler-toggle[aria-expanded="true"] { display: inline-flex; vertical-align: text-bottom; margin-inline-end: 4px; }
 .bookmark { background: none; border: none; color: var(--primary); }
 .wikilink { border: none; text-decoration: underline; }
 .image-unavailable, .unsupported { color: var(--muted-foreground); font-style: italic; }
@@ -129,6 +131,24 @@ img, svg { max-width: 100%; height: auto; }
 svg text, svg .nodeLabel, svg .nodeLabel *, svg .edgeLabel, svg .edgeLabel * { font-family: -apple-system, BlinkMacSystemFont, sans-serif !important; }
 .prose section.footnotes li { font-size: var(--gp-footnote-size); line-height: var(--gp-footnote-line-height); }
 .markdown-container ::selection { background: revert; color: revert; }
+.comment-text { display: contents; }
+.comment-highlight[data-comment-ids] {
+  background: var(--comment-idle);
+  border-radius: 3px;
+  box-shadow: 1px 0 var(--comment-idle), -1px 0 var(--comment-idle);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.comment-highlight[data-comment-ids][role="button"] { cursor: pointer; }
+.comment-highlight[data-comment-ids]:focus-visible { outline: 2px solid var(--gp-accent-text); outline-offset: 2px; }
+.comment-highlight.comment-selected[data-comment-ids] {
+  background: var(--gp-accent-fill);
+  box-shadow: 1px 0 var(--gp-accent-fill), -1px 0 var(--gp-accent-fill);
+  color: var(--gp-on-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: .16em;
+}
 [data-bold-text="true"] article { font-weight: 600; }
 [data-contrast="increased"] { --border: var(--gp-boundary); }
 [data-contrast="increased"] .markdown-alert { border-inline-start-width: 4px; }

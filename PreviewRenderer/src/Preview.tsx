@@ -15,6 +15,7 @@ import { toString } from "hast-util-to-string";
 import type { PreviewMessage, RenderRequest, TaskEdit } from "./protocol";
 import { useDiagramTheme } from "./diagramTheme";
 import { isTaskEditingEnabled, useTaskEditingEnabled } from "./taskEditing";
+import { CommentText, type CommentHighlightController } from "./commentHighlights";
 
 const emojis = new Map(
   Object.entries(emojiData.emojis).map(([id, emoji]) => [id, emoji.skins[0]?.native ?? ""]),
@@ -46,10 +47,25 @@ export function send(message: PreviewMessage) {
 
 function Spoiler({ children }: { children: ReactNode }) {
   const [revealed, setRevealed] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const reveal = () => setRevealed(true);
+    const spoiler = ref.current!;
+    spoiler.addEventListener("gistpad-reveal-comment", reveal);
+    return () => spoiler.removeEventListener("gistpad-reveal-comment", reveal);
+  }, []);
   return (
-    <button className="spoiler" aria-expanded={revealed} onClick={() => setRevealed(!revealed)}>
-      {revealed ? children : "Reveal spoiler"}
-    </button>
+    <span ref={ref} className="spoiler">
+      <button className="spoiler-toggle" aria-expanded={revealed}
+        aria-label={revealed ? "Hide spoiler" : "Reveal spoiler"} onClick={() => setRevealed(!revealed)}>
+        {revealed ? <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"
+          fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z" />
+          <circle cx="12" cy="12" r="3" /><path d="m3 3 18 18" />
+        </svg> : "Reveal spoiler"}
+      </button>
+      <span hidden={!revealed}>{children}</span>
+    </span>
   );
 }
 
@@ -101,7 +117,7 @@ export function identity(request: RenderRequest) {
   return { version: request.version, documentID: request.documentID, generation: request.generation };
 }
 
-export function Preview({ request }: { request: RenderRequest }) {
+export function Preview({ request, comments }: { request: RenderRequest; comments: CommentHighlightController }) {
   const taskPlugins = useMemo(() => taskRangePlugins(request.markdown), [request]);
   const contents = useRef({ documentID: request.documentID, open: false });
   if (contents.current.documentID !== request.documentID) {
@@ -151,6 +167,10 @@ export function Preview({ request }: { request: RenderRequest }) {
         );
       },
       span({ children, node, ...props }) {
+        const segment = comments.segment(node);
+        if (segment !== undefined) {
+          return <CommentText controller={comments} segment={segment} text={toString(node!)} />;
+        }
         if (props.className?.split(" ").includes("octicon")) return null;
         const resultKind = props.className?.split(" ").includes("bg-amber-500")
           ? "current" : props.className?.split(" ").includes("bg-green-500") ? "previous" : undefined;
@@ -207,13 +227,14 @@ export function Preview({ request }: { request: RenderRequest }) {
         return <PreviewImage src={typeof src === "string" ? src : undefined} alt={alt ?? ""} />;
       },
     };
-  }, [request]);
+  }, [request, comments]);
   const remarkPlugins: Options["remarkPlugins"] = [
     remarkGfm, remarkGithubAlerts, remarkFrontmatter, taskPlugins.remark,
     [remarkInlineSyntax, { emojis }],
   ];
   const rehypePlugins: Options["rehypePlugins"] = [
     rehypeRaw, [rehypeSanitize, schema], rehypeSlug, rehypeToc, taskPlugins.rehype,
+    comments.catalogPlugin,
   ];
 
   useEffect(() => {

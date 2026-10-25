@@ -3,10 +3,15 @@ import SwiftUI
 import WebKit
 import OSLog
 import GistPadAppearance
+import GistPadComments
 
 public struct MarkdownPreviewView: View {
     private let document: PreviewDocument
     private let allowsTaskEdits: Bool
+    private let comments: CommentHighlightConfiguration
+    private let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
+    private let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
+    private let onAddComment: (@MainActor (String) -> Void)?
     private let onEvent: @MainActor (PreviewEvent) -> Void
     @State private var viewportView = PreviewViewportView()
 
@@ -15,10 +20,18 @@ public struct MarkdownPreviewView: View {
         documentID: String,
         generation: UInt64,
         allowsTaskEdits: Bool = true,
+        comments: CommentHighlightConfiguration = .init(),
+        onOpenCommentThreads: (@MainActor ([Int64]) -> Void)? = nil,
+        onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)? = nil,
+        onAddComment: (@MainActor (String) -> Void)? = nil,
         onEvent: @escaping @MainActor (PreviewEvent) -> Void
     ) {
         self.document = PreviewDocument(text: document, id: documentID, generation: generation)
         self.allowsTaskEdits = allowsTaskEdits
+        self.comments = comments
+        self.onOpenCommentThreads = onOpenCommentThreads
+        self.onLinkedCommentIDsChange = onLinkedCommentIDsChange
+        self.onAddComment = onAddComment
         self.onEvent = onEvent
     }
 
@@ -26,7 +39,10 @@ public struct MarkdownPreviewView: View {
         GeometryReader { _ in
             NativeMarkdownPreview(
                 document: document, allowsTaskEdits: allowsTaskEdits,
-                viewportView: viewportView, onEvent: onEvent
+                viewportView: viewportView, comments: comments,
+                onOpenCommentThreads: onOpenCommentThreads,
+                onLinkedCommentIDsChange: onLinkedCommentIDsChange,
+                onAddComment: onAddComment, onEvent: onEvent
             )
             .ignoresSafeArea(.container, edges: .vertical)
         }
@@ -38,6 +54,10 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     let document: PreviewDocument
     let allowsTaskEdits: Bool
     let viewportView: PreviewViewportView
+    let comments: CommentHighlightConfiguration
+    let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
+    let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
+    let onAddComment: (@MainActor (String) -> Void)?
     let onEvent: @MainActor (PreviewEvent) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorSchemeContrast) private var contrast
@@ -48,11 +68,19 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
 
     init(
         document: PreviewDocument, allowsTaskEdits: Bool, viewportView: PreviewViewportView,
+        comments: CommentHighlightConfiguration,
+        onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?,
+        onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?,
+        onAddComment: (@MainActor (String) -> Void)?,
         onEvent: @escaping @MainActor (PreviewEvent) -> Void
     ) {
         self.document = document
         self.allowsTaskEdits = allowsTaskEdits
         self.viewportView = viewportView
+        self.comments = comments
+        self.onOpenCommentThreads = onOpenCommentThreads
+        self.onLinkedCommentIDsChange = onLinkedCommentIDsChange
+        self.onAddComment = onAddComment
         self.onEvent = onEvent
     }
 
@@ -67,6 +95,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.setURLSchemeHandler(PreviewResourceHandler(), forURLScheme: "gistpad-preview")
         configuration.userContentController.add(context.coordinator, name: "gistpadPreview")
+        configuration.userContentController.add(context.coordinator, name: "gistpadComments")
 
         let webView = InsetAwareWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -80,7 +109,9 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         webView.scrollView.bottomEdgeEffect.style = .soft
         webView.allowsLinkPreview = false
         context.coordinator.webView = webView
+        context.coordinator.commentHighlights.webView = webView
         let coordinator = context.coordinator
+        webView.onBuildCommentMenu = { [weak coordinator] in coordinator?.commentHighlights.addCommentMenu() }
         webView.onViewportChange = { [weak coordinator] in coordinator?.updateViewport($0) }
         viewportView.webView = webView
         webView.updateViewportView(viewportView)
@@ -101,12 +132,19 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             $0[PersonalAccentTrait.self] = personalAccent
         }
         context.coordinator.appearance = PreviewAppearance(traits: traits, boldText: legibilityWeight == .bold)
+        context.coordinator.commentHighlights.update(
+            document: document, configuration: comments, accent: personalAccent.color.hex,
+            onOpen: onOpenCommentThreads, onLinkedIDs: onLinkedCommentIDsChange, onAdd: onAddComment)
         context.coordinator.update(document, allowsTaskEdits: allowsTaskEdits)
     }
 
     static func dismantleUIView(_ uiView: InsetAwareWebView, coordinator: Coordinator) {
         uiView.onViewportChange = nil
+        uiView.onBuildCommentMenu = nil
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "gistpadPreview")
+        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "gistpadComments")
+        coordinator.commentHighlights.reset()
+        coordinator.commentHighlights.webView = nil
         uiView.navigationDelegate = nil
         coordinator.webView = nil
         uiView.stopLoading()
@@ -117,6 +155,9 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         fileprivate weak var webView: WKWebView?
         fileprivate var onEvent: @MainActor (PreviewEvent) -> Void
         fileprivate var appearance: PreviewAppearance?
+        fileprivate lazy var commentHighlights = PreviewCommentHighlights { [weak self] failure in
+            self?.onEvent(.failure(failure))
+        }
         private var document: PreviewDocument
         private var allowsTaskEdits: Bool
         private var lastSent: PreviewDocument?
@@ -227,6 +268,10 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                 return
             }
             do {
+                if message.name == "gistpadComments" {
+                    try commentHighlights.activate(message.body)
+                    return
+                }
                 switch try PreviewBridge.decode(message.body, document: document, allowsTaskEdits: allowsTaskEdits) {
                 case .ready:
                     ready = true
@@ -257,12 +302,14 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                                     }
                                     self.needsInitialScroll = false
                                 }
+                                self.commentHighlights.rendered(self.document)
                                 self.onEvent(event)
                             } catch {
                                 self?.onEvent(.failure(.webKit(error)))
                             }
                         }
                     } else {
+                        if case .rendered = event { commentHighlights.rendered(document) }
                         onEvent(event)
                     }
                 }
@@ -294,6 +341,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             lastTaskEditing = nil
             lastAppearance = nil
             lastViewportInsets = nil
+            commentHighlights.reset()
             needsInitialScroll = true
             onEvent(.failure(.renderer("The preview stopped unexpectedly. Reload the document to recover.")))
             webView.reload()
@@ -335,8 +383,16 @@ private final class PreviewViewportView: UIView {
 @MainActor
 private final class InsetAwareWebView: WKWebView {
     var onViewportChange: ((UIEdgeInsets) -> Void)?
+    var onBuildCommentMenu: (() -> UIDeferredMenuElement?)?
     private weak var viewportView: UIView?
     private var applyingInsets = false
+
+    override func buildMenu(with builder: any UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        guard let comment = onBuildCommentMenu?() else { return }
+        builder.insertSibling(
+            UIMenu(options: .displayInline, children: [comment]), afterMenu: .standardEdit)
+    }
 
     func updateViewportView(_ view: UIView) {
         viewportView = view

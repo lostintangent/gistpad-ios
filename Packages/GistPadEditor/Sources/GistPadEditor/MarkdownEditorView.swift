@@ -1,5 +1,6 @@
 #if canImport(UIKit)
   import GistPadAppearance
+  import GistPadComments
   import SwiftUI
   import UIKit
 
@@ -8,6 +9,10 @@
     private let insertPhoto: (@MainActor () -> Void)?
     private let canInsertPhoto: Bool
     private let intelligence: (@MainActor () -> Void)?
+    private let comments: CommentHighlightConfiguration
+    private let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
+    private let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
+    private let onAddComment: (@MainActor (String) -> Void)?
     @State private var linkRequest: LinkRequest?
     @State private var actionError: String?
 
@@ -15,18 +20,29 @@
       session: DocumentSession,
       insertPhoto: (@MainActor () -> Void)? = nil,
       canInsertPhoto: Bool = false,
-      intelligence: (@MainActor () -> Void)? = nil
+      intelligence: (@MainActor () -> Void)? = nil,
+      comments: CommentHighlightConfiguration = .init(),
+      onOpenCommentThreads: (@MainActor ([Int64]) -> Void)? = nil,
+      onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)? = nil,
+      onAddComment: (@MainActor (String) -> Void)? = nil
     ) {
       self.session = session
       self.insertPhoto = insertPhoto
       self.canInsertPhoto = canInsertPhoto
       self.intelligence = intelligence
+      self.comments = comments
+      self.onOpenCommentThreads = onOpenCommentThreads
+      self.onLinkedCommentIDsChange = onLinkedCommentIDsChange
+      self.onAddComment = onAddComment
     }
 
     public var body: some View {
       GeometryReader { _ in
         SourceTextView(
           session: session,
+          comments: comments, onOpenCommentThreads: onOpenCommentThreads,
+          onLinkedCommentIDsChange: onLinkedCommentIDsChange,
+          onAddComment: onAddComment,
           actions: SourceToolbarActions(
             format: format, link: beginLink, indent: indent,
             photo: insertPhoto,
@@ -129,9 +145,14 @@
 
   private struct SourceTextView: UIViewRepresentable {
     let session: DocumentSession
+    let comments: CommentHighlightConfiguration
+    let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
+    let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
+    let onAddComment: (@MainActor (String) -> Void)?
     let actions: SourceToolbarActions
     let configuration: SourceToolbarConfiguration
     @Environment(\.isNotebookPaneVisible) private var isPaneVisible
+    @Environment(\.personalAccent) private var personalAccent
 
     func makeCoordinator() -> SourceToolbarCoordinator {
       SourceToolbarCoordinator(actions: actions)
@@ -139,6 +160,10 @@
 
     func makeUIView(context: Context) -> UITextView {
       context.coordinator.update(actions: actions, configuration: configuration)
+      session.textView.traitOverrides[PersonalAccentTrait.self] = personalAccent
+      session.setCommentHighlights(
+        comments, onOpenCommentThreads: onOpenCommentThreads,
+        onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment)
       session.textView.inputAccessoryView = context.coordinator.toolbar
       return session.textView
     }
@@ -148,7 +173,15 @@
       view.isAccessibilityElement = isPaneVisible
       view.accessibilityElementsHidden = !isPaneVisible
       context.coordinator.update(actions: actions, configuration: configuration)
+      view.traitOverrides[PersonalAccentTrait.self] = personalAccent
+      session.setCommentHighlights(
+        comments, onOpenCommentThreads: onOpenCommentThreads,
+        onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment)
       session.updateAppearanceIfNeeded()
+    }
+
+    static func dismantleUIView(_ view: UITextView, coordinator: SourceToolbarCoordinator) {
+      (view.delegate as? DocumentSession)?.setCommentHighlights(.init())
     }
   }
 

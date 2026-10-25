@@ -26,6 +26,11 @@ export type PreviewMessage =
         | { type: "failure"; message: string }
       ));
 
+export function isUInt64String(value: unknown): value is string {
+  return typeof value === "string" && /^(0|[1-9]\d{0,19})$/.test(value) &&
+    BigInt(value) <= 18_446_744_073_709_551_615n;
+}
+
 export function isRenderRequest(value: unknown): value is RenderRequest {
   if (!value || typeof value !== "object") return false;
   const data = value as Partial<RenderRequest>;
@@ -34,9 +39,7 @@ export function isRenderRequest(value: unknown): value is RenderRequest {
     typeof data.documentID === "string" &&
     data.documentID.length > 0 &&
     data.documentID.length <= 512 &&
-    typeof data.generation === "string" &&
-    /^(0|[1-9]\d{0,19})$/.test(data.generation) &&
-    BigInt(data.generation) <= 18_446_744_073_709_551_615n &&
+    isUInt64String(data.generation) &&
     typeof data.markdown === "string" &&
     data.markdown.length <= maximumDocumentLength
   );
@@ -49,9 +52,16 @@ declare global {
       setAppearance: (appearance: unknown) => void;
       setTaskEditingEnabled: (enabled: unknown) => void;
       setViewportInsets: (insets: unknown) => void;
+      commentSegments: () => unknown;
+      commentSelection: () => unknown;
+      setCommentHighlights: (value: unknown) => void;
     };
     webkit?: {
-      messageHandlers?: { gistpadPreview?: { postMessage: (message: PreviewMessage) => void } };
+      messageHandlers?: {
+        gistpadPreview?: { postMessage: (message: PreviewMessage) => void };
+        gistpadComments?: { postMessage: (message: CommentThreadActivation) => void };
+      };
     };
   }
 }
+import type { CommentThreadActivation } from "./commentHighlights";

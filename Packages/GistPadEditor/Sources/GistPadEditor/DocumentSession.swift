@@ -1,4 +1,7 @@
 #if canImport(UIKit)
+  import Accessibility
+  import GistPadAppearance
+  import GistPadComments
   import GistPadInterface
   import Observation
   import SwiftUI
@@ -27,6 +30,7 @@
     @ObservationIgnored private var isApplyingSourceEdit = false
     @ObservationIgnored private var pendingFocusRequest = false
     @ObservationIgnored private var pendingShowsFrontMatter: Bool?
+    @ObservationIgnored lazy var commentAnnotations = SourceCommentAnnotations(session: self)
 
     public init(
       documentID: String, text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
@@ -58,6 +62,7 @@
       textView.registerForTraitChanges([
         UITraitPreferredContentSizeCategory.self, UITraitUserInterfaceStyle.self,
         UITraitAccessibilityContrast.self, UITraitLegibilityWeight.self,
+        PersonalAccentTrait.self,
       ]) { (view: UITextView, _: UITraitCollection) in
         (view.delegate as? DocumentSession)?.updateAppearanceIfNeeded()
       }
@@ -159,6 +164,7 @@
       guard value != showsFrontMatter else { return }
       showsFrontMatter = value
       updateHiddenFrontMatter()
+      commentAnnotations.frontMatterVisibilityDidChange()
     }
 
     public func textContentManager(
@@ -293,6 +299,7 @@
         inputError = String(localized: "Find is unavailable in this editor.", bundle: .module)
         return
       }
+      commentAnnotations.suspendForFind()
       textView.becomeFirstResponder()
       interaction.presentFindNavigator(showingReplace: replacing)
     }
@@ -305,12 +312,14 @@
       }
       selection = textView.selectedRange
       isComposing = textView.markedTextRange != nil
+      commentAnnotations.selectionDidChange()
       if !isComposing, let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
       if !isComposing { scheduleHighlight() }
     }
 
     public func textViewWritingToolsWillBegin(_ textView: UITextView) {
       synchronizeText()
+      commentAnnotations.suspendForWritingTools()
       writingToolsActive = true
       highlightTask?.cancel()
       (textView as? AnchoredTextView)?.sourceInteractionActive = true
@@ -318,6 +327,7 @@
 
     public func textViewWritingToolsDidEnd(_ textView: UITextView) {
       writingToolsActive = false
+      commentAnnotations.resumeAfterWritingTools()
       synchronizeText()
       if let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
       (textView as? AnchoredTextView)?.sourceInteractionActive = false
@@ -342,6 +352,24 @@
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
       (textView as? AnchoredTextView)?.rememberReadingAnchor()
+    }
+
+    public func setCommentHighlights(
+      _ configuration: CommentHighlightConfiguration,
+      onOpenCommentThreads: (@MainActor ([Int64]) -> Void)? = nil,
+      onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)? = nil,
+      onAddComment: (@MainActor (String) -> Void)? = nil
+    ) {
+      commentAnnotations.configure(
+        configuration, onOpen: onOpenCommentThreads, onLinkedIDs: onLinkedCommentIDsChange,
+        onAdd: onAddComment)
+    }
+
+    public func textView(
+      _ textView: UITextView, editMenuForTextInRanges ranges: [NSValue],
+      suggestedActions: [UIMenuElement]
+    ) -> UIMenu? {
+      commentAnnotations.editMenu(ranges: ranges.map(\.rangeValue), suggestedActions: suggestedActions)
     }
 
     public func highlight() {
@@ -421,6 +449,7 @@
           }
         }
       }
+      commentAnnotations.paint(in: storage)
       storage.endEditing()
       if undoWasEnabled { manager?.enableUndoRegistration() }
       if textView.selectedRange != selectedRange {
@@ -437,6 +466,9 @@
       if highlightedTraits?.preferredContentSizeCategory
         != textView.traitCollection.preferredContentSizeCategory
         || highlightedTraits?.legibilityWeight != textView.traitCollection.legibilityWeight
+        || highlightedTraits?.userInterfaceStyle != textView.traitCollection.userInterfaceStyle
+        || highlightedTraits?.accessibilityContrast != textView.traitCollection.accessibilityContrast
+        || highlightedTraits?[PersonalAccentTrait.self] != textView.traitCollection[PersonalAccentTrait.self]
       {
         highlight()
       } else {
@@ -476,7 +508,12 @@
     }
   }
 
-  private final class AnchoredTextView: UITextView {
+  final class AnchoredTextView: UITextView, @MainActor AXCustomContentProvider {
+    private var commentAccessibilityContent: [AXCustomContent] = []
+    var accessibilityCustomContent: [AXCustomContent]! {
+      get { commentAccessibilityContent }
+      set { commentAccessibilityContent = newValue ?? [] }
+    }
     struct ReadingAnchor {
       let offset: Int
       let delta: CGFloat
@@ -616,6 +653,7 @@
     override func didMoveToWindow() {
       super.didMoveToWindow()
       (delegate as? DocumentSession)?.completeFocusRequestIfAttached()
+      (delegate as? DocumentSession)?.commentAnnotations.scrollSelectedCommentIfNeeded()
     }
 
     override func scrollRangeToVisible(_ range: NSRange) {
@@ -626,6 +664,25 @@
         return
       }
       revealCaret()
+    }
+
+    func revealPassage(_ range: NSRange) -> Bool {
+      guard let start = position(from: beginningOfDocument, offset: range.location),
+        let end = position(from: start, offset: range.length),
+        let passage = textRange(from: start, to: end)
+      else { return false }
+      if let manager = textLayoutManager, let document = manager.textContentManager?.documentRange {
+        manager.ensureLayout(for: document)
+      }
+      setNeedsLayout()
+      layoutIfNeeded()
+      let frame = firstRect(for: passage)
+      let height = bounds.height - adjustedContentInset.top - adjustedContentInset.bottom
+      guard !frame.isEmpty, frame.minY.isFinite, frame.maxY.isFinite, height > 0 else { return false }
+      let y = frame.height > height ? frame.minY : frame.midY - height / 2
+      setVerticalContentOffset(y - adjustedContentInset.top)
+      rememberReadingAnchor()
+      return true
     }
 
     private func revealCaret() {
@@ -699,6 +756,7 @@
     }
 
     override func layoutSubviews() {
+      (delegate as? DocumentSession)?.commentAnnotations.findVisibilityDidChange()
       applyViewportInsets()
       let needsInitialAnchor = previousWidth == 0
       if sourceInteractionActive {
@@ -707,6 +765,7 @@
         previousWidth = bounds.width
         return
       }
+
       guard !restoringAnchor else {
         super.layoutSubviews()
         return
@@ -737,6 +796,8 @@
       previousHeight = bounds.height
       restoringAnchor = false
       if needsInitialAnchor { rememberReadingAnchor() }
+      (delegate as? DocumentSession)?.commentAnnotations.layoutBackgrounds()
+      (delegate as? DocumentSession)?.commentAnnotations.scrollSelectedCommentIfNeeded()
     }
 
     private func setVerticalContentOffset(_ y: CGFloat) {

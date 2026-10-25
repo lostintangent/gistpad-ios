@@ -280,7 +280,8 @@ async (page) => {
       oversizedRange.selectNodeContents(oversized);
       return {
         wholeWords: headings.every((heading) => {
-          const text = heading.firstChild;
+          const text = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT).nextNode();
+          if (!text || text.textContent !== heading.textContent) return false;
           return [...text.textContent.matchAll(/\S+/g)].every((word) => {
             const range = document.createRange();
             range.setStart(text, word.index);

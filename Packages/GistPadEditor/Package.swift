@@ -7,17 +7,19 @@ let package = Package(
   products: [.library(name: "GistPadEditor", targets: ["GistPadEditor"])],
   dependencies: [
     .package(path: "../GistPadAppearance"),
+    .package(path: "../GistPadComments"),
     .package(path: "../GistPadInterface"),
     .package(path: "../GistPadIntelligence"),
   ],
   targets: [
     .target(
-      name: "GistPadEditor", dependencies: ["GistPadAppearance", "GistPadInterface", "GistPadIntelligence"],
+      name: "GistPadEditor",
+      dependencies: ["GistPadAppearance", "GistPadComments", "GistPadInterface", "GistPadIntelligence"],
       resources: [.process("Resources")]),
     .testTarget(
       name: "GistPadEditorTests",
       dependencies: [
-        "GistPadEditor", "GistPadIntelligence", "GistPadInterface", "GistPadAppearance",
+        "GistPadEditor", "GistPadComments", "GistPadIntelligence", "GistPadInterface", "GistPadAppearance",
       ]),
   ]
 )

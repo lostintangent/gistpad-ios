@@ -28,6 +28,8 @@ struct GistPadApp: App {
         NotebookIntelligenceCaptureWorkspace()
       } else if LaunchArguments.captureScreen == "scroll-edges" {
         ScrollEdgeCaptureWorkspace()
+      } else if LaunchArguments.captureScreen == "comment-highlights" {
+        CommentHighlightCaptureWorkspace(session: session)
       } else if let screen = LaunchArguments.captureScreen, ["library", "note"].contains(screen) {
         InterfaceCaptureWorkspace(session: session)
       } else if let screen = LaunchArguments.captureScreen,
@@ -58,7 +60,9 @@ struct GistPadApp: App {
           || LaunchArguments.captureScreen == "editor"
         if LaunchArguments.captureScreen != nil || longFixture || isTesting {
           let text: String
-          if LaunchArguments.captureMarkerFixture {
+          if LaunchArguments.captureScreen == "comment-highlights" {
+            text = CommentHighlightCaptureWorkspace.markdown
+          } else if LaunchArguments.captureMarkerFixture {
             text = try PreviewFixtures.listMarkers
           } else if let screen = LaunchArguments.captureScreen, ["library", "note"].contains(screen) {
             text = try LaunchArguments.captureMangaFixture ? PreviewFixtures.mangaReading

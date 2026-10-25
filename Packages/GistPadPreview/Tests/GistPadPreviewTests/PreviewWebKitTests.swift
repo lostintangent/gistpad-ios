@@ -5,6 +5,7 @@ import Testing
 import UIKit
 import WebKit
 import GistPadAppearance
+import GistPadComments
 @testable import GistPadPreview
 
 @MainActor
@@ -49,10 +50,6 @@ struct PreviewWebKitTests {
                 if case .rendered(documentID: "read-only", generation: 0) = $0 { return true }
                 return false
             }
-        }
-        func findWebView(in view: UIView) -> WKWebView? {
-            if let webView = view as? WKWebView { return webView }
-            return view.subviews.lazy.compactMap { findWebView(in: $0) }.first
         }
         let webView = try #require(findWebView(in: controller.view))
         try await waitFor("native bar insets") {
@@ -168,6 +165,65 @@ struct PreviewWebKitTests {
         })
     }
 
+    @Test("Selected comments reveal and repeat within the actual native viewport")
+    func nativeCommentReveal() async throws {
+        let markdown = "# A beginning\n\n"
+            + String(repeating: "A little room for another thought.\n\n", count: 60)
+            + "A final native passage."
+        var configuration = CommentHighlightConfiguration(
+            quotes: [CommentQuote(commentID: 60, quote: "final native passage")],
+            selectedCommentID: 60)
+        var events: [PreviewEvent] = []
+        var linked: Set<Int64> = []
+        func preview(_ comments: CommentHighlightConfiguration) -> some View {
+            MarkdownPreviewView(
+                document: markdown, documentID: "native-reveal", generation: 0,
+                comments: comments, onLinkedCommentIDsChange: { linked = $0 }
+            ) { events.append($0) }
+                .safeAreaInset(edge: .bottom, spacing: 0) { Color.clear.frame(height: 120) }
+                .environment(\.dynamicTypeSize, .accessibility3)
+        }
+        let controller = UIHostingController(rootView: preview(configuration))
+        let window = testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+        window.rootViewController = UINavigationController(rootViewController: controller)
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        try await waitFor("matched native comment") { linked == [60] }
+        let webView = try #require(findWebView(in: controller.view))
+        var lastGeometry: [String: Double] = [:]
+        func verifiedPassageIsVisible() async throws -> Bool {
+            for _ in 0..<100 {
+                let geometry = try await viewportGeometry(in: webView, selector: ".comment-selected")
+                lastGeometry = geometry
+                if try #require(geometry["nativeElementTop"]) >= Double(webView.scrollView.adjustedContentInset.top),
+                   try #require(geometry["nativeElementBottom"]) <=
+                    Double(webView.bounds.height - webView.scrollView.adjustedContentInset.bottom) {
+                    return true
+                }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            return false
+        }
+        #expect(try await verifiedPassageIsVisible(), "\(lastGeometry)")
+        let top = -webView.scrollView.adjustedContentInset.top
+        webView.scrollView.setContentOffset(CGPoint(x: 0, y: top), animated: false)
+        controller.rootView = preview(configuration)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(abs(webView.scrollView.contentOffset.y - top) < 1)
+        configuration.revealRevision += 1
+        controller.rootView = preview(configuration)
+        #expect(try await verifiedPassageIsVisible(), "\(lastGeometry)")
+        #expect(!events.contains { if case .failure = $0 { true } else { false } })
+    }
+
+    private func findWebView(in view: UIView) -> WKWebView? {
+        if let webView = view as? WKWebView { return webView }
+        return view.subviews.lazy.compactMap { findWebView(in: $0) }.first
+    }
+
     private func viewportGeometry(in webView: WKWebView, selector: String) async throws -> [String: Double] {
         let result = try await webView.callAsyncJavaScript(
             """
@@ -191,6 +247,7 @@ struct PreviewWebKitTests {
         geometry["nativeTopInset"] = webView.scrollView.adjustedContentInset.top
         geometry["nativeBottomInset"] = webView.scrollView.adjustedContentInset.bottom
         geometry["nativeHeight"] = webView.bounds.height
+        geometry["nativeContentHeight"] = webView.scrollView.contentSize.height
         let scrollY = try #require(geometry["scrollY"])
         let elementTop = try #require(geometry["elementTop"])
         let elementBottom = try #require(geometry["elementBottom"])
@@ -692,7 +749,8 @@ struct PreviewWebKitTests {
                         const headings = ['h1', 'h2', 'h3'].map(selector => document.querySelector(selector));
                         const wholeWords = headings.every(heading => {
                             if (heading.textContent !== 'The shape of a notebook') return false;
-                            const text = heading.firstChild;
+                            const text = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT).nextNode();
+                            if (!text || text.textContent !== heading.textContent) return false;
                             return [...text.textContent.matchAll(/\\S+/g)].every(word => {
                                 const range = document.createRange();
                                 range.setStart(text, word.index);

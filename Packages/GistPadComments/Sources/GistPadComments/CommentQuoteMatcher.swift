@@ -8,6 +8,10 @@ public struct CommentQuote: Codable, Equatable, Sendable {
         self.commentID = commentID
         self.quote = quote
     }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.commentID == rhs.commentID && lhs.quote.utf16.elementsEqual(rhs.quote.utf16)
+    }
 }
 
 public struct CommentQuoteMatch: Codable, Equatable, Sendable {
