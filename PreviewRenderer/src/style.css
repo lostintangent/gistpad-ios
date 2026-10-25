@@ -153,9 +153,6 @@ svg text, svg .nodeLabel, svg .nodeLabel *, svg .edgeLabel, svg .edgeLabel * { f
   border-radius: 0;
   box-shadow: none;
   color: var(--gp-on-accent);
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: .16em;
 }
 [data-bold-text="true"] article { font-weight: 600; }
 [data-contrast="increased"] { --border: var(--gp-boundary); }

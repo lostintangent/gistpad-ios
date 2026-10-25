@@ -129,7 +129,6 @@
                 range: range,
                 attributes: [
                   .foregroundColor: attributes[.foregroundColor] ?? UIColor.label,
-                  .underlineStyle: attributes[.underlineStyle] ?? 0,
                 ]))
           }
         } else {
@@ -173,7 +172,6 @@
       storage.beginEditing()
       for original in originalInk {
         storage.addAttributes(original.attributes, range: original.range)
-        storage.removeAttribute(.underlineColor, range: original.range)
       }
       applySelectedInk(in: storage)
       storage.endEditing()
@@ -184,11 +182,7 @@
     private func applySelectedInk(in storage: NSTextStorage) {
       for passage in passages where passage.selected {
         for range in unselectedRanges(passage.highlight.range) {
-          storage.addAttributes(
-            [
-              .foregroundColor: onSelected, .underlineColor: onSelected,
-              .underlineStyle: NSUnderlineStyle.single.rawValue,
-            ], range: range)
+          storage.addAttribute(.foregroundColor, value: onSelected, range: range)
         }
       }
     }

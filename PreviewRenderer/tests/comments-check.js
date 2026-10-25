@@ -170,7 +170,7 @@ async (page) => {
               span.getAttribute("aria-current") === "true" && !span.hasAttribute("aria-pressed") &&
               span.getAttribute("aria-description").startsWith("Selected comment. ") &&
               style.backgroundColor === "rgba(0, 0, 0, 0)" && style.color === "rgb(0, 0, 0)" &&
-              style.textDecorationLine.includes("underline");
+              !style.textDecorationLine.includes("underline");
           });
       });
       if (!selected) throw new Error("Selected-only annotations lost native accent or accessible state.");
