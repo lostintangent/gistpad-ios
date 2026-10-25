@@ -286,7 +286,10 @@ public struct LibraryView: View {
                         )
                         .frame(height: dynamicTypeSize.isAccessibilitySize ? nil : 56)
                         .padding(.horizontal, 12)
-                        .padding(.bottom, 20)
+                        .padding(
+                            .bottom,
+                            dynamicTypeSize.isAccessibilitySize && hasSideToolbar(in: geometry)
+                                ? 14 : 20)
                         .ignoresSafeArea(
                             .container, edges: hasSideToolbar(in: geometry) ? .bottom : [])
                     }

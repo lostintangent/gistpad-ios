@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 final class LibraryToolbarUITests: XCTestCase {
   @MainActor
@@ -79,7 +80,7 @@ final class LibraryToolbarUITests: XCTestCase {
   }
 
   @MainActor
-  func testFoldedHomeHeadersAndToolbarInLightDarkAndAX3() async throws {
+  func testFoldedHomeHeadersAndToolbarInLightDarkAndAccessibilitySizes() async throws {
     try await captureHome(wide: false)
   }
 
@@ -232,14 +233,19 @@ final class LibraryToolbarUITests: XCTestCase {
 
   @MainActor
   private func captureHome(wide: Bool) async throws {
-    let appearances = wide
-      ? [("light", false), ("dark", false)]
-      : [("light", false), ("dark", false), ("light", true)]
-    for (appearance, accessibility) in appearances {
-      let app = launch(state: "populated", appearance: appearance, accessibility: accessibility)
+    let appearances: [(String, UIContentSizeCategory)] = wide
+      ? [("light", .large), ("dark", .large)]
+      : [
+        ("light", .large), ("dark", .large),
+        ("light", .accessibilityExtraLarge), ("light", .accessibilityExtraExtraExtraLarge)
+      ]
+    for (appearance, textSize) in appearances {
+      let accessibility = textSize.isAccessibilityCategory
+      let sizeName = textSize == .accessibilityExtraExtraExtraLarge ? "AX5" : accessibility ? "AX3" : "Large"
+      let app = launch(state: "populated", appearance: appearance, textSize: textSize)
       defer { app.terminate() }
       try await waitUntil { app.navigationBars["GistPad"].exists }
-      record(app, name: "home-initial-\(wide ? "open" : "folded")-\(appearance)-\(accessibility ? "AX3" : "Large")")
+      record(app, name: "home-initial-\(wide ? "open" : "folded")-\(appearance)-\(sizeName)")
       let search = app.searchFields.firstMatch
       try await waitUntil {
         guard search.exists else { return false }
@@ -280,10 +286,11 @@ final class LibraryToolbarUITests: XCTestCase {
         XCTAssertLessThan(settings.maxY, tags.midY)
         XCTAssertGreaterThan(tags.midY, app.windows.firstMatch.frame.maxY * 0.8)
         XCTAssertGreaterThan(tags.midY - settings.midY, 150)
+        let tagsGlass = try toolbarGlassFrame(for: app.buttons["library-filter-tags"], in: app)
         if accessibility {
-          XCTAssertEqual(tags.maxY, search.frame.maxY, accuracy: 2)
+          XCTAssertEqual(tagsGlass.maxY, search.frame.maxY, accuracy: 2)
         } else {
-          XCTAssertEqual(tags.midY, search.frame.midY, accuracy: 2)
+          XCTAssertEqual(tagsGlass.midY, search.frame.midY, accuracy: 2)
         }
         XCTAssertFalse(tags.intersects(search.frame))
         XCTAssertEqual(create.midX, settings.midX, accuracy: 2)
@@ -294,12 +301,12 @@ final class LibraryToolbarUITests: XCTestCase {
       try await waitUntil { pinned.exists }
       reveal(pinned, in: app)
       XCTAssertEqual(pinned.label, "Pinned Gists, 2 gists")
-      record(app, name: "home-\(wide ? "open" : "folded")-\(appearance)-\(accessibility ? "AX3" : "Large")")
+      record(app, name: "home-\(wide ? "open" : "folded")-\(appearance)-\(sizeName)")
       let listed = app.descendants(matching: .any)["library-listed-heading"].firstMatch
       reveal(listed, in: app)
       try await waitUntil { listed.isHittable }
       XCTAssertEqual(listed.label, "Your Gists, 3 gists")
-      record(app, name: "home-your-gists-\(wide ? "open" : "folded")-\(appearance)-\(accessibility ? "AX3" : "Large")")
+      record(app, name: "home-your-gists-\(wide ? "open" : "folded")-\(appearance)-\(sizeName)")
       if wide {
         let more = app.navigationBars["GistPad"].buttons["More"]
         try await waitUntil { more.isHittable }
@@ -328,6 +335,18 @@ final class LibraryToolbarUITests: XCTestCase {
   }
 
   @MainActor
+  private func toolbarGlassFrame(
+    for button: XCUIElement, in app: XCUIApplication
+  ) throws -> CGRect {
+    let buttonFrame = button.frame
+    let containers = app.otherElements.containing(.button, identifier: button.identifier)
+    let glassFrame = containers.allElementsBoundByIndex.map(\.frame).filter {
+      $0.contains(buttonFrame) && $0.width > buttonFrame.width && $0.height > buttonFrame.height
+    }.min { $0.width * $0.height < $1.width * $1.height }
+    return try XCTUnwrap(glassFrame, "The native toolbar glass must enclose its smaller button.")
+  }
+
+  @MainActor
   private func assertBottomSearch(
     _ field: XCUIElement, in app: XCUIApplication,
     file: StaticString = #filePath, line: UInt = #line
@@ -352,14 +371,15 @@ final class LibraryToolbarUITests: XCTestCase {
 
   @MainActor
   private func launch(
-    state: String, appearance: String, accessibility: Bool = false, horizontalToolbar: Bool = false
+    state: String, appearance: String, textSize: UIContentSizeCategory = .large,
+    horizontalToolbar: Bool = false
   ) -> XCUIApplication {
     let app = XCUIApplication(bundleIdentifier: "dev.gistpad.GistPad")
     app.launchArguments = [
       "--capture-screen", "library", "--capture-state", state,
       "--capture-appearance", appearance, "--capture-accent", "#FACC15",
       "-UIPreferredContentSizeCategoryName",
-      accessibility ? "UICTContentSizeCategoryAccessibilityXL" : "UICTContentSizeCategoryL"
+      textSize.rawValue
     ]
     if horizontalToolbar { app.launchArguments.append("--capture-horizontal-toolbar") }
     app.launch()
