@@ -85,28 +85,32 @@ struct LibraryModelTests {
     }
 
     @Test(arguments: [LibraryCollection.starred, .dailyNotes, .archive])
-    func scopedHeadingsStillSeparateAnOpenDocumentAndSearchResults(collection: LibraryCollection) {
+    func scopedHeadingsOnlyIdentifySearchResultsNotTheRetainedDocument(collection: LibraryCollection) {
         let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
         model.collection = collection
         model.selectedNoteID = "shape"
-        #expect(model.openDocumentOutsideFilter?.id == "shape")
-        #expect(model.showsListedNotesHeading)
+        #expect(model.visibleSelectedNoteID == nil)
+        #expect(model.selectedNoteID == "shape")
+        #expect(!model.showsListedNotesHeading)
         model.selectedNoteID = nil
         #expect(!model.showsListedNotesHeading)
         model.query = "note"
         #expect(model.showsListedNotesHeading)
     }
 
-    @Test func selectedDocumentRemainsDiscoverableAfterFilterChangingEdit() {
+    @Test func selectedDocumentOutlivesItsVisibleSelectionAfterFilterChangingEdit() {
         let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
         model.selectedNoteID = "shape"
         model.selectedTagIDs = ["design"]
-        #expect(model.openDocumentOutsideFilter == nil)
+        #expect(model.visibleSelectedNoteID == "shape")
         model.snapshot.notes[0].tagIDs = []
         #expect(model.matchingNotes.isEmpty)
-        #expect(model.openDocumentOutsideFilter?.id == "shape")
+        #expect(model.visibleSelectedNoteID == nil)
+        #expect(model.selectedNoteID == "shape")
+        model.clearFilters()
+        #expect(model.visibleSelectedNoteID == "shape")
         model.selectedNoteID = nil
-        #expect(model.openDocumentOutsideFilter == nil)
+        #expect(model.visibleSelectedNoteID == nil)
     }
 
     @Test func equalTimestampsSortDeterministically() {

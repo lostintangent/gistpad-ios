@@ -2,6 +2,7 @@
 import GistPadEditor
 import GistPadInterface
 import GistPadPreview
+import GistPadSync
 import SwiftUI
 import UIKit
 import WebKit
@@ -26,7 +27,7 @@ struct InterfaceCaptureWorkspace: View {
         This is a **synthetic note** for interface review. Changes stay in memory.
         """
 
-    let session: DocumentSession
+    @State private var session: DocumentSession
     @State private var ideasSession = DocumentSession(
         documentID: "capture-ideas",
         text: "# Small observations\n\nA notebook can be both quiet and precise.\n\n- [ ] Follow the useful detail\n"
@@ -51,7 +52,6 @@ struct InterfaceCaptureWorkspace: View {
     @Environment(\.isGitHubStatusVisible) private var isGitHubStatusVisible
 
     init(session: DocumentSession) {
-        self.session = session
         let arguments = ProcessInfo.processInfo.arguments
         func argument(_ name: String, default fallback: String) -> String {
             guard let index = arguments.firstIndex(of: name), arguments.indices.contains(index + 1) else { return fallback }
@@ -59,6 +59,25 @@ struct InterfaceCaptureWorkspace: View {
         }
         let screen = LaunchArguments.captureScreen ?? "library"
         let state = argument("--capture-state", default: "populated")
+        let rowAnatomyTitle = "📚 A longer thought about the things we choose to keep close"
+        if state == "row-anatomy" {
+            _session = State(initialValue: DocumentSession(
+                documentID: session.documentID,
+                text: """
+                    # \(rowAnatomyTitle)
+
+                    A quiet place to think, with a precise engine beneath the page.
+
+                    - [x] Keep the useful thought close
+                    - [x] Give it a place to grow
+                    - [x] Leave room to read
+                    - [x] Return when the thought needs more
+
+                    This is a **synthetic note** for interface review. Changes stay in memory.
+                    """))
+        } else {
+            _session = State(initialValue: session)
+        }
         let accent = argument("--capture-accent", default: "")
         captureAccent = accent.isEmpty ? nil : accent
         captureScreen = screen
@@ -70,7 +89,8 @@ struct InterfaceCaptureWorkspace: View {
             "tag-editor", "tag-readonly", "search", "search-active", "no-results", "filtered", "signed-out",
             "daily", "daily-progress", "starred", "archive", "notes", "featured", "header-file",
             "mode-long", "mode-emoji", "today-done", "today-no-tasks",
-            "status-busy", "status-error", "status-details", "status-limited", "tag-filters"
+            "status-busy", "status-error", "status-details", "status-limited", "tag-filters", "row-anatomy",
+            "collection-loading"
         ].contains(state) || (LaunchArguments.captureMangaFixture && screen == "note"
             && ["markers", "rules", "bullets"].contains(state))
         _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
@@ -101,6 +121,19 @@ struct InterfaceCaptureWorkspace: View {
                 snapshot.notes[index].excerpt = "A few sentences to return to when a thought needs a starting point."
                 snapshot.notes[index].fileCount = 3
             }
+        }
+        if state == "row-anatomy" {
+            if let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
+                snapshot.notes[index].title = rowAnatomyTitle
+                snapshot.notes[index].tagIDs = Set(snapshot.tags.map(\.id))
+                snapshot.notes[index].isSecret = false
+                snapshot.notes[index].isStarred = true
+                snapshot.notes[index].progress = .init(completed: 4, total: 4)
+            }
+            snapshot.notes.append(.init(
+                id: "local-draft", title: "A first draft", updatedAt: InterfaceFixtures.referenceDate,
+                filename: "README.md", excerpt: "Not published yet."
+            ))
         }
         if state == "tag-audit" {
             snapshot = LibrarySnapshot(
@@ -169,6 +202,9 @@ struct InterfaceCaptureWorkspace: View {
             ))
         }
         switch state {
+        case "collection-loading":
+            model.replaceSnapshot(nil)
+            model.loadState = .loading
         case "daily-progress":
             model.collection = .dailyNotes
             model.searchState = .results(
@@ -178,14 +214,16 @@ struct InterfaceCaptureWorkspace: View {
                         updatedAt: InterfaceFixtures.referenceDate, gistID: "daily",
                         isDailyNote: true, filename: "2026-10-23.md", fileCount: 3,
                         excerpt: "Set up the iPhone Duo. Keep the useful thoughts close.",
-                        progress: .init(completed: 3, total: 4), isOverdue: true
+                        progress: .init(completed: 3, total: 4), isOverdue: true,
+                        dailyDate: DailyNotesIndex.parseDateFilename("2026-10-23.md")
                     ),
                     .init(
                         id: "daily-done", title: "2026-10-24",
                         updatedAt: InterfaceFixtures.referenceDate, gistID: "daily",
                         isDailyNote: true, filename: "2026-10-24.md", fileCount: 3,
                         excerpt: "A little room to think.",
-                        progress: .init(completed: 1, total: 1)
+                        progress: .init(completed: 1, total: 1),
+                        dailyDate: DailyNotesIndex.parseDateFilename("2026-10-24.md")
                     )
                 ],
                 coverage: .init(totalDocuments: 2, documentsWithCachedContent: 2)
@@ -226,7 +264,7 @@ struct InterfaceCaptureWorkspace: View {
                     )
                     .captureTagFilters(captureState == "tag-filters")
                     .task {
-                        if ["notes", "featured", "tag-audit"].contains(captureState) {
+                        if ["notes", "featured", "tag-audit", "row-anatomy"].contains(captureState) {
                             try? await Task.sleep(for: .milliseconds(400))
                             scroll.scrollTo(captureState == "notes" ? "weekend" : "shape", anchor: .top)
                             await markReady()
@@ -235,31 +273,36 @@ struct InterfaceCaptureWorkspace: View {
                 }
             } detail: {
                 NavigationStack {
-                    if captureState == "today" {
-                        TodayLanding(summary: library.today) {
-                            actionMessage = "This synthetic landing cannot create a note."
-                        }
-                    } else if library.selectedNoteID != nil {
-                        NoteScreen(
-                            document: chrome, mode: mode, saveState: .inMemoryFixture,
-                            actions: noteActions
-                        ) {
-                            MarkdownEditorView(session: activeSession)
-                        } preview: {
-                            preview
-                        }
-                        .toolbar {
-                            if isGitHubStatusVisible, let status = library.gitHubStatus, status != .idle {
-                                ToolbarSpacer(.flexible, placement: .bottomBar)
-                                ToolbarItem(placement: .bottomBar) {
-                                    GitHubStatusControl(state: status, recover: recoverCaptureStatus)
-                                }
-                                .sharedBackgroundVisibility(.hidden)
+                    Group {
+                        if captureState == "today" {
+                            TodayLanding(summary: library.today) {
+                                actionMessage = "This synthetic landing cannot create a note."
                             }
+                        } else if library.selectedNoteID != nil {
+                            NoteScreen(
+                                document: chrome, mode: mode, saveState: .inMemoryFixture,
+                                actions: noteActions
+                            ) {
+                                MarkdownEditorView(session: activeSession)
+                            } preview: {
+                                preview
+                            }
+                            .toolbar {
+                                if isGitHubStatusVisible, let status = library.gitHubStatus, status != .idle {
+                                    ToolbarSpacer(.flexible, placement: .bottomBar)
+                                    ToolbarItem(placement: .bottomBar) {
+                                        GitHubStatusControl(state: status, recover: recoverCaptureStatus)
+                                    }
+                                    .sharedBackgroundVisibility(.hidden)
+                                }
+                            }
+                        } else {
+                            ContentUnavailableView("Select a gist", systemImage: "doc.text")
                         }
-                    } else {
-                        ContentUnavailableView("Select a gist", systemImage: "doc.text")
                     }
+                    .libraryCreateAction(
+                        isVisible: horizontalSizeClass == .regular && library.loadState != .signedOut,
+                        action: libraryActions.create)
                 }
             }
             .navigationSplitViewStyle(.balanced)
@@ -278,10 +321,11 @@ struct InterfaceCaptureWorkspace: View {
             }
             .task {
                 if captureState == "search-active" { searchPresented = true }
-                if captureScreen == "library", horizontalSizeClass == .regular, captureState != "empty" {
+                if captureScreen == "library", horizontalSizeClass == .regular,
+                   !["empty", "collection-loading"].contains(captureState) {
                     library.selectedNoteID = "shape"
                 }
-                if (captureScreen == "library" && !["notes", "featured", "tag-audit"].contains(captureState))
+                if (captureScreen == "library" && !["notes", "featured", "tag-audit", "row-anatomy"].contains(captureState))
                     || captureState == "error" || captureState == "today" {
                     await markReady()
                 }
@@ -344,6 +388,20 @@ struct InterfaceCaptureWorkspace: View {
         actions.recoverStatus = recoverCaptureStatus
         actions.account = {
             actionMessage = "Settings opened for this synthetic notebook."
+        }
+        actions.togglePin = { id in
+            guard let index = library.snapshot.notes.firstIndex(where: { $0.id == id }) else {
+                actionMessage = "The synthetic note is no longer available."
+                return
+            }
+            library.snapshot.notes[index].isPinned.toggle()
+        }
+        actions.toggleArchive = { id in
+            guard let index = library.snapshot.notes.firstIndex(where: { $0.id == id }) else {
+                actionMessage = "The synthetic note is no longer available."
+                return
+            }
+            library.snapshot.notes[index].isArchived.toggle()
         }
         return actions
     }

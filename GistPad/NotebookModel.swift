@@ -938,8 +938,10 @@ final class NotebookModel {
         return draft.state != .savedToGitHub || draft.attemptedGeneration != nil
       }
       library.searchState = .searching
+      let timeZone = TimeZone.current
       let result = await Task.detached(priority: .userInitiated) {
-        LibrarySearch.search(cache, query: query, collection: collection, drafts: drafts)
+        LibrarySearch.search(
+          cache, query: query, collection: collection, drafts: drafts, timeZone: timeZone)
       }.value
       guard !Task.isCancelled, request == searchRequest, self.account?.id == account.id else {
         return
@@ -966,7 +968,9 @@ final class NotebookModel {
           filename: match.filename, fileCount: gist?.truncated == true ? nil : gist?.files.count,
           excerpt: match.text.flatMap { Self.libraryExcerpt($0, title: match.title) },
           progress: match.progress.map { .init(completed: $0.completed, total: $0.total) },
-          isOverdue: match.isOverdue)
+          isOverdue: match.isOverdue,
+          dailyDate: match.isDailyNote
+            ? DailyNotesIndex.parseDateFilename(match.filename, timeZone: timeZone) : nil)
       }
       searchTargets = targets
       recoverySearchRows = recoveries

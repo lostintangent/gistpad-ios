@@ -38,6 +38,7 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
     public var excerpt: String?
     public var progress: LibraryTaskProgress?
     public var isOverdue: Bool
+    public var dailyDate: Date?
 
     public init(
         id: String, title: String, updatedAt: Date, gistID: String? = nil, owner: String? = nil,
@@ -45,7 +46,7 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
         isSecret: Bool = true, isPinned: Bool = false,
         isStarred: Bool = false, isArchived: Bool = false, isDailyNote: Bool = false,
         tagIDs: Set<String> = [], filename: String? = nil, fileCount: Int? = nil, excerpt: String? = nil,
-        progress: LibraryTaskProgress? = nil, isOverdue: Bool = false
+        progress: LibraryTaskProgress? = nil, isOverdue: Bool = false, dailyDate: Date? = nil
     ) {
         self.id = id
         self.gistID = gistID
@@ -65,6 +66,7 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
         self.excerpt = excerpt
         self.progress = progress
         self.isOverdue = isOverdue
+        self.dailyDate = dailyDate
     }
 }
 
@@ -119,6 +121,20 @@ public final class LibraryModel {
 
     public var hasFilters: Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedTagIDs.isEmpty
+    }
+
+    public var visibleCollections: [LibraryCollection] {
+        LibraryCollection.allCases.filter { candidate in
+            switch candidate {
+            case .gists, .dailyNotes:
+                true
+            case .starred, .archive:
+                candidate == collection
+                    || (hasKnownGistSnapshot && snapshot.notes.contains {
+                        $0.gistID != nil && Self.includes($0, in: candidate)
+                    })
+            }
+        }
     }
 
     var showsSearchScope: Bool {
@@ -205,13 +221,13 @@ public final class LibraryModel {
     var featuredNotes: [LibraryNote] { showsFeaturedNotes ? pinnedNotes : [] }
     var listedNotes: [LibraryNote] { showsFeaturedNotes ? unpinnedNotes : matchingNotes }
     var showsListedNotesHeading: Bool {
-        collection == .gists || hasFilters || openDocumentOutsideFilter != nil
+        collection == .gists || hasFilters
     }
 
-    public var openDocumentOutsideFilter: LibraryNote? {
+    public var visibleSelectedNoteID: String? {
         guard let selectedNoteID,
-              !matchingNotes.contains(where: { $0.id == selectedNoteID }) else { return nil }
-        return snapshot.notes.first { $0.id == selectedNoteID }
+              matchingNotes.contains(where: { $0.id == selectedNoteID }) else { return nil }
+        return selectedNoteID
     }
 
     public func clearFilters() {

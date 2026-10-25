@@ -45,47 +45,6 @@ struct LibraryHostTests {
     #expect(selected.map(\.title) == [currentTitle])
   }
 
-  @Test(arguments: [323, 324])
-  func featuredCardsNeedTwoReadableColumns(usableWidth: Int) async throws {
-    let scene = try #require(
-      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-    let animationsWereEnabled = UIView.areAnimationsEnabled
-    UIView.setAnimationsEnabled(false)
-    defer { UIView.setAnimationsEnabled(animationsWereEnabled) }
-    let window = UIWindow(windowScene: scene)
-    var frames: [Int: CGRect] = [:]
-    window.rootViewController = UIHostingController(
-      rootView: HStack(spacing: 0) {
-        LibraryView.FeaturedGrid {
-          ForEach(0..<2) { index in
-            Text("Card")
-              .padding(16)
-              .frame(maxWidth: .infinity)
-              .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
-                frames[index] = $0
-              }
-          }
-        }
-        .frame(width: CGFloat(usableWidth))
-        Spacer(minLength: 0)
-      })
-    window.makeKeyAndVisible()
-    defer { window.isHidden = true }
-    try await Task.sleep(for: .milliseconds(400))
-    window.layoutIfNeeded()
-    let first = try #require(frames[0])
-    let second = try #require(frames[1])
-    if usableWidth == 324 {
-      #expect(abs(first.minY - second.minY) < 1)
-      #expect(first.width >= 156)
-      #expect(second.width >= 156)
-      #expect(abs(second.minX - first.maxX - 12) < 1)
-    } else {
-      #expect(second.minY >= first.maxY)
-      #expect(first.width > 300)
-    }
-  }
-
   @Test(arguments: [280, 900], [false, true])
   func mountedSidebarAndWideLayoutsStayNative(width: Int, dark: Bool) async throws {
     let scene = try #require(
@@ -147,25 +106,25 @@ struct LibraryHostTests {
   }
 
   @Test(arguments: [DynamicTypeSize.large, .accessibility3])
-  func taskProgressStaysBesideTheFirstTitleLine(size: DynamicTypeSize) async throws {
+  func ordinaryRowsKeepTagsBelowTheDateAndExcerptWithoutClipping(size: DynamicTypeSize) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.windows.first(where: \.isKeyWindow)
     let window = UIWindow(windowScene: scene)
-    let category: UIContentSizeCategory = size == .large ? .large : .accessibilityExtraLarge
-    window.traitOverrides.preferredContentSizeCategory = category
+    window.traitOverrides.preferredContentSizeCategory =
+      size == .large ? .large : .accessibilityExtraLarge
     let note = LibraryNote(
-      id: "daily-progress", title: "2026-10-23", updatedAt: .now,
-      isDailyNote: true, filename: "2026-10-23.md", fileCount: 3,
-      excerpt: "Keep the useful thoughts close.", progress: .init(completed: 3, total: 4),
-      isOverdue: true)
-    var measured: CGSize?
+      id: "metadata", title: "Words worth keeping",
+      updatedAt: .now.addingTimeInterval(-172_800), tagIDs: ["ideas"], fileCount: 3,
+      excerpt: "A few sentences to return to when a thought needs a starting point.")
+    let tags = [LibraryTag(id: "ideas", name: "Ideas", colorHex: "#EBC85A")]
+    var measuredSize: CGSize?
     window.rootViewController = UIHostingController(
       rootView: VStack {
-        LibraryView.NoteRowContent(note: note, tags: [])
-          .frame(width: 350)
+        LibraryNoteRow(note: note, tags: tags)
+          .frame(width: 324)
           .fixedSize(horizontal: false, vertical: true)
-          .onGeometryChange(for: CGSize.self) { $0.size } action: { measured = $0 }
+          .onGeometryChange(for: CGSize.self) { $0.size } action: { measuredSize = $0 }
         Spacer()
       }
       .environment(\.dynamicTypeSize, size))
@@ -175,58 +134,13 @@ struct LibraryHostTests {
       window.rootViewController = nil
       previous?.makeKeyAndVisible()
     }
-    try await Task.sleep(for: .milliseconds(350))
-    window.layoutIfNeeded()
-    func frame(_ name: String) throws -> CGRect {
-      let marker = try #require(descendants(window).first {
-        $0.accessibilityIdentifier == "capture-frame-\(name)" && !$0.bounds.isEmpty
-      })
-      return marker.convert(marker.bounds, to: window)
-    }
-    let title = try frame("note-title-daily-progress")
-    let progress = try frame("note-progress-daily-progress")
-    let titleFont = UIFont.preferredFont(
-      forTextStyle: .headline, compatibleWith: UITraitCollection(preferredContentSizeCategory: category))
-    #expect(title.height <= titleFont.lineHeight + 1)
-    #expect(progress.minX >= title.maxX + 7)
-    #expect(progress.midY >= title.minY)
-    #expect(progress.midY <= title.maxY)
-    let rowSize = try #require(measured)
-    #expect(rowSize.width == 350)
-    #expect(rowSize.height <= (size == .large ? 100 : 190))
-  }
-
-  @Test(arguments: [DynamicTypeSize.large, .accessibility3])
-  func ordinaryRowsKeepMetadataTogetherWithoutClipping(size: DynamicTypeSize) async throws {
-    let scene = try #require(
-      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-    let window = UIWindow(windowScene: scene)
-    let note = LibraryNote(
-      id: "metadata", title: "Words worth keeping",
-      updatedAt: .now.addingTimeInterval(-172_800), tagIDs: ["ideas"], fileCount: 3,
-      excerpt: "A few sentences to return to when a thought needs a starting point.")
-    let tags = [LibraryTag(id: "ideas", name: "Ideas", colorHex: "#EBC85A")]
-    var measuredSize: CGSize?
-    var metadataSize: CGSize?
-    window.rootViewController = UIHostingController(
-      rootView: VStack {
-        LibraryView.NoteRowContent(note: note, tags: tags)
-          .frame(width: 324)
-          .fixedSize(horizontal: false, vertical: true)
-          .onGeometryChange(for: CGSize.self) { $0.size } action: { measuredSize = $0 }
-        LibraryView.NoteRowMetadata(note: note, tags: tags)
-          .frame(width: 324)
-          .fixedSize(horizontal: false, vertical: true)
-          .onGeometryChange(for: CGSize.self) { $0.size } action: { metadataSize = $0 }
-        Spacer()
-      }
-      .environment(\.dynamicTypeSize, size))
-    window.makeKeyAndVisible()
-    defer { window.isHidden = true }
     try await Task.sleep(for: .milliseconds(400))
     window.layoutIfNeeded()
     let measured = try #require(measuredSize)
-    let metadata = try #require(metadataSize)
+    let marker = try #require(descendants(window).first {
+      $0.accessibilityIdentifier == "capture-frame-note-tags-metadata" && !$0.bounds.isEmpty
+    })
+    let metadata = marker.bounds.size
     #expect(measured.width == 324)
     if size == .large {
       #expect(measured.height <= 128)

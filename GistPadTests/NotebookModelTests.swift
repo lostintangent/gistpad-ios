@@ -641,7 +641,8 @@ struct NotebookModelTests {
     #expect(model.loadedDocument?.text == "Original text")
     #expect(model.library.query == "Original")
     #expect(model.library.selectedTagIDs == ["ideas"])
-    #expect(model.library.openDocumentOutsideFilter?.id == "a")
+    #expect(model.library.visibleSelectedNoteID == nil)
+    #expect(model.library.selectedNoteID == "a")
   }
 
   @Test func anOlderOpenCannotReplaceTheNewerSelection() async throws {
@@ -962,6 +963,8 @@ struct NotebookModelTests {
     await model.search()
     let row = try #require(model.library.matchingNotes.first)
     #expect(row.id == "daily/\(filename)")
+    #expect(row.dailyDate == DailyNotesIndex.parseDateFilename(filename))
+    #expect(model.library.dailyNoteCount == 1)
     #expect(row.progress == .init(completed: 1, total: 2))
     #expect(model.library.today.excerpt == "One\nTwo")
     await model.openRow(id: row.id)

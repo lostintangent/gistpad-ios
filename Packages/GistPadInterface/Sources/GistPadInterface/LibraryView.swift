@@ -60,9 +60,31 @@ private struct LibrarySearchModifier: ViewModifier {
     }
 }
 
+private struct LibraryCreateButton: View {
+    let action: @MainActor () -> Void
+
+    var body: some View {
+        Button(String(localized: "New note", bundle: .module), systemImage: "square.and.pencil", action: action)
+            .tint(.primary)
+            .accessibilityIdentifier("library-create")
+    }
+}
+
 extension View {
     public func librarySearch(model: LibraryModel, isPresented: Binding<Bool>? = nil) -> some View {
         modifier(LibrarySearchModifier(model: model, isPresented: isPresented))
+    }
+
+    public func libraryCreateAction(
+        isVisible: Bool, action: @escaping @MainActor () -> Void
+    ) -> some View {
+        toolbar {
+            if isVisible {
+                ToolbarItem(placement: .primaryAction) {
+                    LibraryCreateButton(action: action)
+                }
+            }
+        }
     }
 }
 
@@ -156,16 +178,6 @@ public struct LibraryView: View {
         case note(String)
     }
 
-    struct FeaturedGrid<Content: View>: View {
-        @ViewBuilder let content: Content
-
-        var body: some View {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 156), spacing: 12)], alignment: .leading, spacing: 12) {
-                content
-            }
-        }
-    }
-
     struct SearchProgressModifier: ViewModifier {
         let state: GitHubStatusState
         @State private var checkingOperation: String?
@@ -233,90 +245,6 @@ public struct LibraryView: View {
         }
     }
 
-    struct NoteRowContent: View {
-        let note: LibraryNote
-        let tags: [LibraryTag]
-        var showsPin = true
-        @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(verbatim: note.title)
-                            .font(.headline)
-                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                            .captureFrame("note-title-\(note.id)")
-                        if note.isPinned && showsPin {
-                            Image(systemName: "pin.fill")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .accessibilityLabel(Text("Pinned", bundle: .module))
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    if let progress = note.progress, progress.total > 0 {
-                        TaskProgressLabel(progress: progress, isOverdue: note.isOverdue)
-                            .fixedSize()
-                            .captureFrame("note-progress-\(note.id)")
-                    }
-                }
-                if let excerpt = note.excerpt, !excerpt.isEmpty {
-                    Text(verbatim: excerpt)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                if !note.isDailyNote || !tags.isEmpty || (!note.isOwned && note.owner != nil) {
-                    NoteRowMetadata(note: note, tags: tags)
-                }
-                if !note.isDailyNote, let filename = note.filename, filename != note.title {
-                    Text(verbatim: filename)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.vertical, 12)
-            .accessibilityElement(children: .combine)
-        }
-    }
-
-    struct NoteRowMetadata: View {
-        let note: LibraryNote
-        let tags: [LibraryTag]
-        @Environment(\.layoutDirection) private var layoutDirection
-
-        var body: some View {
-            MetadataFlowLayout(layoutDirection: layoutDirection) {
-                if !note.isOwned, let owner = note.owner {
-                    Text(verbatim: "@\(owner)")
-                }
-                if !note.isDailyNote {
-                    Text(note.updatedAt, format: .relative(presentation: .named))
-                }
-                ForEach(tags.prefix(2)) { TagLabel(tag: $0) }
-                if tags.count > 2 {
-                    TagLabels.TagOverflowLabel(count: tags.count - 2)
-                        .accessibilityLabel(Text(
-                            "Tags: \(tags.dropFirst(2).map(\.name).joined(separator: ", "))",
-                            bundle: .module
-                        ))
-                }
-                if !note.isDailyNote, let count = note.fileCount, count > 1 {
-                    HStack(spacing: 4) {
-                        Image(systemName: "doc.on.doc")
-                            .accessibilityHidden(true)
-                        Text("\(count) files", bundle: .module)
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityElement(children: .combine)
-                }
-            }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-        }
-    }
-
     struct SearchSummary: View {
         let coverage: LibrarySearchCoverage?
         let selectedTagCount: Int
@@ -361,6 +289,9 @@ public struct LibraryView: View {
     @State private var tagQuery = ""
     @State private var isPullRefreshing = false
     @State private var searchPresented = false
+    @ScaledMetric(relativeTo: .body) private var headingTopSpacing = 32
+    @ScaledMetric(relativeTo: .body) private var headingBottomSpacing = 12
+    @ScaledMetric(relativeTo: .body) private var headingCountSpacing = 4
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -392,7 +323,7 @@ public struct LibraryView: View {
             .navigationTitle(navigationTitle)
             .navigationSubtitle(navigationSubtitle)
             .toolbarTitleDisplayMode(.inline)
-            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
+            .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 400)
             .refreshable {
                 isPullRefreshing = true
                 defer { isPullRefreshing = false }
@@ -428,8 +359,9 @@ public struct LibraryView: View {
             libraryList.listStyle(.sidebar)
         } else {
             libraryList
-                .listStyle(.insetGrouped)
-                .listSectionSpacing(32)
+                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
+                .background(Color(uiColor: .systemGroupedBackground))
         }
     }
 
@@ -441,7 +373,7 @@ public struct LibraryView: View {
     }
 
     private var navigationSubtitle: String {
-        guard model.loadState != .signedOut, model.collection != .gists else { return "" }
+        guard model.loadState != .signedOut else { return "" }
         if model.collection == .dailyNotes {
             return model.dailyNoteCount.map(LibraryModel.noteCountLabel) ?? ""
         }
@@ -456,13 +388,26 @@ public struct LibraryView: View {
                     Section {
                         if isSidebar {
                             NavigationLink(value: Selection.today) {
-                                Label(String(localized: "Today", bundle: .module), systemImage: "calendar")
-                                    .font(.headline)
-                                    .frame(minHeight: 44)
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Image(systemName: "calendar")
+                                        .font(.headline)
+                                        .foregroundStyle(.secondary)
+                                        .accessibilityHidden(true)
+                                        .captureFrame("library-today-symbol")
+                                    LibraryNoteRow(
+                                        note: .init(
+                                            id: "today", title: String(localized: "Today", bundle: .module),
+                                            updatedAt: model.today.date, isDailyNote: true,
+                                            excerpt: model.today.excerpt,
+                                            progress: model.today.availability == .missing ? nil : model.today.progress),
+                                        tags: [])
+                                }
+                                .frame(minHeight: 44)
                             }
                             .tint(.primary)
                             .navigationLinkIndicatorVisibility(.hidden)
                             .tag(Selection.today)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
                             .listRowSeparator(.hidden)
                             .accessibilityValue(Text(
                                 model.today.date,
@@ -480,29 +425,30 @@ public struct LibraryView: View {
                             .accessibilityIdentifier("library-today")
                         }
                     }
-                    .listSectionMargins(.top, 16)
+                    .listSectionMargins(.vertical, 0)
+                    .listSectionMargins(.top, headingTopSpacing / 2)
+                    .listSectionSeparator(.hidden)
                 }
                 if model.showsSearchScope {
                     searchScope
                 }
                 searchStatus
-                if let open = model.openDocumentOutsideFilter {
-                    Section {
-                        noteRow(open)
-                    } header: {
-                        sectionHeading(String(localized: "Open document", bundle: .module))
-                    }
-                }
                 if !model.featuredNotes.isEmpty {
                     Section {
                         pinnedNotes
                     } header: {
                         pinnedHeading
+                            .listRowInsets(
+                                isSidebar ? EdgeInsets()
+                                    : EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
                     }
+                    .listSectionMargins(.vertical, 0)
+                    .listSectionSeparator(.visible, edges: .top)
                 }
                 if !model.listedNotes.isEmpty {
                     listedNotesSection
-                        .listSectionSeparator(.hidden)
+                        .listSectionMargins(.vertical, 0)
+                        .listSectionSeparator(.visible, edges: .top)
                 }
                 if model.matchingNotes.isEmpty && model.loadState != .loading && canShowEmptyState {
                     emptyState
@@ -513,6 +459,10 @@ public struct LibraryView: View {
             }
         }
         .tint(.primary)
+        .contentMargins(.horizontal, 20, for: .scrollContent)
+        .listSectionSpacing(0)
+        .environment(\.defaultMinListHeaderHeight, 0)
+        .accessibilityIdentifier("library-list")
         .animation(reduceMotion ? nil : .default, value: model.matchingNotes.map(\.id))
     }
 
@@ -531,6 +481,9 @@ public struct LibraryView: View {
                             : model.hasKnownGistSnapshot ? LibraryModel.gistCount(in: model.listedNotes) : nil)
                     .accessibilityIdentifier("library-listed-heading")
                 }
+                .listRowInsets(
+                    isSidebar ? EdgeInsets()
+                        : EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
             }
         } else {
             Section {
@@ -545,7 +498,11 @@ public struct LibraryView: View {
 
     private var librarySelection: Binding<Selection?> {
         Binding(
-            get: { isTodaySelected ? .today : model.selectedNoteID.map(Selection.note) },
+            get: {
+                guard isSidebar else { return nil }
+                if isTodaySelected { return model.showsFeaturedNotes ? .today : nil }
+                return model.visibleSelectedNoteID.map(Selection.note)
+            },
             set: { selection in
                 switch selection {
                 case .today:
@@ -557,7 +514,8 @@ public struct LibraryView: View {
                         model.selectedNoteID = id
                     }
                 case nil:
-                    model.selectedNoteID = nil
+                    // Losing a visible row is not leaving the open document.
+                    break
                 }
             }
         )
@@ -566,38 +524,62 @@ public struct LibraryView: View {
     private func sectionHeading(
         _ title: String, symbol: String? = nil, count: Int? = nil
     ) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Group {
-                if let symbol {
-                    Label {
-                        Text(verbatim: title)
-                    } icon: {
-                        Image(systemName: symbol)
-                            .imageScale(.small)
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                    }
-                } else {
-                    Text(verbatim: title)
-                }
-            }
-            .font(.title3.weight(.bold))
+        Group {
             if let count {
-                Spacer(minLength: 12)
-                Text(count, format: .number)
-                    .font(.subheadline)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline) {
+                        headingLabel(title, symbol: symbol)
+                            .fixedSize(horizontal: true, vertical: true)
+                        Spacer(minLength: 12)
+                        headingCount(count)
+                            .fixedSize()
+                    }
+                    VStack(alignment: .leading, spacing: headingCountSpacing) {
+                        headingLabel(title, symbol: symbol)
+                        headingCount(count)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
+            } else {
+                headingLabel(title, symbol: symbol)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .font(.title3.weight(.bold))
+        .font(.title2.weight(.bold))
         .foregroundStyle(Color(uiColor: .label))
         .textCase(nil)
+        .captureFrame("library-heading-\(symbol ?? "scope")")
+        .padding(.horizontal, 12)
+        .padding(.top, headingTopSpacing)
+        .padding(.bottom, headingBottomSpacing)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             count.map { Text("\(title), \(LibraryModel.gistCountLabel($0))", bundle: .module) }
                 ?? Text(verbatim: title))
         .accessibilityAddTraits(.isHeader)
+    }
+
+    @ViewBuilder
+    private func headingLabel(_ title: String, symbol: String?) -> some View {
+        if let symbol {
+            Label {
+                Text(verbatim: title)
+            } icon: {
+                Image(systemName: symbol)
+                    .imageScale(.small)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+        } else {
+            Text(verbatim: title)
+        }
+    }
+
+    private func headingCount(_ count: Int) -> some View {
+        Text(count, format: .number)
+            .font(.subheadline)
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
     }
 
     private var pinnedHeading: some View {
@@ -616,96 +598,10 @@ public struct LibraryView: View {
         return state
     }
 
-    @ViewBuilder
     private var pinnedNotes: some View {
-        if !isSidebar, !dynamicTypeSize.isAccessibilitySize,
-           model.featuredNotes.count > 1 {
-            FeaturedGrid {
-                ForEach(model.featuredNotes) { note in
-                    Button {
-                        librarySelection.wrappedValue = .note(note.id)
-                    } label: {
-                        featuredContent(note)
-                            .padding(16)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                            .background(
-                                model.selectedNoteID == note.id
-                                    ? InterfaceTheme.neutralSelection : Color(uiColor: .secondarySystemGroupedBackground),
-                                in: .rect(cornerRadius: 20)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(model.selectedNoteID == note.id ? .isSelected : [])
-                    .accessibilityIdentifier("library-featured-\(note.id)")
-                    .contextMenu { rowActions(note) }
-                    .modifier(LibraryRowDeletionConfirmation(rowID: note.id, target: actions.deletionConfirmation))
-                }
-            }
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
-        } else {
-            ForEach(model.featuredNotes) { note in
-                NavigationLink(value: Selection.note(note.id)) {
-                    featuredContent(note)
-                        .padding(.vertical, 16)
-                }
-                .navigationLinkIndicatorVisibility(.hidden)
-                .accessibilityIdentifier("library-featured-\(note.id)")
-                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                .listRowSeparator(.hidden)
-                .listRowBackground(!isSidebar && model.selectedNoteID == note.id ? InterfaceTheme.neutralSelection : nil)
-                .contextMenu { rowActions(note) }
-                .modifier(LibraryRowDeletionConfirmation(rowID: note.id, target: actions.deletionConfirmation))
-            }
+        ForEach(model.featuredNotes) { note in
+            noteRow(note, showsPin: false, isFeatured: true)
         }
-    }
-
-    private func featuredContent(_ note: LibraryNote) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(verbatim: note.title)
-                .font(.headline)
-                .foregroundStyle(.primary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 3)
-            if let excerpt = note.excerpt, !excerpt.isEmpty {
-                Text(verbatim: excerpt)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            if !model.tags(for: note).isEmpty {
-                featuredTags(model.tags(for: note))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(Text("Pinned", bundle: .module))
-    }
-
-    private func featuredTags(_ tags: [LibraryTag]) -> some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                TagLabels(tags: tags, limit: 1)
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    TagLabels(tags: tags, limit: 2)
-                        .fixedSize(horizontal: true, vertical: false)
-                    TagLabels(tags: tags, limit: 1)
-                        .fixedSize(horizontal: true, vertical: false)
-                    HStack(spacing: 6) {
-                        if let tag = tags.first {
-                            TagLabel(tag: tag).lineLimit(1)
-                        }
-                        if tags.count > 1 {
-                            TagLabels.TagOverflowLabel(count: tags.count - 1)
-                                .fixedSize()
-                        }
-                    }
-                }
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Tags: \(tags.map(\.name).joined(separator: ", "))", bundle: .module))
     }
 
     private var searchScope: some View {
@@ -911,18 +807,22 @@ public struct LibraryView: View {
         }
     }
 
-    private func noteRow(_ note: LibraryNote, showsPin: Bool = true) -> some View {
+    private func noteRow(
+        _ note: LibraryNote, showsPin: Bool = true, isFeatured: Bool = false
+    ) -> some View {
         NavigationLink(value: Selection.note(note.id)) {
-            NoteRowContent(note: note, tags: model.tags(for: note), showsPin: showsPin)
+            LibraryNoteRow(
+                note: note, tags: model.tags(for: note), showsPin: showsPin,
+                showsStar: model.collection != .starred)
         }
-        .accessibilityValue(note.isPinned ? Text("Pinned", bundle: .module) : Text(""))
-        .accessibilityIdentifier("library-note-\(note.id)")
+        .accessibilityIdentifier("\(isFeatured ? "library-featured" : "library-note")-\(note.id)")
         .navigationLinkIndicatorVisibility(.hidden)
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
-        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
         .listRowSeparator(.visible)
-        .listRowBackground(!isSidebar && model.selectedNoteID == note.id ? InterfaceTheme.neutralSelection : nil)
+        .listRowSeparatorTint(Color(uiColor: .separator))
+        .listRowBackground(isSidebar ? nil : Color.clear)
         .contextMenu { rowActions(note) }
         .modifier(LibraryRowDeletionConfirmation(rowID: note.id, target: actions.deletionConfirmation))
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -1028,10 +928,12 @@ public struct LibraryView: View {
                     .sharedBackgroundVisibility(.hidden)
                 }
             }
-            ToolbarItemGroup(placement: .primaryAction) {
-                createButton
-                if !isSidebar, let account = actions.account {
-                    settingsButton(account)
+            if !isSidebar {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    LibraryCreateButton(action: actions.create)
+                    if let account = actions.account {
+                        settingsButton(account)
+                    }
                 }
             }
             if isSidebar {
@@ -1045,12 +947,6 @@ public struct LibraryView: View {
                 settingsButton(account)
             }
         }
-    }
-
-    private var createButton: some View {
-        Button(String(localized: "New note", bundle: .module), systemImage: "square.and.pencil", action: actions.create)
-            .tint(.primary)
-            .accessibilityIdentifier("library-create")
     }
 
     private func settingsButton(_ action: @escaping @MainActor () -> Void) -> some View {
@@ -1083,7 +979,7 @@ public struct LibraryView: View {
 
     private var collectionPicker: some View {
         Picker(String(localized: "Collection", bundle: .module), selection: $model.collection) {
-            ForEach(LibraryCollection.allCases) { collection in
+            ForEach(model.visibleCollections) { collection in
                 Label(
                     collection == .gists ? String(localized: "All Notes", bundle: .module) : collection.title,
                     systemImage: collection.symbol

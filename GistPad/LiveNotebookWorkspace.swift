@@ -156,6 +156,9 @@ struct LiveNotebookWorkspace: View {
               .disabled(notebook.account == nil || notebook.isCreating)
           }
         }
+        .libraryCreateAction(
+          isVisible: horizontalSizeClass == .regular && notebook.library.loadState != .signedOut,
+          action: libraryActions.create)
       }
     }
     .navigationSplitViewStyle(.balanced)
