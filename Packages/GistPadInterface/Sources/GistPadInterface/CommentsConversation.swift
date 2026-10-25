@@ -254,7 +254,6 @@ private struct CommentThreadContent: View {
             header
             if let quote = parsed.quote, !quote.isEmpty {
                 quotedPassage(quote)
-                    .padding(.vertical, quoteSpacing)
             }
             Text(LocalizedStringKey(parsed.text))
                 .font(.body)
@@ -269,12 +268,16 @@ private struct CommentThreadContent: View {
                         Text("Reply", bundle: .module)
                             .fixedSize(horizontal: false, vertical: true)
                     } icon: {
-                        Image(systemName: "arrow.uturn.backward")
+                        Image(systemName: "arrowshape.turn.up.left")
                     }
-                        .frame(minHeight: 44)
+                    .labelStyle(InlineActionLabelStyle())
+                    .frame(minHeight: 44)
+                    .contentShape(.rect)
                 }
-                .font(.subheadline.weight(.semibold))
-                .buttonStyle(.bordered)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .buttonStyle(.borderless)
+                .padding(.vertical, -8)
                 .disabled(!actions.areActionsEnabled)
                 .accessibilityLabel(Text("Reply to \(login)", bundle: .module))
                 .accessibilityIdentifier("comment-reply-\(comment.id)")
@@ -285,16 +288,6 @@ private struct CommentThreadContent: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 8) {
             CommentAvatar(author: comment.user)
-                .overlay(alignment: .leading) {
-                    if parentLogin == nil, selectedRootID == comment.id {
-                        RoundedRectangle(cornerRadius: 1.5)
-                            .fill(InterfaceTheme.accent)
-                            .frame(width: 3, height: 20)
-                            .offset(x: -8)
-                            .allowsHitTesting(false)
-                            .accessibilityHidden(true)
-                    }
-                }
             VStack(alignment: .leading, spacing: 3) {
                 Text(verbatim: login)
                     .font(.subheadline.weight(.semibold))
@@ -343,7 +336,7 @@ private struct CommentThreadContent: View {
                 .frame(width: 3)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: contentSpacing) {
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .center, spacing: 8) {
                     quoteText(quote)
                         .lineLimit(showsFullQuote ? nil : 3)
                         .textSelection(.enabled)
@@ -376,8 +369,11 @@ private struct CommentThreadContent: View {
                                 systemImage: "text.viewfinder")
                                 .labelStyle(.iconOnly)
                                 .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(.rect)
                         }
                         .buttonStyle(.borderless)
+                        // Keeps the 44-point target without letting it stretch the quote rule.
+                        .padding(.vertical, -10)
                         .accessibilityAddTraits(
                             selectedRootID == comment.id ? .isSelected : [])
                         .accessibilityIdentifier("comment-passage-\(comment.id)")
@@ -397,10 +393,14 @@ private struct CommentThreadContent: View {
                         } icon: {
                             Image(systemName: showsFullQuote ? "chevron.up" : "chevron.down")
                         }
+                        .labelStyle(InlineActionLabelStyle())
                         .frame(minHeight: 44)
+                        .contentShape(.rect)
                     }
-                    .font(.subheadline.weight(.semibold))
-                    .buttonStyle(.bordered)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .buttonStyle(.borderless)
+                    .padding(.vertical, -8)
                 }
                 if let linkedRootIDs {
                     if !linkedRootIDs.contains(comment.id) {
@@ -410,6 +410,7 @@ private struct CommentThreadContent: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 2)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -419,6 +420,18 @@ private struct CommentThreadContent: View {
             .font(.subheadline)
             .tint(Color(uiColor: .systemBlue))
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct InlineActionLabelStyle: LabelStyle {
+    @ScaledMetric(relativeTo: .subheadline) private var spacing = 5
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: spacing) {
+            configuration.icon
+                .imageScale(.small)
+            configuration.title
+        }
     }
 }
 

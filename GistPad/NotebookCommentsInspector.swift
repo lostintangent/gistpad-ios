@@ -27,7 +27,6 @@ struct NotebookCommentsInspector: View {
           composer
         }
         .navigationTitle("Comments")
-        .navigationSubtitle("All files in this gist")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {

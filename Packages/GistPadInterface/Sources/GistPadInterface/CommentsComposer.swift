@@ -68,7 +68,9 @@ public struct CommentsComposer: View {
                     .font(.footnote)
                     .accessibilityIdentifier("comment-post-error")
             }
-            contextLine
+            if context != .root {
+                contextLine
+            }
             HStack(alignment: .bottom, spacing: 8) {
                 TextField(
                     prompt, text: $text, axis: .vertical
@@ -76,6 +78,7 @@ public struct CommentsComposer: View {
                 .font(.body)
                 .lineLimit(1...maximumLines)
                 .textFieldStyle(.plain)
+                .frame(minHeight: 44)
                 .focused($isFocused)
                 .tint(Color(uiColor: .systemBlue))
                 .disabled(!isEditable || isPosting)
@@ -147,7 +150,7 @@ public struct CommentsComposer: View {
             Group {
                 switch context {
                 case .root:
-                    Text("On GitHub", bundle: .module)
+                    EmptyView()
                 case .reply(let author):
                     if let author {
                         Text("Replying to @\(author)", bundle: .module)
