@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
@@ -7,7 +7,7 @@ import { adaptCalculations } from "./src/calculatorAdapter";
 import { adaptMermaid } from "./src/mermaidAdapter";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
-const web = resolve(root, "../../gistpad.dev");
+const web = realpathSync(resolve(root, "../../gistpad.dev"));
 const sourceFiles = [
   "features/markdown/MarkdownPreview.tsx",
   "features/markdown/remarkInlineSyntax.ts",
@@ -18,18 +18,24 @@ const sourceFiles = [
 ];
 
 function webSourceAdapter(): Plugin {
+  const adapted = new Set<string>();
   return {
     name: "gistpad-web-source-adapter",
     enforce: "pre",
     transform(code, id) {
       if (id === resolve(web, "src/shared/calculations.ts")) {
+        adapted.add("calculations");
         return { code: adaptCalculations(code, resolve(root, "src/arithmetic.ts")), map: null };
       }
       if (id === resolve(web, "src/features/markdown/Mermaid.tsx")) {
+        adapted.add("mermaid");
         return { code: adaptMermaid(code, resolve(root, "src/diagramTheme.ts")), map: null };
       }
     },
     generateBundle() {
+      if (!adapted.has("calculations") || !adapted.has("mermaid")) {
+        throw new Error("Required offline web-source adapters did not run. Check resolved source paths.");
+      }
       this.emitFile({
         type: "asset",
         fileName: "provenance.json",
