@@ -25,13 +25,13 @@ struct NotebookModelTests {
     conversation.updateText("A comment draft to remove")
     #expect(await conversation.flushDraft())
     try await provider.discard(gistID: gist.id, accountID: fixtureAccount.id)
-    #expect(await store.loadDrafts(scope: conversation.scope) == nil)
+    #expect(try await store.loadDrafts(scope: conversation.scope) == nil)
     #expect(!conversation.isPrepared)
     await #expect(throws: NotebookCommentError.unavailable) {
       try await provider.conversation(for: document)
     }
     #expect(await provider.flushDrafts())
-    #expect(await store.loadDrafts(scope: conversation.scope) == nil)
+    #expect(try await store.loadDrafts(scope: conversation.scope) == nil)
   }
 
   @Test func unavailableCommentDraftReadsDoNotBlockDepartureButFailedWritesStillDo() async throws {
