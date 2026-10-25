@@ -173,6 +173,7 @@ final class NotebookCommentsPresentation {
 
   func didDismiss() {
     guard !isPresented else { return }
+    hide()
     awaitsDismissal = false
     if let afterDismiss {
       self.afterDismiss = nil
@@ -211,7 +212,10 @@ final class NotebookCommentsPresentation {
     let request = requestID
     let model = conversation
     if let model, model.isPrepared, !(await model.flushDraft()) { return }
-    guard isPresented, sessionID == identity, requestID == request, conversation === model else { return }
+    guard sessionID == identity, requestID == request, conversation === model else {
+      logger.debug("A newer conversation superseded the Comments close request.")
+      return
+    }
     hide()
   }
 

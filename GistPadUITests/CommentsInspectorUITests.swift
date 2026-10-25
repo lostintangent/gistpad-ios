@@ -10,6 +10,187 @@ final class CommentsInspectorUITests: XCTestCase {
     try checkAppearances(wide: true)
   }
 
+  func testOpenCloseRestoresThePinnedLibraryColumn() throws {
+    let app = launch()
+    defer { app.terminate() }
+    XCTAssertEqual(app.windows.firstMatch.frame.width, 951, accuracy: 1)
+    try openComments(in: app)
+    record(app, name: "comments-open-before-close")
+    app.buttons["comments-close"].tap()
+    try wait("the entire inspector to disappear") {
+      !app.otherElements["comments-inspector"].firstMatch.exists
+        && !app.buttons["comments-close"].exists
+    }
+    let row = app.descendants(matching: .any)["library-note-ideas"].firstMatch
+    try wait("the restored pinned Library column") {
+      row.isHittable && row.frame.maxX <= app.webViews.firstMatch.frame.minX + 1
+    }
+    record(app, name: "comments-open-after-close-pinned-library")
+    app.buttons["Hide Sidebar"].tap()
+    try wait("the intentionally hidden Library") {
+      !row.isHittable && app.buttons["Show Sidebar"].isHittable
+    }
+    app.buttons["Show Sidebar"].tap()
+    try wait("the pinned Library after its native toggle") {
+      row.isHittable && row.frame.maxX <= app.webViews.firstMatch.frame.minX + 1
+    }
+  }
+
+  func testOpenCloseFromPreviewSourceAndReplyRestoresSidebarVisibility() throws {
+    for appearance in ["light", "dark"] {
+      let app = launch(appearance: appearance)
+      defer { app.terminate() }
+      XCTAssertEqual(app.windows.firstMatch.frame.width, 951, accuracy: 1)
+      try openComments(in: app)
+      try closeAndExpectPinnedLibrary(in: app)
+
+      let passage = try revealPreviewPassage("A good walk clears more than your head", in: app)
+      passage.tap()
+      try waitForSelectedThread(300, in: app)
+      try closeAndExpectPinnedLibrary(in: app)
+
+      app.buttons["Edit"].tap()
+      let editor = app.textViews["source-editor"]
+      try wait("the source editor") { editor.isHittable && app.buttons["Edit"].isSelected }
+      app.buttons["Hide Keyboard"].tap()
+      try wait("the unfocused source passage") { !app.keyboards.firstMatch.exists }
+      record(app, name: "comments-open-source-before-passage-tap")
+      editor.coordinate(withNormalizedOffset: .zero)
+        .withOffset(.init(
+          dx: 60, dy: app.navigationBars["A place for good ideas"].frame.maxY + 77
+            - editor.frame.minY)).tap()
+      try wait("the source passage's Comments inspector") {
+        app.buttons["comments-close"].isHittable
+          && app.descendants(matching: .any)["comment-thread-300"].firstMatch.isSelected
+      }
+      try closeAndExpectPinnedLibrary(in: app, source: true)
+
+      app.buttons["note-comments"].tap()
+      try wait("the reopened conversation for a reply") { app.buttons["comment-reply-300"].isHittable }
+      app.buttons["comment-reply-300"].tap()
+      let field = composer(in: app)
+      field.typeText("Keep the conversation open.")
+      try wait("the enabled reply") { app.buttons["comment-post"].isEnabled }
+      app.buttons["comment-post"].tap()
+      try wait("the reply acknowledgement") {
+        (field.value as? String)?.contains("Keep the conversation open.") == false
+          && app.buttons["note-comments"].label == "Comments, 6 comments"
+      }
+      try closeAndExpectPinnedLibrary(in: app, source: true)
+
+      app.buttons["Hide Sidebar"].tap()
+      let row = app.descendants(matching: .any)["library-note-ideas"].firstMatch
+      try wait("the deliberately hidden sidebar") { !row.isHittable }
+      app.buttons["note-comments"].tap()
+      try wait("Comments while the sidebar was hidden") { app.buttons["comments-close"].isHittable }
+      let unsent = composer(in: app)
+      unsent.tap()
+      unsent.typeText("An unsent reply stays on this iPhone.")
+      app.buttons["comments-close"].tap()
+      try wait("the hidden sidebar to stay hidden after Close") {
+        !app.otherElements["comments-inspector"].firstMatch.exists
+          && !row.isHittable && app.buttons["Show Sidebar"].isHittable
+      }
+      record(app, name: "comments-open-close-keeps-hidden-sidebar-\(appearance)")
+    }
+  }
+
+  func testOpenCloseFromTheLibraryRowAndAfterRefreshRetainsTheDraft() throws {
+    let app = launch()
+    defer { app.terminate() }
+    XCTAssertEqual(app.windows.firstMatch.frame.width, 951, accuracy: 1)
+    let row = app.descendants(matching: .any)["library-note-ideas"].firstMatch
+    try wait("the Library row") { row.isHittable }
+    row.press(forDuration: 1)
+    app.buttons["Open Comments"].tap()
+    try wait("the row's live conversation") { app.buttons["comments-close"].isHittable }
+    let field = composer(in: app)
+    field.tap()
+    field.typeText("Save this without posting.")
+    app.buttons["comments-actions"].tap()
+    app.buttons["Refresh Comments"].tap()
+    try wait("the refreshed thread") { app.buttons["comment-actions-300"].isHittable }
+    try closeAndExpectPinnedLibrary(in: app)
+    row.press(forDuration: 1)
+    app.buttons["Open Comments"].tap()
+    try wait("the row to reopen the retained unposted draft") {
+      app.buttons["comments-close"].isHittable
+        && (composer(in: app).value as? String)?.contains("Save this without posting.") == true
+    }
+    try closeAndExpectPinnedLibrary(in: app)
+  }
+
+  func testOpenSidebarOverlayDoesNotPreventCommentsClose() throws {
+    let app = launch()
+    defer { app.terminate() }
+    try openComments(in: app)
+    let window = app.windows.firstMatch
+    let edge = window.coordinate(withNormalizedOffset: .zero).withOffset(.init(dx: 1, dy: 330))
+    edge.press(
+      forDuration: 0.05, thenDragTo: edge.withOffset(.init(dx: 300, dy: 0)),
+      withVelocity: .slow, thenHoldForDuration: 0.2)
+    record(app, name: "comments-open-library-edge-swipe")
+    let row = app.descendants(matching: .any)["library-note-ideas"].firstMatch
+    if !row.isHittable { app.buttons["Show Sidebar"].tap() }
+    try wait("the Library overlay while Comments uses the trailing column") { row.isHittable }
+    XCTAssertGreaterThan(row.frame.maxX, app.webViews.firstMatch.frame.minX)
+    record(app, name: "comments-open-library-overlay")
+    try closeAndExpectPinnedLibrary(in: app)
+  }
+
+  func testCommentsCloseAcrossSheetAndInspectorPostureTransitions() throws {
+    let app = launch()
+    defer { app.terminate() }
+    XCTAssertEqual(app.windows.firstMatch.frame.width, 466, accuracy: 1)
+    try openComments(in: app)
+    record(app, name: "comments-transition-ready-to-unfold")
+    try wait("the phone to unfold with the Comments sheet open", timeout: 90) {
+      abs(app.windows.firstMatch.frame.width - 951) <= 1
+    }
+    try wait("the first unfolded Comments inspector") {
+      app.buttons["comments-close"].isHittable
+    }
+    record(app, name: "comments-transition-ready-to-fold-before-close")
+    try wait("the phone to fold again without closing Comments", timeout: 90) {
+      abs(app.windows.firstMatch.frame.width - 466) <= 1
+    }
+    try wait("the retained Comments sheet") { app.buttons["comments-close"].isHittable }
+    record(app, name: "comments-transition-ready-to-unfold-again")
+    try wait("the phone to unfold again without closing Comments", timeout: 90) {
+      abs(app.windows.firstMatch.frame.width - 951) <= 1
+    }
+    try wait("the retained Comments inspector") { app.buttons["comments-close"].isHittable }
+    try closeAndExpectPinnedLibrary(in: app)
+    record(app, name: "comments-transition-unfolded-after-close")
+    app.buttons["note-comments"].tap()
+    try wait("the reopened unfolded inspector") { app.buttons["comments-close"].isHittable }
+    record(app, name: "comments-transition-ready-to-fold")
+    try wait("the phone to fold with the inspector open", timeout: 90) {
+      abs(app.windows.firstMatch.frame.width - 466) <= 1
+    }
+    try wait("the folded Comments sheet") { app.buttons["comments-close"].isHittable }
+    record(app, name: "comments-transition-folded-before-close")
+    app.buttons["comments-close"].tap()
+    try wait("the folded inspector to disappear") {
+      !app.buttons["comments-close"].exists
+        && !app.otherElements["comments-inspector"].firstMatch.exists
+        && !app.buttons["note-comments"].isSelected
+    }
+    record(app, name: "comments-transition-folded-after-close")
+  }
+
+  private func closeAndExpectPinnedLibrary(in app: XCUIApplication, source: Bool = false) throws {
+    app.buttons["comments-close"].tap()
+    let row = app.descendants(matching: .any)["library-note-ideas"].firstMatch
+    try wait("Close to remove the inspector and restore a pinned Library column") {
+      let document = source ? app.textViews["source-editor"] : app.webViews.firstMatch
+      return !app.otherElements["comments-inspector"].firstMatch.exists
+        && !app.buttons["comments-close"].exists && !app.buttons["note-comments"].isSelected
+        && row.isHittable && row.frame.maxX <= document.frame.minX + 1
+    }
+    record(app, name: "comments-open-closed-\(source ? "source" : "preview")")
+  }
+
   func testPostingAndAnUncertainReceiptNeverPostTwice() throws {
     for scenario in ["threads", "uncertain"] {
       let app = launch(scenario: scenario)
@@ -628,8 +809,8 @@ final class CommentsInspectorUITests: XCTestCase {
     throw CommentsTestError.timedOut
   }
 
-  private func wait(_ description: String, _ ready: () -> Bool) throws {
-    let deadline = Date().addingTimeInterval(12)
+  private func wait(_ description: String, timeout: TimeInterval = 12, _ ready: () -> Bool) throws {
+    let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
       if ready() { return }
       RunLoop.current.run(until: Date().addingTimeInterval(0.1))

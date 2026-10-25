@@ -98,6 +98,51 @@ struct NotebookCommentsPresentationTests {
     #expect(await fixture.remote.createdBodies.isEmpty)
   }
 
+  @Test func nativeReparentingKeepsContextUntilTheFinalDismissal() async throws {
+    let fixture = NotebookCommentsCaptureFixture()
+    let controller = try await open(fixture)
+    let presentation = NotebookCommentsPresentation(notebook: fixture.notebook, provider: fixture.comments)
+    presentation.activate(controller)
+    presentation.open(for: controller, rootID: 300)
+    try await wait { presentation.selectedRootID == 300 }
+    let conversation = try #require(presentation.conversation)
+    conversation.updateText("Keep this thought through the fold.")
+    #expect(await conversation.flushDraft())
+    let revision = presentation.threadRevealRevision
+
+    presentation.isPresented = false
+    presentation.isPresented = true
+    presentation.didDismiss()
+    #expect(presentation.isPresented)
+    #expect(presentation.selectedRootID == 300)
+    #expect(presentation.threadRevealRevision == revision)
+    #expect(presentation.conversation === conversation)
+    #expect(conversation.activeDraft.text == "Keep this thought through the fold.")
+
+    presentation.isPresented = false
+    presentation.didDismiss()
+    #expect(!presentation.isPresented)
+    #expect(presentation.selectedRootID == nil)
+    #expect(presentation.focusRequest == 0)
+    #expect(conversation.activeDraft.text == "Keep this thought through the fold.")
+    #expect(await fixture.remote.createdBodies.isEmpty)
+  }
+
+  @Test func closeCleansUpWhenTheNativePanelOutlivesItsPresentationFlag() async throws {
+    let fixture = NotebookCommentsCaptureFixture()
+    let controller = try await open(fixture)
+    let presentation = NotebookCommentsPresentation(notebook: fixture.notebook, provider: fixture.comments)
+    presentation.activate(controller)
+    presentation.open(for: controller, rootID: 300)
+    try await wait { presentation.selectedRootID == 300 }
+    presentation.isPresented = false
+    await presentation.close()
+    #expect(!presentation.isPresented)
+    #expect(presentation.selectedRootID == nil)
+    #expect(presentation.focusRequest == 0)
+    #expect(await fixture.remote.createdBodies.isEmpty)
+  }
+
   @Test func reopeningPassagesReplacesTheSelectedRootWithoutRequestingFocus() async throws {
     let fixture = NotebookCommentsCaptureFixture()
     let controller = try await open(fixture)

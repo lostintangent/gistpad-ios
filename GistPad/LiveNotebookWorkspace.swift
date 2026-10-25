@@ -170,11 +170,7 @@ struct LiveNotebookWorkspace: View {
     .navigationSplitViewStyle(.balanced)
     .librarySearch(model: notebook.library, isSidebar: horizontalSizeClass == .regular)
     .toolbar(removing: comments.isPresented && horizontalSizeClass == .regular ? .sidebarToggle : nil)
-    .inspector(
-      isPresented: Binding(
-        get: { comments.isPresented },
-        set: { if !$0 { comments.hide() } })
-    ) {
+    .inspector(isPresented: $comments.isPresented) {
       commentsPanel
         .inspectorColumnWidth(min: 280, ideal: 320, max: 360)
         .presentationDetents(
@@ -184,15 +180,23 @@ struct LiveNotebookWorkspace: View {
             set: { comments.detent = $0 }))
         .presentationDragIndicator(.visible)
         .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-        .onDisappear { comments.didDismiss() }
+        .onDisappear {
+          if !comments.isPresented, let previous = comments.sidebarBeforeOpening {
+            comments.sidebarBeforeOpening = nil
+            columnVisibility = previous
+          }
+          comments.didDismiss()
+        }
     }
     .onChange(of: comments.isPresented) { _, presented in
       if presented, horizontalSizeClass == .regular {
-        comments.sidebarBeforeOpening = columnVisibility
+        if comments.sidebarBeforeOpening == nil {
+          comments.sidebarBeforeOpening = columnVisibility
+        }
         columnVisibility = .detailOnly
-      } else if !presented, let previous = comments.sidebarBeforeOpening {
-        comments.sidebarBeforeOpening = nil
-        columnVisibility = previous
+      } else if !presented, comments.sidebarBeforeOpening != nil {
+        // Dismiss any temporary overlay before restoring the pinned column at native completion.
+        columnVisibility = .detailOnly
       }
     }
     .onChange(of: horizontalSizeClass) { _, sizeClass in
