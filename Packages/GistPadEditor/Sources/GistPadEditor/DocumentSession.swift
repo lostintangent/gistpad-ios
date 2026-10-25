@@ -25,6 +25,7 @@
     public var inputError: String?
     @ObservationIgnored public let textView: UITextView
     @ObservationIgnored weak var sourceHost: SourceTextViewHost?
+    @ObservationIgnored var sourceHosts: [SourceTextViewHost.Reference] = []
     @ObservationIgnored public var onSourceChange: ((String, UInt64) -> Void)?
     @ObservationIgnored private var highlightTask: Task<Void, Never>?
     @ObservationIgnored private var highlightedTraits: UITraitCollection?

@@ -189,6 +189,10 @@
   }
 
   final class SourceTextViewHost: UIView {
+    struct Reference {
+      weak var host: SourceTextViewHost?
+    }
+
     private let session: DocumentSession
     private var configuration: ((UITextView) -> Void)?
     private var isDismantled = false
@@ -196,6 +200,7 @@
     init(session: DocumentSession) {
       self.session = session
       super.init(frame: .zero)
+      session.sourceHosts.append(Reference(host: self))
     }
 
     @available(*, unavailable)
@@ -209,14 +214,15 @@
 
     override func didMoveToWindow() {
       super.didMoveToWindow()
-      guard window != nil, !isDismantled else { return }
-      session.sourceHost = self
-      adoptEditor()
+      guard !isDismantled else { return }
+      updateOwnership()
     }
 
     override func layoutSubviews() {
       super.layoutSubviews()
-      guard window != nil, session.sourceHost === self, !isDismantled else { return }
+      guard window != nil, !isDismantled else { return }
+      if session.sourceHost?.window == nil { updateOwnership() }
+      guard session.sourceHost === self else { return }
       if !ownsEditor { adoptEditor() }
       if session.textView.frame != bounds { session.textView.frame = bounds }
     }
@@ -224,8 +230,8 @@
     func dismantle() {
       isDismantled = true
       configuration = nil
-      guard ownsEditor else { return }
-      session.sourceHost = nil
+      updateOwnership()
+      guard session.sourceHost == nil, session.textView.superview === self else { return }
       session.setCommentHighlights(.init())
       session.textView.inputAccessoryView = nil
       session.textView.removeFromSuperview()
@@ -235,7 +241,19 @@
       session.sourceHost === self && session.textView.superview === self
     }
 
+    private func updateOwnership() {
+      session.sourceHosts.removeAll {
+        $0.host == nil || $0.host?.isDismantled == true
+      }
+      // Re-entering an older native column must not supersede a newer live host.
+      let owner = session.sourceHosts.last { $0.host?.window != nil }?.host
+      guard session.sourceHost !== owner || owner?.ownsEditor == false else { return }
+      session.sourceHost = owner
+      owner?.adoptEditor()
+    }
+
     private func adoptEditor() {
+      guard window != nil, session.sourceHost === self, !isDismantled else { return }
       // SwiftUI owns this container, never the text view shared with another host.
       let editor = session.textView
       editor.frame = bounds

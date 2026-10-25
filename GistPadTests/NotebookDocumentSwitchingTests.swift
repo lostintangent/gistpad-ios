@@ -8,6 +8,10 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct NotebookDocumentSwitchingTests {
+  enum OwnerState: CaseIterable {
+    case current, missing, detached
+  }
+
   @Test(arguments: [false, true])
   func supersededContainersCannotReconfigureDetachOrReclaimTheEditor(composing: Bool) throws {
     let source = "# A retained source\nAn editable thought."
@@ -70,7 +74,78 @@ struct NotebookDocumentSwitchingTests {
     }
   }
 
-  @Test func theActiveContainerReadoptsAnUnexpectedlyDetachedEditorOnLayout() throws {
+  @Test(arguments: [false, true])
+  func aReturningStaleHostCannotOrphanTheVisibleHost(dismantled: Bool) throws {
+    let session = DocumentSession(documentID: "stale-return", text: "# Still visible")
+    let fixture = try SourceHostWindow()
+    defer { fixture.close() }
+    let stale = SourceTextViewHost(session: session)
+    let visible = SourceTextViewHost(session: session)
+    let accessory = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 72))
+    stale.frame = fixture.root.view.bounds
+    visible.frame = fixture.root.view.bounds
+    stale.configure { $0.isHidden = true }
+    visible.configure {
+      $0.isHidden = false
+      $0.inputAccessoryView = accessory
+    }
+    fixture.root.view.addSubview(stale)
+    fixture.root.view.addSubview(visible)
+    let editor = session.textView
+    editor.selectedRange = NSRange(location: 3, length: 0)
+    try #require(editor.superview === visible)
+
+    stale.removeFromSuperview()
+    fixture.root.view.addSubview(stale)
+    #expect(editor.superview === visible)
+    if dismantled {
+      stale.dismantle()
+    } else {
+      stale.removeFromSuperview()
+    }
+
+    #expect(session.sourceHost === visible)
+    #expect(editor.superview === visible)
+    #expect(editor.window === fixture.window)
+    #expect(!editor.isHidden)
+    #expect(editor.inputAccessoryView === accessory)
+    #expect(editor.selectedRange == NSRange(location: 3, length: 0))
+    #expect(editor.text == "# Still visible")
+    #expect(session.generation == 0)
+    stale.setNeedsLayout()
+    stale.layoutIfNeeded()
+    #expect(editor.superview === visible)
+  }
+
+  @Test(arguments: [false, true])
+  func anOwnerLeavingOrDismantlingImmediatelyReturnsTheEditorToThePreviousLiveHost(
+    dismantled: Bool
+  ) throws {
+    let session = DocumentSession(documentID: "owner-left", text: "# Still attached")
+    let fixture = try SourceHostWindow()
+    defer { fixture.close() }
+    let previous = SourceTextViewHost(session: session)
+    let owner = SourceTextViewHost(session: session)
+    previous.frame = fixture.root.view.bounds
+    owner.frame = fixture.root.view.bounds
+    fixture.root.view.addSubview(previous)
+    fixture.root.view.addSubview(owner)
+    let editor = session.textView
+    try #require(editor.superview === owner)
+    if dismantled {
+      owner.dismantle()
+    } else {
+      owner.removeFromSuperview()
+    }
+    #expect(session.sourceHost === previous)
+    #expect(editor.superview === previous)
+    #expect(editor.window === fixture.window)
+    #expect(editor.text == "# Still attached")
+    #expect(session.generation == 0)
+  }
+
+  @Test(arguments: OwnerState.allCases)
+  func anInWindowContainerRepairsMissingDetachedAndCurrentOwnership(owner: OwnerState) throws {
     let session = DocumentSession(documentID: "reattached", text: "# Still here")
     let fixture = try SourceHostWindow()
     defer { fixture.close() }
@@ -78,10 +153,18 @@ struct NotebookDocumentSwitchingTests {
     host.frame = fixture.root.view.bounds
     fixture.root.view.addSubview(host)
     let editor = session.textView
+    let detachedOwner = SourceTextViewHost(session: session)
     editor.removeFromSuperview()
     try #require(editor.window == nil)
+    switch owner {
+    case .current: break
+    case .missing: session.sourceHost = nil
+    case .detached: session.sourceHost = detachedOwner
+    }
     host.setNeedsLayout()
     host.layoutIfNeeded()
+    #expect(detachedOwner.window == nil)
+    #expect(session.sourceHost === host)
     #expect(session.textView === editor)
     #expect(editor.superview === host)
     #expect(editor.window === fixture.window)
