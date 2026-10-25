@@ -13,6 +13,7 @@ final class NotebookIntelligencePresentation {
 
   func present(
     session: DocumentSession, title: String, filename: String,
+    reviewState: NoteReviewState? = nil,
     isCurrent: @escaping @MainActor () -> Bool,
     revealSource: @escaping @MainActor (NSRange) -> Void
   ) {
@@ -22,6 +23,7 @@ final class NotebookIntelligencePresentation {
     }
     let target = Target(
       session: session, title: title, filename: filename,
+      reviewState: reviewState ?? NoteReviewState(session: session, isCurrent: isCurrent),
       isCurrent: isCurrent, revealSource: revealSource)
     retainedTarget = target
     session.textView.resignFirstResponder()
@@ -64,6 +66,7 @@ final class NotebookIntelligencePresentation {
     let session: DocumentSession
     let title: String
     let filename: String
+    let reviewState: NoteReviewState
     let isCurrent: @MainActor () -> Bool
     let revealSource: @MainActor (NSRange) -> Void
     let generation: UInt64
@@ -79,12 +82,14 @@ final class NotebookIntelligencePresentation {
 
     init(
       session: DocumentSession, title: String, filename: String,
+      reviewState: NoteReviewState,
       isCurrent: @escaping @MainActor () -> Bool,
       revealSource: @escaping @MainActor (NSRange) -> Void
     ) {
       self.session = session
       self.title = title
       self.filename = filename
+      self.reviewState = reviewState
       self.isCurrent = isCurrent
       self.revealSource = revealSource
       generation = session.generation
@@ -110,6 +115,7 @@ private struct NotebookIntelligenceModifier: ViewModifier {
       .sheet(item: $presentation.target, onDismiss: presentation.dismissed) { target in
         NoteIntelligenceSheet(
           session: target.session, title: target.title, filename: target.filename,
+          reviewState: target.reviewState,
           isCurrent: target.isCurrent,
           revealSource: {
             target.reference = .init(range: $0, generation: target.session.generation)

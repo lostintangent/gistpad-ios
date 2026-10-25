@@ -22,6 +22,7 @@ final class NotebookSessionController {
   private(set) var isPerformingDestructiveAction = false
   private(set) var metadataError: String?
   private(set) var isApplyingDurableEdit = false
+  private(set) var review: NoteReviewState?
   private(set) var remoteInspectionProblem: NotebookRemoteReadProblem?
   var remoteInspectionError: String? { remoteInspectionProblem?.message }
   private(set) var isInspectingRemote = false
@@ -33,6 +34,7 @@ final class NotebookSessionController {
   @ObservationIgnored private var isForeground = false
   @ObservationIgnored private var didRequestCreationFocus = false
   @ObservationIgnored private var isDiscarded = false
+  @ObservationIgnored private var reviewScope = UUID()
   @ObservationIgnored private var publicationWaiters: [CheckedContinuation<Void, Never>] = []
   @ObservationIgnored private let autosaveDelay: Duration
   @ObservationIgnored private let remoteInspectionRetryDelays: [Duration]
@@ -76,6 +78,25 @@ final class NotebookSessionController {
     document.chrome.access.canEdit && !isDiscarded && !session.isComposing && !session.writingToolsActive
       && !isPerformingDestructiveAction
       && !isApplyingDurableEdit
+  }
+
+  func reviewState() -> NoteReviewState {
+    if let review { return review }
+    let scope = UUID()
+    reviewScope = scope
+    let review = NoteReviewState(session: session) { [weak self] in
+      guard let self else { return false }
+      return reviewScope == scope && !isDiscarded && notebook.account?.id == draft.accountID
+        && notebook.pendingAccount == nil && !notebook.isSigningIn && !notebook.isSigningOut
+    }
+    self.review = review
+    return review
+  }
+
+  func clearReview() {
+    reviewScope = UUID()
+    review?.clear()
+    review = nil
   }
 
   var remoteInspectionStatus: GitHubStatusState {

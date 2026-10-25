@@ -12,6 +12,33 @@ import WebKit
 
 @MainActor
 struct NotebookModelTests {
+  @Test func reviewIsOwnedByTheOpenSessionAndClosedHandlesCannotReviveOnReopen() async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount, gists: [try makeGist(id: "a", title: "A reviewed note")])
+    let notebook = NotebookModel(provider: provider)
+    await notebook.start()
+    await notebook.open(gistID: "a")
+    let document = try #require(notebook.loadedDocument)
+    let draft = try await notebook.openDraft(for: document)
+    let controller = NotebookSessionController(
+      document: document, draft: draft, notebook: notebook)
+    let review = controller.reviewState()
+    #expect(controller.review === review)
+    #expect(controller.reviewState() === review)
+    #expect(!review.hasReview)
+    #expect(!review.isStale)
+    controller.clearReview()
+    #expect(controller.review == nil)
+    #expect(review.isStale)
+    #expect(!review.hasReview)
+    let reopened = controller.reviewState()
+    #expect(reopened !== review)
+    #expect(!reopened.isStale)
+    #expect(review.isStale)
+    #expect(controller.session.text == draft.text)
+    #expect(controller.session.generation == draft.generation)
+  }
+
   @Test func libraryDeleteResolvesOwnedGistsAndSearchFilesButNeverLocalOrRecoveryRows() async throws {
     let owned = try makeGist(
       id: "a", title: "An owned notebook", content: "Find this thought",

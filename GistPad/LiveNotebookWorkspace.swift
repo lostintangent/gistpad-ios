@@ -193,7 +193,7 @@ struct LiveNotebookWorkspace: View {
     }
     .onChange(of: compactColumn) { previous, current in
       guard previous != current, current == .sidebar, let outgoing = active else { return }
-      finishLeavingNote(outgoing)
+      finishLeavingNote(outgoing, preservingReview: true)
     }
   }
 
@@ -215,13 +215,17 @@ struct LiveNotebookWorkspace: View {
     .onChange(of: notebook.account, initial: true) {
       NotebookPlatformBootstrap.scheduleRefresh()
     }
-    .onChange(of: notebook.pendingAccount?.id) {
+    .onChange(of: notebook.pendingAccount?.id) { _, pending in
       NotebookPlatformBootstrap.scheduleRefresh()
+      if pending != nil {
+        for controller in sessions.values { controller.clearReview() }
+      }
     }
     .onChange(of: notebook.localDrafts) {
       NotebookPlatformBootstrap.scheduleRefresh()
     }
     .onChange(of: notebook.account?.id) { _, accountID in
+      for controller in sessions.values { controller.clearReview() }
       archiveUndo = nil
       intelligenceAccountScope = UUID()
       intelligence.target = nil
@@ -237,6 +241,7 @@ struct LiveNotebookWorkspace: View {
     }
     .onChange(of: notebook.isSigningIn) { _, signingIn in
       if signingIn {
+        for controller in sessions.values { controller.clearReview() }
         intelligenceAccountScope = UUID()
         intelligence.target = nil
         creationChoiceTarget = nil
@@ -400,6 +405,7 @@ struct LiveNotebookWorkspace: View {
           if let error = target.controller.metadataError { actionMessage = error }
         case .discard:
           let key = target.controller.draft.id.uuidString
+          target.controller.clearReview()
           await photoControllers[key]?.stop()
           photoControllers[key] = nil
           sessions[key] = nil
@@ -904,10 +910,14 @@ struct LiveNotebookWorkspace: View {
     }
   }
 
-  private func finishLeavingNote(_ controller: NotebookSessionController) {
+  private func finishLeavingNote(
+    _ controller: NotebookSessionController, preservingReview: Bool = false
+  ) {
+    if !preservingReview { controller.clearReview() }
     Task {
       guard await controller.finishLeavingNote() else { return }
       let id = controller.draft.id.uuidString
+      controller.clearReview()
       sessions[id] = nil
       if activeID == id { activeID = nil }
       if let photos = photoControllers.removeValue(forKey: id) { await photos.stop() }
@@ -930,7 +940,8 @@ struct LiveNotebookWorkspace: View {
     }
     intelligence.present(
       session: controller.session, title: controller.document.chrome.title,
-      filename: controller.draft.filename, isCurrent: isCurrent,
+      filename: controller.draft.filename, reviewState: controller.reviewState(),
+      isCurrent: isCurrent,
       revealSource: { range in
         guard isCurrent() else { return }
         guard controller.document.chrome.access.canEdit else {
@@ -1068,6 +1079,7 @@ struct LiveNotebookWorkspace: View {
       case .signedOut:
         let keys = sessions.filter { $0.value.draft.accountID == accountID }.map(\.key)
         for key in keys {
+          sessions[key]?.clearReview()
           sessions[key] = nil
           await photoControllers[key]?.stop()
           photoControllers[key] = nil
@@ -1090,6 +1102,7 @@ struct LiveNotebookWorkspace: View {
         }
       case .deleted(_, let disposition):
         for id in disposition.removedDraftIDs {
+          sessions[id.uuidString]?.clearReview()
           sessions[id.uuidString] = nil
           photoControllers[id.uuidString] = nil
         }
@@ -1097,6 +1110,7 @@ struct LiveNotebookWorkspace: View {
       case .review:
         break
       case .discardedDraft(let id):
+        sessions[id.uuidString]?.clearReview()
         sessions[id.uuidString] = nil
         await photoControllers[id.uuidString]?.stop()
         photoControllers[id.uuidString] = nil

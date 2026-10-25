@@ -4,6 +4,35 @@ import Testing
 @testable import GistPadIntelligence
 
 struct NoteAnchorTests {
+  @Test func dismissalPreservesRemainingIdentityAnchorsAndSafety() throws {
+    let snapshot = note("bad and typo")
+    let proposal = NoteProposal(
+      snapshot: snapshot,
+      scopedCandidates: [
+        (change("bad", "good"), NSRange(location: 0, length: snapshot.source.utf16.count)),
+        (change("typo", "word"), NSRange(location: 0, length: snapshot.source.utf16.count)),
+      ], safetyInstruction: "Fix spelling")
+    let remaining = try proposal.dismissing(commentID: proposal.comments[0].id)
+    #expect(remaining.snapshot == snapshot)
+    #expect(remaining.comments.map(\.id) == [proposal.comments[1].id])
+    #expect(remaining.comments[0].range == proposal.comments[1].range)
+    #expect(try remaining.application(to: snapshot).source == "bad and word")
+    let protected = NoteProposal(
+      snapshot: snapshot,
+      scopedCandidates: [
+        (change("bad", "good"), NSRange(location: 0, length: snapshot.source.utf16.count)),
+        (change("typo", "word"), NSRange(location: 0, length: snapshot.source.utf16.count)),
+      ], safetyInstruction: "word")
+    let guarded = try protected.dismissing(commentID: protected.comments[0].id)
+    #expect(throws: NoteIntelligenceError.unsafeEdit) { try guarded.application(to: snapshot) }
+    let empty = try remaining.dismissing(commentID: remaining.comments[0].id)
+    #expect(empty.comments.isEmpty)
+    #expect(!empty.canApply)
+    #expect(throws: NoteIntelligenceError.noApplicableChanges) {
+      try proposal.dismissing(commentID: UUID())
+    }
+  }
+
   @Test func anEmptyNoteHasExactlyOneSafeInsertionAnchor() throws {
     let snapshot = note("")
     let proposal = NoteProposal(snapshot: snapshot, candidates: [change("", "A new paragraph")])

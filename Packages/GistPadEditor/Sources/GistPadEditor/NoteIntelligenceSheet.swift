@@ -10,7 +10,9 @@
     private let filename: String
     private let revealSource: @MainActor (NSRange) -> Void
     private let initialPromptFocus: Bool
-    @State private var model: NoteIntelligenceModel
+    @State private var requestModel: NoteIntelligenceModel
+    @State private var review: NoteReviewState
+    @State private var action: NoteIntelligenceAction
     @State private var detent = PresentationDetent.medium
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -19,6 +21,7 @@
 
     public init(
       session: DocumentSession, title: String, filename: String,
+      reviewState: NoteReviewState? = nil,
       backend: (any NoteModelBackend)? = nil,
       isCurrent: @escaping @MainActor () -> Bool,
       revealSource: @escaping @MainActor (NSRange) -> Void
@@ -27,9 +30,14 @@
       self.filename = filename
       self.revealSource = revealSource
       initialPromptFocus = false
-      _model = State(
+      precondition(reviewState == nil || reviewState?.model.session === session)
+      _requestModel = State(
         initialValue: NoteIntelligenceModel(
           session: session, backend: backend ?? AppleNoteModel(), isCurrent: isCurrent))
+      _review = State(
+        initialValue: reviewState
+          ?? NoteReviewState(session: session, backend: backend, isCurrent: isCurrent))
+      _action = State(initialValue: .ask)
     }
 
     init(
@@ -41,8 +49,16 @@
       self.filename = filename
       self.revealSource = revealSource
       self.initialPromptFocus = initialPromptFocus
-      _model = State(initialValue: model)
+      _requestModel = State(
+        initialValue: model.action == .review ? model.modelFactory(action: .ask)() : model)
+      _review = State(
+        initialValue: NoteReviewState(
+          model: model.action == .review ? model : model.modelFactory(action: .review)()))
+      _action = State(initialValue: model.action)
     }
+
+    private var model: NoteIntelligenceModel { action == .review ? review.model : requestModel }
+    private var isRunning: Bool { action == .review ? review.isRunning : requestModel.isRunning }
 
     @ViewBuilder
     private var actionPicker: some View {
@@ -66,7 +82,7 @@
     }
 
     private var actionTitle: Text {
-      switch model.action {
+      switch action {
       case .ask: Text("Ask", bundle: .module)
       case .edit: Text("Edit", bundle: .module)
       case .review: Text("Review", bundle: .module)
@@ -74,8 +90,7 @@
     }
 
     private var actionChoices: some View {
-      @Bindable var model = model
-      return Picker(String(localized: "Action", bundle: .module), selection: $model.action) {
+      Picker(String(localized: "Action", bundle: .module), selection: $action) {
         Text("Ask", bundle: .module).tag(NoteIntelligenceAction.ask)
         Text("Edit", bundle: .module).tag(NoteIntelligenceAction.edit)
           .disabled(!model.session.textView.isEditable)
@@ -97,16 +112,16 @@
               .tint(.primary)
             }
             actionPicker
-              .disabled(model.isRunning)
+              .disabled(isRunning)
               .accessibilityIdentifier("intelligence-actions")
             if let error = model.errorMessage { issue(error, symbol: "exclamationmark.circle") }
-            if model.isRunning, dynamicTypeSize.isAccessibilitySize { generationProgress }
-            if model.action != .review || !model.hasResults || model.isRunning
+            if isRunning, dynamicTypeSize.isAccessibilitySize { generationProgress }
+            if model.action != .review || !model.hasResults || isRunning
               || !model.session.textView.isEditable
             {
               request
             }
-            if model.isRunning, !dynamicTypeSize.isAccessibilitySize { generationProgress }
+            if isRunning, !dynamicTypeSize.isAccessibilitySize { generationProgress }
             if model.isStale, model.snapshot != nil {
               issue(
                 String(
@@ -132,7 +147,7 @@
               .font(.callout)
               .foregroundStyle(.secondary)
             }
-            if model.hasResults, !model.isRunning {
+            if model.hasResults, !isRunning {
               generateButton
             }
           }
@@ -147,7 +162,7 @@
         .toolbar {
           ToolbarItem(placement: .topBarTrailing) {
             Button(String(localized: "Done", bundle: .module), systemImage: "xmark") {
-              model.cancel()
+              requestModel.cancel()
               dismiss()
             }
             .labelStyle(.iconOnly)
@@ -160,8 +175,8 @@
       .presentationDragIndicator(.visible)
       .sensoryFeedback(.success, trigger: model.applyFeedback)
       .task {
-        if dynamicTypeSize.isAccessibilitySize
-          || model.isRunning || (model.action != .ask && model.hasResults)
+        if dynamicTypeSize.isAccessibilitySize || isRunning
+          || (model.action != .ask && model.hasResults)
         {
           detent = .large
         }
@@ -173,17 +188,25 @@
       .onChange(of: scenePhase) { _, phase in
         if phase == .active { Task { await model.checkAvailability() } }
       }
-      .onChange(of: model.action) { _, _ in model.clearResults() }
+      .onChange(of: action) { _, selected in
+        requestModel.clearResults()
+        if selected != .review { requestModel.action = selected }
+        let selectedModel = model
+        Task { await selectedModel.checkAvailability() }
+      }
       .onChange(of: model.proposal != nil) { _, exists in
         if exists { detent = .large }
       }
-      .onChange(of: model.isRunning) { _, running in
+      .onChange(of: isRunning) { _, running in
         if running { detent = .large }
       }
       .onChange(of: dynamicTypeSize) { _, size in
         if size.isAccessibilitySize { detent = .large }
       }
-      .onDisappear { model.cancel() }
+      .onDisappear {
+        requestModel.cancel()
+        if action == .review { review.closePresentation() }
+      }
       .accessibilityIdentifier("note-intelligence-sheet")
       .captureFrame("note-intelligence-sheet")
     }
@@ -214,7 +237,7 @@
               .font(.callout)
               .foregroundStyle(.secondary)
           }
-        } else if model.isRunning || model.hasResults {
+        } else if isRunning || model.hasResults {
           VStack(alignment: .leading, spacing: 8) {
             Text(model.submittedPrompt ?? model.prompt)
               .font(.callout)
@@ -225,7 +248,7 @@
               .accessibilityLabel(model.submittedPrompt ?? model.prompt)
               .accessibilityIdentifier("intelligence-submitted-request")
               .captureFrame("intelligence-submitted-request")
-            if !model.isRunning {
+            if !isRunning {
               Button {
                 model.clearResults()
                 promptFocused = true
@@ -252,10 +275,10 @@
             Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 14)
           )
           .focused($promptFocused)
-          .disabled(model.isRunning)
+          .disabled(isRunning)
           .accessibilityIdentifier("intelligence-prompt")
         }
-        if !model.isRunning && !model.hasResults {
+        if !isRunning && !model.hasResults {
           generateButton
         }
         if !model.session.textView.isEditable {
@@ -281,13 +304,13 @@
     private var generateAction: some View {
       Button {
         promptFocused = false
-        model.generate()
+        if action == .review { review.generate() } else { requestModel.generate() }
       } label: {
         Label(generateLabel, systemImage: "sparkles")
           .foregroundStyle(
             model.hasResults ? Color(uiColor: .label) : Color(uiColor: .systemBackground))
       }
-      .disabled(!model.canGenerate)
+      .disabled(!model.canGenerate || isRunning)
       .tint(Color(uiColor: .label))
       .accessibilityIdentifier("intelligence-generate")
     }
@@ -309,7 +332,8 @@
     }
 
     private var generationProgress: some View {
-      let layout = dynamicTypeSize.isAccessibilitySize
+      let layout =
+        dynamicTypeSize.isAccessibilitySize
         ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
         : AnyLayout(HStackLayout(spacing: 12))
       return layout {
@@ -327,7 +351,9 @@
         if !dynamicTypeSize.isAccessibilitySize {
           Spacer(minLength: 0)
         }
-        Button(String(localized: "Cancel", bundle: .module), role: .cancel) { model.cancel() }
+        Button(String(localized: "Cancel", bundle: .module), role: .cancel) {
+          if action == .review { review.cancel() } else { requestModel.cancel() }
+        }
           .buttonStyle(.glass)
           .controlSize(.large)
           .tint(.primary)
@@ -469,13 +495,22 @@
               )
               .font(.callout)
               .foregroundStyle(.secondary)
-            } else if model.action == .review, comment.canApply {
-              Button(String(localized: "Apply Change", bundle: .module)) {
-                model.apply(commentID: comment.id)
+            }
+            if model.action == .review {
+              HStack {
+                if comment.canApply {
+                  Button(String(localized: "Apply Change", bundle: .module)) {
+                    review.apply(commentID: comment.id)
+                  }
+                  .disabled(!review.canApply)
+                }
+                Button(String(localized: "Dismiss Suggestion", bundle: .module)) {
+                  review.dismiss(commentID: comment.id)
+                }
+                .disabled(!review.canDismiss)
               }
               .buttonStyle(.glass)
               .tint(.primary)
-              .disabled(!model.canApply)
             }
           }
           .padding(16)

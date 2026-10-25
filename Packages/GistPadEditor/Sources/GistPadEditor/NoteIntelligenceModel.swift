@@ -41,6 +41,18 @@
       self.isCurrent = isCurrent
     }
 
+    func modelFactory(action: NoteIntelligenceAction) -> @MainActor () -> NoteIntelligenceModel {
+      let session = session
+      let backend = backend
+      let isCurrent = isCurrent
+      return {
+        let model = NoteIntelligenceModel(
+          session: session, backend: backend, isCurrent: isCurrent)
+        model.action = action
+        return model
+      }
+    }
+
     var prompt: String {
       get { action == .edit ? editPrompt : askPrompt }
       set {

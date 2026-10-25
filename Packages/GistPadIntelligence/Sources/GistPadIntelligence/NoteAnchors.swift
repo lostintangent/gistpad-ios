@@ -132,6 +132,15 @@ public struct NoteProposal: Sendable {
     self.safetyInstruction = safetyInstruction
   }
 
+  public func dismissing(commentID: UUID) throws -> NoteProposal {
+    guard comments.contains(where: { $0.id == commentID }) else {
+      throw NoteIntelligenceError.noApplicableChanges
+    }
+    return NoteProposal(
+      snapshot: snapshot, comments: comments.filter { $0.id != commentID },
+      safetyInstruction: safetyInstruction)
+  }
+
   public func application(
     to current: NoteSnapshot, commentID: UUID? = nil
   ) throws -> NoteApplication {
