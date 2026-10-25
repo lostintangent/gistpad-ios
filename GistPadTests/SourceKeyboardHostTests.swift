@@ -17,9 +17,10 @@ struct SourceKeyboardHostTests {
         try await fixture.settle("the real keyboard and final caret")
         try fixture.expectKeyboardViewport()
         try fixture.expectVisibleCaret()
+        try await fixture.captureCheckpoint(named: "final-caret-\(size)-focused")
 
         var expected = source
-        for input in ["\n", "One more thought", " stays in view", "."] {
+        for (index, input) in ["\n", "One more thought", " stays in view", "."].enumerated() {
             fixture.editor.insertText(input)
             expected += input
             try await fixture.settle("the final caret after native input")
@@ -28,6 +29,7 @@ struct SourceKeyboardHostTests {
             #expect(ObjectIdentifier(fixture.editor) == identity)
             try fixture.expectKeyboardViewport()
             try fixture.expectVisibleCaret()
+            try await fixture.captureCheckpoint(named: "final-caret-\(size)-input-\(index)")
         }
         fixture.recordGeometry(named: "final-line-typing-\(size)")
     }
@@ -72,6 +74,76 @@ struct SourceKeyboardHostTests {
         )
         try fixture.expectKeyboardViewport()
         fixture.recordGeometry(named: "last-line-scroll-\(size)")
+    }
+
+    @Test("Restyling never pulls a deliberate keyboard-up scroll back to the caret", arguments: ["large", "ax3"])
+    func deliberateScrollAwaySurvivesRestyling(size: String) async throws {
+        let fixture = try await SourceKeyboardFixture(source: Self.source, size: size)
+        defer { fixture.close() }
+        fixture.session.requestFocusAtEnd()
+        try await fixture.settle("the focused final caret before a deliberate scroll")
+        try fixture.expectVisibleCaret()
+        fixture.editor.delegate?.scrollViewWillBeginDragging?(fixture.editor)
+        fixture.editor.setContentOffset(
+            CGPoint(x: 0, y: fixture.editor.contentSize.height / 2), animated: false
+        )
+        try await fixture.settle("the deliberate keyboard-up reading position")
+        let offset = fixture.editor.contentOffset
+        let selection = fixture.editor.selectedRange
+        for _ in 0..<3 {
+            fixture.session.highlight()
+            try await fixture.settle("a restyle at the deliberate reading position")
+            #expect(abs(fixture.editor.contentOffset.y - offset.y) <= 1)
+            #expect(fixture.editor.selectedRange == selection)
+            #expect(fixture.editor.isFirstResponder)
+            let caret = fixture.editor.caretRect(for: fixture.editor.endOfDocument)
+            #expect(!fixture.editor.bounds.inset(
+                by: fixture.editor.adjustedContentInset
+            ).intersects(caret))
+        }
+        #expect(fixture.session.text.utf8.elementsEqual(Self.source.utf8))
+        #expect(fixture.session.generation == 0)
+        fixture.recordGeometry(named: "manual-scroll-\(size)")
+        try await fixture.captureCheckpoint(named: "manual-scroll-\(size)")
+    }
+
+    @Test(arguments: [false, true])
+    func compositionAndWritingToolsKeepTheirOwnScrolling(writingTools: Bool) async throws {
+        let fixture = try await SourceKeyboardFixture(source: Self.source, size: "large")
+        defer { fixture.close() }
+        fixture.session.requestFocusAtEnd()
+        try await fixture.settle("the focused editor before system text interaction")
+        if writingTools {
+            fixture.session.textViewWritingToolsWillBegin(fixture.editor)
+        } else {
+            fixture.editor.setMarkedText("draft", selectedRange: NSRange(location: 5, length: 0))
+            try #require(fixture.editor.markedTextRange != nil)
+        }
+        defer {
+            if writingTools {
+                fixture.session.textViewWritingToolsDidEnd(fixture.editor)
+            } else {
+                fixture.editor.unmarkText()
+            }
+        }
+        fixture.editor.setContentOffset(
+            CGPoint(x: 0, y: fixture.editor.contentSize.height / 2), animated: false
+        )
+        let offset = fixture.editor.contentOffset
+        let selection = fixture.editor.selectedRange
+        let source = fixture.editor.text
+        let generation = fixture.session.generation
+        for _ in 0..<3 {
+            fixture.session.highlight()
+            fixture.editor.setNeedsLayout()
+            fixture.editor.layoutIfNeeded()
+            #expect(fixture.editor.contentOffset == offset)
+            #expect(fixture.editor.selectedRange == selection)
+            #expect(fixture.editor.text == source)
+            #expect(fixture.session.generation == generation)
+            #expect(fixture.editor.isFirstResponder)
+            #expect((fixture.editor.markedTextRange != nil) == !writingTools)
+        }
     }
 
     private static let lastLine = "Last reachable line."
@@ -217,6 +289,15 @@ private final class SourceKeyboardFixture {
             """
         print("\(name): \(geometry)")
         Attachment.record(geometry, named: "\(name).txt")
+    }
+
+    func captureCheckpoint(named name: String) async throws {
+        guard let run = ProcessInfo.processInfo.environment["GISTPAD_CARET_CAPTURE"] else { return }
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "gistpad-caret-\(run)-\(name)-\(UUID().uuidString).ready"
+        )
+        try Data("\(sample())".utf8).write(to: marker, options: .atomic)
+        try await Task.sleep(for: .seconds(2))
     }
 
     private func sample() -> Sample {
