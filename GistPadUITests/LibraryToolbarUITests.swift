@@ -122,8 +122,16 @@ final class LibraryToolbarUITests: XCTestCase {
       if !wide {
         XCTAssertFalse(title.frame.intersects(app.buttons["library-settings"].frame))
         XCTAssertFalse(title.frame.intersects(app.buttons["library-filter-tags"].frame))
-        XCTAssertLessThan(app.buttons["library-create"].frame.midY, app.buttons["library-settings"].frame.midY)
-        XCTAssertLessThan(app.buttons["library-filter-tags"].frame.midY, search.frame.midY)
+        let create = app.buttons["library-create"].frame
+        let settings = app.buttons["library-settings"].frame
+        let tags = app.buttons["library-filter-tags"].frame
+        XCTAssertLessThan(create.maxY, settings.midY)
+        XCTAssertLessThan(settings.maxY, tags.midY)
+        XCTAssertLessThan(tags.maxY, search.frame.midY)
+        XCTAssertEqual(create.midX, settings.midX, accuracy: 2)
+        XCTAssertEqual(settings.midX, tags.midX, accuracy: 2)
+        XCTAssertEqual(tags.midX, search.frame.midX, accuracy: 2)
+        XCTAssertGreaterThan(tags.midX, app.windows.firstMatch.frame.midX)
       }
       let pinned = app.descendants(matching: .any)["library-pinned-heading"].firstMatch
       try await waitUntil { pinned.exists }

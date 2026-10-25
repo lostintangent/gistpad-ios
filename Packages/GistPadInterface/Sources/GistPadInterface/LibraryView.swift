@@ -910,13 +910,8 @@ public struct LibraryView: View {
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
             }
             if !(containerSearchPresentation?.wrappedValue ?? searchPresented) {
-                if !isSidebar {
-                    ToolbarSpacer(.flexible, placement: .bottomBar)
-                }
                 if isGitHubStatusVisible, case .problem = remoteStatus {
-                    if isSidebar {
-                        ToolbarSpacer(.flexible, placement: .bottomBar)
-                    }
+                    ToolbarSpacer(.flexible, placement: .bottomBar)
                     ToolbarItem(placement: .bottomBar) {
                         GitHubStatusControl(state: remoteStatus) {
                             if let recover = actions.recoverStatus {
@@ -931,31 +926,23 @@ public struct LibraryView: View {
                     }
                     .sharedBackgroundVisibility(.hidden)
                 }
-                if !isSidebar {
-                    ToolbarItem(placement: .bottomBar) {
-                        VStack(spacing: 8) {
-                            tagFilterButton
-                                .buttonStyle(.plain)
-                                .labelStyle(.iconOnly)
-                            SearchButton {
-                                if let containerSearchPresentation {
-                                    containerSearchPresentation.wrappedValue = true
-                                } else {
-                                    searchPresented = true
-                                }
-                            }
-                        }
-                        .padding(2)
-                        .glassEffect(.regular.interactive(), in: .capsule)
-                    }
-                    .sharedBackgroundVisibility(.hidden)
-                }
             }
             if !isSidebar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     LibraryCreateButton(action: actions.create)
                     if let account = actions.account {
                         settingsButton(account)
+                    }
+                    if !(containerSearchPresentation?.wrappedValue ?? searchPresented) {
+                        tagFilterButton
+                            .labelStyle(.iconOnly)
+                        SearchButton {
+                            if let containerSearchPresentation {
+                                containerSearchPresentation.wrappedValue = true
+                            } else {
+                                searchPresented = true
+                            }
+                        }
                     }
                 }
             }
