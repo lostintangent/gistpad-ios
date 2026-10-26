@@ -266,6 +266,8 @@ struct InterfaceCaptureWorkspace: View {
         case "archive": expandedCollections = [.archive]
         case "collections-expanded", "long-library":
             expandedCollections = [.dailyNotes, .starred, .archive]
+        case "collection-search":
+            model.query = "finished chapter"
         case "filtered", "tag-filters": model.selectedTagIDs = ["ideas"]
         case "search", "search-active":
             model.query = "notebook"
@@ -301,9 +303,9 @@ struct InterfaceCaptureWorkspace: View {
                     )
                     .captureTagFilters(captureState == "tag-filters")
                     .task {
-                        if ["notes", "featured", "tag-audit", "row-anatomy", "long-library"].contains(captureState) {
+                        if ["notes", "featured", "tag-audit", "row-anatomy", "long-library", "collections-expanded"].contains(captureState) {
                             try? await Task.sleep(for: .milliseconds(400))
-                            if captureState == "long-library" {
+                            if ["long-library", "collections-expanded"].contains(captureState) {
                                 scroll.scrollTo(LibraryCollection.dailyNotes, anchor: .top)
                             } else {
                                 scroll.scrollTo(captureState == "notes" ? "weekend" : "shape", anchor: .top)
@@ -367,7 +369,7 @@ struct InterfaceCaptureWorkspace: View {
                    !["empty", "collection-loading"].contains(captureState) {
                     library.selectedNoteID = "shape"
                 }
-                if (captureScreen == "library" && !["notes", "featured", "tag-audit", "row-anatomy", "long-library"].contains(captureState))
+                if (captureScreen == "library" && !["notes", "featured", "tag-audit", "row-anatomy", "long-library", "collections-expanded"].contains(captureState))
                     || captureState == "error" {
                     await markReady()
                 }

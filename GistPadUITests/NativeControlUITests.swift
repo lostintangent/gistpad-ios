@@ -163,11 +163,14 @@ final class NativeControlUITests: XCTestCase {
     for appearance in ["light", "dark"] {
       let app = launch(screen: "library", state: "search", appearance: appearance)
       defer { app.terminate() }
-      let search = app.buttons["Search"].firstMatch
-      try await waitUntil("the real Library Search command") { search.isHittable }
-      search.tap()
       let field = app.searchFields.firstMatch
+      if !field.isHittable {
+        let search = app.buttons["Search"].firstMatch
+        try await waitUntil("the real Library Search command") { search.isHittable }
+        search.tap()
+      }
       try await waitUntil("the visible native search field") { field.isHittable }
+      field.tap()
       XCTAssertEqual(field.value as? String, "notebook")
       field.typeText(" thought")
       XCTAssertEqual(field.value as? String, "notebook thought")
@@ -265,25 +268,47 @@ final class NativeControlUITests: XCTestCase {
         let today = app.buttons["library-today"].firstMatch
         try await waitUntil("the native Today action") { today.isHittable }
         XCTAssertEqual(app.buttons.matching(identifier: "library-today").count, 1)
-        XCTAssertGreaterThanOrEqual(today.frame.width, 44)
-        XCTAssertGreaterThanOrEqual(today.frame.height, 44)
+        XCTAssertTrue(today.isEnabled)
         XCTAssertTrue(app.windows.firstMatch.frame.contains(today.frame))
         XCTAssertTrue((today.value as? String ?? "").contains(badge.value))
         XCTAssertFalse(app.staticTexts["All done"].exists)
         record(app, name: "today-rail-\(badge.state)-AX3-\(appearance)")
-        today.tap()
-        let editor = app.textViews.firstMatch
-        try await waitUntil("the exact Today document in Edit") {
-          editor.isHittable && (editor.value as? String ?? "").hasPrefix("# Today")
-            && app.segmentedControls.firstMatch.buttons["Edit"].isSelected
-        }
+        try await checkTodayOpening(app, at: .zero)
       }
     }
   }
 
   @MainActor
+  func testTodayRailAcceptsEveryEdgeOfIts44PointHitRegion() async throws {
+    for offset in [
+      CGVector(dx: -21, dy: 0), CGVector(dx: 21, dy: 0),
+      CGVector(dx: 0, dy: -21), CGVector(dx: 0, dy: 21)
+    ] {
+      let app = launch(
+        screen: "library", state: "today-99plus", accessibility: true, appearance: "light")
+      defer { app.terminate() }
+      try await checkTodayOpening(app, at: offset)
+    }
+  }
+
+  @MainActor
+  private func checkTodayOpening(_ app: XCUIApplication, at offset: CGVector) async throws {
+    let today = app.buttons["library-today"].firstMatch
+    try await waitUntil("the native Today action") { today.isHittable }
+    today.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+      .withOffset(offset).tap()
+    let editor = app.textViews.firstMatch
+    let hideKeyboard = app.buttons["Hide Keyboard"].firstMatch
+    try await waitUntil("the exact Today document opening in Edit with focus") {
+      editor.isHittable && (editor.value as? String ?? "").hasPrefix("# Today")
+        && app.segmentedControls.firstMatch.buttons["Edit"].isSelected
+        && hideKeyboard.isHittable
+    }
+  }
+
+  @MainActor
   func testSearchRevealsACollapsedCollectionWithoutRememberingThatExpansion() async throws {
-    let app = launch(screen: "library", state: "collection-search")
+    let app = launch(screen: "library", state: "populated")
     defer { app.terminate() }
     let list = app.collectionViews.firstMatch
     let archive = app.buttons["library-collection-archive"].firstMatch
@@ -705,7 +730,7 @@ final class NativeControlUITests: XCTestCase {
 
   @MainActor
   private func record(_ app: XCUIApplication, name: String) {
-    let image = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    let image = XCTAttachment(screenshot: app.screenshot())
     image.name = name
     image.lifetime = .keepAlways
     add(image)

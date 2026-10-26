@@ -1098,7 +1098,7 @@ struct NotebookModelTests {
       try makeGist(id: "a", title: "Changed remotely", content: "Remote text")
     ])
     await model.refresh()
-    #expect(model.library.snapshot.notes.first?.title == "Changed remotely")
+    #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.title == "Changed remotely")
     #expect(model.loadedDocument?.text == "Original text")
     #expect(model.library.query == "Original")
     #expect(model.library.selectedTagIDs == ["ideas"])
@@ -1403,8 +1403,10 @@ struct NotebookModelTests {
       Issue.record("Full-text results must carry honest cache coverage.")
       return
     }
-    #expect(coverage.totalDocuments == 2)
-    #expect(coverage.documentsWithCachedContent == 2)
+    #expect(
+      coverage.totalDocuments == 3,
+      "All-collection coverage includes the day staged during startup.")
+    #expect(coverage.documentsWithCachedContent == 3)
     model.library.query = "tag:Missing"
     await model.search()
     guard case .failed(let message) = model.library.searchState else {

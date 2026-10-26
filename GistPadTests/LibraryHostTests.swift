@@ -193,8 +193,65 @@ struct LibraryHostTests {
   }
 
   @Test(arguments: [false, true], [DynamicTypeSize.large, .accessibility3])
+  func pinnedCardsKeepAReal28PointTransitionBeforeOrdinaryRows(
+    isSidebar: Bool, size: DynamicTypeSize
+  ) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.frame = .init(x: 0, y: 0, width: isSidebar ? 900 : 466, height: 800)
+    window.traitOverrides.preferredContentSizeCategory =
+      size.isAccessibilitySize ? .accessibilityExtraLarge : .large
+    let model = LibraryModel(
+      snapshot: .init(notes: [
+        .init(id: "pin", title: "One good thought", updatedAt: .now, gistID: "pin", isPinned: true),
+        .init(id: "ordinary", title: "Another thought", updatedAt: .now, gistID: "ordinary"),
+      ]), loadState: .ready)
+    let library = LibraryView(
+      model: model, actions: .init(refresh: {}, create: {}, today: {}), isSidebar: isSidebar)
+    let content: AnyView
+    if isSidebar {
+      content = AnyView(NavigationSplitView { library } detail: { Text("A retained document") })
+    } else {
+      content = AnyView(NavigationStack { library })
+    }
+    window.rootViewController = UIHostingController(
+      rootView: content
+        .environment(\.horizontalSizeClass, isSidebar ? .regular : .compact)
+        .environment(\.dynamicTypeSize, size))
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(500))
+    window.layoutIfNeeded()
+    func frame(_ id: String) throws -> CGRect {
+      let marker = try #require(descendants(window).first {
+        $0.accessibilityIdentifier == "capture-frame-note-content-\(id)" && !$0.bounds.isEmpty
+      })
+      return marker.convert(marker.bounds, to: window)
+    }
+    let cardContent = try frame("pin")
+    let ordinary = try frame("ordinary")
+    let gap = ordinary.minY - (cardContent.maxY + 14)
+    #expect(abs(gap - 28) <= 1, "Measured card-to-row transition: \(gap) pt")
+  }
+
+  @Test(arguments: [
+    (dark: false, size: DynamicTypeSize.large, hasTags: false),
+    (dark: false, size: DynamicTypeSize.large, hasTags: true),
+    (dark: true, size: DynamicTypeSize.large, hasTags: false),
+    (dark: true, size: DynamicTypeSize.large, hasTags: true),
+    (dark: false, size: DynamicTypeSize.accessibility3, hasTags: false),
+    (dark: false, size: DynamicTypeSize.accessibility3, hasTags: true),
+    (dark: true, size: DynamicTypeSize.accessibility3, hasTags: false),
+    (dark: true, size: DynamicTypeSize.accessibility3, hasTags: true),
+  ])
   func pinnedCardsGrowWithTheirContentAndKeepMetadataBelowTheTitle(
-    dark: Bool, size: DynamicTypeSize
+    dark: Bool, size: DynamicTypeSize, hasTags: Bool
   ) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -214,8 +271,11 @@ struct LibraryHostTests {
     window.rootViewController = UIHostingController(
       rootView: VStack(spacing: 8) {
         LibraryPinnedCard(
-          note: note, tags: [.init(id: "ideas", name: "Ideas", colorHex: "#EBC85A")],
-          isSelected: false)
+          note: note, tags: hasTags ? [
+            .init(id: "ideas", name: "Ideas", colorHex: "#EBC85A"),
+            .init(id: "long", name: "A complete and deliberately long tag name"),
+            .init(id: "more", name: "More"),
+          ] : [], isSelected: false)
           .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
         LibraryPinnedCard(note: simple, tags: [], isSelected: false)
           .onGeometryChange(for: CGSize.self) { $0.size } action: { simpleSize = $0 }
@@ -243,13 +303,21 @@ struct LibraryHostTests {
     }
     let title = try frame("note-title-card")
     let excerpt = try frame("note-excerpt-card")
-    let tags = try frame("note-tags-card")
+    let footer = try frame("note-footer-card")
     let progress = try frame("note-progress-card")
     let comments = try frame("note-comment-count-card")
     #expect(excerpt.minY >= title.maxY)
-    #expect(tags.minY >= excerpt.maxY)
-    #expect(progress.minY >= tags.maxY)
-    #expect(comments.minY >= tags.maxY)
+    #expect(footer.minY >= excerpt.maxY)
+    if hasTags {
+      let tags = try frame("note-tags-card")
+      #expect(tags.minY >= excerpt.maxY)
+      #expect(abs(progress.midY - tags.midY) <= 1)
+      #expect(abs(comments.midY - tags.midY) <= 1)
+      #expect(progress.minX >= tags.maxX + 12)
+    }
+    #expect(progress.maxY <= footer.maxY)
+    #expect(comments.maxY <= footer.maxY)
+    #expect(abs(comments.maxX - footer.maxX) <= 1)
     #expect(!descendants(window).contains {
       $0.accessibilityIdentifier == "capture-frame-note-date-card"
     })
@@ -257,11 +325,11 @@ struct LibraryHostTests {
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
     Attachment.record(
-      image, named: "pinned-card-\(dark ? "Dark" : "Light")-\(size).png", as: .png)
+      image, named: "pinned-card-\(dark ? "Dark" : "Light")-\(size)-tags-\(hasTags).png", as: .png)
   }
 
   @Test(arguments: [false, true])
-  func searchOpensAsNativeUI(dark: Bool) async throws {
+  func nativeSearchFieldKeepsFocusAndSystemTextTint(dark: Bool) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.windows.first(where: \.isKeyWindow)
@@ -273,10 +341,14 @@ struct LibraryHostTests {
       notes: InterfaceFixtures.library.notes.filter { $0.id == "shape" },
       coverage: .init(totalDocuments: 7, documentsWithCachedContent: 1))
     window.rootViewController = UIHostingController(
-      rootView: NavigationStack {
-        LibraryView(model: model, actions: .init(refresh: {}, create: {}, today: {}))
+      rootView: NavigationSplitView {
+        LibraryView(
+          model: model, actions: .init(refresh: {}, create: {}, today: {}), isSidebar: true)
+      } detail: {
+        Text("The retained document")
       }
-      .librarySearch(model: model, isPresented: .constant(true))
+      .librarySearch(model: model, isPresented: .constant(true), isSidebar: true)
+      .environment(\.horizontalSizeClass, .regular)
       .environment(\.dynamicTypeSize, .large)
       .environment(\.colorScheme, dark ? .dark : .light))
     window.makeKeyAndVisible()
@@ -289,18 +361,17 @@ struct LibraryHostTests {
     }
     let deadline = ContinuousClock.now + .seconds(5)
     while !descendants(window).compactMap({ $0 as? UITextField }).contains(where: {
-      $0.window === window && $0.text == "notebook" && $0.isFirstResponder
+      $0.window === window && $0.text == "notebook"
     }), .now < deadline {
       try await Task.sleep(for: .milliseconds(20))
       window.layoutIfNeeded()
     }
     let field = try #require(
       descendants(window).compactMap { $0 as? UITextField }.first {
-        $0.window != nil && $0.text == "notebook"
+        $0.window === window && $0.text == "notebook"
       })
-    #expect(field.isFirstResponder)
-    #expect(field.tintColor.resolvedColor(with: field.traitCollection)
-      .isEqual(UIColor.systemBlue.resolvedColor(with: field.traitCollection)))
+    #expect(field.becomeFirstResponder())
+    try await Task.sleep(for: .milliseconds(350))
     let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
       for overlay in scene.windows where !overlay.isHidden && overlay.windowLevel > window.windowLevel {
@@ -308,6 +379,15 @@ struct LibraryHostTests {
       }
     }
     Attachment.record(image, named: "library-search-\(dark ? "Dark" : "Light")-Large.png", as: .png)
+    Attachment.record(
+      "Key window: \(window.isKeyWindow), scene: \(scene.activationState.rawValue)\n"
+        + descendants(window).compactMap { $0 as? UITextField }.map {
+          "\(type(of: $0)): \($0.text ?? ""), focused: \($0.isFirstResponder), owned: \($0.window === window)"
+        }.joined(separator: "\n"),
+      named: "library-search-fields.txt")
+    #expect(field.isFirstResponder)
+    #expect(field.tintColor.resolvedColor(with: field.traitCollection)
+      .isEqual(UIColor.systemBlue.resolvedColor(with: field.traitCollection)))
   }
 
   @Test(arguments: [false, true], [nil, "#FACC15"] as [String?])

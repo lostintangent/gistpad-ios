@@ -183,7 +183,7 @@ public struct LibraryActions {
     }
 
     @MainActor
-    func deletionAction(for note: LibraryNote) -> (() -> Void)? {
+    func deletionAction(for note: LibraryNote) -> (@MainActor () -> Void)? {
         guard note.isOwned, note.canDeleteFromGitHub || note.isRecovery, let delete else { return nil }
         return { delete(note.id) }
     }
@@ -394,24 +394,27 @@ public struct LibraryView: View {
                     Section {
                         ForEach(pinnedCards) { noteRow($0, isCard: true) }
                     }
-                    .listSectionMargins(.vertical, 0)
                     .listSectionMargins(.top, 16)
                     .listSectionMargins(.bottom, mainNotes.isEmpty ? 0 : 24)
+                    .listSectionMargins(.vertical, 0)
                     .listSectionSeparator(.hidden)
                 }
                 if !mainNotes.isEmpty {
                     Section {
-                        ForEach(mainNotes) { noteRow($0) }
+                        ForEach(mainNotes) { note in
+                            noteRow(note, hidesTopSeparator: note.id == mainNotes.first?.id)
+                        }
                     }
-                    .listSectionMargins(.vertical, 0)
                     .listSectionMargins(.top, pinnedCards.isEmpty && !model.hasFilters ? 8 : 0)
+                    .listSectionMargins(.vertical, 0)
+                    .listSectionSeparator(.hidden, edges: .top)
                 }
                 if !displayedCollections.isEmpty {
                     Section {
                         ForEach(displayedCollections) { collectionDisclosure($0) }
                     }
-                    .listSectionMargins(.vertical, 0)
                     .listSectionMargins(.top, 28)
+                    .listSectionMargins(.vertical, 0)
                     .listSectionSeparator(.hidden)
                 }
                 if !hasVisibleNotes && model.loadState != .loading && canShowEmptyState {
@@ -750,17 +753,18 @@ public struct LibraryView: View {
     }
 
     private func noteRow(
-        _ note: LibraryNote, collection: LibraryCollection = .gists, isCard: Bool = false
+        _ note: LibraryNote, collection: LibraryCollection = .gists, isCard: Bool = false,
+        hidesTopSeparator: Bool = false
     ) -> some View {
         let selection = Selection(collection: collection, noteID: note.id)
-        let openComments: ((String) -> Void)? = actions.openComments.map { action in
-            { id in
+        let openComments: (@MainActor (String) -> Void)? = actions.openComments.map { action in
+            { @MainActor (id: String) in
                 selectedCollection = collection
                 action(id)
             }
         }
-        let delete: (() -> Void)? = actions.deletionAction(for: note).map { action in
-            {
+        let delete: (@MainActor () -> Void)? = actions.deletionAction(for: note).map { action in
+            { @MainActor in
                 deletionSelection = selection
                 action()
             }
@@ -769,7 +773,8 @@ public struct LibraryView: View {
             if isCard {
                 LibraryPinnedCard(
                     note: note, tags: model.tags(for: note),
-                    isSelected: librarySelection.wrappedValue == selection)
+                    isSelected: librarySelection.wrappedValue == selection,
+                    isSidebar: isSidebar)
             } else {
                 LibraryNoteRow(
                     note: note, tags: model.tags(for: note),
@@ -783,7 +788,8 @@ public struct LibraryView: View {
         .listRowInsets(EdgeInsets(
             top: isCard ? 4 : 0, leading: isCard ? 0 : 12,
             bottom: isCard ? 4 : 0, trailing: isCard ? 0 : 12))
-        .listRowSeparator(isCard ? .hidden : .visible)
+        .listRowSeparator(isCard || hidesTopSeparator ? .hidden : .visible, edges: .top)
+        .listRowSeparator(isCard ? .hidden : .visible, edges: .bottom)
         .listRowSeparatorTint(Color(uiColor: .separator))
         .listRowBackground(isSidebar ? nil : Color.clear)
         .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
@@ -832,7 +838,8 @@ public struct LibraryView: View {
 
     @ViewBuilder
     private func rowActions(
-        _ note: LibraryNote, openComments: ((String) -> Void)?, delete: (() -> Void)?
+        _ note: LibraryNote, openComments: (@MainActor (String) -> Void)?,
+        delete: (@MainActor () -> Void)?
     ) -> some View {
         if note.supportsComments, let openComments {
             Button(

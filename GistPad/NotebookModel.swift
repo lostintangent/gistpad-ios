@@ -429,8 +429,10 @@ final class NotebookModel {
     if let id = UUID(uuidString: rowID), let draft = localDrafts.first(where: { $0.id == id }) {
       return .init(gistID: draft.gistID, filename: draft.filename, draftID: id)
     }
-    if let row = library.snapshot.notes.first(where: { $0.id == rowID }), let gistID = row.gistID {
-      return .init(gistID: gistID, filename: row.filename, draftID: nil)
+    if let row = library.snapshot.notes.first(where: { $0.id == rowID }),
+      let gistID = row.gistID, let filename = row.filename
+    {
+      return .init(gistID: gistID, filename: filename, draftID: nil)
     }
     return nil
   }

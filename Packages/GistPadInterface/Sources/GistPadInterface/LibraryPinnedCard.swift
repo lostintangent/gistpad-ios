@@ -5,6 +5,7 @@ struct LibraryPinnedCard: View {
     let note: LibraryNote
     let tags: [LibraryTag]
     let isSelected: Bool
+    var isSidebar = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -28,28 +29,52 @@ struct LibraryPinnedCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .captureFrame("note-excerpt-\(note.id)")
             }
-            if !tags.isEmpty {
-                TagLabels(tags: tags, limit: 2)
-                    .captureFrame("note-tags-\(note.id)")
-            }
-            if note.progress.map({ $0.total > 0 }) == true || note.visibleCommentCount != nil {
+            if !tags.isEmpty || hasMetadata {
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) { metadata }
-                        .fixedSize(horizontal: true, vertical: false)
-                    VStack(alignment: .trailing, spacing: 8) { metadata }
+                    if tags.count >= 2 { footer(tagLimit: 2) }
+                    if !tags.isEmpty { footer(tagLimit: 1) }
+                    footer(tagLimit: 0)
                 }
                 .font(.footnote)
                 .foregroundStyle(Color(uiColor: .label))
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .captureFrame("note-footer-\(note.id)")
             }
         }
         .captureFrame("note-content-\(note.id)")
         .padding(14)
         .background(
-            isSelected ? Color.clear : Color(uiColor: .secondarySystemGroupedBackground),
+            isSelected ? Color.clear : Color(
+                uiColor: isSidebar ? .secondarySystemBackground : .secondarySystemGroupedBackground),
             in: .rect(cornerRadius: 16))
         .accessibilityElement(children: .combine)
         .accessibilityValue(Text(verbatim: note.accessibilityDetail))
+    }
+
+    private func footer(tagLimit: Int) -> some View {
+        HStack(spacing: 0) {
+            if !tags.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(Array(tags.prefix(tagLimit))) { TagLabel(tag: $0) }
+                    if tags.count > tagLimit {
+                        TagLabels.TagOverflowLabel(count: tags.count - tagLimit)
+                    }
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("Tags: \(tags.map(\.name).joined(separator: ", "))", bundle: .module))
+                .captureFrame("note-tags-\(note.id)")
+            }
+            Spacer(minLength: tags.isEmpty || !hasMetadata ? 0 : 12)
+            if hasMetadata {
+                HStack(spacing: 12) { metadata }
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+
+    private var hasMetadata: Bool {
+        note.progress.map { $0.total > 0 } == true || note.visibleCommentCount != nil
     }
 
     @ViewBuilder
