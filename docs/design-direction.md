@@ -12,9 +12,9 @@ Cached words, immediate input and continuity matter more than decoration. No inv
 
 ## One adaptive notebook
 
-Home is titled **GistPad**. The recommended Library revision puts pinned cards first, ordinary gists next, then conditional native Daily Notes, Starred and Archive disclosures. It removes the Library title-menu collection switcher, not the document's file menu. New and Today stay direct rail actions; Search remains one tap away in either posture.
+Home is titled **GistPad**. The approved Library layout puts pinned cards first, ordinary gists next, then conditional native Daily Notes, Starred and Archive disclosures. It removes the Library title-menu collection switcher, not the document's file menu. New and Today stay direct rail actions; Search remains one tap away in either posture.
 
-**Review boundary:** pinned-card treatment is approved. The rail/disclosure revision in the same shared board is proposed for user review before implementation. The contract below records that recommendation without claiming it has shipped.
+**Approval boundary:** pinned cards and the rail/disclosure layout are user-approved for implementation. The shared board is a concept reference, not evidence of native acceptance or shipment.
 
 | Available space and task | Composition |
 | --- | --- |
@@ -78,7 +78,7 @@ Filtering projects the existing local all-collection search into the main list a
 
 ### Secondary collections
 
-Recommend native disclosure-backed sections over the title switcher. A switcher hides the rest of the notebook and replaces its list. Disclosures retain one spatial context, make their contents inspectable and leave the primary entrances direct. Use supported `DisclosureGroup` behavior, not a custom accordion. Unlike the web's desktop panels, expanded rows share the one outer native scroll; no capped five-row inner scrollers. [DisclosureGroup](https://developer.apple.com/documentation/swiftui/disclosuregroup).
+Use native disclosure-backed sections rather than the title switcher. A switcher hides the rest of the notebook and replaces its list. Disclosures retain one spatial context, make their contents inspectable and leave the primary entrances direct. Use supported `DisclosureGroup` behavior, not a custom accordion. Unlike the web's desktop panels, expanded rows share the one outer native scroll; no capped five-row inner scrollers. [DisclosureGroup](https://developer.apple.com/documentation/swiftui/disclosuregroup).
 
 After the ordinary gist rows, show **Daily Notes**, **Starred**, then **Archive**, only with known positive unfiltered membership. Each starts collapsed and remembers its explicit account-local choice across navigation, layout changes and relaunch. An active note remains usable when its section collapses. Today/deep-link opening does not rewrite disclosure preferences or force the Library to scroll away from pins.
 
@@ -112,9 +112,9 @@ Keep known counts through refresh/offline, omit unknown counts and show zero onl
 
 Use the native outlined `calendar` glyph, primary monochrome ink and a target of at least 44 pt. It is one adaptive toolbar item, with an attached foreground-filled/inverse-numeral badge like Comments, not a custom floating control or extra independent badge target. No personal tint, red urgency, progress donut or completion check.
 
-The proposed badge counts **unfinished tasks in today's exact file**, not all tasks, all Daily Notes or overdue days. Reuse the existing Today task summary from durable local/cached source. Missing source means unknown, not zero. Update after committed local changes and resolve the current account/date; never carry yesterday's count or create/fetch a note merely to decorate the button.
+The badge counts **unfinished tasks in today's exact file**, not all tasks, all Daily Notes or overdue days. Reuse the existing Today task summary from durable local/cached source. Missing source means unknown, not zero. Update after committed local changes and resolve the current account/date; never carry yesterday's count or create/fetch a note merely to decorate the button.
 
-| State | Proposed badge and behavior |
+| State | Badge and behavior |
 | --- | --- |
 | Known 0 unfinished tasks | No badge; calendar remains enabled. Accessibility can state no unfinished tasks |
 | Known positive | Exact localized count through 99, then visual 99+; full accessible count. The board shows 3, 12 and 128 |
