@@ -5,6 +5,31 @@ import Testing
 
 @Suite @MainActor
 struct LibraryCollectionVisibilityTests {
+    @Test func homeDisclosuresHideKnownZeroCountsEvenWhenRowsRemain() {
+        var notes = publishedCollections
+        for index in notes.indices { notes[index].gistID = nil }
+        notes.append(.init(
+            id: "daily", title: "A local day", updatedAt: nil, isDailyNote: true))
+        let model = LibraryModel(snapshot: .init(notes: notes, dailyNoteCount: 0))
+        #expect(model.secondaryCollections.isEmpty)
+    }
+
+    @Test func homeDisclosuresKeepRowsWithUnknownCountsWithoutInventingZero() {
+        let model = LibraryModel(loadState: .offline)
+        model.snapshot.notes = publishedCollections + [
+            .init(id: "daily", title: "A local day", updatedAt: nil, isDailyNote: true)
+        ]
+        #expect(model.secondaryCollections == [.dailyNotes, .starred, .archive])
+        #expect(model.secondaryCollections.allSatisfy { model.count(in: $0) == nil })
+    }
+
+    @Test func homeDisclosuresDisappearWhenTheirLastRowsLeave() {
+        let model = LibraryModel(snapshot: .init(notes: publishedCollections))
+        #expect(model.secondaryCollections == [.starred, .archive])
+        model.replaceSnapshot(.init(notes: []))
+        #expect(model.secondaryCollections.isEmpty)
+    }
+
     @Test func unknownCollectionsDoNotFlashBeforeTheFirstSnapshot() {
         let model = LibraryModel()
         #expect(model.visibleCollections == [.gists, .dailyNotes])

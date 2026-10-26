@@ -4,6 +4,40 @@ import Testing
 
 @MainActor
 struct LibraryModelTests {
+    @Test func todayBadgeRequiresTheExactExistingDayAndKnownTaskSource() {
+        var today = LibraryTodaySummary(
+            date: InterfaceFixtures.referenceDate,
+            progress: .init(completed: 1, total: 4), availability: .existing)
+        #expect(today.unfinishedTaskCount == 3)
+        today.progress = .init(completed: 4, total: 4)
+        #expect(today.unfinishedTaskCount == 0)
+        today.progress = nil
+        #expect(today.unfinishedTaskCount == nil)
+        today.progress = .init(completed: 0, total: 104)
+        #expect(today.unfinishedTaskCount == 104)
+        today.availability = .missing
+        #expect(today.unfinishedTaskCount == nil)
+        today.availability = .unknown
+        #expect(today.unfinishedTaskCount == nil)
+    }
+
+    @Test func dailyCountBelongsToTheUnfilteredSnapshot() {
+        let model = LibraryModel(snapshot: .init(notes: [], dailyNoteCount: 12), loadState: .ready)
+        #expect(model.dailyNoteCount == 12)
+        model.collection = .dailyNotes
+        model.searchState = .results(
+            notes: [], coverage: .init(
+                totalDocuments: 3, documentsWithCachedContent: 3,
+                incompleteGistCount: 0, staleResultCount: 0))
+        #expect(model.dailyNoteCount == 12)
+        model.replaceSnapshot(.init(notes: [], dailyNoteCount: 0))
+        #expect(model.dailyNoteCount == 0)
+        model.replaceSnapshot(.init(notes: []))
+        #expect(model.dailyNoteCount == nil)
+        model.replaceSnapshot(nil)
+        #expect(model.dailyNoteCount == nil)
+    }
+
     @Test(arguments: [nil, -1, 0, 1, 42] as [Int?])
     func commentMetadataOnlyExposesKnownPositiveGistTotals(count: Int?) {
         var note = LibraryNote(
@@ -101,11 +135,11 @@ struct LibraryModelTests {
     }
 
     @Test(arguments: [LibraryCollection.starred, .dailyNotes, .archive])
-    func scopedHeadingsOnlyIdentifySearchResultsNotTheRetainedDocument(collection: LibraryCollection) {
+    func groupMembershipDoesNotHideTheRetainedDocumentInAnotherGroup(collection: LibraryCollection) {
         let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
         model.collection = collection
         model.selectedNoteID = "shape"
-        #expect(model.visibleSelectedNoteID == nil)
+        #expect(model.visibleSelectedNoteID == "shape")
         #expect(model.selectedNoteID == "shape")
         #expect(!model.showsListedNotesHeading)
         model.selectedNoteID = nil

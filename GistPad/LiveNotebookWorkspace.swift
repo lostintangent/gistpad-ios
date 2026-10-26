@@ -66,6 +66,13 @@ struct LiveNotebookWorkspace: View {
     activeID.flatMap { sessions[$0] }
   }
 
+  private var libraryCollections: Binding<Set<LibraryCollection>> {
+    guard let accountID = notebook.account?.id else { return .constant([]) }
+    return Binding(
+      get: { layout.expandedCollections(accountID: accountID) },
+      set: { layout.setExpandedCollections($0, accountID: accountID) })
+  }
+
   private struct NotebookCreationChoiceTarget {
     let controller: NotebookSessionController
     let generation: UInt64
@@ -157,7 +164,9 @@ struct LiveNotebookWorkspace: View {
       LibraryView(
         model: notebook.library, actions: libraryActions,
         isTodaySelected: notebook.isTodaySelected,
-        isSidebar: horizontalSizeClass == .regular)
+        isSidebar: horizontalSizeClass == .regular,
+        expandedCollections: libraryCollections)
+        .id(notebook.account?.id)
     } detail: {
       NavigationStack {
         GeometryReader { geometry in
@@ -179,9 +188,10 @@ struct LiveNotebookWorkspace: View {
             NotebookOpeningView(title: String(localized: "Today"))
           }
         }
-        .libraryCreateAction(
+        .libraryRail(
           isVisible: horizontalSizeClass == .regular && notebook.library.loadState != .signedOut,
-          action: libraryActions.create)
+          today: notebook.library.today, isTodaySelected: notebook.isTodaySelected,
+          create: libraryActions.create, openToday: libraryActions.today)
       }
       .frame(minWidth: comments.isPresented && horizontalSizeClass == .regular ? 320 : 0)
     }

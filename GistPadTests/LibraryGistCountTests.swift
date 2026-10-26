@@ -113,7 +113,9 @@ struct LibraryGistCountTests {
     }
 
     private func gist(_ id: String, description: String? = nil) -> Gist {
-        let files = ["README.md", "Ideas.md"].map { filename in
+        let filenames = description == GistConventions.dailyNotesDescription
+            ? ["2026-10-23.md", "2026-10-24.md"] : ["README.md", "Ideas.md"]
+        let files = filenames.map { filename in
             (filename, GistFile(
                 filename: filename, language: "Markdown", content: nil, truncated: false,
                 rawURL: nil, size: nil))

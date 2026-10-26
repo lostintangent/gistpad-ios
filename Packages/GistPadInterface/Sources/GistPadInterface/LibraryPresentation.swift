@@ -23,6 +23,10 @@ public struct LibraryTodaySummary: Equatable, Sendable {
     public var availability: LibraryTodayAvailability
     public var excerpt: String?
 
+    public var unfinishedTaskCount: Int? {
+        availability == .existing ? progress?.remaining : nil
+    }
+
     public init(
         date: Date, timeZone: TimeZone = .current, progress: LibraryTaskProgress? = nil,
         availability: LibraryTodayAvailability = .unknown, excerpt: String? = nil

@@ -32,8 +32,8 @@ extension LibraryCollection {
         switch self {
         case .gists: String(localized: "Your Gists", bundle: .module)
         case .dailyNotes: String(localized: "Daily Notes", bundle: .module)
-        case .starred: String(localized: "Starred", bundle: .module)
-        case .archive: String(localized: "Archive", bundle: .module)
+        case .starred: String(localized: "Starred Gists", bundle: .module)
+        case .archive: String(localized: "Archived Gists", bundle: .module)
         }
     }
 

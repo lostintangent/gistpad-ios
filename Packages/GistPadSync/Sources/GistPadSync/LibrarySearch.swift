@@ -128,7 +128,9 @@ public enum LibrarySearch {
                 $0.gistID == gist.id && $0.filename.hasSuffix(".md")
             }.map(\.filename)).sorted()
             for filename in filenames {
-                if gist.isDailyNote, filename == GistConventions.templateFilename { continue }
+                let day = gist.isDailyNote
+                    ? DailyNotesIndex.parseDateFilename(filename, timeZone: timeZone) : nil
+                if gist.isDailyNote, day == nil { continue }
                 let draft = drafts.first { $0.gistID == gist.id && $0.filename == filename }
                 let cached = library.cachedContent(gist: gist, filename: filename)
                 let text = draft?.text ?? cached?.text
@@ -138,8 +140,6 @@ public enum LibrarySearch {
                 let current = hasLocalChanges
                     || (cached?.isCurrent == true && sourceEqual(text, cached?.text))
                 let progress = text.map(TaskProgress.init(markdown:))
-                let day = gist.isDailyNote
-                    ? DailyNotesIndex.parseDateFilename(filename, timeZone: timeZone) : nil
                 let tags = Set(library.preferences.gistTags[gist.id] ?? []).intersection(validTagIDs)
                 documents.append(LibrarySearchMatch(
                     id: "\(gist.id)/\(filename)", gistID: gist.id, draftID: draft?.id,
@@ -160,11 +160,12 @@ public enum LibrarySearch {
             if collection == .all || (collection == .gists && !daily && !archived)
                 || (collection == .dailyNotes && daily) || (collection == .archive && archived) {
                 let day = daily ? DailyNotesIndex.parseDateFilename(draft.filename, timeZone: timeZone) : nil
+                if daily, day == nil { continue }
                 let progress = TaskProgress(markdown: draft.text)
                 let tags = Set(draft.gistID.flatMap { library.preferences.gistTags[$0] } ?? []).intersection(validTagIDs)
                 documents.append(LibrarySearchMatch(
                     id: draft.id.uuidString, gistID: draft.gistID, draftID: draft.id,
-                    filename: draft.filename, title: draft.description.isEmpty
+                    filename: draft.filename, title: daily || draft.description.isEmpty
                         ? GistConventions.fileDisplayName(draft.filename) : draft.description,
                     text: draft.text, updatedAt: draft.updatedAt,
                     isPinned: false, isStarred: false,

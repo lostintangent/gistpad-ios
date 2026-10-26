@@ -7,6 +7,35 @@ import UIKit
 @MainActor
 struct NoteCommentsBadgeTests {
   @Test(arguments: [false, true], [UIContentSizeCategory.large, .accessibilityExtraLarge])
+  func todayBadgeKeepsItsCalendarAxisAndCapsOnlyTheVisualCount(
+    dark: Bool, category: UIContentSizeCategory
+  ) throws {
+    let traits = UITraitCollection(preferredContentSizeCategory: category)
+    let size = min(13, UIFontMetrics(forTextStyle: .caption2).scaledValue(
+      for: 11, compatibleWith: traits))
+    for selected in [false, true] {
+      func icon(_ count: Int?) -> UIImage {
+        ToolbarBadgeIcon.image(
+          systemImage: "calendar", count: count, fontSize: size,
+          dark: dark, scale: 3, isSelected: selected)
+      }
+      let initial = icon(nil)
+      #expect(initial.size == CGSize(width: 36, height: 36))
+      #expect(icon(0).pngData() == initial.pngData())
+      #expect(icon(100).pngData() == icon(104).pngData())
+      #expect(icon(99).pngData() != icon(100).pngData())
+      for count in [3, 99, 104] {
+        let image = icon(count)
+        #expect(image.size == initial.size)
+        #expect(image.alignmentRectInsets == initial.alignmentRectInsets)
+        let alignment = CGRect(origin: .zero, size: image.size).inset(by: image.alignmentRectInsets)
+        try expectBubbleCentered(image, on: alignment.midX, level: dark != selected ? 255 : 0)
+        try expectForegroundCount(image, dark: dark)
+      }
+    }
+  }
+
+  @Test(arguments: [false, true], [UIContentSizeCategory.large, .accessibilityExtraLarge])
   func countsUseForegroundFillAndInverseInkInsideTheSameIconBounds(
     dark: Bool, category: UIContentSizeCategory
   ) throws {
@@ -14,12 +43,13 @@ struct NoteCommentsBadgeTests {
     let size = min(13, UIFontMetrics(forTextStyle: .caption2).scaledValue(
       for: 11, compatibleWith: traits))
     for selected in [false, true] {
-      let initial = NoteCommentsIcon.image(
-        count: nil, fontSize: size, dark: dark, scale: 3, isSelected: selected)
+      let initial = ToolbarBadgeIcon.image(
+        systemImage: "text.bubble", count: nil, fontSize: size, dark: dark, scale: 3, isSelected: selected)
       #expect(initial.size == CGSize(width: 36, height: 36))
       for count in [24, 1, 124, 0] {
-        let icon = NoteCommentsIcon.image(
-          count: count, fontSize: size, dark: dark, scale: 3, isSelected: selected)
+        let icon = ToolbarBadgeIcon.image(
+          systemImage: "text.bubble", count: count, fontSize: size,
+          dark: dark, scale: 3, isSelected: selected)
         #expect(icon.size == initial.size)
         #expect(icon.renderingMode == .alwaysOriginal)
         let alignment = CGRect(origin: .zero, size: icon.size).inset(by: icon.alignmentRectInsets)

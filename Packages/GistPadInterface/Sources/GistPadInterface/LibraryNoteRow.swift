@@ -28,7 +28,7 @@ struct LibraryNoteRow: View {
             }
             .padding(.vertical, verticalPadding)
             .accessibilityElement(children: .combine)
-            .accessibilityValue(Text(verbatim: accessibilityDetail))
+            .accessibilityValue(Text(verbatim: note.accessibilityDetail))
             .captureFrame("note-content-\(note.id)")
         }
     }
@@ -99,14 +99,14 @@ struct LibraryNoteRow: View {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(alignment: .leading, spacing: titleSpacing) {
                         metadata(relativeTo: now)
-                        commentCount(count)
+                        LibraryCommentCount(count: count, noteID: note.id)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         metadata(relativeTo: now)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        commentCount(count)
+                        LibraryCommentCount(count: count, noteID: note.id)
                     }
                 }
             } else {
@@ -159,19 +159,6 @@ struct LibraryNoteRow: View {
         }
     }
 
-    private func commentCount(_ count: Int) -> some View {
-        Label {
-            Text(count, format: .number)
-        } icon: {
-            Image(systemName: "text.bubble")
-        }
-        .fixedSize()
-        .accessibilityLabel(
-            Text("\(count) comments", bundle: .module)
-        )
-        .captureFrame("note-comment-count-\(note.id)")
-    }
-
     private func excerptText(_ excerpt: String) -> some View {
         Text(verbatim: excerpt)
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
@@ -192,27 +179,45 @@ struct LibraryNoteRow: View {
             calendar: displayCalendar, timeZone: timeZone))
     }
 
-    private var accessibilityDetail: String {
-        var details: [String] = []
-        if note.isPinned { details.append(String(localized: "Pinned", bundle: .module)) }
-        if note.isStarred { details.append(String(localized: "Starred", bundle: .module)) }
-        if note.gistID == nil {
-            details.append(String(localized: "On this iPhone", bundle: .module))
-        } else if note.isSecret {
-            details.append(String(localized: "Unlisted gist", bundle: .module))
-        } else {
-            details.append(String(localized: "Public gist", bundle: .module))
-        }
-        if !note.isOwned, let owner = note.owner {
-            details.append(String(localized: "By \(owner)", bundle: .module))
-        }
-        return details.joined(separator: ", ")
-    }
-
     private var displayCalendar: Calendar {
         var value = calendar
         value.timeZone = timeZone
         return value
+    }
+}
+
+struct LibraryCommentCount: View {
+    let count: Int
+    let noteID: String
+
+    var body: some View {
+        Label {
+            Text(count, format: .number)
+        } icon: {
+            Image(systemName: "text.bubble")
+        }
+        .fixedSize()
+        .accessibilityLabel(Text("\(count) comments", bundle: .module))
+        .captureFrame("note-comment-count-\(noteID)")
+    }
+}
+
+extension LibraryNote {
+    var accessibilityDetail: String {
+        var details: [String] = []
+        if isPinned { details.append(String(localized: "Pinned", bundle: .module)) }
+        if isStarred { details.append(String(localized: "Starred", bundle: .module)) }
+        if gistID == nil {
+            details.append(String(localized: "On this iPhone", bundle: .module))
+        } else if isSecret {
+            details.append(String(localized: "Unlisted gist", bundle: .module))
+        } else {
+            details.append(String(localized: "Public gist", bundle: .module))
+        }
+        if !isOwned, let owner {
+            details.append(String(localized: "By \(owner)", bundle: .module))
+        }
+        return details.joined(separator: ", ")
     }
 }
 #endif

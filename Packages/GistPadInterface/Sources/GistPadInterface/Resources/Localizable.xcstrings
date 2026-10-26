@@ -10,6 +10,30 @@
     "%lld notes" : {
 
     },
+    "%lld unfinished tasks" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld unfinished task"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld unfinished tasks"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "No unfinished tasks" : {},
+    "No notes to show" : {},
     "%lld comments" : {
       "localizations" : {
         "en" : {
@@ -292,6 +316,9 @@
 
     },
     "Archive" : {
+
+    },
+    "Archived Gists" : {
 
     },
     "Cancel" : {
@@ -608,6 +635,9 @@
 
     },
     "Starred" : {
+
+    },
+    "Starred Gists" : {
 
     },
     "Start today's note" : {
