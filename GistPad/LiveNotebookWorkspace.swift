@@ -546,7 +546,7 @@ struct LiveNotebookWorkspace: View {
       selectRow(rowID)
     }
     actions.account = { showingSettings = true }
-    actions.reconnect = {
+    let reconnect: () -> Void = {
       Task {
         await notebook.signIn()
         if notebook.account?.id == active?.draft.accountID,
@@ -556,13 +556,13 @@ struct LiveNotebookWorkspace: View {
         }
       }
     }
+    actions.reconnect = reconnect
     actions.recoverStatus = {
-      Task {
-        if notebook.remoteRefreshProblem?.recovery == .reconnect {
-          await notebook.signIn()
-        } else {
-          await notebook.refresh()
-        }
+      switch (notebook.library.loadState, notebook.remoteRefreshProblem?.recovery) {
+      case (.reconnectRequired, _), (_, .reconnect?):
+        reconnect()
+      default:
+        Task { await notebook.refresh() }
       }
     }
     actions.togglePin = { rowID in

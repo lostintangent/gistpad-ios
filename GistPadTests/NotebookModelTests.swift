@@ -13,20 +13,34 @@ import WebKit
 
 @MainActor
 struct NotebookModelTests {
-  @Test(arguments: [false, true])
-  func workspaceStatusRecoveryIsWiredBeforeAnyReconnectAction(requiresReconnect: Bool) async throws {
+  enum StatusRecoveryCase: CaseIterable, Sendable {
+    case retry, remoteReconnect, loadStateReconnect
+  }
+
+  @Test(arguments: StatusRecoveryCase.allCases)
+  func workspaceStatusRecoveryIsWiredBeforeAnyReconnectAction(
+    recovery: StatusRecoveryCase
+  ) async throws {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     await provider.failToday(true)
     let model = NotebookModel(provider: provider, remoteReadRetryDelays: [])
     await model.start()
     try #require(model.library.loadState == .ready)
-    if requiresReconnect {
+    switch recovery {
+    case .remoteReconnect:
       await provider.requireReconnect()
-    } else {
+      await model.refresh()
+      #expect(model.remoteRefreshProblem?.recovery == .reconnect)
+      model.library.loadState = .ready
+    case .loadStateReconnect:
+      model.library.loadState = .reconnectRequired(message: "Reconnect the current notebook.")
+      #expect(model.remoteRefreshProblem == nil)
+    case .retry:
       await provider.failRequests()
+      await model.refresh()
+      #expect(model.remoteRefreshProblem?.recovery == .retry)
     }
-    await model.refresh()
-    #expect(model.remoteRefreshProblem?.recovery == (requiresReconnect ? .reconnect : .retry))
+    let expectedSignIns = recovery == .retry ? 0 : 1
     let refreshes = await provider.refreshAccountReads
     #expect(await provider.signInCount == 0)
     await provider.failRequests(false)
@@ -34,14 +48,21 @@ struct NotebookModelTests {
     let recover = try #require(workspace.libraryActions.recoverStatus)
     recover()
     let deadline = ContinuousClock.now + .seconds(5)
-    while model.remoteRefreshProblem != nil, ContinuousClock.now < deadline {
+    while ContinuousClock.now < deadline {
+      let signIns = await provider.signInCount
+      let refreshCount = await provider.refreshAccountReads
+      if signIns == expectedSignIns, refreshCount == refreshes + 1,
+        model.remoteRefreshProblem == nil, model.library.loadState == .ready
+      {
+        break
+      }
       try await Task.sleep(for: .milliseconds(20))
     }
     #expect(model.remoteRefreshProblem == nil)
     #expect(model.library.loadState == .ready)
     #expect(model.account?.id == fixtureAccount.id)
     #expect(model.pendingAccount == nil)
-    #expect(await provider.signInCount == (requiresReconnect ? 1 : 0))
+    #expect(await provider.signInCount == expectedSignIns)
     #expect(await provider.refreshAccountReads == refreshes + 1)
     #expect(await provider.publicationReasons.isEmpty)
   }
