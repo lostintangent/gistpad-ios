@@ -274,7 +274,7 @@ extension LiveNotebookProvider {
   }
 
   private func ownedGist(
-    id: String, account: NotebookAccount
+    id: String, account: AccountSnapshot
   ) async throws -> (GitHubClient, Gist, Int64) {
     let client = await client(accountID: account.id)
     let gist = try await client.gist(id: id)
