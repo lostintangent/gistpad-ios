@@ -792,7 +792,7 @@ public struct LibraryView: View {
         .listRowSeparator(isCard || hidesTopSeparator ? .hidden : .visible, edges: .top)
         .listRowSeparator(isCard ? .hidden : .visible, edges: .bottom)
         .listRowSeparatorTint(Color(uiColor: .separator))
-        .listRowBackground(isSidebar ? nil : Color.clear)
+        .listRowBackground(isCard || !isSidebar ? Color.clear : nil)
         .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
         .modifier(LibraryCommentsAccessibilityAction(note: note, action: openComments))
         .modifier(LibraryRowDeletionConfirmation(

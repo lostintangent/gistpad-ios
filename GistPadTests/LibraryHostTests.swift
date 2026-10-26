@@ -422,6 +422,27 @@ struct LibraryHostTests {
       return RGBColor(red: pixel[0], green: pixel[1], blue: pixel[2])
     }
     let background = try color(in: crop, at: .zero)
+    let card = try #require(descendants(window).first {
+      $0.accessibilityIdentifier == "capture-frame-note-card-pin" && !$0.bounds.isEmpty
+    })
+    let cardFrame = card.convert(card.bounds, to: window)
+    let bitmap = try #require(image.cgImage)
+    for distance in 1...4 {
+      for y in [cardFrame.minY - CGFloat(distance), cardFrame.maxY + CGFloat(distance)] {
+        let edge = try color(in: bitmap, at: CGPoint(
+          x: cardFrame.midX * image.scale, y: y * image.scale))
+        let sidebar = try color(in: bitmap, at: CGPoint(
+          x: (cardFrame.minX - 4) * image.scale, y: y * image.scale))
+        #expect(edge.contrast(with: sidebar) <= 1.02, "No selection tray outside the card: \(distance)")
+      }
+    }
+    let list = try #require(descendants(window).compactMap { $0 as? UICollectionView }.first)
+    let selected = try #require(list.indexPathsForSelectedItems?.first)
+    let cell = try #require(list.cellForItem(at: selected))
+    #expect(cell.isSelected)
+    #expect(descendants(cell).contains {
+      $0.accessibilityIdentifier == "capture-frame-note-card-pin"
+    })
     let ink = try #require(RGBColor(
       uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
     let contrast = ink.contrast(with: background)
