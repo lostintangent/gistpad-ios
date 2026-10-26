@@ -13,6 +13,39 @@ import WebKit
 
 @MainActor
 struct NotebookModelTests {
+  @Test(arguments: [false, true])
+  func workspaceStatusRecoveryIsWiredBeforeAnyReconnectAction(requiresReconnect: Bool) async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    await provider.failToday(true)
+    let model = NotebookModel(provider: provider, remoteReadRetryDelays: [])
+    await model.start()
+    try #require(model.library.loadState == .ready)
+    if requiresReconnect {
+      await provider.requireReconnect()
+    } else {
+      await provider.failRequests()
+    }
+    await model.refresh()
+    #expect(model.remoteRefreshProblem?.recovery == (requiresReconnect ? .reconnect : .retry))
+    let refreshes = await provider.refreshAccountReads
+    #expect(await provider.signInCount == 0)
+    await provider.failRequests(false)
+    let workspace = LiveNotebookWorkspace(notebook: model, routes: NotebookRouteInbox())
+    let recover = try #require(workspace.libraryActions.recoverStatus)
+    recover()
+    let deadline = ContinuousClock.now + .seconds(5)
+    while model.remoteRefreshProblem != nil, ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(20))
+    }
+    #expect(model.remoteRefreshProblem == nil)
+    #expect(model.library.loadState == .ready)
+    #expect(model.account?.id == fixtureAccount.id)
+    #expect(model.pendingAccount == nil)
+    #expect(await provider.signInCount == (requiresReconnect ? 1 : 0))
+    #expect(await provider.refreshAccountReads == refreshes + 1)
+    #expect(await provider.publicationReasons.isEmpty)
+  }
+
   @Test func orphanedEditedCopiesHaveStableDatesAndLocalDeletionTargets() async throws {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     await provider.failToday(true)
@@ -2424,6 +2457,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
   var starredNotes: [Gist]
   private var listedOwned: [Gist]?
   private var listedStarred: [Gist]?
+  private var needsReconnect = false
   private var holdsLibraryRead = false
   private var heldLibraryRead: CheckedContinuation<Void, Never>?
   private var libraryReadObserver: CheckedContinuation<Void, Never>?
@@ -2435,6 +2469,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
   var store: DraftStore?
   let cachesContent: Bool
   private(set) var creationCount = 0
+  private(set) var signInCount = 0
   private(set) var inspectionCount = 0
   private(set) var localStateReads = 0
   private(set) var todayTargets: [DailyNoteTarget] = []
@@ -2490,6 +2525,8 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
       userID: 1)
   }
   func signIn() -> NotebookAccount {
+    signInCount += 1
+    needsReconnect = false
     isSignedOut = false
     return signInAccount
   }
@@ -2510,6 +2547,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
   func refreshAccount() throws -> NotebookAccount {
     refreshAccountReads += 1
     if isSigningOut { throw AccountError.signInInProgress }
+    if needsReconnect { throw AccountError.reconnectGitHub }
     if shouldFail { throw URLError(.notConnectedToInternet) }
     return account
   }
@@ -2759,7 +2797,8 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
   func setReadFailure(id: String, fails: Bool) {
     if fails { failingReadIDs.insert(id) } else { failingReadIDs.remove(id) }
   }
-  func failRequests() { shouldFail = true }
+  func failRequests(_ fails: Bool = true) { shouldFail = fails }
+  func requireReconnect() { needsReconnect = true }
   func setSignInAccount(_ account: NotebookAccount) { signInAccount = account }
   func setAutosaveEnabled(_ enabled: Bool) {
     var metadata = account.preferences.metadata

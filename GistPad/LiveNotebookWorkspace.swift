@@ -534,7 +534,7 @@ struct LiveNotebookWorkspace: View {
     }
   }
 
-  private var libraryActions: LibraryActions {
+  var libraryActions: LibraryActions {
     var actions = LibraryActions(
       refresh: { await notebook.refresh() },
       create: { createNote() },
@@ -555,13 +555,13 @@ struct LiveNotebookWorkspace: View {
           active?.didReconnect()
         }
       }
-      actions.recoverStatus = {
-        Task {
-          if notebook.remoteRefreshProblem?.recovery == .reconnect {
-            await notebook.signIn()
-          } else {
-            await notebook.refresh()
-          }
+    }
+    actions.recoverStatus = {
+      Task {
+        if notebook.remoteRefreshProblem?.recovery == .reconnect {
+          await notebook.signIn()
+        } else {
+          await notebook.refresh()
         }
       }
     }
