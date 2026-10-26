@@ -59,8 +59,8 @@ Use one vertical list in compact Home and the regular sidebar, whether there is 
 | Card part | Treatment |
 | --- | --- |
 | Surface | Opaque semantic content surface, 16-pt corners, about 12-14 pt internal inset. Full available content width, never glass or a fixed-height cover |
-| Content | Headline title with quiet neutral trailing pin, one cached excerpt line at standard type and optional tags. No modification date; dates remain in ordinary rows |
-| Metadata | Real task/comment state at the trailing metadata edge, not extra controls. Omit unknown/absent metadata. Titles, tags and AX content grow/wrap without capped type |
+| Content | Three content tiers at most: headline title with quiet neutral trailing pin, cached excerpt and one footer. One excerpt line at standard type; titles/excerpts can wrap at AX without capped type. No modification date; dates remain in ordinary rows |
+| Footer | Tags lead; real task progress and comment metadata trail on the same row, including when there are no tags. Never add a fourth metadata tier or wrap the footer at AX3. Show fewer complete tags plus truthful `+N` as space tightens, counting every omitted tag; if no full name fits, show only `+N`. Keep native text size and intrinsic accessories rather than shrinking type. Omit unknown/absent metadata and an entirely empty footer |
 | Rhythm | Start at the native list content inset, with 8 pt between cards and 28 pt before ordinary rows. Untagged cards are naturally shorter; 84 pt in the three-pin concept is not a fixed height |
 | Selection/actions | Neutral native sidebar selected treatment, unchanged tag colors, one opening action and existing swipe/context/named accessibility actions. The pin is metadata, not a separate Unpin button |
 
