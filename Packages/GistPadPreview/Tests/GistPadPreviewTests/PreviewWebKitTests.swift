@@ -439,7 +439,7 @@ struct PreviewWebKitTests {
         #expect(edit.replacementMarker == "[ ]")
         let updated = (markdown as NSString).replacingCharacters(in: edit.range, with: edit.replacementMarker)
         #expect(updated == markdown.replacingOccurrences(of: "- [x] Duplicate task", with: "- [ ] Duplicate task"))
-        #expect(receiver.bodies.contains { $0["type"] as? String == "height" })
+        #expect(webView.scrollView.contentSize.height > webView.scrollView.bounds.height)
 
         for style: UIUserInterfaceStyle in [.light, .dark] {
             for contrast: UIAccessibilityContrast in [.normal, .high] {
