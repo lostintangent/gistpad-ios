@@ -52,6 +52,16 @@ private struct LibrarySearchModifier: ViewModifier {
     }
 }
 
+private struct LibraryCreateButton: View {
+    let action: @MainActor () -> Void
+
+    var body: some View {
+        Button(String(localized: "New note", bundle: .module), systemImage: "square.and.pencil", action: action)
+            .tint(.primary)
+            .accessibilityIdentifier("library-create")
+    }
+}
+
 extension View {
     public func librarySearch(
         model: LibraryModel, isPresented: Binding<Bool>? = nil, isSidebar: Bool? = nil
@@ -66,9 +76,7 @@ extension View {
         toolbar {
             if isVisible {
                 ToolbarItem(placement: .primaryAction) {
-                    Button(String(localized: "New note", bundle: .module), systemImage: "square.and.pencil", action: action)
-                        .tint(.primary)
-                        .accessibilityIdentifier("library-create")
+                    LibraryCreateButton(action: action)
                 }
             }
         }
