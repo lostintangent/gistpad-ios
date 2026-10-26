@@ -4,6 +4,23 @@ import Testing
 
 @MainActor
 struct LibraryModelTests {
+    @Test func todayBadgeRequiresTheExactExistingDayAndKnownTaskSource() {
+        var today = LibraryTodaySummary(
+            date: InterfaceFixtures.referenceDate,
+            progress: .init(completed: 1, total: 4), availability: .existing)
+        #expect(today.unfinishedTaskCount == 3)
+        today.progress = .init(completed: 4, total: 4)
+        #expect(today.unfinishedTaskCount == 0)
+        today.progress = nil
+        #expect(today.unfinishedTaskCount == nil)
+        today.progress = .init(completed: 0, total: 104)
+        #expect(today.unfinishedTaskCount == 104)
+        today.availability = .missing
+        #expect(today.unfinishedTaskCount == nil)
+        today.availability = .unknown
+        #expect(today.unfinishedTaskCount == nil)
+    }
+
     @Test func dailyCountBelongsToTheUnfilteredSnapshot() {
         let model = LibraryModel(snapshot: .init(notes: [], dailyNoteCount: 12), loadState: .ready)
         #expect(model.dailyNoteCount == 12)

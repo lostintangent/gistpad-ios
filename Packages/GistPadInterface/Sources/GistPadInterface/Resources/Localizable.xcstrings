@@ -10,6 +10,29 @@
     "%lld notes" : {
 
     },
+    "%lld unfinished tasks" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld unfinished task"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld unfinished tasks"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "No unfinished tasks" : {},
     "%lld comments" : {
       "localizations" : {
         "en" : {
