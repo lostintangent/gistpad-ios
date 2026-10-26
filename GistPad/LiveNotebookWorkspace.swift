@@ -17,7 +17,8 @@ struct LiveNotebookWorkspace: View {
   @State private var openRequest = UUID()
   @State private var compactColumn: NavigationSplitViewColumn = .sidebar
   @State private var actionMessage: String?
-  @State private var shareItem: NotebookShareItem?
+  @State private var shareURL: URL?
+  @State private var showingShare = false
   @State private var sharingTarget: NotebookSharingTarget?
   @State private var tagTarget: NotebookTagTarget?
   @State private var nameTarget: NotebookNameTarget?
@@ -366,9 +367,11 @@ struct LiveNotebookWorkspace: View {
     } message: {
       Text(actionMessage ?? notebook.documentError ?? "")
     }
-    .sheet(item: $shareItem) { item in
-      NotebookActivitySheet(item: item)
-        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
+    .sheet(isPresented: $showingShare) {
+      if let shareURL {
+        NotebookActivitySheet(item: .url(shareURL))
+          .personalAccent(savedHex: notebook.account?.preferences.accentColor)
+      }
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
       if let undo = archiveUndo, notebook.account?.id == undo.accountID {
@@ -1518,7 +1521,7 @@ struct LiveNotebookWorkspace: View {
       accountID: notebook.account?.id,
       isReady: !notebook.isStarting && !notebook.isSigningIn && !isPerformingAction
         && notebook.library.loadState != .loading && notebook.pendingAccount == nil
-        && !showingSettings && shareItem == nil && !showingAddToToday
+        && !showingSettings && !showingShare && !showingAddToToday
         && sharingTarget == nil && tagTarget == nil && nameTarget == nil
         && deletionTarget == nil && reviewTarget == nil
         && creationChoiceTarget == nil
@@ -1603,7 +1606,8 @@ struct LiveNotebookWorkspace: View {
             UIAccessibility.post(
               notification: .announcement, argument: String(localized: "Link copied"))
           } else {
-            shareItem = .url(links.shareURL)
+            shareURL = links.shareURL
+            showingShare = true
           }
         } else {
           sharingTarget = .init(controller: controller, copiesLink: copiesLink)
