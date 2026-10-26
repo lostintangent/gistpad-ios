@@ -1438,6 +1438,282 @@ struct NotebookModelTests {
     #expect(model.loadedDocument?.filename == filename)
     #expect(model.library.selectedNoteID == row.id)
   }
+
+  @Test(arguments: [false, true])
+  func allSearchSpansTheLibraryWithoutFetchingOrChangingDailyMembership(cachedContent: Bool) async throws {
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription,
+      content: "A daily needle\n- [ ] One", filename: "2026-10-23.md",
+      additionalFiles: [
+        "2026-10-24.md": "Another daily needle\n- [x] One",
+        "template.md": "A template needle",
+        "README.md": "Not a day needle",
+        "2026-02-30.md": "Not a real day needle",
+      ])
+    let provider = StubNotebookProvider(
+      account: fixtureAccount,
+      gists: [
+        try makeGist(id: "a", title: "Pinned needle", content: "Pinned needle"),
+        try makeGist(id: "archive", title: "Archived needle [Archived]", content: "Archived needle"),
+        daily,
+      ],
+      cachesContent: cachedContent,
+      starred: [try makeGist(id: "starred", title: "Starred needle", content: "Starred needle", owner: "other")])
+    await provider.failToday(true)
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    #expect(model.library.hasKnownGistSnapshot)
+    #expect(model.library.dailyNoteCount == 2)
+    #expect(Set(model.library.snapshot.notes.map(\.id)) == [
+      "a", "archive", "starred", "daily/2026-10-23.md", "daily/2026-10-24.md",
+    ])
+    #expect(model.library.snapshot.notes.first { $0.id == "starred" }?.isOwned == false)
+    if !cachedContent {
+      #expect(model.library.snapshot.notes.filter(\.isDailyNote).allSatisfy {
+        $0.progress == nil && !$0.isOverdue
+      })
+    }
+    let reads = await provider.readIDs
+    let todayRequests = await provider.todayTargets
+    model.library.query = "needle"
+    await model.search()
+    let ids = Set(model.library.matchingNotes.map(\.id))
+    #expect(ids == (cachedContent
+      ? ["a", "archive", "starred", "daily/2026-10-23.md", "daily/2026-10-24.md"]
+      : ["a", "archive", "starred"]))
+    #expect(model.library.matchingNotes.first?.id == "a")
+    guard case .results(_, let coverage) = model.library.searchState else {
+      Issue.record("The unified search must report its actual cache coverage.")
+      return
+    }
+    #expect(coverage.totalDocuments == 5)
+    #expect(coverage.documentsWithCachedContent == (cachedContent ? 5 : 0))
+    #expect(coverage.isComplete == cachedContent)
+    model.library.query = "does not match anything"
+    await model.search()
+    #expect(model.library.matchingNotes.isEmpty)
+    #expect(model.library.dailyNoteCount == 2)
+    #expect(await provider.readIDs == reads)
+    #expect(await provider.todayTargets == todayRequests)
+  }
+
+  @Test func dailyProjectionUnionsActualDaysAndAccountScopedDraftsWithoutRevivingDeletedFiles() async throws {
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription,
+      content: "- [ ] Remote", filename: "2026-10-23.md",
+      additionalFiles: ["template.md": "Template", "README.md": "Not a day", "2026-02-30.md": "Invalid"])
+    let store = try DraftStore.open(inMemory: true)
+    let clean = try await store.openDraft(
+      accountID: fixtureAccount.id, githubUserID: 1, gistID: daily.id, filename: "2026-10-19.md",
+      description: GistConventions.dailyNotesDescription, content: "Intentionally deleted", revision: "one")
+    let added = try await store.newFileDraft(
+      accountID: fixtureAccount.id, githubUserID: 1, gistID: daily.id, filename: "2026-10-20.md",
+      description: GistConventions.dailyNotesDescription, text: "- [ ] Local only")
+    let overlay = try await store.openDraft(
+      accountID: fixtureAccount.id, githubUserID: 1, gistID: daily.id, filename: "2026-10-23.md",
+      description: GistConventions.dailyNotesDescription, content: "- [ ] Remote", revision: "one")
+    let edited = try await store.persist(
+      id: overlay.id, accountID: fixtureAccount.id, text: "- [x] Local\n- [ ] Retained", generation: 1)
+    let unbound = try await store.newDraft(
+      accountID: fixtureAccount.id, githubUserID: 1, filename: "2026-10-22.md",
+      description: GistConventions.dailyNotesDescription, text: "An unpublished day")
+    let foreign = try await store.newDraft(
+      accountID: UUID(), githubUserID: 2, filename: "2026-10-21.md",
+      description: GistConventions.dailyNotesDescription, text: "Another account")
+    let template = try await store.newFileDraft(
+      accountID: fixtureAccount.id, githubUserID: 1, gistID: daily.id, filename: "template.md",
+      description: GistConventions.dailyNotesDescription, text: "A local template")
+    let drafts = [clean, added, edited, unbound, foreign, template]
+    let snapshot = NotebookModel.librarySnapshot(
+      owned: [daily], starred: [], account: fixtureAccount, drafts: drafts)
+    #expect(snapshot.dailyNoteCount == 3)
+    #expect(Set(snapshot.notes.map(\.id)) == [
+      "daily/2026-10-20.md", "daily/2026-10-23.md", unbound.id.uuidString,
+    ])
+    #expect(snapshot.notes.first { $0.id == "daily/2026-10-23.md" }?.progress
+      == .init(completed: 1, total: 2))
+    #expect(snapshot.notes.allSatisfy { $0.dailyDate != nil && !$0.isRecovery })
+    #expect(snapshot.notes.first { $0.id == unbound.id.uuidString }?.gistID == nil)
+
+    let partial = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription,
+      content: "- [ ] Remote", filename: "2026-10-23.md", truncated: true)
+    let incomplete = NotebookModel.librarySnapshot(
+      owned: [partial], starred: [], account: fixtureAccount, drafts: drafts)
+    #expect(incomplete.dailyNoteCount == nil)
+    #expect(incomplete.notes.contains { $0.id == "daily/2026-10-19.md" })
+    #expect(incomplete.notes.count == 4)
+  }
+
+  @Test(arguments: [false, true])
+  func dailyMembershipDistinguishesAKnownEmptyContainerFromAnIncompleteOne(truncated: Bool) async throws {
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription,
+      filename: "template.md", additionalFiles: ["README.md": "Not a day"], truncated: truncated)
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
+    await provider.failToday(true)
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    #expect(model.library.hasKnownGistSnapshot)
+    #expect(model.library.snapshot.notes.isEmpty)
+    #expect(model.library.dailyNoteCount == (truncated ? nil : 0))
+  }
+
+  @Test func localCreationDoesNotTurnAnUnavailableLibraryIntoAKnownEmptyOne() async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    await provider.failRequests()
+    await provider.failToday(true)
+    let model = NotebookModel(provider: provider, remoteReadRetryDelays: [])
+    await model.start()
+    await model.createNote()
+    let draft = try #require(model.loadedDocument?.draft)
+    #expect(model.library.snapshot.notes.map(\.id) == [draft.id.uuidString])
+    #expect(!model.library.hasKnownGistSnapshot)
+    #expect(model.library.dailyNoteCount == nil)
+    #expect(model.library.collectionGistCount == nil)
+  }
+
+  @Test func aCleanDeletedTodayDoesNotSupplyRailProgressButNewLocalEditsDo() async throws {
+    let filename = GistConventions.todayFilename()
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-23.md")
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
+    let previous = NotebookDocument(
+      accountID: fixtureAccount.id, gist: daily, filename: filename, text: "- [ ] A deleted task",
+      chrome: .init(
+        title: daily.displayName, files: [.init(id: filename, filename: filename)],
+        selectedFileID: filename, access: .editable))
+    let draft = try await provider.openDraft(for: previous)
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    #expect(model.library.today.availability == .missing)
+    #expect(model.library.today.progress == nil)
+    #expect(model.library.dailyNoteCount == 1)
+    _ = try await model.persist(
+      draftID: draft.id, accountID: draft.accountID,
+      text: "- [ ] A new local task", generation: 1)
+    #expect(model.library.today.availability == .existing)
+    #expect(model.library.today.progress == .init(completed: 0, total: 1))
+    #expect(model.library.dailyNoteCount == 2)
+    #expect(model.library.snapshot.notes.contains { $0.id == "daily/\(filename)" })
+    #expect(await provider.readIDs.isEmpty)
+    #expect(await provider.todayTargets.isEmpty)
+  }
+
+  @Test func unfilteredDailyRowsOpenTheirExactFileAndKeepSelectionWhenSearchEnds() async throws {
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription,
+      content: "The alpha day", filename: "2026-10-23.md",
+      additionalFiles: ["2026-10-24.md": "The beta day"])
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
+    await provider.failToday(true)
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    #expect(model.beginOpeningRow(id: "daily/2026-10-24.md"))
+    #expect(model.loadedDocument?.filename == "2026-10-24.md")
+    #expect(model.loadedDocument?.text == "The beta day")
+    #expect(model.library.selectedNoteID == "daily/2026-10-24.md")
+    await model.openRow(id: "daily/2026-10-23.md")
+    #expect(model.loadedDocument?.text == "The alpha day")
+    model.library.query = "alpha"
+    await model.search()
+    #expect(model.library.matchingNotes.map(\.id) == ["daily/2026-10-23.md"])
+    await model.openRow(id: "daily/2026-10-23.md")
+    model.library.query = ""
+    await model.search()
+    #expect(model.library.selectedNoteID == "daily/2026-10-23.md")
+    #expect(model.loadedDocument?.rowID == "daily/2026-10-23.md")
+    await model.open(gistID: daily.id, filename: "2026-10-24.md")
+    #expect(model.library.selectedNoteID == "daily/2026-10-24.md")
+    let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
+    #expect(deletion.id == daily.id)
+    #expect(deletion.title == daily.displayName)
+    if case .delete(let gistID) = deletion.action {
+      #expect(gistID == daily.id)
+    } else {
+      Issue.record("A Daily row retains the existing whole-gist deletion boundary.")
+    }
+    #expect(await provider.readIDs.isEmpty)
+  }
+
+  @Test func persistingAndPublishingANewDailyFileKeepItsExactRowAndTaskProgress() async throws {
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-23.md")
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
+    await provider.failToday(true)
+    let draft = try await provider.stageDailyDraft(
+      filename: "2026-10-24.md", text: "- [ ] A retained task")
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await model.openRow(id: "daily/2026-10-24.md")
+    let documentID = try #require(model.loadedDocument?.id)
+    _ = try await model.persist(
+      draftID: draft.id, accountID: draft.accountID,
+      text: "- [x] A retained task\n- [ ] A new task", generation: 1)
+    let row = try #require(model.library.snapshot.notes.first { $0.id == "daily/2026-10-24.md" })
+    #expect(row.progress == .init(completed: 1, total: 2))
+    #expect(row.excerpt == "A retained task A new task")
+    #expect(row.isOverdue)
+    #expect(model.library.dailyNoteCount == 2)
+    _ = try await model.publish(draftID: draft.id, accountID: draft.accountID)
+    #expect(model.loadedDocument?.id == documentID)
+    #expect(model.library.selectedNoteID == row.id)
+    #expect(model.library.dailyNoteCount == 2)
+    #expect(model.library.snapshot.notes.filter { $0.id == row.id }.count == 1)
+    #expect(model.library.snapshot.notes.allSatisfy { $0.id != draft.id.uuidString })
+    #expect(await provider.publicationReasons == [.manual])
+  }
+
+  @Test(arguments: [false, true])
+  func publishingTheFirstDailyNotePromotesItsUUIDToTheExactFileRow(adopting: Bool) async throws {
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    let draft = try #require(model.loadedDocument?.draft)
+    #expect(model.library.selectedNoteID == draft.id.uuidString)
+    #expect(model.library.dailyNoteCount == 1)
+    _ = try await model.persist(
+      draftID: draft.id, accountID: draft.accountID, text: "- [ ] A daily task", generation: 1)
+    let saved: DraftSnapshot
+    if adopting {
+      saved = try await provider.publish(
+        draftID: draft.id, accountID: draft.accountID, reason: .manual,
+        expectedGeneration: 1, shouldPublish: { true })
+      _ = try await model.adoptPublication(saved)
+    } else {
+      saved = try await model.publish(draftID: draft.id, accountID: draft.accountID)
+    }
+    let gistID = try #require(saved.gistID)
+    let rowID = "\(gistID)/\(draft.filename)"
+    #expect(model.library.selectedNoteID == rowID)
+    #expect(model.loadedDocument?.rowID == rowID)
+    #expect(model.library.snapshot.notes.map(\.id) == [rowID])
+    #expect(model.library.dailyNoteCount == 1)
+    #expect(model.libraryDeletionTarget(for: rowID)?.id == gistID)
+  }
+
+  @Test func deletingADailyGistCancelsItsPendingExactFileOpening() async throws {
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-24.md")
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily], cachesContent: false)
+    await provider.failToday(true)
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    await provider.holdRead(id: daily.id)
+    let opening = Task { await model.openRow(id: "daily/2026-10-24.md") }
+    await provider.waitForHeldRead()
+    #expect(model.openingDocument?.rowID == "daily/2026-10-24.md")
+    let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
+    _ = try await model.perform(deletion.action)
+    await provider.releaseRead()
+    await opening.value
+    #expect(!model.isOpeningDocument)
+    #expect(model.loadedDocument?.gist?.id != daily.id)
+    #expect(model.library.selectedNoteID != "daily/2026-10-24.md")
+    #expect(model.library.snapshot.notes.allSatisfy { $0.gistID != daily.id })
+    #expect(model.library.dailyNoteCount == 0)
+    #expect(await provider.deletedIDs == [daily.id])
+  }
 }
 
 @Suite(.serialized)
@@ -2810,6 +3086,11 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
       accountID: account.id, githubUserID: 1, gistID: gistID, filename: "README.md",
       description: "Recoverable note", content: "Base", revision: "1")
     return try await store.persist(id: draft.id, accountID: account.id, text: text, generation: 8)
+  }
+  func stageDailyDraft(filename: String, text: String) async throws -> DraftSnapshot {
+    try await draftStore().newFileDraft(
+      accountID: account.id, githubUserID: 1, gistID: "daily", filename: filename,
+      description: GistConventions.dailyNotesDescription, text: text)
   }
   func recoveryCount(draftID: UUID) async throws -> Int {
     try await draftStore().recoveries(id: draftID, accountID: account.id).count

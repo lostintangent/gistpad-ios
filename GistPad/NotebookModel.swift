@@ -262,7 +262,13 @@ struct NotebookDocument: Equatable, Sendable, Identifiable {
     NotebookSelection(gistID: gist?.id ?? draft?.gistID, filename: filename, draftID: draft?.id)
   }
 
-  var rowID: String { libraryRowID ?? gist?.id ?? draft?.id.uuidString ?? id }
+  var rowID: String {
+    if let libraryRowID { return libraryRowID }
+    if let gist, gist.isDailyNote, chrome.access == .editable {
+      return "\(gist.id)/\(filename)"
+    }
+    return gist?.id ?? draft?.id.uuidString ?? id
+  }
 
   func refersToSameFile(as other: NotebookDocument) -> Bool {
     guard accountID == other.accountID, filename == other.filename else { return false }
@@ -362,7 +368,7 @@ final class NotebookModel {
     guard let selected = library.selectedNoteID,
       selected != loadedDocument?.rowID
     else { return nil }
-    return opening(gistID: searchTargets[selected]?.gistID ?? selected, rowID: selected).title
+    return opening(gistID: rowSelection(for: selected)?.gistID ?? selected, rowID: selected).title
   }
 
   var isTodaySelected: Bool {
@@ -392,7 +398,7 @@ final class NotebookModel {
       }
       return true
     }
-    openingDocument = opening(gistID: searchTargets[id]?.gistID ?? id, rowID: id)
+    openingDocument = opening(gistID: rowSelection(for: id)?.gistID ?? id, rowID: id)
     isOpeningDocument = true
     library.selectedNoteID = id
     return false
@@ -400,7 +406,8 @@ final class NotebookModel {
 
   func libraryDeletionTarget(for rowID: String) -> NotebookDeletionTarget? {
     guard let account, pendingAccount == nil else { return nil }
-    let draftID = searchTargets[rowID]?.draftID ?? UUID(uuidString: rowID)
+    let target = rowSelection(for: rowID)
+    let draftID = target?.draftID
     let draft = draftID.flatMap { id in localDrafts.first { $0.id == id } }
     if let draft,
       let gistID = draft.gistID, cachedLibrary?.gists.contains(where: { $0.id == gistID }) != true
@@ -410,15 +417,26 @@ final class NotebookModel {
         title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
         localDraft: draft)
     }
-    let gistID = searchTargets[rowID]?.gistID ?? draft?.gistID ?? rowID
+    let gistID = target?.gistID ?? draft?.gistID ?? rowID
     guard !deletedGistIDs.contains(gistID),
       let gist = cachedLibrary?.owned.first(where: { $0.id == gistID })
     else { return nil }
     return .init(id: gist.id, accountID: account.id, title: gist.displayName)
   }
 
+  private func rowSelection(for rowID: String) -> NotebookSelection? {
+    if let target = searchTargets[rowID] { return target }
+    if let id = UUID(uuidString: rowID), let draft = localDrafts.first(where: { $0.id == id }) {
+      return .init(gistID: draft.gistID, filename: draft.filename, draftID: id)
+    }
+    if let row = library.snapshot.notes.first(where: { $0.id == rowID }), let gistID = row.gistID {
+      return .init(gistID: gistID, filename: row.filename, draftID: nil)
+    }
+    return nil
+  }
+
   func cachedDocument(rowID: String) -> NotebookDocument? {
-    if let target = searchTargets[rowID] {
+    if let target = rowSelection(for: rowID) {
       if let draftID = target.draftID, let draft = localDrafts.first(where: { $0.id == draftID }) {
         return localDocument(draft, rowID: rowID)
       }
@@ -426,9 +444,6 @@ final class NotebookModel {
         return cachedDocument(gistID: gistID, filename: target.filename, rowID: rowID)
       }
       return nil
-    }
-    if let id = UUID(uuidString: rowID), let draft = localDrafts.first(where: { $0.id == id }) {
-      return localDocument(draft, rowID: rowID)
     }
     return cachedDocument(gistID: rowID, rowID: rowID)
   }
@@ -496,7 +511,9 @@ final class NotebookModel {
 
   private func present(_ document: NotebookDocument) throws {
     var document = document
-    if !library.hasFilters, library.collection != .dailyNotes {
+    if !library.hasFilters, let rowID = document.libraryRowID,
+      !library.snapshot.notes.contains(where: { $0.id == rowID })
+    {
       document.libraryRowID = nil
     }
     failedOpen = nil
@@ -513,35 +530,41 @@ final class NotebookModel {
   private func recordLocalDraft(_ draft: DraftSnapshot) {
     localDrafts.removeAll { $0.id == draft.id }
     localDrafts.append(draft)
-    if !library.snapshot.notes.contains(where: {
-      $0.id == draft.gistID || $0.id == draft.id.uuidString
-    }) {
-      library.snapshot.notes.insert(
-        .init(
-          id: draft.id.uuidString,
-          title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
-          updatedAt: draft.updatedAt,
-          isRecovery: draft.gistID != nil
-            && cachedLibrary?.gists.contains(where: { $0.id == draft.gistID }) != true,
-          isSecret: true,
-          isDailyNote: draft.description == GistConventions.dailyNotesDescription),
-        at: 0)
-    }
-    updateLibraryExcerpt(for: draft)
+    projectLibrary()
     updateToday()
   }
 
   private func updateLibraryExcerpt(for draft: DraftSnapshot) {
-    guard let index = library.snapshot.notes.firstIndex(where: {
-      $0.id == draft.id.uuidString || $0.id == draft.gistID
-    }) else { return }
-    if let gist = cachedLibrary?.gists.first(where: { $0.id == draft.gistID }) {
-      let filename = gist.isDailyNote
-        ? GistConventions.todayFilename() : gist.defaultMarkdownFilename
-      guard draft.filename == filename else { return }
+    let gist = cachedLibrary?.gists.first { $0.id == draft.gistID }
+    let isDaily = gist?.isDailyNote == true
+      || draft.description == GistConventions.dailyNotesDescription
+    if isDaily, DailyNotesIndex.parseDateFilename(draft.filename) == nil { return }
+    if let gist, !gist.isDailyNote, draft.filename != gist.defaultMarkdownFilename { return }
+    let rowID =
+      if let gist, gist.isDailyNote, ownedGistIDs.contains(gist.id) {
+        "\(gist.id)/\(draft.filename)"
+      } else { gist?.id ?? draft.id.uuidString }
+    guard let index = library.snapshot.notes.firstIndex(where: { $0.id == rowID }) else {
+      projectLibrary()
+      return
     }
-    library.snapshot.notes[index].excerpt = Self.libraryExcerpt(
-      draft.text, title: library.snapshot.notes[index].title)
+    if library.snapshot.notes[index].gistID == nil {
+      library.snapshot.notes[index].updatedAt = draft.updatedAt
+    }
+    Self.updateLibraryContent(&library.snapshot.notes[index], text: draft.text)
+  }
+
+  private static func updateLibraryContent(_ note: inout LibraryNote, text: String?) {
+    note.excerpt = text.flatMap { Self.libraryExcerpt($0, title: note.title) }
+    if note.isDailyNote {
+      note.progress = text.map {
+        let tasks = TaskProgress(markdown: $0)
+        return .init(completed: tasks.completed, total: tasks.total)
+      }
+      note.isOverdue = note.dailyDate.map {
+        $0 < Calendar.current.startOfDay(for: .now) && (note.progress?.remaining ?? 0) > 0
+      } ?? false
+    }
   }
 
   func start() async {
@@ -725,7 +748,8 @@ final class NotebookModel {
       self.account = refreshed
       ownedGistIDs = Set(owned.map(\.id))
       library.replaceSnapshot(Self.librarySnapshot(
-        owned: owned, starred: starred, account: refreshed, excluding: deletedGistIDs))
+        owned: owned, starred: starred, account: refreshed, drafts: localDrafts,
+        cached: cachedLibrary, excluding: deletedGistIDs))
       library.loadState = .ready
       let remoteIDs = Set((ownedGists + starredGists).map(\.id))
       let local = try await provider.localState(accountID: account.id)
@@ -918,7 +942,7 @@ final class NotebookModel {
   }
 
   func openRow(id: String) async {
-    if let target = searchTargets[id] {
+    if let target = rowSelection(for: id) {
       if let draftID = target.draftID,
         recoverySearchRows.contains(id)
           || localDrafts.contains(where: { $0.id == draftID && $0.baseContent == nil })
@@ -929,10 +953,6 @@ final class NotebookModel {
       } else if let draftID = target.draftID {
         await openLocalDraft(id: draftID)
       }
-    } else if let draftID = UUID(uuidString: id),
-      localDrafts.contains(where: { $0.id == draftID })
-    {
-      await openLocalDraft(id: draftID)
     } else {
       await open(gistID: id)
     }
@@ -957,11 +977,13 @@ final class NotebookModel {
       library.searchState = .inactive
       return
     }
-    guard library.hasFilters || library.collection == .dailyNotes else {
+    guard library.hasFilters else {
       library.searchState = .inactive
       searchTargets = [:]
       recoverySearchRows = []
-      if loadedDocument?.libraryRowID != nil {
+      if let rowID = loadedDocument?.libraryRowID,
+        !library.snapshot.notes.contains(where: { $0.id == rowID })
+      {
         let isSelected = library.selectedNoteID == loadedDocument?.rowID
         loadedDocument?.libraryRowID = nil
         if isSelected, openingDocument == nil { library.selectedNoteID = loadedDocument?.rowID }
@@ -971,24 +993,12 @@ final class NotebookModel {
     do {
       let query = try LibrarySearchQuery(
         query: library.query, preferences: cache.preferences, tagIDs: library.selectedTagIDs)
-      let collection: CachedLibraryCollection =
-        switch library.collection {
-        case .gists: .gists
-        case .dailyNotes: .dailyNotes
-        case .starred: .starred
-        case .archive: .archive
-        }
-      let drafts = localDrafts.filter { draft in
-        guard let gist = cache.owned.first(where: { $0.id == draft.gistID }),
-          gist.isDailyNote, gist.files[draft.filename] == nil
-        else { return true }
-        return draft.state != .savedToGitHub || draft.attemptedGeneration != nil
-      }
+      let drafts = Self.libraryDrafts(localDrafts, owned: cache.owned, accountID: account.id)
       library.searchState = .searching
       let timeZone = TimeZone.current
       let result = await Task.detached(priority: .userInitiated) {
         LibrarySearch.search(
-          cache, query: query, collection: collection, drafts: drafts, timeZone: timeZone)
+          cache, query: query, collection: .all, drafts: drafts, timeZone: timeZone)
       }.value
       guard !Task.isCancelled, request == searchRequest, self.account?.id == account.id else {
         return
@@ -1182,49 +1192,49 @@ final class NotebookModel {
       if try await discardBlankDraft(draft) { removed.insert(draft.id) }
     }
     guard account?.id == accountID, pendingAccount == nil else { return }
-    localDrafts = local.drafts.filter { !removed.contains($0.id) }
+    localDrafts = local.drafts.filter { $0.accountID == accountID && !removed.contains($0.id) }
     cachedLibrary = local.library.map(libraryExcludingDeletedGists)
-    if let cached = cachedLibrary, let account {
-      ownedGistIDs = Set(cached.owned.map(\.id))
-      library.replaceSnapshot(Self.librarySnapshot(
-        owned: cached.owned, starred: cached.starred, account: account, excluding: deletedGistIDs))
-    } else {
-      library.replaceSnapshot(nil)
-    }
-    let known = Set(library.snapshot.notes.map(\.id))
-    library.snapshot.notes += localDrafts.filter {
-      $0.gistID.map { !known.contains($0) } ?? true
-    }.map { draft in
-      LibraryNote(
-        id: draft.id.uuidString,
-        title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
-        updatedAt: draft.updatedAt, isRecovery: draft.gistID != nil,
-        isSecret: true, isDailyNote: draft.description == GistConventions.dailyNotesDescription,
-        excerpt: Self.libraryExcerpt(draft.text, title: draft.description))
-    }
-    for index in library.snapshot.notes.indices {
-      let id = library.snapshot.notes[index].id
-      guard let gist = cachedLibrary?.gists.first(where: { $0.id == id }) else { continue }
-      let filename = gist.isDailyNote ? GistConventions.todayFilename() : gist.defaultMarkdownFilename
-      guard let filename else { continue }
-      let draft = local.drafts.first { $0.gistID == id && $0.filename == filename }
-      let cached = cachedLibrary?.content(gist: gist, filename: filename)
-      let text: String?
-      if let draft, draft.state != .savedToGitHub || draft.attemptedGeneration != nil {
-        text = draft.text
-      } else {
-        text = cached ?? draft?.text
-      }
-      library.snapshot.notes[index].excerpt = text.flatMap {
-        Self.libraryExcerpt($0, title: gist.displayName)
-      }
-    }
+    projectLibrary()
     updateToday()
     if let cachedLibrary, cachedLibrary != local.library, let account {
       try await provider.cacheLibrary(
         owned: cachedLibrary.owned, starred: cachedLibrary.starred, account: account)
     }
     await search()
+  }
+
+  private func projectLibrary() {
+    guard let account else { return }
+    let snapshot = Self.librarySnapshot(
+      owned: cachedLibrary?.owned ?? [], starred: cachedLibrary?.starred ?? [],
+      account: account, drafts: localDrafts, cached: cachedLibrary, excluding: deletedGistIDs)
+    if let cachedLibrary {
+      ownedGistIDs = Set(cachedLibrary.owned.map(\.id))
+      library.replaceSnapshot(snapshot)
+    } else {
+      library.replaceSnapshot(nil)
+      library.snapshot = snapshot
+      library.snapshot.dailyNoteCount = nil
+    }
+  }
+
+  private static func libraryDrafts(
+    _ drafts: [DraftSnapshot], owned: [Gist], accountID: UUID
+  ) -> [DraftSnapshot] {
+    drafts.filter { draft in
+      guard draft.accountID == accountID else { return false }
+      guard let gist = owned.first(where: { $0.id == draft.gistID }),
+        gist.isDailyNote, gist.truncated != true, gist.files[draft.filename] == nil
+      else { return true }
+      return draft.state != .savedToGitHub || draft.attemptedGeneration != nil
+    }
+  }
+
+  private static func librarySource(draft: DraftSnapshot?, cached: String?) -> String? {
+    if let draft, draft.state != .savedToGitHub || draft.attemptedGeneration != nil {
+      return draft.text
+    }
+    return cached ?? draft?.text
   }
 
   private func libraryExcludingDeletedGists(_ cache: CachedLibrarySnapshot) -> CachedLibrarySnapshot {
@@ -1247,7 +1257,10 @@ final class NotebookModel {
   private func updateToday() {
     let filename = GistConventions.todayFilename()
     let daily = cachedLibrary?.owned.first(where: \.isDailyNote)
-    let local = todayDraft(filename: filename, daily: daily)
+    let local = todayDraft(filename: filename, daily: daily).flatMap {
+      Self.libraryDrafts(
+        [$0], owned: cachedLibrary?.owned ?? [], accountID: $0.accountID).first
+    }
     let text = local?.text ?? daily.flatMap { cachedLibrary?.content(gist: $0, filename: filename) }
     var summary = LibraryTodaySummary(
       date: .now,
@@ -1470,7 +1483,7 @@ final class NotebookModel {
       report(error, operation: "clear-discarded-selection")
     }
     localDrafts.removeAll { $0.id == id }
-    library.snapshot.notes.removeAll { $0.id == id.uuidString }
+    projectLibrary()
     searchRequest = UUID()
     if case .results(let notes, let coverage) = library.searchState {
       library.searchState = .results(
@@ -1492,6 +1505,9 @@ final class NotebookModel {
   private func recordDeletedGist(_ id: String, accountID: UUID) {
     selections.markDeleted(gistID: id, accountID: accountID)
     guard account?.id == accountID else { return }
+    let isOpeningDeleted = openingDocument.map {
+      $0.rowID == id || rowSelection(for: $0.rowID)?.gistID == id
+    } ?? false
     deletedGistIDs.insert(id)
     libraryRequest = UUID()
     isRefreshingRemote = false
@@ -1500,12 +1516,8 @@ final class NotebookModel {
     let removedDraftIDs = Set(localDrafts.filter { $0.gistID == id }.map(\.id))
     localDrafts.removeAll { $0.gistID == id }
     cachedLibrary = cachedLibrary.map(libraryExcludingDeletedGists)
-    library.snapshot.notes.removeAll {
-      $0.id == id || $0.gistID == id || UUID(uuidString: $0.id).map(removedDraftIDs.contains) == true
-    }
-    if let opening = openingDocument,
-      opening.rowID == id || searchTargets[opening.rowID]?.gistID == id
-    {
+    projectLibrary()
+    if isOpeningDeleted {
       documentRequest = UUID()
       openingDocument = nil
       isOpeningDocument = false
@@ -1611,6 +1623,9 @@ final class NotebookModel {
       loadedDocument?.gist = gist
       loadedDocument?.draft = saved
       loadedDocument?.chrome = chrome(gist: gist, draft: saved)
+      if loadedDocument?.libraryRowID == saved.id.uuidString {
+        loadedDocument?.libraryRowID = nil
+      }
       if isSelected, openingDocument == nil {
         library.selectedNoteID = loadedDocument?.rowID
         try remember(NotebookSelection(gistID: id, filename: saved.filename, draftID: saved.id))
@@ -1627,9 +1642,6 @@ final class NotebookModel {
     if account?.id == accountID {
       localDrafts.removeAll { $0.id == saved.id }
       localDrafts.append(saved)
-      if let index = library.snapshot.notes.firstIndex(where: { $0.id == saved.id.uuidString }) {
-        library.snapshot.notes[index].updatedAt = saved.updatedAt
-      }
       updateLibraryExcerpt(for: saved)
       updateToday()
       await search()
@@ -1674,7 +1686,8 @@ final class NotebookModel {
   }
 
   static func librarySnapshot(
-    owned: [Gist], starred: [Gist], account: NotebookAccount, excluding deletedIDs: Set<String> = []
+    owned: [Gist], starred: [Gist], account: NotebookAccount, drafts: [DraftSnapshot] = [],
+    cached: CachedLibrarySnapshot? = nil, excluding deletedIDs: Set<String> = []
   )
     -> LibrarySnapshot
   {
@@ -1686,19 +1699,63 @@ final class NotebookModel {
       unique[gist.id] = gist
     }
     let preferences = account.preferences
-    return LibrarySnapshot(
-      notes: unique.values.map { gist in
-        LibraryNote(
-          id: gist.id, title: gist.displayName, updatedAt: gist.updatedAt, gistID: gist.id,
+    let drafts = libraryDrafts(drafts, owned: owned, accountID: account.id)
+    var notes = unique.values.flatMap { gist -> [LibraryNote] in
+      let gistDrafts = drafts.filter { $0.gistID == gist.id }
+      let days: [(filename: String, date: Date)?]
+      if gist.isDailyNote, ownedIDs.contains(gist.id) {
+        days = Set(gist.files.keys).union(gistDrafts.map(\.filename)).compactMap { filename in
+          DailyNotesIndex.parseDateFilename(filename).map { (filename: filename, date: $0) }
+        }.map(Optional.some)
+      } else {
+        days = [nil]
+      }
+      return days.map { day in
+        let filename = day?.filename
+          ?? (gist.isDailyNote ? GistConventions.todayFilename() : gist.defaultMarkdownFilename)
+        let draft = gistDrafts.first { $0.filename == filename }
+        let inline = filename.flatMap { gist.files[$0] }.flatMap {
+          $0.truncated == true ? nil : $0.content
+        }.map(GistConventions.decodeContent)
+        let text = librarySource(
+          draft: draft, cached: filename.flatMap { cached?.content(gist: gist, filename: $0) } ?? inline)
+        var note = LibraryNote(
+          id: day.map { "\(gist.id)/\($0.filename)" } ?? gist.id,
+          title: day.map { GistConventions.fileDisplayName($0.filename) } ?? gist.displayName,
+          updatedAt: gist.updatedAt, gistID: gist.id,
           owner: gist.owner?.login, isOwned: ownedIDs.contains(gist.id),
           canDeleteFromGitHub: ownedIDs.contains(gist.id),
           isSecret: !gist.isPublic, isPinned: preferences.pinnedGists.contains(gist.id),
           isStarred: starredIDs.contains(gist.id), isArchived: gist.isArchived,
           isDailyNote: gist.isDailyNote, tagIDs: Set(preferences.gistTags[gist.id] ?? []),
+          filename: day?.filename,
           fileCount: gist.truncated == true ? nil : gist.files.count,
-          commentCount: gist.commentCount
+          dailyDate: day?.date,
+          commentCount: gist.isDailyNote ? nil : gist.commentCount
         )
-      }.sorted {
+        updateLibraryContent(&note, text: text)
+        return note
+      }
+    }
+    notes += drafts.filter { $0.gistID.map { unique[$0] == nil } ?? true }.compactMap { draft in
+      let daily = draft.description == GistConventions.dailyNotesDescription
+      let day = daily ? DailyNotesIndex.parseDateFilename(draft.filename) : nil
+      if daily, day == nil { return nil }
+      var note = LibraryNote(
+        id: draft.id.uuidString,
+        title: daily ? GistConventions.fileDisplayName(draft.filename)
+          : (draft.description.isEmpty ? String(localized: "Untitled") : draft.description),
+        updatedAt: draft.updatedAt, isRecovery: draft.gistID != nil,
+        isSecret: true, isDailyNote: daily, filename: draft.filename,
+        dailyDate: day)
+      updateLibraryContent(&note, text: draft.text)
+      return note
+    }
+    let hasIncompleteDaily = unique.values.contains {
+      ownedIDs.contains($0.id) && $0.isDailyNote && $0.truncated == true
+    }
+    return LibrarySnapshot(
+      notes: notes.sorted {
         if $0.updatedAt != $1.updatedAt {
           return ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast)
         }
@@ -1706,7 +1763,10 @@ final class NotebookModel {
       },
       tags: preferences.tagDefinitions.map { tag in
         LibraryTag(id: tag.id, name: tag.name, colorHex: tag.colorHex)
-      }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+      }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
+      dailyNoteCount: hasIncompleteDaily ? nil : notes.filter {
+        $0.isDailyNote && $0.isOwned && $0.dailyDate != nil
+      }.count
     )
   }
 

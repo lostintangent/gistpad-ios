@@ -160,6 +160,38 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
         #expect(LibrarySearch.search(library, collection: .gists, drafts: [daily]).matches.isEmpty)
     }
 
+    @Test(arguments: ["template.md", "README.md", "2026.md", "2026-02-30.md"])
+    func dailySearchIncludesOnlyRealDatedFilesWithoutRestrictingOrdinaryNotes(filename: String) async throws {
+        let account = UUID()
+        let daily = try decodeGist(gistData(
+            id: "daily", description: GistConventions.dailyNotesDescription, filename: filename))
+        let dated = try decodeGist(gistData(
+            id: "dated", content: "- [ ] A task",
+            description: GistConventions.dailyNotesDescription, filename: "2024-02-29.md"))
+        let ordinary = try decodeGist(gistData(id: "ordinary", filename: filename))
+        let store = try DraftStore.open(inMemory: true)
+        let invalid = try await store.newDraft(
+            accountID: account, githubUserID: 42, filename: filename,
+            description: GistConventions.dailyNotesDescription, text: "Not a day")
+        let local = try await store.newDraft(
+            accountID: account, githubUserID: 42, filename: "2026-10-24.md",
+            description: GistConventions.dailyNotesDescription, text: "- [x] A task")
+        let library = CachedLibrarySnapshot(
+            accountID: account, owned: [daily, dated, ordinary], starred: [],
+            preferences: Preferences(metadata: [:]))
+        let all = LibrarySearch.search(library, collection: .all, drafts: [invalid, local])
+        #expect(Set(all.matches.map(\.id)) == [
+            "dated/2024-02-29.md", "ordinary/\(filename)", local.id.uuidString,
+        ])
+        #expect(all.totalDocuments == 3)
+        #expect(all.documentsWithCachedContent == 3)
+        #expect(all.hasCompleteCachedContent)
+        let days = LibrarySearch.search(library, collection: .dailyNotes, drafts: [invalid, local])
+        #expect(Set(days.matches.map(\.id)) == ["dated/2024-02-29.md", local.id.uuidString])
+        #expect(days.matches.first { $0.id == local.id.uuidString }?.title == "2026-10-24")
+        #expect(days.matches.first { $0.id == local.id.uuidString }?.progress?.remaining == 0)
+    }
+
     @Test func missingRemoteGistsRemainSearchableAsAccountScopedRecoveryDrafts() async throws {
         let account = UUID()
         let store = try DraftStore.open(inMemory: true)
