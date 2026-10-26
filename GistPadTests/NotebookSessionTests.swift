@@ -930,9 +930,13 @@ struct NotebookSessionTests {
       draft = try await store.draft(id: draft.id, accountID: accountID)
     }
     let provider = SessionNotebookProvider(
-      store: store, id: draft.id, accountID: accountID, autosave: autosave)
+      store: store, id: draft.id, accountID: accountID, autosave: autosave,
+      publishedGist: uncertainCreation ? nil : gist)
     let model = NotebookModel(provider: provider)
-    if autosave != nil { await model.start() }
+    if autosave != nil {
+      await model.start()
+      #expect(model.library.loadState == .ready)
+    }
     let document = uncertainCreation
       ? NotebookDocument(draft: draft)
       : NotebookDocument(
@@ -977,6 +981,7 @@ private actor SessionNotebookProvider: NotebookProviding {
   let id: UUID
   let accountID: UUID
   let autosave: Bool?
+  private let publishedGist: Gist?
   private(set) var persistedGenerations: [UInt64] = []
   private(set) var publishCount = 0
   private(set) var publicationReasons: [PublishReason] = []
@@ -999,11 +1004,15 @@ private actor SessionNotebookProvider: NotebookProviding {
   private var refreshObserver: CheckedContinuation<Void, Never>?
   private var pausesRefresh = false
 
-  init(store: DraftStore, id: UUID, accountID: UUID, autosave: Bool? = nil) {
+  init(
+    store: DraftStore, id: UUID, accountID: UUID, autosave: Bool? = nil,
+    publishedGist: Gist? = nil
+  ) {
     self.store = store
     self.id = id
     self.accountID = accountID
     self.autosave = autosave
+    self.publishedGist = publishedGist
   }
 
   func cachedAccount() -> NotebookAccount? {
@@ -1027,8 +1036,14 @@ private actor SessionNotebookProvider: NotebookProviding {
     guard let account = cachedAccount() else { throw AccountError.signedOut }
     return account
   }
-  func gists(accountID: UUID) -> [Gist] { [] }
-  func starredGists(accountID: UUID) -> [Gist] { [] }
+  func gists(accountID: UUID) -> [Gist] {
+    guard let publishedGist, publishedGist.owner?.id == 1 else { return [] }
+    return [publishedGist]
+  }
+  func starredGists(accountID: UUID) -> [Gist] {
+    guard let publishedGist, publishedGist.owner?.id != 1 else { return [] }
+    return [publishedGist]
+  }
   func gist(id: String, accountID: UUID) throws -> Gist { throw GitHubClientError.missingFile }
   func content(gist: Gist, filename: String, accountID: UUID) throws -> String {
     throw GitHubClientError.missingFile
