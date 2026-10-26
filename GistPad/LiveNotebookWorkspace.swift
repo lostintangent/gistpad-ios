@@ -546,7 +546,7 @@ struct LiveNotebookWorkspace: View {
       selectRow(rowID)
     }
     actions.account = { showingSettings = true }
-    let reconnect: () -> Void = {
+    let reconnect: @MainActor () -> Void = {
       Task {
         await notebook.signIn()
         if notebook.account?.id == active?.draft.accountID,
