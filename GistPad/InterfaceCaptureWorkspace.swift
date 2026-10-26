@@ -513,8 +513,6 @@ struct InterfaceCaptureWorkspace: View {
                 }
                 await markReady()
             }
-        case .contentHeight:
-            break
         }
     }
 

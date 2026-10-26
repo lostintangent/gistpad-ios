@@ -17,7 +17,7 @@ public struct CommentHighlightConfiguration: Equatable, Sendable {
     }
 }
 
-public struct CommentQuoteHighlight: Codable, Equatable, Sendable {
+public struct CommentQuoteHighlight: Equatable, Sendable {
     public let segment: Int
     public let start: Int
     public let end: Int
@@ -36,11 +36,11 @@ extension CommentQuoteMatcher {
             guard let matches = grouped[segment] else {
                 preconditionFailure("A grouped quote segment must contain its matches.")
             }
-            let boundaries = Set(matches.flatMap { [$0.start, $0.end] }).sorted()
+            let boundaries = Set(matches.flatMap { [$0.range.location, NSMaxRange($0.range)] }).sorted()
             for (start, end) in zip(boundaries, boundaries.dropFirst()) {
                 var seen: Set<Int64> = []
                 let ids = matches.compactMap { match -> Int64? in
-                    guard match.start <= start, match.end >= end,
+                    guard match.range.location <= start, NSMaxRange(match.range) >= end,
                           seen.insert(match.commentID).inserted else { return nil }
                     return match.commentID
                 }

@@ -47,7 +47,8 @@ struct CommentCompatibilityFixtures: Decodable {
             let actual = CommentQuoteMatcher.matches(
                 quotes: [.init(commentID: 7, quote: fixture.quote)], segments: fixture.segments)
             #expect(actual.map {
-                CommentCompatibilityFixtures.Quote.Match(segment: $0.segment, start: $0.start, end: $0.end)
+                CommentCompatibilityFixtures.Quote.Match(
+                    segment: $0.segment, start: $0.range.location, end: NSMaxRange($0.range))
             } == fixture.matches, Comment(rawValue: fixture.quote))
             #expect(actual.allSatisfy { $0.commentID == 7 })
             for match in actual {

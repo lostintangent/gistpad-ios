@@ -75,7 +75,6 @@ public enum PreviewFailure: Error, Equatable, Sendable, LocalizedError {
 public enum PreviewEvent: Equatable, Sendable {
     case taskToggle(TaskToggleEdit)
     case linkTapped(PreviewLink)
-    case contentHeight(Double)
     case rendered(documentID: String, generation: UInt64)
     case failure(PreviewFailure)
 }

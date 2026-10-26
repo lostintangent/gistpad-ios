@@ -8,17 +8,8 @@ struct PreviewCommentCatalog: Decodable {
     let segments: [String]
 
     static func decode(_ value: Any, document: PreviewDocument) throws -> Self {
-        guard JSONSerialization.isValidJSONObject(value) else { throw PreviewFailure.invalidMessage }
-        let data = try JSONSerialization.data(withJSONObject: value)
-        guard data.count <= PreviewDocument.maximumLength * 32 else {
-            throw PreviewFailure.invalidMessage
-        }
-        let catalog: Self
-        do {
-            catalog = try JSONDecoder().decode(Self.self, from: data)
-        } catch {
-            throw PreviewFailure.invalidMessage
-        }
+        let catalog: Self = try PreviewBridge.decode(
+            value, maximumBytes: PreviewDocument.maximumLength * 32)
         guard catalog.version == 1, catalog.documentID == document.id,
               catalog.generation == String(document.generation) else {
             throw PreviewFailure.staleDocument
@@ -44,16 +35,11 @@ struct PreviewCommentSelection: Decodable {
     let quote: String?
 
     static func decode(_ value: Any, document: PreviewDocument) throws -> Self {
-        guard let envelope = value as? [String: Any], envelope.keys.contains("quote"),
-              JSONSerialization.isValidJSONObject(envelope) else { throw PreviewFailure.invalidMessage }
-        let data = try JSONSerialization.data(withJSONObject: value)
-        guard data.count <= PreviewDocument.maximumLength * 32 else { throw PreviewFailure.invalidMessage }
-        let selection: Self
-        do {
-            selection = try JSONDecoder().decode(Self.self, from: data)
-        } catch {
+        guard let envelope = value as? [String: Any], envelope.keys.contains("quote") else {
             throw PreviewFailure.invalidMessage
         }
+        let selection: Self = try PreviewBridge.decode(
+            value, maximumBytes: PreviewDocument.maximumLength * 32)
         guard selection.version == 1, selection.documentID == document.id,
               selection.generation == String(document.generation) else {
             throw PreviewFailure.staleDocument
@@ -80,15 +66,7 @@ enum PreviewCommentActivation {
         _ value: Any, document: PreviewDocument,
         highlights: [CommentQuoteHighlight], configuration: CommentHighlightConfiguration
     ) throws -> [Int64] {
-        guard JSONSerialization.isValidJSONObject(value) else { throw PreviewFailure.invalidMessage }
-        let data = try JSONSerialization.data(withJSONObject: value)
-        guard data.count <= 16_384 else { throw PreviewFailure.invalidMessage }
-        let message: Envelope
-        do {
-            message = try JSONDecoder().decode(Envelope.self, from: data)
-        } catch {
-            throw PreviewFailure.invalidMessage
-        }
+        let message: Envelope = try PreviewBridge.decode(value, maximumBytes: 16_384)
         guard message.version == 1, message.type == "commentActivate" else {
             throw PreviewFailure.invalidMessage
         }

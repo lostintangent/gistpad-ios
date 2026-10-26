@@ -78,7 +78,7 @@ final class NotebookCommentsPresentation {
       let model = try await preparedConversation(for: next.document)
       guard isCurrent(next) else { return }
       conversation = model
-      await model.load()
+      await model.refresh()
     } catch {
       guard isCurrent(next) else { return }
       preparationFailure = NotebookModel.message(for: error)
@@ -130,7 +130,7 @@ final class NotebookCommentsPresentation {
         guard requestID == request, isCurrent(next), isPresented else { return }
         conversation = model
         applyPendingContext()
-        await model.load()
+        await model.refresh()
         guard requestID == request, isCurrent(next), isPresented else { return }
         applyPendingContext()
       } catch {

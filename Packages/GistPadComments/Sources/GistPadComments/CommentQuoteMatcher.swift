@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CommentQuote: Codable, Equatable, Sendable {
+public struct CommentQuote: Equatable, Sendable {
     public let commentID: Int64
     public let quote: String
 
@@ -14,30 +14,23 @@ public struct CommentQuote: Codable, Equatable, Sendable {
     }
 }
 
-public struct CommentQuoteMatch: Codable, Equatable, Sendable {
-    public let commentID: Int64
-    public let segment: Int
-    public let start: Int
-    public let end: Int
-    public var range: NSRange { NSRange(location: start, length: end - start) }
-}
-
 public enum CommentQuoteMatcher {
-    public static let minimumQuoteLength = 3
-    public static let minimumSelectionLength = 4
+    typealias Match = (commentID: Int64, segment: Int, range: NSRange)
+    private static let minimumQuoteLength = 3
+    private static let minimumSelectionLength = 4
 
     public static func isEligibleSelection(_ selection: String) -> Bool {
         GistCommentBody.trim(selection).utf16.count >= minimumSelectionLength
     }
 
-    public static func matches(
+    static func matches(
         quotes: [CommentQuote], segments: [String]
-    ) -> [CommentQuoteMatch] {
+    ) -> [Match] {
         let texts = segments.map { $0 as NSString }
         return quotes.compactMap { quote in
             let length = quote.quote.utf16.count
             guard length >= minimumQuoteLength else { return nil }
-            var match: CommentQuoteMatch?
+            var match: Match?
             for (segment, text) in texts.enumerated() {
                 var location = 0
                 while location <= text.length - length {
@@ -48,9 +41,7 @@ public enum CommentQuoteMatcher {
                     let end = NSMaxRange(range)
                     if isWordBoundary(range.location, in: text), isWordBoundary(end, in: text) {
                         guard match == nil else { return nil }
-                        match = CommentQuoteMatch(
-                            commentID: quote.commentID, segment: segment,
-                            start: range.location, end: end)
+                        match = (commentID: quote.commentID, segment: segment, range: range)
                         location = end
                     } else {
                         location = range.location + 1

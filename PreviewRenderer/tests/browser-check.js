@@ -80,7 +80,7 @@ async (page) => {
       evalBlocked: window.previewEvalBlocked === true,
       wikilink: window.previewMessages.some((message) => message.type === "link" && message.kind === "wikilink" && message.target === "Ideas"),
       external: window.previewMessages.some((message) => message.type === "link" && message.kind === "external" && message.target === "https://gistpad.dev"),
-      heights: window.previewMessages.filter((message) => message.type === "height").every((message) => Number.isFinite(message.height) && message.height > 0),
+      rendered: window.previewMessages.some((message) => message.type === "rendered"),
       calculations: document.querySelector("article").textContent.includes("$15.00"),
       noPageOverflow: document.documentElement.scrollWidth <= window.innerWidth,
       toc: document.querySelectorAll(".markdown-toc a").length >= 6,

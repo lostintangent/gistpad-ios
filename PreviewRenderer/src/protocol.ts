@@ -21,7 +21,6 @@ export type PreviewMessage =
       (
         | { type: "taskToggle"; edit: TaskEdit }
         | { type: "link"; kind: "external" | "wikilink" | "anchor"; target: string }
-        | { type: "height"; height: number }
         | { type: "rendered" }
         | { type: "failure"; message: string }
       ));

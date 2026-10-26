@@ -22,14 +22,14 @@ struct PreviewDocument: Equatable, Sendable {
     }
 }
 
-enum BridgeMessage {
-    case ready
-    case obsolete
-    case taskEditingUnavailable
-    case event(PreviewEvent)
-}
-
 enum PreviewBridge {
+    enum Message {
+        case ready
+        case obsolete
+        case taskEditingUnavailable
+        case event(PreviewEvent)
+    }
+
     private struct Envelope: Decodable {
         struct Edit: Decodable {
             let location: Int
@@ -44,25 +44,27 @@ enum PreviewBridge {
         let edit: Edit?
         let kind: String?
         let target: String?
-        let height: Double?
         let message: String?
     }
 
-    static func decode(_ body: Any, document: PreviewDocument, allowsTaskEdits: Bool = true) throws -> BridgeMessage {
+    static func decode<Value: Decodable>(_ body: Any, maximumBytes: Int) throws -> Value {
         guard JSONSerialization.isValidJSONObject(body) else { throw PreviewFailure.invalidMessage }
         let data = try JSONSerialization.data(withJSONObject: body)
-        guard data.count <= 16_384 else { throw PreviewFailure.invalidMessage }
-        let message: Envelope
+        guard data.count <= maximumBytes else { throw PreviewFailure.invalidMessage }
         do {
-            message = try JSONDecoder().decode(Envelope.self, from: data)
+            return try JSONDecoder().decode(Value.self, from: data)
         } catch {
             throw PreviewFailure.invalidMessage
         }
+    }
+
+    static func decode(_ body: Any, document: PreviewDocument, allowsTaskEdits: Bool = true) throws -> Message {
+        let message: Envelope = try decode(body, maximumBytes: 16_384)
         guard message.version == 1 else { throw PreviewFailure.invalidMessage }
         if message.type == "ready" { return .ready }
         guard message.documentID == document.id,
               message.generation == String(document.generation) else {
-            if ["height", "rendered", "failure"].contains(message.type) { return .obsolete }
+            if ["rendered", "failure"].contains(message.type) { return .obsolete }
             throw PreviewFailure.staleDocument
         }
         switch message.type {
@@ -96,11 +98,6 @@ enum PreviewBridge {
             return .event(.linkTapped(PreviewLink(
                 documentID: document.id, generation: document.generation, kind: kind, target: target
             )))
-        case "height":
-            guard let height = message.height, height.isFinite, (0...10_000_000).contains(height) else {
-                throw PreviewFailure.invalidMessage
-            }
-            return .event(.contentHeight(height))
         case "rendered":
             return .event(.rendered(documentID: document.id, generation: document.generation))
         case "failure":

@@ -6,7 +6,7 @@ import Testing
 struct CommentConversationTests {
     @Test func confirmedGistDeletionClearsCommentDraftsAndCannotBeAutosavedBack() async throws {
         let (controller, remote, store) = make(comments: [comment(1)])
-        await controller.load()
+        await controller.refresh()
         controller.updateText("A comment draft to remove")
         #expect(await controller.flushDraft())
         try await controller.discardAfterGistDeletion()
@@ -23,7 +23,7 @@ struct CommentConversationTests {
 
     @Test func confirmedGistDeletionWaitsForAnAlreadyRunningAutosaveBeforeRemovingItsBytes() async throws {
         let (controller, _, store) = make()
-        await controller.load()
+        await controller.refresh()
         await store.suspendNextSave()
         controller.updateText("A draft with its autosave already running")
         await store.waitForSave()
@@ -38,7 +38,7 @@ struct CommentConversationTests {
 
     @Test func aLateCommentReceiptCannotRestoreADeletedGistsConversation() async throws {
         let (controller, remote, store) = make()
-        await controller.load()
+        await controller.refresh()
         controller.updateText("A comment already being sent")
         await remote.suspendPosts()
         let posting = Task { await controller.post() }
@@ -84,7 +84,7 @@ struct CommentConversationTests {
 
     @Test func preservesKnownTotalsAndThreadsDuringFailedRefresh() async {
         let (controller, remote, _) = make(comments: [comment(1), comment(2, body: "> [comment:1]\n\nReply")])
-        await controller.load()
+        await controller.refresh()
         #expect(controller.knownTotal == 2)
         #expect(controller.threads.count == 1)
         await remote.failReads(.network)
@@ -97,7 +97,7 @@ struct CommentConversationTests {
 
     @Test func aSuccessfulRefreshClearsAStaleAuthenticationFailureWithoutPosting() async {
         let (controller, remote, _) = make()
-        await controller.load()
+        await controller.refresh()
         controller.updateText("Keep this draft after reconnecting")
         await remote.behave(.reject(.authentication))
         await controller.post()
@@ -118,7 +118,7 @@ struct CommentConversationTests {
         #expect(await controller.flushDraft())
         let restored = make(remote: remote, store: store, scope: controller.scope).0
         await remote.failReads(.network)
-        await restored.load()
+        await restored.refresh()
         #expect(restored.comments == nil)
         #expect(restored.knownTotal == nil)
         #expect(restored.activeDraft.text == "Kept on this device")
@@ -129,7 +129,7 @@ struct CommentConversationTests {
 
     @Test func restoresExactCapturedQuoteAndSeparateReplyDrafts() async {
         let (controller, remote, store) = make(comments: [comment(1)])
-        await controller.load()
+        await controller.refresh()
         let quote = CapturedCommentQuote(filename: "Notes.md", text: "Cafe\u{301}\nsecond line")
         controller.beginQuote(quote)
         controller.updateText("Quote draft")
@@ -137,7 +137,7 @@ struct CommentConversationTests {
         controller.updateText("Reply draft")
         #expect(await controller.flushDraft())
         let restored = make(remote: remote, store: store, scope: controller.scope).0
-        await restored.load()
+        await restored.refresh()
         #expect(restored.activeDraft.target == .reply(commentID: 1))
         #expect(restored.activeDraft.text == "Reply draft")
         restored.beginQuote(quote)
@@ -152,7 +152,7 @@ struct CommentConversationTests {
 
     @Test func missingReplyTargetNeverBecomesARootPost() async {
         let (controller, remote, _) = make(comments: [comment(1)])
-        await controller.load()
+        await controller.refresh()
         controller.beginReply(to: 1)
         controller.updateText("Unsent reply")
         await remote.replace([])
@@ -167,7 +167,7 @@ struct CommentConversationTests {
             comment(1), comment(2, body: "> [comment:1]\n\nOne"),
             comment(3, body: "> [comment:2]\n\nTwo"),
         ])
-        await controller.load()
+        await controller.refresh()
         controller.beginReply(to: 3)
         #expect(controller.composer.problem == .replyDepthLimit)
         #expect(controller.activeDraft.target == .root)
@@ -176,7 +176,7 @@ struct CommentConversationTests {
     @Test func editingPreservesTheExactHiddenPrefix() async {
         let original = "> first line\n\n\nOriginal"
         let (controller, remote, _) = make(comments: [comment(1, body: original)])
-        await controller.load()
+        await controller.refresh()
         controller.beginEditing(1)
         controller.updateText("Revised **Markdown**")
         await controller.post()
@@ -188,7 +188,7 @@ struct CommentConversationTests {
 
     @Test func aChangedRemoteCommentDoesNotOverwriteTheNewerBody() async {
         let (controller, remote, _) = make(comments: [comment(1, body: "Original")])
-        await controller.load()
+        await controller.refresh()
         controller.beginEditing(1)
         controller.updateText("Local edit")
         await remote.replace([comment(1, body: "Someone changed this")])
@@ -205,7 +205,7 @@ struct CommentConversationTests {
 
     @Test func explicitlyRestartingAnEditReplacesItsSnapshotWithoutLosingTypedText() async {
         let (controller, remote, store) = make(comments: [comment(1, body: "> Original quote\n\nOriginal")])
-        await controller.load()
+        await controller.refresh()
         controller.beginEditing(1)
         controller.updateText("Keep this local edit")
         await remote.replace([comment(1, body: "> Changed quote\n\nChanged remotely")])
@@ -221,7 +221,7 @@ struct CommentConversationTests {
         #expect(controller.composer.canPost)
         #expect(await controller.flushDraft())
         let restored = make(remote: remote, store: store, scope: controller.scope).0
-        await restored.load()
+        await restored.refresh()
         #expect(restored.activeDraft.id == controller.activeDraft.id)
         #expect(restored.activeDraft.text == "Keep this local edit")
         #expect(restored.composer.canPost)
@@ -233,7 +233,7 @@ struct CommentConversationTests {
     @Test(arguments: [(Int64(0), Int64(7)), (Int64(1), Int64(7)), (Int64(2), Int64(8))])
     func anInvalidCreateReceiptCannotClearTheDraft(id: Int64, authorID: Int64) async {
         let (controller, remote, _) = make(comments: [comment(1, body: "Keep this draft")])
-        await controller.load()
+        await controller.refresh()
         controller.updateText("Keep this draft")
         await remote.behave(.malformedCreateReceipt(comment(id, body: "Keep this draft", authorID: authorID)))
         await controller.post()
@@ -247,7 +247,7 @@ struct CommentConversationTests {
     @Test func gistOwnershipAllowsDeleteButNotEditingAnotherAuthorsComment() async {
         let foreign = comment(1, authorID: 8)
         let (controller, remote, _) = make(comments: [foreign], gistOwnerID: 7)
-        await controller.load()
+        await controller.refresh()
         #expect(!controller.canEdit(foreign))
         #expect(controller.canDelete(foreign))
         controller.beginEditing(1)
@@ -261,7 +261,7 @@ struct CommentConversationTests {
         let (controller, _, _) = make(comments: [
             comment(1), comment(2, body: "> [comment:1]\n\nSurviving reply"),
         ])
-        await controller.load()
+        await controller.refresh()
         await controller.delete(1)
         #expect(controller.comments?.map(\.id) == [2])
         #expect(controller.threads.map(\.id) == [2])
@@ -270,7 +270,7 @@ struct CommentConversationTests {
 
     @Test func aFailedLocalDraftWriteBlocksTheRemoteMutation() async {
         let (controller, remote, store) = make()
-        await controller.load()
+        await controller.refresh()
         controller.updateText("Do not lose me")
         await store.setFailSaves(true)
         await controller.post()
@@ -285,7 +285,7 @@ struct CommentConversationTests {
 
     @Test func aRejectedPostKeepsItsDraftAndCanBeRetriedExplicitly() async {
         let (controller, remote, _) = make()
-        await controller.load()
+        await controller.refresh()
         controller.updateText("Keep after rejection")
         await remote.behave(.reject(.http(status: 422, retryAfter: nil)))
         await controller.post()
@@ -301,7 +301,7 @@ struct CommentConversationTests {
 
     @Test func aLostAcknowledgementRefreshesAndNeverPostsTwice() async {
         let (controller, remote, _) = make()
-        await controller.load()
+        await controller.refresh()
         controller.updateText("Posted once")
         await remote.behave(.applyThenFail)
         await controller.post()
@@ -314,7 +314,7 @@ struct CommentConversationTests {
 
     @Test func anUnconfirmedPostRefreshesAndLeavesPostForTheUser() async {
         let (controller, remote, _) = make()
-        await controller.load()
+        await controller.refresh()
         controller.updateText("Still a draft")
         await remote.behave(.failWithoutApplying)
         await controller.post()
@@ -327,7 +327,7 @@ struct CommentConversationTests {
 
     @Test func anInterruptedUncertainPostIsReconciledAfterRestart() async {
         let (controller, remote, store) = make()
-        await controller.load()
+        await controller.refresh()
         controller.updateText("Survive the restart")
         await remote.behave(.applyThenFailAndLoseReads)
         await controller.post()
@@ -335,7 +335,7 @@ struct CommentConversationTests {
         #expect(controller.pendingMutation != nil)
         let restored = make(remote: remote, store: store, scope: controller.scope).0
         await remote.failReads(nil)
-        await restored.load()
+        await restored.refresh()
         #expect(await remote.createCount == 1)
         #expect(restored.activeDraft.text.isEmpty)
         #expect(restored.pendingMutation == nil)
@@ -344,7 +344,7 @@ struct CommentConversationTests {
 
     @Test func anOldIdenticalCommentDoesNotAcknowledgeANewUncertainPost() async {
         let (controller, remote, _) = make(comments: [comment(1, body: "Same words")])
-        await controller.load()
+        await controller.refresh()
         controller.updateText("Same words")
         await remote.behave(.failWithoutApplying)
         await controller.post()
@@ -356,7 +356,7 @@ struct CommentConversationTests {
     @Test(arguments: [false, true])
     func reconciliationRequiresTheAuthorAndExactSourceBytes(canonicalOnly: Bool) async {
         let (controller, remote, _) = make()
-        await controller.load()
+        await controller.refresh()
         controller.updateText("Cafe\u{301}")
         await remote.behave(.applyThenFailAndLoseReads)
         await controller.post()
@@ -372,7 +372,7 @@ struct CommentConversationTests {
 
     @Test func acknowledgedPostWithLocalFailureOnlyRetriesLocalCompletion() async {
         let (controller, remote, store) = make()
-        await controller.load()
+        await controller.refresh()
         controller.updateText("GitHub accepted this")
         await remote.failLocalAfterCreate(store)
         await controller.post()
@@ -389,7 +389,7 @@ struct CommentConversationTests {
 
     @Test func uncertainEditAcknowledgesItsIDAndRebasesNewerDraftText() async {
         let (controller, remote, _) = make(comments: [comment(1, body: "Original")])
-        await controller.load()
+        await controller.refresh()
         controller.beginEditing(1)
         controller.updateText("First edit")
         await remote.behave(.applyThenFailAndLoseReads)
@@ -411,7 +411,7 @@ struct CommentConversationTests {
         let (controller, remote, _) = make(comments: [
             comment(1), comment(2, body: "> [comment:1]\n\nA reply"),
         ])
-        await controller.load()
+        await controller.refresh()
         await remote.behave(.applyThenFail)
         await controller.delete(1)
         #expect(await remote.deleteCount == 1)
@@ -437,7 +437,7 @@ struct CommentConversationTests {
 
     @Test func sendingDisablesComposerEditingAndOverlappingPosts() async {
         let (controller, remote, _) = make()
-        await controller.load()
+        await controller.refresh()
         controller.updateText("One operation")
         await remote.suspendPosts()
         let sending = Task { await controller.post() }
@@ -454,7 +454,7 @@ struct CommentConversationTests {
 
     @Test func serverRetryDeadlinesPreventAnotherRequest() async {
         let (controller, remote, _) = make()
-        await controller.load()
+        await controller.refresh()
         controller.updateText("Wait for GitHub")
         let deadline = Date.now.addingTimeInterval(3_600)
         await remote.behave(.reject(.http(status: 429, retryAfter: deadline)))
@@ -468,7 +468,7 @@ struct CommentConversationTests {
 
     @Test func removingQuoteContextDoesNotOverwriteAnotherRootDraft() async {
         let (controller, _, _) = make()
-        await controller.load()
+        await controller.refresh()
         controller.updateText("Root draft")
         controller.beginQuote(.init(filename: "Note.md", text: "A passage"))
         controller.updateText("Quoted draft")

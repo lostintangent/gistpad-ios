@@ -93,7 +93,7 @@ struct PreviewBridgeTests {
             ["version": 2, "type": "ready"],
             ["version": 1, "type": "unknown", "documentID": "fixture", "generation": String(UInt64.max)],
             ["version": 1, "type": "failure", "message": String(repeating: "x", count: 20_000)],
-            ["version": 1, "type": "height", "documentID": "fixture", "generation": String(UInt64.max), "height": -1]
+            ["version": 1, "type": "link", "documentID": "fixture", "generation": String(UInt64.max), "kind": "external", "target": ""]
         ] {
             #expect(throws: PreviewFailure.invalidMessage) {
                 try PreviewBridge.decode(body, document: document)
@@ -111,8 +111,8 @@ struct PreviewBridgeTests {
     @Test("Late layout notifications do not become document errors")
     func lateLayoutMessage() throws {
         let body: [String: Any] = [
-            "version": 1, "type": "height", "documentID": "previous-document",
-            "generation": "1", "height": 300
+            "version": 1, "type": "rendered", "documentID": "previous-document",
+            "generation": "1"
         ]
         guard case .obsolete = try PreviewBridge.decode(body, document: document) else {
             Issue.record("Expected an obsolete layout notification")

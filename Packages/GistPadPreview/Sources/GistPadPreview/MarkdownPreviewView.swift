@@ -66,24 +66,6 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     @Environment(\.personalAccent) private var personalAccent
     @Environment(\.isNotebookPaneVisible) private var isPaneVisible
 
-    init(
-        document: PreviewDocument, allowsTaskEdits: Bool, viewportView: PreviewViewportView,
-        comments: CommentHighlightConfiguration,
-        onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?,
-        onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?,
-        onAddComment: (@MainActor (String) -> Void)?,
-        onEvent: @escaping @MainActor (PreviewEvent) -> Void
-    ) {
-        self.document = document
-        self.allowsTaskEdits = allowsTaskEdits
-        self.viewportView = viewportView
-        self.comments = comments
-        self.onOpenCommentThreads = onOpenCommentThreads
-        self.onLinkedCommentIDsChange = onLinkedCommentIDsChange
-        self.onAddComment = onAddComment
-        self.onEvent = onEvent
-    }
-
     func makeCoordinator() -> Coordinator {
         Coordinator(document: document, allowsTaskEdits: allowsTaskEdits, onEvent: onEvent)
     }

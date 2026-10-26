@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNod
 import { flushSync } from "react-dom";
 import type { Element as HASTElement, Root } from "hast";
 import { isUInt64String, type RenderRequest } from "./protocol";
+import { contrastRatio, type RGB } from "./appearance";
 
 type Identity = Pick<RenderRequest, "version" | "documentID" | "generation">;
 export interface CommentThreadActivation extends Identity {
@@ -313,21 +314,9 @@ function CommentFragment({ controller, highlight, state, selected, children }: {
     } : undefined}>{children}</span>;
 }
 
-type RGB = [number, number, number];
 interface RGBA { rgb: RGB; alpha: number }
 function mix(page: RGB, color: RGB, amount: number): RGB {
   return page.map((value, index) => value * (1 - amount) + color[index]! * amount) as RGB;
-}
-function luminance(color: RGB) {
-  const linear = color.map((channel) => {
-    const value = channel / 255;
-    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * linear[0]! + 0.7152 * linear[1]! + 0.0722 * linear[2]!;
-}
-function contrast(first: RGB, second: RGB) {
-  const a = luminance(first), b = luminance(second);
-  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 function parseHex(value: string): RGB {
   return [1, 3, 5].map((start) => parseInt(value.slice(start, start + 2), 16)) as RGB;
@@ -338,10 +327,10 @@ function parseColor(value: string): RGBA {
   return { rgb: [Number(match[1]), Number(match[2]), Number(match[3])], alpha: Number(match[4] ?? 1) };
 }
 export function idleHighlight(accent: RGB, page: RGB, ink: RGBA, target: number): string {
-  const minimum = Math.min(target, contrast(mix(page, ink.rgb, ink.alpha), page));
+  const minimum = Math.min(target, contrastRatio(mix(page, ink.rgb, ink.alpha), page));
   for (let step = 0; step <= 128; step++) {
     const candidate = mix(page, accent, 0.5 - step / 256).map(Math.round) as RGB;
-    if (contrast(mix(candidate, ink.rgb, ink.alpha), candidate) + 0.000_001 >= minimum) {
+    if (contrastRatio(mix(candidate, ink.rgb, ink.alpha), candidate) + 0.000_001 >= minimum) {
       return `rgb(${candidate.join(",")})`;
     }
   }

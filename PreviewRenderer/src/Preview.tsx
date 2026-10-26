@@ -239,14 +239,6 @@ export function Preview({ request, comments }: { request: RenderRequest; comment
 
   useEffect(() => {
     send({ ...identity(request), type: "rendered" });
-    const reportHeight = () => send({
-      ...identity(request), type: "height",
-      height: Math.ceil(document.getElementById("root")!.getBoundingClientRect().height),
-    });
-    const observer = new ResizeObserver(reportHeight);
-    observer.observe(document.getElementById("root")!);
-    reportHeight();
-    return () => observer.disconnect();
   }, [request]);
 
   return <article className="prose markdown-container" dir="auto">

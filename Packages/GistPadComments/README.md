@@ -5,7 +5,7 @@ Foundation-only comment values, web-compatible body markers, thread construction
 ```swift
 let threads = GistCommentThread.build(from: comments)
 let quotes = threads.compactMap(\.quotedPassage)
-let matches = CommentQuoteMatcher.matches(quotes: quotes, segments: [source])
+let highlights = CommentQuoteMatcher.highlights(quotes: quotes, segments: [source])
 ```
 
 For Preview, pass the individual eligible rendered text nodes, excluding `pre`, `code` and `svg`. A quote must occur exactly once across all supplied segments. Matches are literal and case-sensitive, with the web's JavaScript ASCII `\b` boundaries and three-UTF-16-unit minimum. They do not normalize Unicode, whitespace or Markdown, join text nodes, choose among repeated occurrences, or discard overlapping threads. Returned `segment`, `start` and `end` are UTF-16 coordinates. Native code can use `range` directly. The four-unit selection minimum is exposed separately for the native edit menu.
@@ -18,7 +18,7 @@ Permissions distinguish comment authorship from gist ownership: authors can edit
 
 ## Live conversations
 
-`CommentConversationController` is MainActor-owned. Inject a `CommentConversationRemote` and `CommentConversationStore`, then call `load()` when opening the conversation. `comments == nil` means unknown, not empty. `knownTotal` covers every comment in the gist, including replies, and retains a supplied known count through read failure. No conversation fetch is needed for a decorative badge.
+`CommentConversationController` is MainActor-owned. Inject a `CommentConversationRemote` and `CommentConversationStore`, then call `refresh()` when opening the conversation. It prepares persisted drafts before requesting comments. `comments == nil` means unknown, not empty. `knownTotal` covers every comment in the gist, including replies, and retains a supplied known count through read failure. No conversation fetch is needed for a decorative badge.
 
 `composer` supplies its captured target, text, durable-save state, problem and enabled states. Targets keep independent drafts for a root, an exact quote with its original filename, a reply ID or an edit ID. New selections never retarget an existing draft. Draft changes save after 250 ms. Await `flushDraft()` on deliberate Close or application departure, and retain an explicit local-save failure when it returns false. The host disables field editing while `canEdit` is false. Merely opening or closing a conversation never posts.
 

@@ -73,11 +73,6 @@ public final class CommentConversationController {
         preparation = nil
     }
 
-    public func load() async {
-        await prepare()
-        await refresh()
-    }
-
     public func refresh() async {
         await prepare()
         guard !isDeleted, !isRefreshing, mutation != .working else { return }
@@ -122,7 +117,7 @@ public final class CommentConversationController {
     }
 
     public func beginQuote(_ quote: CapturedCommentQuote) {
-        guard GistCommentBody.trim(quote.text).utf16.count >= 4 else {
+        guard CommentQuoteMatcher.isEligibleSelection(quote.text) else {
             composerProblem = .invalidSelection
             return
         }

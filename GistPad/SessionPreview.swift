@@ -92,7 +92,7 @@ struct SessionPreview: View {
       }
     case .failure(let failure):
       renderError = failure.localizedDescription
-    case .contentHeight, .rendered:
+    case .rendered:
       break
     }
   }

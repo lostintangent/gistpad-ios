@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { contrastRatio } from "../src/diagramTheme";
+import { contrastRatio } from "../src/appearance";
 import { adaptMermaid } from "../src/mermaidAdapter";
 
 test("diagram contrast calculation measures the required boundary", () => {
