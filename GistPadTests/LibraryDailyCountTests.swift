@@ -5,7 +5,9 @@ import Testing
 @MainActor
 struct LibraryDailyCountTests {
   @Test func dailyCountsNotesRatherThanTheirSharedGist() {
-    let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
+    var snapshot = InterfaceFixtures.library
+    snapshot.dailyNoteCount = 2
+    let model = LibraryModel(snapshot: snapshot, loadState: .ready)
     model.collection = .dailyNotes
     model.searchState = .results(
       notes: [],
@@ -15,13 +17,15 @@ struct LibraryDailyCountTests {
   }
 
   @Test func dailyTotalSurvivesFilteringPendingSearchAndFailure() {
-    let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
+    var snapshot = InterfaceFixtures.library
+    snapshot.dailyNoteCount = 2
+    let model = LibraryModel(snapshot: snapshot, loadState: .ready)
     model.collection = .dailyNotes
     model.query = "no matching day"
     model.selectedTagIDs = ["ideas"]
     model.searchState = .results(
       notes: [],
-      coverage: .init(totalDocuments: 2, documentsWithCachedContent: 2))
+      coverage: .init(totalDocuments: 1, documentsWithCachedContent: 1))
     #expect(model.dailyNoteCount == 2)
     #expect(model.resultGistCount == 0)
     model.searchState = .searching
@@ -34,19 +38,22 @@ struct LibraryDailyCountTests {
     let model = LibraryModel()
     model.collection = .dailyNotes
     #expect(model.dailyNoteCount == nil)
-    model.replaceSnapshot(.init(notes: []))
+    model.replaceSnapshot(.init(notes: [], dailyNoteCount: 0))
     #expect(model.dailyNoteCount == 0)
     model.loadState = .loading
     #expect(model.dailyNoteCount == 0)
     model.replaceSnapshot(InterfaceFixtures.library)
     #expect(model.dailyNoteCount == nil)
+    var snapshot = InterfaceFixtures.library
+    snapshot.dailyNoteCount = 2
+    model.replaceSnapshot(snapshot)
     model.searchState = .results(
       notes: [],
       coverage: .init(totalDocuments: 2, documentsWithCachedContent: 2))
     #expect(model.dailyNoteCount == 2)
     model.replaceSnapshot(nil)
     #expect(model.dailyNoteCount == nil)
-    model.replaceSnapshot(.init(notes: []))
+    model.replaceSnapshot(.init(notes: [], dailyNoteCount: 0))
     #expect(model.dailyNoteCount == 0)
   }
 

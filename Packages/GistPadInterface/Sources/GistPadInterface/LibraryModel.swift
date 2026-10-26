@@ -85,10 +85,14 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
 public struct LibrarySnapshot: Equatable, Sendable {
     public var notes: [LibraryNote]
     public var tags: [LibraryTag]
+    public var dailyNoteCount: Int?
 
-    public init(notes: [LibraryNote], tags: [LibraryTag] = []) {
+    public init(
+        notes: [LibraryNote], tags: [LibraryTag] = [], dailyNoteCount: Int? = nil
+    ) {
         self.notes = notes
         self.tags = tags
+        self.dailyNoteCount = dailyNoteCount
     }
 }
 
@@ -112,14 +116,7 @@ public final class LibraryModel {
     public var selectedTagIDs: Set<String> = []
     public var selectedNoteID: String?
     public var today: LibraryTodaySummary
-    private var knownDailyNoteCount: Int?
-    public var searchState: LibrarySearchState = .inactive {
-        didSet {
-            if collection == .dailyNotes, case .results(_, let coverage) = searchState {
-                knownDailyNoteCount = coverage.totalDocuments
-            }
-        }
-    }
+    public var searchState: LibrarySearchState = .inactive
 
     public init(
         snapshot: LibrarySnapshot? = nil, loadState: LibraryLoadState = .loading,
@@ -174,15 +171,10 @@ public final class LibraryModel {
     public func replaceSnapshot(_ snapshot: LibrarySnapshot?) {
         self.snapshot = snapshot ?? .init(notes: [])
         hasKnownGistSnapshot = snapshot != nil
-        if snapshot == nil || !self.snapshot.notes.contains(where: { $0.isDailyNote && $0.isOwned }) {
-            knownDailyNoteCount = nil
-        }
     }
 
     public var dailyNoteCount: Int? {
-        guard hasKnownGistSnapshot else { return nil }
-        if let knownDailyNoteCount { return knownDailyNoteCount }
-        return snapshot.notes.contains { $0.isDailyNote && $0.isOwned } ? nil : 0
+        hasKnownGistSnapshot ? snapshot.dailyNoteCount : nil
     }
 
     public var collectionGistCount: Int? {
