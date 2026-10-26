@@ -31,7 +31,7 @@ Normal content text targets 4.5:1, Increased Contrast 7:1, against actual compos
 
 Preserve a valid saved `accentColor`, including yellow. Missing values use GistPad sky `#0EA5E9`. Invalid data uses a legible native fallback and explicit Settings explanation, never silent metadata repair. The web preference/key remains authoritative; native does not invent a separate theme or rewrite the stored color for contrast.
 
-Personal accent is limited to Today date/incomplete progress/in-content Start, the preference swatch and comment annotations. Ordinary progress/pins, Library selection and document list/task markers stay neutral. Completion uses fixed green; overdue unfinished counts can use contrast-safe amber. Tags keep their own saved colors.
+Personal accent is limited to approved Today widget date/incomplete progress/in-content invitations, the preference swatch and comment annotations. The Today rail glyph/badge, ordinary progress/pins, Library selection and document list/task markers stay neutral. Completion uses fixed green; overdue unfinished counts can use contrast-safe amber. Tags keep their own saved colors.
 
 | Derived role | Rule in each of Light, Dark and their Increased Contrast appearances |
 | --- | --- |
@@ -52,7 +52,7 @@ Rows show up to two complete names plus truthful `+N` at standard type; AX wraps
 
 ## 3. Typography and geometry
 
-Use SF through native style APIs and language fallback for interface, prose and rendered headings. Today day uses system Rounded, about 44 pt at Large, scaling with Large Title. Code uses scaled system monospace. No bundled/private font names, New York headings, body tracking, condensed prose or fixed accessibility caps. Source headings remain body-sized bold. [Typography][type], [Preferred fonts][font], [Font metrics][metrics].
+Use SF through native style APIs and language fallback for interface, prose and rendered headings. Widget day numerals use system Rounded, about 44 pt at Large where space allows, scaling with Large Title. Code uses scaled system monospace. No bundled/private font names, New York headings, body tracking, condensed prose or fixed accessibility caps. Source headings remain body-sized bold. [Typography][type], [Preferred fonts][font], [Font metrics][metrics].
 
 | Content metric | Standard Large reference |
 | --- | --- |

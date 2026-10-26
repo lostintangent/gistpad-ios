@@ -4,7 +4,7 @@ Owner: Designer. This document owns the current product and interaction contract
 
 ## Direction
 
-**A lively notebook and an excellent writing instrument.** Today invites, pinned notes support recognition, and ordinary notes scan quickly. Identity comes from the original notebook icon, an expressive date, real excerpts and the user's tag colors. Native controls supply navigation, depth and feedback. Reading and writing stay composed around the same passage.
+**A lively notebook and an excellent writing instrument.** Optimize three entrances: New or Today, a pinned gist, and filtering to find a gist. Pins lead the list and ordinary notes scan quickly. Identity comes from the original notebook icon, real excerpts and the user's tag colors. Native controls supply navigation, depth and feedback. Reading and writing stay composed around the same passage.
 
 Use one vocabulary: a **gist** is the GitHub object, a **file** is an exact file inside it, and the open **note** is the document being read or edited. Tags, pins, stars, archive state and GitHub comments belong to the gist. A Daily Note is one dated file, not its backing gist.
 
@@ -12,7 +12,9 @@ Cached words, immediate input and continuity matter more than decoration. No inv
 
 ## One adaptive notebook
 
-Home is titled **GistPad**. Its native title picker exposes the available collections with the current one checked. Daily Notes and Your Gists remain available. Starred and Archive appear only with known positive unfiltered membership. Scoped collections identify themselves once in navigation, without a redundant list heading or its empty space.
+Home is titled **GistPad**. The recommended Library revision puts pinned cards first, ordinary gists next, then conditional native Daily Notes, Starred and Archive disclosures. It removes the Library title-menu collection switcher, not the document's file menu. New and Today stay direct rail actions; Search remains one tap away in either posture.
+
+**Review boundary:** pinned-card treatment is approved. The rail/disclosure revision in the same shared board is proposed for user review before implementation. The contract below records that recommendation without claiming it has shipped.
 
 | Available space and task | Composition |
 | --- | --- |
@@ -50,7 +52,7 @@ One retained source session survives mode, sidebar, inspector and layout changes
 
 ### Pinned cards
 
-Home is Today, full-width stacked pinned cards, then ordinary unpinned rows. **No Pinned Gists or Your Gists headings.** Spacing separates the groups; the total remains in the GistPad navigation subtitle and includes each pin once. The shared *Pinned cards · folded Home and sidebar* SVG is the approved composition, not a native capture. Implementation follows separately from this behavior-preserving documentation cleanup.
+Home starts with full-width stacked pinned cards, then ordinary unpinned rows. **No Today card/row, Pinned Gists heading or Your Gists heading.** Spacing separates the groups; the main-gist total remains in the GistPad navigation subtitle and includes each pin once. The shared *Pinned cards · folded Home and sidebar* SVG is the canonical editable board, not a native capture.
 
 Use one vertical list in compact Home and the regular sidebar, whether there is one pin, three or six-plus. No carousel, grid, Show More, new reordering/drag feature or duplicate unpinned entry. Preserve existing pin order. More pins lengthen the feed; Search remains reachable. Zero pins removes the stack and its gap.
 
@@ -59,18 +61,28 @@ Use one vertical list in compact Home and the regular sidebar, whether there is 
 | Surface | Opaque semantic content surface, 16-pt corners, about 12-14 pt internal inset. Full available content width, never glass or a fixed-height cover |
 | Content | Headline title with quiet neutral trailing pin, one cached excerpt line at standard type and optional tags. No modification date; dates remain in ordinary rows |
 | Metadata | Real task/comment state at the trailing metadata edge, not extra controls. Omit unknown/absent metadata. Titles, tags and AX content grow/wrap without capped type |
-| Rhythm | 20 pt after Today, 8 pt between cards, 28 pt before ordinary rows. Untagged cards are naturally shorter; 84 pt in the three-pin concept is not a fixed height |
+| Rhythm | Start at the native list content inset, with 8 pt between cards and 28 pt before ordinary rows. Untagged cards are naturally shorter; 84 pt in the three-pin concept is not a fixed height |
 | Selection/actions | Neutral native sidebar selected treatment, unchanged tag colors, one opening action and existing swipe/context/named accessibility actions. The pin is metadata, not a separate Unpin button |
 
-Search/tag-filter results remain ordinary rows with a small pin and existing ordering, not another featured stack or duplicate shelf. Keep Today behavior and the ordinary row anatomy below.
+Search/tag-filter results remain ordinary rows with a small pin and existing ordering, not another featured stack or duplicate shelf. One pin and six-plus use the same stack. Zero pins starts with ordinary rows at the normal content inset, with no reserved feature space.
 
 ### Controls and Search
 
-Compact Home exposes New and Settings in the upper native group. Tags is the only lower rail button, beside an always-visible real `UISearchBar`. There is no compact Search button. The regular sidebar keeps native `.searchable`, overflow and one supported trailing sidebar toggle, with no blank leading placeholder.
+Compact Home's upper native group is **New, Today, Settings**, in that order. Open places **Today directly below Compose in the detail rail**, retaining the document's other eligible actions. Tags is the only lower compact rail button, beside an always-visible real `UISearchBar`. There is no compact Search button. The regular sidebar keeps native `.searchable`, overflow and one supported trailing sidebar toggle, with no blank leading placeholder.
 
 Search placement follows geometry: compare usable Library width, excluding safe areas, with window content width. A narrower Library reserves the native side rail and aligns the visible Search glass bottom with Tags at every text size. Otherwise the field stacks above the bottom toolbar. Do not use device checks or fixed rail coordinates.
 
-Preserve full-size Dynamic Type, native placeholder tail truncation, typed-text scrolling, Clear and internal trailing clearance. Never shrink the placeholder or let it cross the glass. Regular Search floats above the keyboard with a neutral X; compact Cancel is neutral too. Native insertion/selection stays blue. Keep collection/tag scope visible, allow broadening and describe actual title/filename/tag/cached-content coverage. Routine checks never replace the search input. [Search fields](https://developer.apple.com/design/human-interface-guidelines/search-fields).
+Preserve full-size Dynamic Type, native placeholder tail truncation, typed-text scrolling, Clear and internal trailing clearance. Never shrink the placeholder or let it cross the glass. Regular Search floats above the keyboard with a neutral X; compact Cancel is neutral too. Native insertion/selection stays blue. Keep query/tag scope and actual cached-content coverage visible. Routine checks never replace the search input. [Search fields](https://developer.apple.com/design/human-interface-guidelines/search-fields).
+
+Filtering projects the existing local all-collection search into the main list and secondary groups, without a new index, sync path or network fetch for presentation. Temporarily reveal matching secondary groups without writing remembered collapse choices; clearing filters restores those choices. Results use ordinary rows, not pinned cards. Do not report global emptiness when another group has matches, hide a matching group behind its collapsed state or claim uncached body text was searched.
+
+### Secondary collections
+
+Recommend native disclosure-backed sections over the title switcher. A switcher hides the rest of the notebook and replaces its list. Disclosures retain one spatial context, make their contents inspectable and leave the primary entrances direct. Use supported `DisclosureGroup` behavior, not a custom accordion. Unlike the web's desktop panels, expanded rows share the one outer native scroll; no capped five-row inner scrollers. [DisclosureGroup](https://developer.apple.com/documentation/swiftui/disclosuregroup).
+
+After the ordinary gist rows, show **Daily Notes**, **Starred**, then **Archive**, only with known positive unfiltered membership. Each starts collapsed and remembers its explicit account-local choice across navigation, layout changes and relaunch. An active note remains usable when its section collapses. Today/deep-link opening does not rewrite disclosure preferences or force the Library to scroll away from pins.
+
+Headers are single native disclosure targets with a quiet neutral calendar/star/archive symbol, readable label, plain localized count and native expanded/collapsed semantics. No colored star, count badge or ornamental rule. At AX, counts can move below the full label and decorative symbols can yield before type shrinks. Expanded contents retain the ordinary row language, selection and existing actions; no nested cards.
 
 ### Rows, membership and counts
 
@@ -90,24 +102,29 @@ Match sidebar row/selection bounds to native Search, with 12-pt fixed horizontal
 
 Ordinary-row task state is one upper-trailing neutral ring plus tabular `3/4` in scaled footnote; cards use the metadata edge above. Completion replaces the ring with fixed semantic-green `checkmark.circle.fill`, keeping `4/4`. Only overdue unfinished counts use contrast-safe amber. Unknown/no tasks omit the cluster; known zero complete shows `0/4`. No separate progress row or nested task toggle. VoiceOver receives completed/total/remaining and overdue meaning in the coherent row description.
 
-Starred/Archive visibility comes from ordinary account-scoped unfiltered Library membership, not visiting a hidden collection. Unknown initial membership is absent; cached positive membership survives refresh/offline. Failed reads and filters do not prove emptiness. First successful membership reveals the route. A selected collection that loses its last member remains available with truthful emptiness and Undo until departure, then disappears and is not restored on next launch. Account changes never inherit another account's visibility.
+Section membership comes from the ordinary account-scoped owned/starred cache, not visiting each scope. Daily rows use actual dated filenames plus durable local drafts, excluding the template. Unknown initial membership is absent; cached positive membership survives refresh/offline. Missing cache, truncated data, failed reads and filters never prove emptiness. First successful membership reveals the section. If an expanded section loses its last member during interaction, retain truthful emptiness and Undo until collapse/departure, then remove it. Account changes never inherit another account's membership or disclosure choice.
 
-Counts use the same known snapshot and predicates as the list. Home/Starred/Archive count distinct published gists, excluding recovery/local-only rows and confirmed deletions. Daily counts actual days/notes, not backing gists. Use localized full “1 gist” / “12 gists” or “1 note” / “2 notes”, never capped badges. The native navigation subtitle contains the unfiltered collection total, including pins once on Home. Results count completed current-query matches, not the unfiltered total, and omit the number during searching/failure. Preserve useful existing Results headings, but do not add one just for a count.
+Counts use the same known snapshot and predicates as their rows. Home/Starred/Archive count distinct published gists, excluding recovery/local-only rows and confirmed deletions. Daily counts actual days/notes, not backing gists. Use localized full “1 gist” / “12 gists” or “1 note” / “2 notes”, never capped badges. Home's subtitle counts the unfiltered main collection, including pins once, not the sum of overlapping secondary memberships. Secondary headers carry their own totals. Filtered Results/header match counts use their own units and completed current query, omitting match numbers during searching/failure. Never add a heading just for a count.
 
-Keep known counts through refresh/offline, omit unknown counts and show zero only for known emptiness. No decorative fetch, independent incremented counter, inferred gist identity or stale-response resurrection. Counts and confirmed membership changes move together. At AX, wrap rather than shrink, and speak a heading/count once.
+Keep known counts through refresh/offline, omit unknown counts and show zero only for known emptiness. No decorative fetch, independent incremented counter, inferred gist identity or stale-response resurrection. Counts and confirmed membership changes move together. A gist in both the main list and Starred is the same document, never another draft or an extra Home total. At AX, wrap rather than shrink, and speak a heading/count once.
 
-### Today and excerpts
+### Today button and excerpts
 
-Today is one opening action, with an accent-tinted date area and rounded day numeral. Standard composition puts the date tile beside a flexible column containing Today/weekday, real task state and up to two cached excerpt lines. Use 20-pt internal inset, a 16-pt column gap and 8-12 pt before the excerpt. Content determines height. Use the two-column form only when it fits, about 280 pt of inner measure at standard type. Narrow sidebar/AX compositions use a compact date heading and full-width excerpt instead of squeezing columns.
+Use the native outlined `calendar` glyph, primary monochrome ink and a target of at least 44 pt. It is one adaptive toolbar item, with an attached foreground-filled/inverse-numeral badge like Comments, not a custom floating control or extra independent badge target. No personal tint, red urgency, progress donut or completion check.
 
-| Actual task state | Today presentation |
+The proposed badge counts **unfinished tasks in today's exact file**, not all tasks, all Daily Notes or overdue days. Reuse the existing Today task summary from durable local/cached source. Missing source means unknown, not zero. Update after committed local changes and resolve the current account/date; never carry yesterday's count or create/fetch a note merely to decorate the button.
+
+| State | Proposed badge and behavior |
 | --- | --- |
-| Incomplete known tasks | 32-pt determinate ring, remaining count and small “left” caption. Accessible value includes completed, total and remaining |
-| All complete | Same-size fixed semantic-green filled check. No All done caption, empty-looking ring or duplicate progress row |
-| No tasks / unknown | Omit progress entirely; never fabricate a zero or loading ring |
-| Today absent | Date and concise Start invitation. No fabricated excerpt or automatic publication |
+| Known 0 unfinished tasks | No badge; calendar remains enabled. Accessibility can state no unfinished tasks |
+| Known positive | Exact localized count through 99, then visual 99+; full accessible count. The board shows 3, 12 and 128 |
+| Unknown | No badge and no false zero/success claim. Existing opening/recovery remains available |
+| Today absent | Same enabled calendar, no badge. Tap stages the real durable local day and opens Edit, never automatically publishes an untouched default |
+| Today's exact file is visible | Native neutral selected material and selected trait. A different day in the same gist does not select Today |
 
-The whole card opens Today. Progress is informational. No streak, greeting, carryover, Earlier days, automatic journal text or decorative date stretching. Preserve the user's template and do not use a large-gist Git fallback. Truncated source blocks unsafe writes.
+Closed taps push Today through native navigation; Open taps replace the document while keeping Library position. Both use the existing explicit Today action, Edit-ready caret beneath its heading and keyboard request on editor attachment. Reuse the retained session rather than creating another copy. Default launch restoration stays quiet as specified above. Day rollover changes the button's target/count, never the open document.
+
+No streak, greeting, carryover, Earlier days, automatic journal text or large-gist Git fallback. Preserve the user's template and its existing file-management entry. Truncated source blocks unsafe writes. Widgets, Open Today, Add to Today and exact daily-note routes retain their existing behavior; only Library presentation changes.
 
 One cached-source extractor serves Today, pins and ordinary rows before their existing snippet limits. Skip complete leading frontmatter, following blank lines, the title/date-template header and nonprose code/diagrams. Preserve prose/task words, emoji, link labels and visible inline HTML text while removing Markdown delimiters, destinations and tags. Do not treat mid-document `---` as metadata or present an unclosed metadata prefix as clean prose. Update from the local draft, never fetch decoration, invent a summary or reserve an empty excerpt.
 
@@ -291,7 +308,7 @@ Universal links require deployed website AASA plus app entitlement. A local prep
 
 ## Motion and approval
 
-Native navigation owns gestures, interactive cancellation and presentation. Never delay a ready caret or words for animation. Today can use a roughly 250-ms numeric transition only when the actual day changes. Direct task completion gets one roughly 200-ms check transition/light response after local commit, with the line stable. Creation may acknowledge accepted local creation once. Pin relocation uses native list motion, preserving the document.
+Native navigation owns gestures, interactive cancellation and presentation. Never delay a ready caret or words for animation. Widget dates can use a roughly 250-ms numeric transition only when the actual day changes. The Today rail badge updates quietly, with no celebration. Direct task completion gets one roughly 200-ms check transition/light response after local commit, with the line stable. Creation may acknowledge accepted local creation once. Pin relocation uses native list motion, preserving the document.
 
 No refresh/restore entrance replay, midnight/autosave haptic, per-keystroke feedback, confetti, page flip or simulated folding. Reduce Motion shows settled state without lost meaning. Widgets use supported system feedback, not promised custom haptics.
 
