@@ -2,7 +2,7 @@ import AppIntents
 import Foundation
 import GistPadEditor
 import GistPadInterface
-import GistPadPlatform
+@testable import GistPadPlatform
 import SwiftUI
 import Testing
 import UIKit

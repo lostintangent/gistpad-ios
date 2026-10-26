@@ -2,11 +2,11 @@ import Foundation
 import GistPadSync
 
 public struct SharedNotebookStore: Sendable {
-    public static let appGroupIdentifier = "group.dev.gistpad.GistPad"
-    public let location: SharedStoreLocation
+    private static let appGroupIdentifier = "group.dev.gistpad.GistPad"
+    let location: SharedStoreLocation
     private var url: URL { location.directory.appendingPathComponent("notebook.snapshot") }
 
-    public init(location: SharedStoreLocation) {
+    init(location: SharedStoreLocation) {
         self.location = location
     }
 

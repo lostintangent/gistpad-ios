@@ -24,7 +24,7 @@ extension LiveNotebookProvider: NotebookPhotoProviding {
   }
 }
 
-struct NotebookPhotoTarget: Equatable, Sendable {
+struct NotebookPhotoTarget: Sendable {
   let accountID: UUID
   let draftID: UUID
   let generation: UInt64
@@ -36,15 +36,14 @@ struct NotebookPhotoTarget: Equatable, Sendable {
 @Observable
 final class NotebookPhotoController {
   let accountID: UUID
-  let draftID: UUID
+  private let draftID: UUID
   private(set) var attachments: [PhotoAttachment] = []
-  private(set) var isPreparing = false
+  private var isPreparing = false
   private(set) var isShowingNotice = false
   var isShowingDetails = false
   private(set) var noticeStartsPicker = false
   var isShowingPicker = false
   var removalID: UUID?
-  private(set) var insertedCount = 0
   private(set) var queueError: String?
   @ObservationIgnored private let makeServices: @MainActor () async throws -> NotebookPhotoServices
   @ObservationIgnored private let target: @MainActor () -> NotebookPhotoTarget?
@@ -428,7 +427,6 @@ final class NotebookPhotoController {
         insertionLocation: atCurrentPosition ? target.insertionLocation : nil)
       try await insert(command, services.store)
       insertionFailures.remove(id)
-      insertedCount += 1
       didInsert()
       await reload()
     } catch {

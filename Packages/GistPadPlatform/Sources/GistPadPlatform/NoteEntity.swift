@@ -7,10 +7,10 @@ import UniformTypeIdentifiers
 public struct NoteEntity: IndexedEntity {
     public static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Note")
     public static let defaultQuery = NoteEntityQuery()
-    public let note: SystemNote
+    let note: SystemNote
     public var id: String { note.id }
 
-    public init(note: SystemNote) { self.note = note }
+    init(note: SystemNote) { self.note = note }
 
     public var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(
@@ -116,7 +116,6 @@ public struct OpenNoteIntent: OpenIntent {
 
     @Parameter(title: "Note") public var target: NoteEntity
     public init() {}
-    public init(note: NoteEntity) { target = note }
 
     @MainActor
     public func perform() async throws -> some IntentResult {

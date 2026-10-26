@@ -30,22 +30,22 @@ public enum NotebookPlatformError: LocalizedError, Equatable, Sendable {
     }
 }
 
-public struct SystemNote: Codable, Equatable, Identifiable, Sendable {
-    public var id: String { "\(accountID.uuidString)/\(route.url.absoluteString)" }
-    public let accountID: UUID
-    public let title: String
-    public let filename: String
-    public let excerpt: String?
-    public let tags: [String]
-    public let updatedAt: Date?
-    public let route: NotebookRoute
+struct SystemNote: Codable, Equatable, Identifiable, Sendable {
+    var id: String { "\(accountID.uuidString)/\(route.url.absoluteString)" }
+    let accountID: UUID
+    let title: String
+    let filename: String
+    let excerpt: String?
+    let tags: [String]
+    let updatedAt: Date?
+    let route: NotebookRoute
 }
 
 public struct TodayTask: Codable, Equatable, Identifiable, Sendable {
     public var id: String { "\(draftID.uuidString)/\(generation)/\(markerLocation)" }
-    public let draftID: UUID
-    public let generation: UInt64
-    public let markerLocation: Int
+    let draftID: UUID
+    let generation: UInt64
+    let markerLocation: Int
     public let title: String
     public let isCompleted: Bool
 
@@ -61,18 +61,18 @@ public struct TodayTask: Codable, Equatable, Identifiable, Sendable {
 public struct SystemToday: Codable, Equatable, Sendable {
     public let filename: String
     public let timeZoneIdentifier: String
-    public let excerpt: String?
+    let excerpt: String?
     public let tasks: [TodayTask]
-    public let route: NotebookRoute
-    public let isAvailable: Bool
-    public let issue: String?
+    let route: NotebookRoute
+    let isAvailable: Bool
+    let issue: String?
 }
 
 public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
     public let accountID: UUID?
-    public let createdAt: Date
-    public let accentHex: String?
-    public let notes: [SystemNote]
+    let createdAt: Date
+    let accentHex: String?
+    let notes: [SystemNote]
     public let today: SystemToday
 
     public static func make(

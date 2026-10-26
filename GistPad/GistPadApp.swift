@@ -129,7 +129,7 @@ struct GistPadApp: App {
       }
       .onOpenURL { url in
         if url.scheme == "gistpad", url.host == "auth-callback" { return }
-        do { try NotebookRouteInbox.shared.receive(url) }
+        do { NotebookRouteInbox.shared.submit(try NotebookRoute(url: url)) }
         catch {
           routeError = String(localized: "This link doesn't point to a supported GistPad note.")
         }

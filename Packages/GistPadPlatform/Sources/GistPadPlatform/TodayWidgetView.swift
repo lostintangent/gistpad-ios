@@ -8,10 +8,10 @@ public enum TodayWidgetState: Equatable, Sendable {
 }
 
 public struct TodayWidgetView: View {
-    public let snapshot: NotebookSystemSnapshot?
-    public let date: Date
-    public let state: TodayWidgetState
-    private let familyOverride: WidgetFamily?
+    private let snapshot: NotebookSystemSnapshot?
+    private let date: Date
+    private let state: TodayWidgetState
+    private var familyOverride: WidgetFamily?
     private var taskGeometry: (@MainActor (String, CGSize) -> Void)?
     private var layoutGeometry: (@MainActor (String, CGRect) -> Void)?
     @Environment(\.widgetFamily) private var widgetFamily
@@ -20,13 +20,11 @@ public struct TodayWidgetView: View {
     @ScaledMetric(relativeTo: .largeTitle) private var dateSize = 38.0
 
     public init(
-        snapshot: NotebookSystemSnapshot?, date: Date, state: TodayWidgetState,
-        family: WidgetFamily? = nil
+        snapshot: NotebookSystemSnapshot?, date: Date, state: TodayWidgetState
     ) {
         self.snapshot = snapshot
         self.date = date
         self.state = state
-        familyOverride = family
     }
 
     @_spi(Testing)
@@ -35,7 +33,8 @@ public struct TodayWidgetView: View {
         family: WidgetFamily, taskGeometry: @escaping @MainActor (String, CGSize) -> Void,
         layoutGeometry: (@MainActor (String, CGRect) -> Void)? = nil
     ) {
-        self.init(snapshot: snapshot, date: date, state: state, family: family)
+        self.init(snapshot: snapshot, date: date, state: state)
+        familyOverride = family
         self.taskGeometry = taskGeometry
         self.layoutGeometry = layoutGeometry
     }

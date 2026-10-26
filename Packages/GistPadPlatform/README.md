@@ -63,3 +63,7 @@ account/Writing Tools gates, pinned-date capture and main-process intent policy.
 Widget view screenshots are hosted native presentations. Installed WidgetKit
 execution, Control Center placement, Spotlight launching and provisioning remain
 separate device acceptance gates.
+
+The package exposes routes, the route inbox, intent service and system surfaces.
+Note metadata and snapshot storage details stay internal. Tests use `@testable`
+imports and the widget's testing SPI rather than production configuration options.
