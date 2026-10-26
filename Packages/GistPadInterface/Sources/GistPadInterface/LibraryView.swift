@@ -408,7 +408,7 @@ public struct LibraryView: View {
                     Section {
                         ForEach(displayedCollections) { collectionDisclosure($0) }
                     }
-                    .listSectionMargins(.top, 28)
+                    .listSectionMargins(.top, 16)
                     .listSectionMargins(.vertical, 0)
                     .listSectionSeparator(.hidden)
                 }
@@ -518,6 +518,7 @@ public struct LibraryView: View {
         }
         .listRowBackground(isSidebar ? nil : Color.clear)
         .listRowSeparator(.hidden)
+        .listRowInsets(.vertical, dynamicTypeSize.isAccessibilitySize ? nil : 0)
     }
 
     private func collectionLabel(_ collection: LibraryCollection) -> some View {
@@ -527,7 +528,7 @@ public struct LibraryView: View {
         }
         let countText = count.map {
             Text($0, format: .number)
-                .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                .font(.subheadline).monospacedDigit().foregroundStyle(.primary)
                 .fixedSize()
                 .captureFrame("library-collection-count-\(collection.rawValue)")
         }
@@ -560,7 +561,10 @@ public struct LibraryView: View {
         }
         .font(.headline)
         .foregroundStyle(.primary)
-        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: dynamicTypeSize.isAccessibilitySize ? nil : 44,
+            alignment: .leading)
         .textCase(nil)
         .captureFrame("library-collection-\(collection.rawValue)")
         .accessibilityElement(children: .ignore)

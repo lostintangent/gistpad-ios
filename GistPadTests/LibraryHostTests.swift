@@ -165,6 +165,9 @@ struct LibraryHostTests {
     let model = LibraryModel(
       snapshot: .init(notes: [
         .init(
+          id: "ordinary", title: "A quiet thought", updatedAt: InterfaceFixtures.referenceDate,
+          gistID: "ordinary"),
+        .init(
           id: "daily", title: "A daily thought", updatedAt: InterfaceFixtures.referenceDate,
           gistID: "daily", isDailyNote: true),
         .init(
@@ -198,6 +201,8 @@ struct LibraryHostTests {
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
     let bitmap = try #require(image.cgImage)
+    var headerFrames: [CGRect] = []
+    var firstContentFrame: CGRect?
     for collection in [LibraryCollection.dailyNotes, .starred, .archive] {
       let marker = try #require(descendants(window).first {
         $0.accessibilityIdentifier == "capture-frame-library-collection-\(collection.rawValue)"
@@ -205,12 +210,18 @@ struct LibraryHostTests {
       })
       let frame = marker.convert(marker.bounds, to: window)
       #expect(window.bounds.contains(frame))
+      var parent = marker.superview
+      while parent != nil && !(parent is UICollectionViewCell) { parent = parent?.superview }
+      let cell = try #require(parent as? UICollectionViewCell)
+      let cellFrame = cell.convert(cell.bounds, to: window)
+      headerFrames.append(cellFrame)
+      if firstContentFrame == nil { firstContentFrame = frame }
       let count = try #require(descendants(window).first {
         $0.accessibilityIdentifier == "capture-frame-library-collection-count-\(collection.rawValue)"
           && !$0.bounds.isEmpty
       })
       if size == .large {
-        #expect(frame.height <= 64, "A standard disclosure must not reserve empty title space.")
+        #expect(abs(cellFrame.height - 44) <= 1 / image.scale)
       } else {
         let title = try #require(descendants(window).first {
           $0.accessibilityIdentifier == "capture-frame-library-collection-title-\(collection.rawValue)"
@@ -239,7 +250,28 @@ struct LibraryHostTests {
       let backgroundPixels = try nativeAccentPixels(
         in: UIImage(cgImage: countCrop), expected: background).personal
       #expect(countCrop.width * countCrop.height - backgroundPixels > 10, "The number draws real ink.")
+      let ink = try #require(RGBColor(
+        uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
+      #expect(ink.contrast(with: background) >= 4.5)
+      #expect(try nativeAccentPixels(in: UIImage(cgImage: countCrop), expected: ink).personal > 10)
     }
+    if size == .large {
+      for index in 1..<headerFrames.count {
+        #expect(abs(headerFrames[index].minY - headerFrames[index - 1].minY - 44) <= 1 / image.scale)
+      }
+    }
+    let ordinary = try #require(descendants(window).first {
+      $0.accessibilityIdentifier == "capture-frame-note-title-ordinary"
+    })
+    var parent = ordinary.superview
+    while parent != nil && !(parent is UICollectionViewCell) { parent = parent?.superview }
+    let cell = try #require(parent as? UICollectionViewCell)
+    let ordinaryFrame = cell.convert(cell.bounds, to: window)
+    let firstHeader = try #require(firstContentFrame)
+    #expect(abs(firstHeader.minY - ordinaryFrame.maxY - 28) <= 1)
+    Attachment.record(
+      "Headers: \(headerFrames)\nOrdinary cell: \(ordinaryFrame)\nFirst content: \(firstHeader)",
+      named: "collection-native-rhythm-\(dark)-\(size).txt")
     Attachment.record(
       image, named: "collection-titles-\(dark ? "Dark" : "Light")-\(size).png", as: .png)
   }

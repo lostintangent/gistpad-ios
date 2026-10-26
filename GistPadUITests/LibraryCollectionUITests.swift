@@ -30,8 +30,8 @@ final class LibraryCollectionUITests: XCTestCase {
             && abs(frame.height - (wide ? 669 : 678)) <= 1
         }
         let bar = app.navigationBars["GistPad"]
-        let title = bar.buttons["GistPad"]
-        try await waitUntil("the native collection title menu") { title.isHittable }
+        try await waitUntil("the stable Home title") { bar.exists }
+        XCTAssertFalse(bar.buttons["GistPad"].exists)
         if state == "collection-loading" {
           XCTAssertFalse(bar.staticTexts["0 gists"].exists)
           XCTAssertFalse(bar.staticTexts["5 gists"].exists)
@@ -47,9 +47,7 @@ final class LibraryCollectionUITests: XCTestCase {
           }
           XCTAssertEqual(app.buttons.matching(identifier: "library-create").count, 1)
           XCTAssertEqual(bar.buttons.matching(identifier: "Hide Sidebar").count, 1)
-          XCTAssertEqual(
-            bar.buttons.count, 3,
-            "The native header contains only its title menu, More and one working sidebar toggle.")
+          XCTAssertEqual(bar.buttons.count, 2)
           XCTAssertGreaterThanOrEqual(create.frame.minX, bar.frame.maxX - 1)
           let search = app.searchFields.firstMatch
           let first = app.descendants(matching: .any)["library-featured-shape"].firstMatch
@@ -67,43 +65,31 @@ final class LibraryCollectionUITests: XCTestCase {
           XCTAssertTrue(app.navigationBars["The shape of a notebook"].exists)
           show.tap()
           try await waitUntil("the restored sidebar and retained native row selection") {
-            title.isHittable && toggle.isHittable && first.isHittable && first.isSelected
+            toggle.isHittable && first.isHittable && first.isSelected
           }
-          XCTAssertEqual(bar.buttons.count, 3)
+          XCTAssertEqual(bar.buttons.count, 2)
         }
-        title.tap()
-        try await waitUntil("the two permanent collection choices") {
-          app.buttons["All Notes"].exists && app.buttons["Daily Notes"].exists
+        let list = app.collectionViews.firstMatch
+        if state == "populated" {
+          for section in [
+            (id: "dailyNotes", title: "Daily Notes"),
+            (id: "starred", title: "Starred Gists"),
+            (id: "archive", title: "Archived Gists")
+          ] {
+            let header = app.buttons["library-collection-\(section.id)"].firstMatch
+            for _ in 0..<8 {
+              if header.isHittable { break }
+              list.swipeUp()
+            }
+            try await waitUntil("the nonempty \(section.title) disclosure") { header.isHittable }
+            XCTAssertEqual(header.label, section.title)
+          }
+        } else {
+          XCTAssertEqual(app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "library-collection-")).count, 0)
         }
-        XCTAssertEqual(app.buttons["Starred"].exists, state == "populated")
-        XCTAssertEqual(app.buttons["Archive"].exists, state == "populated")
         record(
           app, name: "collections-\(wide ? "open" : "folded")-\(state)-\(appearance)")
-        if wide && state == "populated" {
-          app.buttons["Starred"].tap()
-          let starredBar = app.navigationBars["Starred"]
-          let retainedDetail = app.navigationBars["The shape of a notebook"]
-          let starredRow = app.descendants(matching: .any)["library-note-starred"].firstMatch
-          try await waitUntil("the scoped list with the same open detail") {
-            starredBar.exists && retainedDetail.exists && starredRow.isHittable
-          }
-          XCTAssertFalse(starredRow.isSelected)
-          let search = app.searchFields.firstMatch
-          XCTAssertEqual(starredRow.frame.minX, search.frame.minX, accuracy: 1)
-          XCTAssertEqual(starredRow.frame.width, search.frame.width, accuracy: 1)
-          XCTAssertFalse(app.descendants(matching: .any)["library-featured-shape"].firstMatch.exists)
-          XCTAssertFalse(app.descendants(matching: .any)["library-listed-heading"].firstMatch.exists)
-          XCTAssertFalse(app.staticTexts["Open document"].exists)
-          record(app, name: "retained-detail-outside-starred-open-\(appearance)")
-          starredBar.buttons["Starred"].tap()
-          try await waitUntil("the original Home choice") { app.buttons["All Notes"].isHittable }
-          app.buttons["All Notes"].tap()
-          let restored = app.descendants(matching: .any)["library-featured-shape"].firstMatch
-          try await waitUntil("the retained note's native selection on returning Home") {
-            restored.isHittable && restored.isSelected && retainedDetail.exists
-          }
-          record(app, name: "retained-detail-reselected-on-home-open-\(appearance)")
-        }
       }
     }
   }
