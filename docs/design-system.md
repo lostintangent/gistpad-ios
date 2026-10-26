@@ -72,6 +72,8 @@ Heading scaling adds the exact preferred-style point growth from Large to each r
 
 Use logical margins/direction for RTL and mixed script, isolating code only where necessary. Never clip diacritics or assume one line box fits every language. At AX, collapse companions/stack metadata before shrinking content. Preserve long titles, complete tag names and distinguishable action labels.
 
+Library secondary disclosures retain their full titles and bare trailing numbers, including at AX. Align the number with the first title baseline, wrap the title and let a decorative symbol yield before shrinking type. Empty sections have no header or reserved space. See the [secondary collection contract](design-direction.md#secondary-collections).
+
 ### Shared appearance bridge
 
 The native host resolves semantic sRGB colors, preferred sizes/line heights, scaled monospace, contrast, Bold Text and relevant layout direction. Preview consumes those values through the existing typed bridge/CSS variables. Appearance is separate from document identity/generation: no web view reload, source replacement or lost selection/scroll for a theme change.
