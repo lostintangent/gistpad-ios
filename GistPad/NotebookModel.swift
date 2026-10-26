@@ -123,18 +123,11 @@ actor LiveNotebookProvider: NotebookProviding {
       throw AccountError.accountChanged
     }
     let githubUserID = try await verifiedUserID(accountID: document.accountID)
-    let existing = try await drafts.drafts(accountID: document.accountID).first {
-      $0.gistID == gist.id && $0.filename == document.filename
-    }
-    guard let existing else {
-      return try await drafts.openDraft(
-        accountID: document.accountID, githubUserID: githubUserID,
-        gistID: gist.id, filename: document.filename,
-        description: gist.description ?? "",
-        content: document.text, revision: gist.revision
-      )
-    }
-    return existing
+    return try await drafts.openDraft(
+      accountID: document.accountID, githubUserID: githubUserID,
+      gistID: gist.id, filename: document.filename,
+      description: gist.description ?? "",
+      content: document.text, revision: gist.revision)
   }
 
   func persist(draftID: UUID, accountID: UUID, text: String, generation: UInt64) async throws
@@ -408,7 +401,8 @@ final class NotebookModel {
   func libraryDeletionTarget(for rowID: String) -> NotebookDeletionTarget? {
     guard let account, pendingAccount == nil else { return nil }
     let draftID = searchTargets[rowID]?.draftID ?? UUID(uuidString: rowID)
-    if let draftID, let draft = localDrafts.first(where: { $0.id == draftID }),
+    let draft = draftID.flatMap { id in localDrafts.first { $0.id == id } }
+    if let draft,
       let gistID = draft.gistID, cachedLibrary?.gists.contains(where: { $0.id == gistID }) != true
     {
       return .init(
@@ -416,8 +410,7 @@ final class NotebookModel {
         title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
         localDraft: draft)
     }
-    let gistID = searchTargets[rowID]?.gistID
-      ?? draftID.flatMap { id in localDrafts.first(where: { $0.id == id })?.gistID } ?? rowID
+    let gistID = searchTargets[rowID]?.gistID ?? draft?.gistID ?? rowID
     guard !deletedGistIDs.contains(gistID),
       let gist = cachedLibrary?.owned.first(where: { $0.id == gistID })
     else { return nil }

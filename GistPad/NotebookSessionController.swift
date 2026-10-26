@@ -458,7 +458,7 @@ final class NotebookSessionController {
   func finishLeavingNote() async -> Bool {
     guard await waitForLocalSave() else { return false }
     if draft.isDiscardableBlank, notebook.isDraftSelected(draft.id) { return false }
-    if draft.isDiscardableBlank, !notebook.isDraftSelected(draft.id),
+    if draft.isDiscardableBlank,
       canMutate, !isPublishing,
       session.generation == draft.generation, session.text.utf8.elementsEqual(draft.text.utf8)
     {
@@ -503,7 +503,7 @@ final class NotebookSessionController {
       publicationWaiters = []
       for waiter in waiters { waiter.resume() }
     }
-    if let persistence, !(await persistence.value) { return }
+    guard await waitForLocalSave() else { return }
     guard !Task.isCancelled, shouldContinue(), canMutate, saveState.canPublish,
       publicationAllowed(reason: reason)
     else { return }
@@ -608,8 +608,7 @@ final class NotebookSessionController {
   }
 
   func waitForLocalSave() async -> Bool {
-    if let persistence { return await persistence.value }
-    return true
+    await persistence?.value ?? true
   }
 
   private func persist(text: String, generation: UInt64) {

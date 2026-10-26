@@ -19,15 +19,17 @@ public actor CommentConversationDiskStore: CommentConversationStore {
     }
 
     public func loadDrafts(scope: CommentConversationScope) throws -> CommentDraftArchive? {
-        let url = try location(scope: scope, name: "drafts")
-        guard let data = try read(url) else { return nil }
+        let url = try location(scope: scope)
+        let data: Data
+        do { data = try Data(contentsOf: url) }
+        catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
         let archive = try JSONDecoder().decode(CommentDraftArchive.self, from: data)
         try validate(archive, scope: scope)
         return archive
     }
 
     public func removeDrafts(scope: CommentConversationScope) throws {
-        let url = try location(scope: scope, name: "drafts")
+        let url = try location(scope: scope)
         deletedScopes.insert(scope)
         do { try files.removeItem(at: url) }
         catch let error as CocoaError where error.code == .fileNoSuchFile { return }
@@ -55,27 +57,7 @@ public actor CommentConversationDiskStore: CommentConversationStore {
                 throw CommentStoreFailure.staleWrite
             }
         }
-        try write(archive, scope: archive.scope, name: "drafts")
-    }
-
-    private func location(scope: CommentConversationScope, name: String) throws -> URL {
-        guard !scope.gistID.isEmpty,
-              scope.gistID.utf8.allSatisfy({
-                  (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
-              }) else { throw CommentStoreFailure.invalidRecord }
-        return directory
-            .appendingPathComponent(scope.accountID.uuidString, isDirectory: true)
-            .appendingPathComponent(scope.gistID, isDirectory: true)
-            .appendingPathComponent("\(name).json")
-    }
-
-    private func read(_ url: URL) throws -> Data? {
-        do { return try Data(contentsOf: url) }
-        catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
-    }
-
-    private func write(_ value: some Encodable, scope: CommentConversationScope, name: String) throws {
-        let url = try location(scope: scope, name: name)
+        let url = try location(scope: archive.scope)
         let parent = url.deletingLastPathComponent()
         #if os(iOS)
         try files.createDirectory(
@@ -89,6 +71,17 @@ public actor CommentConversationDiskStore: CommentConversationStore {
         try files.createDirectory(at: parent, withIntermediateDirectories: true)
         let options: Data.WritingOptions = [.atomic]
         #endif
-        try JSONEncoder().encode(value).write(to: url, options: options)
+        try JSONEncoder().encode(archive).write(to: url, options: options)
+    }
+
+    private func location(scope: CommentConversationScope) throws -> URL {
+        guard !scope.gistID.isEmpty,
+              scope.gistID.utf8.allSatisfy({
+                  (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
+              }) else { throw CommentStoreFailure.invalidRecord }
+        return directory
+            .appendingPathComponent(scope.accountID.uuidString, isDirectory: true)
+            .appendingPathComponent(scope.gistID, isDirectory: true)
+            .appendingPathComponent("drafts.json")
     }
 }

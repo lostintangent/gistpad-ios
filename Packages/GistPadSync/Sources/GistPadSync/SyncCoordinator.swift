@@ -8,10 +8,9 @@ public enum PublishReason: Equatable, Sendable {
 
 public actor SyncCoordinator {
     private let client: GitHubClient
-    public let store: DraftStore
+    private let store: DraftStore
     private var busy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
-    private var scheduled: [UUID: Task<Void, Never>] = [:]
     private var notBefore: Date = .distantPast
     private let mutationInterval: Duration
 
@@ -19,31 +18,6 @@ public actor SyncCoordinator {
         self.client = client
         self.store = store
         self.mutationInterval = mutationInterval
-    }
-
-    public func cancelScheduledPublishing() {
-        for task in scheduled.values { task.cancel() }
-        scheduled.removeAll()
-    }
-
-    public func scheduleAutosave(
-        id: UUID, accountID: UUID, enabled: Bool,
-        onResult: @escaping @Sendable (Result<DraftSnapshot, any Error>) async -> Void
-    ) {
-        scheduled[id]?.cancel()
-        scheduled[id] = nil
-        guard enabled else { return }
-        scheduled[id] = Task {
-            do {
-                try await Task.sleep(for: .seconds(5))
-                let result = try await publish(id: id, accountID: accountID, reason: .autosave)
-                await onResult(.success(result))
-            } catch is CancellationError {
-                return
-            } catch {
-                await onResult(.failure(error))
-            }
-        }
     }
 
     @discardableResult
@@ -72,11 +46,11 @@ public actor SyncCoordinator {
         }
         do {
             if Date.now < notBefore { try await Task.sleep(for: .seconds(notBefore.timeIntervalSinceNow)) }
+            let remote: String?
             if let gistID = draft.gistID {
                 let remoteGist = try await client.gist(id: gistID)
                 guard remoteGist.owner?.id == draft.githubUserID else { throw DraftError.readOnly }
                 guard remoteGist.truncated != true else { throw GitHubClientError.incompleteGist }
-                let remote: String?
                 if remoteGist.files[draft.filename] == nil { remote = nil }
                 else { remote = try await client.content(gist: remoteGist, filename: draft.filename) }
                 try await validatePublication(
@@ -100,57 +74,42 @@ public actor SyncCoordinator {
                     )
                 }
                 guard sourceEqual(remote, draft.baseContent) else {
-                    let suggestion: String?
-                    if let base = draft.baseContent, let remote {
-                        suggestion = ThreeWayMerge.merge(base: base, local: draft.text, remote: remote)
-                    } else { suggestion = nil }
                     let conflict = DraftConflict(
                         generation: draft.generation, base: draft.baseContent, local: draft.text,
-                        remote: remote, remoteRevision: remoteGist.revision, suggestedMerge: suggestion
+                        remote: remote, remoteRevision: remoteGist.revision
                     )
                     try await store.setState(.conflict(conflict), id: id, accountID: accountID)
                     return try await store.draft(id: id, accountID: accountID)
                 }
-                try await validatePublication(
-                    draft, reason: reason, expectedGeneration: expectedGeneration,
-                    shouldPublish: shouldPublish)
-                try await store.beginAttempt(
-                    id: id, accountID: accountID, content: draft.text,
-                    generation: draft.generation, remote: remote
-                )
-                notBefore = .now.addingTimeInterval(durationSeconds(mutationInterval))
-                let result = try await client.updateGist(
+            } else {
+                remote = nil
+            }
+            try await validatePublication(
+                draft, reason: reason, expectedGeneration: expectedGeneration,
+                shouldPublish: shouldPublish)
+            try await store.beginAttempt(
+                id: id, accountID: accountID, content: draft.text,
+                generation: draft.generation, remote: remote
+            )
+            notBefore = .now.addingTimeInterval(durationSeconds(mutationInterval))
+            let result: Gist
+            if let gistID = draft.gistID {
+                result = try await client.updateGist(
                     id: gistID, files: [draft.filename: .content(draft.text)]
                 )
-                let acknowledged = try await client.content(gist: result, filename: draft.filename)
-                guard sourceEqual(acknowledged, draft.text) else { throw DraftError.remoteDidNotAcknowledge }
-                notBefore = .now.addingTimeInterval(durationSeconds(mutationInterval))
-                return try await store.acknowledge(
-                    id: id, accountID: accountID, gistID: gistID, content: acknowledged,
-                    revision: result.revision, generation: draft.generation, publishedGist: result
-                )
             } else {
-                try await validatePublication(
-                    draft, reason: reason, expectedGeneration: expectedGeneration,
-                    shouldPublish: shouldPublish)
-                try await store.beginAttempt(
-                    id: id, accountID: accountID, content: draft.text,
-                    generation: draft.generation, remote: nil
-                )
-                notBefore = .now.addingTimeInterval(durationSeconds(mutationInterval))
-                let result = try await client.createGist(
+                result = try await client.createGist(
                     description: draft.description, filename: draft.filename,
                     content: GistConventions.encodeContent(draft.text)
                 )
-                let acknowledged = try await client.content(gist: result, filename: draft.filename)
-                guard sourceEqual(acknowledged, draft.text) else { throw DraftError.remoteDidNotAcknowledge }
-                notBefore = .now.addingTimeInterval(durationSeconds(mutationInterval))
-                return try await store.acknowledge(
-                    id: id, accountID: accountID, gistID: result.id, content: acknowledged,
-                    revision: result.revision, generation: draft.generation, publishedGist: result
-                )
             }
-
+            let acknowledged = try await client.content(gist: result, filename: draft.filename)
+            guard sourceEqual(acknowledged, draft.text) else { throw DraftError.remoteDidNotAcknowledge }
+            notBefore = .now.addingTimeInterval(durationSeconds(mutationInterval))
+            return try await store.acknowledge(
+                id: id, accountID: accountID, gistID: draft.gistID ?? result.id, content: acknowledged,
+                revision: result.revision, generation: draft.generation, publishedGist: result
+            )
         } catch {
             let latest = try await store.draft(id: id, accountID: accountID)
             if error is CancellationError || (error as? URLError)?.code == .cancelled {

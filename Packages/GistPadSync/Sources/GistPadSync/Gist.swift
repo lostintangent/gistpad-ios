@@ -91,7 +91,7 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
     }
     public var revision: String? { history?.first?.version }
 
-    public func matchesWebMarkdownFilter(allowImages: Bool) -> Bool {
+    func matchesWebMarkdownFilter(allowImages: Bool) -> Bool {
         files.values.allSatisfy {
             $0.language == "Markdown" || $0.filename.hasSuffix(".tldraw")
                 || (allowImages && $0.filename.hasSuffix(".png"))
@@ -140,16 +140,12 @@ public enum GistConventions {
         content == emptyContent ? "" : content
     }
 
-    public static func encodeContent(_ content: String) -> String {
+    static func encodeContent(_ content: String) -> String {
         content.isEmpty ? emptyContent : content
     }
 
     public static func fileDisplayName(_ filename: String) -> String {
         filename.hasSuffix(".md") ? String(filename.dropLast(3)) : filename
-    }
-
-    public static func markdownFilename(_ name: String) -> String {
-        name.hasSuffix(".md") ? name : name + ".md"
     }
 
     public static func todayFilename(date: Date = .now, timeZone: TimeZone = .current) -> String {
@@ -166,7 +162,7 @@ public enum GistConventions {
         )
     }
 
-    public static func initialContent(description: String = "", content: String? = nil) -> String {
+    static func initialContent(description: String, content: String?) -> String {
         content.flatMap { $0.isEmpty ? nil : $0 }
             ?? (description.isEmpty ? emptyContent : "# \(description)\n\n")
     }

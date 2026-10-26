@@ -9,8 +9,8 @@ public enum PhotoImageError: Error, Equatable, Sendable {
 }
 
 public enum PhotoImage {
-    public static let maximumByteCount = 50_000_000
-    public static let maximumPixelCount = 100_000_000
+    private static let maximumByteCount = 50_000_000
+    private static let maximumPixelCount = 100_000_000
 
     public static func thumbnailData(from data: Data) throws -> Data {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),

@@ -98,24 +98,20 @@ extension LiveNotebookProvider {
     guard let account = try await accounts.cachedAccount(), account.id == accountID else {
       throw AccountError.accountChanged
     }
-    if case .preference(let operation) = action {
+    switch action {
+    case .preference(let operation):
       return .account(NotebookAccount(try await accounts.apply(operation, accountID: accountID)))
-    }
-    if case .signOut = action {
+    case .signOut:
       try await accounts.signOut(accountID: accountID)
       return .signedOut
-    }
-    if case .confirmNewCreation(let id, let generation) = action {
+    case .confirmNewCreation(let id, let generation):
       return .review(
         try await drafts.confirmNewCreation(
           id: id, accountID: accountID, expectedGeneration: generation))
-    }
-    if case .discardUncertainCreation(let id, let generation) = action {
+    case .discardUncertainCreation(let id, let generation):
       try await drafts.discardUncertainCreation(
         id: id, accountID: accountID, expectedGeneration: generation)
       return .discardedDraft(id)
-    }
-    switch action {
     case .discardLocalCopy(let id, let generation):
       try await drafts.discardLocalCopy(
         id: id, accountID: accountID, expectedGeneration: generation)
@@ -136,10 +132,7 @@ extension LiveNotebookProvider {
         }
         return .review(try await drafts.draft(id: id, accountID: accountID))
       }
-    default:
-      break
-    }
-    if case .renameLocal(let id, let title) = action {
+    case .renameLocal(let id, let title):
       guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         throw NotebookActionError.invalidTitle
       }
@@ -148,9 +141,8 @@ extension LiveNotebookProvider {
         try await drafts.updateDraftMetadata(
           id: id, accountID: accountID, expectedFilename: draft.filename,
           filename: draft.filename, description: title))
-    }
-    let client = await client(accountID: accountID)
-    if case .inspectRemote(let id, let generation) = action {
+    case .inspectRemote(let id, let generation):
+      let client = await client(accountID: accountID)
       let current = try await drafts.draft(id: id, accountID: accountID)
       guard let gistID = current.gistID else { return .review(current) }
       let gist = try await client.gist(id: gistID)
@@ -164,9 +156,8 @@ extension LiveNotebookProvider {
         try await drafts.inspectRemoteChange(
           id: id, accountID: accountID, expectedGeneration: generation,
           remote: remote, revision: gist.revision))
-    }
-    switch action {
     case .refreshConflict(let review), .resolveConflict(let review, _, _):
+      let client = await client(accountID: accountID)
       guard review.draft.accountID == accountID, let gistID = review.draft.gistID else {
         throw AccountError.accountChanged
       }
@@ -196,36 +187,13 @@ extension LiveNotebookProvider {
         try await drafts.refreshConflict(
           id: current.id, accountID: accountID, expectedGeneration: current.generation,
           expectedConflict: review.conflict, remote: remote, revision: gist.revision))
-    default:
-      break
-    }
-    if case .star(let id, let starred) = action {
+    case .star(let id, let starred):
+      let client = await client(accountID: accountID)
       let gist = try await client.gist(id: id)
       try await client.setStarred(starred, id: id)
       return .gist(gist, starred: starred)
-    }
-    let id: String
-    switch action {
-    case .undoArchive(let undo):
-      id = undo.gistID
-    case .archive(let gistID, _), .rename(let gistID, _),
-      .renameFile(let gistID, _, _), .addFile(let gistID, _), .delete(let gistID):
-      id = gistID
-    case .star, .preference, .renameLocal, .refreshConflict, .resolveConflict, .inspectRemote,
-      .signOut, .confirmNewCreation, .discardUncertainCreation, .discardLocalCopy,
-      .discardCleanMissingCopy:
-      preconditionFailure("Handled before the owner-only action boundary.")
-    }
-    let gist = try await client.gist(id: id)
-    let userID: Int64
-    if let cached = account.githubUserID {
-      userID = cached
-    } else {
-      userID = try await client.authenticatedUser().id
-    }
-    guard gist.owner?.id == userID else { throw DraftError.readOnly }
-    switch action {
-    case .archive(_, let archived):
+    case .archive(let id, let archived):
+      let (client, gist, _) = try await ownedGist(id: id, account: account)
       let updated = try await client.setArchived(archived, gist: gist)
       return .archived(
         updated,
@@ -233,9 +201,12 @@ extension LiveNotebookProvider {
           accountID: accountID, gistID: id, originalDescription: gist.description ?? "",
           archivedDescription: updated.description ?? "", wasArchived: gist.isArchived))
     case .undoArchive(let undo):
+      let id = undo.gistID
+      let (client, gist, _) = try await ownedGist(id: id, account: account)
       try undo.validate(gist: gist, accountID: accountID)
       return .gist(try await client.updateGist(id: id, description: undo.originalDescription))
-    case .rename(_, let title):
+    case .rename(let id, let title):
+      let (client, gist, _) = try await ownedGist(id: id, account: account)
       guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         throw NotebookActionError.invalidTitle
       }
@@ -254,7 +225,8 @@ extension LiveNotebookProvider {
         throw NotebookActionError.remoteChangedLocalUpdateFailed(gistID: id)
       }
       return .gist(updated)
-    case .renameFile(_, let filename, let newFilename):
+    case .renameFile(let id, let filename, let newFilename):
+      let (client, gist, _) = try await ownedGist(id: id, account: account)
       try Self.validateFilename(newFilename)
       guard filename != newFilename else { return .gist(gist) }
       guard gist.files[filename] != nil else { throw GitHubClientError.missingFile }
@@ -277,14 +249,16 @@ extension LiveNotebookProvider {
         throw NotebookActionError.remoteChangedLocalUpdateFailed(gistID: id)
       }
       return .gist(updated)
-    case .addFile(_, let filename):
+    case .addFile(let id, let filename):
+      let (_, gist, userID) = try await ownedGist(id: id, account: account)
       try Self.validateFilename(filename)
       guard gist.files[filename] == nil else { throw NotebookActionError.filenameExists }
       let draft = try await drafts.newFileDraft(
         accountID: accountID, githubUserID: userID, gistID: id, filename: filename,
         description: gist.description ?? "", text: "")
       return .draft(draft, gist: gist)
-    case .delete:
+    case .delete(let id):
+      let (client, _, _) = try await ownedGist(id: id, account: account)
       try await client.deleteGist(id: id)
       do {
         try await CommentConversationDiskStore.applicationStore().removeDrafts(
@@ -296,12 +270,22 @@ extension LiveNotebookProvider {
       } catch {
         throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: id)
       }
-    case .star, .preference, .renameLocal, .refreshConflict, .resolveConflict, .inspectRemote,
-      .signOut, .confirmNewCreation, .discardUncertainCreation, .discardLocalCopy,
-      .discardCleanMissingCopy:
-      preconditionFailure("Handled before the owner-only action boundary.")
     }
+  }
 
+  private func ownedGist(
+    id: String, account: NotebookAccount
+  ) async throws -> (GitHubClient, Gist, Int64) {
+    let client = await client(accountID: account.id)
+    let gist = try await client.gist(id: id)
+    let userID: Int64
+    if let cached = account.githubUserID {
+      userID = cached
+    } else {
+      userID = try await client.authenticatedUser().id
+    }
+    guard gist.owner?.id == userID else { throw DraftError.readOnly }
+    return (client, gist, userID)
   }
 
   private static func validateFilename(_ filename: String) throws {

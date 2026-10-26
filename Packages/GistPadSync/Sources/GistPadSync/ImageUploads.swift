@@ -115,7 +115,7 @@ extension DraftStore {
             insertionGeneration: expectedGeneration, format: format
         )
         modelContext.insert(image)
-        try saveImageChanges()
+        try commit()
         return try imageSnapshot(image)
     }
 
@@ -163,7 +163,7 @@ extension DraftStore {
         }
         let draft = try applyCommand(command)
         image.stateData = try JSONEncoder().encode(ImageUploadState.inserted(generation: draft.generation))
-        try saveImageChanges()
+        try commit()
         return draft
     }
 
@@ -171,7 +171,7 @@ extension DraftStore {
         let image = try imageRecord(id: id, accountID: accountID)
         guard try imageSnapshot(image).state != .uploading else { throw ImageUploadError.uploadInProgress }
         modelContext.delete(image)
-        try saveImageChanges()
+        try commit()
     }
 
     func beginImageUpload(id: UUID, accountID: UUID) throws -> PendingImageTransfer {
@@ -180,7 +180,7 @@ extension DraftStore {
         let draft = try draft(id: image.draftID, accountID: accountID)
         guard let gistID = draft.gistID else {
             image.stateData = try JSONEncoder().encode(ImageUploadState.waitingForGist)
-            try saveImageChanges()
+            try commit()
             throw ImageUploadError.unpublishedNote
         }
         guard image.gistID == nil || image.gistID == gistID else { throw ImageUploadError.targetChanged }
@@ -188,14 +188,14 @@ extension DraftStore {
         image.gistID = gistID
         image.hasAttempted = true
         image.stateData = try JSONEncoder().encode(ImageUploadState.uploading)
-        try saveImageChanges()
+        try commit()
         return transfer
     }
 
     func setImageUploadState(_ state: ImageUploadState, id: UUID, accountID: UUID) throws -> ImageUploadSnapshot {
         let image = try imageRecord(id: id, accountID: accountID)
         image.stateData = try JSONEncoder().encode(state)
-        try saveImageChanges()
+        try commit()
         return try imageSnapshot(image)
     }
 
@@ -222,11 +222,6 @@ extension DraftStore {
             insertionGeneration: image.insertionGeneration, insertionLocation: image.insertionLocation,
             format: format, state: state, publicURL: url
         )
-    }
-
-    private func saveImageChanges() throws {
-        do { try modelContext.save() }
-        catch { modelContext.rollback(); throw error }
     }
 }
 

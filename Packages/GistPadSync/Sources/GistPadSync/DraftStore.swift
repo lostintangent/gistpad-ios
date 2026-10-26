@@ -19,6 +19,17 @@ public struct DraftConflict: Codable, Equatable, Sendable {
     public let suggestedMerge: String?
 }
 
+extension DraftConflict {
+    init(generation: UInt64, base: String?, local: String, remote: String?, remoteRevision: String?) {
+        self.init(
+            generation: generation, base: base, local: local, remote: remote,
+            remoteRevision: remoteRevision,
+            suggestedMerge: base.flatMap { base in
+                remote.flatMap { ThreeWayMerge.merge(base: base, local: local, remote: $0) }
+            })
+    }
+}
+
 public enum SaveState: Codable, Equatable, Sendable {
     case savedLocally
     case savingToGitHub(generation: UInt64)
@@ -542,14 +553,9 @@ public actor DraftStore {
         draft.text = text
         draft.generation = generation
         if case .conflict(let conflict) = previousState {
-            let suggestion: String?
-            if let base = conflict.base, let remote = conflict.remote {
-                suggestion = ThreeWayMerge.merge(base: base, local: text, remote: remote)
-            } else { suggestion = nil }
             draft.stateData = try encode(.conflict(DraftConflict(
                 generation: generation, base: conflict.base, local: text,
-                remote: conflict.remote, remoteRevision: conflict.remoteRevision,
-                suggestedMerge: suggestion
+                remote: conflict.remote, remoteRevision: conflict.remoteRevision
             )))
         } else if let sent = draft.attemptedGeneration, case .savingToGitHub = previousState {
             draft.stateData = try encode(.savingToGitHub(generation: sent))
@@ -679,13 +685,9 @@ public actor DraftStore {
               sourceEqual(conflict.suggestedMerge, expectedConflict.suggestedMerge) else {
             throw DraftError.unresolvedConflict
         }
-        let suggestion: String?
-        if let base = conflict.base, let remote {
-            suggestion = ThreeWayMerge.merge(base: base, local: draft.text, remote: remote)
-        } else { suggestion = nil }
         draft.stateData = try encode(.conflict(DraftConflict(
             generation: expectedGeneration, base: conflict.base, local: draft.text,
-            remote: remote, remoteRevision: revision, suggestedMerge: suggestion
+            remote: remote, remoteRevision: revision
         )))
         try commit()
         return try snapshot(draft)
@@ -708,13 +710,9 @@ public actor DraftStore {
                 revision: revision, generation: generation)
         }
         guard !sourceEqual(draft.baseContent, remote) else { return try snapshot(draft) }
-        let suggestion: String?
-        if let base = draft.baseContent, let remote {
-            suggestion = ThreeWayMerge.merge(base: base, local: draft.text, remote: remote)
-        } else { suggestion = nil }
         draft.stateData = try encode(.conflict(DraftConflict(
             generation: draft.generation, base: draft.baseContent, local: draft.text,
-            remote: remote, remoteRevision: revision, suggestedMerge: suggestion)))
+            remote: remote, remoteRevision: revision)))
         try commit()
         return try snapshot(draft)
     }
@@ -783,7 +781,7 @@ public actor DraftStore {
     private func encode(_ state: SaveState) throws -> Data { try JSONEncoder().encode(state) }
     private func decode(_ data: Data) throws -> SaveState { try JSONDecoder().decode(SaveState.self, from: data) }
 
-    private func commit() throws {
+    func commit() throws {
         do { try modelContext.save() }
         catch { modelContext.rollback(); throw error }
     }

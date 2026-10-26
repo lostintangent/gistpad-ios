@@ -172,7 +172,7 @@ public actor GitHubClient {
         )
     }
 
-    public func clearCache() {
+    private func clearCache() {
         cache.removeAll()
         cacheToken = nil
         cacheRevision = UUID()

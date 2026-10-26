@@ -148,8 +148,7 @@ extension DraftStore {
         let payload = try JSONEncoder().encode(snapshot)
         if let existing = try libraryRecord(snapshot.accountID) { existing.payload = payload }
         else { modelContext.insert(StoredLibrary(accountID: snapshot.accountID, payload: payload)) }
-        do { try modelContext.save() }
-        catch { modelContext.rollback(); throw error }
+        try commit()
     }
 }
 

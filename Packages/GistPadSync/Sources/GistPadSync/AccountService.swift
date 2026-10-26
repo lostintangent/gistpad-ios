@@ -157,7 +157,7 @@ public actor AccountService {
         return snapshot(session.user)
     }
 
-    public static func validateCallback(_ url: URL) throws {
+    private static func validateCallback(_ url: URL) throws {
         guard url.scheme == callbackURL.scheme, url.host == callbackURL.host,
               url.path.isEmpty, url.port == nil, url.user == nil, url.password == nil,
               url.fragment == nil else { throw AccountError.invalidCallback }
@@ -196,7 +196,7 @@ public actor AccountService {
         return session.accessToken
     }
 
-    public func githubToken(accountID: UUID) async throws -> String {
+    func githubToken(accountID: UUID) async throws -> String {
         guard !signingIn, !signingOut else { throw AccountError.accountChanged }
         guard let session = try persistedSession() else { throw AccountError.signedOut }
         guard session.user.id == accountID else { throw AccountError.accountChanged }

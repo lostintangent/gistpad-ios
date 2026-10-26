@@ -67,7 +67,7 @@ The coordinator serializes publication, freshly reads the remote file, validates
 
 `SaveState` distinguishes local durability, an in-flight generation, GitHub acknowledgement, offline, reconnect, typed failures and conflicts. A failure is persisted and thrown. The UI should reload the snapshot to show its state. A `404` retains the draft. A `403` is not sign-out. Rate-limit reset and `Retry-After` deadlines are honored.
 
-`scheduleAutosave` coalesces edits with the web's five-second delay. Always persist locally first. Cancel scheduled publishing immediately when autosave is disabled or the account changes. Background publication is permitted only when autosave is enabled. Folding itself must never request publication. Pending AI proposals, marked text and temporary Writing Tools edits are not accepted draft generations.
+The document session owns the web's five-second autosave delay and account/input eligibility. The coordinator only publishes accepted durable generations. Disabling autosave or changing accounts cancels the session's pending request. Leaving a note publishes when autosave is enabled. Leaving the app always attempts publication. Folding itself never requests publication. Pending AI proposals, marked text and temporary Writing Tools edits are not accepted draft generations.
 
 ## Conflicts and uncertain writes
 
