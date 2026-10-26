@@ -1,492 +1,187 @@
 # GistPad Native design system
 
-Version 1, October 23, 2026. Owner: Designer. Applies to native UI, the TextKit source editor, the bundled WebKit preview, and later system surfaces.
+Owner: Designer. This document owns visual tokens, native/rendered presentation and evidence requirements. [design-direction.md](design-direction.md) owns journeys, state, permissions and saving. Specifications are not claims that every surface ships or passes review.
 
-**A quiet notebook with a precise Markdown engine.** Content is stable, controls are recognizably iOS, and every action tells the truth about its effect. Use system components before custom styling. Modern means the best supported tool for the job, not replacing a reliable text engine merely because a newer wrapper exists.
+## 1. Identity and platform
 
-This is the implementation specification and review gate, not a claim that the current spike passes it. The app targets iOS 27.1 and later. It is personal, installed directly with the user's paid developer account. No marketing onboarding, App Store work, or subscription UI.
+Target iOS 27.1+, installed directly with the user's developer account. No marketing onboarding, subscription UI or App Store work. Use supported native components before custom styling. A reliable TextKit editor is not replaced merely because a newer wrapper exists.
 
-**October 24 design reset:** Use [design-direction.md](design-direction.md) for the overnight work through M4, with Designer reviewing the actual surfaces as they land. Earlier Library, palette and decorative proposals below are inputs, not competing specifications. Data-safety rules and explicitly requested fixes to note chrome, keyboard controls, scrolling and syntax remain active. The October 24 saving and Apple Intelligence decisions below supersede the earlier background-save and staged-AI policies.
+Keep the original `gistpad.dev/public/icon.svg` artwork: blue gradient spine, pale outlined cover, coral/amber/teal tabs, strokes, proportions and shadow. System appearance variants may adapt packaging, not redesign the master. Empty/first-run illustrations can use that original art at 48-64 pt, never fake per-note covers or error-state decoration.
 
-## 1. Non-negotiable product rules
+Liquid Glass belongs to navigation, menus and controls. The native source/reading backing stays opaque. Transparent WebKit/HTML can reveal that backing beneath real system chrome. No glass paragraphs/cards, custom blur imitation, painted scroll-edge gradients or glass-on-glass. [Materials][materials], [Liquid Glass adoption][adoption].
 
-- Existing notes open rendered. New notes open in source. An interrupted edit resumes at its selection.
-- Cover display: Library or one document. Open inner display: Library + document. Deliberate Focus: source + preview, with Library hidden. Never three squeezed columns.
-- One document session and native text surface survive presentation changes. Folding never saves, publishes, changes mode, accepts a proposal, or resets undo.
-- Local drafts and GitHub publication are different states. Keep local edits durable. Publish after five quiet seconds and on leaving a note when autosave is on; attempt publication on app background regardless of that preference, within the existing background-task lease and eligibility/safety checks.
-- Today contains the user's current dated note and template. **No Earlier days, task carryover, automatic journal text, or large-gist Git fallback.** A truncated response warns and blocks unsafe writes.
-- Tags apply to gists, not individual files or days. Secret gists and uploaded images are readable by URL.
-- Apple Intelligence is the only AI platform. V1 includes system Writing Tools plus exactly three whole-note actions: Ask, Edit and Review. Run on device, with bounded passes covering long notes in full. The user's later October 24 decision skips Private Cloud Compute. No app-owned tag suggestions, selection/section modes, third-party models or permanent chatbot. Generated changes remain proposals until Apply.
+## 2. Color and contrast
 
-The accepted recommendation governs scope. Earlier concept sketches are directional, not production geometry or an exception to these rules.
+Resolve semantic colors against the containing view's actual traits. Do not hard-code example system RGB values into assets/CSS. Use shared native/Preview roles, updating appearance without changing source, selection, scroll or Undo. [Color][color], [Resolved colors][resolved].
 
-### Preserve the original app identity
-
-Use the original PWA artwork from `gistpad.dev/public/icon.svg` for the native app icon. Preserve its blue gradient spine, outlined pale cover, coral/amber/teal tabs, writing strokes, proportions and shadow in the default full-color rendition. Do not substitute the simplified warm-binding notebook or another approximation. Adapt asset packaging and system-owned appearance variants without redesigning the master artwork.
-
-### A useful default detail
-
-An unselected wide detail must not open onto a generic Select a gist placeholder. Resolve it in this order:
-
-1. Restore the last accessible note and file for the current account, including its durable local draft and genuine interrupted editing state.
-2. With no restorable note, show the existing current-day note in reading mode.
-3. If today's note does not exist, stage it locally and open it quietly, without the keyboard. The user's October 25 request removes the Start interstitial. Explicit Today actions enter Edit with the keyboard.
-
-Opening the Library or unfolding does not create an extra note. A no-selection default may stage Today locally but never automatically publishes its untouched default heading. It may fill only a still-unselected detail and must never replace a newer user selection or push a deliberately visible compact Library into detail. An active note always wins, even when it falls outside the current Library filter. A remotely removed note with a recoverable local draft needs a recovery state, not silent abandonment.
-
-Signed-out, offline-without-cache, loading and failed-read states explain the actual condition and provide an appropriate action. Do not conceal those states behind a decorative empty page. Use note in selection/reading copy. Retain gist where the GitHub object's scope matters, such as multiple files, gist-level tags, and unlisted-link warnings.
-
-### Signature craft, not just compliant controls
-
-Correct system components are the floor. A stock grouped list, readable fonts, and a passing accessibility matrix are not the finished product. The production experience needs an identifiable notebook composition and exceptionally direct interactions. These requirements fit the existing M2/M3 scope, not a new feature milestone.
-
-| Moment | Production direction and evidence |
+| Role | Source / purpose |
 | --- | --- |
-| Opening the Library | Approved Install B has one Today feature and one compact row language for Pinned and Your Gists, replacing the card grid. Titles lead, date/excerpt recede, and tags add a third line only when present. Native inset separators, selection, swipe and accessibility remain. No decoration fetch or extra metadata rows |
-| Opening a scoped collection | Starred, Daily Notes and Archive show their name once in navigation, not again above their only list. Install B removes the out-of-scope Open document shelf: retain that note in detail with no selected Library row, not a synthetic member. Collection/tag/search changes and nil visible selection are not document departure and must preserve its session/Review. Remove redundant header space without changing native grouping or row insets. Keep Home's real Pinned Gists and Your Gists headings |
-| Conditional collection navigation | Keep Daily Notes and Your Gists available. Show Starred/Archive in compact and regular navigation only after known positive unfiltered gist membership; unknown initial membership stays absent, while cached positive membership survives refresh/offline. A current collection that empties stays until the user navigates elsewhere, preserving the note and Undo. Filters do not hide a nonempty collection. See the canonical design direction for membership loading and account boundaries |
-| Home group headings | Native section `Label` headers with `pin.fill` / `doc.text`, using title2 bold, 22 pt at Large, and small secondary-gray symbols. Target header symbol and row title alignment at the 12-pt inner edge; no inherited icon gutter. Rhythm targets: 32 pt before the header, 12 pt header-frame-to-row-frame, 12 pt row padding top/bottom, 3 pt title/secondary gap and 6 pt before tags. Keep regular `.sidebar` behavior and accept unavoidable system header additions rather than ordinary heading rows, negative offsets or the rejected `.inset` selection. Compact keeps its verified rhythm. Vertical tokens scale with Body metrics; horizontal 12 pt stays fixed. Speak the heading once |
-| List counts | Plain localized integers at trailing Home/Results headings, scaled subheadline regular secondary gray with tabular digits. No badge or cap. Home/Starred/Archive count distinct gists; Daily counts actual daily notes, using "1 note" / "2 notes", not the backing gist. VoiceOver uses the same unit. Scoped lists stay headerless with their unfiltered total in the native navigation subtitle. Results count current matches and omit the number during searching/failure. Keep known counts through refresh/offline, omit unknown initial counts and show zero only for a known empty result |
-| Row task state | Upper-trailing title-row cluster with a small neutral ring and scaled secondary footnote `3/4`, using tabular digits. Complete uses fixed semantic-green `checkmark.circle.fill` plus `4/4`, never an empty ring or personal accent. Only overdue unfinished counts use contrast-safe amber. No separate progress/Unfinished tasks row. Daily rows also omit repeated filename, gist-level file count and relative modification time; keep the date title, clean excerpt, meaningful tags and one complete accessible row description |
-| Home navigation controls | Compact Duo uses New above Settings in the upper native rail group, and Filter by tags above Search in the lower group. No overflow for those actions. Active filters use neutral `tag.fill` and an accessible count. The regular sidebar keeps overflow beside its single native trailing sidebar toggle. Do not reintroduce the empty leading relocation placeholder. Preserve native grouping, 44-pt targets, title collection picker and compact/regular adaptation, not fixed rail coordinates |
-| Approved Install B sidebar | One compact row system replaces the featured-card/list mixture. Match row/selection outer bounds to native Search, with 12-pt inner horizontal padding and native text-inset separators, including the first row's top boundary and Pinned. The selected capsule replaces adjacent boundaries without a line through its fill. Use neutral full-column native selection, never personal accent. See the canonical Install B table for anatomy, date formatting, states and actions |
-| Today feels like today | Give the current local date a deliberate typographic treatment beside Today. When actual current-day task data is available, show completed/total with a quiet progress indicator and an accessible text equivalent. No fabricated progress, streaks, weather, greetings, or carryover. Add a line is direct, with its target date pinned when composing starts |
-| Unfolding reveals context | The same page remains the visual and interaction anchor as Library appears beside it. Focus deliberately reveals source + preview at the relevant passage. Preserve text, selection, scroll and undo rather than crossfading to a fresh-looking copy. Judge this in motion through Closed, Partially Open and Open, not in independent screenshots |
-| Capturing a thought | A native, keyboard-ready composer with one clear commit action. After the durable local commit, reveal the inserted line in its real note rather than a generic success toast. An interrupted composer retains its text. Local capture never masquerades as GitHub publication |
-| Completing a task | Keep the line in place, make the checked state precise, and use one restrained checkmark transition and light response after the local commit for a direct toggle. Rejected edits retain a visible recovery path. No confetti, row teleportation, haptic on initial tap, or background-sync celebration |
-| Chrome gets out of the way | Use the platform's adaptive toolbar, native Liquid Glass and supported Duo arrangements/reserved regions. Let system chrome respond to scrolling and presentation. Do not imitate it with custom blur, a permanent command dashboard, or decorative fold effects. The page itself stays quiet and opaque |
+| Page | `systemBackground`, opaque document backing |
+| Content surface | `secondarySystemBackground`; tertiary only for genuine nesting |
+| Prose ink | Shared exact assets: Light `#1E293B`, Dark `#E2E8F0`, Light Increased `#0F172A`, Dark Increased `#F8FAFC` |
+| Metadata | Readable resolved label role. Necessary row date/excerpt share full-opacity ink; typography provides hierarchy, not compounded secondary opacity |
+| Separators / boundaries | Semantic separator / opaque separator; required visible affordances measured at 3:1 |
+| Links | Semantic link role plus underline or another explicit non-color affordance |
+| Error / completion | System red / fixed system green, with meaning also expressed through symbols/text |
+| Library selection | Native neutral selected surface and traits, never personal tint or OS text-selection color |
 
-The sky spine, existing colored tag labels, editorial hierarchy and exact feedback are the recognizable identity. The web is the reference for capability and speed, not a visual template. Titles are user content: display them exactly as written, without extracting emoji faces or inventing fallback illustrations per note. The icon's paper treatment belongs to notebook surfaces, not behind every paragraph. A signature interaction must still be clear with Reduce Motion, increased contrast, VoiceOver, and large type. Review the live error states with the same care as the opening frame; healthy persistence does not need a footer.
+Normal content text targets 4.5:1, Increased Contrast 7:1, against actual composited selected/unselected surfaces. Required nontext affordances target 3:1. Use WCAG relative luminance, not HSB brightness. System materials own their foreground adaptation; reference flat colors do not certify rendered glass.
 
-### Signature moves
+### Personal content, neutral controls
 
-This reset replaces the olive/gold direction and the twice-rejected flat Library. Build in the priority order below, then show the same real-app fixture before and after. A recolor alone is not the finished pass.
+Preserve a valid saved `accentColor`, including yellow. Missing values use GistPad sky `#0EA5E9`. Invalid data uses a legible native fallback and explicit Settings explanation, never silent metadata repair. The web preference/key remains authoritative; native does not invent a separate theme or rewrite the stored color for contrast.
 
-| Priority / surface | Memorable move and concrete delta |
+Personal accent is limited to Today date/incomplete progress/in-content Start, the preference swatch and comment annotations. Ordinary progress/pins, Library selection and document list/task markers stay neutral. Completion uses fixed green; overdue unfinished counts can use contrast-safe amber. Tags keep their own saved colors.
+
+| Derived role | Rule in each of Light, Dark and their Increased Contrast appearances |
 | --- | --- |
-| 1 / Library | Approved Install B supersedes the card-grid/spine treatment. One compact row language serves Pinned and Your Gists, with title2-bold neutral symbol/label/count headers, the measured compact rhythm and the native sidebar-header allowance above. Rows use headline titles, a localized date-plus-excerpt footnote line and tags only when present. Date/excerpt share a full-opacity native label role; size/weight supply their subordinate hierarchy. Keep native hairlines and neutral sidebar selection. No individual card, fixed height, filename, file-count or stacked recency row |
-| 1 / Today | A full-width notebook hero inside the margins, with 22-pt continuous corners, `secondarySystemGroupedBackground`, 20-pt internal inset and a 4-pt leading sky-gradient spine. Give the day numeral native SF Rounded bold, starting around 44 pt and scaling relative to large title; month uses `accentText`, weekday stays SF. Add up to two real cached excerpt lines and a small genuine task-progress ring beside a readable count. Leave 24 pt above and 32 pt below. No excerpt fetch or appearance-time creation. An existing note opens directly; an absent note has one explicit Start action. Stack at accessibility sizes |
-| 1 / Tags | Keep tinted metadata labels with readable full names and soft rounded shape, but remove their redundant inner color dot per the October 24 tag decision. Do not replace them with solid web pills, a new leading strip or a notebook-tab shape. The Tags sheet itself gets lighter, not bigger: remove its duplicate selected-chip panel, grouped cards and All tags heading. Use one plain searchable list with 44-pt minimum total rows, standalone swatch/neutral name/check and one quiet scope footer. Native medium/large detents, initially large at accessibility sizes. Keep editing behind swipe/context and preserve user colors |
-| 2 / Reading | A composed, uninterrupted page, with New York for rendered H1/H2 only, SF prose, adaptive ink and 1.5-body line height. Keep the existing heading scales and language fallback. Remove the healthy-state footer entirely. When a problem notice is present, use native scroll-edge underlap and enough end space to reveal the final line. Keep tasks fully legible when read-only. No page texture, permanent contents rail or decorative card around prose |
-| 2 / Editing | Readable, colorful Markdown structure using the web's semantic token colors: bold purple headings/strong and green quotes in dark mode, with the light theme and increased-contrast adaptations below. Keep native body-sized fonts and monochrome code, not a fenced-code language rainbow. The keyboard accessory floats as a native glass capsule, with a visible trailing Hide Keyboard button and no overflow. Keep the current passage anchored when moving between source and reading, with caret/selection/Undo intact |
-| 2 / File switching | The current exact filename is the native subtitle for a multi-file note; its title menu exposes ordinary files directly and dates in newest-first year/month groups. The selected file has a check. Choosing a file changes the actual mounted document, not just its title. No intermediate Files sheet or custom tab strip |
-| 3 / Motion and feedback | Today may retain native compact navigation with stable identity, interactive cancellation and a Reduce Motion alternative. Pinned and ordinary rows share native navigation; side-by-side selection does not zoom. A committed pin may relocate its row with native list animation, and a committed task completion may give its fixed green check one short response. Never repeat on restore/refresh. Archive retains real Undo. Autosave never buzzes or celebrates. Do not delay opening to animate [9-11, 14] |
+| Accent text | Smallest mix toward black in Light or white in Dark meeting the text target on its actual opaque surfaces |
+| Accent fill + on-fill | Prefer saved opaque fill. Choose black/white ink by greater contrast; minimally adjust fill only if needed to reach the text target |
+| Selected content surface | Restrained content tint with measured ink contrast. Not Library selection, chrome tint or native blue text selection |
+| Idle comment fill | Begin at 50% saved accent over page, reduce if needed for existing ink contrast |
 
-Palette and Library/Today/tab composition land first. Reading/editor/file chrome follow in the same connected flow. Motion is last, not a substitute for composition. The source-identity safety fix ships independently of this design pass.
+Enabled chrome uses native primary adaptive monochrome foreground, not reduced opacity or personal tint: navigation, mode controls, menus, sheets, Tags checks, keyboard tools, Intelligence, Photos and recovery. Native disabled/prominent roles still communicate hierarchy. Keep destructive red, native switch defaults, semantic links and standard blue caret/selection. Never apply global tint/foreground that also recolors content or input.
 
-Approved Install B replaces Pinned grid metrics with the ordinary list's compact row anatomy. Tag labels retain full names and honest overflow, not cropped fragments or tiny independent hit targets. Native context, swipe and accessibility actions keep their safety and availability.
+Non-destructive swipe actions use explicit `UIColor.darkGray` with native white text/glyphs, nominally 7.46:1. Verify actual on-fill pixels in both appearances and Increased Contrast. Delete remains native destructive red. Archive is not destructive.
 
-Approved Install B combines a localized date and cached excerpt on one secondary line. File details stay reachable without a per-row file-count line. Collections remain directly available in the existing title picker, with a native count subtitle in each scope; Daily counts days/notes, not its backing gist.
+### Tag labels
 
-Three daily moments make the notebook feel alive:
+Use scaled Footnote medium, primary text, 8-pt horizontal/4-pt vertical padding and 8-pt corners. Composite saved tag color into the content surface at 24% Light / 28% Dark to form an opaque fill. No internal dot, arbitrary colored text or whole-label opacity. Preserve neutral black/white/missing colors rather than inventing hues.
 
-- **A friendly date:** the rounded day numeral is expressive immediately, before any animation. Include it in the first Library/Today pass. Use the native rounded design, not a fixed font name or an oversized date that squeezes the excerpt. [15]
-- **A task clicks into place:** a direct task-toggle action gets one short checkmark response and light haptic only after its local source commit succeeds. The native host owns the haptic; the reading checkbox resolves once rather than replaying on render. Today's real progress fills to the committed value when that leaf is visible. No row movement, refresh/relaunch feedback, or haptic for every typed character. Reduce Motion uses the settled check/progress immediately. [9-11]
-- **A fresh page:** deliberate local-note creation opens the real, focused editor immediately. After durable creation, briefly reveal its leading sky spine once, around 180-220 ms, without moving text or delaying the keyboard. Reduce Motion shows the settled page without the reveal. Empty-notebook and first-run invitations use the original notebook artwork at 48-64 pt, not a generic document symbol or a giant hero. Do not substitute it for offline, error or no-search-results states.
+Rows show up to two complete names plus truthful `+N` at standard type; AX wraps/grows. Use 6-pt gaps. Metadata labels are not nested controls. Picker rows instead show one standalone swatch on an untinted row, full name and separate neutral selection check. Use an own-hue hairline only where needed, neutral gray for white; no universal black outline. Increased Contrast strengthens necessary boundaries. Measure final text/fill with white, black, yellow, saturated and similar hues.
 
-## 2. Color: one set of roles, four appearances
+## 3. Typography and geometry
 
-### System roles
+Use SF through native style APIs and language fallback for interface, prose and rendered headings. Today day uses system Rounded, about 44 pt at Large, scaling with Large Title. Code uses scaled system monospace. No bundled/private font names, New York headings, body tracking, condensed prose or fixed accessibility caps. Source headings remain body-sized bold. [Typography][type], [Preferred fonts][font], [Font metrics][metrics].
 
-Use semantic colors, resolved against the **containing view's traits**. Never copy sample system RGB values into assets or CSS. Colors can change between OS releases, appearances, elevated presentations, and accessibility settings. [1, 2]
-
-| Token | Native source | Preview CSS variable | Use |
-| --- | --- | --- | --- |
-| `page` | `UIColor.systemBackground` | `--gp-page` | Opaque native editor/reading backing; nested transparent WebKit inherits this page |
-| `surface` | `UIColor.secondarySystemBackground` | `--gp-surface` | Code blocks and quiet grouped content |
-| `surfaceRaised` | `UIColor.tertiarySystemBackground` | `--gp-surface-raised` | Only a genuine nested content surface |
-| `text` | Adaptive custom `ink` below | `--gp-text` | App-owned prose, headings and task labels; system-owned chrome retains semantic foregrounds |
-| `textSecondary` | `UIColor.secondaryLabel` | `--gp-text-secondary` | Supporting metadata, not essential source syntax |
-| `separator` | `UIColor.separator` | `--gp-separator` | Nonessential dividers |
-| `boundary` | `UIColor.opaqueSeparator` | `--gp-boundary` | Visible content boundaries, checked at actual contrast |
-| `link` | `UIColor.link` | `--gp-link` | External links and wikilinks, with a non-color affordance |
-| `error` | `UIColor.systemRed` | `--gp-error` | Errors, with a symbol and explanation |
-| `success` | `UIColor.systemGreen` | `--gp-success` | Explicit success, never the only status signal |
-
-System navigation/list materials retain their standard styles. `surface` is not an instruction to put every row inside a card. Do not use `tertiaryLabel`, opacity, or separator colors for necessary small text.
-
-### Custom roles
-
-The ink values below are exact sRGB assets. The accent values are the earlier sky reference, not a replacement for the saved profile color or permission to tint chrome. The current derivation and allowed uses are specified in [Color: personal content, neutral controls](design-direction.md#color-personal-content-neutral-controls). Keep shared native/preview roles with four appearances, not separate inline RGB literals.
-
-| Token / CSS suffix | Light | Dark | Light increased | Dark increased |
-| --- | --- | --- | --- | --- |
-| `ink` / `text` | `#1E293B` | `#E2E8F0` | `#0F172A` | `#F8FAFC` |
-| `accentText` / `accent-text` | `#0369A1` | `#7DD3FC` | `#075985` | `#BAE6FD` |
-| `accentFill` / `accent-fill` | `#0EA5E9` | `#38BDF8` | `#0EA5E9` | `#7DD3FC` |
-| `onAccent` / `on-accent` | `#0F172A` | `#0F172A` | `#0F172A` | `#0F172A` |
-| `selectedSurface` / `selected-surface` | `#E7F6FD` | `#0B3548` | `#D4EEFC` | `#134B63` |
-
-Prefix each CSS suffix with `--gp-`. Personal `selectedSurface` now belongs to the Today date treatment, not Library/sidebar selection or OS text selection. Library selection uses native neutral surfaces and selected traits.
-
-Use personal accent only for Today date/incomplete-progress/Start content and the preference swatch, as enumerated in the canonical direction. Completed-task checks use a fixed, contrast-safe system-green role instead. Today drops its All done caption in every layout, retaining the small left caption only for incomplete remaining counts and the full summary in VoiceOver. The user's later October 24 feedback restores muted secondary gray for document bullets, numbers and task boxes, including checked boxes, in Edit and Preview. Enabled native chrome, keyboard tools, menu commands and sheet actions use primary adaptive monochrome ink, with native neutral prominent styling where needed. Secondary ink is for ordinary metadata/progress and document list markers, not a dimmed enabled action. Overdue unfinished row counts may use contrast-safe amber. Preserve destructive red, tag colors, native text-entry blue and switch defaults. Do not apply personal tint at the app, navigation or sheet root. System controls own material/foreground and disabled-state adaptation. Links retain their semantic treatment and non-color affordance.
-
-The decorative spine uses the original `#5AD1FA` to `#0EA5E9` gradient. Neither stop is suitable for small text on white (1.76:1 and 2.77:1). Library uses semantic grouped surfaces, with the icon's paper `#FFFFFF` to `#E2E8F0` gradient reserved for small original-artwork illustrations rather than overriding those surfaces. Keep the source and reading page semantic and flat. The icon's coral, amber and teal do not replace existing profile colors or force a new tag palette.
-
-The shared custom text roles above clear 4.5:1 against reference light canvases `#FFFFFF`/`#F2F2F7` and dark canvases `#000000`/`#1C1C1E`. The lowest measured normal-mode text ratio is 5.32:1, increased-mode 6.78:1. `onAccent` against its fill exceeds 6.4:1 in all variants. Source-only token colors and their quote-background caveat are specified in section 6. Those reference backgrounds are **test inputs, not a definition of system colors**. Measure final resolved text/background pairs, selected surfaces, actual materials, Today paper and tag fills on the shipping OS. Never assume these reference checks certify the whole screen.
-
-User-defined tag colors stay compatible with the web. Show the complete tag name in primary semantic ink. Metadata pills carry color in their tinted fill without an inner dot; plain picker rows use one standalone swatch instead. Chosen tags also have a neutral checkmark. A tag's color is not an error or sync status.
-
-### Tags with presence
-
-Tags are small colored labels, not a comma-separated gray sentence. Use one shared presentation across Library metadata, the selected note's metadata, and tag selection.
-
-- **Label:** retain the installed scaled `.footnote` medium label, primary text, 8-pt horizontal / 4-pt vertical padding and softly rounded 8-pt shape. Remove the inner color dot consistently from all metadata pills. Composite the tag color into `surface` at 24% in light and 28% in dark, producing an opaque final fill with recognizable color. Do not replace it with solid pills, a leading strip or asymmetric corners. Do not lower the whole label's opacity or use arbitrary user color as its text color. Increased contrast adds a visible boundary and retains the complete name. Check final text/fill contrast for white, black, saturated yellow, similar hues and missing-color tags, targeting 4.5:1 normally and 7:1 with Increased Contrast. Black, white and missing-color tags remain truthfully neutral rather than receiving invented hues.
-- **Library rows:** place labels below the title/excerpt, with 6-pt gaps. At standard sizes show up to two complete names plus a truthful `+N` overflow label. Never cut a chip midway or abbreviate two names into the same string. At accessibility sizes wrap/grow rather than compressing text. Row tags are metadata, not nested buttons inside the note's navigation link. The note's labeled Tags action reveals the complete set.
-- **Note metadata:** provide one labeled Tags route in native note chrome. Its editable sheet is a single plain native searchable list: color swatch, full name and selected check. No duplicated On this note chip shelf, All tags heading or rounded group cards. The total row target is at least 44 pt, not a 44-pt inner control plus List padding; grow for wrapping/accessibility. Offer medium/large native sheet detents, starting large at accessibility sizes. Use one scope footer, **Applies to every file in this gist.** A nonmutating presentation shows the assigned tags in the same compact list without toggle checks, plus the native Close action. GitHub source access is a separate capability: a signed-in user can tag someone else's gist, and incomplete source does not by itself block profile-only tag changes. Use a nonmutating presentation only when the account lacks profile-write capability or no safe account-scoped gist association exists. A transient offline/save failure preserves local choices with Retry rather than changing their permission. Avoid a separate information-only sheet that duplicates the Tags editor. Do not pin a new ribbon over the writing canvas or insert tags into the Markdown file.
-- **Filtering:** selected search/filter tokens use the same name and color identity plus a checkmark or explicit remove affordance. Show the matching rule and Clear filters. An interactive label has a nonoverlapping 44-pt target. The full tag picker remains a native searchable list with color dot, name and selected checkmark, not a wall of tiny pills.
-- **No color escalation:** a selected note uses a native neutral selection surface without recoloring its tag labels. Preserve the user's actual web colors and distinguish a tag selection from a failed metadata save. An unsuccessful edit retains the user's choice with an inline Retry, not a silently reverted success state.
-
-The Tags and Filter by tags sheets use primary neutral ink for names, selection checks and Done/Save/Close. Their untinted picker rows retain the standalone color dot as the only tag-colored element. Keep each picker row to dot, name and check. Expose **Edit Tag...** through swipe/context actions and a named accessibility action instead of a second pencil button in every row. Do not explain the conventional Cancel/Done interaction in a second paragraph. Library timestamps use scaled footnote regular, allowing titles to lead without fading small text below 4.5:1.
-
-Swatches are metadata, not radio controls. Do not add a universal primary/black outline. Use an unoutlined fill when it is distinct, with a subtle own-hue hairline only where separation is needed. White uses a neutral gray hairline rather than an invisible white edge. Increase Contrast can strengthen the necessary boundary without changing the tag's color identity. Selection remains a separate checkmark and accessibility state.
-
-### Purposeful delight
-
-Animation and accent details are welcome when they make writing, reading or navigation feel more direct. Quiet does not mean lifeless. Prefer the system control's pressed, selection and presentation behavior, then add only the missing explanatory transition.
-
-| Interaction | Intended character |
+| Content metric | Standard Large reference |
 | --- | --- |
-| Choosing a tag/filter | Keep the tapped label anchored. A short fill/checkmark transition makes the choice visible; a single settled list update follows. Never animate a fresh result order on every typed character or duplicate the system haptic |
-| Opening/closing a note | Native navigation owns the gesture and interactive cancellation. A source-to-destination relationship is desirable only when it survives back gestures, large type and interrupted transitions. Do not replace native navigation with a bespoke page-flip |
-| Source and reading | Preserve the relevant passage and the persistent editor. Let mode chrome change crisply while the document remains the anchor. No full-page flash, fake typing or slide that implies another note |
-| Committing a captured line | Reveal the actual inserted line once, using a brief `selectedSurface` highlight that clears. Never replay it on refresh or use an ongoing pulse |
-| Task completion | A single restrained checkmark transition after local commit. Keep the row and text stable. Optional light feedback is reserved for that committed user action |
-| Save status | A quiet content transition when the truthful state changes. No pill bounce, spinner after completion, autosave toast or success animation competing with the sentence being written |
+| Spacing scale | 4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 pt; custom content only, not replacement system chrome |
+| Document measure | One 20-pt gutter per side, 16 pt in a narrow Split pane; cap useful measure at 64ch. Never add both native and CSS gutters |
+| Page start/end | 24 pt below unobscured top; 40 pt end breathing room plus native inset for actual controls/keyboard |
+| Body | 17-pt native Body, `max(1.75em, nativeBodyLineHeight)`, 1.25-em paragraph gaps |
+| H1 | Sans bold, 34 pt; native Large Title growth from Large; no first-block top margin |
+| H2 | Sans semibold, 25.5 pt; native Title 2 growth, about 3rem before a section except at page start |
+| H3 | Sans semibold, 21.25 pt; native Title 3 growth. Lower levels retain hierarchy without extra rules |
+| H1/H2 rule | One CSS pixel semantic separator, with 1rem padding above it, across the text measure |
+| List rhythm | Clear logical marker gutter, wrapped-line alignment, 0.5-em inter-item gaps |
+| Anchors | Target about 16 pt below actual unobscured top, not an assumed browser origin |
+| Targets | At least 44 x 44 pt, with nonoverlapping hit regions. Grow rows instead of overlapping adjacent task targets |
 
-For custom state changes, start around 160-220 ms ease-out and evaluate on the device. This is a tuning range, not a replacement for system spring parameters. Motion must be interruptible, and Reduce Motion uses an immediate state change or brief nonspatial fade. A flourish that damages input responsiveness, reading position or clarity is removed. Custom gradients or accent strokes are not categorically banned, but must serve a specific focal point and pass the same appearance/accessibility review as typography.
+Heading scaling adds the exact preferred-style point growth from Large to each reference. H1 follows Large Title; H2 is Title 2 + 3.5 pt; H3 is Title 3 + 1.25 pt. Do not keep fixed Body ratios or multiply preferred heading sizes by calibration ratios that invert hierarchy at AX. `rem` follows native-scaled Body. Prefer whole-word wrapping, with emergency wrapping only for a word wider than its column.
 
-## 3. Typography and Dynamic Type
+Use logical margins/direction for RTL and mixed script, isolating code only where necessary. Never clip diacritics or assume one line box fits every language. At AX, collapse companions/stack metadata before shrinking content. Preserve long titles, complete tag names and distinguishable action labels.
 
-Use system font APIs with language fallback: SF by default, SF Rounded for the Today day numeral, and New York for rendered H1/H2. Keep Library titles, native chrome, reading body and source in SF. No bundled system fonts, fixed-size UI typography, condensed prose, manual tracking on body text, or all-uppercase labels needed to understand the product. [3, 15]
+### Shared appearance bridge
 
-| Role | Native text style | Treatment at default Large |
-| --- | --- | --- |
-| Screen title | System navigation title | Let navigation adapt size and placement |
-| Document H1 | `.title` / `UIFont.TextStyle.title1`, serif design | New York bold, approximately 28 pt |
-| H2 | `.title2`, serif design | New York semibold, approximately 22 pt |
-| H3 | `.title3` | Semibold, approximately 20 pt |
-| H4-H6 / section heading | `.headline` | Semibold, approximately 17 pt, preserve semantic heading levels |
-| Prose / source / task | `.body` | Regular, approximately 17 pt |
-| Library title | `.headline` | Default semibold, allow two lines then a detail route. No repeated pin inside Pinned; retain a small pin for a pinned note outside that shelf. Do not let a status symbol steal title width at accessibility sizes |
-| Secondary metadata | `.subheadline` or `.footnote` | Not smaller merely to preserve a tight row |
-| Code | Monospaced system font at scaled body size | Regular, no `.88em` reduction |
-| Status / footnotes | `.footnote` | Approximately 13 pt, scales, remains readable |
-| Today day numeral | Rounded design, scaled relative to `.largeTitle` | Bold, starting around 44 pt; other date components remain SF |
+The native host resolves semantic sRGB colors, preferred sizes/line heights, scaled monospace, contrast, Bold Text and relevant layout direction. Preview consumes those values through the existing typed bridge/CSS variables. Appearance is separate from document identity/generation: no web view reload, source replacement or lost selection/scroll for a theme change.
 
-Point sizes are reference values only. Native style APIs determine actual size. All labels wrap/grow at large categories. Required actions must not truncate to identical labels. Source headings stay body-sized bold, not the large rendered heading sizes.
+Use preferred fonts with current view traits and avoid double scaling. Update attributed spans for metric/Bold Text changes without touching characters, Undo or marked text; defer unsafe restyling during IME/Writing Tools. Color-only updates do not reparse source.
 
-For UIKit, resolve `UIFont.preferredFont(forTextStyle:compatibleWith:)` using the current view traits and update attributed spans when those traits change. Use `UIFontMetrics` for a custom monospaced base. Do not double-scale a font that is already preferred/scaled. Attribute refresh must not change characters, marked text, undo, selection, or the current reading anchor. Defer restyling while composition or Writing Tools is active, then apply current traits safely. [4, 5]
+Keep native point metrics as CSS pixels at normal `width=device-width, initial-scale=1`, system sans font fallback and `-webkit-text-size-adjust: 100%`. Do not add another accessibility multiplier or independent body shorthand. Preserve pinch zoom. Standalone-browser CSS fallbacks are not the embedded authority. Invalid appearance retains the last legible theme and emits a diagnostic, not unreadable output.
 
-### Shared preview appearance contract
+## 4. Native controls and input
 
-**The host is the authority for Dynamic Type and appearance.** Resolve semantic colors and preferred font metrics in native code, then update the page's CSS variables in one transaction. The appearance update is presentation data, separate from document identity and draft generation. It must not reload the web view, replace Markdown, or erase selection/scroll.
+System navigation/toolbars/sheets own placement, grouping, shapes, safe areas and overflow. Supply title + SF Symbol even when only the symbol is visible. Use native cancel/confirm/close roles, clear accessible labels and descriptive body copy for consequential choices. No manual centering spacers or hard-coded Duo rail offsets. [Toolbars][toolbars], [Buttons][buttons].
 
-The payload needs:
+Edit uses `square.and.pencil`, Preview `eye`, Split `rectangle.split.2x1`. Keep neutral native selected state, exact accessible names, one glass treatment and the scaled 48-pt segment floor. The mode control keeps intrinsic width; long titles truncate first, not the symbols. Other actions retain familiar native symbols: calendar, tag, share, pin, star, archive and gear.
 
-- Appearance and contrast, plus resolved sRGB colors for the roles in section 2.
-- Preferred point sizes and native line heights for body, title1/title2/title3, headline, and footnote, plus the scaled monospaced body size.
-- Bold Text state and layout direction when relevant to typography. Content direction remains determined by the content, not forced from the app language.
+The keyboard accessory is one floating native glass capsule, using `UIGlassEffect`, about 12 pt above the keyboard and 16-pt outer inset where usable width allows. Its compact controls are Aa / Lists / Insert / Intelligence / Hide Keyboard. Bold/Italic can be direct only with room; fold them into Aa before shrinking targets or hiding dismissal. Find stays in the note menu and Command-F. The retained text view remains input owner; no second editor or reset selection/Undo. [Native glass][glass].
 
-CSS metric names: `--gp-body-size`, `--gp-body-line-height`, `--gp-title1-size`, `--gp-title1-line-height`, `--gp-title2-size`, `--gp-title2-line-height`, `--gp-title3-size`, `--gp-title3-line-height`, `--gp-headline-size`, `--gp-headline-line-height`, `--gp-footnote-size`, `--gp-footnote-line-height`, `--gp-code-size`.
+Both source and Preview use native bounce, automatic insets and soft scroll edges only where real controls overlap. At rest the first heading is visible; the final line/caret can scroll above keyboard, accessory and active problem notice. No double inset, CSS fade, fake footer cutoff, nested page scroll surface or blanket touch cancellation. Local table/code scrolling remains independent.
 
-Resolve title1/title2 metrics using the preferred font descriptor's `.serif` design, which Apple maps to New York. Apply `font-family: ui-serif, serif` only to rendered H1/H2 in WebKit. Keep native language fallback and Bold Text. Do not bundle the font or hard-code an installed/private face name. [15, 16]
+Propagate Reduce Transparency, Increase Contrast, Reduce Motion and Bold Text through native/WebKit surfaces. Preserve native selection, menus, focus outlines, Writing Tools, IME and pinch zoom. Never blanket-disable selection/callouts or remove native menu actions to hide a renderer tell.
 
-The preview's existing transport names remain stable: `background` -> `--gp-page`, `foreground` -> `--gp-text`, `secondaryForeground` -> `--gp-text-secondary`, `link` -> `--gp-link`, `separator` -> `--gp-separator`, `secondaryBackground` -> `--gp-surface`, `accentText` -> `--gp-accent-text`, `accentBackground` -> `--gp-selected-surface`. Retain `bodyFontSize` and `increasedContrast`, and add the preferred text-style metrics when integrating the complete appearance theme. `accentBackground` means a selected content surface, not the opaque primary-button fill.
+## 5. Rendered content
 
-A viewport with `width=device-width, initial-scale=1` makes host point-size values suitable as CSS pixels at the normal scale. Preserve pinch zoom. Use `font-family: -apple-system, BlinkMacSystemFont, sans-serif`, not a screenshot of text. Once native point sizes are injected, do not also apply an independent accessibility multiplier or the `-apple-system-body` font shorthand. Keep `-webkit-text-size-adjust: 100%` so the same scale is not applied twice.
+The bundled preview preserves the web Markdown dialect and the user's source. Rendered headings and authored emoji are not duplicated with another giant description heading. Content surfaces are quiet and opaque.
 
-CSS `prefers-color-scheme`/`prefers-contrast` and `font: -apple-system-body` can be a documented standalone-browser fallback, not the source of truth for the embedded app. The bridge's exact typed transport belongs to Renderer. Missing/invalid appearance must retain a legible last valid theme and surface a diagnostic, not silently render unreadable text.
+| Element | Presentation |
+| --- | --- |
+| Tasks | Labeled real controls with 44-pt targets, pending/failure recovery, contrast-safe gray box/check and legible read-only text |
+| Links | Semantic link treatment and non-color affordance; no hover-only dependency |
+| Contents | Compact disclosure only when requested by the note. Interface-scale label, primary anchor rows, modest hierarchy, 44-pt targets, pressed/focus states and navigation landmark. Do not alter ordinary authored details open state |
+| Quotes | 3-pt logical-start rule, 16-pt inset, primary prose rather than faded italics |
+| Inline code | Body-size monospace, quiet surface, 2-4 pt horizontal padding, no synthetic backticks |
+| Fenced code | Scaled body monospace, 12-16 pt inset, preserved whitespace and local horizontal scrolling. No language rainbow |
+| Tables | Body text, semibold header, quiet horizontal separators and authored alignment. No default zebra/outer grid; local scrolling instead of tiny cells |
+| Alerts | Kind label, symbol and boundary. Color supplements meaning |
+| Footnotes | Native-scaled Footnote, discoverable backlinks, no extra tiny relative reduction |
+| Calculations | Current result semibold on the existing selected content surface; previous substitutions regular on content surface. Primary ink, tabular numerals, 6-pt radius, 4-pt horizontal/2-pt vertical padding. Preserve exact value/copy semantics and accessible distinction |
+| Diagrams | Neutral default nodes, primary labels and readable strokes, native Body typography, authored meaningful styles/alternative text and explicit enlargement where needed. Scroll locally instead of shrinking |
+| Images | Fit width, preserve aspect ratio and meaningful alternative text; enlargement where needed |
+| Disclosure | Real details/summary semantics, quiet chevron, Body semibold, 44-pt row, 8-pt label gap and expanded-content spacing, visible pressed/focus states. No mandatory motion/card |
 
-## 4. Space, shape, and adaptive composition
-
-Use system margins, row styles, sheets, popovers, and toolbars first. The scale below is for custom **content**, not a new chrome system.
-
-| Token | Points | Use |
-| --- | --- | --- |
-| `space1` | 4 | Tight related details |
-| `space2` | 8 | Symbol/label gap, inline content |
-| `space3` | 12 | Related rows, compact content inset |
-| `space4` | 16 | Standard content group gap |
-| `space5` | 20 | Compact document side inset |
-| `space6` | 24 | Document top/group spacing |
-| `space8` | 32 | Larger content separation |
-| `space10` | 40 | Breathing room at document end |
-
-Document side inset starts at 20 pt in compact content and 28-32 pt when there is room. Respect the system's asymmetric safe area on Duo; never add a second manual toolbar gutter. Bottom inset accommodates the keyboard, safe area, and visible accessory, with at least one comfortable line of end space. Prefer container-relative margins rather than a device-width switch.
-
-Custom content corner radii: 6 pt for inline code, 12 pt for a code/alert container. Let system buttons, tags/pickers, sheets, and widgets choose appropriate adaptive shapes. No universal 24-pt card wrapper, border on every paragraph, or fake phone frame.
-
-Custom controls target at least 44 x 44 pt, including preview task targets. A 20-24 pt visible checkbox can have a larger nonoverlapping hit region. Grow rows rather than overlapping two adjacent tasks' tap targets. At accessibility sizes, stack metadata below the title and collapse companions before shrinking type. [6]
-
-Navigation follows size classes and usable container bounds, not a device model or orientation guess. Use native split navigation for Library + document. Focus uses a navigation container around the two content surfaces, not navigation nested inside an arrangement. Let supported arrangements/reserved regions keep content reachable. Approximately 320 useful points per pane at default type is a hypothesis to validate, not a hard-coded Duo breakpoint. [7]
-
-## 5. Materials and native controls
-
-Liquid Glass belongs to **navigation and controls**, not the document. System navigation, toolbars, sheets, search, menus, and share sheets get modern platform treatment. Use their semantic placements, grouping, visibility priorities, and overflow behavior. Supply title + SF Symbol even if only the symbol is currently visible. [7, 8]
-
-Use role-driven native actions for sheet chrome: `.cancel` discards the pending operation, `.confirm` commits it, and `.close` dismisses a read-only surface. Keep clear accessible names such as Cancel and Save Tags. Let native toolbar/title placement adapt to Duo rather than inserting manual centering spacers. Consequential choices such as Use GitHub Version or Restore File retain descriptive text in the sheet body instead of becoming unexplained checkmarks. [13]
-
-For multi-file gists, show the active filename in the native subtitle. Opening the note-title menu reveals ordinary filenames directly and dated series in newest-first year/month groups within that same menu, with a checkmark on the selected file. Match the web's grouping rules using UTC Gregorian dates, never grouping UTC midnight in the viewer's local zone. Do not require Files in this gist followed by another sheet merely to choose a file. Keep filenames exact, including non-Markdown files. Separate Add File and Rename File actions from selection. Initial file resolution follows the web resolver, including newest-file selection for a detected dated series and README selection otherwise, with its fallback. Explicitly choosing a file always opens that exact file. The mounted source editor, preview and title must share that account/draft/file identity before editing is enabled.
-
-The note's overflow menu uses native sections. Begin with one compact Pin/Star/Share/Copy Link control group, with accessible names and current toggle states. Follow with content/view actions (Tags, Files, Source & Preview, Find), Open in GitHub, Archive, then destructive Delete isolated at the bottom. Use a real native Menu with Sections if automatic secondary-action placement cannot express this hierarchy. Do not fake headings with disabled buttons or draw custom separator views.
-
-The page's native backing stays opaque. WebKit and its HTML canvas may be transparent over that backing so content can underlap system chrome; this does not turn prose into a glass panel. Code/alerts use content surfaces, not glass. A translucent panel behind every row, tag and paragraph is a rejection. Never hand-render blur/highlight edges to imitate system glass.
-
-The source keyboard accessory is one floating native glass capsule, not a full-width flat toolbar attached to the keyboard's top border. Keep 12 pt of clear space between the capsule and keyboard and 16-pt outer insets where usable width permits. Use native glass (`UIGlassEffect` for a UIKit accessory), not a custom blur imitation. Its six visible essentials are Aa, Bold, Italic, Lists, Insert and a trailing Hide Keyboard button. Every target is at least 44 pt, and Hide Keyboard never moves into overflow. At narrow/accessibility widths, fold Bold/Italic into Aa before sacrificing dismissal or shrinking targets. Find moves to the note menu and keeps Command-F. The retained text view remains the input owner; the capsule does not add a second editor or reset selection/Undo. [17]
-
-Both source and reading use native soft top/bottom scroll edges, normal bounce and automatic content insets. Extend content beneath the container's navigation/bottom regions without ignoring the keyboard or extending the chrome itself. At rest the first heading is below navigation; the final line and source caret can scroll fully above a visible accessory or problem notice. No doubled inset, clipped hard seam or CSS gradient over document text. Anchor/task scrolling must account for the native adjusted insets.
-
-Reduce Transparency, Increase Contrast, Reduce Motion, and Bold Text must propagate through the native controls and WebKit presentation. Do not defeat them with a permanently translucent custom bar or pale placeholder text.
-
-| Action | SF Symbol starting point | Semantics |
-| --- | --- | --- |
-| New gist / Edit | `square.and.pencil` | Different accessible titles in each context |
-| Today | `calendar` | Date note, not weather |
-| Source | `text.alignleft` | Markdown editing mode |
-| Preview | `doc.richtext` | Rendered note |
-| Focus | `rectangle.split.2x1` | Deliberate source/preview comparison |
-| Tags | `tag` | Gist-level tags |
-| Share | `square.and.arrow.up` | Native share flow |
-| Pin / Star / Archive | `pin`, `star`, `archivebox` | Preserve their distinct meanings |
-| Offline / Error | `wifi.slash`, `exclamationmark.circle` | Always paired with useful text |
-
-Use system symbol weight/scale matched to adjacent text. Confirm each symbol in the installed SDK. No emoji as an unlabeled action, generic sparkle as a mode, or ellipsis for a menu other than system overflow. User emoji in note titles remains content.
+No page-wide horizontal panning, browser tap flash, hover-only controls or fake pointer cues. Preserve heading/link/task semantics and actual keyboard/VoiceOver operation. Rendering changes use source generations and retain the passage; appearance changes only update variables.
 
 ## 6. Source syntax theme
 
-The editor is Markdown source, not a lossy rich-text conversion. Use familiar semantic Markdown color, not a gray-only approximation. The web reference is `src/features/editor/extensions/theme.ts`, which uses `@uiw/codemirror-theme-github`. Native typography and input remain iOS-owned.
+Source remains exact Markdown, not lossy rich text. The semantic reference is the web's `src/features/editor/extensions/theme.ts` and GitHub theme. Color helps structure; native input and readable body typography remain authoritative.
 
-| Source token | Light | Dark | Light increased | Dark increased |
+| Token | Light | Dark | Light Increased | Dark Increased |
 | --- | --- | --- | --- | --- |
 | Heading / strong / emphasis | `#1E293B` | `#D2A8FF` | `#0F172A` | `#E6CCFF` |
 | Quote | `#22863A` | `#7EE787` | `#155D27` | `#B0F5B7` |
 | HTML tag | `#116329` | `#7EE787` | `#0B4B1E` | `#B0F5B7` |
 | URL destination | `#032F62` | `#A5D6FF` | `#02234A` | `#D1ECFF` |
 
-These dynamic source colors replace the previous `syntaxMuted`/`syntaxCode` styling contract. Preserve the exact web-light quote on the white source page, where it measures 4.63:1. It is only 4.15:1 on the secondary gray reference; if a quote can appear on that surface, use `#1E7A34` there (4.84:1). Increased-contrast variants clear AA on both reference canvases. Resolve appearance through dynamic native colors, without rewriting or reparsing source solely to change appearance.
+Light quote green measures 4.63:1 on white but only 4.15:1 on the reference secondary gray; use `#1E7A34` if displayed on that surface. Always verify final resolved pairs.
 
-List markers are the exception to the colored syntax palette. The user's latest October 24 web-match request uses exact normal-contrast bullets `#D4D4D4` Light / `#525252` Dark and numbers `#737373` Light / `#A1A1A1` Dark in both Source and Preview. The intentionally soft decorative bullet is a normal-contrast visual exception, not an item-text or control-opacity change. Increased Contrast retains a stronger step targeting 7:1. Source task delimiters keep `InterfaceTheme.syntaxMuted`; Preview task boxes retain their existing opaque contrast-safe gray and contrasting checkmark. Keep these marker-only roles separate from secondary captions. Preserve ordinary item text, source bytes, task state, targets, wrapping and the native blue caret.
-
-| Source element | Style |
+| Source element | Treatment |
 | --- | --- |
-| Ordinary prose | Body regular, `text` |
-| Whole heading, including `#` markers | Body bold, heading token; preserve every source character |
-| Strong / emphasis | Their token color, with bold / italic respectively; compose both traits when nested |
-| Whole blockquote line, including `>` | Quote token; nested emphasis/strong/link/code retain their own valid styles |
-| Ordered number / unordered bullet | Separate exact web grays in normal contrast, stronger at Increased Contrast; list-item text stays body ink |
-| Element punctuation | Same readable size and color as its owning element, not independently grayed |
-| Unchecked task marker | Muted source-marker ink, same size; no personal accent |
-| Checked marker | Muted source-marker ink; preserve explicit checked syntax and do not dim the task's text |
-| Inline/fenced code | Monospaced scaled body in ink; optional `surface` block background, no language-token rainbow |
-| Link label / wikilink | Underlined; URL color in light mode, inherited ink in dark mode as in the web theme; source delimiters remain visible |
-| URL destination | URL token, underlined; no hide/replace without an explicit source view |
-| HTML tag | HTML token, without misclassifying autolinks or code as HTML |
-| Strikethrough | Line-through on the valid content span, with source markers intact |
-| Frontmatter | Monospaced scaled body in ink; explicit collapse affordance only |
-| Selection, caret, marked text | Native text-entry blue and selection behavior, independent of neutral chrome and saved accent; preserve marked-text handling |
-| Proposed diff | Before/After labels; added words primary semibold and underlined, removed words secondary and struck through. No personal accent or new red/green palette |
+| Prose | Body regular, shared ink |
+| Heading | Whole heading including markers, Body bold and heading token |
+| Strong / emphasis | Token color plus bold/italic, composing nested traits |
+| Blockquote | Whole line including `>`, with valid nested roles retained |
+| Punctuation | Same readable size/color as owning element, not independently faded |
+| Code / frontmatter | Scaled Body monospace and ink; protected from prose matching. Frontmatter collapse is explicit only |
+| Link label / wikilink | Underlined, URL color in Light and inherited ink in Dark; all source delimiters visible |
+| URL | URL token and underline |
+| HTML | HTML token without misclassifying code/autolinks |
+| Strikethrough | Valid content span struck through, source markers intact |
+| Task delimiters | Existing `InterfaceTheme.syntaxMuted`, preserving checked bytes and full-opacity task text |
+| Caret / selection / marked text | Native text-entry blue/behavior, independent of chrome/personal accent |
+| Proposed diff | Before/After labels. Added words primary semibold + underline; removed secondary + strikethrough. No new red/green palette |
 
-Do not use opacity-faded entire code blocks, a rainbow of language tokens by default, giant source headings, or an active-line highlight that competes with selection. Valid inline code, fences and frontmatter remain protected from prose-role matching. Syntax changes must be pure attributes. No rewriting smart quotes, invisible delimiter removal, or automatic code formatting on appearance changes.
+Edit and Preview share the exact normal-contrast list marker grays: bullets `#D4D4D4` Light / `#525252` Dark, numbers `#737373` Light / `#A1A1A1` Dark. The deliberately soft decorative bullet is an explicit exception, not permission to fade item text or controls. Increased Contrast strengthens markers toward 7:1. Keep bullet/number/task roles separate from secondary captions and personal accent.
 
-System Writing Tools exclude code/frontmatter through the supported integration. Highlighting and sync replacement must not interrupt Writing Tools or active IME composition. The inability to demonstrate that is an interaction blocker, not a typography compromise.
+Styling is attributes only: no smart-quote rewriting, hidden delimiters, automatic formatting or source mutation. Preserve task targets/state, ordering/nesting, wrapping and native caret. Code/fences/frontmatter resist inline decorations. System Writing Tools excludes code/frontmatter through supported integration; highlighting/replacement never interrupts IME or Writing Tools.
 
-## 7. Rendered reading typography
+Comment annotations follow the separate [quote contract](design-direction.md#quotes-and-native-selection). No comment-added underline. Ordinary link and proposal-diff underlines remain.
 
-The preview is a document, not a website inside a card. It matches the editor's semantic colors and native type scale, while preserving the web app's Markdown dialect.
+## 7. Review gate
 
-| Element | Reading rule |
-| --- | --- |
-| Measure | Target `64ch`, centered only when there is surplus room; never narrow the cover unnecessarily |
-| Body | Scaled body size; line height `max(1.5 * bodySize, nativeBodyLineHeight)` |
-| First block | No artificial top margin; document has one content inset |
-| Paragraph | 0 above, `0.85em` below |
-| H1-H3 | Resolved native heading size/line height; bottom gap `0.55em`, top gap `1.25em` except first block |
-| Heading decoration | No automatic underlining rule below every H1/H2 |
-| Lists | Logical start indent, generous enough for marker; `0.35em` between items |
-| Tasks | Native-looking checked/unchecked state, 44-pt usable target, visible pending/error state after a rejected edit |
-| Links | System link color plus underline or a distinct linked-label treatment; no hover-only affordance |
-| Table of contents | A quiet document outline on `surface`, headed Contents in the scaled headline style. Primary-text anchor rows, modest hierarchy indentation, no persistent underline, and a 44-pt whole-row target with visible pressed/focus states. Preserve anchor/link semantics and a labeled navigation landmark. This grouped navigation treatment is distinct from inline prose links, which remain link blue |
-| Quote | 3-pt logical-start rule, 16-pt content inset; prose remains primary text, not low-contrast italic |
-| Inline code | Body-size monospace, `surface`, 2-4 pt horizontal padding; no synthetic backticks |
-| Fenced code | Body-size monospace, `surface`, 12-16 pt inset; preserve whitespace and allow horizontal scroll within the block |
-| Tables | Body-size text with a semibold header and quiet horizontal separators. No outer box, vertical cell grid, or default zebra stripes. Retain authored column alignment and table semantics. Scroll within the block instead of shrinking cells |
-| Alerts | Kind label + symbol + boundary. Color supplements the meaning. Match shared roles in every contrast mode |
-| Footnotes | Scaled footnote style, discoverable backlinks, no 0.8-em unreadable reduction |
-| Calculator results | Current result: semibold body text on `selectedSurface`, with a 6-pt radius and 4-pt inline / 2-pt block padding. Previous-result substitutions: regular body text on `surface`. Both use `text`, with tabular numerals when available. No fixed orange/green status chips. Preserve exact expression/value/copy behavior and label the current versus previous result accessibly |
-| Diagrams | Neutral default nodes on `surface`, primary text labels, and `textSecondary` strokes/arrows measured at 3:1 against their actual surroundings. No default lavender. Use the native body font/size, preserve authored meaningful styles, and scroll within the block rather than shrinking labels. Keep alternative text and an explicit enlargement route where needed |
-| Images | Fit available width, preserve aspect ratio, meaningful alternative text; explicit enlargement if needed |
-| Disclosure content | Keep real details/summary semantics, replacing only the browser triangle with a quiet stroked chevron. Body-size semibold summary, 44-pt whole-row target, 8-pt label gap, visible pressed/focus states, and 8-pt space before expanded content. The chevron indicates collapsed/expanded state, with no mandatory motion or card wrapper |
-| Empty/error content | Native-state treatment with an explanation and a real action, not a blank document |
+Designer signs off actual surfaces, with installed-device review required for final polish. A stock component, passing build, SVG or single Light screenshot is not whole-app approval. Award-caliber is an ambition, not an award claim. Lead can accept the delegated nightly outcome without converting unobserved hardware behavior into evidence.
 
-Use logical CSS properties for RTL, with content-aware direction for mixed-script paragraphs. Isolate code direction where necessary without forcing the whole note LTR. No clipped diacritics or line boxes at large size. Do not assume a fixed `line-height` suits every script.
+For an implemented app surface, supply the same build/fixture at Closed/Open × Light/Dark × Large/AX3. Large is native default Dynamic Type; AX3 is `.accessibility3` / `.accessibilityExtraLarge`. Include actual keyboard, sheets and relevant empty/loading/offline/failed/read-only/permission states. Name build/runtime, pose, contrast, type and state; attach images to the channel handoff.
 
-Remove browser tells without removing accessibility: no hover-only copy/link buttons, purple selection override, pointer-hand styling as the primary cue, default tap-flash, two nested page scroll views, overscroll glow, or web-wide horizontal panning. The WebKit host owns one document scroll surface with normal native bounce and soft system scroll edges. This supersedes the earlier preview no-bounce rule. Block-level table/code scrolling still works independently.
+Inspect Increased Contrast, Reduce Transparency, Reduce Motion, Bold Text, RTL/mixed script and AX5 reachability. Measure final content/affordance pairs, including selected surfaces and actual materials. Reusing component evidence does not waive review in a new context. [Accessibility][accessibility].
 
-Preserve native text selection, context menus, VoiceOver headings/links/tasks, keyboard focus outlines, and pinch zoom. Do not blanket `user-select: none`, disable all callouts, remove focus indication, or cancel every touch. A task target is an actual labeled interactive control, not a clickable paragraph.
+Connected review must establish:
 
-Updating theme should modify CSS variables only. Re-rendering a document is a separate event with a source generation. Test live dark/contrast/type changes while selecting text and while source edits arrive.
+- Clear purpose, hierarchy, native grouping, direct commands and usable asymmetric safe areas.
+- Readable uncut content/actions, full tag names, nonoverlapping targets and no color-only meaning.
+- Honest persistence, publication, permission and recovery language; explicit data-risk protections.
+- Real selection, native menus, keyboard dismissal, IME, Writing Tools, Undo and passage continuity.
+- Actual VoiceOver order/focus and keyboard access, without hidden/occluded accessibility stops.
+- Purposeful, interruptible feedback after committed actions, never before persistence or on background refresh.
 
-## 8. Motion, haptics, and state language
+Continuity needs an observed sequence or recording: type/select, change presentation, continue, Undo. Performance needs measured frame/input behavior. VoiceOver requires traversal; haptics, live-model quality and physical fold behavior require hardware. Mark unobserved gates unverified.
 
-Prefer system transitions. Custom motion exists only to explain a user action, follows its gesture, remains interruptible, and honors Reduce Motion. No page curl, folding parallax, bouncing save badges, rainbow thinking text, or repeated entrance animations. [9]
-
-| Event | Visual / tactile feedback |
-| --- | --- |
-| Check a task | Keep row in place; one short state transition; at most a light selection response after local commit |
-| Tag/collection selection | System selection behavior; no second app-generated haptic if the control already supplies it |
-| Manual Save confirmed | Quiet status change. A success haptic is optional only for deliberate manual completion |
-| Debounced autosave / background refresh | No haptic, toast, or sound |
-| Action failed | Persistent useful error + Retry. Optional error response for a direct failed action, never a repeating alert |
-| Archive | System row removal, Undo, no celebratory animation |
-| Fold / resize | System layout adaptation, no app haptic or meaning change |
-| AI Apply | One undoable local edit; no automatic publish or success claim about model correctness |
-
-Use SwiftUI `sensoryFeedback` where appropriate, with state that represents the **committed outcome**, not the initial tap. No haptic for every typed character. Keep feedback optional and never essential to understanding the result. Simulator screenshots cannot prove tactile quality. [10, 11]
-
-### Quiet healthy editing, explicit problems
-
-Remove the footer, its container, padding and reserved inset for `unsaved`, `savedLocally`, `savingToGitHub` and `savedToGitHub`; do not leave an empty strip. Local durability and GitHub publication remain separate internally, but the editor does not narrate that pipeline. Do not add autosave spinners, success receipts or generic read-only labels to the healthy writing/reading edge.
-
-Routine remote-check/connection status follows the canonical native toolbar policy in [design-direction.md](design-direction.md). Compact Home uses the existing Search position: after 400 ms, replace its magnifying glass with a native spinner while keeping Search enabled, labeled and tappable. Restore the glyph when checking ends. The regular sidebar retains its native full-width Search field and quiet routine background checks, with no replacement input or duplicate spinner. No separate Home status footer or empty strip remains. A persistent actionable problem restores normal compact Search and adds one quiet adjacent exclamation button in the existing toolbar, keeping Search and recovery separately one tap away; sidebar recovery remains independently reachable. An already-open query retains focus. The note's accepted trailing status placement and 350-ms delay stay unchanged. When the writing keyboard covers that note slot, remove the occluded control from accessibility traversal and restore the unresolved status after dismissal. Do not move it into the keyboard accessory or add a floating overlay. This does not hide or weaken the explicit save-safety notices below.
-
-Hide Save to GitHub when autosave is effectively enabled. Keep manual Save available when the preference is off, after a publication failure, and while a conflict-reviewed draft's durable `autosavePaused` requires explicit publication. The effective flag must reflect that pause rather than the profile preference alone. Hiding the control never changes publication policy.
-
-Known offline status with unpublished edits gets one quiet `icloud.slash` toolbar glyph. Its accessible label is **Offline. Changes haven't reached GitHub.** Tapping explains that changes are kept locally and eligible autosave resumes online while the app is open. Offline with nothing pending stays silent.
-
-Only actionable problems get one compact native notice with a clear recovery action. Keep raw diagnostics behind Details rather than several paragraphs. Let large type wrap naturally, preserve a 44-pt action target and retain the notice until resolved. A local persistence failure remains prominent and must not look like successful offline storage.
-
-| Real condition | Notice / action |
-| --- | --- |
-| Publication failed, local copy safe | Couldn't sync. / Retry |
-| Local write failed | Changes aren't saved. Keep this note open. / Retry |
-| Changed remotely | Changed on GitHub. / Review |
-| Account needs reconnection | Reconnect GitHub to sync. / Reconnect |
-| Gist creation uncertain | Note creation not confirmed. / Check GitHub; never blind duplicate creation |
-| Publication uncertain | Save not confirmed. / Check Status |
-| Publication blocked | Can't sync this note. / Details with the actual reason and recovery path |
-| No persistence in an engineering fixture | Mark the evidence as synthetic and local-only; never claim actual saving or upload |
-
-Do not call queued or in-memory data Saved. Preserve the failed operation and give a recovery action. Status is accessible text, not just a colored dot. Errors remain long enough to act, not solely in an expiring toast.
-
-### Inserting a photo
-
-**Entry:** use **Insert > Photo** in the native keyboard formatting bar, with a labeled `plus` menu and `photo` item. Keep this entry reusable by the fuller formatting bar. Use the system PhotosPicker for one image, not a custom photo browser or an app-wide library-permission screen. [12] Preserve the originating account, draft, accepted generation and UTF-16 insertion location before presenting it. Insert after a selected passage rather than replacing its text. Disable mutation for read-only/incomplete notes and during IME or Writing Tools transactions.
-
-**Public-image notice:** before this account's first pick, present a native, dismissible sheet titled **Photos are public** with this body:
-
-> Photos you choose are uploaded to GistPad's public image storage. Anyone with an image link can view them, even in a secret gist. Location metadata is removed, but visible details remain.
-
-Use **Continue** and **Cancel**. Continue opens PhotosPicker, not an upload. Remember acknowledgement locally for this account only, and keep this disclosure available from the photo entry's help. A notice dismissal, picker cancellation or failed image load creates no upload. The notice must fit large type through natural scrolling, not smaller text. This is a privacy explanation, not a claim that a secret gist protects its images.
-
-**Pending presentation:** use a native attachment row within the note, above any active problem notice and the keyboard. It remains available when the healthy save footer is absent. Show a small thumbnail when available, **Photo**, a scaled readable state, and the appropriate recovery action. It is not a modal progress screen, translucent card, or literal text attachment. Pending UI never adds provisional Markdown, object-replacement characters, invented URLs or hidden source markers. Copy, share, preview and canonical persistence continue to use the unchanged source. This note-local row is the safe first implementation rather than introducing unproved in-text decorations into the retained TextKit session.
-
-| Actual state | Row language and action |
-| --- | --- |
-| Loading a picker item / normalizing its pixels | **Preparing photo...** with indeterminate activity. No Saved claim until local queue persistence succeeds |
-| Picker transfer or image conversion failed | **Couldn't prepare this photo.** Explain an oversize/invalid image when known, with **Choose Another Photo**. No empty success-shaped row |
-| Protected bytes durably queued | **Photo saved on this iPhone**. Upload begins when eligible |
-| `.waitingForGist` | **Save this note to GitHub to upload the photo.** Use the existing deliberate Save action. Never create or publish a gist merely to release the queue |
-| `.offline` | **Saved on this iPhone. Waiting for connection.** No infinite active spinner |
-| `.uploading` | **Uploading photo...** with indeterminate activity, unless the transport exposes real progress. No guessed percentage |
-| `.uncertain` | **Checking upload...** while reconciling the existing stable asset ID. Do not offer a duplicate upload |
-| `.reconnect` | **Reconnect to upload** with **Reconnect GitHub**. Retain the local photo |
-| `.failed` | **Couldn't upload photo** with **Retry**, preserving the actual useful failure explanation. Respect a server retry delay rather than presenting an immediately actionable retry |
-| `.uploaded`, original target still valid | Commit insertion through the session's durable-edit hook, then reveal the actual inserted Markdown |
-| `.uploaded`, target or insertion generation changed / composition active | **Photo ready** with **Insert Here**, available only in its originating note at a fresh safe cursor. During composition, explain **Finish the current edit to insert the photo** |
-| Local queue/insertion persistence failed | **Couldn't save this photo on this iPhone** with **Retry**. Keep available image data and the failure visible, without claiming an inserted or durable result |
-| `.inserted` | Remove the pending row only after the durable receipt and source edit succeed. Normal note save state remains authoritative |
-
-Resume eligible work on foreground/reconnection for the same account. Never insert into whichever note happens to be open when an upload finishes. A stale anchor requires an explicit **Insert Here** using a fresh accepted generation and zero-length insertion range in the original draft. Do not guess a shifted offset or overwrite newer typing. Defer insertion during marked text or Writing Tools. Apply the verified URL as exactly one native undoable edit, retaining normal editable Markdown and alternative-text syntax. Reveal it once without stealing an unrelated selection. Undo removes the source insertion, not the public storage object, and must not trigger automatic reinsertion.
-
-Removing a pending item requires **Remove Pending Photo?** confirmation and must explain **This removes the pending photo from this note. It does not delete any uploaded image.** Do not promise upload cancellation or remote deletion that the queue API cannot perform. Disable removal during an active upload if cancellation is not supported. Multiple pending items remain reachable without letting a fixed accessory consume the whole AX3 editing viewport.
-
-Keep the thumbnail/status/action traversal logical for VoiceOver. Do not announce every progress update, move focus on background completion, or dim the entire row. Required evidence includes the first-use notice and cancellation, iCloud/picker-load failure, offline relaunch, an unpublished note with autosave off, upload reconciliation, stale insertion, switching account/note, a failed local commit, one Undo with no reinsertion, and Large/AX3 with the real keyboard. Live upload still requires the user's explicit test approval.
-
-## 9. Conflict review: local choice before publication
-
-### Entry and composition
-
-Keep the inline note state **This note changed elsewhere** with **Review changes**. Do not interrupt writing with a modal alert or open review automatically. Publishing is paused while the conflict remains unresolved, while local persistence continues.
-
-Review changes opens one native, large sheet titled **Review changes**, with the filename and **Your draft is saved on this iPhone. Nothing will be published from this review.** The sheet dismisses without losing the conflict or the source editor's place. On the cover, use one readable column. On the open display the sheet may be wider, but never squeeze base/local/remote into three columns.
-
-Use a native segmented control for **Changes**, **My Draft**, and **GitHub**. Changes shows deterministic source differences from the saved base, grouped and labeled **On this iPhone** and **On GitHub**. Added/removed lines have explicit `+`/`-` and labels, with color only supplementary. Preserve whitespace and Markdown characters. Long source lines scroll inside their block. My Draft and GitHub show full read-only source for inspection, not lossy rendered substitutes. Base is available through **Show original**, not a permanent fourth column. Review source uses the same scaled monospace and semantic colors as code.
-
-### Choices and exact effects
-
-| Available evidence | Choice | Effect |
-| --- | --- | --- |
-| `suggestedMerge` contains a deterministic nonoverlapping merge | **Review combined version**, then **Use combined draft** | Preview the proposed source and its diff against the current local draft. Apply only after that explicit choice. This is not AI and not a claim that the prose is semantically correct |
-| Both local and remote are complete | **Use My Draft** | Retain local text and accept the inspected GitHub version as the comparison baseline. Explain that a later Save to GitHub replaces the inspected remote file with this version. Do not publish from the sheet |
-| A complete remote file exists | **Use GitHub Version** | Show a confirmation that this replaces the current local text, with Cancel as the safe choice. Preserve a durable recovery snapshot. Apply as one undoable local edit, without an automatic write |
-| The remote file is verifiably absent (`remote == nil`) | **Keep Local Draft**; optionally **Restore File...** | Never present a missing file as empty content. Keep the draft recoverable. Restoration requires an explicit confirmation naming the file and a fresh check that the containing gist still exists. A missing whole gist is a different recovery case, not an implicit new-gist creation |
-| Remote is truncated, unavailable, or unverified | **Retry** / **Reconnect GitHub**, as appropriate | No Use GitHub or merge choice based on incomplete content. A timeout or 404 without sufficient evidence is not proof the user's draft should be discarded |
-
-Overlapping edits have no combined-version promise. The user can inspect both versions, copy exact passages using native selection, and choose a complete version. Do not add a per-hunk merge editor or a second live canonical text editor to v1. A dismissible explanation states **Both versions changed the same passage. Choose a version, or return to your draft to combine the changes yourself.**
-
-### Stale review, failure and safety
-
-- Bind the review to account, draft/file identity, local generation, base and the inspected remote revision. Revalidate before Apply. If local text changed, leave it untouched and show **Your draft changed while this review was open. Review the latest draft.** Retain an inspectable proposal; never apply an old whole-file replacement over newer typing.
-- A foreground remote refresh may invalidate the reviewed remote revision. Do not silently swap the GitHub tab underneath the reader. Show **GitHub has a newer version** and an explicit refresh action. Publication performs the coordinator's fresh-read/conflict check again, even after a successful review.
-- Save a recovery snapshot before replacing text. The session owns the transaction, selection and undo. Apply replacement as one local undo step and a new generation; choosing unchanged text does not need a fake empty undo entry. Do not call `resolveConflict` before the active session can safely accept the transaction. Defer application while IME composition or Writing Tools is active, with visible **Finish the current edit to apply this version** guidance.
-- Keep timed/leave-note autosave paused after resolving review until a deliberate **Save to GitHub**. After a durable local result, return to the note with its manual Save action still reachable, even when the profile preference enables autosave. Under the October 24 policy, background Save is manual-save-equivalent and can clear this pause, with the existing fresh-read/conflict and eligibility checks. No combined Apply & Publish, healthy local-save footer or success claim before persistence succeeds.
-- A local storage failure leaves the review open with its proposal intact and an actionable error. Never dismiss into Saved or lose the original on failure. Dismissal, account switching and process termination preserve the unresolved durable draft.
-
-Required evidence includes a nonoverlapping proposal, overlapping edits, a remotely removed file, stale local generation, changed remote revision, local storage failure, offline inspection and AX3/VoiceOver traversal. Include a real undo after adopting the remote/combined source. Neither a diff screenshot nor a successful PATCH proves the safety of this flow.
-
-## 10. Review gate for every UI surface
-
-**No production UI task closes without Designer sign-off on the actual installed Duo app.** Simulator evidence can establish scoped layout approval, not final device polish or hardware behavior. A polished SVG, passing build, stock component, or Light-mode screenshot alone is not sign-off. Award-caliber is the quality ambition, not a claim of an Apple award.
-
-Review the connected Library > open note > read > edit > switch file flow, including the real keyboard, grouped menus, problem-only sync notices and return navigation. Assess hierarchy, breathing room, directness and continuity in that experience, not just each isolated fixture. Actual on-device feedback overrides earlier still-image density targets. Fixing correctness or basic usability does not by itself establish the intended design quality.
-
-For each implemented surface, supply eight captures from the same build and synthetic fixture:
-
-| Duo presentation | Light / Large | Dark / Large | Light / AX3 | Dark / AX3 |
-| --- | --- | --- | --- | --- |
-| Cover display | Required | Required | Required | Required |
-| Fully open inner display | Required | Required | Required | Required |
-
-Large means the default Dynamic Type category, not a manually set 17-pt screenshot font. AX3 means SwiftUI `.accessibility3` / UIKit `.accessibilityExtraLarge`. Include the real keyboard in editing/capture evidence. Show relevant sheets, errors, and empty states for that task, not only the happy-path parent view. Name build, device/runtime, pose, appearance, contrast, type category, and state with the evidence. Attach images to the channel handoff rather than sharing image files as artifacts.
-
-Also inspect light/dark Increase Contrast, Reduce Transparency, Reduce Motion, Bold Text, RTL/mixed-script text, and AX5 reachability. For a critical content/action boundary, retain contrast measurements using final resolved colors. A new generic component can reuse previous evidence only for unchanged internals, not to skip its new context.
-
-### Short checklist
-
-- [ ] The screen has one obvious purpose, with native navigation and consistent hierarchy.
-- [ ] Titles, metadata, actions, content margins, and SF Symbols use the tokens above.
-- [ ] Light, dark, increased contrast, and large type remain legible without clipped or hidden actions.
-- [ ] Glass is limited to native controls/navigation, with no web/card chrome around prose.
-- [ ] Cover/open layouts use available space and avoid active fold/camera regions.
-- [ ] Task/action targets are comfortably tappable, labeled, and not color-only.
-- [ ] Empty, loading, offline, failed, read-only, and permission states relevant to the surface have a truthful next action.
-- [ ] Local-save/cloud-save/pending labels match real persistence, with no destructive surprise.
-- [ ] VoiceOver order/focus, keyboard access, selection, and dismissal work in the actual UI.
-- [ ] Editing, IME, undo, selection, scroll anchor, and presented state survive relevant transitions.
-- [ ] Motion and feedback are purposeful, optional, and tested beyond a still image.
-- [ ] Screenshots/interaction evidence are recorded, and Designer explicitly signs off or lists blockers.
-
-Continuity requires a short recording or observed sequence: type/select, resize/fold, continue, undo. VoiceOver needs actual traversal. Performance needs measured frame/input behavior on the target hardware. Haptics require a device. Mark those **unverified** until observed rather than implying a simulator still proves them.
-
-Review outcomes: **Approved**, **Approved for a named spike only**, or **Changes required**. A spike-only approval does not carry into v1. Diagnostics stay explicitly marked, are reachable without dominating the notebook, and must be removed from production surfaces before final approval.
+Use **Approved**, **Approved for a named spike only**, or **Changes required**, always with the inspected scope. Spike approval never carries into v1. Keep diagnostics explicitly synthetic/local-only and out of production surfaces. Git/channel hold evidence history, not this current contract.
 
 ## Primary references
 
-1. [HIG: Color](https://developer.apple.com/design/human-interface-guidelines/color)
-2. [`UIColor.resolvedColor(with:)`](https://developer.apple.com/documentation/uikit/uicolor/resolvedcolor(with:))
-3. [HIG: Typography](https://developer.apple.com/design/human-interface-guidelines/typography)
-4. [`UIFont.preferredFont(forTextStyle:compatibleWith:)`](https://developer.apple.com/documentation/uikit/uifont/preferredfont(forTextStyle:compatibleWith:))
-5. [`UIFontMetrics`](https://developer.apple.com/documentation/uikit/uifontmetrics)
-6. [HIG: Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility)
-7. [HIG: Designing for iPhone Duo](https://developer.apple.com/design/human-interface-guidelines/designing-for-iphone-duo) and [Preparing your app for iPhone Duo](https://developer.apple.com/documentation/technologyoverviews/preparing-your-app-for-iphone-duo)
-8. [HIG: Materials](https://developer.apple.com/design/human-interface-guidelines/materials)
-9. [HIG: Motion](https://developer.apple.com/design/human-interface-guidelines/motion)
-10. [HIG: Playing haptics](https://developer.apple.com/design/human-interface-guidelines/playing-haptics)
-11. [`sensoryFeedback(_:trigger:)`](https://developer.apple.com/documentation/swiftui/view/sensoryfeedback(_:trigger:))
-12. [Bringing Photos picker to your SwiftUI app](https://developer.apple.com/documentation/photokit/bringing-photos-picker-to-your-swiftui-app)
-13. [`ButtonRole`](https://developer.apple.com/documentation/swiftui/buttonrole), including [confirm](https://developer.apple.com/documentation/swiftui/buttonrole/confirm)
-14. [`NavigationTransition.zoom(sourceID:in:)`](https://developer.apple.com/documentation/swiftui/navigationtransition/zoom(sourceid:in:))
-15. [`UIFontDescriptor.SystemDesign.serif`](https://developer.apple.com/documentation/uikit/uifontdescriptor/systemdesign/serif), [`Font.Design.rounded`](https://developer.apple.com/documentation/swiftui/font/design/rounded), and [Apple platform fonts](https://developer.apple.com/fonts/)
-16. [WebKit platform font keywords](https://webkit.org/blog/10247/new-webkit-features-in-safari-13-1/)
-17. [`UIGlassEffect`](https://developer.apple.com/documentation/uikit/uiglasseffect)
+Platform facts come from Apple. GistPad compositions, contrast targets and exact metrics are product choices, not claims that Apple mandates them.
+
+[materials]: https://developer.apple.com/design/human-interface-guidelines/materials
+[adoption]: https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass
+[color]: https://developer.apple.com/design/human-interface-guidelines/color
+[resolved]: https://developer.apple.com/documentation/uikit/uicolor/resolvedcolor(with:)
+[type]: https://developer.apple.com/design/human-interface-guidelines/typography
+[font]: https://developer.apple.com/documentation/uikit/uifont/preferredfont(forTextStyle:compatibleWith:)
+[metrics]: https://developer.apple.com/documentation/uikit/uifontmetrics
+[toolbars]: https://developer.apple.com/design/human-interface-guidelines/toolbars
+[buttons]: https://developer.apple.com/design/human-interface-guidelines/buttons
+[glass]: https://developer.apple.com/documentation/uikit/uiglasseffect
+[accessibility]: https://developer.apple.com/design/human-interface-guidelines/accessibility
