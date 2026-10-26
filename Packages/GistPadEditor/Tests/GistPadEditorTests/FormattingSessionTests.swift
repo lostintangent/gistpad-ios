@@ -245,8 +245,9 @@
     @Test(arguments: [false, true], [false, true])
     func photoAvailabilityRequiresBothItsActionAndCapability(hasAction: Bool, allowed: Bool) throws {
       let session = DocumentSession(documentID: "photo-availability", text: "A note")
+      let insert: @MainActor () -> Void = {}
       let window = host(
-        session, insertPhoto: hasAction ? {} : nil, canInsertPhoto: allowed)
+        session, insertPhoto: hasAction ? insert : nil, canInsertPhoto: allowed)
       defer { window.isHidden = true }
       let toolbar = try #require(session.textView.inputAccessoryView as? SourceAccessoryView)
       let insertion = try #require(
