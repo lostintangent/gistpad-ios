@@ -47,7 +47,7 @@ import Testing
         #expect(sections[0].sharedFailureExplanation == "Kept on this iPhone")
         #expect(sections[1].attachments == [distinct])
         #expect(sections[1].sharedFailureExplanation == nil)
-        #expect(sections[1].attachments.first?.failureExplanation == "Reconnect GitHub")
+        #expect(sections[1].attachments.first?.phase.failureExplanation == "Reconnect GitHub")
     }
 
     @Test func ordinaryStatusesKeepTheirOrderAndNeverGainFailureFooters() {

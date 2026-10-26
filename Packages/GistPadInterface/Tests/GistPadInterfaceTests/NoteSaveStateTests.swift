@@ -6,7 +6,7 @@ struct NoteSaveStateTests {
         NoteSaveState.inMemoryFixture, .unsaved, .savedLocally, .offline, .savingToGitHub, .savedToGitHub
     ])
     func healthyAndOfflineStatesDoNotCreateAPersistentNotice(_ state: NoteSaveState) {
-        #expect(!state.needsAttention)
+        #expect(state.issue == nil)
         #expect(!state.showsManualSave(isAutoSaveEnabled: true))
     }
 
@@ -15,8 +15,10 @@ struct NoteSaveStateTests {
         .localFailure(message: "Storage unavailable"), .remoteChange, .reconnectRequired,
         .creationUncertain, .publicationUncertain, .publicationBlocked(message: "Missing access")
     ])
-    func actionableProblemsKeepTheirNotice(_ state: NoteSaveState) {
-        #expect(state.needsAttention)
+    func actionableProblemsKeepTheirNotice(_ state: NoteSaveState) throws {
+        let issue = try #require(state.issue)
+        #expect(!issue.title.isEmpty)
+        #expect(!issue.symbol.isEmpty)
     }
 
     @Test func failedPublishingRestoresManualSaveEvenWhenAutosaveIsEnabled() {

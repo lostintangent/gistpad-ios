@@ -38,19 +38,33 @@ public enum NoteSaveState: Equatable, Sendable {
         }
     }
 
-    var needsAttention: Bool {
-        switch self {
-        case .cloudFailure, .localFailure, .remoteChange, .reconnectRequired,
-             .creationUncertain, .publicationUncertain, .publicationBlocked:
-            true
-        case .inMemoryFixture, .unsaved, .savedLocally, .offline, .savingToGitHub, .savedToGitHub:
-            false
-        }
-    }
-
     func showsManualSave(isAutoSaveEnabled: Bool) -> Bool {
         if case .cloudFailure = self { return true }
         return !isAutoSaveEnabled
+    }
+
+    var issue: (title: String, symbol: String, details: String?)? {
+        switch self {
+        case .cloudFailure(let message):
+            return (String(localized: "Couldn't sync to GitHub.", bundle: .module), "exclamationmark.circle", message)
+        case .localFailure(let message):
+            return (String(localized: "Changes aren't saved. Keep this note open.", bundle: .module), "exclamationmark.triangle", message)
+        case .remoteChange:
+            return (String(localized: "This note changed elsewhere.", bundle: .module), "exclamationmark.circle", nil)
+        case .reconnectRequired:
+            return (String(localized: "Reconnect GitHub to sync.", bundle: .module), "person.crop.circle", nil)
+        case .creationUncertain:
+            return (
+                String(localized: "GitHub couldn't confirm creation.", bundle: .module), "exclamationmark.circle",
+                String(localized: "GitHub may already have created this gist. Check GitHub before trying again.", bundle: .module)
+            )
+        case .publicationUncertain:
+            return (String(localized: "GitHub couldn't confirm the last save.", bundle: .module), "exclamationmark.circle", nil)
+        case .publicationBlocked(let message):
+            return (String(localized: "Publishing is unavailable.", bundle: .module), "exclamationmark.shield", message)
+        case .inMemoryFixture, .unsaved, .savedLocally, .offline, .savingToGitHub, .savedToGitHub:
+            return nil
+        }
     }
 }
 

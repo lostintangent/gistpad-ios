@@ -76,7 +76,10 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         .navigationSubtitle(document.headerFilename ?? "")
         .background { NoteFileSubtitle(filename: document.headerFilename) }
         .modifier(NoteTitleMenu(isEnabled: document.files.count > 1) { fileChoices })
-        .toolbar { noteToolbar }
+        .toolbar {
+            primaryToolbar
+            secondaryToolbar
+        }
         .safeAreaBar(edge: .bottom, spacing: 0) {
             if issue != nil {
                 status
@@ -122,12 +125,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     }
 
     @ToolbarContentBuilder
-    private var noteToolbar: some ToolbarContent {
-        primaryToolbar
-        secondaryToolbar
-    }
-
-    @ToolbarContentBuilder
     private var primaryToolbar: some ToolbarContent {
         if document.access.canEdit, !isFocused {
             ToolbarItem(placement: .topBarPinnedTrailing) {
@@ -139,7 +136,8 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             }
             .sharedBackgroundVisibility(.hidden)
         }
-        if let save = actions.save, document.access.canEdit, showsManualSave {
+        if let save = actions.save, document.access.canEdit,
+           saveState.showsManualSave(isAutoSaveEnabled: document.isAutoSaveEnabled) {
             ToolbarItem(placement: .primaryAction) {
                 Button(String(localized: "Save to GitHub", bundle: .module), systemImage: "arrow.up.doc", action: save)
                     .tint(.primary)
@@ -297,10 +295,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         }
     }
 
-    private var showsManualSave: Bool {
-        saveState.showsManualSave(isAutoSaveEnabled: document.isAutoSaveEnabled)
-    }
-
     private var commentsLabel: String {
         let title = String(localized: "Comments", bundle: .module)
         guard let count = document.commentCount else { return title }
@@ -351,28 +345,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 String(localized: "GitHub returned an incomplete note. Editing is unavailable to protect the original.", bundle: .module)
             )
         }
-        guard saveState.needsAttention else { return nil }
-        switch saveState {
-        case .cloudFailure(let message):
-            return (String(localized: "Couldn't sync to GitHub.", bundle: .module), "exclamationmark.circle", message)
-        case .localFailure(let message):
-            return (String(localized: "Changes aren't saved. Keep this note open.", bundle: .module), "exclamationmark.triangle", message)
-        case .remoteChange:
-            return (String(localized: "This note changed elsewhere.", bundle: .module), "exclamationmark.circle", nil)
-        case .reconnectRequired:
-            return (String(localized: "Reconnect GitHub to sync.", bundle: .module), "person.crop.circle", nil)
-        case .creationUncertain:
-            return (
-                String(localized: "GitHub couldn't confirm creation.", bundle: .module), "exclamationmark.circle",
-                String(localized: "GitHub may already have created this gist. Check GitHub before trying again.", bundle: .module)
-            )
-        case .publicationUncertain:
-            return (String(localized: "GitHub couldn't confirm the last save.", bundle: .module), "exclamationmark.circle", nil)
-        case .publicationBlocked(let message):
-            return (String(localized: "Publishing is unavailable.", bundle: .module), "exclamationmark.shield", message)
-        case .inMemoryFixture, .unsaved, .savedLocally, .offline, .savingToGitHub, .savedToGitHub:
-            return nil
-        }
+        return saveState.issue
     }
 
     @ViewBuilder

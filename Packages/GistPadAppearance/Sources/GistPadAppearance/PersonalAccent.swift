@@ -30,7 +30,7 @@ public struct RGBColor: Hashable, Sendable {
         String(format: "#%02X%02X%02X", Int(red), Int(green), Int(blue))
     }
 
-    public var luminance: Double {
+    private var luminance: Double {
         func linear(_ component: UInt8) -> Double {
             let value = Double(component) / 255
             return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
@@ -68,7 +68,7 @@ public struct PersonalAccent: Hashable, Sendable {
         color = savedHex.flatMap(RGBColor.init(hex:)) ?? .sky
     }
 
-    public func roles(
+    func roles(
         dark: Bool, increasedContrast: Bool, surfaces: [RGBColor],
         selectionSurface: RGBColor, ink: RGBColor
     ) -> AccentRoles {

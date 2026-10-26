@@ -8,8 +8,7 @@ struct NotebookSettingsSheet<Appearance: View>: View {
   let connect: @MainActor () -> Void
   let signOut: @MainActor () async throws -> Void
   @ViewBuilder var appearance: () -> Appearance
-  @State private var pendingPreference: BooleanPreference?
-  @State private var pendingValue = false
+  @State private var pendingPreference: (key: BooleanPreference, value: Bool)?
   @State private var saveError: String?
   @State private var errorTitle = String(localized: "Couldn't Confirm Setting")
   @State private var confirmingSignOut = false
@@ -159,13 +158,12 @@ struct NotebookSettingsSheet<Appearance: View>: View {
   private func preference(_ key: BooleanPreference, default fallback: Bool) -> Binding<Bool> {
     Binding(
       get: {
-        pendingPreference == key
-          ? pendingValue : account?.preferences.booleanValue(key, default: fallback) ?? fallback
+        if let pendingPreference, pendingPreference.key == key { return pendingPreference.value }
+        return account?.preferences.booleanValue(key, default: fallback) ?? fallback
       },
       set: { value in
         guard pendingPreference == nil else { return }
-        pendingPreference = key
-        pendingValue = value
+        pendingPreference = (key, value)
         saveError = nil
         errorTitle = String(localized: "Couldn't Confirm Setting")
         Task {

@@ -4,19 +4,12 @@ import GistPadAppearance
 
 public enum InterfaceTheme {
     public static let accent = Color(uiColor: AccentRole.text.uiColor)
-    public static let accentFill = Color(uiColor: AccentRole.fill.uiColor)
-    public static let onAccent = Color(uiColor: AccentRole.onFill.uiColor)
     public static let selection = Color(uiColor: AccentRole.selectedSurface.uiColor)
     public static let neutralSelection = Color(uiColor: .tertiarySystemFill)
     public static let syntaxMuted = Color("SyntaxMuted", bundle: .module)
-    public static let syntaxCode = Color("SyntaxCode", bundle: .module)
     public static let text = Color("Ink", bundle: .module)
     static let taskCompletion = taskInk(.systemGreen)
     static let overdue = taskInk(.systemOrange)
-    public static let spine = LinearGradient(
-        colors: [Color("SpineTop", bundle: .module), Color("SpineBottom", bundle: .module)],
-        startPoint: .top, endPoint: .bottom
-    )
 
     private static func taskInk(_ color: UIColor) -> Color {
         Color(uiColor: UIColor { traits in

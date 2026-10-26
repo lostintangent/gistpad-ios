@@ -16,6 +16,13 @@ public enum PhotoAttachmentPhase: Equatable, Sendable {
     case failed(message: String, retryAfter: Date? = nil)
     case localFailure(message: String)
     case preparationFailed(message: String)
+
+    var failureExplanation: String? {
+        switch self {
+        case .failed(let message, _), .localFailure(let message), .preparationFailed(let message): message
+        default: nil
+        }
+    }
 }
 
 public struct PhotoAttachment: Equatable, Identifiable, Sendable {
@@ -47,19 +54,7 @@ public struct PhotoAttachment: Equatable, Identifiable, Sendable {
         return true
     }
 
-    public var hasFailure: Bool {
-        switch phase {
-        case .failed, .localFailure, .preparationFailed: true
-        default: false
-        }
-    }
-
-    var failureExplanation: String? {
-        switch phase {
-        case .failed(let message, _), .localFailure(let message), .preparationFailed(let message): message
-        default: nil
-        }
-    }
+    public var hasFailure: Bool { phase.failureExplanation != nil }
 }
 
 struct PhotoAttachmentSection: Identifiable, Sendable {
@@ -67,14 +62,14 @@ struct PhotoAttachmentSection: Identifiable, Sendable {
     private(set) var attachments: [PhotoAttachment]
 
     var sharedFailureExplanation: String? {
-        attachments.count > 1 ? attachments.first?.failureExplanation : nil
+        attachments.count > 1 ? attachments.first?.phase.failureExplanation : nil
     }
 
     static func grouping(_ attachments: [PhotoAttachment]) -> [Self] {
         var sections: [Self] = []
         var failureSections: [String: Int] = [:]
         for attachment in attachments {
-            if let explanation = attachment.failureExplanation {
+            if let explanation = attachment.phase.failureExplanation {
                 if let index = failureSections[explanation] {
                     sections[index].attachments.append(attachment)
                 } else {
@@ -82,7 +77,7 @@ struct PhotoAttachmentSection: Identifiable, Sendable {
                     sections.append(Self(id: attachment.id, attachments: [attachment]))
                 }
             } else if let last = sections.indices.last,
-                sections[last].attachments.first?.failureExplanation == nil
+                sections[last].attachments.first?.phase.failureExplanation == nil
             {
                 sections[last].attachments.append(attachment)
             } else {
@@ -368,7 +363,7 @@ private struct PhotoAttachmentRow: View {
                     Text(status(attachment.phase)).font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                if showsExplanation, let detail = attachment.failureExplanation {
+                if showsExplanation, let detail = attachment.phase.failureExplanation {
                     Text(detail).font(.subheadline).foregroundStyle(Color(uiColor: .secondaryLabel))
                 }
                 if let guidance = attachment.guidance {

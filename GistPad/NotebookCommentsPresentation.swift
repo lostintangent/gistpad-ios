@@ -78,7 +78,7 @@ final class NotebookCommentsPresentation {
       let model = try await preparedConversation(for: next.document)
       guard isCurrent(next) else { return }
       conversation = model
-      if showsInline { await model.load() }
+      await model.load()
     } catch {
       guard isCurrent(next) else { return }
       preparationFailure = NotebookModel.message(for: error)
