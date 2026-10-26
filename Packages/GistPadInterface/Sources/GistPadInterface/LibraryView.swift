@@ -535,9 +535,10 @@ public struct LibraryView: View {
                 ForEach(notes) { noteRow($0, collection: collection) }
             }
         } label: {
+            // A DisclosureGroup identifier would override its child row identifiers.
             collectionLabel(collection)
+                .accessibilityIdentifier("library-collection-\(collection.rawValue)")
         }
-        .accessibilityIdentifier("library-collection-\(collection.rawValue)")
         .listRowBackground(isSidebar ? nil : Color.clear)
         .listRowSeparator(.hidden)
     }

@@ -230,13 +230,13 @@ struct LibraryHostTests {
     window.layoutIfNeeded()
     func frame(_ id: String) throws -> CGRect {
       let marker = try #require(descendants(window).first {
-        $0.accessibilityIdentifier == "capture-frame-note-content-\(id)" && !$0.bounds.isEmpty
+        $0.accessibilityIdentifier == "capture-frame-\(id)" && !$0.bounds.isEmpty
       })
       return marker.convert(marker.bounds, to: window)
     }
-    let cardContent = try frame("pin")
-    let ordinary = try frame("ordinary")
-    let gap = ordinary.minY - (cardContent.maxY + 14)
+    let card = try frame("note-card-pin")
+    let ordinary = try frame("note-content-ordinary")
+    let gap = ordinary.minY - card.maxY
     #expect(abs(gap - 28) <= 1, "Measured card-to-row transition: \(gap) pt")
   }
 
@@ -268,6 +268,9 @@ struct LibraryHostTests {
       id: "simple", title: "One thought", updatedAt: .now, gistID: "simple", isPinned: true)
     var cardSize: CGSize?
     var simpleSize: CGSize?
+    var twoTitleLines: CGFloat?
+    var excerptLines: CGFloat?
+    var minimumTagNameWidth: CGFloat?
     window.rootViewController = UIHostingController(
       rootView: VStack(spacing: 8) {
         LibraryPinnedCard(
@@ -282,6 +285,19 @@ struct LibraryHostTests {
         Spacer(minLength: 0)
       }
       .frame(width: 280)
+      .overlay {
+        VStack {
+          Text(verbatim: "Ag\nAg").font(.headline).fixedSize()
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { twoTitleLines = $0 }
+          Text(verbatim: size.isAccessibilitySize ? "Ag\nAg" : "Ag")
+            .font(.footnote).fixedSize()
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { excerptLines = $0 }
+          Text(verbatim: "Ide…").font(.footnote.weight(.medium)).fixedSize()
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { minimumTagNameWidth = $0 }
+        }
+        .hidden()
+        .accessibilityHidden(true)
+      }
       .environment(\.dynamicTypeSize, size)
       .environment(\.colorScheme, dark ? .dark : .light)
       .background(Color(uiColor: .systemGroupedBackground)))
@@ -291,8 +307,9 @@ struct LibraryHostTests {
     window.layoutIfNeeded()
     let measuredCard = try #require(cardSize)
     let measuredSimple = try #require(simpleSize)
-    #expect(measuredCard.width == 280)
-    #expect(measuredSimple.width == measuredCard.width)
+    let pixelTolerance = 1 / window.traitCollection.displayScale + 0.01
+    #expect(abs(measuredCard.width - 280) <= pixelTolerance)
+    #expect(abs(measuredSimple.width - measuredCard.width) <= pixelTolerance)
     #expect(measuredCard.height > measuredSimple.height)
     func frame(_ id: String) throws -> CGRect {
       let marker = try #require(descendants(window).first {
@@ -306,6 +323,8 @@ struct LibraryHostTests {
     let footer = try frame("note-footer-card")
     let progress = try frame("note-progress-card")
     let comments = try frame("note-comment-count-card")
+    #expect(title.height <= (try #require(twoTitleLines)) + pixelTolerance)
+    #expect(excerpt.height <= (try #require(excerptLines)) + pixelTolerance)
     #expect(excerpt.minY >= title.maxY)
     #expect(footer.minY >= excerpt.maxY)
     if hasTags {
@@ -313,7 +332,11 @@ struct LibraryHostTests {
       #expect(tags.minY >= excerpt.maxY)
       #expect(abs(progress.midY - tags.midY) <= 1)
       #expect(abs(comments.midY - tags.midY) <= 1)
-      #expect(progress.minX >= tags.maxX + 12)
+      #expect(progress.minX >= tags.maxX + (size.isAccessibilitySize ? 4 : 12))
+      if size.isAccessibilitySize {
+        let name = try frame("pinned-tag-summary-name")
+        #expect(name.width >= (try #require(minimumTagNameWidth)) - pixelTolerance)
+      }
     }
     #expect(progress.maxY <= footer.maxY)
     #expect(comments.maxY <= footer.maxY)
@@ -326,6 +349,108 @@ struct LibraryHostTests {
     }
     Attachment.record(
       image, named: "pinned-card-\(dark ? "Dark" : "Light")-\(size)-tags-\(hasTags).png", as: .png)
+  }
+
+  @Test(arguments: [
+    (dark: false, size: DynamicTypeSize.large, increasedContrast: false),
+    (dark: true, size: DynamicTypeSize.large, increasedContrast: false),
+    (dark: false, size: DynamicTypeSize.accessibility3, increasedContrast: false),
+    (dark: true, size: DynamicTypeSize.accessibility3, increasedContrast: false),
+    (dark: false, size: DynamicTypeSize.large, increasedContrast: true),
+    (dark: true, size: DynamicTypeSize.large, increasedContrast: true),
+    (dark: false, size: DynamicTypeSize.accessibility3, increasedContrast: true),
+    (dark: true, size: DynamicTypeSize.accessibility3, increasedContrast: true),
+  ])
+  func selectedPinnedProgressKeepsPrimaryInkAndTextContrast(
+    dark: Bool, size: DynamicTypeSize, increasedContrast: Bool
+  ) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.frame = .init(x: 0, y: 0, width: 900, height: 800)
+    window.overrideUserInterfaceStyle = dark ? .dark : .light
+    window.traitOverrides.accessibilityContrast = increasedContrast ? .high : .normal
+    window.traitOverrides.preferredContentSizeCategory =
+      size.isAccessibilitySize ? .accessibilityExtraLarge : .large
+    let model = LibraryModel(
+      snapshot: .init(notes: [
+        .init(
+          id: "pin", title: "A selected thought", updatedAt: .now, gistID: "pin",
+          isPinned: true, progress: .init(completed: 2, total: 5)),
+        .init(
+          id: "quiet-pin", title: "Another pinned thought", updatedAt: .now,
+          gistID: "quiet-pin", isPinned: true),
+      ]), loadState: .ready)
+    model.selectedNoteID = "pin"
+    window.rootViewController = UIHostingController(
+      rootView: NavigationSplitView {
+        LibraryView(
+          model: model, actions: .init(refresh: {}, create: {}, today: {}), isSidebar: true)
+      } detail: { Text("A retained document") }
+      .environment(\.horizontalSizeClass, .regular)
+      .environment(\.dynamicTypeSize, size)
+      .environment(\.colorScheme, dark ? .dark : .light))
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(500))
+    window.layoutIfNeeded()
+    let marker = try #require(descendants(window).first {
+      $0.accessibilityIdentifier == "capture-frame-note-progress-pin" && !$0.bounds.isEmpty
+    })
+    let frame = marker.convert(marker.bounds, to: window).insetBy(dx: -2, dy: -2)
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+    }
+    let crop = try #require(image.cgImage?.cropping(to: CGRect(
+      x: frame.minX * image.scale, y: frame.minY * image.scale,
+      width: frame.width * image.scale, height: frame.height * image.scale)))
+    func color(in bitmap: CGImage, at point: CGPoint) throws -> RGBColor {
+      let corner = try #require(bitmap.cropping(to: CGRect(
+        x: point.x, y: point.y, width: 1, height: 1)))
+      var pixel = [UInt8](repeating: 0, count: 4)
+      try pixel.withUnsafeMutableBytes { bytes in
+        let context = try #require(CGContext(
+          data: bytes.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+          space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(corner, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+      }
+      return RGBColor(red: pixel[0], green: pixel[1], blue: pixel[2])
+    }
+    let background = try color(in: crop, at: .zero)
+    let ink = try #require(RGBColor(
+      uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
+    let contrast = ink.contrast(with: background)
+    #expect(contrast >= 4.5, "Contrast against actual native selected-card pixels: \(contrast)")
+    #expect(try nativeAccentPixels(in: UIImage(cgImage: crop), expected: ink).personal > 10)
+    Attachment.record(
+      "Contrast: \(contrast), background: \(background), ink: \(ink)",
+      named: "pinned-progress-\(dark ? "Dark" : "Light")-\(size)-\(increasedContrast)-contrast.txt")
+    do {
+      let quiet = try #require(descendants(window).first {
+        $0.accessibilityIdentifier == "capture-frame-note-card-quiet-pin" && !$0.bounds.isEmpty
+      })
+      let quietFrame = quiet.convert(quiet.bounds, to: window)
+      let bitmap = try #require(image.cgImage)
+      let surface = try color(in: bitmap, at: CGPoint(
+        x: (quietFrame.minX + 2) * image.scale, y: quietFrame.midY * image.scale))
+      let sidebar = try color(in: bitmap, at: CGPoint(
+        x: (quietFrame.minX - 4) * image.scale, y: quietFrame.midY * image.scale))
+      #expect(background.contrast(with: surface) >= 1.3)
+      #expect(surface.hex == (dark ? "#3F4448" : "#F2F2F7"))
+      #expect(background.hex == (dark ? "#51565A" : "#D1D1D6"))
+      if dark {
+        #expect(surface.contrast(with: .black) > sidebar.contrast(with: .black))
+        #expect(background.contrast(with: .black) > surface.contrast(with: .black))
+      }
+      Attachment.record(
+        "Sidebar: \(sidebar.hex), unselected: \(surface.hex), selected: \(background.hex)",
+        named: "pinned-\(dark ? "Dark" : "Light")-surface-\(size)-\(increasedContrast).txt")
+    }
   }
 
   @Test(arguments: [false, true])

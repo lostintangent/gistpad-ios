@@ -23,18 +23,19 @@ public struct LibraryTodayButton: View {
         }
         .toggleStyle(.button)
         .tint(.primary)
-        .accessibilityLabel(Text("Today", bundle: .module))
-        .accessibilityValue(accessibilityValue)
+        .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier("library-today")
     }
 
-    private var accessibilityValue: Text {
+    private var accessibilityLabel: Text {
+        let title = Text("Today", bundle: .module)
         if let count = summary.unfinishedTaskCount {
-            count == 0
+            let status = count == 0
                 ? Text("No unfinished tasks", bundle: .module)
                 : Text("\(count) unfinished tasks", bundle: .module)
+            return Text("\(title), \(status)", bundle: .module)
         } else {
-            Text("")
+            return title
         }
     }
 }

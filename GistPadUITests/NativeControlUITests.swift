@@ -241,9 +241,14 @@ final class NativeControlUITests: XCTestCase {
             let bar = app.navigationBars["GistPad"]
             XCTAssertLessThanOrEqual(first.frame.minY - max(bar.frame.maxY, list.frame.minY), 24)
           } else if state == "three-pins" {
+            let first = app.descendants(matching: .any)["library-featured-shape"].firstMatch
             try await waitUntil("the first intrinsic pinned card") {
-              app.descendants(matching: .any)["library-featured-shape"].firstMatch.isHittable
+              first.isHittable
             }
+            XCTAssertTrue(first.label.contains("The shape of a notebook"))
+            XCTAssertTrue(first.label.contains("precise engine beneath the page"))
+            XCTAssertTrue(first.label.contains("Design"))
+            XCTAssertTrue(first.label.contains("Ideas"))
           } else {
             let daily = app.buttons["library-collection-dailyNotes"].firstMatch
             try await reveal(daily, in: list)
@@ -270,7 +275,7 @@ final class NativeControlUITests: XCTestCase {
         XCTAssertEqual(app.buttons.matching(identifier: "library-today").count, 1)
         XCTAssertTrue(today.isEnabled)
         XCTAssertTrue(app.windows.firstMatch.frame.contains(today.frame))
-        XCTAssertTrue((today.value as? String ?? "").contains(badge.value))
+        XCTAssertTrue("\(today.label) \(today.value as? String ?? "")".contains(badge.value))
         XCTAssertFalse(app.staticTexts["All done"].exists)
         record(app, name: "today-rail-\(badge.state)-AX3-\(appearance)")
         try await checkTodayOpening(app, at: .zero)
@@ -311,7 +316,7 @@ final class NativeControlUITests: XCTestCase {
     let app = launch(screen: "library", state: "populated")
     defer { app.terminate() }
     let list = app.collectionViews.firstMatch
-    let archive = app.buttons["library-collection-archive"].firstMatch
+    let archive = app.descendants(matching: .any)["library-collection-archive"].firstMatch
     let row = app.descendants(matching: .any)["library-note-archived"].firstMatch
     try await reveal(archive, in: list)
     XCTAssertFalse(row.exists)
@@ -331,6 +336,13 @@ final class NativeControlUITests: XCTestCase {
     let clear = field.buttons["Clear text"].firstMatch
     try await waitUntil("the native query-clear control") { clear.isHittable }
     clear.tap()
+    let dismissSearch = app.buttons.matching(
+      NSPredicate(format: "label IN %@", ["Cancel", "close"])).firstMatch
+    try await waitUntil("the native Search dismissal control") { dismissSearch.isHittable }
+    dismissSearch.tap()
+    try await waitUntil("Search's keyboard to dismiss before scrolling Home") {
+      app.keyboards.count == 0
+    }
     try await reveal(archive, in: list)
     XCTAssertFalse(row.exists)
   }
@@ -351,12 +363,18 @@ final class NativeControlUITests: XCTestCase {
     XCTAssertEqual(app.buttons.matching(identifier: "Delete from GitHub").count, 1)
     XCTAssertTrue(app.windows.firstMatch.frame.contains(confirm.frame))
     record(app, name: "home-overlapping-starred-deletion-confirmation")
-    app.buttons["Cancel"].tap()
+    let cancel = app.buttons["Cancel"].firstMatch
+    if cancel.isHittable {
+      cancel.tap()
+    } else {
+      app.navigationBars["GistPad"].coordinate(
+        withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
     try await waitUntil("cancellation retaining the Starred occurrence") { row.isHittable }
     row.tap()
     let home = app.navigationBars["GistPad"]
     if home.isHittable {
-      let starred = app.buttons["library-collection-starred"].firstMatch
+      let starred = app.descendants(matching: .any)["library-collection-starred"].firstMatch
       try await reveal(starred, in: list)
       starred.tap()
       try await waitUntil("collapsing Starred without closing the selected document") {
@@ -725,6 +743,10 @@ final class NativeControlUITests: XCTestCase {
         list.swipeUp()
       }
     }
+    let tree = XCTAttachment(string: list.debugDescription)
+    tree.name = "unrevealed-library-control"
+    tree.lifetime = .keepAlways
+    add(tree)
     try await waitUntil("the requested Library control") { element.isHittable }
   }
 
