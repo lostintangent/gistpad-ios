@@ -1625,6 +1625,9 @@ struct NotebookModelTests {
     #expect(model.loadedDocument?.rowID == "daily/2026-10-23.md")
     await model.open(gistID: daily.id, filename: "2026-10-24.md")
     #expect(model.library.selectedNoteID == "daily/2026-10-24.md")
+    var readOnly = try #require(model.loadedDocument)
+    readOnly.chrome.access = .readOnly
+    #expect(readOnly.rowID == "daily/2026-10-24.md")
     let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
     #expect(deletion.id == daily.id)
     #expect(deletion.title == daily.displayName)
@@ -1633,6 +1636,34 @@ struct NotebookModelTests {
     } else {
       Issue.record("A Daily row retains the existing whole-gist deletion boundary.")
     }
+    #expect(await provider.readIDs.isEmpty)
+  }
+
+  @Test func aStarredDailyGistKeepsItsGistRowOutsideExactFileSearch() async throws {
+    let filename = GistConventions.todayFilename()
+    let starred = try makeGist(
+      id: "foreign-daily", title: GistConventions.dailyNotesDescription,
+      content: "A starred daily needle", owner: "other", filename: filename)
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [], starred: [starred])
+    await provider.failToday(true)
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    #expect(model.library.snapshot.notes.map(\.id) == [starred.id])
+    #expect(model.library.dailyNoteCount == 0)
+    await model.open(gistID: starred.id, filename: filename)
+    #expect(model.library.selectedNoteID == starred.id)
+    #expect(model.loadedDocument?.chrome.access == .readOnly)
+    model.library.query = "needle"
+    await model.search()
+    let rowID = "\(starred.id)/\(filename)"
+    #expect(model.library.matchingNotes.map(\.id) == [rowID])
+    await model.openRow(id: rowID)
+    #expect(model.library.selectedNoteID == rowID)
+    model.library.query = ""
+    await model.search()
+    #expect(model.library.selectedNoteID == starred.id)
+    #expect(model.loadedDocument?.filename == filename)
+    #expect(model.libraryDeletionTarget(for: starred.id) == nil)
     #expect(await provider.readIDs.isEmpty)
   }
 

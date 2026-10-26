@@ -264,7 +264,7 @@ struct NotebookDocument: Equatable, Sendable, Identifiable {
 
   var rowID: String {
     if let libraryRowID { return libraryRowID }
-    if let gist, gist.isDailyNote, chrome.access == .editable {
+    if let gist, gist.isDailyNote {
       return "\(gist.id)/\(filename)"
     }
     return gist?.id ?? draft?.id.uuidString ?? id
@@ -511,11 +511,7 @@ final class NotebookModel {
 
   private func present(_ document: NotebookDocument) throws {
     var document = document
-    if !library.hasFilters, let rowID = document.libraryRowID,
-      !library.snapshot.notes.contains(where: { $0.id == rowID })
-    {
-      document.libraryRowID = nil
-    }
+    if !library.hasFilters { document.libraryRowID = unfilteredRowID(for: document) }
     failedOpen = nil
     loadedDocument = document
     library.selectedNoteID = document.rowID
@@ -525,6 +521,14 @@ final class NotebookModel {
           "The GitHub note is unavailable. Your local draft is safe and can still be read or exported.")
     }
     try remember(document.selection)
+  }
+
+  private func unfilteredRowID(for document: NotebookDocument) -> String? {
+    library.snapshot.notes.first {
+      $0.id == document.draft?.id.uuidString
+        || ($0.gistID != nil && $0.gistID == document.selection.gistID
+          && ($0.filename == nil || $0.filename == document.filename))
+    }?.id
   }
 
   private func recordLocalDraft(_ draft: DraftSnapshot) {
@@ -981,11 +985,9 @@ final class NotebookModel {
       library.searchState = .inactive
       searchTargets = [:]
       recoverySearchRows = []
-      if let rowID = loadedDocument?.libraryRowID,
-        !library.snapshot.notes.contains(where: { $0.id == rowID })
-      {
+      if let document = loadedDocument {
         let isSelected = library.selectedNoteID == loadedDocument?.rowID
-        loadedDocument?.libraryRowID = nil
+        loadedDocument?.libraryRowID = unfilteredRowID(for: document)
         if isSelected, openingDocument == nil { library.selectedNoteID = loadedDocument?.rowID }
       }
       return
