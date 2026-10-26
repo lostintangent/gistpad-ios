@@ -50,10 +50,9 @@
             dismiss: { session.textView.resignFirstResponder() }),
           configuration: SourceToolbarConfiguration(
             canFormat: session.canFormat,
-            canInsertPhoto: canInsertPhoto, hasPhoto: insertPhoto != nil,
+            canInsertPhoto: canInsertPhoto && insertPhoto != nil,
             canUseIntelligence: !session.isComposing && !session.writingToolsActive
-              && session.textView.markedTextRange == nil,
-            hasIntelligence: intelligence != nil)
+              && session.textView.markedTextRange == nil && intelligence != nil)
         )
         .id(session.viewIdentity)
         .ignoresSafeArea(.container, edges: .vertical)

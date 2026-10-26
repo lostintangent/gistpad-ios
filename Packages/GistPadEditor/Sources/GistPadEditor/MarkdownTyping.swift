@@ -1,8 +1,8 @@
 import Foundation
 
-public enum MarkdownTyping {
+enum MarkdownTyping {
   /// Returns nil for ordinary input or protected syntax so the caller can use native input.
-  public static func edit(
+  static func edit(
     in source: String, selection: NSRange, replacement: String, isComposing: Bool
   ) throws -> SourceEdit? {
     guard !isComposing else { return nil }
@@ -28,12 +28,12 @@ public enum MarkdownTyping {
       .replacingOccurrences(of: "<", with: "%3C").replacingOccurrences(of: ">", with: "%3E")
     let markdown = "[\(label)](\(destination))"
     return SourceEdit(
-      mutation: SourceMutation(range: selection, expected: selected, replacement: markdown),
+      range: selection, expected: selected, replacement: markdown,
       selection: NSRange(location: selection.location + markdown.utf16.count, length: 0))
   }
 
   /// Call only outside composition and Writing Tools. Offsets and returned selection are UTF-16.
-  public static func indent(
+  static func indent(
     in source: String, selection: NSRange, outdent: Bool
   ) throws -> SourceEdit? {
     _ = try selectedText(in: source, selection: selection)
@@ -61,25 +61,8 @@ public enum MarkdownTyping {
       offset = NSMaxRange(line)
     } while offset < NSMaxRange(block)
     guard !changes.isEmpty else { return nil }
-    let original = text.substring(with: block)
-    let modified = NSMutableString(string: original)
-    var start = selection.location
-    var end = NSMaxRange(selection)
-    var delta = 0
-    for change in changes {
-      let current = NSRange(location: change.range.location + delta, length: change.range.length)
-      start = mapped(start, through: current, replacementLength: change.replacement.utf16.count)
-      end = mapped(end, through: current, replacementLength: change.replacement.utf16.count)
-      delta += change.replacement.utf16.count - change.range.length
-    }
-    for change in changes.reversed() {
-      modified.replaceCharacters(
-        in: NSRange(location: change.range.location - block.location, length: change.range.length),
-        with: change.replacement)
-    }
     return SourceEdit(
-      mutation: SourceMutation(range: block, expected: original, replacement: modified as String),
-      selection: NSRange(location: start, length: end - start))
+      range: block, expected: text.substring(with: block), replacements: changes, selection: selection)
   }
 
   private static func continueList(
@@ -103,7 +86,7 @@ public enum MarkdownTyping {
     if content.allSatisfy(\.isWhitespace) {
       let range = NSRange(location: lineStart, length: contentsEnd - lineStart)
       return SourceEdit(
-        mutation: SourceMutation(range: range, expected: line, replacement: ""),
+        range: range, expected: line, replacement: "",
         selection: NSRange(location: lineStart, length: 0))
     }
     func capture(_ index: Int) -> String {
@@ -134,8 +117,7 @@ public enum MarkdownTyping {
       )
     }
     return SourceEdit(
-      mutation: SourceMutation(
-        range: selection, expected: text.substring(with: selection), replacement: replacement),
+      range: selection, expected: text.substring(with: selection), replacement: replacement,
       selection: NSRange(location: selection.location + replacement.utf16.count, length: 0))
   }
 
@@ -178,7 +160,7 @@ public enum MarkdownTyping {
         with: change.replacement)
     }
     return SourceEdit(
-      mutation: SourceMutation(range: range, expected: expected, replacement: result as String),
+      range: range, expected: expected, replacement: result as String,
       selection: NSRange(location: selection.location + replacement.utf16.count, length: 0))
   }
 
@@ -209,12 +191,6 @@ public enum MarkdownTyping {
       }
       return NSIntersectionRange(range, protected).length > 0
     }
-  }
-
-  private static func mapped(_ offset: Int, through range: NSRange, replacementLength: Int) -> Int {
-    if offset < range.location { return offset }
-    if offset >= NSMaxRange(range) { return offset + replacementLength - range.length }
-    return range.location + min(offset - range.location, replacementLength)
   }
 
   private static let listPrefix: NSRegularExpression = {

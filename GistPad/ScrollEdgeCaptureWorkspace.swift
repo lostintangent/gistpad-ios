@@ -298,7 +298,8 @@ private final class ScrollEdgeProbe: UIView {
                         arguments: ["title": self.heading], in: nil, contentWorld: .page
                     ) as? Double
                     guard let value, value.isFinite else {
-                        throw ScrollEdgeCaptureFailure.invalidHeading
+                        self.fail("The preview returned an invalid target-heading position.")
+                        return
                     }
                     self.setTarget(value, scrollView: preview.scrollView)
                 } catch {
@@ -393,11 +394,5 @@ private final class ScrollEdgeProbe: UIView {
         let frame: CGRect
         let insets: UIEdgeInsets
     }
-}
-
-private enum ScrollEdgeCaptureFailure: LocalizedError {
-    case invalidHeading
-
-    var errorDescription: String? { "The preview returned an invalid target-heading position." }
 }
 #endif

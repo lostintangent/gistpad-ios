@@ -5,15 +5,15 @@ import Foundation
   import UIKit
 #endif
 
-public enum MarkdownSyntax {
-  public enum Kind: Sendable {
+enum MarkdownSyntax {
+  enum Kind: Sendable {
     case heading, strong, emphasis, blockquote, htmlTag, strikethrough, orderedMarker
     case code, frontmatter, link, task, checkedTask, punctuation, linkDestination
   }
 
-  public struct Span: Sendable {
-    public let range: NSRange
-    public let kind: Kind
+  struct Span: Sendable {
+    let range: NSRange
+    let kind: Kind
   }
 
   private static let inlinePatterns: [(NSRegularExpression, [(Int, Kind)])] = {
@@ -80,7 +80,7 @@ public enum MarkdownSyntax {
     }
   }()
 
-  public static func spans(in text: String) -> [Span] {
+  static func spans(in text: String) -> [Span] {
     let source = text as NSString
     var result: [Span] = []
     var proseRanges: [NSRange] = []
@@ -162,7 +162,7 @@ public enum MarkdownSyntax {
     return result
   }
 
-  public static func ignoredWritingToolsRanges(in text: String, enclosing range: NSRange)
+  static func ignoredWritingToolsRanges(in text: String, enclosing range: NSRange)
     -> [NSRange]
   {
     let protected = spans(in: text).compactMap { span -> NSRange? in

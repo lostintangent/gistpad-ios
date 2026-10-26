@@ -1,28 +1,68 @@
 import Foundation
 
-public struct SourceEdit: Sendable {
-  public let mutation: SourceMutation
-  public let selection: NSRange
+struct SourceEdit: Sendable {
+  let mutation: SourceMutation
+  let selection: NSRange
 
-  public init(mutation: SourceMutation, selection: NSRange) {
+  init(mutation: SourceMutation, selection: NSRange) {
     self.mutation = mutation
     self.selection = selection
   }
+
+  init(range: NSRange, expected: String, replacement: String, selection: NSRange) {
+    self.init(
+      mutation: SourceMutation(range: range, expected: expected, replacement: replacement),
+      selection: selection)
+  }
+
+  /// Replacements are ordered, nonoverlapping UTF-16 ranges in the original source.
+  init(
+    range: NSRange, expected: String, replacements: [(range: NSRange, replacement: String)],
+    selection: NSRange
+  ) {
+    var start = selection.location
+    var end = NSMaxRange(selection)
+    var delta = 0
+    for replacement in replacements {
+      let current = NSRange(
+        location: replacement.range.location + delta, length: replacement.range.length)
+      let length = replacement.replacement.utf16.count
+      start = Self.remap(start, through: current, replacementLength: length)
+      end = Self.remap(end, through: current, replacementLength: length)
+      delta += length - replacement.range.length
+    }
+    let result = NSMutableString(string: expected)
+    for replacement in replacements.reversed() {
+      result.replaceCharacters(
+        in: NSRange(
+          location: replacement.range.location - range.location, length: replacement.range.length),
+        with: replacement.replacement)
+    }
+    self.init(
+      range: range, expected: expected, replacement: result as String,
+      selection: NSRange(location: start, length: end - start))
+  }
+
+  private static func remap(_ offset: Int, through range: NSRange, replacementLength: Int) -> Int {
+    if offset < range.location { return offset }
+    if offset >= NSMaxRange(range) { return offset + replacementLength - range.length }
+    return range.location + min(offset - range.location, replacementLength)
+  }
 }
 
-public enum MarkdownFormat: Sendable {
+enum MarkdownFormat: Sendable {
   case heading(Int)
   case bold, italic, bulletList, numberedList, checklist, quote
   case inlineCode, codeBlock
   case link(label: String, destination: String)
 }
 
-public enum MarkdownFormatting {
-  public enum FormattingError: Error, Equatable {
+enum MarkdownFormatting {
+  enum FormattingError: Error, Equatable {
     case invalidHeadingLevel, invalidLink
   }
 
-  public static func edit(
+  static func edit(
     _ format: MarkdownFormat, in source: String, selection: NSRange
   ) throws -> SourceEdit? {
     let text = source as NSString
@@ -49,7 +89,7 @@ public enum MarkdownFormatting {
           && !selected.allSatisfy(\.isWhitespace))
       let padding = padded ? " " : ""
       let replacement = delimiter + padding + selected + padding + delimiter
-      return makeEdit(
+      return SourceEdit(
         range: selection, expected: selected, replacement: replacement,
         selection: NSRange(
           location: selection.location + delimiter.utf16.count + padding.utf16.count,
@@ -71,7 +111,7 @@ public enum MarkdownFormatting {
         .replacingOccurrences(of: "[", with: "\\[")
         .replacingOccurrences(of: "]", with: "\\]")
       let replacement = "[\(title)](\(escaped))"
-      return makeEdit(
+      return SourceEdit(
         range: selection, expected: selected, replacement: replacement,
         selection: NSRange(location: selection.location + replacement.utf16.count, length: 0))
     case .codeBlock:
@@ -83,7 +123,7 @@ public enum MarkdownFormatting {
       let terminator = endsLine ? "" : newline
       let trailing = endsLine ? newline : ""
       let opening = fence + newline
-      return makeEdit(
+      return SourceEdit(
         range: block, expected: content,
         replacement: opening + content + terminator + fence + trailing,
         selection: NSRange(
@@ -116,7 +156,7 @@ public enum MarkdownFormatting {
     let before = selection.location - opening - padding
     if before > longestBacktickRun(selected), closing - NSMaxRange(selection) - padding == before {
       let enclosing = NSRange(location: opening, length: closing - opening)
-      return makeEdit(
+      return SourceEdit(
         range: enclosing, expected: text.substring(with: enclosing), replacement: selected,
         selection: NSRange(location: opening, length: selected.utf16.count))
     }
@@ -129,7 +169,7 @@ public enum MarkdownFormatting {
     if content.hasPrefix(" "), content.hasSuffix(" "), !content.allSatisfy(\.isWhitespace) {
       content = String(content.dropFirst().dropLast())
     }
-    return makeEdit(
+    return SourceEdit(
       range: selection, expected: selected, replacement: content,
       selection: NSRange(location: selection.location, length: content.utf16.count))
   }
@@ -148,7 +188,7 @@ public enum MarkdownFormatting {
     {
       let content = (selected as NSString).substring(
         with: NSRange(location: count, length: selected.utf16.count - count * 2))
-      return makeEdit(
+      return SourceEdit(
         range: selection, expected: selected, replacement: content,
         selection: NSRange(location: selection.location, length: content.utf16.count))
     }
@@ -164,11 +204,11 @@ public enum MarkdownFormatting {
     {
       let enclosing = NSRange(
         location: selection.location - count, length: selection.length + count * 2)
-      return makeEdit(
+      return SourceEdit(
         range: enclosing, expected: text.substring(with: enclosing), replacement: selected,
         selection: NSRange(location: enclosing.location, length: selected.utf16.count))
     }
-    return makeEdit(
+    return SourceEdit(
       range: selection, expected: selected, replacement: marker + selected + marker,
       selection: NSRange(location: selection.location + count, length: selection.length))
   }
@@ -191,7 +231,7 @@ public enum MarkdownFormatting {
       expression = listPrefix
     }
     var offset = block.location
-    var prefixes: [(range: NSRange, existing: String, marker: String, matches: Bool)] = []
+    var prefixes: [(range: NSRange, marker: String, matches: Bool)] = []
     var suffixes: [NSRange] = []
     for (index, line) in components.enumerated() {
       let value = line as NSString
@@ -221,7 +261,7 @@ public enum MarkdownFormatting {
         matches = existing.hasPrefix(">")
       }
       prefixes.append(
-        (NSRange(location: offset + indent, length: length), existing, marker, matches))
+        (NSRange(location: offset + indent, length: length), marker, matches))
       if case .heading = format, let match,
         let suffix = headingSuffix.firstMatch(
           in: line, range: NSRange(location: 0, length: value.length)),
@@ -233,31 +273,13 @@ public enum MarkdownFormatting {
       offset += value.length + 1
     }
     let remove = prefixes.allSatisfy(\.matches)
-    let result = NSMutableString(string: content)
-    var start = selection.location
-    var end = NSMaxRange(selection)
     let changes =
       (prefixes.map { (range: $0.range, replacement: remove ? "" : $0.marker) }
       + suffixes.map { (range: $0, replacement: "") })
       .sorted { $0.range.location < $1.range.location }
-    var delta = 0
-    for change in changes {
-      let replacement = change.replacement
-      let current = NSRange(location: change.range.location + delta, length: change.range.length)
-      start = remap(start, through: current, replacementLength: replacement.utf16.count)
-      end = remap(end, through: current, replacementLength: replacement.utf16.count)
-      delta += replacement.utf16.count - change.range.length
-    }
-    for change in changes.reversed() {
-      result.replaceCharacters(
-        in: NSRange(location: change.range.location - block.location, length: change.range.length),
-        with: change.replacement)
-    }
-    let replacement = result as String
-    guard !replacement.utf8.elementsEqual(content.utf8) else { return nil }
-    return makeEdit(
-      range: block, expected: content, replacement: replacement,
-      selection: NSRange(location: start, length: end - start))
+    let edit = SourceEdit(
+      range: block, expected: content, replacements: changes, selection: selection)
+    return edit.mutation.replacement.utf8.elementsEqual(content.utf8) ? nil : edit
   }
 
   private static func lineRange(in source: NSString, selection: NSRange) -> NSRange {
@@ -265,12 +287,6 @@ public enum MarkdownFormatting {
     let last = source.lineRange(
       for: NSRange(location: max(selection.location, NSMaxRange(selection) - 1), length: 0))
     return NSUnionRange(first, last)
-  }
-
-  private static func remap(_ offset: Int, through range: NSRange, replacementLength: Int) -> Int {
-    if offset < range.location { return offset }
-    if offset >= NSMaxRange(range) { return offset + replacementLength - range.length }
-    return range.location + min(offset - range.location, replacementLength)
   }
 
   private static func longestBacktickRun(_ source: String) -> Int {
@@ -281,14 +297,6 @@ public enum MarkdownFormatting {
       longest = max(longest, current)
     }
     return longest
-  }
-
-  private static func makeEdit(
-    range: NSRange, expected: String, replacement: String, selection: NSRange
-  ) -> SourceEdit {
-    SourceEdit(
-      mutation: SourceMutation(range: range, expected: expected, replacement: replacement),
-      selection: selection)
   }
 
   private static func expression(_ pattern: String) -> NSRegularExpression {

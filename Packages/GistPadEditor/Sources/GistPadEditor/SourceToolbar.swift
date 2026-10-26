@@ -1,5 +1,4 @@
 #if canImport(UIKit)
-  import GistPadInterface
   import UIKit
 
   @MainActor
@@ -8,16 +7,14 @@
     let link: @MainActor () -> Void
     let indent: @MainActor (Bool) -> Void
     let photo: (@MainActor () -> Void)?
-    var intelligence: (@MainActor () -> Void)? = nil
+    let intelligence: (@MainActor () -> Void)?
     let dismiss: @MainActor () -> Void
   }
 
   struct SourceToolbarConfiguration: Equatable {
     let canFormat: Bool
     let canInsertPhoto: Bool
-    let hasPhoto: Bool
-    var canUseIntelligence = true
-    var hasIntelligence = false
+    let canUseIntelligence: Bool
   }
 
   @MainActor
@@ -136,7 +133,7 @@
         $0.actions.photo?()
       }
       photo.subtitle = String(localized: "Public, even in a secret gist", bundle: .module)
-      photo.attributes = configuration.hasPhoto && configuration.canInsertPhoto ? [] : .disabled
+      photo.attributes = configuration.canInsertPhoto ? [] : .disabled
       insert.append(UIMenu(options: .displayInline, children: [photo]))
       let emphasis = [
         action(String(localized: "Bold", bundle: .module), image: "bold") {
@@ -159,7 +156,7 @@
         $0.actions.intelligence?()
       }
       intelligence.accessibilityIdentifier = "editor-intelligence"
-      intelligence.isEnabled = configuration.hasIntelligence && configuration.canUseIntelligence
+      intelligence.isEnabled = configuration.canUseIntelligence
       let dismiss = command("Hide Keyboard", image: "keyboard.chevron.compact.down") {
         $0.actions.dismiss()
       }

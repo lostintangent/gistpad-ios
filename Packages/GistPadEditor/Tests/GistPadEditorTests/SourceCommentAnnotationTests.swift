@@ -283,6 +283,25 @@
       #expect(session.textView.selectedRange == NSRange(location: 2, length: 6))
     }
 
+    @Test func selectingACommentRestoresEachSyntaxInkWithoutChangingOtherAttributes() throws {
+      let source = "A **native** `code` [note](https://example.test)"
+      let session = DocumentSession(documentID: "syntax-ink", text: source)
+      let window = host(session)
+      defer { window.isHidden = true }
+      let original = NSAttributedString(attributedString: session.textView.textStorage)
+      session.setCommentHighlights(
+        .init(quotes: [CommentQuote(commentID: 10, quote: source)], selectedCommentID: 10))
+      let selection = NSRange(location: 0, length: source.utf16.count)
+      session.textView.selectedRange = selection
+      session.textViewDidChangeSelection(session.textView)
+      let restored = NSMutableAttributedString(attributedString: session.textView.textStorage)
+      restored.removeAttribute(SourceCommentAnnotations.annotationKey, range: selection)
+      #expect(restored.isEqual(to: original))
+      #expect(session.text.utf8.elementsEqual(source.utf8))
+      #expect(session.generation == 0)
+      #expect(session.textView.selectedRange == selection)
+    }
+
     @Test func writingToolsTemporarilyOwnsTextPresentationWithoutChangingSource() {
       let session = DocumentSession(documentID: "writing-tools", text: "A native note")
       session.setCommentHighlights(

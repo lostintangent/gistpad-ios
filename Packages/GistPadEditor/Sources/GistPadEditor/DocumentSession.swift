@@ -226,7 +226,7 @@
       view.updateViewportView(viewport)
     }
 
-    public func apply(_ edit: SourceEdit, generation: UInt64) throws {
+    func apply(_ edit: SourceEdit, generation: UInt64) throws {
       guard canFormat else { throw SourceMutation.MutationError.compositionActive }
       guard self.generation == generation else {
         throw SourceMutation.MutationError.staleGeneration

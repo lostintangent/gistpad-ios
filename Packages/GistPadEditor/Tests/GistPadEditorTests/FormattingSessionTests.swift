@@ -182,6 +182,7 @@
       let items = toolbar.buttons.arrangedSubviews.compactMap { $0 as? UIButton }
       #expect(items.count == 5)
       #expect(items.allSatisfy { $0.title(for: .normal) == nil })
+      #expect(items.first { $0.accessibilityIdentifier == "editor-intelligence" }?.isEnabled == false)
       for appearance: UIUserInterfaceStyle in [.light, .dark] {
         toolbar.traitOverrides.userInterfaceStyle = appearance
         #expect(items.allSatisfy {
@@ -241,6 +242,21 @@
       #expect(!session.textView.isFirstResponder)
     }
 
+    @Test(arguments: [false, true], [false, true])
+    func photoAvailabilityRequiresBothItsActionAndCapability(hasAction: Bool, allowed: Bool) throws {
+      let session = DocumentSession(documentID: "photo-availability", text: "A note")
+      let window = host(
+        session, insertPhoto: hasAction ? {} : nil, canInsertPhoto: allowed)
+      defer { window.isHidden = true }
+      let toolbar = try #require(session.textView.inputAccessoryView as? SourceAccessoryView)
+      let insertion = try #require(
+        toolbar.buttons.arrangedSubviews.compactMap { $0 as? UIButton }.first {
+          $0.accessibilityIdentifier == "editor-insert-menu"
+        }?.menu)
+      let photo = try #require(menuActions(insertion.children).first { $0.title == "Photo" })
+      #expect(photo.attributes.contains(.disabled) == !(hasAction && allowed))
+    }
+
     @Test func intelligenceAccessoryInvokesItsCallbackWithoutChangingSource() throws {
       let session = DocumentSession(documentID: "intelligence-button", text: "A note")
       var requests = 0
@@ -287,12 +303,15 @@
     }
 
     private func host(
-      _ session: DocumentSession, intelligence: (@MainActor () -> Void)? = nil
+      _ session: DocumentSession, intelligence: (@MainActor () -> Void)? = nil,
+      insertPhoto: (@MainActor () -> Void)? = nil, canInsertPhoto: Bool = false
     ) -> UIWindow {
       // Package logic tests have no connected UIWindowScene.
       let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
       window.rootViewController = UIHostingController(
-        rootView: MarkdownEditorView(session: session, intelligence: intelligence))
+        rootView: MarkdownEditorView(
+          session: session, insertPhoto: insertPhoto, canInsertPhoto: canInsertPhoto,
+          intelligence: intelligence))
       window.makeKeyAndVisible()
       window.layoutIfNeeded()
       session.textView.becomeFirstResponder()

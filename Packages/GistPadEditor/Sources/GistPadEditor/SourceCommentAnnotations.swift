@@ -12,10 +12,6 @@
       let fill: UIColor
       let selected: Bool
     }
-    private struct OriginalInk {
-      let range: NSRange
-      let attributes: [NSAttributedString.Key: Any]
-    }
     private unowned let session: DocumentSession
     private let backgroundLayer = CALayer()
     private var configuration = CommentHighlightConfiguration()
@@ -28,7 +24,7 @@
     private var matchedGeneration: UInt64?
     private var matchedQuotes: [CommentQuote] = []
     private var sourceHighlights: [CommentQuoteHighlight] = []
-    private var originalInk: [OriginalInk] = []
+    private var originalInk: [(range: NSRange, color: Any)] = []
     private var paintedGeneration: UInt64?
     private var suspendsForFind = false
     private var suspendsForWritingTools = false
@@ -123,13 +119,8 @@
         let fill: UIColor
         if selected {
           fill = roles.fill.uiColor
-          storage.enumerateAttributes(in: highlight.range) { attributes, range, _ in
-            originalInk.append(
-              OriginalInk(
-                range: range,
-                attributes: [
-                  .foregroundColor: attributes[.foregroundColor] ?? UIColor.label,
-                ]))
+          storage.enumerateAttribute(.foregroundColor, in: highlight.range) { color, range, _ in
+            originalInk.append((range, color ?? UIColor.label))
           }
         } else {
           var inks: [(RGBColor, Double)] = []
@@ -171,7 +162,7 @@
       if undoEnabled { undo?.disableUndoRegistration() }
       storage.beginEditing()
       for original in originalInk {
-        storage.addAttributes(original.attributes, range: original.range)
+        storage.addAttribute(.foregroundColor, value: original.color, range: original.range)
       }
       applySelectedInk(in: storage)
       storage.endEditing()
