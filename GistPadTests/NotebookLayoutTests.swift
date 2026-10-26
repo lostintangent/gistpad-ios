@@ -11,6 +11,26 @@ import WebKit
 @Suite(.serialized)
 @MainActor
 struct NotebookLayoutTests {
+  @Test func libraryDisclosuresStartCollapsedAndRememberOnlyTheirOwnAccount() throws {
+    let name = "dev.gistpad.layout.tests.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: name))
+    defer { defaults.removePersistentDomain(forName: name) }
+    let account = UUID()
+    let otherAccount = UUID()
+    let layout = NotebookLayoutPreferences(defaults: defaults)
+    #expect(layout.expandedCollections(accountID: account).isEmpty)
+    layout.setExpandedCollections([.gists, .dailyNotes, .archive], accountID: account)
+    #expect(layout.expandedCollections(accountID: account) == [.dailyNotes, .archive])
+    #expect(layout.expandedCollections(accountID: otherAccount).isEmpty)
+    let restored = NotebookLayoutPreferences(defaults: defaults)
+    #expect(restored.expandedCollections(accountID: account) == [.dailyNotes, .archive])
+    restored.setExpandedCollections([.starred], accountID: otherAccount)
+    restored.setExpandedCollections([], accountID: account)
+    let relaunched = NotebookLayoutPreferences(defaults: defaults)
+    #expect(relaunched.expandedCollections(accountID: account).isEmpty)
+    #expect(relaunched.expandedCollections(accountID: otherAccount) == [.starred])
+  }
+
   @Test func modeChoicePersistsOnThisDeviceWithoutAffectingTheCompactFallback() throws {
     let name = "dev.gistpad.layout.tests.\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: name))

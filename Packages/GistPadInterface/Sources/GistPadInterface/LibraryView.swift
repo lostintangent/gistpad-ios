@@ -70,13 +70,15 @@ extension View {
             model: model, isPresented: isPresented, sidebarOverride: isSidebar))
     }
 
-    public func libraryCreateAction(
-        isVisible: Bool, action: @escaping @MainActor () -> Void
+    public func libraryRail(
+        isVisible: Bool, today: LibraryTodaySummary, isTodaySelected: Bool,
+        create: @escaping @MainActor () -> Void, openToday: @escaping @MainActor () -> Void
     ) -> some View {
         toolbar {
             if isVisible {
-                ToolbarItem(placement: .primaryAction) {
-                    LibraryCreateButton(action: action)
+                ToolbarItemGroup(placement: .primaryAction) {
+                    LibraryCreateButton(action: create)
+                    LibraryTodayButton(summary: today, isSelected: isTodaySelected, action: openToday)
                 }
             }
         }
@@ -200,9 +202,9 @@ public struct NotebookArtwork: View {
 }
 
 public struct LibraryView: View {
-    private enum Selection: Hashable {
-        case today
-        case note(String)
+    private struct Selection: Hashable {
+        let collection: LibraryCollection
+        let noteID: String
     }
 
     struct SearchSummary: View {
@@ -245,13 +247,16 @@ public struct LibraryView: View {
     private let footer: Text?
     private let isTodaySelected: Bool
     private let sidebarOverride: Bool?
+    private let savedCollections: Binding<Set<LibraryCollection>>?
+    @State private var localCollections: Set<LibraryCollection> = []
+    @State private var retainedCollections: Set<LibraryCollection> = []
+    @State private var collapsedSearchCollections: Set<LibraryCollection> = []
+    @State private var selectedCollection: LibraryCollection = .gists
     @State private var showingTags = false
     @State private var tagQuery = ""
     @State private var isPullRefreshing = false
     @State private var searchPresented = false
     @State private var windowContentWidth: CGFloat?
-    @ScaledMetric(relativeTo: .body) private var headingTopSpacing = 32
-    @ScaledMetric(relativeTo: .body) private var headingBottomSpacing = 12
     @ScaledMetric(relativeTo: .body) private var headingCountSpacing = 4
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -262,13 +267,15 @@ public struct LibraryView: View {
 
     public init(
         model: LibraryModel, actions: LibraryActions, footer: Text? = nil,
-        isTodaySelected: Bool = false, isSidebar: Bool? = nil
+        isTodaySelected: Bool = false, isSidebar: Bool? = nil,
+        expandedCollections: Binding<Set<LibraryCollection>>? = nil
     ) {
         self.model = model
         self.actions = actions
         self.footer = footer
         self.isTodaySelected = isTodaySelected
         sidebarOverride = isSidebar
+        savedCollections = expandedCollections
     }
 
     #if DEBUG
@@ -312,6 +319,12 @@ public struct LibraryView: View {
                 .sheet(isPresented: $showingTags) { tagFilters }
                 .scrollEdgeEffectStyle(.soft, for: .all)
         }
+        .onChange(of: currentCollections, initial: true) { _, collections in
+            retainedCollections.formUnion(collections.filter { expansion(for: $0).wrappedValue })
+        }
+        .onChange(of: model.query) { resetSearchDisclosures() }
+        .onChange(of: model.selectedTagIDs) { resetSearchDisclosures() }
+        .onDisappear { retainedCollections.removeAll() }
     }
 
     @ViewBuilder
@@ -320,7 +333,6 @@ public struct LibraryView: View {
             signedOutInvitation
         } else if searchManagedByContainer || !isSidebar {
             adaptiveList
-                .toolbarTitleMenu { collectionPicker }
         } else {
             adaptiveList
                 .searchable(
@@ -328,7 +340,6 @@ public struct LibraryView: View {
                     placement: .sidebar,
                     prompt: Text("Search notes", bundle: .module))
                 .searchToolbarBehavior(isSidebar ? .minimize : .automatic)
-                .toolbarTitleMenu { collectionPicker }
         }
     }
 
@@ -355,88 +366,46 @@ public struct LibraryView: View {
 
     private var navigationTitle: String {
         if model.loadState == .signedOut { return "" }
-        return model.collection == .gists ? String(localized: "GistPad", bundle: .module) : model.collection.title
+        return String(localized: "GistPad", bundle: .module)
     }
 
     private var navigationSubtitle: String {
         guard model.loadState != .signedOut else { return "" }
-        if model.collection == .dailyNotes {
-            return model.dailyNoteCount.map(LibraryModel.noteCountLabel) ?? ""
-        }
-        return model.collectionGistCount.map(LibraryModel.gistCountLabel) ?? ""
+        return model.mainGistCount.map(LibraryModel.gistCountLabel) ?? ""
     }
 
     private var libraryList: some View {
         List(selection: librarySelection) {
             status
             if model.loadState != .signedOut {
-                if model.showsFeaturedNotes {
-                    Section {
-                        if isSidebar {
-                            NavigationLink(value: Selection.today) {
-                                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                    Image(systemName: "calendar")
-                                        .font(.headline)
-                                        .foregroundStyle(.secondary)
-                                        .accessibilityHidden(true)
-                                        .captureFrame("library-today-symbol")
-                                    LibraryNoteRow(
-                                        note: .init(
-                                            id: "today", title: String(localized: "Today", bundle: .module),
-                                            updatedAt: model.today.date, isDailyNote: true,
-                                            excerpt: model.today.excerpt,
-                                            progress: model.today.availability == .missing ? nil : model.today.progress),
-                                        tags: [])
-                                }
-                                .frame(minHeight: 44)
-                            }
-                            .tint(.primary)
-                            .navigationLinkIndicatorVisibility(.hidden)
-                            .tag(Selection.today)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
-                            .listRowSeparator(.hidden)
-                            .accessibilityValue(Text(
-                                model.today.date,
-                                format: Date.FormatStyle(date: .complete, time: .omitted, timeZone: model.today.timeZone)
-                            ))
-                            .accessibilityIdentifier("library-today")
-                        } else {
-                            Button(action: actions.today) {
-                                TodayFeature(summary: model.today)
-                            }
-                            .buttonStyle(.plain)
-                            .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                            .accessibilityIdentifier("library-today")
-                        }
-                    }
-                    .listSectionMargins(.vertical, 0)
-                    .listSectionMargins(.top, headingTopSpacing / 2)
-                    .listSectionSeparator(.hidden)
-                }
-                if model.showsSearchScope {
+                if !model.selectedTagIDs.isEmpty {
                     searchScope
                 }
                 searchStatus
-                if !model.featuredNotes.isEmpty {
+                if model.hasFilters {
+                    Section {} header: { searchSummary }
+                        .listSectionMargins(.vertical, 0)
+                }
+                if !pinnedCards.isEmpty {
                     Section {
-                        pinnedNotes
-                    } header: {
-                        pinnedHeading
-                            .listRowInsets(
-                                isSidebar ? EdgeInsets()
-                                    : EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+                        ForEach(pinnedCards) { noteRow($0, isCard: true) }
                     }
                     .listSectionMargins(.vertical, 0)
-                    .listSectionSeparator(.visible, edges: .top)
+                    .listSectionMargins(.top, 16)
+                    .listSectionMargins(.bottom, mainNotes.isEmpty ? 0 : 24)
+                    .listSectionSeparator(.hidden)
                 }
-                if !model.listedNotes.isEmpty {
-                    listedNotesSection
-                        .listSectionMargins(.vertical, 0)
-                        .listSectionSeparator(.visible, edges: .top)
+                if !mainNotes.isEmpty {
+                    Section {
+                        ForEach(mainNotes) { noteRow($0) }
+                    }
+                    .listSectionMargins(.vertical, 0)
+                    .listSectionMargins(.top, pinnedCards.isEmpty && !model.hasFilters ? 8 : 0)
                 }
-                if model.matchingNotes.isEmpty && model.loadState != .loading && canShowEmptyState {
+                ForEach(displayedCollections) { collection in
+                    collectionSection(collection)
+                }
+                if !hasVisibleNotes && model.loadState != .loading && canShowEmptyState {
                     emptyState
                 }
                 if let footer {
@@ -452,127 +421,151 @@ public struct LibraryView: View {
         .animation(reduceMotion ? nil : .default, value: model.matchingNotes.map(\.id))
     }
 
-    @ViewBuilder
-    private var listedNotesSection: some View {
-        if model.showsListedNotesHeading {
-            Section {
-                listedNoteRows
-            } header: {
-                VStack(alignment: .leading, spacing: 8) {
-                    if model.hasFilters { searchSummary }
-                    sectionHeading(
-                        model.hasFilters ? String(localized: "Results", bundle: .module) : model.collection.title,
-                        symbol: !model.hasFilters && model.collection == .gists ? "doc.text" : nil,
-                        count: model.hasFilters ? model.resultGistCount
-                            : model.hasKnownGistSnapshot ? LibraryModel.gistCount(in: model.listedNotes) : nil)
-                    .accessibilityIdentifier("library-listed-heading")
-                }
-                .listRowInsets(
-                    isSidebar ? EdgeInsets()
-                        : EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
-            }
-        } else {
-            Section {
-                listedNoteRows
-            }
-        }
+    private var pinnedCards: [LibraryNote] {
+        model.hasFilters ? [] : model.unfilteredNotes(in: .gists).filter(\.isPinned)
     }
 
-    private var listedNoteRows: some View {
-        ForEach(model.listedNotes) { noteRow($0) }
+    private var mainNotes: [LibraryNote] {
+        model.matchingNotes(in: .gists).filter { model.hasFilters || !$0.isPinned }
+    }
+
+    private var hasVisibleNotes: Bool {
+        !pinnedCards.isEmpty || !mainNotes.isEmpty || !displayedCollections.isEmpty
     }
 
     private var librarySelection: Binding<Selection?> {
         Binding(
             get: {
-                guard isSidebar else { return nil }
-                if isTodaySelected { return model.showsFeaturedNotes ? .today : nil }
-                return model.visibleSelectedNoteID.map(Selection.note)
+                guard isSidebar, let id = model.visibleSelectedNoteID else { return nil }
+                let candidates = [selectedCollection] + LibraryCollection.allCases.filter {
+                    $0 != selectedCollection
+                }
+                return candidates.first { isVisible(id, in: $0) }.map {
+                    Selection(collection: $0, noteID: id)
+                }
             },
             set: { selection in
-                switch selection {
-                case .today:
-                    actions.today()
-                case .note(let id):
-                    if let select = actions.select {
-                        select(id)
-                    } else {
-                        model.selectedNoteID = id
-                    }
-                case nil:
-                    // Losing a visible row is not leaving the open document.
-                    break
+                // Losing a visible row is not leaving the open document.
+                guard let selection else { return }
+                selectedCollection = selection.collection
+                if let select = actions.select {
+                    select(selection.noteID)
+                } else {
+                    model.selectedNoteID = selection.noteID
                 }
             }
         )
     }
 
-    private func sectionHeading(
-        _ title: String, symbol: String? = nil, count: Int? = nil
-    ) -> some View {
-        Group {
-            if let count {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline) {
-                        headingLabel(title, symbol: symbol)
-                            .fixedSize(horizontal: true, vertical: true)
-                        Spacer(minLength: 12)
-                        headingCount(count)
-                            .fixedSize()
-                    }
-                    VStack(alignment: .leading, spacing: headingCountSpacing) {
-                        headingLabel(title, symbol: symbol)
-                        headingCount(count)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
+    private func isVisible(_ id: String, in collection: LibraryCollection) -> Bool {
+        if collection == .gists {
+            return pinnedCards.contains { $0.id == id } || mainNotes.contains { $0.id == id }
+        }
+        return displayedCollections.contains(collection) && expansion(for: collection).wrappedValue
+            && model.matchingNotes(in: collection).contains { $0.id == id }
+    }
+
+    private var collections: Binding<Set<LibraryCollection>> {
+        savedCollections ?? $localCollections
+    }
+
+    private var currentCollections: [LibraryCollection] {
+        model.secondaryCollections.filter {
+            !model.hasFilters || !model.matchingNotes(in: $0).isEmpty
+        }
+    }
+
+    private var displayedCollections: [LibraryCollection] {
+        [.dailyNotes, .starred, .archive].filter {
+            currentCollections.contains($0)
+                || (retainedCollections.contains($0) && !model.secondaryCollections.contains($0))
+        }
+    }
+
+    private func expansion(for collection: LibraryCollection) -> Binding<Bool> {
+        Binding(
+            get: {
+                model.hasFilters
+                    ? !collapsedSearchCollections.contains(collection)
+                    : collections.wrappedValue.contains(collection)
+            },
+            set: { expanded in
+                if model.hasFilters {
+                    if expanded { collapsedSearchCollections.remove(collection) }
+                    else { collapsedSearchCollections.insert(collection) }
+                } else {
+                    if expanded { collections.wrappedValue.insert(collection) }
+                    else { collections.wrappedValue.remove(collection) }
                 }
-            } else {
-                headingLabel(title, symbol: symbol)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if expanded { retainedCollections.insert(collection) }
+                else { retainedCollections.remove(collection) }
+            })
+    }
+
+    private func resetSearchDisclosures() {
+        collapsedSearchCollections.removeAll()
+        retainedCollections.formIntersection(collections.wrappedValue)
+    }
+
+    private func collectionSection(_ collection: LibraryCollection) -> some View {
+        Section {
+            DisclosureGroup(isExpanded: expansion(for: collection)) {
+                let notes = model.matchingNotes(in: collection)
+                if notes.isEmpty {
+                    Text("No notes to show", bundle: .module)
+                        .foregroundStyle(.secondary)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("library-empty-\(collection.rawValue)")
+                } else {
+                    ForEach(notes) { noteRow($0, collection: collection) }
+                }
+            } label: {
+                collectionLabel(collection)
+            }
+            .accessibilityIdentifier("library-collection-\(collection.rawValue)")
+            .listRowBackground(isSidebar ? nil : Color.clear)
+            .listRowSeparator(.hidden)
+        }
+        .listSectionMargins(.vertical, 0)
+        .listSectionMargins(.top, 28)
+        .listSectionSeparator(.hidden)
+    }
+
+    private func collectionLabel(_ collection: LibraryCollection) -> some View {
+        let notes = model.matchingNotes(in: collection)
+        let count: Int? = model.hasFilters
+            ? collection == .dailyNotes ? notes.count : LibraryModel.gistCount(in: notes)
+            : model.count(in: collection)
+        let countLabel = count.map {
+            collection == .dailyNotes ? LibraryModel.noteCountLabel($0) : LibraryModel.gistCountLabel($0)
+        }
+        let title = Label(collection.title, systemImage: collection.symbol)
+            .fixedSize(horizontal: false, vertical: true)
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                title.fixedSize(horizontal: true, vertical: true)
+                Spacer(minLength: 0)
+                if let count {
+                    Text(count, format: .number)
+                        .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
+            VStack(alignment: .leading, spacing: headingCountSpacing) {
+                title
+                if let count {
+                    Text(count, format: .number)
+                        .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                }
             }
         }
-        .font(.title2.weight(.bold))
-        .foregroundStyle(Color(uiColor: .label))
+        .font(.headline)
+        .foregroundStyle(.primary)
+        .frame(minHeight: 44)
         .textCase(nil)
-        .captureFrame("library-heading-\(symbol ?? "scope")")
-        .padding(.horizontal, 12)
-        .padding(.top, headingTopSpacing)
-        .padding(.bottom, headingBottomSpacing)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            count.map { Text("\(title), \(LibraryModel.gistCountLabel($0))", bundle: .module) }
-                ?? Text(verbatim: title))
+        .accessibilityLabel(Text(verbatim: collection.title))
+        .accessibilityValue(Text(verbatim: countLabel ?? ""))
         .accessibilityAddTraits(.isHeader)
-    }
-
-    @ViewBuilder
-    private func headingLabel(_ title: String, symbol: String?) -> some View {
-        if let symbol {
-            Label {
-                Text(verbatim: title)
-            } icon: {
-                Image(systemName: symbol)
-                    .imageScale(.small)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-            }
-        } else {
-            Text(verbatim: title)
-        }
-    }
-
-    private func headingCount(_ count: Int) -> some View {
-        Text(count, format: .number)
-            .font(.subheadline)
-            .monospacedDigit()
-            .foregroundStyle(.secondary)
-    }
-
-    private var pinnedHeading: some View {
-        sectionHeading(
-            String(localized: "Pinned Gists", bundle: .module), symbol: "pin.fill",
-            count: model.hasKnownGistSnapshot ? LibraryModel.gistCount(in: model.featuredNotes) : nil)
-        .accessibilityIdentifier("library-pinned-heading")
     }
 
     private var remoteStatus: GitHubStatusState {
@@ -584,17 +577,11 @@ public struct LibraryView: View {
         return state
     }
 
-    private var pinnedNotes: some View {
-        ForEach(model.featuredNotes) { note in
-            noteRow(note, showsPin: false, isFeatured: true)
-        }
-    }
-
     private var searchScope: some View {
         Section {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Label(model.collection.title, systemImage: model.collection.symbol)
+                    Label(String(localized: "All Notes", bundle: .module), systemImage: "doc.text")
                         .font(.subheadline.weight(.semibold))
                     Spacer(minLength: 8)
                     Button(String(localized: "Clear", bundle: .module)) { model.clearFilters() }
@@ -606,13 +593,6 @@ public struct LibraryView: View {
                         tags: model.snapshot.tags.filter { model.selectedTagIDs.contains($0.id) },
                         isSelected: true
                     )
-                }
-                if model.collection != .gists {
-                    Button(String(localized: "Search All Notes", bundle: .module)) {
-                        model.collection = .gists
-                    }
-                    .tint(.primary)
-                    .font(.subheadline)
                 }
             }
             .padding(.vertical, 4)
@@ -731,82 +711,60 @@ public struct LibraryView: View {
     private var emptyState: some View {
         Section {
             ContentUnavailableView {
-                if !model.hasFilters, model.collection == .gists {
+                if !model.hasFilters {
                     NotebookArtwork()
-                    Text(verbatim: emptyTitle)
+                    Text("A notebook of your own", bundle: .module)
                         .font(.title2.weight(.semibold))
                 } else {
                     Label(
-                        model.hasFilters
-                            ? String(localized: "No matching notes", bundle: .module)
-                            : emptyTitle,
-                        systemImage: model.hasFilters ? "magnifyingglass" : model.collection.symbol
+                        String(localized: "No matching notes", bundle: .module),
+                        systemImage: "magnifyingglass"
                     )
                 }
             } description: {
                 if model.hasFilters {
                     Text("Try another search or clear your filters.", bundle: .module)
                 } else {
-                    Text(verbatim: emptyDescription)
+                    Text("A thought, a list, a little thing worth keeping. Start with your first note.", bundle: .module)
                 }
             } actions: {
                 if model.hasFilters {
                     Button(String(localized: "Clear filters", bundle: .module)) { model.clearFilters() }
                         .tint(.primary)
-                } else if model.collection == .gists {
+                } else {
                     Button(action: actions.create) {
                         Text("Create a note", bundle: .module)
                             .foregroundStyle(Color(uiColor: .systemBackground))
                     }
                         .buttonStyle(.borderedProminent)
                         .tint(Color(uiColor: .label))
-                } else if model.collection == .dailyNotes {
-                    Button(action: actions.today) {
-                        Text("Start today's note", bundle: .module)
-                            .foregroundStyle(Color(uiColor: .systemBackground))
-                    }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Color(uiColor: .label))
                 }
             }
-        } header: {
-            if model.hasFilters { searchSummary }
         }
         .listRowBackground(Color.clear)
     }
 
-    private var emptyTitle: String {
-        switch model.collection {
-        case .gists: String(localized: "A notebook of your own", bundle: .module)
-        case .dailyNotes: String(localized: "A fresh day", bundle: .module)
-        case .starred: String(localized: "Keep a useful discovery", bundle: .module)
-        case .archive: String(localized: "Nothing in the archive", bundle: .module)
-        }
-    }
-
-    private var emptyDescription: String {
-        switch model.collection {
-        case .gists: String(localized: "A thought, a list, a little thing worth keeping. Start with your first note.", bundle: .module)
-        case .dailyNotes: String(localized: "Your daily notes will gather here. Begin with today.", bundle: .module)
-        case .starred: String(localized: "Star a gist on GitHub to find it here.", bundle: .module)
-        case .archive: String(localized: "Finished notes stay here when you archive them. You can bring them back anytime.", bundle: .module)
-        }
-    }
-
     private func noteRow(
-        _ note: LibraryNote, showsPin: Bool = true, isFeatured: Bool = false
+        _ note: LibraryNote, collection: LibraryCollection = .gists, isCard: Bool = false
     ) -> some View {
-        NavigationLink(value: Selection.note(note.id)) {
-            LibraryNoteRow(
-                note: note, tags: model.tags(for: note), showsPin: showsPin,
-                showsStar: model.collection != .starred)
+        NavigationLink(value: Selection(collection: collection, noteID: note.id)) {
+            if isCard {
+                LibraryPinnedCard(
+                    note: note, tags: model.tags(for: note),
+                    isSelected: isSidebar && model.visibleSelectedNoteID == note.id)
+            } else {
+                LibraryNoteRow(
+                    note: note, tags: model.tags(for: note),
+                    showsStar: collection != .starred)
+            }
         }
-        .accessibilityIdentifier("\(isFeatured ? "library-featured" : "library-note")-\(note.id)")
+        .accessibilityIdentifier("\(isCard ? "library-featured" : "library-note")-\(note.id)")
         .navigationLinkIndicatorVisibility(.hidden)
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
-        .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
-        .listRowSeparator(.visible)
+        .listRowInsets(EdgeInsets(
+            top: isCard ? 4 : 0, leading: 12, bottom: isCard ? 4 : 0, trailing: 12))
+        .listRowSeparator(isCard ? .hidden : .visible)
         .listRowSeparatorTint(Color(uiColor: .separator))
         .listRowBackground(isSidebar ? nil : Color.clear)
         .contextMenu { rowActions(note) }
@@ -907,6 +865,8 @@ public struct LibraryView: View {
             if !isSidebar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     LibraryCreateButton(action: actions.create)
+                    LibraryTodayButton(
+                        summary: model.today, isSelected: isTodaySelected, action: actions.today)
                     if let account = actions.account {
                         settingsButton(account)
                     }
@@ -951,20 +911,6 @@ public struct LibraryView: View {
         .tint(.primary)
         .accessibilityValue(Text("\(model.selectedTagIDs.count) selected", bundle: .module))
         .accessibilityIdentifier("library-filter-tags")
-    }
-
-    private var collectionPicker: some View {
-        Picker(String(localized: "Collection", bundle: .module), selection: $model.collection) {
-            ForEach(model.visibleCollections) { collection in
-                Label(
-                    collection == .gists ? String(localized: "All Notes", bundle: .module) : collection.title,
-                    systemImage: collection.symbol
-                )
-                .tag(collection)
-            }
-        }
-        .tint(.primary)
-        .accessibilityIdentifier("library-collection")
     }
 
     private var tagFilters: some View {

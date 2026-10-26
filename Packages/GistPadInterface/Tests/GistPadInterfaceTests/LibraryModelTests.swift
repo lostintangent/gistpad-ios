@@ -135,11 +135,11 @@ struct LibraryModelTests {
     }
 
     @Test(arguments: [LibraryCollection.starred, .dailyNotes, .archive])
-    func scopedHeadingsOnlyIdentifySearchResultsNotTheRetainedDocument(collection: LibraryCollection) {
+    func groupMembershipDoesNotHideTheRetainedDocumentInAnotherGroup(collection: LibraryCollection) {
         let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
         model.collection = collection
         model.selectedNoteID = "shape"
-        #expect(model.visibleSelectedNoteID == nil)
+        #expect(model.visibleSelectedNoteID == "shape")
         #expect(model.selectedNoteID == "shape")
         #expect(!model.showsListedNotesHeading)
         model.selectedNoteID = nil

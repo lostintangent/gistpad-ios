@@ -295,9 +295,10 @@ struct InterfaceCaptureWorkspace: View {
                             ContentUnavailableView("Select a gist", systemImage: "doc.text")
                         }
                     }
-                    .libraryCreateAction(
+                    .libraryRail(
                         isVisible: horizontalSizeClass == .regular && library.loadState != .signedOut,
-                        action: libraryActions.create)
+                        today: library.today, isTodaySelected: library.selectedNoteID == "today",
+                        create: libraryActions.create, openToday: libraryActions.today)
                 }
             }
             .navigationSplitViewStyle(.balanced)

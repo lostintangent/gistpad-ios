@@ -158,7 +158,9 @@ public final class LibraryModel {
         }
         let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return snapshot.notes.filter { note in
-            return Self.includes(note, in: collection) && selectedTagIDs.isSubset(of: note.tagIDs)
+            let isIncluded = hasFilters
+                ? Self.primaryCollection(for: note) != nil : Self.includes(note, in: collection)
+            return isIncluded && selectedTagIDs.isSubset(of: note.tagIDs)
                 && (search.isEmpty || note.title.localizedStandardContains(search))
         }.sorted {
             if $0.updatedAt != $1.updatedAt {
@@ -175,6 +177,53 @@ public final class LibraryModel {
 
     public var dailyNoteCount: Int? {
         hasKnownGistSnapshot ? snapshot.dailyNoteCount : nil
+    }
+
+    public var mainGistCount: Int? {
+        count(in: .gists)
+    }
+
+    public func count(in collection: LibraryCollection) -> Int? {
+        guard hasKnownGistSnapshot else { return nil }
+        if collection == .dailyNotes { return dailyNoteCount }
+        return Self.gistCount(in: snapshot.notes.filter { Self.includes($0, in: collection) })
+    }
+
+    var secondaryCollections: [LibraryCollection] {
+        guard hasKnownGistSnapshot else { return [] }
+        return [.dailyNotes, .starred, .archive].filter { collection in
+            snapshot.notes.contains { Self.includes($0, in: collection) }
+        }
+    }
+
+    public func unfilteredNotes(in collection: LibraryCollection) -> [LibraryNote] {
+        Self.ordered(snapshot.notes.filter { Self.includes($0, in: collection) }, in: collection)
+    }
+
+    public func matchingNotes(in collection: LibraryCollection) -> [LibraryNote] {
+        guard hasFilters else { return unfilteredNotes(in: collection) }
+        let notes = matchingNotes.filter { Self.primaryCollection(for: $0) == collection }
+        return collection == .dailyNotes ? Self.ordered(notes, in: collection) : notes
+    }
+
+    private static func primaryCollection(for note: LibraryNote) -> LibraryCollection? {
+        LibraryCollection.allCases.first { includes(note, in: $0) }
+    }
+
+    private static func ordered(
+        _ notes: [LibraryNote], in collection: LibraryCollection
+    ) -> [LibraryNote] {
+        notes.sorted {
+            if collection == .dailyNotes {
+                if $0.isOverdue != $1.isOverdue { return $0.isOverdue }
+                if $0.dailyDate != $1.dailyDate {
+                    return ($0.dailyDate ?? .distantPast) > ($1.dailyDate ?? .distantPast)
+                }
+            } else if $0.updatedAt != $1.updatedAt {
+                return ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast)
+            }
+            return $0.id < $1.id
+        }
     }
 
     public var collectionGistCount: Int? {
@@ -232,7 +281,9 @@ public final class LibraryModel {
 
     public var visibleSelectedNoteID: String? {
         guard let selectedNoteID,
-              matchingNotes.contains(where: { $0.id == selectedNoteID }) else { return nil }
+              (hasFilters ? matchingNotes : snapshot.notes).contains(where: {
+                  $0.id == selectedNoteID && Self.primaryCollection(for: $0) != nil
+              }) else { return nil }
         return selectedNoteID
     }
 
