@@ -1,5 +1,23 @@
+import Foundation
+import GistPadIntelligence
+
+extension NoteSnapshot {
+  init(parsing source: String, documentID: String, sessionID: UUID, generation: UInt64) {
+    let spans = MarkdownSyntax.spans(in: source)
+    let protected = spans.filter { $0.kind == .code || $0.kind == .frontmatter }
+    let markers = spans.filter { span in
+      (span.kind == .task || span.kind == .checkedTask)
+        && !protected.contains { NSIntersectionRange($0.range, span.range).length > 0 }
+    }.map(\.range)
+    let headings = spans.filter { $0.kind == .heading }.map(\.range)
+    self.init(
+      documentID: documentID, sessionID: sessionID, generation: generation, source: source,
+      headingOffsets: headings.map(\.location),
+      tasks: NoteTask.indexed(in: source, markers: markers, headings: headings))
+  }
+}
+
 #if canImport(UIKit)
-  import GistPadIntelligence
   import UIKit
 
   extension DocumentSession {
@@ -11,20 +29,8 @@
               "Finish composition or Writing Tools before starting an intelligence action.",
             bundle: .module))
       }
-      let spans = MarkdownSyntax.spans(in: text)
-      let protected = spans.filter { $0.kind == .code || $0.kind == .frontmatter }
-      let tasks = spans.filter { span in
-        (span.kind == .task || span.kind == .checkedTask)
-          && !protected.contains {
-            NSIntersectionRange($0.range, span.range).length > 0
-          }
-      }.map(\.range)
-      let headings = spans.filter { $0.kind == .heading }.map(\.range)
       return NoteSnapshot(
-        documentID: documentID, sessionID: viewIdentity, generation: generation, source: text,
-        headingOffsets: spans.filter { $0.kind == .heading }.map {
-          $0.range.location
-        }, tasks: NoteTask.indexed(in: text, markers: tasks, headings: headings))
+        parsing: text, documentID: documentID, sessionID: viewIdentity, generation: generation)
     }
 
     @discardableResult

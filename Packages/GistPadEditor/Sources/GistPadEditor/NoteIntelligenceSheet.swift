@@ -352,7 +352,7 @@
           Spacer(minLength: 0)
         }
         Button(String(localized: "Cancel", bundle: .module), role: .cancel) {
-          if action == .review { review.cancel() } else { requestModel.cancel() }
+          if action == .review { review.clear() } else { requestModel.cancel() }
         }
           .buttonStyle(.glass)
           .controlSize(.large)

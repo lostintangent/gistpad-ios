@@ -180,17 +180,8 @@
     }
 
     private static func snapshot(_ source: String) -> NoteSnapshot {
-      let spans = MarkdownSyntax.spans(in: source)
-      let protected = spans.filter { $0.kind == .code || $0.kind == .frontmatter }
-      let markers = spans.filter { span in
-        (span.kind == .task || span.kind == .checkedTask)
-          && !protected.contains { NSIntersectionRange($0.range, span.range).length > 0 }
-      }.map(\.range)
-      let headings = spans.filter { $0.kind == .heading }.map(\.range)
-      return NoteSnapshot(
-        documentID: "local-evaluation", sessionID: UUID(), generation: 0, source: source,
-        headingOffsets: headings.map(\.location),
-        tasks: NoteTask.indexed(in: source, markers: markers, headings: headings))
+      NoteSnapshot(
+        parsing: source, documentID: "local-evaluation", sessionID: UUID(), generation: 0)
     }
 
     private static func addedTaskPasses(

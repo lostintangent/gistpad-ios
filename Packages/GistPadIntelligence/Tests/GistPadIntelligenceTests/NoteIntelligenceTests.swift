@@ -89,9 +89,9 @@ struct NoteAnchorTests {
       candidates: [change("bad", "good"), change("Second line\r\n", "")])
     let application = try proposal.application(to: snapshot)
     #expect(application.source == "👩🏽‍💻 good\r\n")
-    #expect(application.diff.filter { $0.kind == .removed }.map(\.text).joined() == snapshot.source)
-    #expect(
-      application.diff.filter { $0.kind == .added }.map(\.text).joined() == application.source)
+    let diff = NoteTextDiff(before: snapshot.source, after: application.source)
+    #expect(diff.before.map(\.text).joined().utf8.elementsEqual(snapshot.source.utf8))
+    #expect(diff.after.map(\.text).joined().utf8.elementsEqual(application.source.utf8))
     let selection = NSRange(location: snapshot.source.utf16.count, length: 0)
     #expect(
       try application.mappedSelection(selection)

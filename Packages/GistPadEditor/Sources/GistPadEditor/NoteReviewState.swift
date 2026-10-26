@@ -34,26 +34,12 @@
       hasReview = model.isRunning || model.hasResults || model.errorMessage != nil
     }
 
-    public var isRunning: Bool { isPreparing || model.isRunning }
-    public var available: Bool { model.available }
-    public var canGenerate: Bool { !isPreparing && model.canGenerate }
-    public var availabilityReason: String? { model.availabilityReason }
-    public var progress: NoteIntelligenceProgress? { model.progress }
-    public var proposal: NoteProposal? { model.proposal }
-    public var snapshot: NoteSnapshot? { model.snapshot }
+    var isRunning: Bool { isPreparing || model.isRunning }
     public var isStale: Bool { model.isStale }
-    public var canApply: Bool { hasReview && !isPreparing && model.canApply }
-    public var canDismiss: Bool { hasReview && !isRunning }
-    public var errorMessage: String? { model.errorMessage }
-    public var notice: String? { model.notice }
-    public var appliedCount: Int { model.appliedCount }
-    public var applyFeedback: Int { model.applyFeedback }
+    var canApply: Bool { hasReview && !isPreparing && model.canApply }
+    var canDismiss: Bool { hasReview && !isRunning }
 
-    public func checkAvailability() async {
-      await model.checkAvailability()
-    }
-
-    public func generate() {
+    func generate() {
       guard !isRunning else { return }
       hasReview = true
       isPreparing = true
@@ -81,12 +67,12 @@
       }
     }
 
-    public func apply(commentID: UUID) {
+    func apply(commentID: UUID) {
       model.apply(commentID: commentID)
       if model.proposal?.comments.isEmpty == true { hasReview = false }
     }
 
-    public func dismiss(commentID: UUID) {
+    func dismiss(commentID: UUID) {
       guard canDismiss, let proposal = model.proposal else {
         model.errorMessage = NoteIntelligenceError.noApplicableChanges.localizedDescription
         return
@@ -100,11 +86,7 @@
       }
     }
 
-    public func cancel() {
-      clear()
-    }
-
-    public func closePresentation() {
+    func closePresentation() {
       if hasReview, !isRunning, model.proposal?.comments.isEmpty != false { clear() }
     }
 

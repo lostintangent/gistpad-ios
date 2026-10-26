@@ -2,8 +2,10 @@ import Foundation
 import NaturalLanguage
 
 public struct NoteTextDiff: Sendable {
+  public enum Kind: Sendable { case unchanged, removed, added }
+
   public struct Run: Sendable {
-    public let kind: NoteDiffLine.Kind
+    public let kind: Kind
     public let text: String
   }
 
@@ -46,11 +48,11 @@ public struct NoteTextDiff: Sendable {
   }
 
   private static func runs(
-    _ tokens: [String], changed: Set<Int>, kind: NoteDiffLine.Kind
+    _ tokens: [String], changed: Set<Int>, kind: Kind
   ) -> [Run] {
     var result: [Run] = []
     var text = ""
-    var current = NoteDiffLine.Kind.unchanged
+    var current = Kind.unchanged
     for (offset, token) in tokens.enumerated() {
       let next = changed.contains(offset) ? kind : .unchanged
       if next != current, !text.isEmpty {

@@ -13,13 +13,13 @@
       let backend = ReviewBackend()
       let review = NoteReviewState(session: session, backend: backend, isCurrent: { true })
       let inspector = review
-      await review.checkAvailability()
-      await inspector.checkAvailability()
+      await review.model.checkAvailability()
+      await inspector.model.checkAvailability()
       #expect(inspector === review)
-      #expect(review.available)
+      #expect(review.model.available)
       #expect(!review.hasReview)
       #expect(!review.isRunning)
-      #expect(review.proposal == nil)
+      #expect(review.model.proposal == nil)
       #expect(backend.calls == 0)
       #expect(session.text == "bad and typo")
       #expect(session.generation == 4)
@@ -31,7 +31,7 @@
       let review = NoteReviewState(session: session, backend: backend, isCurrent: { true })
       review.generate()
       await review.task?.value
-      let ids = try #require(review.proposal).comments.map(\.id)
+      let ids = try #require(review.model.proposal).comments.map(\.id)
       review.closePresentation()
       let inspector = review
       let sheet = NoteIntelligenceModel(
@@ -49,7 +49,7 @@
       sheet.clearResults()
       #expect(inspector === review)
       #expect(review.hasReview)
-      #expect(review.proposal?.comments.map(\.id) == ids)
+      #expect(review.model.proposal?.comments.map(\.id) == ids)
       #expect(backend.calls == 1)
       #expect(backend.lastPass?.purpose == .review)
       #expect(backend.lastPass?.instruction.isEmpty == true)
@@ -65,10 +65,10 @@
       let review = NoteReviewState(session: session, backend: backend, isCurrent: { true })
       review.generate()
       await review.task?.value
-      let original = try #require(review.proposal)
+      let original = try #require(review.model.proposal)
       #expect(changes == 0)
       review.apply(commentID: original.comments[0].id)
-      let remaining = try #require(review.proposal)
+      let remaining = try #require(review.model.proposal)
       #expect(review.hasReview)
       #expect(!review.isStale)
       #expect(review.canApply)
@@ -76,9 +76,9 @@
       #expect(remaining.comments[0].range == (session.text as NSString).range(of: "typo"))
       review.apply(commentID: remaining.comments[0].id)
       #expect(!review.hasReview)
-      #expect(review.proposal?.comments.isEmpty == true)
-      #expect(review.appliedCount == 2)
-      #expect(review.errorMessage == nil)
+      #expect(review.model.proposal?.comments.isEmpty == true)
+      #expect(review.model.appliedCount == 2)
+      #expect(review.model.errorMessage == nil)
       #expect(backend.calls == 1)
       #expect(session.text == "much better and word")
       #expect(session.generation == 2)
@@ -94,9 +94,9 @@
       let review = NoteReviewState(session: session, backend: backend, isCurrent: { true })
       review.generate()
       await review.task?.value
-      let original = try #require(review.proposal)
+      let original = try #require(review.model.proposal)
       review.dismiss(commentID: original.comments[0].id)
-      let remaining = try #require(review.proposal)
+      let remaining = try #require(review.model.proposal)
       #expect(review.hasReview)
       #expect(remaining.snapshot == original.snapshot)
       #expect(remaining.comments.map(\.id) == [original.comments[1].id])
@@ -104,7 +104,7 @@
       #expect(remaining.comments[0].canApply)
       review.dismiss(commentID: remaining.comments[0].id)
       #expect(!review.hasReview)
-      #expect(review.errorMessage == nil)
+      #expect(review.model.errorMessage == nil)
       #expect(backend.calls == 1)
       #expect(session.text.utf8.elementsEqual(source.utf8))
       #expect(session.generation == 0)
@@ -121,12 +121,12 @@
       let review = NoteReviewState(session: session, backend: backend, isCurrent: { true })
       review.generate()
       await review.task?.value
-      let proposal = try #require(review.proposal)
+      let proposal = try #require(review.model.proposal)
       #expect(!review.canApply)
       #expect(proposal.comments.count == 2)
       for comment in proposal.comments { review.dismiss(commentID: comment.id) }
       #expect(!review.hasReview)
-      #expect(review.errorMessage == nil)
+      #expect(review.model.errorMessage == nil)
       #expect(session.generation == 0)
     }
 
@@ -136,11 +136,11 @@
         session: session, backend: ReviewBackend(), isCurrent: { true })
       review.generate()
       await review.task?.value
-      let ids = try #require(review.proposal).comments.map(\.id)
+      let ids = try #require(review.model.proposal).comments.map(\.id)
       review.dismiss(commentID: UUID())
       #expect(review.hasReview)
-      #expect(review.errorMessage?.isEmpty == false)
-      #expect(review.proposal?.comments.map(\.id) == ids)
+      #expect(review.model.errorMessage?.isEmpty == false)
+      #expect(review.model.proposal?.comments.map(\.id) == ids)
       #expect(session.generation == 0)
     }
 
@@ -159,19 +159,19 @@
       #expect(review.hasReview)
       #expect(!review.isRunning)
       if outcome == "empty" {
-        #expect(review.proposal?.comments.isEmpty == true)
-        #expect(review.errorMessage == nil)
+        #expect(review.model.proposal?.comments.isEmpty == true)
+        #expect(review.model.errorMessage == nil)
       } else if outcome == "failure" {
-        #expect(review.proposal == nil)
-        #expect(review.errorMessage?.isEmpty == false)
+        #expect(review.model.proposal == nil)
+        #expect(review.model.errorMessage?.isEmpty == false)
       } else {
-        #expect(review.availabilityReason?.isEmpty == false)
+        #expect(review.model.availabilityReason?.isEmpty == false)
         #expect(backend.calls == 0)
       }
       review.closePresentation()
       #expect(!review.hasReview)
-      #expect(review.proposal == nil)
-      #expect(review.errorMessage == nil)
+      #expect(review.model.proposal == nil)
+      #expect(review.model.errorMessage == nil)
       #expect(session.text == "bad and typo")
       #expect(session.generation == 0)
     }
@@ -186,14 +186,14 @@
         review.generate()
       }
       let pending = review.task
-      review.cancel()
+      review.clear()
       #expect(!review.hasReview)
       #expect(!review.isRunning)
       backend.resumeAvailability()
       await pending?.value
       #expect(!review.hasReview)
-      #expect(review.proposal == nil)
-      #expect(review.errorMessage == nil)
+      #expect(review.model.proposal == nil)
+      #expect(review.model.errorMessage == nil)
       #expect(backend.calls == 0)
       #expect(session.generation == 0)
     }
@@ -212,20 +212,20 @@
       review.closePresentation()
       #expect(review.hasReview)
       #expect(review.isRunning)
-      review.cancel()
+      review.clear()
       #expect(!review.hasReview)
       #expect(review.model !== oldModel)
-      #expect(review.proposal == nil)
+      #expect(review.model.proposal == nil)
       backend.suspendReplacements = false
       review.generate()
       await review.task?.value
-      let newIDs = try #require(review.proposal).comments.map(\.id)
+      let newIDs = try #require(review.model.proposal).comments.map(\.id)
       backend.resumeReplacements()
       await oldTask?.value
       #expect(review.hasReview)
-      #expect(review.proposal?.comments.map(\.id) == newIDs)
-      #expect(review.notice == nil)
-      #expect(review.errorMessage == nil)
+      #expect(review.model.proposal?.comments.map(\.id) == newIDs)
+      #expect(review.model.notice == nil)
+      #expect(review.model.errorMessage == nil)
       #expect(backend.calls == 2)
       #expect(session.text == "bad and typo")
       #expect(session.generation == 0)
@@ -237,14 +237,14 @@
         session: session, backend: ReviewBackend(), isCurrent: { true })
       review.generate()
       await review.task?.value
-      let proposal = try #require(review.proposal)
+      let proposal = try #require(review.model.proposal)
       try session.apply(
         SourceMutation(range: NSRange(location: 0, length: 3), expected: "bad", replacement: "new"),
         documentID: session.documentID, generation: 0)
       #expect(review.isStale)
       #expect(!review.canApply)
       review.apply(commentID: proposal.comments[0].id)
-      #expect(review.errorMessage?.isEmpty == false)
+      #expect(review.model.errorMessage?.isEmpty == false)
       #expect(session.text == "new and typo")
       #expect(session.generation == 1)
       for comment in proposal.comments { review.dismiss(commentID: comment.id) }
@@ -260,19 +260,19 @@
         session: session, backend: backend, isCurrent: { current })
       review.generate()
       await review.task?.value
-      let comment = try #require(review.proposal?.comments.first)
+      let comment = try #require(review.model.proposal?.comments.first)
       current = false
       #expect(review.isStale)
       #expect(!review.canApply)
       review.apply(commentID: comment.id)
-      #expect(review.errorMessage?.isEmpty == false)
+      #expect(review.model.errorMessage?.isEmpty == false)
       review.generate()
       await review.task?.value
-      #expect(review.errorMessage?.isEmpty == false)
+      #expect(review.model.errorMessage?.isEmpty == false)
       #expect(backend.calls == 1)
       review.clear()
       #expect(!review.hasReview)
-      #expect(review.proposal == nil)
+      #expect(review.model.proposal == nil)
       #expect(session.generation == 0)
     }
 
@@ -283,11 +283,11 @@
       let review = NoteReviewState(session: session, backend: backend, isCurrent: { true })
       review.generate()
       await review.task?.value
-      let proposal = try #require(review.proposal)
+      let proposal = try #require(review.model.proposal)
       #expect(review.hasReview)
       #expect(!review.canApply)
       review.apply(commentID: proposal.comments[0].id)
-      #expect(review.errorMessage?.isEmpty == false)
+      #expect(review.model.errorMessage?.isEmpty == false)
       for comment in proposal.comments { review.dismiss(commentID: comment.id) }
       #expect(!review.hasReview)
       #expect(backend.calls == 1)

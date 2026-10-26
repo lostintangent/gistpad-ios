@@ -47,12 +47,6 @@ public struct NoteProposalComment: Identifiable, Sendable {
   }
 }
 
-public struct NoteDiffLine: Sendable {
-  public enum Kind: Sendable { case unchanged, removed, added }
-  public let kind: Kind
-  public let text: String
-}
-
 public struct NoteProposal: Sendable {
   public let snapshot: NoteSnapshot
   public let comments: [NoteProposalComment]
@@ -155,14 +149,39 @@ public struct NoteProposal: Sendable {
       else { throw NoteIntelligenceError.staleSnapshot }
       source.replaceSubrange(swiftRange, with: replacement)
     }
-    if let safetyInstruction {
-      try NoteEditSafety.validate(
-        source: snapshot.source, replacement: source, instruction: safetyInstruction,
-        changes: selected)
-    }
+    try validateApplication(source, changes: selected)
     return NoteApplication(
       proposal: self, source: source,
       applied: selected.sorted { ($0.range?.location ?? 0) < ($1.range?.location ?? 0) })
+  }
+
+  private func validateApplication(_ replacement: String, changes: [NoteProposalComment]) throws {
+    let source = snapshot.source
+    guard let safetyInstruction, !source.isEmpty else { return }
+    let request = Self.normalized(safetyInstruction)
+    for change in changes {
+      if let replacement = change.replacement, !request.isEmpty,
+        Self.normalized(replacement) == request
+      {
+        throw NoteIntelligenceError.unsafeEdit
+      }
+    }
+    guard !replacement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      throw NoteIntelligenceError.unsafeEdit
+    }
+    let originalCount = source.filter { !$0.isWhitespace }.count
+    let replacementCount = replacement.filter { !$0.isWhitespace }.count
+    guard replacementCount <= min(12, originalCount / 4) else { return }
+    let retained = NoteTextDiff(before: source, after: replacement).before
+      .filter { $0.kind == .unchanged }.reduce(0) { $0 + $1.text.utf8.count }
+    if retained * 10 < source.utf8.count {
+      throw NoteIntelligenceError.unsafeEdit
+    }
+  }
+
+  private static func normalized(_ text: String) -> String {
+    text.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+      .trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines))
   }
 }
 
@@ -170,39 +189,6 @@ public struct NoteApplication: Sendable {
   public let proposal: NoteProposal
   public let source: String
   public let applied: [NoteProposalComment]
-
-  public var diff: [NoteDiffLine] {
-    let before = Self.lines(proposal.snapshot.source)
-    let after = Self.lines(source)
-    let difference = after.difference(from: before) { $0.utf8.elementsEqual($1.utf8) }
-    var removals = Set<Int>()
-    var insertions = Set<Int>()
-    for change in difference {
-      switch change {
-      case .remove(let offset, _, _): removals.insert(offset)
-      case .insert(let offset, _, _): insertions.insert(offset)
-      }
-    }
-    var old = 0
-    var new = 0
-    var result: [NoteDiffLine] = []
-    while old < before.count || new < after.count {
-      if old < before.count && removals.contains(old) {
-        result.append(NoteDiffLine(kind: .removed, text: before[old]))
-        old += 1
-      } else if new < after.count && insertions.contains(new) {
-        result.append(NoteDiffLine(kind: .added, text: after[new]))
-        new += 1
-      } else if old < before.count && new < after.count {
-        result.append(NoteDiffLine(kind: .unchanged, text: before[old]))
-        old += 1
-        new += 1
-      } else {
-        preconditionFailure("A computed source difference must consume both sequences.")
-      }
-    }
-    return result
-  }
 
   public func mappedSelection(_ selection: NSRange) throws -> NSRange {
     guard Range(selection, in: proposal.snapshot.source) != nil else {
@@ -256,18 +242,6 @@ public struct NoteApplication: Sendable {
     let composed = text.rangeOfComposedCharacterSequence(at: offset)
     guard composed.location != offset else { return offset }
     return trailing ? NSMaxRange(composed) : composed.location
-  }
-
-  private static func lines(_ source: String) -> [String] {
-    var result: [String] = []
-    var start = source.startIndex
-    for index in source.indices where source[index].isNewline {
-      let end = source.index(after: index)
-      result.append(String(source[start..<end]))
-      start = end
-    }
-    if start != source.endIndex { result.append(String(source[start...])) }
-    return result
   }
 }
 

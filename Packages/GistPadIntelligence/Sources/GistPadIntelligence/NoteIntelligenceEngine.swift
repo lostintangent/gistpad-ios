@@ -136,7 +136,13 @@ public final class NoteIntelligenceEngine {
         pending.append(contentsOf: smaller.reversed())
       }
     }
-    return try verifiedProposal(request, candidates: candidates)
+    let proposal = NoteProposal(
+      snapshot: request.snapshot, scopedCandidates: candidates,
+      safetyInstruction: request.instruction)
+    if proposal.canApply {
+      _ = try proposal.application(to: request.snapshot)
+    }
+    return proposal
   }
 
   public func ask(
@@ -218,19 +224,6 @@ public final class NoteIntelligenceEngine {
     }
     onUpdate(parts)
     return NoteAnswer(snapshot: request.snapshot, parts: parts)
-  }
-
-  private func verifiedProposal(
-    _ request: NoteIntelligenceRequest,
-    candidates: [(NoteReplacementCandidate, NSRange)]
-  ) throws -> NoteProposal {
-    let proposal = NoteProposal(
-      snapshot: request.snapshot, scopedCandidates: candidates,
-      safetyInstruction: request.instruction)
-    if proposal.canApply {
-      _ = try proposal.application(to: request.snapshot)
-    }
-    return proposal
   }
 
   private func combine(
