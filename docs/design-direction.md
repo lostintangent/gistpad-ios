@@ -58,11 +58,20 @@ Use one vertical list in compact Home and the regular sidebar, whether there is 
 
 | Card part | Treatment |
 | --- | --- |
-| Surface | Semantic content fill, 16-pt corners, about 12-14 pt internal inset. Full available content width, never glass or a fixed-height cover. In the Dark sidebar, unselected cards lift above the actual containing surface while remaining quieter than native selection; verify rendered tones, not only semantic color names |
+| Surface | Semantic content fill, 16-pt corners, about 12-14 pt internal inset. Full available content width, never glass or a fixed-height cover. Sidebar cards use the contrast-tested fills below; in Dark, unselected cards lift above the actual containing surface while remaining quieter than the selected card |
 | Content | Three content tiers at most: headline title with quiet neutral trailing pin, cached excerpt and one footer. Limit titles to 2 lines, excerpts to 1 line at standard sizes / 2 at accessibility sizes, with tail truncation and uncapped native type. Keep complete title/excerpt text accessible. No modification date; dates remain in ordinary rows |
 | Footer | Tags lead; real task progress and comment metadata trail on the same row, including when there are no tags. Never add a fourth metadata tier or wrap the footer at AX3. Show fewer complete tags plus truthful `+N` as space tightens. If no full name fits, tail-truncate the first tag with at least three visible characters before the ellipsis, or show its full name when shorter, and count the other tags; never show an orphaned number. When separate chips cannot fit, use one neutral summary chip with a flexible first name and fixed `+N` suffix. Keep all tag names accessible and native text size rather than shrinking type. Reclaim accessory gaps first, retaining at least 4 pt between progress and Comments. If the widest AX size still cannot fit the summary, omit the redundant progress ring, retaining the numeric ratio, Comments and named tag context. Omit unknown/absent metadata and an entirely empty footer |
 | Rhythm | Start at the native list content inset, with 8 pt between cards and 28 pt before ordinary rows. Untagged cards are naturally shorter; 84 pt in the three-pin concept is not a fixed height |
-| Selection/actions | Neutral native sidebar selected treatment, unchanged tag colors, one opening action and existing swipe/context/named accessibility actions. The pin is metadata, not a separate Unpin button |
+| Selection/actions | Native List selection semantics with neutral card-owned fills, unchanged tag colors, one opening action and existing swipe/context/named accessibility actions. Keep the pin in both states; no selection checkmark. The pin is metadata, not a separate Unpin button |
+
+Sidebar card fills are deliberate opaque sRGB tokens, not sampled system-color substitutes. Keep the same fills under Increased Contrast and verify at least 1.3:1 selected/unselected fill contrast in rendered pixels. This scoped exception preserves native selection identity, actions and selected traits; ordinary rows and Closed unselected cards retain their existing surfaces.
+
+| Sidebar appearance | Unselected fill | Selected fill | Increased Contrast unselected boundary |
+| --- | --- | --- | --- |
+| Light | `#F2F2F7` | `#D1D1D6` | `#8A8A8E` |
+| Dark | `#3F4448` | `#51565A` | `#959AA0` |
+
+Normal contrast adds no outline. Under Increased Contrast, unselected cards add a one-physical-pixel inset boundary; selected cards add a 1.5-pt inset primary-ink boundary. Retain 16-pt corners and unchanged layout bounds. The fill pairs measure 1.36:1 Light / 1.33:1 Dark; white label ink on the Dark selected fill measures 7.42:1. Measure actual text and necessary metadata against their card, including selected tags, rather than treating these fill calculations as whole-surface acceptance.
 
 Search/tag-filter results remain ordinary rows with a small pin and existing ordering, not another featured stack or duplicate shelf. One pin and six-plus use the same stack. Zero pins starts with ordinary rows at the normal content inset, with no reserved feature space.
 

@@ -23,7 +23,7 @@ Resolve semantic colors against the containing view's actual traits. Do not hard
 | Separators / boundaries | Semantic separator / opaque separator; required visible affordances measured at 3:1 |
 | Links | Semantic link role plus underline or another explicit non-color affordance |
 | Error / completion | System red / fixed system green, with meaning also expressed through symbols/text |
-| Library selection | Native neutral selected surface and traits, never personal tint or OS text-selection color |
+| Library selection | Native neutral selected surface and traits, except the [contrast-tested pinned-sidebar fills](design-direction.md#pinned-cards), which preserve native selection semantics. Never personal tint or OS text-selection color |
 
 Normal content text targets 4.5:1, Increased Contrast 7:1, against actual composited selected/unselected surfaces. Required nontext affordances target 3:1. Use WCAG relative luminance, not HSB brightness. System materials own their foreground adaptation; reference flat colors do not certify rendered glass.
 
