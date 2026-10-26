@@ -72,7 +72,7 @@ Heading scaling adds the exact preferred-style point growth from Large to each r
 
 Use logical margins/direction for RTL and mixed script, isolating code only where necessary. Never clip diacritics or assume one line box fits every language. At AX, collapse companions/stack metadata before shrinking content. Preserve long titles, complete tag names and distinguishable action labels.
 
-Library secondary disclosures retain their full titles and bare trailing numbers, including at AX. Align the number with the first title baseline, wrap the title and let a decorative symbol yield before shrinking type. Empty sections have no header or reserved space. See the [secondary collection contract](design-direction.md#secondary-collections).
+Library secondary disclosures retain their full titles and bare trailing numbers in full-opacity adaptive label ink, including at AX. Align the number with the first title baseline, wrap the title and let a decorative symbol yield before shrinking type. Use a 44-pt collapsed header pitch at Large without extra section gaps, growing for AX content. The 28-pt transition from the final ordinary separator to the first header's content includes normal row inset. Empty sections have no header or reserved space. See the [secondary collection contract](design-direction.md#secondary-collections).
 
 ### Shared appearance bridge
 
