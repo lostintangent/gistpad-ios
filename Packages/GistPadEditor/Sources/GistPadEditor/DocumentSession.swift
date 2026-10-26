@@ -243,10 +243,15 @@
       textView.scrollRangeToVisible(edit.selection)
     }
 
-    public func textViewDidBeginEditing(_ textView: UITextView) { isEditing = true }
+    public func textViewDidBeginEditing(_ textView: UITextView) {
+      isEditing = true
+      (textView as? AnchoredTextView)?.requestEditingCaretReveal()
+      scheduleHighlight()
+    }
 
     public func textViewDidEndEditing(_ textView: UITextView) {
       isEditing = false
+      (textView as? AnchoredTextView)?.cancelEditingCaretReveal()
       synchronizeText()
     }
 
@@ -314,6 +319,7 @@
       }
       selection = textView.selectedRange
       isComposing = textView.markedTextRange != nil
+      if isComposing { (textView as? AnchoredTextView)?.cancelEditingCaretReveal() }
       commentAnnotations.selectionDidChange()
       if !isComposing, let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
       if !isComposing { scheduleHighlight() }
@@ -356,6 +362,10 @@
       (textView as? AnchoredTextView)?.rememberReadingAnchor()
     }
 
+    public func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+      (textView as? AnchoredTextView)?.cancelEditingCaretReveal()
+    }
+
     public func setCommentHighlights(
       _ configuration: CommentHighlightConfiguration,
       onOpenCommentThreads: (@MainActor ([Int64]) -> Void)? = nil,
@@ -377,9 +387,14 @@
     public func highlight() {
       guard textView.markedTextRange == nil && !writingToolsActive else { return }
       let source = textView as? AnchoredTextView
-      let readingAnchor = source?.beginAttributeUpdate()
-      defer { source?.endAttributeUpdate(readingAnchor) }
-      let storage = textView.textStorage
+      let anchor = source?.beginAttributeUpdate()
+      defer { source?.endAttributeUpdate(anchor) }
+      let storage: NSTextStorage
+      if case .caret? = anchor {
+        storage = NSTextStorage(string: textView.text)
+      } else {
+        storage = textView.textStorage
+      }
       let bodyFont = UIFont.preferredFont(
         forTextStyle: .body, compatibleWith: textView.traitCollection)
       let boldText = textView.traitCollection.legibilityWeight == .bold
@@ -453,6 +468,9 @@
       }
       commentAnnotations.paint(in: storage)
       storage.endEditing()
+      if storage !== textView.textStorage {
+        applyChangedHighlightAttributes(storage, to: textView.textStorage)
+      }
       if undoWasEnabled { manager?.enableUndoRegistration() }
       if textView.selectedRange != selectedRange {
         textView.selectedRange = selectedRange
@@ -462,6 +480,25 @@
         .foregroundColor: UIColor(InterfaceTheme.text),
       ]
       highlightedTraits = textView.traitCollection
+    }
+
+    private func applyChangedHighlightAttributes(
+      _ styled: NSAttributedString, to storage: NSTextStorage
+    ) {
+      storage.beginEditing()
+      styled.enumerateAttributes(in: NSRange(location: 0, length: styled.length)) {
+        attributes, range, _ in
+        storage.enumerateAttributes(in: range) { current, run, _ in
+          for key in current.keys where attributes[key] == nil {
+            storage.removeAttribute(key, range: run)
+          }
+          for (key, value) in attributes {
+            if let existing = current[key] as? NSObject, existing.isEqual(value) { continue }
+            storage.addAttribute(key, value: value, range: run)
+          }
+        }
+      }
+      storage.endEditing()
     }
 
     public func updateAppearanceIfNeeded() {
@@ -487,6 +524,7 @@
         text = textView.text
         updateHiddenFrontMatter()
         generation += 1
+        (textView as? AnchoredTextView)?.requestEditingCaretReveal()
         onSourceChange?(text, generation)
       }
       if !isComposing, let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
@@ -516,12 +554,16 @@
       get { commentAccessibilityContent }
       set { commentAccessibilityContent = newValue ?? [] }
     }
-    struct ReadingAnchor {
-      let offset: Int
-      let delta: CGFloat
+    enum AttributeUpdateAnchor {
+      case reading(offset: Int, delta: CGFloat)
+      case caret
     }
 
-    var sourceInteractionActive = false
+    var sourceInteractionActive = false {
+      didSet {
+        if sourceInteractionActive { cancelEditingCaretReveal() }
+      }
+    }
     var contentStart = 0
     private var previousWidth: CGFloat = 0
     private var previousHeight: CGFloat = 0
@@ -531,6 +573,7 @@
     private var viewportInsets: UIEdgeInsets?
     private weak var viewportView: UIView?
     private var applyingViewportInsets = false
+    private var needsEditingCaretReveal = false
 
     override var selectedRange: NSRange {
       get { super.selectedRange }
@@ -575,25 +618,63 @@
       setVerticalContentOffset(-adjustedContentInset.top)
     }
 
-    func beginAttributeUpdate() -> ReadingAnchor? {
-      guard window != nil, !isFirstResponder, !sourceInteractionActive, !restoringAnchor,
-        bounds.width > 0, previousWidth > 0, abs(previousWidth - bounds.width) < 1
-      else { return nil }
-      restoringAnchor = true
-      return ReadingAnchor(offset: readingOffset, delta: anchorDelta)
+    func requestEditingCaretReveal() {
+      guard isFirstResponder, !sourceInteractionActive, markedTextRange == nil else { return }
+      needsEditingCaretReveal = true
     }
 
-    func endAttributeUpdate(_ anchor: ReadingAnchor?) {
+    func cancelEditingCaretReveal() {
+      needsEditingCaretReveal = false
+    }
+
+    func beginAttributeUpdate() -> AttributeUpdateAnchor? {
+      guard window != nil, !sourceInteractionActive, !restoringAnchor,
+        bounds.width > 0, previousWidth > 0, abs(previousWidth - bounds.width) < 1
+      else { return nil }
+      if isFirstResponder, let end = selectedTextRange?.end {
+        guard markedTextRange == nil, !isTracking, !isDragging, !isDecelerating else { return nil }
+        let caret = caretRect(for: end)
+        if needsEditingCaretReveal || bounds.inset(by: adjustedContentInset).contains(caret) {
+          restoringAnchor = true
+          return .caret
+        }
+      }
+      restoringAnchor = true
+      return .reading(offset: readingOffset, delta: anchorDelta)
+    }
+
+    func endAttributeUpdate(_ anchor: AttributeUpdateAnchor?) {
       guard let anchor else { return }
-      // Attribute invalidation can replace exact offscreen geometry with TextKit estimates.
-      if let manager = textLayoutManager, let range = manager.textContentManager?.documentRange {
-        manager.ensureLayout(for: range)
+      defer { restoringAnchor = false }
+      if case .caret = anchor {
+        guard isFirstResponder, !sourceInteractionActive, markedTextRange == nil,
+          !isTracking, !isDragging, !isDecelerating
+        else { return }
       }
-      super.layoutSubviews()
-      if let position = position(from: beginningOfDocument, offset: anchor.offset) {
-        setVerticalContentOffset(caretRect(for: position).minY - anchor.delta)
+      if let manager = textLayoutManager, let content = manager.textContentManager {
+        switch anchor {
+        case .reading:
+          // Attribute invalidation can replace exact offscreen geometry with TextKit estimates.
+          manager.ensureLayout(for: content.documentRange)
+        case .caret:
+          if let location = content.location(
+            content.documentRange.location, offsetBy: NSMaxRange(selectedRange))
+          {
+            manager.ensureLayout(for: NSTextRange(location: location))
+          }
+        }
       }
-      restoringAnchor = false
+      switch anchor {
+      case .reading(let offset, let delta):
+        super.layoutSubviews()
+        if let position = position(from: beginningOfDocument, offset: offset) {
+          setVerticalContentOffset(caretRect(for: position).minY - delta)
+        }
+      case .caret:
+        super.layoutSubviews()
+        revealCaret(ensuringLayout: false)
+        needsEditingCaretReveal = false
+      }
     }
 
     func updateViewportInsets(_ insets: UIEdgeInsets) {
@@ -669,6 +750,7 @@
     }
 
     func revealPassage(_ range: NSRange) -> Bool {
+      cancelEditingCaretReveal()
       guard let start = position(from: beginningOfDocument, offset: range.location),
         let end = position(from: start, offset: range.length),
         let passage = textRange(from: start, to: end)
@@ -687,9 +769,11 @@
       return true
     }
 
-    private func revealCaret() {
+    private func revealCaret(ensuringLayout: Bool = true) {
       guard let position = selectedTextRange?.end else { return }
-      if let manager = textLayoutManager, let range = manager.textContentManager?.documentRange {
+      if ensuringLayout, let manager = textLayoutManager,
+        let range = manager.textContentManager?.documentRange
+      {
         manager.ensureLayout(for: range)
       }
       let caret = caretRect(for: position).insetBy(dx: 0, dy: -8)
@@ -791,7 +875,9 @@
           setVerticalContentOffset(y)
         }
       }
-      if widthChanged || heightChanged, isFirstResponder, markedTextRange == nil {
+      if widthChanged || heightChanged,
+        isFirstResponder, markedTextRange == nil, !isTracking, !isDragging, !isDecelerating
+      {
         revealCaret()
       }
       previousWidth = bounds.width
