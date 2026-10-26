@@ -396,7 +396,7 @@ private final class InsetAwareWebView: WKWebView {
         applyingInsets = true
         defer { applyingInsets = false }
         let previous = scrollView.adjustedContentInset
-        let atTop = abs(scrollView.contentOffset.y + previous.top) <= 1
+        let readingOffset = scrollView.contentOffset.y + previous.top
         let automaticTop = previous.top - scrollView.contentInset.top
         let automaticBottom = previous.bottom - scrollView.contentInset.bottom
         let viewport = convert(viewportView.bounds, from: viewportView)
@@ -405,9 +405,12 @@ private final class InsetAwareWebView: WKWebView {
         contentInsets.bottom = max(0, bounds.maxY - viewport.maxY - automaticBottom)
         if contentInsets != scrollView.contentInset {
             scrollView.contentInset = contentInsets
-            if atTop, !scrollView.isTracking, !scrollView.isDecelerating {
+            if !scrollView.isTracking, !scrollView.isDecelerating {
+                let insets = scrollView.adjustedContentInset
+                let minimum = -insets.top
+                let maximum = max(minimum, scrollView.contentSize.height - scrollView.bounds.height + insets.bottom)
                 scrollView.setContentOffset(
-                    CGPoint(x: scrollView.contentOffset.x, y: -scrollView.adjustedContentInset.top),
+                    CGPoint(x: scrollView.contentOffset.x, y: min(maximum, max(minimum, readingOffset - insets.top))),
                     animated: false
                 )
             }

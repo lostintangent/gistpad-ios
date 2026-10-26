@@ -11,6 +11,136 @@ import GistPadComments
 @MainActor
 @Suite("Offline WebKit renderer", .serialized)
 struct PreviewWebKitTests {
+    @Test("Scrolled reading keeps its distance from a changing native viewport")
+    func scrolledViewportInsets() async throws {
+        let markdown = "# A reading note\n\n"
+            + String(repeating: "A paragraph with enough room to read and scroll.\n\n", count: 100)
+        var events: [PreviewEvent] = []
+        func preview(top: CGFloat) -> some View {
+            MarkdownPreviewView(document: markdown, documentID: "inset-reading", generation: 0) {
+                events.append($0)
+            }
+            .safeAreaInset(edge: .top, spacing: 0) { Color.clear.frame(height: top) }
+        }
+        let controller = UIHostingController(rootView: preview(top: 0))
+        let window = testWindow(frame: CGRect(x: 0, y: 0, width: 951, height: 669))
+        window.rootViewController = UINavigationController(rootViewController: controller)
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        try await waitFor("native inset reading document") {
+            events.contains {
+                if case .rendered(documentID: "inset-reading", generation: 0) = $0 { return true }
+                return false
+            }
+        }
+        let webView = try #require(findWebView(in: controller.view))
+        webView.scrollView.setContentOffset(CGPoint(x: 0, y: 1_000), animated: false)
+        _ = try await viewportGeometry(in: webView, selector: "h1")
+        let originalInset = webView.scrollView.adjustedContentInset.top
+        let originalReadingOffset = webView.scrollView.contentOffset.y + originalInset
+        for _ in 0..<3 {
+            for top: CGFloat in [78, 0] {
+                controller.rootView = preview(top: top)
+                try await waitFor("the changed native reading inset") {
+                    abs(webView.scrollView.adjustedContentInset.top - originalInset - top) <= 1
+                }
+                _ = try await viewportGeometry(in: webView, selector: "h1")
+                #expect(findWebView(in: controller.view) === webView)
+                let readingOffset = webView.scrollView.contentOffset.y + webView.scrollView.adjustedContentInset.top
+                #expect(abs(readingOffset - originalReadingOffset) <= 1)
+            }
+        }
+    }
+
+    @Test("The same reading character survives native width changes", arguments: [false, true])
+    func readingCharacterAfterResize(animationsDisabled: Bool) async throws {
+        let paragraph = "Keep the useful things close and give each thought enough room to breathe. "
+            + "A walk can change the shape of a question before an answer arrives. "
+            + "Bring the notebook, notice the small details, and leave a little space for the next person to think. "
+        let markdown = "# A long reading note\n\n" + (1...18).map { section in
+            "## Section \(section)\n\n"
+                + Array(repeating: paragraph, count: 5).joined(separator: "\n\n")
+        }.joined(separator: "\n\n")
+        var events: [PreviewEvent] = []
+        let preview = MarkdownPreviewView(document: markdown, documentID: "reading-resize", generation: 0) {
+            events.append($0)
+        }
+        let controller = UIHostingController(rootView: preview)
+        let container = UIViewController()
+        container.addChild(controller)
+        container.view.addSubview(controller.view)
+        controller.view.translatesAutoresizingMaskIntoConstraints = false
+        let width = controller.view.widthAnchor.constraint(equalToConstant: 840)
+        NSLayoutConstraint.activate([
+            controller.view.leadingAnchor.constraint(equalTo: container.view.leadingAnchor),
+            controller.view.topAnchor.constraint(equalTo: container.view.topAnchor),
+            width, controller.view.heightAnchor.constraint(equalToConstant: 500)
+        ])
+        controller.didMove(toParent: container)
+        let window = testWindow(frame: CGRect(x: 0, y: 0, width: 951, height: 669))
+        window.rootViewController = container
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        try await waitFor("long native reading document") {
+            events.contains {
+                if case .rendered(documentID: "reading-resize", generation: 0) = $0 { return true }
+                return false
+            }
+        }
+        let webView = try #require(findWebView(in: controller.view))
+        webView.scrollView.setContentOffset(CGPoint(x: 0, y: 2_500), animated: false)
+        _ = try await webView.callAsyncJavaScript(
+            """
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            if (scrollY < 2000) throw Error('The native long note is not scrolled');
+            const top = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop);
+            const x = document.querySelector('article').getBoundingClientRect().left + 8;
+            const position = document.caretPositionFromPoint?.(x, top + 1);
+            const range = position ? document.createRange() : document.caretRangeFromPoint(x, top + 1);
+            if (position) range.setStart(position.offsetNode, position.offset);
+            if (range.startContainer.nodeType !== Node.TEXT_NODE) throw Error('No native reading character');
+            const offset = Math.min(range.startOffset, range.startContainer.textContent.length - 1);
+            range.setStart(range.startContainer, offset);
+            range.setEnd(range.startContainer, offset + 1);
+            window.readingCharacter = range;
+            window.readingCharacterTop = range.getBoundingClientRect().top - top;
+            """,
+            arguments: [:], in: nil, contentWorld: .page)
+        var displacements: [Double] = []
+        for _ in 0..<3 {
+            for destination: CGFloat in [520, 840] {
+                var completed = false
+                UIView.animate(withDuration: animationsDisabled ? 0 : 0.35) {
+                    width.constant = destination
+                    container.view.layoutIfNeeded()
+                } completion: { _ in completed = true }
+                try await waitFor("native reading width change") { completed }
+                let displacement = try #require(try await webView.callAsyncJavaScript(
+                    """
+                    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                    const top = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop);
+                    return window.readingCharacter.getBoundingClientRect().top - top - window.readingCharacterTop;
+                    """,
+                    arguments: [:], in: nil, contentWorld: .page) as? Double)
+                displacements.append(displacement)
+                #expect(abs(displacement) <= 1)
+            }
+        }
+        Attachment.record(
+            displacements.map { String(format: "%.3f", $0) }.joined(separator: ","),
+            named: "native-reading-character-displacements.txt")
+        #expect(!events.contains {
+            if case .failure = $0 { return true }
+            return false
+        })
+    }
+
     @Test("The native preview keeps tasks read-only while scrolling under native bars")
     func nativeReadOnlyHost() async throws {
         var events: [PreviewEvent] = []

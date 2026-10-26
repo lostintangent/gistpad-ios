@@ -2,6 +2,55 @@ import XCTest
 
 @MainActor
 final class CommentsInspectorUITests: XCTestCase {
+  func testOpenCommentsKeepsLongPreviewReadingPosition() throws {
+    try checkPreviewReadingPosition(
+      scenario: "long-reading", passages: ["Reading section 5", "Reading section 6"])
+  }
+
+  func testOpenCommentsKeepsAX3PreviewReadingPosition() throws {
+    try checkPreviewReadingPosition(
+      scenario: "reading-list", passages: ["Reading idea 12:", "Reading idea 14:"],
+      accessibility: true)
+  }
+
+  private func checkPreviewReadingPosition(
+    scenario: String, passages: [String], accessibility: Bool = false
+  ) throws {
+    let app = launch(scenario: scenario, accessibility: accessibility)
+    defer { app.terminate() }
+    XCTAssertEqual(app.windows.firstMatch.frame.width, 951, accuracy: 1)
+    let row = app.descendants(matching: .any)["library-note-ideas"].firstMatch
+    try wait("the reading note") { row.isHittable }
+    row.tap()
+    try wait("the reading Preview") { app.webViews.firstMatch.exists }
+    app.buttons["Hide Sidebar"].tap()
+    try wait("the complete collapsed reading canvas") {
+      !row.isHittable && app.buttons["Show Sidebar"].isHittable
+        && abs(app.webViews.firstMatch.frame.minX - app.windows.firstMatch.frame.minX) <= 1
+    }
+    for (index, prefix) in passages.enumerated() {
+      let passage = try revealPreviewPassage(prefix, in: app, maximumScrolls: 24)
+      try alignReadingPassage(passage, in: app)
+      let originalY = passage.frame.minY
+      record(app, name: "comments-reading-\(scenario)-\(index)-before")
+      app.buttons["note-comments"].tap()
+      try wait("Comments beside the reading Preview") { app.buttons["comments-close"].isHittable }
+      try waitForSettledFrame(app.webViews.firstMatch)
+      let openedY = passage.frame.minY
+      record(app, name: "comments-reading-\(scenario)-\(index)-opened")
+      app.buttons["comments-close"].tap()
+      try wait("Comments to close without restoring the Library") {
+        !app.otherElements["comments-inspector"].firstMatch.exists
+          && app.buttons["Show Sidebar"].isHittable && !row.isHittable
+      }
+      try waitForSettledFrame(app.webViews.firstMatch)
+      record(app, name: "comments-reading-\(scenario)-\(index)-closed")
+      XCTAssertEqual(openedY, originalY, accuracy: 2, "Opening Comments moved the reading passage.")
+      XCTAssertEqual(passage.frame.minY, originalY, accuracy: 2, "Closing Comments moved the reading passage.")
+      XCTAssertTrue(app.segmentedControls["note-toggle-mode"].buttons["Preview"].isSelected)
+    }
+  }
+
   func testClosedCommentsAtLargeAndAX3InBothAppearances() throws {
     try checkAppearances(wide: false)
   }
@@ -749,7 +798,9 @@ final class CommentsInspectorUITests: XCTestCase {
     return navigation.frame.maxY
   }
 
-  private func revealPreviewPassage(_ prefix: String, in app: XCUIApplication) throws -> XCUIElement {
+  private func revealPreviewPassage(
+    _ prefix: String, in app: XCUIApplication, maximumScrolls: Int = 12
+  ) throws -> XCUIElement {
     let webView = app.webViews.firstMatch
     let passage = webView.descendants(matching: .any).matching(
       NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
@@ -761,11 +812,12 @@ final class CommentsInspectorUITests: XCTestCase {
         ? inspector.frame.minY - 8 : webView.frame.maxY - 44
       return (top, bottom)
     }
-    for _ in 0..<12 {
+    for scroll in 0...maximumScrolls {
       let (top, bottom) = visibleBounds()
       if passage.exists, passage.isHittable,
         passage.frame.minX >= webView.frame.minX, passage.frame.maxX <= webView.frame.maxX,
         passage.frame.minY >= top, passage.frame.maxY <= bottom { return passage }
+      guard scroll < maximumScrolls else { break }
       let center = (top + bottom) / 2
       let step = (bottom - top) * 0.35
       let distance = passage.exists
@@ -779,6 +831,36 @@ final class CommentsInspectorUITests: XCTestCase {
     record(app, name: "comments-unreachable-preview-passage")
     XCTFail("The Preview passage was not reachable clear of native navigation and the inspector.")
     throw CommentsTestError.timedOut
+  }
+
+  private func alignReadingPassage(_ passage: XCUIElement, in app: XCUIApplication) throws {
+    let webView = app.webViews.firstMatch
+    let top = app.navigationBars["A place for good ideas"].frame.maxY
+    let firstLine = top...(top + 16)
+    for _ in 0..<4 {
+      let original = passage.frame.minY
+      if firstLine.contains(original) { return }
+      let start = webView.coordinate(withNormalizedOffset: .init(dx: 0.5, dy: 0.5))
+      start.press(
+        forDuration: 0.05, thenDragTo: start.withOffset(.init(dx: 0, dy: top + 2 - original)),
+        withVelocity: .slow, thenHoldForDuration: 0.3)
+    }
+    XCTAssertTrue(firstLine.contains(passage.frame.minY))
+  }
+
+  private func waitForSettledFrame(_ element: XCUIElement) throws {
+    var previous = CGRect.null
+    var stableSince = Date()
+    try wait("the settled reading frame") {
+      guard element.exists else { return false }
+      let frame = element.frame
+      guard frame == previous else {
+        previous = frame
+        stableSince = .now
+        return false
+      }
+      return !frame.isEmpty && Date().timeIntervalSince(stableSince) >= 0.5
+    }
   }
 
   private func reveal(
