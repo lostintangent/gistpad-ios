@@ -190,9 +190,9 @@ public final class LibraryModel {
     }
 
     var secondaryCollections: [LibraryCollection] {
-        guard hasKnownGistSnapshot else { return [] }
-        return [.dailyNotes, .starred, .archive].filter { collection in
-            snapshot.notes.contains { Self.includes($0, in: collection) }
+        [.dailyNotes, .starred, .archive].filter { collection in
+            (hasKnownGistSnapshot || collection == .dailyNotes)
+                && snapshot.notes.contains { Self.includes($0, in: collection) }
         }
     }
 

@@ -7,7 +7,7 @@ import UIKit
 
 @Suite(.serialized)
 @MainActor
-struct TodayFeatureHostTests {
+struct TodayRailHostTests {
   @Test(arguments: [false, true], [false, true])
   func taskStatusInkIsIndependentOfAccentAndMeetsContrast(dark: Bool, increased: Bool) throws {
     func traits(accent: String) -> UITraitCollection {
@@ -35,7 +35,7 @@ struct TodayFeatureHostTests {
 
   @Test(arguments: [CGFloat(248), 355, 600],
     [UIContentSizeCategory.large, .accessibilityExtraLarge])
-  func usefulTodayContentFitsItsActualMeasureAndKeepsHonestTaskState(
+  func todayRemainsOneNativeActionAcrossUnknownZeroAndLargeCounts(
     cardWidth: CGFloat, category: UIContentSizeCategory
   ) async throws {
     let scene = try #require(
@@ -49,20 +49,20 @@ struct TodayFeatureHostTests {
       summary(progress: .init(completed: 0, total: 0)),
       summary(progress: .init(completed: 1, total: 3)),
       summary(progress: .init(completed: 1, total: 1)),
+      summary(progress: .init(completed: 0, total: 104)),
       .init(date: InterfaceFixtures.referenceDate, availability: .missing),
     ]
-    var measured: CGSize?
+    var activations = 0
     func content(_ index: Int) -> some View {
-      VStack {
-        TodayFeature(summary: summaries[index])
-          .frame(width: cardWidth)
-          .fixedSize(horizontal: false, vertical: true)
-          .onGeometryChange(for: CGSize.self) { $0.size } action: { measured = $0 }
-          .id(index)
-        Spacer(minLength: 0)
+      NavigationStack {
+        Color(uiColor: .systemBackground)
+          .navigationTitle("GistPad")
+          .libraryRail(
+            isVisible: true, today: summaries[index], isTodaySelected: true,
+            create: {}, openToday: { activations += 1 })
       }
+      .frame(width: cardWidth)
       .personalAccent(savedHex: "#FACC15")
-      .padding(.top, 16)
     }
     let host = UIHostingController(rootView: content(0))
     window.rootViewController = host
@@ -72,40 +72,37 @@ struct TodayFeatureHostTests {
       previous?.makeKeyAndVisible()
     }
     for index in summaries.indices {
-      measured = nil
       host.rootView = content(index)
       try await Task.sleep(for: .milliseconds(350))
       window.layoutIfNeeded()
-      let size = try #require(measured)
-      #expect(abs(size.width - cardWidth) <= 0.5)
-      #expect(size.height >= 44)
-      #expect(size.height < window.bounds.height)
-      if cardWidth >= 355, category == .large {
-        #expect(size.height < 190, "Content belongs beside the date, not in another full-width row.")
-        let date = try #require(frame("today-date-tile", in: window))
-        let title = try #require(frame("today-title", in: window))
-        #expect(title.minX >= date.maxX + 15)
-        #expect(abs(title.minY - date.minY) <= 1)
-        if summaries[index].availability == .existing {
-          let excerpt = try #require(frame("today-excerpt", in: window))
-          #expect(excerpt.minX >= date.maxX + 15)
-          #expect(excerpt.minY >= title.maxY)
-        }
-        if let progress = summaries[index].progress, progress.total > 0 {
-          let tasks = try #require(frame("today-tasks", in: window))
-          #expect(tasks.minX >= title.maxX + 7)
-          #expect(!tasks.intersects(title))
-        } else {
-          #expect(frame("today-tasks", in: window) == nil)
-        }
-      } else {
-        #expect(frame("today-compact-heading", in: window) != nil)
+      let controls = descendants(window).compactMap { $0 as? UIControl }.filter {
+        $0.accessibilityIdentifier == "library-today" && !$0.isHidden && $0.alpha > 0
       }
+      #expect(controls.count == 1)
+      let control = try #require(controls.first)
+      let target = control.convert(control.bounds, to: window)
+      #expect(window.bounds.contains(target))
+      let hitRegion = CGRect(
+        x: target.midX - 22, y: target.midY - 22, width: 44, height: 44)
+      for point in [
+        CGPoint(x: hitRegion.minX + 1, y: hitRegion.midY),
+        CGPoint(x: hitRegion.maxX - 1, y: hitRegion.midY),
+        CGPoint(x: hitRegion.midX, y: hitRegion.minY + 1),
+        CGPoint(x: hitRegion.midX, y: hitRegion.maxY - 1)
+      ] {
+        let hit = try #require(window.hitTest(point, with: nil))
+        #expect(hit === control || hit.isDescendant(of: control))
+      }
+      if let count = summaries[index].unfinishedTaskCount, count > 0 {
+        #expect(control.accessibilityValue?.contains(count.formatted()) == true)
+      }
+      control.performPrimaryAction()
+      #expect(activations == index + 1)
       let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
         window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
       }
       Attachment.record(
-        image, named: "today-\(Int(cardWidth))-\(category.rawValue)-state-\(index).png", as: .png)
+        image, named: "today-rail-\(Int(cardWidth))-\(category.rawValue)-state-\(index).png", as: .png)
     }
   }
 
@@ -115,15 +112,7 @@ struct TodayFeatureHostTests {
       excerpt: "Keep the next good thought. Leave room for a small adventure.")
   }
 
-  private func frame(_ identifier: String, in window: UIWindow) -> CGRect? {
-    func descendants(_ view: UIView) -> [UIView] {
-      [view] + view.subviews.flatMap(descendants)
-    }
-    guard let view = descendants(window).first(where: {
-      $0.accessibilityIdentifier == "capture-frame-\(identifier)"
-        && !$0.isHidden && $0.alpha > 0 && !$0.bounds.isEmpty
-        && $0.convert($0.bounds, to: window).intersects(window.bounds)
-    }) else { return nil }
-    return view.convert(view.bounds, to: window)
+  private func descendants(_ view: UIView) -> [UIView] {
+    [view] + view.subviews.flatMap(descendants)
   }
 }

@@ -252,6 +252,7 @@ public struct LibraryView: View {
     @State private var retainedCollections: Set<LibraryCollection> = []
     @State private var collapsedSearchCollections: Set<LibraryCollection> = []
     @State private var selectedCollection: LibraryCollection = .gists
+    @State private var deletionSelection: Selection?
     @State private var showingTags = false
     @State private var tagQuery = ""
     @State private var isPullRefreshing = false
@@ -324,6 +325,9 @@ public struct LibraryView: View {
         }
         .onChange(of: model.query) { resetSearchDisclosures() }
         .onChange(of: model.selectedTagIDs) { resetSearchDisclosures() }
+        .onChange(of: actions.deletionConfirmation?.rowID) { _, rowID in
+            if rowID == nil { deletionSelection = nil }
+        }
         .onDisappear { retainedCollections.removeAll() }
     }
 
@@ -402,8 +406,13 @@ public struct LibraryView: View {
                     .listSectionMargins(.vertical, 0)
                     .listSectionMargins(.top, pinnedCards.isEmpty && !model.hasFilters ? 8 : 0)
                 }
-                ForEach(displayedCollections) { collection in
-                    collectionSection(collection)
+                if !displayedCollections.isEmpty {
+                    Section {
+                        ForEach(displayedCollections) { collectionDisclosure($0) }
+                    }
+                    .listSectionMargins(.vertical, 0)
+                    .listSectionMargins(.top, 28)
+                    .listSectionSeparator(.hidden)
                 }
                 if !hasVisibleNotes && model.loadState != .loading && canShowEmptyState {
                     emptyState
@@ -436,13 +445,8 @@ public struct LibraryView: View {
     private var librarySelection: Binding<Selection?> {
         Binding(
             get: {
-                guard isSidebar, let id = model.visibleSelectedNoteID else { return nil }
-                let candidates = [selectedCollection] + LibraryCollection.allCases.filter {
-                    $0 != selectedCollection
-                }
-                return candidates.first { isVisible(id, in: $0) }.map {
-                    Selection(collection: $0, noteID: id)
-                }
+                guard isSidebar, let id = model.selectedNoteID else { return nil }
+                return visibleSelection(for: id)
             },
             set: { selection in
                 // Losing a visible row is not leaving the open document.
@@ -455,6 +459,15 @@ public struct LibraryView: View {
                 }
             }
         )
+    }
+
+    private func visibleSelection(for id: String) -> Selection? {
+        let candidates = [selectedCollection] + LibraryCollection.allCases.filter {
+            $0 != selectedCollection
+        }
+        return candidates.first { isVisible(id, in: $0) }.map {
+            Selection(collection: $0, noteID: id)
+        }
     }
 
     private func isVisible(_ id: String, in collection: LibraryCollection) -> Bool {
@@ -507,28 +520,23 @@ public struct LibraryView: View {
         retainedCollections.formIntersection(collections.wrappedValue)
     }
 
-    private func collectionSection(_ collection: LibraryCollection) -> some View {
-        Section {
-            DisclosureGroup(isExpanded: expansion(for: collection)) {
-                let notes = model.matchingNotes(in: collection)
-                if notes.isEmpty {
-                    Text("No notes to show", bundle: .module)
-                        .foregroundStyle(.secondary)
-                        .frame(minHeight: 44)
-                        .accessibilityIdentifier("library-empty-\(collection.rawValue)")
-                } else {
-                    ForEach(notes) { noteRow($0, collection: collection) }
-                }
-            } label: {
-                collectionLabel(collection)
+    private func collectionDisclosure(_ collection: LibraryCollection) -> some View {
+        DisclosureGroup(isExpanded: expansion(for: collection)) {
+            let notes = model.matchingNotes(in: collection)
+            if notes.isEmpty {
+                Text("No notes to show", bundle: .module)
+                    .foregroundStyle(.secondary)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("library-empty-\(collection.rawValue)")
+            } else {
+                ForEach(notes) { noteRow($0, collection: collection) }
             }
-            .accessibilityIdentifier("library-collection-\(collection.rawValue)")
-            .listRowBackground(isSidebar ? nil : Color.clear)
-            .listRowSeparator(.hidden)
+        } label: {
+            collectionLabel(collection)
         }
-        .listSectionMargins(.vertical, 0)
-        .listSectionMargins(.top, 28)
-        .listSectionSeparator(.hidden)
+        .accessibilityIdentifier("library-collection-\(collection.rawValue)")
+        .listRowBackground(isSidebar ? nil : Color.clear)
+        .listRowSeparator(.hidden)
     }
 
     private func collectionLabel(_ collection: LibraryCollection) -> some View {
@@ -744,11 +752,24 @@ public struct LibraryView: View {
     private func noteRow(
         _ note: LibraryNote, collection: LibraryCollection = .gists, isCard: Bool = false
     ) -> some View {
-        NavigationLink(value: Selection(collection: collection, noteID: note.id)) {
+        let selection = Selection(collection: collection, noteID: note.id)
+        let openComments: ((String) -> Void)? = actions.openComments.map { action in
+            { id in
+                selectedCollection = collection
+                action(id)
+            }
+        }
+        let delete: (() -> Void)? = actions.deletionAction(for: note).map { action in
+            {
+                deletionSelection = selection
+                action()
+            }
+        }
+        return NavigationLink(value: selection) {
             if isCard {
                 LibraryPinnedCard(
                     note: note, tags: model.tags(for: note),
-                    isSelected: isSidebar && model.visibleSelectedNoteID == note.id)
+                    isSelected: librarySelection.wrappedValue == selection)
             } else {
                 LibraryNoteRow(
                     note: note, tags: model.tags(for: note),
@@ -760,15 +781,17 @@ public struct LibraryView: View {
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
         .listRowInsets(EdgeInsets(
-            top: isCard ? 4 : 0, leading: 12, bottom: isCard ? 4 : 0, trailing: 12))
+            top: isCard ? 4 : 0, leading: isCard ? 0 : 12,
+            bottom: isCard ? 4 : 0, trailing: isCard ? 0 : 12))
         .listRowSeparator(isCard ? .hidden : .visible)
         .listRowSeparatorTint(Color(uiColor: .separator))
         .listRowBackground(isSidebar ? nil : Color.clear)
-        .contextMenu { rowActions(note) }
-        .modifier(LibraryCommentsAccessibilityAction(note: note, action: actions.openComments))
-        .modifier(LibraryRowDeletionConfirmation(rowID: note.id, target: actions.deletionConfirmation))
+        .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
+        .modifier(LibraryCommentsAccessibilityAction(note: note, action: openComments))
+        .modifier(LibraryRowDeletionConfirmation(
+            rowID: note.id, target: deletionConfirmation(for: selection)))
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if let delete = actions.deletionAction(for: note) {
+            if let delete {
                 // The confirmation owns the destructive role, not this pending swipe.
                 Button(String(localized: "Delete", bundle: .module), systemImage: "trash", action: delete)
                     .tint(.red)
@@ -800,9 +823,18 @@ public struct LibraryView: View {
         }
     }
 
+    private func deletionConfirmation(for selection: Selection) -> LibraryDeletionConfirmation? {
+        guard let target = actions.deletionConfirmation else { return nil }
+        let source = deletionSelection.flatMap { $0.noteID == target.rowID ? $0 : nil }
+            ?? visibleSelection(for: target.rowID)
+        return source == selection ? target : nil
+    }
+
     @ViewBuilder
-    private func rowActions(_ note: LibraryNote) -> some View {
-        if note.supportsComments, let openComments = actions.openComments {
+    private func rowActions(
+        _ note: LibraryNote, openComments: ((String) -> Void)?, delete: (() -> Void)?
+    ) -> some View {
+        if note.supportsComments, let openComments {
             Button(
                 String(localized: "Open Comments", bundle: .module), systemImage: "text.bubble"
             ) { openComments(note.id) }
@@ -819,7 +851,7 @@ public struct LibraryView: View {
                 systemImage: "archivebox"
             ) { archive(note.id) }
         }
-        if let delete = actions.deletionAction(for: note) {
+        if let delete {
             Divider()
             Button(
                 String(localized: "Delete", bundle: .module), systemImage: "trash",

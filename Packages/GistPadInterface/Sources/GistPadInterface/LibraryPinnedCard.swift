@@ -46,7 +46,7 @@ struct LibraryPinnedCard: View {
         .captureFrame("note-content-\(note.id)")
         .padding(14)
         .background(
-            isSelected ? Color.clear : Color(uiColor: .secondarySystemBackground),
+            isSelected ? Color.clear : Color(uiColor: .secondarySystemGroupedBackground),
             in: .rect(cornerRadius: 16))
         .accessibilityElement(children: .combine)
         .accessibilityValue(Text(verbatim: note.accessibilityDetail))

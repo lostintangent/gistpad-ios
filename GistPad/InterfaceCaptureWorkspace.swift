@@ -32,7 +32,10 @@ struct InterfaceCaptureWorkspace: View {
         documentID: "capture-ideas",
         text: "# Small observations\n\nA notebook can be both quiet and precise.\n\n- [ ] Follow the useful detail\n"
     )
+    @State private var todaySession: DocumentSession
     @State private var library: LibraryModel
+    @State private var expandedCollections: Set<LibraryCollection>
+    @State private var deletionConfirmation: LibraryDeletionConfirmation?
     @State private var compactColumn: NavigationSplitViewColumn
     @State private var selectedFileID = "README.md"
     @State private var modes: [String: NoteMode] = [:]
@@ -90,7 +93,8 @@ struct InterfaceCaptureWorkspace: View {
             "daily", "daily-progress", "starred", "archive", "notes", "featured", "header-file",
             "mode-long", "mode-emoji", "today-done", "today-no-tasks",
             "status-busy", "status-error", "status-details", "status-limited", "tag-filters", "row-anatomy",
-            "collection-loading"
+            "collection-loading", "no-pins", "three-pins", "today-0", "today-3", "today-99plus",
+            "collections-expanded", "collection-search", "collection-overlap", "long-library"
         ].contains(state) || (LaunchArguments.captureMangaFixture && screen == "note"
             && ["markers", "rules", "bullets"].contains(state))
         _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
@@ -100,6 +104,22 @@ struct InterfaceCaptureWorkspace: View {
             _modes = State(initialValue: ["README.md": .source])
         }
         var snapshot = state == "empty" ? LibrarySnapshot(notes: []) : InterfaceFixtures.library
+        var todayProgress: LibraryTaskProgress? = state == "empty" ? nil : .init(completed: 0, total: 3)
+        switch state {
+        case "today-done", "today-0", "daily-progress":
+            todayProgress = .init(completed: 1, total: 1)
+        case "today-no-tasks":
+            todayProgress = .init(completed: 0, total: 0)
+        case "today-99plus":
+            todayProgress = .init(completed: 0, total: 104)
+        default: break
+        }
+        let tasks = (0..<(todayProgress?.total ?? 0)).map { index in
+            "- [\(index < (todayProgress?.completed ?? 0) ? "x" : " ")] A useful next step \(index + 1)"
+        }
+        _todaySession = State(initialValue: DocumentSession(
+            documentID: "capture-today",
+            text: "# Today\n\nKeep the thought, not the interface.\n\n\(tasks.joined(separator: "\n"))\n"))
         if state != "empty" {
             snapshot.notes.insert(
                 .init(
@@ -112,6 +132,8 @@ struct InterfaceCaptureWorkspace: View {
             if let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
                 snapshot.notes[index].fileCount = 2
                 snapshot.notes[index].excerpt = "A quiet place to think, with a precise engine beneath the page."
+                snapshot.notes[index].progress = .init(completed: 2, total: 5)
+                snapshot.notes[index].commentCount = 3
             }
             if let index = snapshot.notes.firstIndex(where: { $0.id == "weekend" }) {
                 snapshot.notes[index].excerpt = "Leave a little room for an unplanned afternoon."
@@ -120,6 +142,44 @@ struct InterfaceCaptureWorkspace: View {
             if let index = snapshot.notes.firstIndex(where: { $0.id == "words" }) {
                 snapshot.notes[index].excerpt = "A few sentences to return to when a thought needs a starting point."
                 snapshot.notes[index].fileCount = 3
+            }
+            snapshot.notes.removeAll(where: \.isDailyNote)
+            snapshot.notes += [
+                .init(
+                    id: "daily-overdue", title: "2026-10-23",
+                    updatedAt: InterfaceFixtures.referenceDate, gistID: "daily",
+                    isDailyNote: true, filename: "2026-10-23.md", fileCount: 2,
+                    excerpt: "Set up the iPhone Duo. Keep the useful thoughts close.",
+                    progress: .init(completed: 3, total: 4), isOverdue: true,
+                    dailyDate: DailyNotesIndex.parseDateFilename("2026-10-23.md")
+                ),
+                .init(
+                    id: "today", title: "Today",
+                    updatedAt: InterfaceFixtures.referenceDate, gistID: "daily",
+                    isDailyNote: true, filename: "2026-10-24.md", fileCount: 2,
+                    excerpt: "Keep the thought, not the interface.", progress: todayProgress,
+                    dailyDate: DailyNotesIndex.parseDateFilename("2026-10-24.md")
+                )
+            ]
+            snapshot.dailyNoteCount = 2
+        }
+        if state == "no-pins" {
+            for index in snapshot.notes.indices { snapshot.notes[index].isPinned = false }
+        } else if state == "three-pins",
+                  let index = snapshot.notes.firstIndex(where: { $0.id == "weekend" }) {
+            snapshot.notes[index].isPinned = true
+        } else if state == "collection-overlap",
+                  let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
+            snapshot.notes[index].isStarred = true
+            snapshot.notes[index].canDeleteFromGitHub = true
+        } else if state == "long-library" {
+            snapshot.notes += (1...20).map { index in
+                .init(
+                    id: "long-\(index)", title: "A useful thought \(index)",
+                    updatedAt: InterfaceFixtures.referenceDate.addingTimeInterval(Double(-index * 3600)),
+                    gistID: "long-\(index)", tagIDs: ["ideas"],
+                    excerpt: "Leave room for the thought to grow."
+                )
             }
         }
         if state == "row-anatomy" {
@@ -181,16 +241,11 @@ struct InterfaceCaptureWorkspace: View {
                 : state == "offline" ? .offline : state == "signed-out" ? .signedOut : .ready,
             today: .init(
                 date: InterfaceFixtures.referenceDate,
-                progress: state == "empty" ? nil : .init(completed: 1, total: 3),
+                progress: todayProgress,
                 availability: state == "empty" ? .missing : .existing,
                 excerpt: state == "empty" ? nil : "Keep the thought, not the interface."
             )
         )
-        if state == "today-done" {
-            model.today.progress = .init(completed: 1, total: 1)
-        } else if state == "today-no-tasks" {
-            model.today.progress = .init(completed: 0, total: 0)
-        }
         if state == "status-busy" {
             model.gitHubStatus = .checking(operation: "Checking GitHub")
         } else if ["status-error", "status-details", "status-limited"].contains(state) {
@@ -201,36 +256,16 @@ struct InterfaceCaptureWorkspace: View {
                 retryAfter: state == "status-limited" ? .now.addingTimeInterval(15) : nil
             ))
         }
+        var expandedCollections: Set<LibraryCollection> = []
         switch state {
         case "collection-loading":
             model.replaceSnapshot(nil)
             model.loadState = .loading
-        case "daily-progress":
-            model.collection = .dailyNotes
-            model.searchState = .results(
-                notes: [
-                    .init(
-                        id: "daily-overdue", title: "2026-10-23",
-                        updatedAt: InterfaceFixtures.referenceDate, gistID: "daily",
-                        isDailyNote: true, filename: "2026-10-23.md", fileCount: 3,
-                        excerpt: "Set up the iPhone Duo. Keep the useful thoughts close.",
-                        progress: .init(completed: 3, total: 4), isOverdue: true,
-                        dailyDate: DailyNotesIndex.parseDateFilename("2026-10-23.md")
-                    ),
-                    .init(
-                        id: "daily-done", title: "2026-10-24",
-                        updatedAt: InterfaceFixtures.referenceDate, gistID: "daily",
-                        isDailyNote: true, filename: "2026-10-24.md", fileCount: 3,
-                        excerpt: "A little room to think.",
-                        progress: .init(completed: 1, total: 1),
-                        dailyDate: DailyNotesIndex.parseDateFilename("2026-10-24.md")
-                    )
-                ],
-                coverage: .init(totalDocuments: 2, documentsWithCachedContent: 2)
-            )
-        case "daily": model.collection = .dailyNotes
-        case "starred": model.collection = .starred
-        case "archive": model.collection = .archive
+        case "daily", "daily-progress": expandedCollections = [.dailyNotes]
+        case "starred", "collection-overlap": expandedCollections = [.starred]
+        case "archive": expandedCollections = [.archive]
+        case "collections-expanded", "long-library":
+            expandedCollections = [.dailyNotes, .starred, .archive]
         case "filtered", "tag-filters": model.selectedTagIDs = ["ideas"]
         case "search", "search-active":
             model.query = "notebook"
@@ -248,6 +283,7 @@ struct InterfaceCaptureWorkspace: View {
         }
         model.selectedNoteID = state == "empty" || screen == "library" ? nil : "shape"
         _library = State(initialValue: model)
+        _expandedCollections = State(initialValue: expandedCollections)
         _compactColumn = State(initialValue: screen == "library" ? .sidebar : .detail)
         _previewError = State(initialValue: state == "error" ? "Synthetic preview failure. Your source is unchanged." : nil)
     }
@@ -259,13 +295,19 @@ struct InterfaceCaptureWorkspace: View {
                     LibraryView(
                         model: library, actions: libraryActions,
                         footer: Text(actionMessage ?? "Synthetic library. No account connected."),
-                        isSidebar: horizontalSizeClass == .regular
+                        isTodaySelected: library.selectedNoteID == "today",
+                        isSidebar: horizontalSizeClass == .regular,
+                        expandedCollections: $expandedCollections
                     )
                     .captureTagFilters(captureState == "tag-filters")
                     .task {
-                        if ["notes", "featured", "tag-audit", "row-anatomy"].contains(captureState) {
+                        if ["notes", "featured", "tag-audit", "row-anatomy", "long-library"].contains(captureState) {
                             try? await Task.sleep(for: .milliseconds(400))
-                            scroll.scrollTo(captureState == "notes" ? "weekend" : "shape", anchor: .top)
+                            if captureState == "long-library" {
+                                scroll.scrollTo(LibraryCollection.dailyNotes, anchor: .top)
+                            } else {
+                                scroll.scrollTo(captureState == "notes" ? "weekend" : "shape", anchor: .top)
+                            }
                             await markReady()
                         }
                     }
@@ -325,7 +367,7 @@ struct InterfaceCaptureWorkspace: View {
                    !["empty", "collection-loading"].contains(captureState) {
                     library.selectedNoteID = "shape"
                 }
-                if (captureScreen == "library" && !["notes", "featured", "tag-audit", "row-anatomy"].contains(captureState))
+                if (captureScreen == "library" && !["notes", "featured", "tag-audit", "row-anatomy", "long-library"].contains(captureState))
                     || captureState == "error" {
                     await markReady()
                 }
@@ -348,7 +390,8 @@ struct InterfaceCaptureWorkspace: View {
     }
 
     private var activeSession: DocumentSession {
-        selectedFileID == "Ideas.md" ? ideasSession : session
+        if library.selectedNoteID == "today" { return todaySession }
+        return selectedFileID == "Ideas.md" ? ideasSession : session
     }
 
     private var chrome: NoteChrome {
@@ -358,6 +401,11 @@ struct InterfaceCaptureWorkspace: View {
         if let note = library.snapshot.notes.first(where: { $0.id == library.selectedNoteID }) {
             chrome.title = note.title
             chrome.tags = library.tags(for: note)
+        }
+        if library.selectedNoteID == "today" {
+            chrome = .init(
+                title: "Today", files: [.init(id: "2026-10-24.md", filename: "2026-10-24.md")],
+                selectedFileID: "2026-10-24.md", access: chrome.access)
         }
         if captureState == "mode-long" {
             chrome.title = "A very long notebook title that must yield its space to the complete editing controls"
@@ -380,7 +428,12 @@ struct InterfaceCaptureWorkspace: View {
         } create: {
             actionMessage = "Creating gists is not connected in this in-memory fixture."
         } today: {
-            actionMessage = "Today is not connected in this in-memory fixture."
+            activeSession.textView.resignFirstResponder()
+            selectedFileID = "2026-10-24.md"
+            modes[selectedFileID] = .source
+            library.selectedNoteID = "today"
+            compactColumn = .detail
+            todaySession.requestFocusAtContentStart()
         }
         actions.reconnect = {
             actionMessage = "This synthetic invitation does not connect to GitHub."
@@ -388,6 +441,11 @@ struct InterfaceCaptureWorkspace: View {
         actions.recoverStatus = recoverCaptureStatus
         actions.account = {
             actionMessage = "Settings opened for this synthetic notebook."
+        }
+        actions.select = { id in
+            activeSession.textView.resignFirstResponder()
+            selectedFileID = id == "today" ? "2026-10-24.md" : "README.md"
+            library.selectedNoteID = id
         }
         actions.togglePin = { id in
             guard let index = library.snapshot.notes.firstIndex(where: { $0.id == id }) else {
@@ -403,6 +461,21 @@ struct InterfaceCaptureWorkspace: View {
             }
             library.snapshot.notes[index].isArchived.toggle()
         }
+        actions.delete = { id in
+            guard let note = library.snapshot.notes.first(where: { $0.id == id }) else {
+                actionMessage = "The synthetic note is no longer available."
+                return
+            }
+            deletionConfirmation = .init(
+                rowID: id, title: note.title,
+                confirm: {
+                    library.snapshot.notes.removeAll { $0.id == id }
+                    deletionConfirmation = nil
+                },
+                dismiss: { deletionConfirmation = nil }
+            )
+        }
+        actions.deletionConfirmation = deletionConfirmation
         return actions
     }
 

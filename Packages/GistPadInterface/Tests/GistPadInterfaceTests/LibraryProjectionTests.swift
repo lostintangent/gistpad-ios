@@ -4,6 +4,21 @@ import Testing
 
 @MainActor
 struct LibraryProjectionTests {
+    @Test func aKnownLocalDayRemainsReachableBeforeTheRemoteLibraryIsKnown() {
+        let model = LibraryModel(loadState: .offline)
+        model.snapshot.notes = [
+            .init(
+                id: "local-day", title: "Today", updatedAt: nil,
+                isDailyNote: true, filename: "2026-10-24.md",
+                dailyDate: InterfaceFixtures.referenceDate)
+        ]
+        #expect(!model.hasKnownGistSnapshot)
+        #expect(model.mainGistCount == nil)
+        #expect(model.count(in: .dailyNotes) == nil)
+        #expect(model.secondaryCollections == [.dailyNotes])
+        #expect(model.unfilteredNotes(in: .dailyNotes).map(\.id) == ["local-day"])
+    }
+
     @Test func homeCountDoesNotIncludeCollectionsOverlapsOrUnpublishedCopies() {
         let model = LibraryModel()
         #expect(model.mainGistCount == nil)

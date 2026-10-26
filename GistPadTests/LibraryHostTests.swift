@@ -9,15 +9,9 @@ import UIKit
 @MainActor
 struct LibraryHostTests {
   @Test(arguments: LibraryCollection.allCases)
-  func titleMenuContainsEveryCollectionAndChecksOnlyTheCurrentCollection(
+  func homeKeepsItsMainTotalAndHasNoCollectionTitleMenu(
     collection: LibraryCollection
   ) async throws {
-    let currentTitle = switch collection {
-    case .gists: "All Notes"
-    case .dailyNotes: "Daily Notes"
-    case .starred: "Starred"
-    case .archive: "Archive"
-    }
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let animationsWereEnabled = UIView.areAnimationsEnabled
@@ -36,13 +30,59 @@ struct LibraryHostTests {
     window.layoutIfNeeded()
     let bar = try #require(descendants(window).compactMap { $0 as? UINavigationBar }.last)
     let item = try #require(bar.topItem)
-    #expect(item.title == (collection == .gists ? "GistPad" : currentTitle))
-    let menu = try #require(item.titleMenuProvider?([]))
-    let choices = menuActions(menu)
-    let titles = Set(choices.map(\.title))
-    #expect(titles.isSuperset(of: ["All Notes", "Daily Notes", "Starred", "Archive"]))
-    let selected = choices.filter { $0.state == .on }
-    #expect(selected.map(\.title) == [currentTitle])
+    #expect(item.title == "GistPad")
+    #expect(item.subtitle == "4 gists")
+    #expect(item.titleMenuProvider?([]) == nil)
+  }
+
+  @Test(arguments: [LibraryCollection.dailyNotes, .starred, .archive])
+  func aSelectedSecondaryDocumentUsesItsRealNativeRow(collection: LibraryCollection) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.frame = .init(x: 0, y: 0, width: 900, height: 800)
+    let target = LibraryNote(
+      id: "secondary", title: "A selected thought", updatedAt: InterfaceFixtures.referenceDate,
+      gistID: "secondary", isOwned: collection != .starred,
+      isStarred: collection == .starred, isArchived: collection == .archive,
+      isDailyNote: collection == .dailyNotes)
+    let model = LibraryModel(
+      snapshot: .init(
+        notes: [
+          .init(
+            id: "main", title: "A pinned thought", updatedAt: InterfaceFixtures.referenceDate,
+            gistID: "main", isPinned: true),
+          target
+        ],
+        dailyNoteCount: collection == .dailyNotes ? 1 : 0),
+      loadState: .ready)
+    model.selectedNoteID = target.id
+    window.rootViewController = UIHostingController(
+      rootView: NavigationSplitView {
+        LibraryView(
+          model: model, actions: .init(refresh: {}, create: {}, today: {}),
+          isSidebar: true, expandedCollections: .constant([collection]))
+      } detail: {
+        Text("The retained document")
+      }
+      .environment(\.horizontalSizeClass, .regular))
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(400))
+    window.layoutIfNeeded()
+    let list = try #require(descendants(window).compactMap { $0 as? UICollectionView }.first)
+    let selected = try #require(list.indexPathsForSelectedItems)
+    #expect(selected.count == 1)
+    let cell = try #require(selected.first.flatMap { list.cellForItem(at: $0) })
+    #expect(descendants(cell).contains {
+      $0.accessibilityIdentifier == "capture-frame-note-title-secondary"
+    })
+    #expect(model.selectedNoteID == target.id)
   }
 
   @Test(arguments: [280, 900], [false, true])
@@ -152,48 +192,72 @@ struct LibraryHostTests {
     }
   }
 
-  @Test(arguments: [false, true])
-  func collectionMenuOpensAsNativeUI(dark: Bool) async throws {
+  @Test(arguments: [false, true], [DynamicTypeSize.large, .accessibility3])
+  func pinnedCardsGrowWithTheirContentAndKeepMetadataBelowTheTitle(
+    dark: Bool, size: DynamicTypeSize
+  ) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
     window.overrideUserInterfaceStyle = dark ? .dark : .light
-    let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
-    model.collection = dark ? .starred : .gists
-    let title = dark ? "Starred" : "GistPad"
+    window.traitOverrides.preferredContentSizeCategory =
+      size == .large ? .large : .accessibilityExtraLarge
+    let note = LibraryNote(
+      id: "card", title: "A quiet place for the next good thought", updatedAt: .now,
+      gistID: "card", isPinned: true, tagIDs: ["ideas"],
+      excerpt: "Keep a thought worth coming back to.",
+      progress: .init(completed: 2, total: 5), commentCount: 3)
+    let simple = LibraryNote(
+      id: "simple", title: "One thought", updatedAt: .now, gistID: "simple", isPinned: true)
+    var cardSize: CGSize?
+    var simpleSize: CGSize?
     window.rootViewController = UIHostingController(
-      rootView: NavigationStack {
-        LibraryView(model: model, actions: .init(refresh: {}, create: {}, today: {}))
+      rootView: VStack(spacing: 8) {
+        LibraryPinnedCard(
+          note: note, tags: [.init(id: "ideas", name: "Ideas", colorHex: "#EBC85A")],
+          isSelected: false)
+          .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
+        LibraryPinnedCard(note: simple, tags: [], isSelected: false)
+          .onGeometryChange(for: CGSize.self) { $0.size } action: { simpleSize = $0 }
+        Spacer(minLength: 0)
       }
-      .environment(\.dynamicTypeSize, .large)
-      .environment(\.colorScheme, dark ? .dark : .light))
+      .frame(width: 280)
+      .environment(\.dynamicTypeSize, size)
+      .environment(\.colorScheme, dark ? .dark : .light)
+      .background(Color(uiColor: .systemGroupedBackground)))
     window.makeKeyAndVisible()
     defer { window.isHidden = true }
     try await Task.sleep(for: .milliseconds(400))
-    let bar = try #require(descendants(window).compactMap { $0 as? UINavigationBar }.last)
-    let titleButton = try #require(
-      descendants(bar).compactMap { $0 as? UIControl }.first { button in
-        button.accessibilityLabel?.contains(title) == true
-          || descendants(button).compactMap { $0 as? UILabel }.contains { $0.text == title }
+    window.layoutIfNeeded()
+    let measuredCard = try #require(cardSize)
+    let measuredSimple = try #require(simpleSize)
+    #expect(measuredCard.width == 280)
+    #expect(measuredSimple.width == measuredCard.width)
+    #expect(measuredCard.height > measuredSimple.height)
+    func frame(_ id: String) throws -> CGRect {
+      let marker = try #require(descendants(window).first {
+        $0.accessibilityIdentifier == "capture-frame-\(id)" && !$0.bounds.isEmpty
+          && !$0.isHidden && $0.convert($0.bounds, to: window).intersects(window.bounds)
       })
-    titleButton.performPrimaryAction()
-    try await Task.sleep(for: .milliseconds(400))
-    let visibleTitles = Set(scene.windows.filter { !$0.isHidden }.flatMap { window in
-      descendants(window).compactMap { ($0 as? UILabel)?.text }
+      return marker.convert(marker.bounds, to: window)
+    }
+    let title = try frame("note-title-card")
+    let excerpt = try frame("note-excerpt-card")
+    let tags = try frame("note-tags-card")
+    let progress = try frame("note-progress-card")
+    let comments = try frame("note-comment-count-card")
+    #expect(excerpt.minY >= title.maxY)
+    #expect(tags.minY >= excerpt.maxY)
+    #expect(progress.minY >= tags.maxY)
+    #expect(comments.minY >= tags.maxY)
+    #expect(!descendants(window).contains {
+      $0.accessibilityIdentifier == "capture-frame-note-date-card"
     })
-    #expect(visibleTitles.isSuperset(of: ["All Notes", "Daily Notes", "Starred", "Archive"]))
     let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-      for overlay in scene.windows where !overlay.isHidden && overlay.windowLevel > window.windowLevel {
-        overlay.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-      }
     }
-    Attachment.record(image, named: "collection-menu-\(dark ? "Dark" : "Light")-Large.png", as: .png)
-    for interaction in titleButton.interactions.compactMap({ $0 as? UIContextMenuInteraction }) {
-      interaction.dismissMenu()
-    }
-    window.rootViewController?.dismiss(animated: false)
-    try await Task.sleep(for: .milliseconds(300))
+    Attachment.record(
+      image, named: "pinned-card-\(dark ? "Dark" : "Light")-\(size).png", as: .png)
   }
 
   @Test(arguments: [false, true])
@@ -429,13 +493,6 @@ struct LibraryHostTests {
 
   private func descendants(_ view: UIView) -> [UIView] {
     [view] + view.subviews.flatMap(descendants)
-  }
-
-  private func menuActions(_ menu: UIMenu) -> [UIAction] {
-    menu.children.flatMap { child in
-      if let menu = child as? UIMenu { return menuActions(menu) }
-      return (child as? UIAction).map { [$0] } ?? []
-    }
   }
 
 }

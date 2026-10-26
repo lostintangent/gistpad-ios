@@ -176,65 +176,168 @@ final class NativeControlUITests: XCTestCase {
   }
 
   @MainActor
-  func testScopedCollectionsHaveNoRepeatedHeadingOrEmptyHeaderSpace() async throws {
+  func testHomeKeepsItsMainCountAndUsesNativeSecondaryDisclosures() async throws {
     let collections = [
-      (state: "starred", title: "Starred", noteID: "starred"),
-      (state: "daily-progress", title: "Daily Notes", noteID: "daily-overdue"),
-      (state: "archive", title: "Archive", noteID: "archived"),
+      (id: "dailyNotes", count: "2 notes", noteID: "daily-overdue"),
+      (id: "starred", count: "1 gist", noteID: "starred"),
+      (id: "archive", count: "1 gist", noteID: "archived"),
     ]
     for appearance in ["light", "dark"] {
       for accessibility in [false, true] {
+        let app = launch(
+          screen: "library", state: "collections-expanded", accessibility: accessibility,
+          appearance: appearance)
+        defer { app.terminate() }
+        let window = app.windows.firstMatch
+        let bar = app.navigationBars["GistPad"]
+        let list = app.collectionViews.firstMatch
+        try await waitUntil("Home's stable title and published-main-gist subtitle") {
+          bar.exists && bar.staticTexts["5 gists"].exists && list.exists
+        }
+        XCTAssertFalse(list.staticTexts["Pinned"].exists)
+        XCTAssertFalse(list.staticTexts["Your Gists"].exists)
+        XCTAssertFalse(list.buttons["library-today"].exists)
         for collection in collections {
-          if accessibility && collection.state != "daily-progress" { continue }
-          let app = launch(
-            screen: "library", state: collection.state, accessibility: accessibility,
-            appearance: appearance)
-          defer { app.terminate() }
-          let window = app.windows.firstMatch
-          try await waitUntil("the actual folded Duo Library") {
-            abs(window.frame.width - 466) <= 1 && abs(window.frame.height - 678) <= 1
-          }
-          let bar = app.navigationBars[collection.title]
-          let count = bar.staticTexts[collection.state == "daily-progress" ? "2 notes" : "1 gist"]
-          let list = app.collectionViews.firstMatch
+          let header = app.buttons["library-collection-\(collection.id)"].firstMatch
           let row = app.descendants(matching: .any)["library-note-\(collection.noteID)"].firstMatch
-          try await waitUntil("the scoped title, gist-count subtitle and only document group") {
-            bar.exists && count.exists && list.exists && row.isHittable
-          }
-          XCTAssertGreaterThan(count.frame.height, 0)
-          XCTAssertTrue(window.frame.contains(count.frame))
-          XCTAssertFalse(list.staticTexts[collection.title].exists)
-          let contentTop = max(bar.frame.maxY, list.frame.minY)
-          XCTAssertGreaterThanOrEqual(row.frame.minY, contentTop)
-          XCTAssertLessThanOrEqual(row.frame.minY - contentTop, 24)
-          if collection.state == "daily-progress" {
-            let done = app.descendants(matching: .any)["library-note-daily-done"].firstMatch
+          try await reveal(header, in: list)
+          XCTAssertTrue((header.value as? String ?? "").contains(collection.count))
+          XCTAssertGreaterThanOrEqual(header.frame.height, 44)
+          XCTAssertTrue(window.frame.contains(header.frame))
+          try await reveal(row, in: list)
+          if collection.id == "dailyNotes" {
             XCTAssertTrue(row.label.contains("3 of 4 tasks complete"))
             XCTAssertTrue(row.label.contains("Unfinished tasks"))
             XCTAssertFalse(row.label.contains(".md"))
-            XCTAssertFalse(row.label.contains("3 files"))
+            XCTAssertFalse(row.label.contains("2 files"))
             XCTAssertFalse(row.label.contains("ago"))
-            XCTAssertTrue(done.label.contains("1 of 1 tasks complete"))
-            XCTAssertFalse(done.label.contains(".md"))
           }
           record(
             app,
-            name: "scoped-\(collection.state)-folded-\(accessibility ? "AX3" : "Large")-\(appearance)")
+            name: "home-\(collection.id)-\(accessibility ? "AX3" : "Large")-\(appearance)")
         }
       }
     }
   }
 
   @MainActor
-  func testTodayCompletionHasNoVisibleAllDoneCaption() async throws {
+  func testHomeCardAndLongCollectionStatesAcrossAppearancesAndTextSizes() async throws {
     for appearance in ["light", "dark"] {
-      let app = launch(screen: "library", state: "today-done", appearance: appearance)
-      defer { app.terminate() }
-      let today = app.buttons["library-today"]
-      try await waitUntil("the completed Today card") { today.isHittable }
-      XCTAssertFalse(app.staticTexts["All done"].exists)
-      XCTAssertTrue((today.value as? String ?? "").contains("1 of 1 tasks complete"))
-      record(app, name: "today-done-static-check-folded-\(appearance)")
+      for accessibility in [false, true] {
+        for state in ["no-pins", "three-pins", "long-library"] {
+          let app = launch(
+            screen: "library", state: state, accessibility: accessibility, appearance: appearance)
+          defer { app.terminate() }
+          let list = app.collectionViews.firstMatch
+          try await waitUntil("the actual Library") { list.exists }
+          if state == "no-pins" {
+            XCTAssertFalse(app.descendants(matching: .any).matching(
+              NSPredicate(format: "identifier BEGINSWITH %@", "library-featured-")).firstMatch.exists)
+            let first = app.descendants(matching: .any)["library-note-shape"].firstMatch
+            try await waitUntil("ordinary content without reserved feature space") { first.isHittable }
+            let bar = app.navigationBars["GistPad"]
+            XCTAssertLessThanOrEqual(first.frame.minY - max(bar.frame.maxY, list.frame.minY), 24)
+          } else if state == "three-pins" {
+            try await waitUntil("the first intrinsic pinned card") {
+              app.descendants(matching: .any)["library-featured-shape"].firstMatch.isHittable
+            }
+          } else {
+            let daily = app.buttons["library-collection-dailyNotes"].firstMatch
+            try await reveal(daily, in: list)
+            XCTAssertTrue((daily.value as? String ?? "").contains("2 notes"))
+            XCTAssertEqual(app.collectionViews.count, 1)
+          }
+          record(app, name: "home-\(state)-\(accessibility ? "AX3" : "Large")-\(appearance)")
+        }
+      }
+    }
+  }
+
+  @MainActor
+  func testTodayRailKeepsItsNativeTargetAndOpensTodayReadyToEdit() async throws {
+    for appearance in ["light", "dark"] {
+      for badge in [(state: "today-0", value: "No unfinished tasks"),
+                    (state: "today-3", value: "3 unfinished tasks"),
+                    (state: "today-99plus", value: "104 unfinished tasks")] {
+        let app = launch(
+          screen: "library", state: badge.state, accessibility: true, appearance: appearance)
+        defer { app.terminate() }
+        let today = app.buttons["library-today"].firstMatch
+        try await waitUntil("the native Today action") { today.isHittable }
+        XCTAssertEqual(app.buttons.matching(identifier: "library-today").count, 1)
+        XCTAssertGreaterThanOrEqual(today.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(today.frame.height, 44)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(today.frame))
+        XCTAssertTrue((today.value as? String ?? "").contains(badge.value))
+        XCTAssertFalse(app.staticTexts["All done"].exists)
+        record(app, name: "today-rail-\(badge.state)-AX3-\(appearance)")
+        today.tap()
+        let editor = app.textViews.firstMatch
+        try await waitUntil("the exact Today document in Edit") {
+          editor.isHittable && (editor.value as? String ?? "").hasPrefix("# Today")
+            && app.segmentedControls.firstMatch.buttons["Edit"].isSelected
+        }
+      }
+    }
+  }
+
+  @MainActor
+  func testSearchRevealsACollapsedCollectionWithoutRememberingThatExpansion() async throws {
+    let app = launch(screen: "library", state: "collection-search")
+    defer { app.terminate() }
+    let list = app.collectionViews.firstMatch
+    let archive = app.buttons["library-collection-archive"].firstMatch
+    let row = app.descendants(matching: .any)["library-note-archived"].firstMatch
+    try await reveal(archive, in: list)
+    XCTAssertFalse(row.exists)
+    let field = app.searchFields.firstMatch
+    if !field.isHittable {
+      let search = app.buttons["Search"].firstMatch
+      try await waitUntil("the native Search command") { search.isHittable }
+      search.tap()
+    }
+    try await waitUntil("the native search field") { field.isHittable }
+    field.tap()
+    field.typeText("finished chapter")
+    try await waitUntil("the archived match temporarily revealing its collection") { row.isHittable }
+    XCTAssertFalse(app.staticTexts["No matching notes"].exists)
+    XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "library-note-archived").count, 1)
+    record(app, name: "home-search-reveals-collapsed-archive")
+    let clear = field.buttons["Clear text"].firstMatch
+    try await waitUntil("the native query-clear control") { clear.isHittable }
+    clear.tap()
+    try await reveal(archive, in: list)
+    XCTAssertFalse(row.exists)
+  }
+
+  @MainActor
+  func testAnOwnedStarredGistHasOneDeletionConfirmationAtItsChosenOccurrence() async throws {
+    let app = launch(screen: "library", state: "collection-overlap")
+    defer { app.terminate() }
+    let list = app.collectionViews.firstMatch
+    let row = app.descendants(matching: .any)["library-note-shape"].firstMatch
+    try await reveal(row, in: list)
+    row.swipeLeft()
+    let delete = app.buttons["Delete"].firstMatch
+    try await waitUntil("the selected Starred occurrence's pending Delete action") { delete.isHittable }
+    delete.tap()
+    let confirm = app.buttons["Delete from GitHub"].firstMatch
+    try await waitUntil("one anchored deletion confirmation") { confirm.isHittable }
+    XCTAssertEqual(app.buttons.matching(identifier: "Delete from GitHub").count, 1)
+    XCTAssertTrue(app.windows.firstMatch.frame.contains(confirm.frame))
+    record(app, name: "home-overlapping-starred-deletion-confirmation")
+    app.buttons["Cancel"].tap()
+    try await waitUntil("cancellation retaining the Starred occurrence") { row.isHittable }
+    row.tap()
+    let home = app.navigationBars["GistPad"]
+    if home.isHittable {
+      let starred = app.buttons["library-collection-starred"].firstMatch
+      try await reveal(starred, in: list)
+      starred.tap()
+      try await waitUntil("collapsing Starred without closing the selected document") {
+        !row.exists && app.navigationBars.buttons.matching(
+          NSPredicate(format: "label CONTAINS %@", "The shape of a notebook")).firstMatch.exists
+      }
     }
   }
 
@@ -587,12 +690,27 @@ final class NativeControlUITests: XCTestCase {
   }
 
   @MainActor
+  private func reveal(_ element: XCUIElement, in list: XCUIElement) async throws {
+    try await waitUntil("the native Library list") { list.exists }
+    for _ in 0..<10 {
+      if element.isHittable { return }
+      if element.exists, element.frame.maxY <= list.frame.minY {
+        list.swipeDown()
+      } else {
+        list.swipeUp()
+      }
+    }
+    try await waitUntil("the requested Library control") { element.isHittable }
+  }
+
+  @MainActor
   private func record(_ app: XCUIApplication, name: String) {
-    let image = XCTAttachment(screenshot: app.screenshot())
+    let image = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
     image.name = name
     image.lifetime = .keepAlways
     add(image)
-    let tree = XCTAttachment(string: app.debugDescription)
+    let tree = XCTAttachment(
+      string: "Application frame: \(app.frame)\nWindow frame: \(app.windows.firstMatch.frame)\n\(app.debugDescription)")
     tree.name = "\(name)-accessibility"
     tree.lifetime = .keepAlways
     add(tree)
