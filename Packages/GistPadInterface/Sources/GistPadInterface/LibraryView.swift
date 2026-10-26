@@ -532,10 +532,7 @@ public struct LibraryView: View {
     }
 
     private func collectionLabel(_ collection: LibraryCollection) -> some View {
-        let notes = model.matchingNotes(in: collection)
-        let count: Int? = model.hasFilters
-            ? collection == .dailyNotes ? notes.count : LibraryModel.gistCount(in: notes)
-            : model.count(in: collection)
+        let count = model.count(in: collection)
         let countLabel = count.map {
             collection == .dailyNotes ? LibraryModel.noteCountLabel($0) : LibraryModel.gistCountLabel($0)
         }

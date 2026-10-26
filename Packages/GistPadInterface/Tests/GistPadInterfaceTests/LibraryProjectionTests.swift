@@ -20,6 +20,9 @@ struct LibraryProjectionTests {
         #expect(model.count(in: .starred) == 2)
         #expect(model.count(in: .archive) == 1)
         #expect(model.secondaryCollections == [.dailyNotes, .starred, .archive])
+        model.snapshot.dailyNoteCount = nil
+        #expect(model.count(in: .dailyNotes) == nil)
+        #expect(model.secondaryCollections.contains(.dailyNotes))
         model.loadState = .offline
         #expect(model.secondaryCollections == [.dailyNotes, .starred, .archive])
         model.replaceSnapshot(nil)
