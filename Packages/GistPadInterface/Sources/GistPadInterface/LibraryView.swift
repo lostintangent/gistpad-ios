@@ -249,7 +249,6 @@ public struct LibraryView: View {
     private let sidebarOverride: Bool?
     private let savedCollections: Binding<Set<LibraryCollection>>?
     @State private var localCollections: Set<LibraryCollection> = []
-    @State private var retainedCollections: Set<LibraryCollection> = []
     @State private var collapsedSearchCollections: Set<LibraryCollection> = []
     @State private var selectedCollection: LibraryCollection = .gists
     @State private var deletionSelection: Selection?
@@ -320,15 +319,11 @@ public struct LibraryView: View {
                 .sheet(isPresented: $showingTags) { tagFilters }
                 .scrollEdgeEffectStyle(.soft, for: .all)
         }
-        .onChange(of: currentCollections, initial: true) { _, collections in
-            retainedCollections.formUnion(collections.filter { expansion(for: $0).wrappedValue })
-        }
         .onChange(of: model.query) { resetSearchDisclosures() }
         .onChange(of: model.selectedTagIDs) { resetSearchDisclosures() }
         .onChange(of: actions.deletionConfirmation?.rowID) { _, rowID in
             if rowID == nil { deletionSelection = nil }
         }
-        .onDisappear { retainedCollections.removeAll() }
     }
 
     @ViewBuilder
@@ -485,16 +480,9 @@ public struct LibraryView: View {
         savedCollections ?? $localCollections
     }
 
-    private var currentCollections: [LibraryCollection] {
+    private var displayedCollections: [LibraryCollection] {
         model.secondaryCollections.filter {
             !model.hasFilters || !model.matchingNotes(in: $0).isEmpty
-        }
-    }
-
-    private var displayedCollections: [LibraryCollection] {
-        [.dailyNotes, .starred, .archive].filter {
-            currentCollections.contains($0)
-                || (retainedCollections.contains($0) && !model.secondaryCollections.contains($0))
         }
     }
 
@@ -513,27 +501,16 @@ public struct LibraryView: View {
                     if expanded { collections.wrappedValue.insert(collection) }
                     else { collections.wrappedValue.remove(collection) }
                 }
-                if expanded { retainedCollections.insert(collection) }
-                else { retainedCollections.remove(collection) }
             })
     }
 
     private func resetSearchDisclosures() {
         collapsedSearchCollections.removeAll()
-        retainedCollections.formIntersection(collections.wrappedValue)
     }
 
     private func collectionDisclosure(_ collection: LibraryCollection) -> some View {
         DisclosureGroup(isExpanded: expansion(for: collection)) {
-            let notes = model.matchingNotes(in: collection)
-            if notes.isEmpty {
-                Text("No notes to show", bundle: .module)
-                    .foregroundStyle(.secondary)
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("library-empty-\(collection.rawValue)")
-            } else {
-                ForEach(notes) { noteRow($0, collection: collection) }
-            }
+            ForEach(model.matchingNotes(in: collection)) { noteRow($0, collection: collection) }
         } label: {
             // A DisclosureGroup identifier would override its child row identifiers.
             collectionLabel(collection)
@@ -548,29 +525,44 @@ public struct LibraryView: View {
         let countLabel = count.map {
             collection == .dailyNotes ? LibraryModel.noteCountLabel($0) : LibraryModel.gistCountLabel($0)
         }
+        let countText = count.map {
+            Text($0, format: .number)
+                .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+                .fixedSize()
+                .captureFrame("library-collection-count-\(collection.rawValue)")
+        }
         let title = Label(collection.title, systemImage: collection.symbol)
+            .labelStyle(.titleAndIcon)
             .fixedSize(horizontal: false, vertical: true)
-        return ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                title.fixedSize(horizontal: true, vertical: true)
-                Spacer(minLength: 0)
-                if let count {
-                    Text(count, format: .number)
-                        .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+            .captureFrame("library-collection-title-\(collection.rawValue)")
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(verbatim: collection.title)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .captureFrame("library-collection-title-\(collection.rawValue)")
+                    Spacer(minLength: 0)
+                    countText
                 }
-            }
-            VStack(alignment: .leading, spacing: headingCountSpacing) {
-                title
-                if let count {
-                    Text(count, format: .number)
-                        .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        title.fixedSize(horizontal: true, vertical: true)
+                        Spacer(minLength: 0)
+                        countText
+                    }
+                    VStack(alignment: .leading, spacing: headingCountSpacing) {
+                        title
+                        countText
+                    }
                 }
             }
         }
         .font(.headline)
         .foregroundStyle(.primary)
-        .frame(minHeight: 44)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         .textCase(nil)
+        .captureFrame("library-collection-\(collection.rawValue)")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: collection.title))
         .accessibilityValue(Text(verbatim: countLabel ?? ""))

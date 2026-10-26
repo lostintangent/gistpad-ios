@@ -181,9 +181,9 @@ final class NativeControlUITests: XCTestCase {
   @MainActor
   func testHomeKeepsItsMainCountAndUsesNativeSecondaryDisclosures() async throws {
     let collections = [
-      (id: "dailyNotes", count: "2 notes", noteID: "daily-overdue"),
-      (id: "starred", count: "1 gist", noteID: "starred"),
-      (id: "archive", count: "1 gist", noteID: "archived"),
+      (id: "dailyNotes", title: "Daily Notes", count: "2 notes", noteID: "daily-overdue"),
+      (id: "starred", title: "Starred Gists", count: "1 gist", noteID: "starred"),
+      (id: "archive", title: "Archived Gists", count: "1 gist", noteID: "archived"),
     ]
     for appearance in ["light", "dark"] {
       for accessibility in [false, true] {
@@ -204,6 +204,7 @@ final class NativeControlUITests: XCTestCase {
           let header = app.buttons["library-collection-\(collection.id)"].firstMatch
           let row = app.descendants(matching: .any)["library-note-\(collection.noteID)"].firstMatch
           try await reveal(header, in: list)
+          XCTAssertEqual(header.label, collection.title)
           XCTAssertTrue((header.value as? String ?? "").contains(collection.count))
           XCTAssertGreaterThanOrEqual(header.frame.height, 44)
           XCTAssertTrue(window.frame.contains(header.frame))
@@ -219,6 +220,26 @@ final class NativeControlUITests: XCTestCase {
             app,
             name: "home-\(collection.id)-\(accessibility ? "AX3" : "Large")-\(appearance)")
         }
+      }
+    }
+  }
+
+  @MainActor
+  func testHomeNeverShowsEmptyCollectionSections() async throws {
+    for appearance in ["light", "dark"] {
+      for accessibility in [false, true] {
+        let app = launch(
+          screen: "library", state: "collections-empty", accessibility: accessibility,
+          appearance: appearance)
+        defer { app.terminate() }
+        let list = app.collectionViews.firstMatch
+        try await waitUntil("the ordinary gist with known empty secondary collections") {
+          list.exists && app.navigationBars["GistPad"].staticTexts["1 gist"].exists
+            && app.descendants(matching: .any)["library-note-weekend"].firstMatch.isHittable
+        }
+        XCTAssertEqual(app.buttons.matching(
+          NSPredicate(format: "identifier BEGINSWITH %@", "library-collection-")).count, 0)
+        record(app, name: "home-no-empty-collections-\(accessibility ? "AX3" : "Large")-\(appearance)")
       }
     }
   }

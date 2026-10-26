@@ -191,7 +191,7 @@ public final class LibraryModel {
 
     var secondaryCollections: [LibraryCollection] {
         [.dailyNotes, .starred, .archive].filter { collection in
-            (hasKnownGistSnapshot || collection == .dailyNotes)
+            count(in: collection) != 0
                 && snapshot.notes.contains { Self.includes($0, in: collection) }
         }
     }

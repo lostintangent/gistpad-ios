@@ -318,6 +318,9 @@
     "Archive" : {
 
     },
+    "Archived Gists" : {
+
+    },
     "Cancel" : {
 
     },
@@ -632,6 +635,9 @@
 
     },
     "Starred" : {
+
+    },
+    "Starred Gists" : {
 
     },
     "Start today's note" : {

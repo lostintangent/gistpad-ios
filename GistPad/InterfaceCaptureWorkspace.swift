@@ -94,7 +94,8 @@ struct InterfaceCaptureWorkspace: View {
             "mode-long", "mode-emoji", "today-done", "today-no-tasks",
             "status-busy", "status-error", "status-details", "status-limited", "tag-filters", "row-anatomy",
             "collection-loading", "no-pins", "three-pins", "today-0", "today-3", "today-99plus",
-            "collections-expanded", "collection-search", "collection-overlap", "long-library"
+            "collections-expanded", "collections-collapsed", "collections-empty",
+            "collection-search", "collection-overlap", "long-library"
         ].contains(state) || (LaunchArguments.captureMangaFixture && screen == "note"
             && ["markers", "rules", "bullets"].contains(state))
         _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
@@ -163,7 +164,10 @@ struct InterfaceCaptureWorkspace: View {
             ]
             snapshot.dailyNoteCount = 2
         }
-        if state == "no-pins" {
+        if state == "collections-empty" {
+            snapshot.notes = snapshot.notes.filter { $0.id == "weekend" }
+            snapshot.dailyNoteCount = 0
+        } else if state == "no-pins" {
             for index in snapshot.notes.indices { snapshot.notes[index].isPinned = false }
         } else if state == "three-pins",
                   let index = snapshot.notes.firstIndex(where: { $0.id == "weekend" }) {
@@ -303,9 +307,9 @@ struct InterfaceCaptureWorkspace: View {
                     )
                     .captureTagFilters(captureState == "tag-filters")
                     .task {
-                        if ["notes", "featured", "tag-audit", "row-anatomy", "long-library", "collections-expanded"].contains(captureState) {
+                        if ["notes", "featured", "tag-audit", "row-anatomy", "long-library", "collections-expanded", "collections-collapsed"].contains(captureState) {
                             try? await Task.sleep(for: .milliseconds(400))
-                            if ["long-library", "collections-expanded"].contains(captureState) {
+                            if ["long-library", "collections-expanded", "collections-collapsed"].contains(captureState) {
                                 scroll.scrollTo(LibraryCollection.dailyNotes, anchor: .top)
                             } else {
                                 scroll.scrollTo(captureState == "notes" ? "weekend" : "shape", anchor: .top)
@@ -369,7 +373,7 @@ struct InterfaceCaptureWorkspace: View {
                    !["empty", "collection-loading"].contains(captureState) {
                     library.selectedNoteID = "shape"
                 }
-                if (captureScreen == "library" && !["notes", "featured", "tag-audit", "row-anatomy", "long-library", "collections-expanded"].contains(captureState))
+                if (captureScreen == "library" && !["notes", "featured", "tag-audit", "row-anatomy", "long-library", "collections-expanded", "collections-collapsed"].contains(captureState))
                     || captureState == "error" {
                     await markReady()
                 }

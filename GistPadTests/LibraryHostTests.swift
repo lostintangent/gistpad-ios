@@ -2,6 +2,7 @@ import GistPadAppearance
 import SwiftUI
 import Testing
 import UIKit
+import Vision
 
 @testable import GistPadInterface
 
@@ -144,6 +145,171 @@ struct LibraryHostTests {
     #expect(counts.systemBlue == 0, "The native sidebar selection and Today symbol stay neutral.")
     Attachment.record(
       image, named: "mounted-library-\(width)-\(dark ? "Dark" : "Light")-Large.png", as: .png)
+  }
+
+  @Test(arguments: [false, true], [DynamicTypeSize.large, .accessibility3])
+  func collectionHeadersDrawTheirFullTitlesAndBareCounts(
+    dark: Bool, size: DynamicTypeSize
+  ) async throws {
+    #expect(LibraryCollection.dailyNotes.title == "Daily Notes")
+    #expect(LibraryCollection.starred.title == "Starred Gists")
+    #expect(LibraryCollection.archive.title == "Archived Gists")
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.frame = .init(x: 0, y: 0, width: 900, height: 800)
+    window.overrideUserInterfaceStyle = dark ? .dark : .light
+    window.traitOverrides.preferredContentSizeCategory =
+      size == .large ? .large : .accessibilityExtraLarge
+    let model = LibraryModel(
+      snapshot: .init(notes: [
+        .init(
+          id: "daily", title: "A daily thought", updatedAt: InterfaceFixtures.referenceDate,
+          gistID: "daily", isDailyNote: true),
+        .init(
+          id: "starred", title: "A starred thought", updatedAt: InterfaceFixtures.referenceDate,
+          gistID: "starred", isOwned: false, isStarred: true),
+        .init(
+          id: "archived", title: "An archived thought", updatedAt: InterfaceFixtures.referenceDate,
+          gistID: "archived", isArchived: true),
+      ], dailyNoteCount: 1),
+      loadState: .ready)
+    window.rootViewController = UIHostingController(
+      rootView: NavigationSplitView {
+        LibraryView(
+          model: model, actions: .init(refresh: {}, create: {}, today: {}),
+          isSidebar: true, expandedCollections: .constant([]))
+      } detail: {
+        Text("The retained document")
+      }
+      .environment(\.horizontalSizeClass, .regular)
+      .environment(\.dynamicTypeSize, size)
+      .environment(\.colorScheme, dark ? .dark : .light))
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(500))
+    window.layoutIfNeeded()
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+    }
+    let bitmap = try #require(image.cgImage)
+    for collection in [LibraryCollection.dailyNotes, .starred, .archive] {
+      let marker = try #require(descendants(window).first {
+        $0.accessibilityIdentifier == "capture-frame-library-collection-\(collection.rawValue)"
+          && !$0.bounds.isEmpty
+      })
+      let frame = marker.convert(marker.bounds, to: window)
+      #expect(window.bounds.contains(frame))
+      let count = try #require(descendants(window).first {
+        $0.accessibilityIdentifier == "capture-frame-library-collection-count-\(collection.rawValue)"
+          && !$0.bounds.isEmpty
+      })
+      if size == .large {
+        #expect(frame.height <= 64, "A standard disclosure must not reserve empty title space.")
+      } else {
+        let title = try #require(descendants(window).first {
+          $0.accessibilityIdentifier == "capture-frame-library-collection-title-\(collection.rawValue)"
+            && !$0.bounds.isEmpty
+        })
+        #expect(count.convert(count.bounds, to: window).minX >= title.convert(title.bounds, to: window).maxX)
+      }
+      let crop = try #require(bitmap.cropping(to: CGRect(
+        x: frame.minX * image.scale, y: frame.minY * image.scale,
+        width: frame.width * image.scale, height: frame.height * image.scale)))
+      let request = VNRecognizeTextRequest()
+      request.recognitionLevel = .accurate
+      request.recognitionLanguages = ["en-US"]
+      request.usesLanguageCorrection = false
+      try VNImageRequestHandler(cgImage: crop).perform([request])
+      let words = (request.results ?? []).compactMap {
+        $0.topCandidates(1).first?.string
+      }.joined(separator: " ").lowercased()
+      #expect(words.contains(collection.title.lowercased()), "Rendered header: \(words)")
+      let countFrame = count.convert(count.bounds, to: window)
+      let countCrop = try #require(bitmap.cropping(to: CGRect(
+        x: countFrame.minX * image.scale, y: countFrame.minY * image.scale,
+        width: countFrame.width * image.scale, height: countFrame.height * image.scale)))
+      #expect(countFrame.width < countFrame.height, "The count contains only the bare digit.")
+      let background = try color(in: countCrop, at: .zero)
+      let backgroundPixels = try nativeAccentPixels(
+        in: UIImage(cgImage: countCrop), expected: background).personal
+      #expect(countCrop.width * countCrop.height - backgroundPixels > 10, "The number draws real ink.")
+    }
+    Attachment.record(
+      image, named: "collection-titles-\(dark ? "Dark" : "Light")-\(size).png", as: .png)
+  }
+
+  @Test(arguments: [LibraryCollection.dailyNotes, .starred, .archive])
+  func anExpandedHomeDisclosureDisappearsWhenEmptyWithoutClosingItsDocument(
+    collection: LibraryCollection
+  ) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    let note = LibraryNote(
+      id: "retained", title: "Keep this document open", updatedAt: .distantPast,
+      gistID: "retained", isOwned: collection != .starred,
+      isStarred: collection == .starred, isArchived: collection == .archive,
+      isDailyNote: collection == .dailyNotes)
+    let populated = LibrarySnapshot(notes: [note], dailyNoteCount: 1)
+    let model = LibraryModel(snapshot: populated, loadState: .ready)
+    model.selectedNoteID = note.id
+    window.rootViewController = UIHostingController(
+      rootView: NavigationStack {
+        LibraryView(
+          model: model, actions: .init(refresh: {}, create: {}, today: {}),
+          isSidebar: true, expandedCollections: .constant([collection]))
+      })
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
+    func headerExists() -> Bool {
+      guard let list = descendants(window).compactMap({ $0 as? UICollectionView }).first else {
+        return false
+      }
+      return list.indexPathsForVisibleItems.contains { index in
+        guard let cell = list.cellForItem(at: index) else { return false }
+        return descendants(cell).contains {
+          $0.accessibilityIdentifier == "capture-frame-library-collection-\(collection.rawValue)"
+            && !$0.bounds.isEmpty
+        }
+      }
+    }
+    var deadline = ContinuousClock.now + .seconds(3)
+    while !headerExists(), ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(20))
+      window.layoutIfNeeded()
+    }
+    #expect(headerExists())
+    model.replaceSnapshot(.init(notes: [], dailyNoteCount: 0))
+    deadline = ContinuousClock.now + .seconds(3)
+    while headerExists(), ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(20))
+      window.layoutIfNeeded()
+    }
+    #expect(!headerExists())
+    #expect(model.selectedNoteID == note.id)
+    model.replaceSnapshot(populated)
+    deadline = ContinuousClock.now + .seconds(3)
+    while !headerExists(), ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(20))
+      window.layoutIfNeeded()
+    }
+    #expect(headerExists())
+    #expect(descendants(window).contains {
+      $0.accessibilityIdentifier == "capture-frame-note-title-retained"
+        && !$0.bounds.isEmpty
+    })
+    #expect(model.selectedNoteID == note.id)
   }
 
   @Test(arguments: [DynamicTypeSize.large, .accessibility3])
@@ -409,18 +575,6 @@ struct LibraryHostTests {
     let crop = try #require(image.cgImage?.cropping(to: CGRect(
       x: frame.minX * image.scale, y: frame.minY * image.scale,
       width: frame.width * image.scale, height: frame.height * image.scale)))
-    func color(in bitmap: CGImage, at point: CGPoint) throws -> RGBColor {
-      let corner = try #require(bitmap.cropping(to: CGRect(
-        x: point.x, y: point.y, width: 1, height: 1)))
-      var pixel = [UInt8](repeating: 0, count: 4)
-      try pixel.withUnsafeMutableBytes { bytes in
-        let context = try #require(CGContext(
-          data: bytes.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
-          space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-        context.draw(corner, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-      }
-      return RGBColor(red: pixel[0], green: pixel[1], blue: pixel[2])
-    }
     let background = try color(in: crop, at: .zero)
     let card = try #require(descendants(window).first {
       $0.accessibilityIdentifier == "capture-frame-note-card-pin" && !$0.bounds.isEmpty
@@ -719,6 +873,19 @@ struct LibraryHostTests {
 
   private func descendants(_ view: UIView) -> [UIView] {
     [view] + view.subviews.flatMap(descendants)
+  }
+
+  private func color(in bitmap: CGImage, at point: CGPoint) throws -> RGBColor {
+    let corner = try #require(bitmap.cropping(to: CGRect(
+      x: point.x, y: point.y, width: 1, height: 1)))
+    var pixel = [UInt8](repeating: 0, count: 4)
+    try pixel.withUnsafeMutableBytes { bytes in
+      let context = try #require(CGContext(
+        data: bytes.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+      context.draw(corner, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+    }
+    return RGBColor(red: pixel[0], green: pixel[1], blue: pixel[2])
   }
 
 }
