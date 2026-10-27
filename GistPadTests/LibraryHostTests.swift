@@ -220,18 +220,19 @@ struct LibraryHostTests {
         $0.accessibilityIdentifier == "capture-frame-library-collection-count-\(collection.rawValue)"
           && !$0.bounds.isEmpty
       })
+      let title = try #require(descendants(window).first {
+        $0.accessibilityIdentifier == "capture-frame-library-collection-title-\(collection.rawValue)"
+          && !$0.bounds.isEmpty
+      })
+      let titleFrame = title.convert(title.bounds, to: window)
       if size == .large {
         #expect(abs(cellFrame.height - 44) <= 1 / image.scale)
       } else {
-        let title = try #require(descendants(window).first {
-          $0.accessibilityIdentifier == "capture-frame-library-collection-title-\(collection.rawValue)"
-            && !$0.bounds.isEmpty
-        })
-        #expect(count.convert(count.bounds, to: window).minX >= title.convert(title.bounds, to: window).maxX)
+        #expect(count.convert(count.bounds, to: window).minX >= titleFrame.maxX)
       }
       let crop = try #require(bitmap.cropping(to: CGRect(
-        x: frame.minX * image.scale, y: frame.minY * image.scale,
-        width: frame.width * image.scale, height: frame.height * image.scale)))
+        x: titleFrame.minX * image.scale, y: titleFrame.minY * image.scale,
+        width: titleFrame.width * image.scale, height: titleFrame.height * image.scale)))
       let request = VNRecognizeTextRequest()
       request.recognitionLevel = .accurate
       request.recognitionLanguages = ["en-US"]
@@ -267,6 +268,7 @@ struct LibraryHostTests {
     while parent != nil && !(parent is UICollectionViewCell) { parent = parent?.superview }
     let cell = try #require(parent as? UICollectionViewCell)
     let ordinaryFrame = cell.convert(cell.bounds, to: window)
+    #expect(abs(ordinaryFrame.height - (size == .large ? 63 : 195)) <= 1 / image.scale)
     let firstHeader = try #require(firstContentFrame)
     #expect(abs(firstHeader.minY - ordinaryFrame.maxY - 28) <= 1)
     Attachment.record(

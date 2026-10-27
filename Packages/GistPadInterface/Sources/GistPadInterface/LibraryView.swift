@@ -423,6 +423,7 @@ public struct LibraryView: View {
         .tint(.primary)
         .contentMargins(.horizontal, 20, for: .scrollContent)
         .listSectionSpacing(0)
+        .environment(\.defaultMinListRowHeight, 44)
         .environment(\.defaultMinListHeaderHeight, 0)
         .accessibilityIdentifier("library-list")
         .animation(reduceMotion ? nil : .default, value: model.matchingNotes.map(\.id))
@@ -518,7 +519,7 @@ public struct LibraryView: View {
         }
         .listRowBackground(isSidebar ? nil : Color.clear)
         .listRowSeparator(.hidden)
-        .listRowInsets(.vertical, dynamicTypeSize.isAccessibilitySize ? nil : 0)
+        .listRowInsets(.vertical, isSidebar || dynamicTypeSize.isAccessibilitySize ? nil : 0)
     }
 
     private func collectionLabel(_ collection: LibraryCollection) -> some View {
@@ -561,10 +562,7 @@ public struct LibraryView: View {
         }
         .font(.headline)
         .foregroundStyle(.primary)
-        .frame(
-            maxWidth: .infinity,
-            minHeight: dynamicTypeSize.isAccessibilitySize ? nil : 44,
-            alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .textCase(nil)
         .captureFrame("library-collection-\(collection.rawValue)")
         .accessibilityElement(children: .ignore)
