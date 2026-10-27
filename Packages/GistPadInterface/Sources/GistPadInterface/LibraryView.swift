@@ -208,37 +208,16 @@ public struct LibraryView: View {
     }
 
     struct SearchSummary: View {
-        let coverage: LibrarySearchCoverage?
         let selectedTagCount: Int
 
         var body: some View {
-            VStack(alignment: .leading, spacing: 6) {
-                if let coverage {
-                    if coverage.documentsWithCachedContent == coverage.totalDocuments {
-                        Text("Searches titles, filenames, tags and note text.", bundle: .module)
-                    } else {
-                        Text(
-                            "Searches titles, filenames and tags, plus text from \(coverage.documentsWithCachedContent) of \(coverage.totalDocuments) notes.",
-                            bundle: .module
-                        )
-                    }
-                    if coverage.incompleteGistCount > 0 {
-                        Text("\(coverage.incompleteGistCount) gists have incomplete file lists.", bundle: .module)
-                    }
-                    if coverage.staleResultCount > 0 {
-                        Text("\(coverage.staleResultCount) results have older cached content.", bundle: .module)
-                    }
-                } else {
-                    Text("Searches note titles.", bundle: .module)
-                }
-                if selectedTagCount > 1 {
-                    Text("Matches all selected tags.", bundle: .module)
-                }
+            if selectedTagCount > 1 {
+                Text("Matches all selected tags.", bundle: .module)
+                    .font(.footnote)
+                    .foregroundStyle(Color(uiColor: .secondaryLabel))
+                    .textCase(nil)
+                    .accessibilityIdentifier("library-search-tag-summary")
             }
-            .font(.footnote)
-            .foregroundStyle(Color(uiColor: .secondaryLabel))
-            .textCase(nil)
-            .accessibilityIdentifier("library-search-coverage")
         }
     }
 
@@ -381,13 +360,13 @@ public struct LibraryView: View {
                     searchScope
                 }
                 searchStatus
-                if model.hasFilters {
+                if model.selectedTagIDs.count > 1 {
                     Section {} header: { searchSummary }
                         .listSectionMargins(.vertical, 0)
                 }
                 if !pinnedCards.isEmpty {
                     Section {
-                        ForEach(pinnedCards) { noteRow($0, isCard: true) }
+                        pinnedGrid
                     }
                     .listSectionMargins(.top, 16)
                     .listSectionMargins(.bottom, mainNotes.isEmpty ? 0 : 24)
@@ -423,6 +402,7 @@ public struct LibraryView: View {
         .tint(.primary)
         .contentMargins(.horizontal, 20, for: .scrollContent)
         .listSectionSpacing(0)
+        .scrollDismissesKeyboard(.immediately)
         .environment(\.defaultMinListRowHeight, 44)
         .environment(\.defaultMinListHeaderHeight, 0)
         .accessibilityIdentifier("library-list")
@@ -450,14 +430,69 @@ public struct LibraryView: View {
             set: { selection in
                 // Losing a visible row is not leaving the open document.
                 guard let selection else { return }
-                selectedCollection = selection.collection
-                if let select = actions.select {
-                    select(selection.noteID)
-                } else {
-                    model.selectedNoteID = selection.noteID
-                }
+                select(selection)
             }
         )
+    }
+
+    private func select(_ selection: Selection) {
+        selectedCollection = selection.collection
+        if let select = actions.select {
+            select(selection.noteID)
+        } else {
+            model.selectedNoteID = selection.noteID
+        }
+    }
+
+    private var pinnedGrid: some View {
+        LazyVGrid(
+            columns: Array(
+                repeating: GridItem(.flexible(), spacing: 12, alignment: .top),
+                count: dynamicTypeSize.isAccessibilitySize ? 1 : 2),
+            alignment: .leading, spacing: 12
+        ) {
+            ForEach(pinnedCards) { pinnedCard($0) }
+        }
+        .captureFrame("library-pinned-grid")
+        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+        .selectionDisabled()
+    }
+
+    private func pinnedCard(_ note: LibraryNote) -> some View {
+        let selection = Selection(collection: .gists, noteID: note.id)
+        let isSelected = librarySelection.wrappedValue == selection
+        let openComments: (@MainActor (String) -> Void)? = actions.openComments.map { action in
+            { @MainActor id in
+                selectedCollection = .gists
+                action(id)
+            }
+        }
+        let delete: (@MainActor () -> Void)? = actions.deletionAction(for: note).map { action in
+            { @MainActor in
+                deletionSelection = selection
+                action()
+            }
+        }
+        return Button {
+            select(selection)
+        } label: {
+            LibraryPinnedCard(
+                note: note, tags: model.tags(for: note),
+                isSelected: isSelected, isSidebar: isSidebar)
+        }
+        .buttonStyle(.plain)
+        .contentShape(.interaction, .rect(cornerRadius: 16))
+        .contentShape(.contextMenuPreview, .rect(cornerRadius: 16))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("library-note-\(note.id)")
+        .accessibilityValue(Text(verbatim: note.accessibilityDetail))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
+        .accessibilityActions { rowActions(note, openComments: openComments, delete: delete) }
+        .modifier(LibraryRowDeletionConfirmation(
+            rowID: note.id, target: deletionConfirmation(for: selection)))
     }
 
     private func visibleSelection(for id: String) -> Selection? {
@@ -603,12 +638,7 @@ public struct LibraryView: View {
     }
 
     private var searchSummary: some View {
-        let coverage: LibrarySearchCoverage? = if case .results(_, let coverage) = model.searchState {
-            coverage
-        } else {
-            nil
-        }
-        return SearchSummary(coverage: coverage, selectedTagCount: model.selectedTagIDs.count)
+        SearchSummary(selectedTagCount: model.selectedTagIDs.count)
     }
 
     private var canShowEmptyState: Bool {
@@ -748,7 +778,7 @@ public struct LibraryView: View {
     }
 
     private func noteRow(
-        _ note: LibraryNote, collection: LibraryCollection = .gists, isCard: Bool = false,
+        _ note: LibraryNote, collection: LibraryCollection = .gists,
         hidesTopSeparator: Bool = false
     ) -> some View {
         let selection = Selection(collection: collection, noteID: note.id)
@@ -765,28 +795,20 @@ public struct LibraryView: View {
             }
         }
         return NavigationLink(value: selection) {
-            if isCard {
-                LibraryPinnedCard(
-                    note: note, tags: model.tags(for: note),
-                    isSelected: librarySelection.wrappedValue == selection,
-                    isSidebar: isSidebar)
-            } else {
-                LibraryNoteRow(
-                    note: note, tags: model.tags(for: note),
-                    showsStar: collection != .starred)
-            }
+            LibraryNoteRow(
+                note: note, tags: model.tags(for: note),
+                showsStar: collection != .starred)
         }
-        .accessibilityIdentifier("\(isCard ? "library-featured" : "library-note")-\(note.id)")
+        .accessibilityIdentifier("library-note-\(note.id)")
         .navigationLinkIndicatorVisibility(.hidden)
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
         .listRowInsets(EdgeInsets(
-            top: isCard ? 4 : 0, leading: isCard ? 0 : 12,
-            bottom: isCard ? 4 : 0, trailing: isCard ? 0 : 12))
-        .listRowSeparator(isCard || hidesTopSeparator ? .hidden : .visible, edges: .top)
-        .listRowSeparator(isCard ? .hidden : .visible, edges: .bottom)
+            top: 0, leading: 12, bottom: 0, trailing: 12))
+        .listRowSeparator(hidesTopSeparator ? .hidden : .visible, edges: .top)
+        .listRowSeparator(.visible, edges: .bottom)
         .listRowSeparatorTint(Color(uiColor: .separator))
-        .listRowBackground(isCard || !isSidebar ? Color.clear : nil)
+        .listRowBackground(isSidebar ? nil : Color.clear)
         .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
         .modifier(LibraryCommentsAccessibilityAction(note: note, action: openComments))
         .modifier(LibraryRowDeletionConfirmation(

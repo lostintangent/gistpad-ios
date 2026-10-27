@@ -197,10 +197,20 @@ struct LibraryHostTests {
     }
     try await Task.sleep(for: .milliseconds(500))
     window.layoutIfNeeded()
-    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+    var image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
-    let bitmap = try #require(image.cgImage)
+    let list = try #require(descendants(window).compactMap { $0 as? UICollectionView }.first)
+    let ordinary = try #require(descendants(window).first {
+      $0.accessibilityIdentifier == "capture-frame-note-title-ordinary"
+    })
+    var ordinaryParent = ordinary.superview
+    while ordinaryParent != nil && !(ordinaryParent is UICollectionViewCell) {
+      ordinaryParent = ordinaryParent?.superview
+    }
+    let ordinaryCell = try #require(ordinaryParent as? UICollectionViewCell)
+    let ordinaryFrame = ordinaryCell.convert(ordinaryCell.bounds, to: window)
+      .offsetBy(dx: 0, dy: list.contentOffset.y)
     var headerFrames: [CGRect] = []
     var firstContentFrame: CGRect?
     for collection in [LibraryCollection.dailyNotes, .starred, .archive] {
@@ -213,9 +223,27 @@ struct LibraryHostTests {
       var parent = marker.superview
       while parent != nil && !(parent is UICollectionViewCell) { parent = parent?.superview }
       let cell = try #require(parent as? UICollectionViewCell)
+      let visibleBottom = list.bounds.maxY - list.adjustedContentInset.bottom
+      if cell.frame.maxY > visibleBottom {
+        let maximum = max(
+          -list.adjustedContentInset.top,
+          list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom)
+        let target = min(
+          maximum, cell.frame.maxY - list.bounds.height + list.adjustedContentInset.bottom + 8)
+        list.setContentOffset(CGPoint(x: list.contentOffset.x, y: target), animated: false)
+        try await Task.sleep(for: .milliseconds(100))
+        window.layoutIfNeeded()
+      }
       let cellFrame = cell.convert(cell.bounds, to: window)
-      headerFrames.append(cellFrame)
-      if firstContentFrame == nil { firstContentFrame = frame }
+      headerFrames.append(cellFrame.offsetBy(dx: 0, dy: list.contentOffset.y))
+      if firstContentFrame == nil {
+        firstContentFrame = marker.convert(marker.bounds, to: window)
+          .offsetBy(dx: 0, dy: list.contentOffset.y)
+      }
+      image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+        window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+      }
+      let bitmap = try #require(image.cgImage)
       let count = try #require(descendants(window).first {
         $0.accessibilityIdentifier == "capture-frame-library-collection-count-\(collection.rawValue)"
           && !$0.bounds.isEmpty
@@ -261,13 +289,6 @@ struct LibraryHostTests {
         #expect(abs(headerFrames[index].minY - headerFrames[index - 1].minY - 44) <= 1 / image.scale)
       }
     }
-    let ordinary = try #require(descendants(window).first {
-      $0.accessibilityIdentifier == "capture-frame-note-title-ordinary"
-    })
-    var parent = ordinary.superview
-    while parent != nil && !(parent is UICollectionViewCell) { parent = parent?.superview }
-    let cell = try #require(parent as? UICollectionViewCell)
-    let ordinaryFrame = cell.convert(cell.bounds, to: window)
     #expect(abs(ordinaryFrame.height - (size == .large ? 63 : 195)) <= 1 / image.scale)
     let firstHeader = try #require(firstContentFrame)
     #expect(abs(firstHeader.minY - ordinaryFrame.maxY - 28) <= 1)
@@ -440,25 +461,157 @@ struct LibraryHostTests {
     #expect(abs(gap - 28) <= 1, "Measured card-to-row transition: \(gap) pt")
   }
 
+  @Test(arguments: [false, true], [DynamicTypeSize.large, .accessibility3])
+  func pinnedGridKeepsAnOddCardLeadingAndUsesOneNativeListRow(
+    isSidebar: Bool, size: DynamicTypeSize
+  ) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.frame = .init(x: 0, y: 0, width: isSidebar ? 900 : 466, height: 800)
+    window.traitOverrides.preferredContentSizeCategory =
+      size.isAccessibilitySize ? .accessibilityExtraLarge : .large
+    let model = LibraryModel(
+      snapshot: .init(notes: ["One", "Two", "Three"].enumerated().map { index, title in
+        .init(
+          id: title, title: title,
+          updatedAt: Date(timeIntervalSince1970: Double(100 - index)), gistID: title, isPinned: true,
+          excerpt: "An excerpt that never appears in the gallery")
+      }), loadState: .ready)
+    let library = LibraryView(
+      model: model, actions: .init(refresh: {}, create: {}, today: {}), isSidebar: isSidebar)
+    let content: AnyView
+    if isSidebar {
+      content = AnyView(NavigationSplitView { library } detail: { Text("A retained document") })
+    } else {
+      content = AnyView(NavigationStack { library })
+    }
+    window.rootViewController = UIHostingController(
+      rootView: content
+        .environment(\.horizontalSizeClass, isSidebar ? .regular : .compact)
+        .environment(\.dynamicTypeSize, size))
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(500))
+    window.layoutIfNeeded()
+    func marker(_ name: String) throws -> UIView {
+      try #require(descendants(window).first {
+        $0.accessibilityIdentifier == "capture-frame-\(name)" && !$0.bounds.isEmpty
+      })
+    }
+    func frame(_ view: UIView) -> CGRect { view.convert(view.bounds, to: window) }
+    let grid = try frame(marker("library-pinned-grid"))
+    let cards = try ["One", "Two", "Three"].map { try marker("note-card-\($0)") }
+    let frames = cards.map(frame)
+    let tolerance = 1 / window.traitCollection.displayScale + 0.01
+    #expect(abs(frames[0].minX - grid.minX) <= tolerance)
+    for (index, card) in cards.enumerated() {
+      var parent = card.superview
+      while parent != nil && !(parent is UICollectionViewCell) { parent = parent?.superview }
+      let cell = try #require(parent as? UICollectionViewCell)
+      #expect(cards.allSatisfy { $0.isDescendant(of: cell) })
+      if size.isAccessibilitySize {
+        #expect(abs(frames[index].width - grid.width) <= tolerance)
+        if index > 0 {
+          #expect(abs(frames[index].minY - frames[index - 1].maxY - 12) <= tolerance)
+        }
+      } else {
+        #expect(abs(frames[index].height - frames[index].width) <= tolerance)
+        #expect(abs(frames[index].width * 2 + 12 - grid.width) <= tolerance)
+      }
+    }
+    if !size.isAccessibilitySize {
+      #expect(abs(frames[1].minY - frames[0].minY) <= tolerance)
+      #expect(abs(frames[1].minX - frames[0].maxX - 12) <= tolerance)
+      #expect(abs(frames[2].minX - frames[0].minX) <= tolerance)
+      #expect(abs(frames[2].minY - frames[0].maxY - 12) <= tolerance)
+    }
+    Attachment.record("Grid: \(grid)\nCards: \(frames)", named: "pinned-grid-\(isSidebar)-\(size)")
+  }
+
+  @Test(arguments: [false, true])
+  func narrowPinnedCardDrawsItsCompleteShortTitleBesideTheCornerPin(dark: Bool) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.overrideUserInterfaceStyle = dark ? .dark : .light
+    window.traitOverrides.preferredContentSizeCategory = .large
+    window.rootViewController = UIHostingController(
+      rootView: VStack {
+        LibraryPinnedCard(
+          note: .init(
+            id: "short", title: "📚 Manga reading list", updatedAt: .now, gistID: "short",
+            isPinned: true, progress: .init(completed: 2, total: 5), commentCount: 3),
+          tags: [.init(id: "design", name: "Design"), .init(id: "ideas", name: "Ideas")],
+          isSelected: true, isSidebar: true)
+          .frame(width: 134)
+        Spacer()
+      }
+      .environment(\.dynamicTypeSize, .large)
+      .environment(\.colorScheme, dark ? .dark : .light))
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(400))
+    window.layoutIfNeeded()
+    let title = try #require(descendants(window).first {
+      $0.accessibilityIdentifier == "capture-frame-note-title-short" && !$0.bounds.isEmpty
+    })
+    let frame = title.convert(title.bounds, to: window)
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+    }
+    let bitmap = try #require(image.cgImage)
+    let crop = try #require(bitmap.cropping(to: CGRect(
+      x: frame.minX * image.scale, y: frame.minY * image.scale,
+      width: frame.width * image.scale, height: frame.height * image.scale)))
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.recognitionLanguages = ["en-US"]
+    request.usesLanguageCorrection = false
+    try VNImageRequestHandler(cgImage: crop).perform([request])
+    let words = (request.results ?? []).compactMap {
+      $0.topCandidates(1).first?.string
+    }.joined(separator: " ").lowercased()
+    #expect(words.contains("manga reading list"), "Rendered narrow title: \(words)")
+    Attachment.record(image, named: "narrow-short-title-\(dark).png", as: .png)
+  }
+
   @Test(arguments: [
     (dark: false, size: DynamicTypeSize.large, hasTags: false),
     (dark: false, size: DynamicTypeSize.large, hasTags: true),
     (dark: true, size: DynamicTypeSize.large, hasTags: false),
     (dark: true, size: DynamicTypeSize.large, hasTags: true),
+    (dark: false, size: DynamicTypeSize.xxxLarge, hasTags: false),
+    (dark: false, size: DynamicTypeSize.xxxLarge, hasTags: true),
+    (dark: true, size: DynamicTypeSize.xxxLarge, hasTags: false),
+    (dark: true, size: DynamicTypeSize.xxxLarge, hasTags: true),
     (dark: false, size: DynamicTypeSize.accessibility3, hasTags: false),
     (dark: false, size: DynamicTypeSize.accessibility3, hasTags: true),
     (dark: true, size: DynamicTypeSize.accessibility3, hasTags: false),
     (dark: true, size: DynamicTypeSize.accessibility3, hasTags: true),
   ])
-  func pinnedCardsGrowWithTheirContentAndKeepMetadataBelowTheTitle(
+  func pinnedCardsAreSquareWithoutExcerptsAndGrowOnlyForAccessibility(
     dark: Bool, size: DynamicTypeSize, hasTags: Bool
   ) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
     window.overrideUserInterfaceStyle = dark ? .dark : .light
-    window.traitOverrides.preferredContentSizeCategory =
-      size == .large ? .large : .accessibilityExtraLarge
+    window.traitOverrides.preferredContentSizeCategory = switch size {
+    case .large: .large
+    case .xxxLarge: .extraExtraExtraLarge
+    default: .accessibilityExtraLarge
+    }
     let note = LibraryNote(
       id: "card", title: "A quiet place for the next good thought", updatedAt: .now,
       gistID: "card", isPinned: true, tagIDs: ["ideas"],
@@ -466,10 +619,10 @@ struct LibraryHostTests {
       progress: .init(completed: 2, total: 5), commentCount: 3)
     let simple = LibraryNote(
       id: "simple", title: "One thought", updatedAt: .now, gistID: "simple", isPinned: true)
+    let width: CGFloat = size.isAccessibilitySize ? 280 : 134
     var cardSize: CGSize?
     var simpleSize: CGSize?
-    var twoTitleLines: CGFloat?
-    var excerptLines: CGFloat?
+    var titleHeightLimit: CGFloat?
     var minimumTagNameWidth: CGFloat?
     window.rootViewController = UIHostingController(
       rootView: VStack(spacing: 8) {
@@ -484,14 +637,11 @@ struct LibraryHostTests {
           .onGeometryChange(for: CGSize.self) { $0.size } action: { simpleSize = $0 }
         Spacer(minLength: 0)
       }
-      .frame(width: 280)
+      .frame(width: width)
       .overlay {
         VStack {
-          Text(verbatim: "Ag\nAg").font(.headline).fixedSize()
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { twoTitleLines = $0 }
-          Text(verbatim: size.isAccessibilitySize ? "Ag\nAg" : "Ag")
-            .font(.footnote).fixedSize()
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { excerptLines = $0 }
+          Text(verbatim: hasTags ? "Ag\nAg" : "Ag\nAg\nAg").font(.headline).fixedSize()
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { titleHeightLimit = $0 }
           Text(verbatim: "Ide…").font(.footnote.weight(.medium)).fixedSize()
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { minimumTagNameWidth = $0 }
         }
@@ -508,9 +658,14 @@ struct LibraryHostTests {
     let measuredCard = try #require(cardSize)
     let measuredSimple = try #require(simpleSize)
     let pixelTolerance = 1 / window.traitCollection.displayScale + 0.01
-    #expect(abs(measuredCard.width - 280) <= pixelTolerance)
+    #expect(abs(measuredCard.width - width) <= pixelTolerance)
     #expect(abs(measuredSimple.width - measuredCard.width) <= pixelTolerance)
-    #expect(measuredCard.height > measuredSimple.height)
+    if size.isAccessibilitySize {
+      #expect(measuredCard.height > measuredSimple.height)
+    } else {
+      #expect(abs(measuredCard.height - width) <= pixelTolerance)
+      #expect(abs(measuredSimple.height - width) <= pixelTolerance)
+    }
     func frame(_ id: String) throws -> CGRect {
       let marker = try #require(descendants(window).first {
         $0.accessibilityIdentifier == "capture-frame-\(id)" && !$0.bounds.isEmpty
@@ -518,32 +673,47 @@ struct LibraryHostTests {
       })
       return marker.convert(marker.bounds, to: window)
     }
+    let card = try frame("note-card-card")
     let title = try frame("note-title-card")
-    let excerpt = try frame("note-excerpt-card")
+    let pin = try frame("note-pin-card")
     let footer = try frame("note-footer-card")
     let progress = try frame("note-progress-card")
     let comments = try frame("note-comment-count-card")
-    #expect(title.height <= (try #require(twoTitleLines)) + pixelTolerance)
-    #expect(excerpt.height <= (try #require(excerptLines)) + pixelTolerance)
-    #expect(excerpt.minY >= title.maxY)
-    #expect(footer.minY >= excerpt.maxY)
+    let content = card.insetBy(dx: 12, dy: 12)
+    #expect(content.insetBy(dx: -pixelTolerance, dy: -pixelTolerance).contains(title))
+    #expect(content.insetBy(dx: -pixelTolerance, dy: -pixelTolerance).contains(footer))
+    #expect(abs(pin.maxX - content.maxX) <= pixelTolerance)
+    #expect(footer.minY >= title.maxY + 8 - pixelTolerance)
+    if !size.isAccessibilitySize {
+      let maximumTitleHeight = try #require(titleHeightLimit)
+      #expect(title.height <= maximumTitleHeight + pixelTolerance)
+      #expect(abs(footer.maxY - content.maxY) <= pixelTolerance)
+    }
     if hasTags {
       let tags = try frame("note-tags-card")
-      #expect(tags.minY >= excerpt.maxY)
-      #expect(abs(progress.midY - tags.midY) <= 1)
-      #expect(abs(comments.midY - tags.midY) <= 1)
-      #expect(progress.minX >= tags.maxX + (size.isAccessibilitySize ? 4 : 12))
-      if size.isAccessibilitySize {
-        let name = try frame("pinned-tag-summary-name")
-        #expect(name.width >= (try #require(minimumTagNameWidth)) - pixelTolerance)
+      #expect(tags.minY >= title.maxY + 8 - pixelTolerance)
+      if progress.minY >= tags.maxY {
+        #expect(progress.minY >= tags.maxY + 4 - pixelTolerance)
+      } else {
+        #expect(abs(progress.midY - tags.midY) <= 1)
+        #expect(progress.minX >= tags.maxX + 8 - pixelTolerance)
+      }
+      #expect(abs(progress.midY - comments.midY) <= 1)
+      if let name = descendants(window).first(where: {
+        $0.accessibilityIdentifier == "capture-frame-pinned-tag-summary-name"
+          && !$0.bounds.isEmpty
+      }) {
+        #expect(name.bounds.width >= (try #require(minimumTagNameWidth)) - pixelTolerance)
       }
     }
-    #expect(progress.maxY <= footer.maxY)
-    #expect(comments.maxY <= footer.maxY)
+    #expect(progress.maxY <= footer.maxY + pixelTolerance)
+    #expect(comments.maxY <= footer.maxY + pixelTolerance)
     #expect(abs(comments.maxX - footer.maxX) <= 1)
-    #expect(!descendants(window).contains {
-      $0.accessibilityIdentifier == "capture-frame-note-date-card"
-    })
+    for part in ["date", "excerpt"] {
+      #expect(!descendants(window).contains {
+        $0.accessibilityIdentifier == "capture-frame-note-\(part)-card"
+      })
+    }
     let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
@@ -625,12 +795,8 @@ struct LibraryHostTests {
       }
     }
     let list = try #require(descendants(window).compactMap { $0 as? UICollectionView }.first)
-    let selected = try #require(list.indexPathsForSelectedItems?.first)
-    let cell = try #require(list.cellForItem(at: selected))
-    #expect(cell.isSelected)
-    #expect(descendants(cell).contains {
-      $0.accessibilityIdentifier == "capture-frame-note-card-pin"
-    })
+    #expect(list.indexPathsForSelectedItems?.isEmpty != false)
+    #expect(model.selectedNoteID == "pin")
     let ink = try #require(RGBColor(
       uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
     let contrast = ink.contrast(with: background)
@@ -830,16 +996,17 @@ struct LibraryHostTests {
       as: .png)
   }
 
-  @Test(arguments: [DynamicTypeSize.large, .accessibility3], [2, 8])
-  func searchCoverageIsOneUnboxedCaption(size: DynamicTypeSize, cachedCount: Int) async throws {
+  @Test(arguments: [DynamicTypeSize.large, .accessibility3], [0, 1, 2])
+  func searchSummaryOnlyReservesSpaceForMultipleTags(
+    size: DynamicTypeSize, selectedTagCount: Int
+  ) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
     var measuredSize: CGSize?
     window.rootViewController = UIHostingController(
       rootView: VStack {
-        LibraryView.SearchSummary(
-          coverage: .init(totalDocuments: 8, documentsWithCachedContent: cachedCount), selectedTagCount: 0)
+        LibraryView.SearchSummary(selectedTagCount: selectedTagCount)
           .frame(width: 324, alignment: .leading)
           .fixedSize(horizontal: false, vertical: true)
           .onGeometryChange(for: CGSize.self) { $0.size } action: { measuredSize = $0 }
@@ -850,16 +1017,20 @@ struct LibraryHostTests {
     defer { window.isHidden = true }
     try await Task.sleep(for: .milliseconds(300))
     let measured = try #require(measuredSize)
-    #expect(measured.width == 324)
-    if size == .large {
-      #expect(measured.height <= 66)
+    if selectedTagCount <= 1 {
+      #expect(measured.width == 0)
+      #expect(measured.height == 0)
     } else {
-      #expect(measured.height > 66)
+      #expect(measured.width == 324)
+      #expect(measured.height > 0)
+      #expect(measured.height <= (size == .large ? 36 : 110))
     }
   }
 
   @Test(arguments: [false, true], [false, true])
-  func searchCoverageRetainsSemanticSecondaryColor(dark: Bool, increasedContrast: Bool) async throws {
+  func multiTagSearchSummaryRetainsSemanticSecondaryColor(
+    dark: Bool, increasedContrast: Bool
+  ) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
@@ -869,8 +1040,7 @@ struct LibraryHostTests {
       rootView: ZStack {
         Color(uiColor: .systemGroupedBackground)
         VStack {
-          LibraryView.SearchSummary(
-            coverage: .init(totalDocuments: 8, documentsWithCachedContent: 2), selectedTagCount: 0)
+          LibraryView.SearchSummary(selectedTagCount: 2)
             .frame(width: 324, alignment: .leading)
           Spacer()
         }
@@ -901,8 +1071,31 @@ struct LibraryHostTests {
     let pixels = try nativeAccentPixels(in: image, expected: expected)
     #expect(pixels.personal > 30, "Section-header styling must not dim the semantic caption again.")
     Attachment.record(
-      image, named: "coverage-secondary-\(dark ? "Dark" : "Light")-\(increasedContrast ? "High" : "Normal").png",
+      image, named: "multi-tag-summary-\(dark ? "Dark" : "Light")-\(increasedContrast ? "High" : "Normal").png",
       as: .png)
+  }
+
+  @Test func compactSearchSubmissionAndFocusLossKeepTheQueryWithoutCancel() {
+    var query = "notebook"
+    var presented = true
+    let coordinator = LibrarySearchField.Coordinator(
+      text: Binding(get: { query }, set: { query = $0 }),
+      isPresented: Binding(get: { presented }, set: { presented = $0 }))
+    let bar = LibrarySearchField.SearchBar()
+    bar.text = query
+    coordinator.searchBarSearchButtonClicked(bar)
+    #expect(query == "notebook")
+    #expect(bar.text == "notebook")
+    #expect(!presented)
+    #expect(!bar.showsCancelButton)
+    coordinator.searchBarTextDidBeginEditing(bar)
+    #expect(presented)
+    coordinator.searchBar(bar, textDidChange: "")
+    #expect(query.isEmpty)
+    #expect(presented, "Clear leaves the field focused.")
+    coordinator.searchBarTextDidEndEditing(bar)
+    #expect(query.isEmpty)
+    #expect(!presented)
   }
 
   private func descendants(_ view: UIView) -> [UIView] {

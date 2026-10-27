@@ -11,49 +11,23 @@ struct LibraryPinnedCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(verbatim: note.title)
-                    .font(.headline)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityLabel(Text(verbatim: note.title))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .captureFrame("note-title-\(note.id)")
-                Image(systemName: "pin.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-            }
-            if let excerpt = note.excerpt, !excerpt.isEmpty {
-                Text(verbatim: excerpt)
-                    .font(.footnote)
-                    .foregroundStyle(Color(uiColor: .label))
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
-                    .truncationMode(.tail)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityLabel(Text(verbatim: excerpt))
-                    .captureFrame("note-excerpt-\(note.id)")
-            }
-            if !tags.isEmpty || hasMetadata {
-                ViewThatFits(in: .horizontal) {
-                    if tags.count >= 2 { footer(tagLimit: 2) }
-                    if !tags.isEmpty { footer(tagLimit: 1) }
-                    footer(tagLimit: 0)
-                    footer(tagLimit: 0, showsProgressIndicator: false)
-                }
-                .font(.footnote)
-                .foregroundStyle(Color(uiColor: .label))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .captureFrame("note-footer-\(note.id)")
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                content(titleLines: nil).padding(12)
+            } else {
+                Color.clear
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay {
+                        ViewThatFits(in: .vertical) {
+                            content(titleLines: 3)
+                            content(titleLines: 2)
+                            content(titleLines: 1)
+                        }
+                        .padding(12)
+                    }
             }
         }
-        .captureFrame("note-content-\(note.id)")
-        .padding(dynamicTypeSize.isAccessibilitySize ? 12 : 14)
-        .background(
-            cardBackground,
-            in: .rect(cornerRadius: 16))
+        .background(cardBackground, in: .rect(cornerRadius: 16))
         .overlay {
             if isSidebar && contrast == .increased {
                 RoundedRectangle(cornerRadius: 16)
@@ -69,6 +43,88 @@ struct LibraryPinnedCard: View {
         .accessibilityValue(Text(verbatim: note.accessibilityDetail))
     }
 
+    private func content(titleLines: Int?) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(verbatim: note.title)
+                    .font(.headline)
+                    .lineLimit(titleLines)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(Text(verbatim: note.title))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .captureFrame("note-title-\(note.id)")
+                Image(systemName: "pin.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                    .captureFrame("note-pin-\(note.id)")
+            }
+            if !dynamicTypeSize.isAccessibilitySize {
+                Spacer(minLength: 0)
+            }
+            if !tags.isEmpty || hasMetadata {
+                ViewThatFits(in: .horizontal) {
+                    if tags.isEmpty || !hasMetadata {
+                        stackedFooter
+                    } else {
+                        if tags.count >= 2 { inlineFooter(tagLimit: 2) }
+                        inlineFooter(tagLimit: 1)
+                        inlineFooter(tagLimit: 0)
+                        inlineFooter(tagLimit: 0, showsProgressIndicator: false)
+                        stackedFooter
+                    }
+                }
+                .font(.footnote)
+                .foregroundStyle(Color(uiColor: .label))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .captureFrame("note-footer-\(note.id)")
+            }
+        }
+        .captureFrame("note-content-\(note.id)")
+    }
+
+    private var stackedFooter: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let first = tags.first {
+                ViewThatFits(in: .horizontal) {
+                    if tags.count >= 2 { tagRow(limit: 2) }
+                    tagRow(limit: 1)
+                    PinnedTagSummary(name: first.name, otherCount: tags.count - 1)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(
+                    "Tags: \(tags.map(\.name).joined(separator: ", "))", bundle: .module))
+                .captureFrame("note-tags-\(note.id)")
+            }
+            if hasMetadata {
+                ViewThatFits(in: .horizontal) {
+                    metadata(showsProgressIndicator: true)
+                    metadata(showsProgressIndicator: false)
+                }
+            }
+        }
+    }
+
+    private func inlineFooter(tagLimit: Int, showsProgressIndicator: Bool = true) -> some View {
+        HStack(spacing: 8) {
+            if let first = tags.first {
+                Group {
+                    if tagLimit == 0 {
+                        PinnedTagSummary(name: first.name, otherCount: tags.count - 1)
+                    } else {
+                        tagRow(limit: tagLimit)
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(
+                    "Tags: \(tags.map(\.name).joined(separator: ", "))", bundle: .module))
+                .captureFrame("note-tags-\(note.id)")
+            }
+            metadata(showsProgressIndicator: showsProgressIndicator)
+        }
+    }
+
     private var cardBackground: Color {
         if isSidebar {
             return Color(isSelected ? "PinnedSelectedSurface" : "PinnedSurface", bundle: .module)
@@ -76,57 +132,34 @@ struct LibraryPinnedCard: View {
         return isSelected ? .clear : Color(uiColor: .secondarySystemGroupedBackground)
     }
 
-    private func footer(tagLimit: Int, showsProgressIndicator: Bool = true) -> some View {
-        HStack(spacing: 0) {
-            if let first = tags.first {
-                Group {
-                    if tagLimit == 0 {
-                        PinnedTagSummary(name: first.name, otherCount: tags.count - 1)
-                    } else {
-                        HStack(spacing: 6) {
-                            ForEach(Array(tags.prefix(tagLimit))) { TagLabel(tag: $0) }
-                            if tags.count > tagLimit {
-                                PinnedTagSummary(otherCount: tags.count - tagLimit)
-                            }
-                        }
-                        .fixedSize(horizontal: true, vertical: false)
-                    }
-                }
-                .layoutPriority(1)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(Text("Tags: \(tags.map(\.name).joined(separator: ", "))", bundle: .module))
-                .captureFrame("note-tags-\(note.id)")
-            }
-            Spacer(minLength: tags.isEmpty || !hasMetadata ? 0 : footerSpacing(tagLimit: tagLimit))
-            if hasMetadata {
-                HStack(spacing: footerSpacing(tagLimit: tagLimit)) {
-                    metadata(showsProgressIndicator: showsProgressIndicator)
-                }
-                    .fixedSize(horizontal: true, vertical: false)
-                    .layoutPriority(2)
+    private func tagRow(limit: Int) -> some View {
+        HStack(spacing: 6) {
+            ForEach(Array(tags.prefix(limit))) { TagLabel(tag: $0) }
+            if tags.count > limit {
+                PinnedTagSummary(otherCount: tags.count - limit)
             }
         }
-    }
-
-    private func footerSpacing(tagLimit: Int) -> CGFloat {
-        tagLimit == 0 && dynamicTypeSize.isAccessibilitySize ? 4 : 12
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var hasMetadata: Bool {
         note.progress.map { $0.total > 0 } == true || note.visibleCommentCount != nil
     }
 
-    @ViewBuilder
     private func metadata(showsProgressIndicator: Bool) -> some View {
-        if let progress = note.progress, progress.total > 0 {
-            TaskProgressLabel(
-                progress: progress, isOverdue: note.isOverdue, usesPrimaryInk: true,
-                showsIndicator: showsProgressIndicator)
-                .captureFrame("note-progress-\(note.id)")
-        }
-        if let count = note.visibleCommentCount {
-            LibraryCommentCount(count: count, noteID: note.id)
-                .labelStyle(.iconOnly)
+        HStack(spacing: 8) {
+            if let progress = note.progress, progress.total > 0 {
+                TaskProgressLabel(
+                    progress: progress, isOverdue: note.isOverdue, usesPrimaryInk: true,
+                    showsIndicator: showsProgressIndicator)
+                    .fixedSize()
+                    .captureFrame("note-progress-\(note.id)")
+            }
+            Spacer(minLength: 0)
+            if let count = note.visibleCommentCount {
+                LibraryCommentCount(count: count, noteID: note.id)
+                    .labelStyle(.iconOnly)
+            }
         }
     }
 }
@@ -139,7 +172,6 @@ private struct PinnedTagSummary: View {
     var body: some View {
         HStack(spacing: 4) {
             if let name {
-                // Reserve three native-size characters before letting the decorative ring yield.
                 Text(verbatim: name.count > 3 ? String(name.prefix(3)) + "…" : name)
                     .fixedSize()
                     .hidden()
