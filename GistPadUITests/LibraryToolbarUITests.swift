@@ -325,15 +325,15 @@ final class LibraryToolbarUITests: XCTestCase {
         XCTAssertEqual(settings.midX, tags.midX, accuracy: 2)
         XCTAssertGreaterThan(tags.midX, app.windows.firstMatch.frame.midX)
       }
-      let pinned = app.descendants(matching: .any)["library-pinned-heading"].firstMatch
+      let pinned = app.descendants(matching: .any)["library-featured-shape"].firstMatch
       try await waitUntil { pinned.exists }
       reveal(pinned, in: app)
-      XCTAssertEqual(pinned.label, "Pinned Gists, 2 gists")
+      XCTAssertFalse(app.descendants(matching: .any)["library-pinned-heading"].exists)
       record(app, name: "home-\(wide ? "open" : "folded")-\(appearance)-\(sizeName)")
-      let listed = app.descendants(matching: .any)["library-listed-heading"].firstMatch
+      let listed = app.descendants(matching: .any)["library-note-weekend"].firstMatch
       reveal(listed, in: app)
       try await waitUntil { listed.isHittable }
-      XCTAssertEqual(listed.label, "Your Gists, 3 gists")
+      XCTAssertFalse(app.descendants(matching: .any)["library-listed-heading"].exists)
       record(app, name: "home-your-gists-\(wide ? "open" : "folded")-\(appearance)-\(sizeName)")
       if wide {
         let more = app.navigationBars["GistPad"].buttons["More"]

@@ -108,8 +108,13 @@ final class NotebookShelfUITests: XCTestCase {
         defer { app.terminate() }
         try await checkPosture(app, wide: wide)
         let overdue = row("library-note-daily-overdue", in: app)
+        let header = app.buttons["library-collection-dailyNotes"].firstMatch
+        for _ in 0..<4 {
+          if overdue.isHittable { break }
+          app.collectionViews.firstMatch.swipeUp()
+        }
         try await waitUntil("the readable day and truthful note total") {
-          overdue.isHittable && app.navigationBars["Daily Notes"].staticTexts["2 notes"].exists
+          overdue.isHittable && (header.value as? String ?? "").contains("2 notes")
         }
         XCTAssertTrue(overdue.label.contains("Friday"))
         XCTAssertTrue(overdue.label.contains("2026"))
@@ -124,7 +129,7 @@ final class NotebookShelfUITests: XCTestCase {
           app,
           name: "daily-shelf-\(wide ? "open" : "folded")-\(accessibility ? "AX3" : "Large")-\(appearance)")
 
-        let complete = row("library-note-daily-done", in: app)
+        let complete = row("library-note-today", in: app)
         for _ in 0..<4 {
           if complete.isHittable { break }
           app.collectionViews.firstMatch.swipeUp()

@@ -203,11 +203,13 @@ final class NativeControlUITests: XCTestCase {
         for collection in collections {
           let header = app.buttons["library-collection-\(collection.id)"].firstMatch
           let row = app.descendants(matching: .any)["library-note-\(collection.noteID)"].firstMatch
-          try await reveal(header, in: list)
+          try await revealFully(header, in: list, window: window)
           XCTAssertEqual(header.label, collection.title)
           XCTAssertTrue((header.value as? String ?? "").contains(collection.count))
-          XCTAssertGreaterThanOrEqual(header.frame.height, 44)
-          XCTAssertTrue(window.frame.contains(header.frame))
+          XCTAssertGreaterThanOrEqual(header.frame.height, 44 - 0.01)
+          XCTAssertTrue(
+            window.frame.insetBy(dx: -0.01, dy: -0.01).contains(header.frame),
+            "\(collection.id) \(header.frame) outside \(window.frame)")
           try await reveal(row, in: list)
           if collection.id == "dailyNotes" {
             XCTAssertTrue(row.label.contains("3 of 4 tasks complete"))
@@ -388,10 +390,12 @@ final class NativeControlUITests: XCTestCase {
     if cancel.isHittable {
       cancel.tap()
     } else {
-      app.navigationBars["GistPad"].coordinate(
-        withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+      // The compact popover can cover the navigation bar, so dismiss from the uncovered margin.
+      app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)).tap()
     }
-    try await waitUntil("cancellation retaining the Starred occurrence") { row.isHittable }
+    try await waitUntil("cancellation retaining the Starred occurrence") {
+      row.isHittable && !confirm.exists
+    }
     row.tap()
     let home = app.navigationBars["GistPad"]
     if home.isHittable {
@@ -769,6 +773,21 @@ final class NativeControlUITests: XCTestCase {
     tree.lifetime = .keepAlways
     add(tree)
     try await waitUntil("the requested Library control") { element.isHittable }
+  }
+
+  /// `reveal` stops at the first hittable sliver, so nudge a revealed element fully into the window.
+  @MainActor
+  private func revealFully(
+    _ element: XCUIElement, in list: XCUIElement, window: XCUIElement
+  ) async throws {
+    try await reveal(element, in: list)
+    for _ in 0..<4 where !window.frame.insetBy(dx: -0.01, dy: -0.01).contains(element.frame) {
+      let upward = element.frame.maxY > window.frame.maxY
+      list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.6 : 0.4)).press(
+        forDuration: 0.05,
+        thenDragTo: list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: upward ? 0.4 : 0.6)))
+      try await Task.sleep(for: .milliseconds(400))
+    }
   }
 
   @MainActor
