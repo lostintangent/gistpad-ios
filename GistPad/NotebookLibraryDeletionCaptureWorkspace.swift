@@ -12,21 +12,35 @@ struct NotebookLibraryDeletionCaptureWorkspace: View {
   }
 }
 
-private actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding {
-  private let account = NotebookAccount(
-    id: UUID(), login: "synthetic-notebook", githubUserID: 1,
-    preferences: .init(isAutoSaveEnabled: false, accentColor: nil))
+actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding {
+  private let account: NotebookAccount
   private var cache: CachedLibrarySnapshot?
   private var store: DraftStore?
   private var deleted: Set<String> = []
   private var published: [Gist] = []
   private var seededCopies = false
+  private let metadataDelay: Duration
+  private(set) var libraryReadCount = 0
+  private(set) var metadataReadCount = 0
+  private(set) var publicationReasons: [PublishReason] = []
+
+  init(
+    autosave: Bool = ProcessInfo.processInfo.arguments.contains("--capture-autosave"),
+    metadataDelay: Duration = ProcessInfo.processInfo.arguments.contains("--capture-slow-publication-metadata")
+      ? .seconds(30) : .zero
+  ) {
+    account = NotebookAccount(
+      id: UUID(), login: "synthetic-notebook", githubUserID: 1,
+      preferences: .init(isAutoSaveEnabled: autosave, accentColor: nil))
+    self.metadataDelay = metadataDelay
+  }
 
   func cachedAccount() -> NotebookAccount? { account }
   func signIn() -> NotebookAccount { account }
   func refreshAccount() -> NotebookAccount { account }
   func gists(accountID: UUID) throws -> [Gist] {
-    try fixtureGists(
+    libraryReadCount += 1
+    return try fixtureGists(
       includeDeleted: ProcessInfo.processInfo.arguments.contains("--capture-stale-deletion")
     ).filter { $0.id != "shared" }
   }
@@ -34,7 +48,9 @@ private actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoPr
     try fixtureGists().filter { $0.id == "shared" }
   }
 
-  func gist(id: String, accountID: UUID) throws -> Gist {
+  func gist(id: String, accountID: UUID) async throws -> Gist {
+    metadataReadCount += 1
+    if id == "newcapture" { try await Task.sleep(for: metadataDelay) }
     guard let gist = try fixtureGists().first(where: { $0.id == id }) else {
       throw GitHubClientError.missingFile
     }
@@ -77,6 +93,7 @@ private actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoPr
       .publish(
         id: draftID, accountID: accountID, reason: reason,
         expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
+    publicationReasons.append(reason)
     cache = try await store.cachedLibrary(accountID: accountID)
     if let id = saved.gistID, let gist = cache?.details[id] { published = [gist] }
     return saved

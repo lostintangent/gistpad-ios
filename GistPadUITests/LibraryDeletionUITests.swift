@@ -94,6 +94,56 @@ final class LibraryDeletionUITests: XCTestCase {
   }
 
   @MainActor
+  func testANewlyAutosavedNoteOffersContextMenuAndSwipeDeleteWithoutRefresh() async throws {
+    for contextMenu in [false, true] {
+      try await checkAutomaticPublicationDeletion(leaving: false, contextMenu: contextMenu)
+    }
+  }
+
+  @MainActor
+  func testLeavingANewNoteOffersContextMenuAndSwipeDeleteWithoutRefresh() async throws {
+    for contextMenu in [false, true] {
+      try await checkAutomaticPublicationDeletion(leaving: true, contextMenu: contextMenu)
+    }
+  }
+
+  @MainActor
+  private func checkAutomaticPublicationDeletion(leaving: Bool, contextMenu: Bool) async throws {
+    let app = launch(dark: leaving, autosave: true)
+    defer { app.terminate() }
+    let create = app.buttons["library-create"]
+    try await waitUntil("the New Note button") { create.isHittable }
+    create.tap()
+    let editor = app.textViews["source-editor"]
+    try await waitUntil("the new note's editor") { editor.isHittable }
+    editor.typeText("Delete this")
+    if app.buttons["Hide Keyboard"].isHittable { app.buttons["Hide Keyboard"].tap() }
+    let row = app.descendants(matching: .any)["library-note-newcapture"].firstMatch
+    if !leaving {
+      try await waitUntil("the five-second autosave's publication") {
+        row.exists || app.buttons["note-comments"].exists
+      }
+    }
+    if app.buttons["BackButton"].isHittable { app.buttons["BackButton"].tap() }
+    try await waitUntil("the automatically published row without refreshing") { row.isHittable }
+    if contextMenu { row.press(forDuration: 0.8) }
+    else { row.swipeLeft() }
+    let delete = app.buttons["Delete"]
+    try await waitUntil("Delete on the automatically published gist") { delete.isHittable }
+    delete.tap()
+    let confirmation = app.buttons["Delete from GitHub"]
+    try await waitUntil("the new gist's remote deletion confirmation") { confirmation.isHittable }
+    XCTAssertFalse(app.buttons["Delete Local Copy"].exists)
+    record(
+      app,
+      name: "new-\(leaving ? "leave-note" : "autosave")-\(contextMenu ? "context" : "swipe")-delete")
+    confirmation.tap()
+    try await waitUntil("the new gist to be deleted without refreshing") { !row.exists }
+    XCTAssertFalse(app.alerts.exists)
+    XCTAssertTrue(app.descendants(matching: .any)["library-note-a"].firstMatch.exists)
+  }
+
+  @MainActor
   func testOwnedGistMenuAndConfirmationInLight() async throws {
     try await checkMenuAndConfirmation(dark: false)
   }
@@ -176,7 +226,9 @@ final class LibraryDeletionUITests: XCTestCase {
   }
 
   @MainActor
-  private func launch(dark: Bool, localCopies: Bool = false) -> XCUIApplication {
+  private func launch(
+    dark: Bool, localCopies: Bool = false, autosave: Bool = false
+  ) -> XCUIApplication {
     let app = XCUIApplication(bundleIdentifier: "dev.gistpad.GistPad")
     app.launchArguments = [
       "--capture-screen", "library-delete", "--capture-stale-deletion",
@@ -184,6 +236,9 @@ final class LibraryDeletionUITests: XCTestCase {
       "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL",
     ]
     if localCopies { app.launchArguments.append("--capture-local-copies") }
+    if autosave {
+      app.launchArguments += ["--capture-autosave", "--capture-slow-publication-metadata"]
+    }
     app.launch()
     return app
   }
