@@ -89,6 +89,8 @@ After the user confirms deletion and GitHub acknowledges it, `removeDraftsForDel
 
 An acknowledged publication updates the cached owned gist, details and file content in the same store commit as its draft baseline. This makes newly created gists immediately available to Library actions even when a subsequent metadata GET is offline.
 
+The app adopts that acknowledged metadata without another GET. A confirmed Library deletion waits for an in-flight publication on the same retained document before taking its destructive lock, including the brief handoff where the durable draft knows the new gist ID before the session does. Autosave and departure publication use the same path as an explicit Save.
+
 `discardBlankDraft(id:accountID:expectedGeneration:)` quietly removes an unbound, locally saved draft with an empty description and whitespace-only source. It also accepts an untouched, generation-zero default daily date heading with no remote-file baseline, including a new day bound to an existing daily gist. Typed daily content, custom templates and published files are not blank. Neither case may have publication attempts, recovery history or photo records. The store rechecks the generation and commits only the local draft deletion before returning `true`. The host must finish pending local edits and exclude its current note before requesting cleanup. It must not automatically publish a discardable blank.
 
 ## Validation

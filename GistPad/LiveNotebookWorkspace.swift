@@ -1397,12 +1397,23 @@ struct LiveNotebookWorkspace: View {
     do {
       for controller in sessions.values {
         let requiresLock: Bool = switch action {
-        case .delete(let gistID): controller.draft.gistID == gistID
+        case .delete(let gistID):
+          controller.draft.gistID == gistID
+            || notebook.localDrafts.contains {
+              $0.id == controller.draft.id && $0.gistID == gistID
+            }
         case .discardLocalCopy(let draftID, _): controller.draft.id == draftID
         case .signOut: controller.draft.accountID == accountID
         default: false
         }
         if requiresLock {
+          if case .delete = action {
+            await controller.waitForPublication()
+            try Task.checkCancellation()
+            guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
+              throw AccountError.accountChanged
+            }
+          }
           try controller.beginDestructiveAction()
           locked.append(controller)
         }
@@ -1411,6 +1422,9 @@ struct LiveNotebookWorkspace: View {
         guard await controller.waitForLocalSave() else {
           throw NotebookEditError.localPersistenceFailed
         }
+      }
+      guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
+        throw AccountError.accountChanged
       }
       let result = try await notebook.perform(action)
       switch result {

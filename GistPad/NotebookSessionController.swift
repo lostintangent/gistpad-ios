@@ -454,6 +454,12 @@ final class NotebookSessionController {
     if saveState == .reconnectRequired { saveState = .savedLocally }
   }
 
+  func waitForPublication() async {
+    if isPublishing {
+      await withCheckedContinuation { publicationWaiters.append($0) }
+    }
+  }
+
   @discardableResult
   func finishLeavingNote() async -> Bool {
     guard await waitForLocalSave() else { return false }
@@ -488,9 +494,7 @@ final class NotebookSessionController {
     shouldContinue: @escaping @MainActor @Sendable () -> Bool = { true }
   ) async {
     guard !Task.isCancelled, shouldContinue() else { return }
-    if reason == .background, isPublishing {
-      await withCheckedContinuation { publicationWaiters.append($0) }
-    }
+    if reason == .background { await waitForPublication() }
     guard !Task.isCancelled, shouldContinue(), publicationAllowed(reason: reason) else { return }
     if reason != .manual, !hasUnpublishedChanges { return }
     guard canMutate, !isPublishing, !document.isRecovery, saveState.canPublish else { return }
