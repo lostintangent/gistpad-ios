@@ -424,6 +424,12 @@ final class NotebookModel {
     return .init(id: gist.id, accountID: account.id, title: gist.displayName)
   }
 
+  func gistID(forRow rowID: String) -> String? {
+    if let id = searchTargets[rowID]?.gistID { return id }
+    if cachedLibrary?.gists.contains(where: { $0.id == rowID }) == true { return rowID }
+    return library.snapshot.notes.first { $0.id == rowID && $0.isDailyNote }?.gistID
+  }
+
   private func rowSelection(for rowID: String) -> NotebookSelection? {
     if let target = searchTargets[rowID] { return target }
     if let id = UUID(uuidString: rowID), let draft = localDrafts.first(where: { $0.id == id }) {
@@ -708,8 +714,21 @@ final class NotebookModel {
   }
 
   func updateCalendar() async {
+    updateDailyOverdue()
     updateToday()
     await search()
+  }
+
+  private func updateDailyOverdue() {
+    let today = Calendar.current.startOfDay(for: .now)
+    for index in library.snapshot.notes.indices {
+      let note = library.snapshot.notes[index]
+      guard note.isDailyNote else { continue }
+      let isOverdue = note.dailyDate.map {
+        $0 < today && (note.progress?.remaining ?? 0) > 0
+      } ?? false
+      if note.isOverdue != isOverdue { library.snapshot.notes[index].isOverdue = isOverdue }
+    }
   }
 
   func refresh() async {

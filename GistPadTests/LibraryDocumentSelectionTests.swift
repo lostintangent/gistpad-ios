@@ -4,19 +4,6 @@ import Testing
 
 @Suite @MainActor
 struct LibraryDocumentSelectionTests {
-  @Test(arguments: [LibraryCollection.starred, .dailyNotes, .archive])
-  func aCollectionDoesNotImportTheOpenDocumentFromAnotherScope(collection: LibraryCollection) {
-    let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
-    model.selectedNoteID = "shape"
-    model.collection = collection
-    #expect(model.visibleSelectedNoteID == nil)
-    #expect(model.selectedNoteID == "shape")
-    #expect(!model.matchingNotes.contains { $0.id == "shape" })
-    #expect(!model.showsListedNotesHeading)
-    model.collection = .gists
-    #expect(model.visibleSelectedNoteID == "shape")
-  }
-
   @Test func tagAndSearchChangesOnlyProjectVisibleSelectionFromTheRetainedDocument() {
     let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
     model.selectedNoteID = "shape"

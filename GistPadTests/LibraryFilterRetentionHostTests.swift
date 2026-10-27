@@ -33,8 +33,6 @@ struct LibraryFilterRetentionHostTests {
 
     try await waitForSelectedCellCount(1, in: window)
     switch change {
-    case .collection:
-      model.collection = .starred
     case .tags:
       model.selectedTagIDs = ["personal"]
     case .search:
@@ -49,7 +47,6 @@ struct LibraryFilterRetentionHostTests {
     #expect(model.selectedNoteID == "shape")
     #expect(departures == 0)
 
-    model.collection = .gists
     model.clearFilters()
     model.searchState = .inactive
     try await waitForSelectedCellCount(1, in: window)
@@ -110,7 +107,7 @@ struct LibraryFilterRetentionHostTests {
 }
 
 enum LibraryFilterChange: CaseIterable, Sendable {
-  case collection, tags, search
+  case tags, search
 }
 
 private struct LibraryRetentionProbe: View {

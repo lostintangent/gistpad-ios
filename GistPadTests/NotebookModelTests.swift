@@ -1441,6 +1441,29 @@ struct NotebookModelTests {
     #expect(model.library.selectedNoteID == row.id)
   }
 
+  @Test func unfilteredDailyRowsResolveTheirGistAndRefreshOverdueOnCalendarChanges() async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount,
+      gists: [
+        try makeGist(
+          id: "daily", title: GistConventions.dailyNotesDescription,
+          content: "- [ ] Carried over", filename: "2026-01-02.md")
+      ])
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    #expect(!model.library.hasFilters)
+    #expect(model.searchTargets.isEmpty)
+    let rowID = "daily/2026-01-02.md"
+    #expect(model.gistID(forRow: rowID) == "daily")
+    #expect(model.gistID(forRow: "daily/2026-01-03.md") == nil)
+    let index = try #require(model.library.snapshot.notes.firstIndex { $0.id == rowID })
+    #expect(model.library.snapshot.notes[index].isOverdue)
+    // A row projected before midnight is stale until the calendar changes.
+    model.library.snapshot.notes[index].isOverdue = false
+    await model.updateCalendar()
+    #expect(model.library.snapshot.notes[index].isOverdue)
+  }
+
   @Test(arguments: [false, true])
   func allSearchSpansTheLibraryWithoutFetchingOrChangingDailyMembership(cachedContent: Bool) async throws {
     let daily = try makeGist(

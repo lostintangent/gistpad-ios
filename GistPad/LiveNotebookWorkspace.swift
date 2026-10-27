@@ -576,10 +576,7 @@ struct LiveNotebookWorkspace: View {
       }
     }
     actions.togglePin = { rowID in
-      guard let account = notebook.account,
-        let id = notebook.searchTargets[rowID]?.gistID
-          ?? notebook.cachedLibrary?.gists.first(where: { $0.id == rowID })?.id
-      else {
+      guard let account = notebook.account, let id = notebook.gistID(forRow: rowID) else {
         actionMessage = String(localized: "Save this local draft to GitHub before pinning it.")
         return
       }
@@ -588,9 +585,7 @@ struct LiveNotebookWorkspace: View {
         accountID: account.id)
     }
     actions.toggleArchive = { rowID in
-      guard let account = notebook.account,
-        let id = notebook.searchTargets[rowID]?.gistID
-          ?? notebook.cachedLibrary?.gists.first(where: { $0.id == rowID })?.id,
+      guard let account = notebook.account, let id = notebook.gistID(forRow: rowID),
         let gist = notebook.cachedLibrary?.gists.first(where: { $0.id == id })
       else {
         actionMessage = String(
