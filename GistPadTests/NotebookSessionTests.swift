@@ -615,6 +615,34 @@ struct NotebookSessionTests {
     #expect(controller.saveState == .savedLocally)
   }
 
+  @Test func aConfirmedDeletionCanWaitForPublicationBeforeTakingItsLock() async throws {
+    let (controller, provider) = try await makeController()
+    edit(controller, to: "A thought being published")
+    #expect(await controller.waitForLocalSave())
+    let publishing = Task { await controller.publish() }
+    await provider.waitForPublish()
+    #expect(controller.isPublishing)
+    var deletionHasLocked = false
+    let deletion = Task {
+      await controller.waitForPublication()
+      try controller.beginDestructiveAction()
+      deletionHasLocked = true
+    }
+    await Task.yield()
+    #expect(!deletionHasLocked)
+    #expect(!controller.isPerformingDestructiveAction)
+    await provider.releasePublish()
+    await publishing.value
+    try await deletion.value
+    #expect(deletionHasLocked)
+    #expect(!controller.isPublishing)
+    #expect(controller.isPerformingDestructiveAction)
+    #expect(!controller.canMutate)
+    #expect(await provider.publishCount == 1)
+    controller.endDestructiveAction()
+    #expect(controller.canMutate)
+  }
+
   @Test func aLocalWriteFailureBlocksPublishing() async throws {
     let (controller, provider) = try await makeController()
     await provider.failPersistence()

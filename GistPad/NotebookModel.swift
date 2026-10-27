@@ -1629,15 +1629,24 @@ final class NotebookModel {
 
   func adoptPublication(_ saved: DraftSnapshot) async throws -> Gist? {
     guard let account, account.id == saved.accountID, let id = saved.gistID else { return nil }
-    let gist = try await provider.gist(id: id, accountID: account.id)
-    guard self.account?.id == account.id else { throw AccountError.accountChanged }
-    if var cache = cachedLibrary {
-      let owned = cache.owned.contains { $0.id == id } || gist.owner?.id == saved.githubUserID
-      cache.owned.removeAll { $0.id == id }
-      if owned { cache.owned.insert(gist, at: 0) }
-      cache.starred = cache.starred.map { $0.id == id ? gist : $0 }
-      try await provider.cacheLibrary(owned: cache.owned, starred: cache.starred, account: account)
-      try await reloadLocalState(accountID: account.id)
+    let gist: Gist
+    if let acknowledged = cachedLibrary?.details[id],
+      acknowledged.revision == saved.baseRevision,
+      let text = cachedLibrary?.content(gist: acknowledged, filename: saved.filename),
+      let base = saved.baseContent, text.utf8.elementsEqual(base.utf8)
+    {
+      gist = acknowledged
+    } else {
+      gist = try await provider.gist(id: id, accountID: account.id)
+      guard self.account?.id == account.id else { throw AccountError.accountChanged }
+      if var cache = cachedLibrary {
+        let owned = cache.owned.contains { $0.id == id } || gist.owner?.id == saved.githubUserID
+        cache.owned.removeAll { $0.id == id }
+        if owned { cache.owned.insert(gist, at: 0) }
+        cache.starred = cache.starred.map { $0.id == id ? gist : $0 }
+        try await provider.cacheLibrary(owned: cache.owned, starred: cache.starred, account: account)
+        try await reloadLocalState(accountID: account.id)
+      }
     }
     if loadedDocument?.draft?.id == saved.id
       || (loadedDocument?.gist?.id == id && loadedDocument?.filename == saved.filename)
