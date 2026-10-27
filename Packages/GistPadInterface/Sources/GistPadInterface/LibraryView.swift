@@ -510,7 +510,7 @@ public struct LibraryView: View {
         .accessibilityValue(Text(verbatim: note.accessibilityDetail))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
-        .modifier(LibraryCommentsAccessibilityAction(note: note, action: openComments))
+        .accessibilityActions { rowActions(note, openComments: openComments, delete: delete) }
         .modifier(LibraryRowDeletionConfirmation(
             rowID: note.id, target: deletionConfirmation(for: selection)))
     }

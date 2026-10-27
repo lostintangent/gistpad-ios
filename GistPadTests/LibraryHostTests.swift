@@ -610,7 +610,12 @@ struct LibraryHostTests {
     if hasTags {
       let tags = try frame("note-tags-card")
       #expect(tags.minY >= title.maxY + 8 - pixelTolerance)
-      #expect(progress.minY >= tags.maxY + 4 - pixelTolerance)
+      if progress.minY >= tags.maxY {
+        #expect(progress.minY >= tags.maxY + 4 - pixelTolerance)
+      } else {
+        #expect(abs(progress.midY - tags.midY) <= 1)
+        #expect(progress.minX >= tags.maxX + 8 - pixelTolerance)
+      }
       #expect(abs(progress.midY - comments.midY) <= 1)
       if let name = descendants(window).first(where: {
         $0.accessibilityIdentifier == "capture-frame-pinned-tag-summary-name"
