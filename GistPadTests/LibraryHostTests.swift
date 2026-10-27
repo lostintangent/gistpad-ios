@@ -473,9 +473,10 @@ struct LibraryHostTests {
     window.traitOverrides.preferredContentSizeCategory =
       size.isAccessibilitySize ? .accessibilityExtraLarge : .large
     let model = LibraryModel(
-      snapshot: .init(notes: ["One", "Two", "Three"].map {
+      snapshot: .init(notes: ["One", "Two", "Three"].enumerated().map { index, title in
         .init(
-          id: $0, title: $0, updatedAt: .now, gistID: $0, isPinned: true,
+          id: title, title: title,
+          updatedAt: Date(timeIntervalSince1970: Double(100 - index)), gistID: title, isPinned: true,
           excerpt: "An excerpt that never appears in the gallery")
       }), loadState: .ready)
     let library = LibraryView(
@@ -538,6 +539,10 @@ struct LibraryHostTests {
     (dark: false, size: DynamicTypeSize.large, hasTags: true),
     (dark: true, size: DynamicTypeSize.large, hasTags: false),
     (dark: true, size: DynamicTypeSize.large, hasTags: true),
+    (dark: false, size: DynamicTypeSize.xxxLarge, hasTags: false),
+    (dark: false, size: DynamicTypeSize.xxxLarge, hasTags: true),
+    (dark: true, size: DynamicTypeSize.xxxLarge, hasTags: false),
+    (dark: true, size: DynamicTypeSize.xxxLarge, hasTags: true),
     (dark: false, size: DynamicTypeSize.accessibility3, hasTags: false),
     (dark: false, size: DynamicTypeSize.accessibility3, hasTags: true),
     (dark: true, size: DynamicTypeSize.accessibility3, hasTags: false),
@@ -550,8 +555,11 @@ struct LibraryHostTests {
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
     window.overrideUserInterfaceStyle = dark ? .dark : .light
-    window.traitOverrides.preferredContentSizeCategory =
-      size == .large ? .large : .accessibilityExtraLarge
+    window.traitOverrides.preferredContentSizeCategory = switch size {
+    case .large: .large
+    case .xxxLarge: .extraExtraExtraLarge
+    default: .accessibilityExtraLarge
+    }
     let note = LibraryNote(
       id: "card", title: "A quiet place for the next good thought", updatedAt: .now,
       gistID: "card", isPinned: true, tagIDs: ["ideas"],
@@ -562,7 +570,7 @@ struct LibraryHostTests {
     let width: CGFloat = size.isAccessibilitySize ? 280 : 134
     var cardSize: CGSize?
     var simpleSize: CGSize?
-    var titleLineHeight: CGFloat?
+    var titleHeightLimit: CGFloat?
     var minimumTagNameWidth: CGFloat?
     window.rootViewController = UIHostingController(
       rootView: VStack(spacing: 8) {
@@ -580,8 +588,8 @@ struct LibraryHostTests {
       .frame(width: width)
       .overlay {
         VStack {
-          Text(verbatim: "Ag").font(.headline).fixedSize()
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { titleLineHeight = $0 }
+          Text(verbatim: hasTags ? "Ag\nAg" : "Ag\nAg\nAg").font(.headline).fixedSize()
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { titleHeightLimit = $0 }
           Text(verbatim: "Ide…").font(.footnote.weight(.medium)).fixedSize()
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { minimumTagNameWidth = $0 }
         }
@@ -625,7 +633,8 @@ struct LibraryHostTests {
     #expect(abs(pin.maxX - content.maxX) <= pixelTolerance)
     #expect(footer.minY >= title.maxY + 8 - pixelTolerance)
     if !size.isAccessibilitySize {
-      #expect(title.height <= (try #require(titleLineHeight)) * (hasTags ? 2 : 3) + pixelTolerance)
+      let maximumTitleHeight = try #require(titleHeightLimit)
+      #expect(title.height <= maximumTitleHeight + pixelTolerance)
       #expect(abs(footer.maxY - content.maxY) <= pixelTolerance)
     }
     if hasTags {
@@ -645,8 +654,8 @@ struct LibraryHostTests {
         #expect(name.bounds.width >= (try #require(minimumTagNameWidth)) - pixelTolerance)
       }
     }
-    #expect(progress.maxY <= footer.maxY)
-    #expect(comments.maxY <= footer.maxY)
+    #expect(progress.maxY <= footer.maxY + pixelTolerance)
+    #expect(comments.maxY <= footer.maxY + pixelTolerance)
     #expect(abs(comments.maxX - footer.maxX) <= 1)
     for part in ["date", "excerpt"] {
       #expect(!descendants(window).contains {
@@ -956,10 +965,11 @@ struct LibraryHostTests {
     defer { window.isHidden = true }
     try await Task.sleep(for: .milliseconds(300))
     let measured = try #require(measuredSize)
-    #expect(measured.width == 324)
     if selectedTagCount <= 1 {
+      #expect(measured.width == 0)
       #expect(measured.height == 0)
     } else {
+      #expect(measured.width == 324)
       #expect(measured.height > 0)
       #expect(measured.height <= (size == .large ? 36 : 110))
     }

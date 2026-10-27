@@ -185,17 +185,17 @@ struct InterfaceCaptureWorkspace: View {
                     excerpt: "Leave room for the thought to grow."
                 )
             }
-            if state == "square-pins" {
-                for index in snapshot.notes.indices where snapshot.notes[index].isPinned {
-                    snapshot.notes[index].canDeleteFromGitHub = true
-                }
-                if let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
-                    snapshot.notes[index].title = "📚 Manga reading list"
-                }
-                if let index = snapshot.notes.firstIndex(where: { $0.id == "small" }) {
-                    snapshot.notes[index].title = "📆 Family memories"
-                    snapshot.notes[index].commentCount = 2
-                }
+        }
+        if state == "square-pins" {
+            for index in snapshot.notes.indices where snapshot.notes[index].isPinned {
+                snapshot.notes[index].canDeleteFromGitHub = true
+            }
+            if let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
+                snapshot.notes[index].title = "📚 Manga reading list"
+            }
+            if let index = snapshot.notes.firstIndex(where: { $0.id == "small" }) {
+                snapshot.notes[index].title = "📆 Family memories"
+                snapshot.notes[index].commentCount = 2
             }
         }
         if state == "row-anatomy" {

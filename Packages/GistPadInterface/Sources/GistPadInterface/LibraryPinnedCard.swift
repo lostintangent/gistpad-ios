@@ -21,6 +21,7 @@ struct LibraryPinnedCard: View {
                         ViewThatFits(in: .vertical) {
                             content(titleLines: 3)
                             content(titleLines: 2)
+                            content(titleLines: 1)
                         }
                         .padding(12)
                     }

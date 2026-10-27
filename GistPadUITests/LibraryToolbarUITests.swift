@@ -109,7 +109,7 @@ final class LibraryToolbarUITests: XCTestCase {
     let clear = field.buttons["Clear text"]
     try await waitUntil { clear.isHittable }
     clear.tap()
-    app.collectionViews.firstMatch.swipeUp()
+    try scrollVisibleResults(in: app)
     try await waitUntil { !app.keyboards.firstMatch.exists }
     XCTAssertTrue(summary.exists, "Ending empty text search preserves independent tag scope.")
     XCTAssertTrue(tags.label.contains("2"))
@@ -144,7 +144,7 @@ final class LibraryToolbarUITests: XCTestCase {
       XCTAssertTrue(app.keyboards.firstMatch.exists)
       record(app, name: "home-search-cleared-placeholder-\(sizeName)")
       XCTAssertFalse(app.buttons["Cancel"].exists)
-      app.collectionViews.firstMatch.swipeUp()
+      try scrollVisibleResults(in: app)
       try await waitUntil { !app.keyboards.firstMatch.exists }
     }
   }
@@ -177,10 +177,27 @@ final class LibraryToolbarUITests: XCTestCase {
     try await waitUntil { matching.exists && !excluded.exists }
     field.tap()
     try await waitUntil { app.keyboards.firstMatch.exists }
-    app.collectionViews.firstMatch.swipeUp()
+    try scrollVisibleResults(in: app)
     try await waitUntil { !app.keyboards.firstMatch.exists }
     XCTAssertEqual(field.value as? String, "notebook")
     record(app, name: "home-open-native-active-field")
+  }
+
+  @MainActor
+  func testCompactSearchSubmissionKeepsQueryAndResultsWithoutCancel() async throws {
+    let app = launch(state: "populated", appearance: "light")
+    defer { app.terminate() }
+    let field = app.searchFields.firstMatch
+    try await waitUntil { field.isHittable }
+    field.tap()
+    try await verifyNativeSearchAcceptsTyping(in: app)
+    XCTAssertFalse(app.buttons["Cancel"].exists)
+    field.typeText("\n")
+    record(app, name: "home-compact-search-after-submit")
+    try await waitUntil { !app.keyboards.firstMatch.exists }
+    XCTAssertEqual(field.value as? String, "notebook")
+    XCTAssertTrue(app.descendants(matching: .any)["library-note-shape"].firstMatch.exists)
+    XCTAssertFalse(app.descendants(matching: .any)["library-note-weekend"].firstMatch.exists)
   }
 
   @MainActor
@@ -210,7 +227,7 @@ final class LibraryToolbarUITests: XCTestCase {
       try await waitUntil {
         keyboard.exists && (field.value as? String == field.placeholderValue)
       }
-      app.collectionViews.firstMatch.swipeUp()
+      try scrollVisibleResults(in: app)
       try await waitUntil { !keyboard.exists }
       assertBottomSearch(field, in: app)
       let tags = app.buttons["library-filter-tags"]
@@ -235,7 +252,8 @@ final class LibraryToolbarUITests: XCTestCase {
       XCTAssertTrue(tags.isHittable)
       field.tap()
       try await waitUntil { keyboard.exists }
-      app.collectionViews.firstMatch.swipeUp()
+      try scrollVisibleResults(in: app)
+      record(app, name: "home-bottom-search-after-results-scroll-\(appearance)")
       try await waitUntil { !keyboard.exists }
       XCTAssertEqual(field.value as? String, "notebook")
       try await waitUntil { matching.exists && !excluded.exists }
@@ -419,6 +437,35 @@ final class LibraryToolbarUITests: XCTestCase {
   }
 
   @MainActor
+  private func scrollVisibleResults(in app: XCUIApplication) throws {
+    let list = app.collectionViews["library-list"]
+    let bounds = list.frame.intersection(app.windows.firstMatch.frame)
+    var top = max(bounds.minY, app.navigationBars["GistPad"].frame.maxY)
+    var bottom = bounds.maxY
+    let field = app.searchFields.firstMatch
+    if field.exists, field.frame.intersects(bounds) {
+      if field.frame.minY > top {
+        bottom = min(bottom, field.frame.minY)
+      } else {
+        top = max(top, field.frame.maxY)
+      }
+    }
+    let keyboard = app.keyboards.firstMatch
+    if keyboard.exists { bottom = min(bottom, keyboard.frame.minY) }
+    let visible = CGRect(x: bounds.minX, y: top, width: bounds.width, height: max(0, bottom - top))
+    guard visible.height >= 44 else {
+      XCTFail("No unobscured results region for a native scroll gesture.")
+      throw ToolbarFailure.timedOut
+    }
+    let origin = list.coordinate(withNormalizedOffset: .zero)
+    let start = origin.withOffset(CGVector(
+      dx: visible.midX - list.frame.minX, dy: visible.minY + visible.height * 0.75 - list.frame.minY))
+    let end = origin.withOffset(CGVector(
+      dx: visible.midX - list.frame.minX, dy: visible.minY + visible.height * 0.25 - list.frame.minY))
+    start.press(forDuration: 0.01, thenDragTo: end)
+  }
+
+  @MainActor
   private func toolbarGlassFrame(
     for button: XCUIElement, in app: XCUIApplication
   ) throws -> CGRect {
@@ -489,13 +536,16 @@ final class LibraryToolbarUITests: XCTestCase {
   }
 
   @MainActor
-  private func waitUntil(_ ready: @MainActor () -> Bool) async throws {
+  private func waitUntil(
+    file: StaticString = #filePath, line: UInt = #line,
+    _ ready: @MainActor () -> Bool
+  ) async throws {
     let deadline = ContinuousClock.now + .seconds(8)
     while ContinuousClock.now < deadline {
       if ready() { return }
       try await Task.sleep(for: .milliseconds(100))
     }
-    XCTFail("The expected native Library control did not become ready.")
+    XCTFail("The expected native Library control did not become ready.", file: file, line: line)
     throw ToolbarFailure.timedOut
   }
 

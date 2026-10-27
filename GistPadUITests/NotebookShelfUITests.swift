@@ -273,11 +273,12 @@ final class NotebookShelfUITests: XCTestCase {
       if element.exists, element.frame.midY <= top + 22 {
         app.collectionViews["library-list"].swipeDown(velocity: .slow)
       } else if backwards {
-        app.collectionViews["library-list"].swipeDown()
+        app.collectionViews["library-list"].swipeDown(velocity: .slow)
       } else {
-        app.collectionViews["library-list"].swipeUp()
+        app.collectionViews["library-list"].swipeUp(velocity: .slow)
       }
     }
+    record(app, name: "notebook-row-reveal-timeout-\(element.identifier)")
     try await waitUntil("the note row while scrolling") {
       visibleTouchRect(for: element, in: app) != nil
     }

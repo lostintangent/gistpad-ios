@@ -39,6 +39,8 @@ struct LibrarySearchField: UIViewRepresentable {
         bar.setShowsCancelButton(false, animated: false)
         if isPresented, bar.window != nil, !bar.searchTextField.isFirstResponder {
             bar.searchTextField.becomeFirstResponder()
+        } else if !isPresented, bar.searchTextField.isFirstResponder {
+            bar.searchTextField.resignFirstResponder()
         }
     }
 
