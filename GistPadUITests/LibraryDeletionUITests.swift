@@ -139,7 +139,7 @@ final class LibraryDeletionUITests: XCTestCase {
       name: "new-\(leaving ? "leave-note" : "autosave")-\(contextMenu ? "context" : "swipe")-delete")
     confirmation.tap()
     try await waitUntil("the new gist to be deleted without refreshing") { !row.exists }
-    XCTAssertFalse(app.alerts.exists)
+    XCTAssertFalse(app.alerts.firstMatch.exists)
     XCTAssertTrue(app.descendants(matching: .any)["library-note-a"].firstMatch.exists)
   }
 
