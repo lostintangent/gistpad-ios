@@ -153,7 +153,7 @@ Use one native searchable Tags editor with medium/large detents, large initially
 
 Profile-write capability, not source-write capability, governs tag editing. A signed-in user can tag another person's gist; incomplete source does not itself block profile-only changes. Use a nonmutating version only without a safe account-scoped association or profile-write capability. Offline/save failure retains choices with Retry, never silently reverts or invents permission loss. No tags inserted into Markdown.
 
-Settings is a small native Form for account, writing behavior, saved accent and relevant appearance options. Label the writing preference **Autosave While Writing**, explaining background saving once in its footer. Destructive account actions stay isolated. Account switching preserves the original account's drafts or offers source export after persistence; it does not discard or publish them.
+Settings is a small native Form for account, writing behavior, saved accent and relevant appearance options. **Autosave While Writing** is the first toggle in the Writing section, with no explanatory footer. Destructive account actions stay isolated. Account switching preserves the original account's drafts or offers source export after persistence; it does not discard or publish them.
 
 ## Saving and recovery
 

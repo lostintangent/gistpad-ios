@@ -66,17 +66,10 @@ struct NotebookSettingsSheet<Appearance: View>: View {
           Text("Account")
         }
         if account != nil {
-          Section {
+          Section("Writing") {
             Toggle("Autosave While Writing", isOn: preference(.isAutoSaveEnabled, default: true))
               .accessibilityIdentifier("settings-autosave")
               .captureFrame("settings-autosave")
-          } header: {
-            Text("Saving")
-          } footer: {
-            Text(
-              "Edits are always kept on this iPhone. When enabled, a 5-second pause or leaving a note saves to GitHub. Leaving the app attempts a save even when this is off.")
-          }
-          Section("Writing") {
             Toggle("Check Spelling", isOn: preference(.isSpellcheckEnabled, default: true))
               .accessibilityIdentifier("settings-spelling")
             Toggle("Show Front Matter", isOn: preference(.showFrontmatter, default: false))
