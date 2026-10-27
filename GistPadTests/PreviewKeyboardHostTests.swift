@@ -7,8 +7,9 @@ import WebKit
 @MainActor
 @Suite(.serialized)
 struct PreviewKeyboardHostTests {
-    @Test("Keyboard avoidance and a native shelf leave a usable preview viewport")
-    func keyboardViewport() async throws {
+    @Test("Keyboard avoidance and a native shelf leave a usable preview viewport",
+          arguments: ["large", "ax3"])
+    func keyboardViewport(size: String) async throws {
         let input = UITextField()
         input.placeholder = "Synthetic keyboard input"
         let source = "# A reachable page\n\n"
@@ -34,7 +35,10 @@ struct PreviewKeyboardHostTests {
                     Text("Synthetic attachment shelf").frame(maxWidth: .infinity).frame(height: 120)
                 }
             }
+            .dynamicTypeSize(size == "large" ? .large : .accessibility3)
         )
+        host.traitOverrides.preferredContentSizeCategory =
+            size == "large" ? .large : .accessibilityExtraExtraExtraLarge
         window.rootViewController = host
         window.makeKeyAndVisible()
         defer {
@@ -45,11 +49,29 @@ struct PreviewKeyboardHostTests {
         }
         try await waitFor("preview keyboard fixture") { rendered }
         let preview = try #require(findWebView(in: host.view))
+        let paragraphY = try #require(try await preview.callAsyncJavaScript(
+            "return document.querySelectorAll('p')[10].getBoundingClientRect().top + window.scrollY;",
+            arguments: [:], in: nil, contentWorld: .page) as? Double)
+        preview.scrollView.setContentOffset(
+            CGPoint(x: 0, y: paragraphY - preview.scrollView.adjustedContentInset.top - 12),
+            animated: false)
+        try await Task.sleep(for: .milliseconds(150))
+        let paragraph = CGPoint(x: 0, y: paragraphY)
+        let originalY = preview.scrollView.convert(paragraph, to: window).y
+        let motion = KeyboardPassageSamples {
+            preview.scrollView.convert(paragraph, to: window).y
+        }
+        motion.start()
+        defer { motion.stop() }
         let originalHeight = preview.bounds.height
         #expect(input.becomeFirstResponder())
         try await waitFor("real keyboard") { host.view.keyboardLayoutGuide.layoutFrame.height > 100 }
         try await Task.sleep(for: .milliseconds(300))
         host.view.layoutIfNeeded()
+        motion.stop()
+        Attachment.record(motion.csv, named: "preview-keyboard-show-\(size).csv")
+        #expect(motion.maximumDrift(from: originalY) <= 2,
+                "Keyboard presentation must not move an already-visible Preview passage.")
         let insets = preview.scrollView.adjustedContentInset
         let visibleHeight = preview.bounds.height - insets.top - insets.bottom
         Attachment.record(
@@ -94,10 +116,24 @@ struct PreviewKeyboardHostTests {
         ) as? Double
         #expect(try #require(lastBottom) - preview.scrollView.contentOffset.y <= visibleHeight + 1)
 
+        preview.scrollView.setContentOffset(
+            CGPoint(x: 0, y: paragraphY - preview.scrollView.adjustedContentInset.top - 12),
+            animated: false)
+        try await Task.sleep(for: .milliseconds(150))
+        let dismissalY = preview.scrollView.convert(paragraph, to: window).y
+        let dismissal = KeyboardPassageSamples {
+            preview.scrollView.convert(paragraph, to: window).y
+        }
+        dismissal.start()
+        defer { dismissal.stop() }
         input.resignFirstResponder()
         try await waitFor("keyboard dismissal") { host.view.keyboardLayoutGuide.layoutFrame.height < 100 }
         try await Task.sleep(for: .milliseconds(300))
         host.view.layoutIfNeeded()
+        dismissal.stop()
+        Attachment.record(dismissal.csv, named: "preview-keyboard-hide-\(size).csv")
+        #expect(dismissal.maximumDrift(from: dismissalY) <= 2,
+                "Keyboard dismissal must not jump the Preview passage.")
         #expect(abs(preview.bounds.height - originalHeight) <= 1)
         #expect(preview.bounds.height - preview.scrollView.adjustedContentInset.top
             - preview.scrollView.adjustedContentInset.bottom >= 100)
