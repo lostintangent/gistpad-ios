@@ -39,7 +39,14 @@ final class LibraryCollectionUITests: XCTestCase {
       }
       frames.append(frame)
     }
-    let measurements = XCTAttachment(string: "Native cells: \(frames)")
+    let content = app.otherElements["capture-frame-library-collection-dailyNotes"].firstMatch
+    let ordinary = app.collectionViews.firstMatch.cells.containing(
+      .button, identifier: "library-note-mixed").firstMatch
+    XCTAssertTrue(content.exists)
+    XCTAssertTrue(ordinary.exists)
+    let gap = content.frame.minY - ordinary.frame.maxY
+    XCTAssertEqual(gap, 28, accuracy: 1)
+    let measurements = XCTAttachment(string: "Native cells: \(frames)\nInclusive entrance: \(gap)")
     measurements.name = "header-pitch-\(wide ? "Open" : "Closed")-Light-Large"
     measurements.lifetime = .keepAlways
     add(measurements)

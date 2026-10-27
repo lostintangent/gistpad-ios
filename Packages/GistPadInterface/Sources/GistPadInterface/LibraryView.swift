@@ -519,6 +519,7 @@ public struct LibraryView: View {
         }
         .listRowBackground(isSidebar ? nil : Color.clear)
         .listRowSeparator(.hidden)
+        .listRowInsets(.vertical, isSidebar || dynamicTypeSize.isAccessibilitySize ? nil : 0)
     }
 
     private func collectionLabel(_ collection: LibraryCollection) -> some View {
