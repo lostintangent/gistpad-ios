@@ -12,7 +12,7 @@ final class NotebookIntelligencePresentation {
   private var retainedTarget: Target?
 
   func present(
-    session: DocumentSession, title: String, filename: String,
+    session: DocumentSession, title: String,
     reviewState: NoteReviewState? = nil,
     isCurrent: @escaping @MainActor () -> Bool,
     revealSource: @escaping @MainActor (NSRange) -> Void
@@ -22,7 +22,7 @@ final class NotebookIntelligencePresentation {
       return
     }
     let target = Target(
-      session: session, title: title, filename: filename,
+      session: session, title: title,
       reviewState: reviewState ?? NoteReviewState(session: session, isCurrent: isCurrent),
       isCurrent: isCurrent, revealSource: revealSource)
     retainedTarget = target
@@ -65,7 +65,6 @@ final class NotebookIntelligencePresentation {
     let id = UUID()
     let session: DocumentSession
     let title: String
-    let filename: String
     let reviewState: NoteReviewState
     let isCurrent: @MainActor () -> Bool
     let revealSource: @MainActor (NSRange) -> Void
@@ -81,14 +80,13 @@ final class NotebookIntelligencePresentation {
     var reference: Reference?
 
     init(
-      session: DocumentSession, title: String, filename: String,
+      session: DocumentSession, title: String,
       reviewState: NoteReviewState,
       isCurrent: @escaping @MainActor () -> Bool,
       revealSource: @escaping @MainActor (NSRange) -> Void
     ) {
       self.session = session
       self.title = title
-      self.filename = filename
       self.reviewState = reviewState
       self.isCurrent = isCurrent
       self.revealSource = revealSource
@@ -114,7 +112,7 @@ private struct NotebookIntelligenceModifier: ViewModifier {
     content
       .sheet(item: $presentation.target, onDismiss: presentation.dismissed) { target in
         NoteIntelligenceSheet(
-          session: target.session, title: target.title, filename: target.filename,
+          session: target.session, title: target.title,
           reviewState: target.reviewState,
           isCurrent: target.isCurrent,
           revealSource: {

@@ -1277,7 +1277,7 @@ struct LiveNotebookWorkspace: View {
     }
     intelligence.present(
       session: controller.session, title: controller.document.chrome.title,
-      filename: controller.draft.filename, reviewState: controller.reviewState(),
+      reviewState: controller.reviewState(),
       isCurrent: isCurrent,
       revealSource: { range in
         guard isCurrent() else { return }

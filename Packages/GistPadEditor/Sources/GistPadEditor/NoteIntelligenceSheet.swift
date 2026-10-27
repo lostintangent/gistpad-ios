@@ -7,7 +7,6 @@
   @MainActor
   public struct NoteIntelligenceSheet: View {
     private let title: String
-    private let filename: String
     private let revealSource: @MainActor (NSRange) -> Void
     private let initialPromptFocus: Bool
     @State private var requestModel: NoteIntelligenceModel
@@ -20,14 +19,13 @@
     @FocusState private var promptFocused: Bool
 
     public init(
-      session: DocumentSession, title: String, filename: String,
+      session: DocumentSession, title: String,
       reviewState: NoteReviewState? = nil,
       backend: (any NoteModelBackend)? = nil,
       isCurrent: @escaping @MainActor () -> Bool,
       revealSource: @escaping @MainActor (NSRange) -> Void
     ) {
       self.title = title
-      self.filename = filename
       self.revealSource = revealSource
       initialPromptFocus = false
       precondition(reviewState == nil || reviewState?.model.session === session)
@@ -41,12 +39,11 @@
     }
 
     init(
-      model: NoteIntelligenceModel, title: String, filename: String,
+      model: NoteIntelligenceModel, title: String,
       initialPromptFocus: Bool = false,
       revealSource: @escaping @MainActor (NSRange) -> Void
     ) {
       self.title = title
-      self.filename = filename
       self.revealSource = revealSource
       self.initialPromptFocus = initialPromptFocus
       _requestModel = State(
@@ -103,7 +100,10 @@
       NavigationStack {
         ScrollView {
           VStack(alignment: .leading, spacing: 24) {
-            identification
+            actionPicker
+              .disabled(isRunning)
+              .accessibilityIdentifier("intelligence-actions")
+              .captureFrame("intelligence-actions")
             if let reason = model.availabilityReason {
               issue(reason, symbol: "apple.intelligence")
               Button(String(localized: "Check Again", bundle: .module)) {
@@ -111,9 +111,6 @@
               }
               .tint(.primary)
             }
-            actionPicker
-              .disabled(isRunning)
-              .accessibilityIdentifier("intelligence-actions")
             if let error = model.errorMessage { issue(error, symbol: "exclamationmark.circle") }
             if isRunning, dynamicTypeSize.isAccessibilitySize { generationProgress }
             if model.action != .review || !model.hasResults || isRunning
@@ -209,23 +206,6 @@
       }
       .accessibilityIdentifier("note-intelligence-sheet")
       .captureFrame("note-intelligence-sheet")
-    }
-
-    private var identification: some View {
-      ViewThatFits(in: .horizontal) {
-        HStack(spacing: 12) {
-          Text(filename)
-          Label(String(localized: "On device", bundle: .module), systemImage: "iphone")
-        }
-        .fixedSize()
-        VStack(alignment: .leading, spacing: 6) {
-          Text(filename).fixedSize(horizontal: false, vertical: true)
-          Label(String(localized: "On device", bundle: .module), systemImage: "iphone")
-        }
-      }
-      .font(.subheadline)
-      .foregroundStyle(.secondary)
-      .accessibilityElement(children: .combine)
     }
 
     private var request: some View {

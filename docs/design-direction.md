@@ -230,7 +230,7 @@ Remove Pending Photo requires confirmation explaining that it removes the pendin
 
 V1 has system Writing Tools and exactly three app-owned actions on the **entire open file**: Ask, Edit and Review. Use `SystemLanguageModel.default` on device, with runtime-measured context capacity. No Private Cloud Compute, third-party provider, tag suggestions, app-owned selection/section modes or global chatbot.
 
-The compact keyboard capsule is Aa / Lists / Insert / Intelligence / Hide Keyboard. Bold/Italic move into Aa and can reappear when there is room. Intelligence is also reachable from the note menu in Preview. The native request surface identifies the note, exact filename and **On device**, not model names/token budgets or a scope picker. Preserve document selection/scroll.
+The compact keyboard capsule is Aa / Lists / Insert / Intelligence / Hide Keyboard. Bold/Italic move into Aa and can reappear when there is room. Intelligence is also reachable from the note menu in Preview. The native request surface uses the note title as its identity, followed directly by the Ask/Edit/Review picker with 20-pt content insets. No filename/device row, model names/token budgets or scope picker. Availability explanations follow the picker. Preserve document selection/scroll.
 
 Ask/Edit use their focused native sheet/popover. Ask is initial. **Pending presentation integration:** Review's approved document-owned inspector lifecycle below is not a claim that the parked integration ships. Do not add an idle Review tab to ordinary Comments.
 
@@ -256,7 +256,7 @@ Normal Close hides running/unresolved Review without clearing it. Dismiss Sugges
 
 No suggestions shows its result and Done before clearing. Failure retains explanation and Retry/Dismiss. Closing acknowledges/clears these terminal messages. Cancel Review clears immediately. Document departure/account change clears private Review. Stale Review retains its explanation with Review Again / Dismiss Review and no unsafe Apply.
 
-Show On device, exact filename, verified Before/After and individual Apply. No author avatar, Reply, Send, GitHub count or automatic publication. Daily/unpublished notes use the same Review-only inspector without Comments or a picker; final resolution, dismissal, cancellation or Done closes it. Gist-comment eligibility never gates on-device Review.
+Use the note title as context, with verified Before/After and individual Apply. No redundant filename/device row, author avatar, Reply, Send, GitHub count or automatic publication. Daily/unpublished notes use the same Review-only inspector without Comments or a picker; final resolution, dismissal, cancellation or Done closes it. Gist-comment eligibility never gates on-device Review.
 
 ## GitHub Comments
 
