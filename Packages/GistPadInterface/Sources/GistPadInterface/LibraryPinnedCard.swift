@@ -45,7 +45,7 @@ struct LibraryPinnedCard: View {
 
     private func content(titleLines: Int?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(verbatim: note.title)
                     .font(.headline)
                     .lineLimit(titleLines)

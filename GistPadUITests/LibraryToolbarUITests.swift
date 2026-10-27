@@ -184,6 +184,31 @@ final class LibraryToolbarUITests: XCTestCase {
   }
 
   @MainActor
+  func testUnfoldedNativeSearchEvidenceMatrix() async throws {
+    for appearance in ["light", "dark"] {
+      for accessibility in [false, true] {
+        let size = accessibility ? "AX3" : "Large"
+        let stateIndex = (appearance == "dark" ? 2 : 0) + (accessibility ? 1 : 0)
+        let app = launch(
+          state: "search-active", appearance: appearance,
+          textSize: accessibility ? .accessibilityExtraLarge : .large,
+          readinessToken: "E53506F0-76B6-4937-BE25-00000000000\(stateIndex)")
+        defer { app.terminate() }
+        let field = app.searchFields.firstMatch
+        try await waitUntil { field.isHittable }
+        field.tap()
+        try await waitUntil { app.keyboards.firstMatch.exists }
+        XCTAssertEqual(app.windows.firstMatch.frame.width, 951, accuracy: 1)
+        XCTAssertEqual(field.value as? String, "notebook")
+        XCTAssertTrue(field.buttons["Clear text"].isHittable)
+        XCTAssertFalse(app.otherElements["library-search-coverage"].exists)
+        record(app, name: "home-open-native-search-\(appearance)-\(size)")
+        try await Task.sleep(for: .seconds(3))
+      }
+    }
+  }
+
+  @MainActor
   func testCompactSearchSubmissionKeepsQueryAndResultsWithoutCancel() async throws {
     let app = launch(state: "populated", appearance: "light")
     defer { app.terminate() }
@@ -440,7 +465,8 @@ final class LibraryToolbarUITests: XCTestCase {
   private func scrollVisibleResults(in app: XCUIApplication) throws {
     let list = app.collectionViews["library-list"]
     let bounds = list.frame.intersection(app.windows.firstMatch.frame)
-    var top = max(bounds.minY, app.navigationBars["GistPad"].frame.maxY)
+    let navigation = app.navigationBars["GistPad"]
+    var top = navigation.exists ? max(bounds.minY, navigation.frame.maxY) : bounds.minY
     var bottom = bounds.maxY
     let field = app.searchFields.firstMatch
     if field.exists, field.frame.intersects(bounds) {
@@ -503,7 +529,7 @@ final class LibraryToolbarUITests: XCTestCase {
   @MainActor
   private func launch(
     state: String, appearance: String, textSize: UIContentSizeCategory = .large,
-    horizontalToolbar: Bool = false
+    horizontalToolbar: Bool = false, readinessToken: String? = nil
   ) -> XCUIApplication {
     let app = XCUIApplication(bundleIdentifier: "dev.gistpad.GistPad")
     app.launchArguments = [
@@ -513,6 +539,9 @@ final class LibraryToolbarUITests: XCTestCase {
       textSize.rawValue
     ]
     if horizontalToolbar { app.launchArguments.append("--capture-horizontal-toolbar") }
+    if let readinessToken {
+      app.launchArguments += ["--capture-ready-token", readinessToken]
+    }
     app.launch()
     return app
   }

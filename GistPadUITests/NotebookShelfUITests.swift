@@ -269,14 +269,20 @@ final class NotebookShelfUITests: XCTestCase {
   ) async throws {
     for _ in 0..<8 {
       if visibleTouchRect(for: element, in: app) != nil { return }
-      let top = app.navigationBars["GistPad"].frame.maxY
-      if element.exists, element.frame.midY <= top + 22 {
-        app.collectionViews["library-list"].swipeDown(velocity: .slow)
-      } else if backwards {
-        app.collectionViews["library-list"].swipeDown(velocity: .slow)
-      } else {
-        app.collectionViews["library-list"].swipeUp(velocity: .slow)
-      }
+      let list = app.collectionViews["library-list"]
+      let visible = visibleListRect(in: app)
+      let limit = visible.height * 0.45
+      let requested = element.exists
+        ? visible.midY - element.frame.midY : (backwards ? limit : -limit)
+      let distance = min(limit, max(-limit, requested))
+      let origin = list.coordinate(withNormalizedOffset: .zero)
+      let start = origin.withOffset(CGVector(
+        dx: visible.midX - list.frame.minX,
+        dy: visible.midY - distance / 2 - list.frame.minY))
+      let end = origin.withOffset(CGVector(
+        dx: visible.midX - list.frame.minX,
+        dy: visible.midY + distance / 2 - list.frame.minY))
+      start.press(forDuration: 0.01, thenDragTo: end)
     }
     record(app, name: "notebook-row-reveal-timeout-\(element.identifier)")
     try await waitUntil("the note row while scrolling") {
@@ -289,16 +295,20 @@ final class NotebookShelfUITests: XCTestCase {
     for element: XCUIElement, in app: XCUIApplication
   ) -> CGRect? {
     guard element.exists else { return nil }
-    let list = app.collectionViews["library-list"].frame
-    let top = max(list.minY, app.navigationBars["GistPad"].frame.maxY)
-    let search = app.searchFields.firstMatch
-    let bottom = search.exists ? min(list.maxY, search.frame.minY) : list.maxY
-    let visible = element.frame.intersection(
-      CGRect(x: list.minX, y: top, width: list.width, height: max(0, bottom - top)))
+    let visible = element.frame.intersection(visibleListRect(in: app))
     guard !visible.isNull, visible.width >= 44, visible.height >= 44 else { return nil }
     guard visible.contains(CGPoint(x: element.frame.midX, y: element.frame.midY)) else { return nil }
     guard element.isHittable else { return nil }
     return visible
+  }
+
+  @MainActor
+  private func visibleListRect(in app: XCUIApplication) -> CGRect {
+    let list = app.collectionViews["library-list"].frame
+    let top = max(list.minY, app.navigationBars["GistPad"].frame.maxY)
+    let search = app.searchFields.firstMatch
+    let bottom = search.exists ? min(list.maxY, search.frame.minY) : list.maxY
+    return CGRect(x: list.minX, y: top, width: list.width, height: max(0, bottom - top))
   }
 
   @MainActor

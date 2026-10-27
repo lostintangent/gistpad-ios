@@ -534,6 +534,58 @@ struct LibraryHostTests {
     Attachment.record("Grid: \(grid)\nCards: \(frames)", named: "pinned-grid-\(isSidebar)-\(size)")
   }
 
+  @Test(arguments: [false, true])
+  func narrowPinnedCardDrawsItsCompleteShortTitleBesideTheCornerPin(dark: Bool) async throws {
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first(where: \.isKeyWindow)
+    let window = UIWindow(windowScene: scene)
+    window.overrideUserInterfaceStyle = dark ? .dark : .light
+    window.traitOverrides.preferredContentSizeCategory = .large
+    window.rootViewController = UIHostingController(
+      rootView: VStack {
+        LibraryPinnedCard(
+          note: .init(
+            id: "short", title: "📚 Manga reading list", updatedAt: .now, gistID: "short",
+            isPinned: true, progress: .init(completed: 2, total: 5), commentCount: 3),
+          tags: [.init(id: "design", name: "Design"), .init(id: "ideas", name: "Ideas")],
+          isSelected: true, isSidebar: true)
+          .frame(width: 134)
+        Spacer()
+      }
+      .environment(\.dynamicTypeSize, .large)
+      .environment(\.colorScheme, dark ? .dark : .light))
+    window.makeKeyAndVisible()
+    defer {
+      window.isHidden = true
+      window.rootViewController = nil
+      previous?.makeKeyAndVisible()
+    }
+    try await Task.sleep(for: .milliseconds(400))
+    window.layoutIfNeeded()
+    let title = try #require(descendants(window).first {
+      $0.accessibilityIdentifier == "capture-frame-note-title-short" && !$0.bounds.isEmpty
+    })
+    let frame = title.convert(title.bounds, to: window)
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+    }
+    let bitmap = try #require(image.cgImage)
+    let crop = try #require(bitmap.cropping(to: CGRect(
+      x: frame.minX * image.scale, y: frame.minY * image.scale,
+      width: frame.width * image.scale, height: frame.height * image.scale)))
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.recognitionLanguages = ["en-US"]
+    request.usesLanguageCorrection = false
+    try VNImageRequestHandler(cgImage: crop).perform([request])
+    let words = (request.results ?? []).compactMap {
+      $0.topCandidates(1).first?.string
+    }.joined(separator: " ").lowercased()
+    #expect(words.contains("manga reading list"), "Rendered narrow title: \(words)")
+    Attachment.record(image, named: "narrow-short-title-\(dark).png", as: .png)
+  }
+
   @Test(arguments: [
     (dark: false, size: DynamicTypeSize.large, hasTags: false),
     (dark: false, size: DynamicTypeSize.large, hasTags: true),
