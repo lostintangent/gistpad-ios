@@ -21,7 +21,7 @@
       }
       .sheet(isPresented: $presented) {
         NoteIntelligenceSheet(
-          model: fixture.model, title: "Saturday walk", filename: "Saturday.md",
+          model: fixture.model, title: "Saturday walk",
           initialPromptFocus: fixture.state == "ask-keyboard",
           revealSource: { _ in presented = false }
         )

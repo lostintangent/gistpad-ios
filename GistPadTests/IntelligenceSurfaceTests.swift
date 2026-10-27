@@ -50,7 +50,7 @@
         rootView: Color(uiColor: .systemBackground)
           .sheet(isPresented: .constant(true)) {
             NoteIntelligenceSheet(
-              model: model, title: "Saturday walk", filename: "Saturday.md",
+              model: model, title: "Saturday walk",
               revealSource: { _ in Issue.record("A capture must not navigate.") }
             )
             .environment(\.dynamicTypeSize, capture.accessibility ? .accessibility3 : .large)
@@ -81,6 +81,11 @@
       }
       let sheetTraits = try #require(
         window.rootViewController?.presentedViewController?.traitCollection)
+      let canvas = try #require(window.rootViewController?.presentedViewController?.view)
+      let actions = try #require(
+        notebookAccessibilityElement("capture-frame-intelligence-actions", in: canvas) as? UIView)
+      #expect(actions.bounds.width > 0 && actions.bounds.height > 0)
+      #expect(window.bounds.contains(actions.convert(actions.bounds, to: window)))
       let expected = try #require(RGBColor(
         uiColor: UIColor.label.resolvedColor(with: sheetTraits)))
       let counts = try nativeAccentPixels(in: image, expected: expected)
@@ -115,7 +120,7 @@
         rootView: Color(uiColor: .systemBackground)
           .sheet(isPresented: .constant(true)) {
             NoteIntelligenceSheet(
-              model: fixture.model, title: "Saturday walk", filename: "Saturday.md",
+              model: fixture.model, title: "Saturday walk",
               revealSource: { _ in Issue.record("Pending generation must not navigate.") }
             )
             .environment(\.dynamicTypeSize, accessibility ? .accessibility3 : .large)
@@ -216,7 +221,7 @@
       try #require(editor.becomeFirstResponder())
       editor.selectedRange = selection
       presentation.present(
-        session: session, title: "Saturday walk", filename: "Saturday.md",
+        session: session, title: "Saturday walk",
         isCurrent: { true },
         revealSource: { _ in Issue.record("Closing must not navigate to a reference.") })
       try #require(presentation.target?.wasEditing == true)
@@ -288,7 +293,7 @@
       }
       .sheet(item: $presentation.target, onDismiss: presentation.dismissed) { target in
         NoteIntelligenceSheet(
-          model: fixture.model, title: target.title, filename: target.filename,
+          model: fixture.model, title: target.title,
           revealSource: {
             target.reference = .init(range: $0, generation: target.session.generation)
           })

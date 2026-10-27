@@ -80,6 +80,35 @@ final class NativeControlUITests: XCTestCase {
   }
 
   @MainActor
+  func testIntelligenceStartsWithItsActionPickerBelowTheTitle() async throws {
+    for accessibility in [false, true] {
+      for appearance in ["light", "dark"] {
+        let app = launch(
+          screen: "intelligence", state: "ask", accessibility: accessibility,
+          appearance: appearance)
+        defer {
+          record(
+            app,
+            name: "intelligence-title-actions-\(accessibility ? "AX3" : "Large")-\(appearance)")
+          app.terminate()
+        }
+        let sheet = app.descendants(matching: .any)["note-intelligence-sheet"].firstMatch
+        let actions = sheet.descendants(matching: .any)["intelligence-actions"].firstMatch
+        let bar = sheet.navigationBars["Saturday walk"]
+        try await waitUntil("the Intelligence title and first action control") {
+          bar.exists && actions.exists && actions.isHittable
+        }
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.frame.contains(actions.frame))
+        XCTAssertEqual(actions.frame.minY - bar.frame.maxY, 20, accuracy: 1)
+        XCTAssertTrue(bar.staticTexts["Saturday walk"].exists)
+        XCTAssertFalse(app.staticTexts["Saturday.md"].exists)
+        XCTAssertFalse(app.staticTexts["On device"].exists)
+      }
+    }
+  }
+
+  @MainActor
   func testLongRequestKeepsAnAccessibleCancelDuringAZeroAnswerWait() async throws {
     try await checkPendingCancellation(accessibility: false)
   }
