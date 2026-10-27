@@ -86,9 +86,15 @@ final class NativeControlUITests: XCTestCase {
         let app = launch(
           screen: "intelligence", state: "ask", accessibility: accessibility,
           appearance: appearance)
-        defer { app.terminate() }
-        let actions = app.descendants(matching: .any)["intelligence-actions"].firstMatch
-        let bar = app.navigationBars.containing(.button, identifier: "intelligence-close").firstMatch
+        defer {
+          record(
+            app,
+            name: "intelligence-title-actions-\(accessibility ? "AX3" : "Large")-\(appearance)")
+          app.terminate()
+        }
+        let sheet = app.descendants(matching: .any)["note-intelligence-sheet"].firstMatch
+        let actions = sheet.descendants(matching: .any)["intelligence-actions"].firstMatch
+        let bar = sheet.navigationBars["Saturday walk"]
         try await waitUntil("the Intelligence title and first action control") {
           bar.exists && actions.exists && actions.isHittable
         }
@@ -98,9 +104,6 @@ final class NativeControlUITests: XCTestCase {
         XCTAssertTrue(bar.staticTexts["Saturday walk"].exists)
         XCTAssertFalse(app.staticTexts["Saturday.md"].exists)
         XCTAssertFalse(app.staticTexts["On device"].exists)
-        record(
-          app,
-          name: "intelligence-title-actions-\(accessibility ? "AX3" : "Large")-\(appearance)")
       }
     }
   }
