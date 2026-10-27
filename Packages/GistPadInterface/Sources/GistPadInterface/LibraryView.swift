@@ -208,37 +208,16 @@ public struct LibraryView: View {
     }
 
     struct SearchSummary: View {
-        let coverage: LibrarySearchCoverage?
         let selectedTagCount: Int
 
         var body: some View {
-            VStack(alignment: .leading, spacing: 6) {
-                if let coverage {
-                    if coverage.documentsWithCachedContent == coverage.totalDocuments {
-                        Text("Searches titles, filenames, tags and note text.", bundle: .module)
-                    } else {
-                        Text(
-                            "Searches titles, filenames and tags, plus text from \(coverage.documentsWithCachedContent) of \(coverage.totalDocuments) notes.",
-                            bundle: .module
-                        )
-                    }
-                    if coverage.incompleteGistCount > 0 {
-                        Text("\(coverage.incompleteGistCount) gists have incomplete file lists.", bundle: .module)
-                    }
-                    if coverage.staleResultCount > 0 {
-                        Text("\(coverage.staleResultCount) results have older cached content.", bundle: .module)
-                    }
-                } else {
-                    Text("Searches note titles.", bundle: .module)
-                }
-                if selectedTagCount > 1 {
-                    Text("Matches all selected tags.", bundle: .module)
-                }
+            if selectedTagCount > 1 {
+                Text("Matches all selected tags.", bundle: .module)
+                    .font(.footnote)
+                    .foregroundStyle(Color(uiColor: .secondaryLabel))
+                    .textCase(nil)
+                    .accessibilityIdentifier("library-search-tag-summary")
             }
-            .font(.footnote)
-            .foregroundStyle(Color(uiColor: .secondaryLabel))
-            .textCase(nil)
-            .accessibilityIdentifier("library-search-coverage")
         }
     }
 
@@ -381,7 +360,7 @@ public struct LibraryView: View {
                     searchScope
                 }
                 searchStatus
-                if model.hasFilters {
+                if model.selectedTagIDs.count > 1 {
                     Section {} header: { searchSummary }
                         .listSectionMargins(.vertical, 0)
                 }
@@ -423,6 +402,7 @@ public struct LibraryView: View {
         .tint(.primary)
         .contentMargins(.horizontal, 20, for: .scrollContent)
         .listSectionSpacing(0)
+        .scrollDismissesKeyboard(.immediately)
         .environment(\.defaultMinListRowHeight, 44)
         .environment(\.defaultMinListHeaderHeight, 0)
         .accessibilityIdentifier("library-list")
@@ -658,12 +638,7 @@ public struct LibraryView: View {
     }
 
     private var searchSummary: some View {
-        let coverage: LibrarySearchCoverage? = if case .results(_, let coverage) = model.searchState {
-            coverage
-        } else {
-            nil
-        }
-        return SearchSummary(coverage: coverage, selectedTagCount: model.selectedTagIDs.count)
+        SearchSummary(selectedTagCount: model.selectedTagIDs.count)
     }
 
     private var canShowEmptyState: Bool {

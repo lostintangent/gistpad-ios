@@ -22,6 +22,8 @@ Square pin-card review uses `square-pins`, which has three synthetic published p
 
 The native Today hit-region test taps 21 pt from center in all four directions, requiring the exact Today source and new editor focus each time. Each point starts from a fresh synthetic app, so a previously open document cannot satisfy it. The visual accessibility frame is not used as a proxy for the native 44-pt touch region.
 
+Active Search evidence must show the native input without compact Cancel or search-coverage prose. Clear empties the query while the keyboard stays present. Keyboard Search and scrolling the results dismiss the keyboard without resetting query/results. Empty-query focus loss restores unfiltered text results while retaining independent tag scope. Only multiple selected tags show "Matches all selected tags", with no reserved summary space otherwise. Inspect the sidebar's system-owned dismissal control separately, without private view-tree customization.
+
 Launches restart the app to make each capture independent. Do not run against an active editing session. A real keyboard and continuity sequence are separate requirements where relevant.
 
 Library, note and Photos routes also receive a unique `--capture-ready-token`. The Debug fixture records that token in the app's temporary container only after the Library appears, WebKit reports a completed render, or the Photos fixture and retained source view attach. The script waits up to 45 seconds and fails without a screenshot if readiness is absent. This prevents a loading or cold, blank view from silently becoming evidence. A preview error is itself a ready error surface and remains recorded in the readiness JSON. Other routes use the configured settling interval and still require inspection.

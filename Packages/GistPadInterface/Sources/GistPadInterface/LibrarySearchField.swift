@@ -36,7 +36,7 @@ struct LibrarySearchField: UIViewRepresentable {
         }
         bar.updateTrailingClearance()
         bar.wantsFocus = isPresented
-        bar.setShowsCancelButton(isPresented, animated: !context.transaction.disablesAnimations)
+        bar.setShowsCancelButton(false, animated: false)
         if isPresented, bar.window != nil, !bar.searchTextField.isFirstResponder {
             bar.searchTextField.becomeFirstResponder()
         }
@@ -67,13 +67,6 @@ struct LibrarySearchField: UIViewRepresentable {
 
         func searchBarTextDidEndEditing(_ searchBar: UISearchBar) {
             if isPresented.wrappedValue { isPresented.wrappedValue = false }
-        }
-
-        func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
-            searchBar.text = ""
-            text.wrappedValue = ""
-            isPresented.wrappedValue = false
-            searchBar.searchTextField.resignFirstResponder()
         }
 
         func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {

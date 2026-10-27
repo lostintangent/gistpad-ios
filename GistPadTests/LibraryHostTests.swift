@@ -914,16 +914,17 @@ struct LibraryHostTests {
       as: .png)
   }
 
-  @Test(arguments: [DynamicTypeSize.large, .accessibility3], [2, 8])
-  func searchCoverageIsOneUnboxedCaption(size: DynamicTypeSize, cachedCount: Int) async throws {
+  @Test(arguments: [DynamicTypeSize.large, .accessibility3], [0, 1, 2])
+  func searchSummaryOnlyReservesSpaceForMultipleTags(
+    size: DynamicTypeSize, selectedTagCount: Int
+  ) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
     var measuredSize: CGSize?
     window.rootViewController = UIHostingController(
       rootView: VStack {
-        LibraryView.SearchSummary(
-          coverage: .init(totalDocuments: 8, documentsWithCachedContent: cachedCount), selectedTagCount: 0)
+        LibraryView.SearchSummary(selectedTagCount: selectedTagCount)
           .frame(width: 324, alignment: .leading)
           .fixedSize(horizontal: false, vertical: true)
           .onGeometryChange(for: CGSize.self) { $0.size } action: { measuredSize = $0 }
@@ -935,15 +936,18 @@ struct LibraryHostTests {
     try await Task.sleep(for: .milliseconds(300))
     let measured = try #require(measuredSize)
     #expect(measured.width == 324)
-    if size == .large {
-      #expect(measured.height <= 66)
+    if selectedTagCount <= 1 {
+      #expect(measured.height == 0)
     } else {
-      #expect(measured.height > 66)
+      #expect(measured.height > 0)
+      #expect(measured.height <= (size == .large ? 36 : 110))
     }
   }
 
   @Test(arguments: [false, true], [false, true])
-  func searchCoverageRetainsSemanticSecondaryColor(dark: Bool, increasedContrast: Bool) async throws {
+  func multiTagSearchSummaryRetainsSemanticSecondaryColor(
+    dark: Bool, increasedContrast: Bool
+  ) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
@@ -953,8 +957,7 @@ struct LibraryHostTests {
       rootView: ZStack {
         Color(uiColor: .systemGroupedBackground)
         VStack {
-          LibraryView.SearchSummary(
-            coverage: .init(totalDocuments: 8, documentsWithCachedContent: 2), selectedTagCount: 0)
+          LibraryView.SearchSummary(selectedTagCount: 2)
             .frame(width: 324, alignment: .leading)
           Spacer()
         }
@@ -985,8 +988,31 @@ struct LibraryHostTests {
     let pixels = try nativeAccentPixels(in: image, expected: expected)
     #expect(pixels.personal > 30, "Section-header styling must not dim the semantic caption again.")
     Attachment.record(
-      image, named: "coverage-secondary-\(dark ? "Dark" : "Light")-\(increasedContrast ? "High" : "Normal").png",
+      image, named: "multi-tag-summary-\(dark ? "Dark" : "Light")-\(increasedContrast ? "High" : "Normal").png",
       as: .png)
+  }
+
+  @Test func compactSearchSubmissionAndFocusLossKeepTheQueryWithoutCancel() {
+    var query = "notebook"
+    var presented = true
+    let coordinator = LibrarySearchField.Coordinator(
+      text: Binding(get: { query }, set: { query = $0 }),
+      isPresented: Binding(get: { presented }, set: { presented = $0 }))
+    let bar = LibrarySearchField.SearchBar()
+    bar.text = query
+    coordinator.searchBarSearchButtonClicked(bar)
+    #expect(query == "notebook")
+    #expect(bar.text == "notebook")
+    #expect(!presented)
+    #expect(!bar.showsCancelButton)
+    coordinator.searchBarTextDidBeginEditing(bar)
+    #expect(presented)
+    coordinator.searchBar(bar, textDidChange: "")
+    #expect(query.isEmpty)
+    #expect(presented, "Clear leaves the field focused.")
+    coordinator.searchBarTextDidEndEditing(bar)
+    #expect(query.isEmpty)
+    #expect(!presented)
   }
 
   private func descendants(_ view: UIView) -> [UIView] {

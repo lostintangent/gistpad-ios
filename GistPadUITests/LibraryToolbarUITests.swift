@@ -80,6 +80,42 @@ final class LibraryToolbarUITests: XCTestCase {
   }
 
   @MainActor
+  func testSearchSummaryAppearsOnlyForMultipleSelectedTags() async throws {
+    let app = launch(state: "populated", appearance: "light")
+    defer { app.terminate() }
+    let summary = app.descendants(matching: .any)["library-search-tag-summary"].firstMatch
+    let tags = app.buttons["library-filter-tags"]
+    try await waitUntil { tags.isHittable }
+    XCTAssertFalse(summary.exists)
+    tags.tap()
+    let ideas = app.buttons["library-tag-filter-ideas"]
+    try await waitUntil { ideas.isHittable }
+    ideas.tap()
+    app.buttons["library-tag-filter-done"].tap()
+    try await waitUntil { tags.isHittable && tags.label.contains("1") }
+    XCTAssertFalse(summary.exists)
+    tags.tap()
+    let design = app.buttons["library-tag-filter-design"]
+    try await waitUntil { design.isHittable }
+    design.tap()
+    app.buttons["library-tag-filter-done"].tap()
+    try await waitUntil { summary.exists }
+    XCTAssertEqual(summary.label, "Matches all selected tags.")
+    XCTAssertFalse(app.otherElements["library-search-coverage"].exists)
+    record(app, name: "home-search-multi-tag-only-summary")
+    let field = app.searchFields.firstMatch
+    field.tap()
+    field.typeText("notebook")
+    let clear = field.buttons["Clear text"]
+    try await waitUntil { clear.isHittable }
+    clear.tap()
+    app.collectionViews.firstMatch.swipeUp()
+    try await waitUntil { !app.keyboards.firstMatch.exists }
+    XCTAssertTrue(summary.exists, "Ending empty text search preserves independent tag scope.")
+    XCTAssertTrue(tags.label.contains("2"))
+  }
+
+  @MainActor
   func testFoldedHomeHeadersAndToolbarInLightDarkAndAccessibilitySizes() async throws {
     try await captureHome(wide: false)
   }
@@ -107,7 +143,8 @@ final class LibraryToolbarUITests: XCTestCase {
       try await waitUntil { (field.value as? String) == field.placeholderValue }
       XCTAssertTrue(app.keyboards.firstMatch.exists)
       record(app, name: "home-search-cleared-placeholder-\(sizeName)")
-      app.buttons["Cancel"].tap()
+      XCTAssertFalse(app.buttons["Cancel"].exists)
+      app.collectionViews.firstMatch.swipeUp()
       try await waitUntil { !app.keyboards.firstMatch.exists }
     }
   }
@@ -125,6 +162,8 @@ final class LibraryToolbarUITests: XCTestCase {
     try await waitUntil { field.isHittable }
     field.tap()
     try await verifyNativeSearchAcceptsTyping(in: app)
+    XCTAssertFalse(app.otherElements["library-search-coverage"].exists)
+    XCTAssertFalse(app.staticTexts["Searches note titles."].exists)
     let clear = field.buttons["Clear text"]
     try await waitUntil { clear.isHittable }
     clear.tap()
@@ -133,13 +172,19 @@ final class LibraryToolbarUITests: XCTestCase {
     field.typeText("notebook\n")
     try await waitUntil { !app.keyboards.firstMatch.exists }
     XCTAssertEqual(field.value as? String, "notebook")
+    let matching = app.descendants(matching: .any)["library-note-shape"].firstMatch
+    let excluded = app.descendants(matching: .any)["library-note-weekend"].firstMatch
+    try await waitUntil { matching.exists && !excluded.exists }
     field.tap()
     try await waitUntil { app.keyboards.firstMatch.exists }
+    app.collectionViews.firstMatch.swipeUp()
+    try await waitUntil { !app.keyboards.firstMatch.exists }
+    XCTAssertEqual(field.value as? String, "notebook")
     record(app, name: "home-open-native-active-field")
   }
 
   @MainActor
-  func testFoldedBottomSearchRidesAboveKeyboardAndCancelsResults() async throws {
+  func testFoldedBottomSearchClearsAndKeepsSubmittedResultsWithoutCancel() async throws {
     for appearance in ["light", "dark"] {
       let app = launch(state: "populated", appearance: appearance)
       defer { app.terminate() }
@@ -152,21 +197,26 @@ final class LibraryToolbarUITests: XCTestCase {
       let keyboard = app.keyboards.firstMatch
       XCTAssertLessThanOrEqual(field.frame.maxY, keyboard.frame.minY + 1)
       XCTAssertLessThan(keyboard.frame.minY - field.frame.maxY, 100)
-      let cancel = app.buttons["Cancel"]
-      XCTAssertTrue(cancel.isHittable)
+      XCTAssertFalse(app.buttons["Cancel"].exists)
+      XCTAssertFalse(app.otherElements["library-search-coverage"].exists)
+      XCTAssertFalse(app.staticTexts["Searches note titles."].exists)
       let matching = app.descendants(matching: .any)["library-note-shape"].firstMatch
       let excluded = app.descendants(matching: .any)["library-note-weekend"].firstMatch
       try await waitUntil { matching.exists && !excluded.exists }
       record(app, name: "home-folded-bottom-search-keyboard-\(appearance)")
-      cancel.tap()
+      let clear = field.buttons["Clear text"]
+      try await waitUntil { clear.isHittable }
+      clear.tap()
       try await waitUntil {
-        !keyboard.exists && (field.value as? String == field.placeholderValue)
+        keyboard.exists && (field.value as? String == field.placeholderValue)
       }
+      app.collectionViews.firstMatch.swipeUp()
+      try await waitUntil { !keyboard.exists }
       assertBottomSearch(field, in: app)
       let tags = app.buttons["library-filter-tags"]
       try await waitUntil { tags.isHittable }
       XCTAssertFalse(field.frame.intersects(tags.frame))
-      record(app, name: "home-folded-bottom-search-cancelled-\(appearance)")
+      record(app, name: "home-folded-bottom-search-cleared-\(appearance)")
       let last = app.descendants(matching: .any)["library-note-words"].firstMatch
       app.collectionViews.firstMatch.swipeUp()
       app.collectionViews.firstMatch.swipeUp()
@@ -175,7 +225,6 @@ final class LibraryToolbarUITests: XCTestCase {
       record(app, name: "home-last-row-clears-bottom-search-\(appearance)")
       field.tap()
       try await verifyNativeSearchAcceptsTyping(in: app)
-      let clear = field.buttons["Clear text"]
       try await waitUntil { clear.isHittable }
       clear.tap()
       try await waitUntil { (field.value as? String) == field.placeholderValue }
@@ -184,6 +233,12 @@ final class LibraryToolbarUITests: XCTestCase {
       try await waitUntil { !keyboard.exists }
       XCTAssertEqual(field.value as? String, "notebook")
       XCTAssertTrue(tags.isHittable)
+      field.tap()
+      try await waitUntil { keyboard.exists }
+      app.collectionViews.firstMatch.swipeUp()
+      try await waitUntil { !keyboard.exists }
+      XCTAssertEqual(field.value as? String, "notebook")
+      try await waitUntil { matching.exists && !excluded.exists }
       record(app, name: "home-bottom-search-submitted-\(appearance)")
     }
   }
@@ -228,7 +283,8 @@ final class LibraryToolbarUITests: XCTestCase {
       try await verifyNativeSearchAcceptsTyping(in: app)
       XCTAssertLessThanOrEqual(field.frame.maxY, app.keyboards.firstMatch.frame.minY + 1)
       record(app, name: "home-compact-horizontal-toolbar-keyboard-\(appearance)")
-      app.buttons["Cancel"].tap()
+      XCTAssertFalse(app.buttons["Cancel"].exists)
+      app.collectionViews.firstMatch.swipeUp()
       try await waitUntil { !app.keyboards.firstMatch.exists }
       assertTarget(field, in: app)
     }
