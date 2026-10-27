@@ -197,10 +197,20 @@ struct LibraryHostTests {
     }
     try await Task.sleep(for: .milliseconds(500))
     window.layoutIfNeeded()
-    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+    var image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
-    let bitmap = try #require(image.cgImage)
+    let list = try #require(descendants(window).compactMap { $0 as? UICollectionView }.first)
+    let ordinary = try #require(descendants(window).first {
+      $0.accessibilityIdentifier == "capture-frame-note-title-ordinary"
+    })
+    var ordinaryParent = ordinary.superview
+    while ordinaryParent != nil && !(ordinaryParent is UICollectionViewCell) {
+      ordinaryParent = ordinaryParent?.superview
+    }
+    let ordinaryCell = try #require(ordinaryParent as? UICollectionViewCell)
+    let ordinaryFrame = ordinaryCell.convert(ordinaryCell.bounds, to: window)
+      .offsetBy(dx: 0, dy: list.contentOffset.y)
     var headerFrames: [CGRect] = []
     var firstContentFrame: CGRect?
     for collection in [LibraryCollection.dailyNotes, .starred, .archive] {
@@ -213,9 +223,27 @@ struct LibraryHostTests {
       var parent = marker.superview
       while parent != nil && !(parent is UICollectionViewCell) { parent = parent?.superview }
       let cell = try #require(parent as? UICollectionViewCell)
+      let visibleBottom = list.bounds.maxY - list.adjustedContentInset.bottom
+      if cell.frame.maxY > visibleBottom {
+        let maximum = max(
+          -list.adjustedContentInset.top,
+          list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom)
+        let target = min(
+          maximum, cell.frame.maxY - list.bounds.height + list.adjustedContentInset.bottom + 8)
+        list.setContentOffset(CGPoint(x: list.contentOffset.x, y: target), animated: false)
+        try await Task.sleep(for: .milliseconds(100))
+        window.layoutIfNeeded()
+      }
       let cellFrame = cell.convert(cell.bounds, to: window)
-      headerFrames.append(cellFrame)
-      if firstContentFrame == nil { firstContentFrame = frame }
+      headerFrames.append(cellFrame.offsetBy(dx: 0, dy: list.contentOffset.y))
+      if firstContentFrame == nil {
+        firstContentFrame = marker.convert(marker.bounds, to: window)
+          .offsetBy(dx: 0, dy: list.contentOffset.y)
+      }
+      image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+        window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+      }
+      let bitmap = try #require(image.cgImage)
       let count = try #require(descendants(window).first {
         $0.accessibilityIdentifier == "capture-frame-library-collection-count-\(collection.rawValue)"
           && !$0.bounds.isEmpty
@@ -261,13 +289,6 @@ struct LibraryHostTests {
         #expect(abs(headerFrames[index].minY - headerFrames[index - 1].minY - 44) <= 1 / image.scale)
       }
     }
-    let ordinary = try #require(descendants(window).first {
-      $0.accessibilityIdentifier == "capture-frame-note-title-ordinary"
-    })
-    var parent = ordinary.superview
-    while parent != nil && !(parent is UICollectionViewCell) { parent = parent?.superview }
-    let cell = try #require(parent as? UICollectionViewCell)
-    let ordinaryFrame = cell.convert(cell.bounds, to: window)
     #expect(abs(ordinaryFrame.height - (size == .large ? 63 : 195)) <= 1 / image.scale)
     let firstHeader = try #require(firstContentFrame)
     #expect(abs(firstHeader.minY - ordinaryFrame.maxY - 28) <= 1)

@@ -464,6 +464,7 @@ struct InterfaceCaptureWorkspace: View {
             activeSession.textView.resignFirstResponder()
             selectedFileID = id == "today" ? "2026-10-24.md" : "README.md"
             library.selectedNoteID = id
+            compactColumn = .detail
         }
         actions.openComments = { _ in
             actionMessage = "Comments opened for this synthetic notebook."

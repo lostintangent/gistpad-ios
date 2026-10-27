@@ -381,7 +381,7 @@ final class LibraryToolbarUITests: XCTestCase {
         XCTAssertEqual(settings.midX, tags.midX, accuracy: 2)
         XCTAssertGreaterThan(tags.midX, app.windows.firstMatch.frame.midX)
       }
-      let pinned = app.descendants(matching: .any)["library-featured-shape"].firstMatch
+      let pinned = app.buttons["library-note-shape"].firstMatch
       try await waitUntil { pinned.exists }
       reveal(pinned, in: app)
       XCTAssertFalse(app.descendants(matching: .any)["library-pinned-heading"].exists)

@@ -269,7 +269,10 @@ final class NotebookShelfUITests: XCTestCase {
   ) async throws {
     for _ in 0..<8 {
       if visibleTouchRect(for: element, in: app) != nil { return }
-      if backwards {
+      let top = app.navigationBars["GistPad"].frame.maxY
+      if element.exists, element.frame.midY <= top + 22 {
+        app.collectionViews["library-list"].swipeDown(velocity: .slow)
+      } else if backwards {
         app.collectionViews["library-list"].swipeDown()
       } else {
         app.collectionViews["library-list"].swipeUp()
@@ -284,7 +287,7 @@ final class NotebookShelfUITests: XCTestCase {
   private func visibleTouchRect(
     for element: XCUIElement, in app: XCUIApplication
   ) -> CGRect? {
-    guard element.exists, element.isHittable else { return nil }
+    guard element.exists else { return nil }
     let list = app.collectionViews["library-list"].frame
     let top = max(list.minY, app.navigationBars["GistPad"].frame.maxY)
     let search = app.searchFields.firstMatch
@@ -292,6 +295,8 @@ final class NotebookShelfUITests: XCTestCase {
     let visible = element.frame.intersection(
       CGRect(x: list.minX, y: top, width: list.width, height: max(0, bottom - top)))
     guard !visible.isNull, visible.width >= 44, visible.height >= 44 else { return nil }
+    guard visible.contains(CGPoint(x: element.frame.midX, y: element.frame.midY)) else { return nil }
+    guard element.isHittable else { return nil }
     return visible
   }
 
