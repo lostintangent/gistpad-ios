@@ -2,13 +2,90 @@ import XCTest
 
 final class NotebookShelfUITests: XCTestCase {
   @MainActor
-  func testFoldedHomeUsesOneNativePinnedRowList() async throws {
+  func testFoldedHomeUsesSquarePinsInOneNativeList() async throws {
     try await checkHome(wide: false)
   }
 
   @MainActor
-  func testUnfoldedHomeUsesTheSameNativePinnedRowList() async throws {
+  func testUnfoldedHomeUsesTheSameSquarePinGallery() async throws {
     try await checkHome(wide: true)
+  }
+
+  @MainActor
+  func testFoldedSquareCardsKeepTheirOwnSelectionAndContextActions() async throws {
+    try await checkSquareCardActions(wide: false)
+  }
+
+  @MainActor
+  func testUnfoldedSquareCardsKeepTheirOwnSelectionAndContextActions() async throws {
+    try await checkSquareCardActions(wide: true)
+  }
+
+  @MainActor
+  private func checkSquareCardActions(wide: Bool) async throws {
+    let app = launch(state: "square-pins", appearance: "light")
+    defer { app.terminate() }
+    try await checkPosture(app, wide: wide)
+    let first = app.buttons["library-note-shape"].firstMatch
+    let second = app.buttons["library-note-small"].firstMatch
+    let third = app.buttons["library-note-weekend"].firstMatch
+    try await waitUntil("three independently accessible square pins") {
+      first.isHittable && second.isHittable && third.isHittable
+    }
+    XCTAssertEqual(first.frame.width, first.frame.height, accuracy: 1)
+    XCTAssertEqual(second.frame.width, first.frame.width, accuracy: 1)
+    XCTAssertEqual(second.frame.minX - first.frame.maxX, 12, accuracy: 1)
+    XCTAssertEqual(second.frame.minY, first.frame.minY, accuracy: 1)
+    XCTAssertEqual(third.frame.minX, first.frame.minX, accuracy: 1)
+    XCTAssertEqual(third.frame.width, first.frame.width, accuracy: 1)
+    XCTAssertEqual(third.frame.minY - first.frame.maxY, 12, accuracy: 1)
+    XCTAssertEqual(app.buttons.matching(identifier: "library-note-shape").count, 1)
+    second.tap()
+    try await waitUntil("the second card's own document") {
+      app.navigationBars["📆 Family memories"].exists
+    }
+    if wide {
+      try await waitUntil("only the chosen card has the selected trait") {
+        second.isSelected && !first.isSelected && !third.isSelected
+      }
+    } else {
+      let back = app.buttons["BackButton"]
+      try await waitUntil("the native Back control") { back.isHittable }
+      back.tap()
+      try await waitUntil("the same compact gallery after Back") { first.isHittable }
+      XCTAssertFalse(first.isSelected)
+      XCTAssertFalse(second.isSelected)
+    }
+    first.press(forDuration: 0.8)
+    try await waitUntil("all permitted actions on this card, not the grid row") {
+      app.buttons["Unpin"].isHittable && app.buttons["Archive"].isHittable
+        && app.buttons["Delete"].isHittable && app.buttons["Open Comments"].isHittable
+    }
+    app.buttons["Delete"].tap()
+    let confirm = app.buttons["Delete from GitHub"].firstMatch
+    try await waitUntil("one deletion confirmation for the pressed card") { confirm.isHittable }
+    XCTAssertEqual(app.buttons.matching(identifier: "Delete from GitHub").count, 1)
+    XCTAssertTrue(app.staticTexts["Delete “📚 Manga reading list” from GitHub?"].exists)
+    XCTAssertTrue(app.windows.firstMatch.frame.contains(confirm.frame))
+    record(app, name: "square-card-delete-\(wide ? "open" : "closed")")
+    let cancel = app.buttons["Cancel"].firstMatch
+    if cancel.isHittable {
+      cancel.tap()
+    } else {
+      app.navigationBars["GistPad"].coordinate(
+        withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+    }
+    try await waitUntil("all cards remain after cancelling Delete") {
+      !confirm.exists && first.isHittable && second.isHittable && third.isHittable
+    }
+    first.press(forDuration: 0.8)
+    try await waitUntil("the card's Unpin command") { app.buttons["Unpin"].isHittable }
+    app.buttons["Unpin"].tap()
+    try await waitUntil("the unpinned note becomes an ordinary row") {
+      !app.otherElements["capture-frame-note-card-shape"].exists
+        && app.buttons["library-note-shape"].firstMatch.exists
+    }
+    record(app, name: "square-card-unpinned-\(wide ? "open" : "closed")")
   }
 
   @MainActor
@@ -30,14 +107,14 @@ final class NotebookShelfUITests: XCTestCase {
           appearance: appearance, accessibility: accessibility)
         defer { app.terminate() }
         try await checkPosture(app, wide: wide)
-        let first = row("library-featured-shape", in: app)
-        let second = row("library-featured-small", in: app)
+        let first = row("library-note-shape", in: app)
+        let second = row("library-note-small", in: app)
         let name = "\(wide ? "open" : "folded")-\(accessibility ? "AX3" : "Large")-\(appearance)"
         let detailTitle = accessibility
           ? "📚 A longer thought about the things we choose to keep close"
           : "The shape of a notebook"
         try await reveal(first, in: app)
-        XCTAssertTrue(first.label.contains("A quiet place to think"))
+        XCTAssertFalse(first.label.contains("A quiet place to think"))
         XCTAssertFalse(first.label.contains("2 files"))
         XCTAssertFalse(first.label.contains(".md"))
         XCTAssertTrue((first.value as? String)?.contains("Pinned") == true)
@@ -56,12 +133,18 @@ final class NotebookShelfUITests: XCTestCase {
         record(app, name: "notebook-shelf-\(name)")
 
         try await reveal(second, in: app)
-        XCTAssertTrue(second.label.contains("A notebook can be both quiet"))
+        XCTAssertTrue(second.label.contains("Small observations"))
+        XCTAssertFalse(second.label.contains("A notebook can be both quiet"))
         if !accessibility {
-          XCTAssertGreaterThanOrEqual(second.frame.minY, first.frame.maxY - 1)
-          XCTAssertEqual(first.frame.minX, second.frame.minX, accuracy: 1)
+          XCTAssertEqual(first.frame.width, first.frame.height, accuracy: 1)
+          XCTAssertEqual(second.frame.width, second.frame.height, accuracy: 1)
+          XCTAssertEqual(second.frame.minY, first.frame.minY, accuracy: 1)
+          XCTAssertEqual(second.frame.minX - first.frame.maxX, 12, accuracy: 1)
           XCTAssertEqual(first.frame.width, second.frame.width, accuracy: 1)
         } else {
+          XCTAssertEqual(first.frame.width, second.frame.width, accuracy: 1)
+          XCTAssertEqual(second.frame.minX, first.frame.minX, accuracy: 1)
+          XCTAssertEqual(second.frame.minY - first.frame.maxY, 12, accuracy: 1)
           let draft = row("library-note-local-draft", in: app)
           try await reveal(draft, in: app)
           XCTAssertTrue(draft.label.contains("Not published yet."))

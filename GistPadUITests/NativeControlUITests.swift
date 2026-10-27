@@ -258,18 +258,19 @@ final class NativeControlUITests: XCTestCase {
           try await waitUntil("the actual Library") { list.exists }
           if state == "no-pins" {
             XCTAssertFalse(app.descendants(matching: .any).matching(
-              NSPredicate(format: "identifier BEGINSWITH %@", "library-featured-")).firstMatch.exists)
+              NSPredicate(
+                format: "identifier == %@", "capture-frame-library-pinned-grid")).firstMatch.exists)
             let first = app.descendants(matching: .any)["library-note-shape"].firstMatch
             try await waitUntil("ordinary content without reserved feature space") { first.isHittable }
             let bar = app.navigationBars["GistPad"]
             XCTAssertLessThanOrEqual(first.frame.minY - max(bar.frame.maxY, list.frame.minY), 24)
           } else if state == "three-pins" {
-            let first = app.descendants(matching: .any)["library-featured-shape"].firstMatch
-            try await waitUntil("the first intrinsic pinned card") {
+            let first = app.buttons["library-note-shape"].firstMatch
+            try await waitUntil("the first square pinned card") {
               first.isHittable
             }
             XCTAssertTrue(first.label.contains("The shape of a notebook"))
-            XCTAssertTrue(first.label.contains("precise engine beneath the page"))
+            XCTAssertFalse(first.label.contains("precise engine beneath the page"))
             XCTAssertTrue(first.label.contains("Design"))
             XCTAssertTrue(first.label.contains("Ideas"))
           } else {

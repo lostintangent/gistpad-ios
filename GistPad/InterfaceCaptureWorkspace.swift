@@ -95,7 +95,7 @@ struct InterfaceCaptureWorkspace: View {
             "status-busy", "status-error", "status-details", "status-limited", "tag-filters", "row-anatomy",
             "collection-loading", "no-pins", "three-pins", "today-0", "today-3", "today-99plus",
             "collections-expanded", "collections-collapsed", "collections-empty",
-            "collection-search", "collection-overlap", "long-library"
+            "collection-search", "collection-overlap", "long-library", "square-pins"
         ].contains(state) || (LaunchArguments.captureMangaFixture && screen == "note"
             && ["markers", "rules", "bullets"].contains(state))
         _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
@@ -169,7 +169,7 @@ struct InterfaceCaptureWorkspace: View {
             snapshot.dailyNoteCount = 0
         } else if state == "no-pins" {
             for index in snapshot.notes.indices { snapshot.notes[index].isPinned = false }
-        } else if state == "three-pins",
+        } else if ["three-pins", "square-pins"].contains(state),
                   let index = snapshot.notes.firstIndex(where: { $0.id == "weekend" }) {
             snapshot.notes[index].isPinned = true
         } else if state == "collection-overlap",
@@ -184,6 +184,18 @@ struct InterfaceCaptureWorkspace: View {
                     gistID: "long-\(index)", tagIDs: ["ideas"],
                     excerpt: "Leave room for the thought to grow."
                 )
+            }
+            if state == "square-pins" {
+                for index in snapshot.notes.indices where snapshot.notes[index].isPinned {
+                    snapshot.notes[index].canDeleteFromGitHub = true
+                }
+                if let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
+                    snapshot.notes[index].title = "📚 Manga reading list"
+                }
+                if let index = snapshot.notes.firstIndex(where: { $0.id == "small" }) {
+                    snapshot.notes[index].title = "📆 Family memories"
+                    snapshot.notes[index].commentCount = 2
+                }
             }
         }
         if state == "row-anatomy" {
@@ -452,6 +464,9 @@ struct InterfaceCaptureWorkspace: View {
             activeSession.textView.resignFirstResponder()
             selectedFileID = id == "today" ? "2026-10-24.md" : "README.md"
             library.selectedNoteID = id
+        }
+        actions.openComments = { _ in
+            actionMessage = "Comments opened for this synthetic notebook."
         }
         actions.togglePin = { id in
             guard let index = library.snapshot.notes.firstIndex(where: { $0.id == id }) else {
