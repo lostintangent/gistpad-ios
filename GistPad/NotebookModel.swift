@@ -379,33 +379,43 @@ final class NotebookModel {
 
   var writeAttentionStatus: GitHubStatusState? {
     guard let failure = writeFailure, account?.id == failure.accountID else { return nil }
-    if let reconnect = writeFailures.last(where: { $0.problem.recovery == .reconnect }) {
+    return Self.attentionStatus(writeFailures, isRetrying: isRetryingWrite)
+  }
+
+  static func attentionStatus(
+    _ failures: [NotebookWriteFailure], isRetrying: Bool
+  ) -> GitHubStatusState {
+    if let reconnect = failures.last(where: { $0.problem.recovery == .reconnect }) {
       return reconnect.problem.status(
         heading: String(localized: "Couldn't reconnect GitHub."), detail: nil,
-        isRecovering: isRetryingWrite)
+        isRecovering: isRetrying)
     }
-    if let blocked = blockedNoteFailure {
+    if let blocked = blockedNoteFailure(in: failures) {
       return blocked.problem.status(
         heading: String(localized: "Couldn't save to GitHub."), detail: nil, isRecovering: false)
     }
-    let retryable = writeFailures.filter { $0.problem.recovery == .retry }
+    let retryable = failures.filter { $0.problem.recovery == .retry }
     return .problem(
       GitHubStatusProblem(
         heading: String(localized: "Couldn't save to GitHub."),
-        message: Self.unsentChangesMessage(retryable),
+        message: unsentChangesMessage(retryable),
         recoveryTitle: String(localized: "Retry"),
-        detail: Self.unsentChangesDetail(retryable),
-        isRecovering: isRetryingWrite, retryAfter: retryable.last?.problem.retryAfter))
+        detail: unsentChangesDetail(retryable),
+        isRecovering: isRetrying, retryAfter: retryable.last?.problem.retryAfter))
   }
 
   // A blocked note can't succeed by retrying, so Show Note waits until no retryable change is left.
-  private var blockedNoteFailure: NotebookWriteFailure? {
-    guard writeFailures.allSatisfy({ $0.problem.recovery == .showNote }) else { return nil }
-    return writeFailures.last
+  private static func blockedNoteFailure(
+    in failures: [NotebookWriteFailure]
+  ) -> NotebookWriteFailure? {
+    guard failures.allSatisfy({ $0.problem.recovery == .showNote }) else { return nil }
+    return failures.last
   }
 
   var blockedNoteDraftID: UUID? {
-    guard let failure = blockedNoteFailure, case .note(let draftID) = failure.operation else {
+    guard let failure = Self.blockedNoteFailure(in: writeFailures),
+      case .note(let draftID) = failure.operation
+    else {
       return nil
     }
     return draftID
