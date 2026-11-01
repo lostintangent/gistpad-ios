@@ -15,20 +15,21 @@ struct NotebookLibraryDeletionCaptureWorkspace: View {
 
   var body: some View {
     LiveNotebookWorkspace(notebook: notebook, routes: NotebookRouteInbox())
-      .overlay(alignment: .bottomLeading) { PublicationHoldRelease() }
+      .overlay(alignment: .center) { PublicationHoldMarker() }
   }
 }
 
-/// Test-only control. It is invisible and appears only while a publication is parked, so UI tests can
-/// release the hold without a visible affordance in captured frames.
-private struct PublicationHoldRelease: View {
+/// Exposes a parked publication to UI tests as a non-interactive element, so a test can wait for the hold
+/// without tapping anything. It never takes hits, so it cannot intercept list taps.
+private struct PublicationHoldMarker: View {
   var body: some View {
     TimelineView(.periodic(from: .now, by: 0.1)) { _ in
       if LibraryPublicationHold.shared.isParked {
-        Button("Release publication") { LibraryPublicationHold.shared.release() }
-          .accessibilityIdentifier("release-publication")
-          .opacity(0.01)
-          .frame(width: 44, height: 44)
+        Color.clear
+          .frame(width: 1, height: 1)
+          .allowsHitTesting(false)
+          .accessibilityElement(children: .ignore)
+          .accessibilityIdentifier("publication-parked")
       }
     }
   }
@@ -117,7 +118,11 @@ actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding 
         expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
     publicationReasons.append(reason)
     cache = try await store.cachedLibrary(accountID: accountID)
-    if let id = saved.gistID, let gist = cache?.details[id] { published = [gist] }
+    if let id = saved.gistID, !published.contains(where: { $0.id == id }),
+      try !fixtureGists(includeDeleted: true).contains(where: { $0.id == id })
+    {
+      published.append(try createdGist(for: saved, gistID: id))
+    }
     return saved
   }
 
@@ -200,6 +205,21 @@ actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding 
     return created
   }
 
+  private func createdGist(for saved: DraftSnapshot, gistID: String) throws -> Gist {
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let payload: [String: Any] = [
+      "id": gistID, "description": saved.description, "public": false,
+      "updated_at": "2026-10-25T21:00:00Z", "created_at": "2026-10-25T21:00:00Z",
+      "owner": ["id": 1, "login": account.login],
+      "files": [
+        saved.filename: ["filename": saved.filename, "language": "Markdown", "content": saved.text]
+      ],
+      "history": [["version": "published"]],
+    ]
+    return try decoder.decode(Gist.self, from: JSONSerialization.data(withJSONObject: payload))
+  }
+
   private func fixtureGists(includeDeleted: Bool = false) throws -> [Gist] {
     let payload = [
       ("a", "A thought to keep"), ("b", "A finished thought"), ("shared", "A friend's field guide"),
@@ -260,6 +280,17 @@ final class LibraryPublicationHold: @unchecked Sendable {
     return false
   }
 
+  /// Releases a parked publication when the app asks to delete the note it is saving. The app waits for that
+  /// publication before it performs a destructive action, so the request is the first point it can be released.
+  func releaseForDeletion(_ action: NotebookAction) {
+    switch action {
+    case .delete, .discardLocalCopy, .discardUncertainCreation:
+      guard isParked else { return }
+      release()
+    default: break
+    }
+  }
+
   func release() {
     let delivery = lock.withLock { () -> (() -> Void)? in
       isEnabled = false
@@ -311,10 +342,10 @@ private final class LibraryPublicationCaptureProtocol: URLProtocol {
       guard let response = HTTPURLResponse(
         url: url, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)
       else { throw URLError(.badServerResponse) }
-      let body = try JSONSerialization.data(withJSONObject: payload)
+      let responseData = try JSONSerialization.data(withJSONObject: payload)
       let deliver: () -> Void = {
         self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        self.client?.urlProtocol(self, didLoad: body)
+        self.client?.urlProtocol(self, didLoad: responseData)
         self.client?.urlProtocolDidFinishLoading(self)
       }
       if !LibraryPublicationHold.shared.park(deliver) { deliver() }

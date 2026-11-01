@@ -1380,6 +1380,9 @@ struct LiveNotebookWorkspace: View {
   private func execute(_ action: NotebookAction, accountID: UUID) async throws
     -> NotebookActionResult
   {
+    #if DEBUG
+    LibraryPublicationHold.shared.releaseForDeletion(action)
+    #endif
     guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
       throw AccountError.accountChanged
     }

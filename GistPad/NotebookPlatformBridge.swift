@@ -223,6 +223,11 @@ final class NotebookPlatformBridge: NotebookIntentServing {
       do {
         if let controller {
           await controller.publish(reason: .background, shouldContinue: { lease.isActive })
+        } else if let notebook {
+          _ = try await notebook.publish(
+            draftID: command.draftID, accountID: command.accountID, reason: .background,
+            expectedGeneration: command.expectedGeneration + 1,
+            shouldPublish: { await MainActor.run { lease.isActive } })
         } else {
           _ = try await provider.publish(
             draftID: command.draftID, accountID: command.accountID, reason: .background,

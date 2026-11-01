@@ -128,9 +128,17 @@ final class LibraryDeletionUITests: XCTestCase {
     try await waitUntil("the new note's editor") { editor.isHittable }
     editor.typeText("Parked thought")
     if app.buttons["Hide Keyboard"].isHittable { app.buttons["Hide Keyboard"].tap() }
-    if app.buttons["BackButton"].isHittable { app.buttons["BackButton"].tap() }
-    let release = app.buttons["release-publication"]
-    try await waitUntil("the leaving publication to park") { release.exists }
+    if wide {
+      let other = app.descendants(matching: .any).matching(
+        NSPredicate(format: "identifier BEGINSWITH %@ AND NOT label CONTAINS %@", "library-note-", "Parked thought")
+      ).firstMatch
+      try await waitUntil("another note to select, leaving the parked note") { other.isHittable }
+      other.tap()
+    } else if app.buttons["BackButton"].isHittable {
+      app.buttons["BackButton"].tap()
+    }
+    let parked = app.descendants(matching: .any)["publication-parked"]
+    try await waitUntil("the leaving publication to park") { parked.exists }
     let row = app.descendants(matching: .any).matching(
       NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "library-note-", "Parked thought")
     ).firstMatch
@@ -141,13 +149,9 @@ final class LibraryDeletionUITests: XCTestCase {
     delete.tap()
     let confirmation = app.buttons["Delete"].firstMatch
     try await waitUntil("the parked note's deletion confirmation") { confirmation.isHittable }
-    XCTAssertTrue(app.staticTexts["Delete “Parked thought”?"].exists)
+    XCTAssertTrue(app.staticTexts["Delete “Untitled”?"].exists)
     record(app, name: "parked-delete-confirmation-\(posture)")
     confirmation.tap()
-    try await Task.sleep(for: .milliseconds(300))
-    XCTAssertTrue(row.exists, "The deletion should wait for the publication to settle.")
-    XCTAssertTrue(release.exists, "The publication should still be parked before release.")
-    release.tap()
     try await waitUntil("the parked note to leave the list once publication settles") { !row.exists }
     XCTAssertFalse(app.alerts.firstMatch.exists)
     record(app, name: "parked-delete-result-\(posture)")

@@ -307,6 +307,7 @@ final class NotebookModel {
   private(set) var openingDocument: NotebookOpeningDocument?
   private(set) var failedOpen: NotebookFailedOpen?
   private(set) var localDrafts: [DraftSnapshot] = []
+  private var publishingDraftIDs: Set<UUID> = []
   private(set) var cachedLibrary: CachedLibrarySnapshot?
   private(set) var isCreating = false
   private(set) var searchTargets: [String: NotebookSelection] = [:]
@@ -415,7 +416,7 @@ final class NotebookModel {
       return .init(
         id: draft.id.uuidString, accountID: account.id,
         title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
-        localDraft: draft)
+        localDraft: draft, isPublishing: publishingDraftIDs.contains(draft.id))
     }
     let gistID = target?.gistID ?? draft?.gistID ?? rowID
     guard !deletedGistIDs.contains(gistID),
@@ -1709,6 +1710,8 @@ final class NotebookModel {
     guard account?.id == accountID || reason == .manual, pendingAccount == nil else {
       throw AccountError.accountChanged
     }
+    publishingDraftIDs.insert(draftID)
+    defer { publishingDraftIDs.remove(draftID) }
     let saved = try await provider.publish(
       draftID: draftID, accountID: accountID, reason: reason,
       expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
