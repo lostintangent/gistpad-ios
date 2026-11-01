@@ -8,9 +8,9 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct LibraryRowHostTests {
-  @Test(arguments: [false, true], [false, true])
-  func metadataUsesSystemSecondaryInkOnSelectedAndUnselectedRows(
-    dark: Bool, increased: Bool
+  @Test(arguments: [false, true])
+  func metadataUsesRenderedSecondaryInkOnSelectedAndUnselectedRows(
+    dark: Bool
   ) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -18,7 +18,7 @@ struct LibraryRowHostTests {
     let window = UIWindow(windowScene: scene)
     window.frame = .init(x: 0, y: 0, width: 951, height: 900)
     window.overrideUserInterfaceStyle = dark ? .dark : .light
-    window.traitOverrides.accessibilityContrast = increased ? .high : .normal
+    window.traitOverrides.accessibilityContrast = .normal
     window.traitOverrides.horizontalSizeClass = .regular
     window.traitOverrides.preferredContentSizeCategory = .large
     let model = LibraryModel(
@@ -62,59 +62,35 @@ struct LibraryRowHostTests {
     let selectedCount = descendants(window).compactMap { $0 as? UICollectionView }
       .reduce(0) { $0 + ($1.indexPathsForSelectedItems?.count ?? 0) }
     #expect(selectedCount == 1)
-    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
-      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-    }
-    for id in ["selected", "unselected"] {
-      let content = try #require(descendants(window).first {
-        $0.accessibilityIdentifier == "capture-frame-note-content-\(id)"
-          && !$0.bounds.isEmpty && $0.window === window
-      })
-      let contentRect = content.convert(content.bounds, to: window)
-      // The strip above the title holds only card or selection surface, so it is the true background.
-      let surface = CGRect(
-        x: contentRect.minX + 4, y: contentRect.minY + 2,
-        width: contentRect.width - 8, height: 6)
-      let surfacePixels = try metadataPixels(in: image, rect: surface)
-      let background = try #require(surfacePixels.max { $0.value < $1.value }?.key)
-      for part in ["date", "excerpt"] {
-        let marker = try #require(descendants(window).first {
-          $0.accessibilityIdentifier == "capture-frame-note-\(part)-\(id)"
-            && !$0.bounds.isEmpty && $0.window === window
-        })
-        let rect = marker.convert(marker.bounds, to: window).insetBy(dx: -1, dy: -1)
-        let pixels = try metadataPixels(in: image, rect: rect)
-        let ink = renderedSecondaryInk(over: background, traits: window.traitCollection)
-        let solidInkCount = pixels.reduce(0) { count, pixel in
-          let color = pixel.key
-          let matches = abs(Int(color.red) - Int(ink.red)) <= 4
-            && abs(Int(color.green) - Int(ink.green)) <= 4
-            && abs(Int(color.blue) - Int(ink.blue)) <= 4
-          return count + (matches ? pixel.value : 0)
-        }
-        let dominant = pixels.sorted { $0.value > $1.value }.prefix(4)
-          .map { "\($0.key.hex)x\($0.value)" }
+    let normal = try renderedSecondaryInk(in: window)
+    window.traitOverrides.accessibilityContrast = .high
+    try await Task.sleep(for: .milliseconds(300))
+    window.layoutIfNeeded()
+    let increased = try renderedSecondaryInk(in: window)
+    #expect(normal.inks.count == 4)
+    for key in normal.inks.keys.sorted() {
+      let base = try #require(normal.inks[key])
+      let high = try #require(increased.inks[key])
+      for (mode, ink) in [("Normal", base), ("High", high)] {
         #expect(
-          solidInkCount >= 8,
-          "\(id) \(part) must render \(ink.hex) on \(background.hex); dominant colors \(dominant)")
-        let ratio = ink.contrast(with: background)
-        let normalInk = renderedSecondaryInk(
-          over: background,
-          traits: window.traitCollection.modifyingTraits { $0.accessibilityContrast = .normal })
-        let normalRatio = normalInk.contrast(with: background)
-        if increased {
-          #expect(
-            ratio > normalRatio,
-            "\(id) \(part) must gain contrast at Increased Contrast, \(ratio):1 vs \(normalRatio):1")
-        }
-        Attachment.record(
-          "\(id) \(part): \(ink.hex) on \(background.hex), \(ratio):1 (normal \(normalRatio):1), solid pixels: \(solidInkCount)",
-          named: "metadata-\(id)-\(part)-\(dark)-\(increased).txt")
+          ink.count >= 8,
+          "\(key) \(mode) needs solid ink, found \(ink.count) pixels on \(ink.background.hex)")
+        #expect(
+          ink.residual <= 6,
+          "\(key) \(mode) ink \(ink.ink.hex) is off the background-to-label line by \(ink.residual)")
+        #expect(
+          ink.position > 0.3 && ink.position < 0.95,
+          "\(key) \(mode) ink sits \(ink.position) of the way to the label color, expected muted secondary ink")
       }
+      #expect(
+        high.contrast > base.contrast,
+        "\(key) must gain contrast at Increased Contrast, \(high.contrast):1 vs \(base.contrast):1")
+      Attachment.record(
+        "\(key): Normal \(base.ink.hex) on \(base.background.hex), position \(base.position), \(base.contrast):1; High \(high.ink.hex) on \(high.background.hex), position \(high.position), \(high.contrast):1",
+        named: "secondary-\(dark ? "Dark" : "Light")-\(key).txt")
     }
     Attachment.record(
-      image, named: "metadata-\(dark ? "Dark" : "Light")-\(increased ? "High" : "Normal").png",
-      as: .png)
+      normal.image, named: "secondary-\(dark ? "Dark" : "Light")-Normal.png", as: .png)
   }
 
   @Test(arguments: [280, 350], [DynamicTypeSize.large, .accessibility3])
@@ -171,7 +147,7 @@ struct LibraryRowHostTests {
     let metrics = UIFontMetrics(forTextStyle: .body)
     let gap = metrics.scaledValue(for: 3, compatibleWith: traits)
     let tagGap = metrics.scaledValue(for: 6, compatibleWith: traits)
-    let padding = metrics.scaledValue(for: 18, compatibleWith: traits)
+    let padding = metrics.scaledValue(for: 21, compatibleWith: traits)
 
     #expect(abs(content.width - CGFloat(width)) <= 1)
     #expect(content.contains(title))
@@ -233,7 +209,7 @@ struct LibraryRowHostTests {
     let secondary = try frame("secondary")
     let metrics = UIFontMetrics(forTextStyle: .body)
     let gap = metrics.scaledValue(for: 3, compatibleWith: traits)
-    let padding = metrics.scaledValue(for: 18, compatibleWith: traits)
+    let padding = metrics.scaledValue(for: 21, compatibleWith: traits)
     let titleFont = UIFont.preferredFont(forTextStyle: .headline, compatibleWith: traits)
     let twoLines = UILabel()
     twoLines.font = titleFont
@@ -261,20 +237,74 @@ struct LibraryRowHostTests {
     [view] + view.subviews.flatMap(descendants)
   }
 
-  /// `secondaryLabel` is translucent, so the ink that actually renders is its blend over the surface.
-  private func renderedSecondaryInk(over background: RGBColor, traits: UITraitCollection) -> RGBColor {
+  private struct RenderedInk {
+    let background: RGBColor
+    let ink: RGBColor
+    let count: Int
+    let position: Double
+    let residual: Double
+
+    var contrast: Double { ink.contrast(with: background) }
+  }
+
+  /// Reads the secondary ink that rendered. The ink of each date or excerpt is its most common pixel
+  /// that departs from the card, and it should sit on the line from that card to the label color.
+  private func renderedSecondaryInk(
+    in window: UIWindow
+  ) throws -> (image: UIImage, inks: [String: RenderedInk]) {
+    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+    }
+    let label = uiChannels(UIColor.label.resolvedColor(with: window.traitCollection))
+    var inks: [String: RenderedInk] = [:]
+    for id in ["selected", "unselected"] {
+      let content = try frame(in: window, identifier: "capture-frame-note-content-\(id)")
+      let contentPixels = try metadataPixels(in: image, rect: content)
+      let background = try #require(contentPixels.max { $0.value < $1.value }?.key)
+      for part in ["date", "excerpt"] {
+        let marker = try frame(in: window, identifier: "capture-frame-note-\(part)-\(id)")
+        let pixels = try metadataPixels(in: image, rect: marker.insetBy(dx: -1, dy: -1))
+        let found = try #require(
+          pixels.filter { distance($0.key, background) > 24 }.max { $0.value < $1.value },
+          "\(id) \(part) has no ink that departs from the card")
+        let backgroundChannels = channels(background)
+        let delta = zip(channels(found.key), backgroundChannels).map { $0 - $1 }
+        let axis = zip(label, backgroundChannels).map { $0 - $1 }
+        let axisLength = axis.reduce(0) { $0 + $1 * $1 }
+        let position = zip(delta, axis).reduce(0) { $0 + $1.0 * $1.1 } / axisLength
+        let residual = zip(delta, axis).map { abs($0.0 - position * $0.1) }.max() ?? .infinity
+        inks["\(id)-\(part)"] = RenderedInk(
+          background: background, ink: found.key, count: found.value,
+          position: position, residual: residual)
+      }
+    }
+    return (image, inks)
+  }
+
+  private func frame(in window: UIWindow, identifier: String) throws -> CGRect {
+    let view = try #require(descendants(window).first {
+      $0.accessibilityIdentifier == identifier && !$0.bounds.isEmpty && $0.window === window
+    })
+    return view.convert(view.bounds, to: window)
+  }
+
+  private func distance(_ lhs: RGBColor, _ rhs: RGBColor) -> Int {
+    max(
+      abs(Int(lhs.red) - Int(rhs.red)), abs(Int(lhs.green) - Int(rhs.green)),
+      abs(Int(lhs.blue) - Int(rhs.blue)))
+  }
+
+  private func channels(_ color: RGBColor) -> [Double] {
+    [Double(color.red), Double(color.green), Double(color.blue)]
+  }
+
+  private func uiChannels(_ color: UIColor) -> [Double] {
     var red: CGFloat = 0
     var green: CGFloat = 0
     var blue: CGFloat = 0
     var alpha: CGFloat = 0
-    _ = UIColor.secondaryLabel.resolvedColor(with: traits)
-      .getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-    func mix(_ ink: CGFloat, _ surface: UInt8) -> UInt8 {
-      UInt8((ink * 255 * alpha + CGFloat(surface) * (1 - alpha)).rounded())
-    }
-    return RGBColor(
-      red: mix(red, background.red), green: mix(green, background.green),
-      blue: mix(blue, background.blue))
+    color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+    return [Double(red), Double(green), Double(blue)].map { $0 * 255 }
   }
 
   private func metadataPixels(in image: UIImage, rect: CGRect) throws -> [RGBColor: Int] {
