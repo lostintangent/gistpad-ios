@@ -291,8 +291,8 @@ Capture account/gist/file/selection before composition; a later selection never 
 
 | Conversation state | Required experience |
 | --- | --- |
-| Loading/refresh | One native indicator; retain cached threads/known count. Unknown is not empty and never blocks the note |
-| Empty | The blank conversation with the normal composer ready. No "No comments yet" message, title, illustration or flash. Cached comments render before the sheet appears. An empty gist and a loaded-empty gist look the same |
+| Loading/refresh | One native indicator in the thread area, with the composer ready. Retain threads and the known count when present. Unknown is not empty and never blocks the note |
+| Empty | Shown only after the load returns zero comments: the blank conversation with the normal composer ready. No "No comments yet" message, title, illustration or flash while the count is unknown. An empty gist and a loaded-empty gist look the same. There is no comments cache for t166; first open shows the indicator, then the result |
 | Offline | Cached threads and editable local draft. Without cache, explain connection need. No automatic send |
 | Post/load failure | Explain the actual operation and preserve draft. Reconcile uncertain Post before retrying to avoid duplicates. Claim saving only after durable receipt |
 | Missing thread/permission | Preserve draft and explain target loss. Never silently turn a reply into a root. Source-write and comment permission are separate |
