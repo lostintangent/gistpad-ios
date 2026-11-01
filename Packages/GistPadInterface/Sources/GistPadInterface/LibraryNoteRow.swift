@@ -96,7 +96,7 @@ struct LibraryNoteRow: View {
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 } else {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    HStack(alignment: .center, spacing: 8) {
                         metadata(relativeTo: now)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         LibraryCommentCount(count: count, noteID: note.id)
@@ -191,6 +191,7 @@ struct LibraryCommentCount: View {
         } icon: {
             Image(systemName: "text.bubble")
         }
+        .labelStyle(.titleAndIcon)
         .fixedSize()
         .accessibilityLabel(Text("\(count) comments", bundle: .module))
         .captureFrame("note-comment-count-\(noteID)")
