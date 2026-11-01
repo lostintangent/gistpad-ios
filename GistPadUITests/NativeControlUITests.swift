@@ -286,16 +286,13 @@ final class NativeControlUITests: XCTestCase {
           let list = app.collectionViews.firstMatch
           try await waitUntil("the actual Library") { list.exists }
           if state == "no-pins" {
-            XCTAssertFalse(app.descendants(matching: .any).matching(
-              NSPredicate(
-                format: "identifier == %@", "capture-frame-library-pinned-grid")).firstMatch.exists)
             let first = app.descendants(matching: .any)["library-note-shape"].firstMatch
             try await waitUntil("ordinary content without reserved feature space") { first.isHittable }
             let bar = app.navigationBars["GistPad"]
             XCTAssertLessThanOrEqual(first.frame.minY - max(bar.frame.maxY, list.frame.minY), 24)
           } else if state == "three-pins" {
             let first = app.buttons["library-note-shape"].firstMatch
-            try await waitUntil("the first square pinned card") {
+            try await waitUntil("the first pinned row") {
               first.isHittable
             }
             XCTAssertTrue(first.label.contains("The shape of a notebook"))

@@ -103,13 +103,9 @@ final class LibraryCollectionUITests: XCTestCase {
           XCTAssertGreaterThanOrEqual(create.frame.minX, bar.frame.maxX - 1)
           let search = app.searchFields.firstMatch
           let first = app.buttons["library-note-shape"].firstMatch
-          let grid = app.otherElements["capture-frame-library-pinned-grid"].firstMatch
-          try await waitUntil("the pinned gallery and full-width native Search column") {
+          try await waitUntil("the pinned rows and full-width native Search column") {
             first.isHittable && search.exists && !search.frame.isEmpty
           }
-          XCTAssertEqual(first.frame.minX, search.frame.minX, accuracy: 1)
-          XCTAssertEqual(first.frame.width * 2 + 12, search.frame.width, accuracy: 1)
-          XCTAssertEqual(grid.frame.width, search.frame.width, accuracy: 1)
           toggle.tap()
           let show = app.buttons["Show Sidebar"]
           try await waitUntil("the native control to reopen the hidden sidebar") {
