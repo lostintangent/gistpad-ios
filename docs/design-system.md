@@ -23,7 +23,7 @@ Resolve semantic colors against the containing view's actual traits. Do not hard
 | Separators / boundaries | Semantic separator / opaque separator; required visible affordances measured at 3:1 |
 | Links | Semantic link role plus underline or another explicit non-color affordance |
 | Error / completion | System red / fixed system green, with meaning also expressed through symbols/text |
-| Library selection | Native neutral selected surface and traits, except the [contrast-tested pinned-sidebar fills](design-direction.md#pinned-cards), which preserve native selection semantics. Never personal tint or OS text-selection color |
+| Library selection | Native neutral selected surface and traits. Never personal tint or OS text-selection color |
 
 Normal content text targets 4.5:1, Increased Contrast 7:1, against actual composited selected/unselected surfaces. Required nontext affordances target 3:1. Use WCAG relative luminance, not HSB brightness. System materials own their foreground adaptation; reference flat colors do not certify rendered glass.
 
@@ -48,7 +48,7 @@ Non-destructive swipe actions use explicit `UIColor.darkGray` with native white 
 
 Use scaled Footnote medium, 8-pt horizontal/4-pt vertical padding and 8-pt corners. Fill the label with the exact saved tag color at full opacity. Ink is black or white, whichever has higher contrast, so every fill reaches at least 4.58:1 and passes 4.5:1. A missing color uses the neutral system fill with primary text. No internal dot, tinted overlay, arbitrary colored text or whole-label opacity. Keep saved white and black exact, with their own edge against the surface.
 
-Rows show up to two complete names plus truthful `+N` at standard type; ordinary rows wrap/grow at AX. Square pinned cards retain full-size type and place tags on the bottom metadata line when possible, or one compact row 4 pt above progress/Comments when necessary. Their tightest summary keeps at least three characters of the first name before truncation, or its full name when shorter, plus a fixed count of the other tags; never a bare number. Follow the [pinned-footer priority](design-direction.md#pinned-cards) when space remains insufficient. A combined neutral summary chip avoids duplicate padding when separate chips cannot fit. Neutral chip fill must lift from the actual card surface in Dark, not become a near-black hole in a selected card. Use 6-pt gaps between tags. Metadata labels are not nested controls. Picker rows instead show one standalone swatch on an untinted row, full name and separate neutral selection check. Use an own-hue hairline only where needed, neutral gray for white; no universal black outline. Increased Contrast strengthens necessary boundaries. Measure final text/fill with white, black, yellow, saturated and similar hues.
+Rows show up to two complete names plus truthful `+N` at standard type; ordinary rows wrap/grow at AX. Use 6-pt gaps between tags. Metadata labels are not nested controls. Picker rows instead show one standalone swatch on an untinted row, full name and separate neutral selection check. Use an own-hue hairline only where needed, neutral gray for white; no universal black outline. Increased Contrast strengthens necessary boundaries. Measure final text/fill with white, black, yellow, saturated and similar hues.
 
 ## 3. Typography and geometry
 
@@ -72,7 +72,7 @@ Heading scaling adds the exact preferred-style point growth from Large to each r
 
 Use logical margins/direction for RTL and mixed script, isolating code only where necessary. Never clip diacritics or assume one line box fits every language. At AX, collapse companions/stack metadata before shrinking content. Preserve long titles, complete tag names and distinguishable action labels.
 
-Pinned cards use two equal square columns at standard text sizes, with a matching 12-pt inset and grid gutter. AX uses one full-width, content-height column. No card excerpts in either layout. Pin stays top trailing, Comments bottom trailing. Preserve the [complete per-card actions and accessibility](design-direction.md#pinned-cards) when the grid replaces individual List rows.
+Library navigation uses the system large title **GistPad** with its count subtitle, collapsing on scroll, with no inline title, custom font or manual size. Library section headers, Pinned and the date groups, use the native list header style at every size: system font, no custom size, count or rule. Pinned uses the native collapse chevron. Headers wrap at AX rather than shrinking. Rows keep the ordinary row type and metadata rules. See the [Pinned and date groups contract](design-direction.md#pinned-and-date-groups).
 
 Library secondary disclosures retain their full titles and bare trailing numbers in full-opacity adaptive label ink, including at AX. Align the number with the first title baseline, wrap the title and let a decorative symbol yield before shrinking type. Use a 44-pt collapsed header pitch at Large without extra section gaps, growing for AX content. The 28-pt transition from the final ordinary separator to the first header's content includes normal row inset. Empty sections have no header or reserved space. See the [secondary collection contract](design-direction.md#secondary-collections).
 
