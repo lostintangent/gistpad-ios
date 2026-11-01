@@ -366,50 +366,60 @@ public struct LibraryView: View {
         }
     }
 
-    /// The whole header is one disclosure button. The sidebar draws its own disclosure, so the
-    /// compact disc appears only where the list style does not.
+    /// Compact `.insetGrouped` draws no disclosure, so there the whole header is one disclosure
+    /// button ending in Notes' circled chevron. The sidebar draws and handles its own.
+    @ViewBuilder
     private func sectionHeader(
         _ title: Text, symbol: String? = nil, count: Int?, countLabel: String?,
         expansion: Binding<Bool>, id: String
     ) -> some View {
         let isExpanded = expansion.wrappedValue
+        let label = HStack(alignment: .firstTextBaseline) {
+            Group {
+                if let symbol {
+                    Label { title } icon: { Image(systemName: symbol) }
+                } else {
+                    title
+                }
+            }
+            .captureFrame("\(id)-title")
+            Spacer(minLength: 8)
+            if let count {
+                Text(count, format: .number)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+                    .captureFrame("\(id)-count")
+            }
+            if !isSidebar {
+                // UIKit's secondary label, which is what Notes' disc uses (SwiftUI's
+                // hierarchical `.secondary` renders a flatter, different gray).
+                Image(
+                    systemName: isExpanded
+                        ? "chevron.down.circle.fill" : "chevron.forward.circle.fill"
+                )
+                .foregroundStyle(Color(uiColor: .secondaryLabel))
+                .contentTransition(.symbolEffect(.replace))
+            }
+        }
         let state = isExpanded
             ? String(localized: "Expanded", bundle: .module)
             : String(localized: "Collapsed", bundle: .module)
         let value = [countLabel, state].compactMap { $0 }.joined(separator: ", ")
-        return Button {
-            withAnimation(reduceMotion ? nil : .default) {
-                expansion.wrappedValue.toggle()
-            }
-        } label: {
-            HStack(alignment: .firstTextBaseline) {
-                Group {
-                    if let symbol {
-                        Label { title } icon: { Image(systemName: symbol) }
-                    } else {
-                        title
+        Group {
+            if isSidebar {
+                label
+            } else {
+                Button {
+                    withAnimation(reduceMotion ? nil : .default) {
+                        expansion.wrappedValue.toggle()
                     }
+                } label: {
+                    label
                 }
-                .captureFrame("\(id)-title")
-                Spacer(minLength: 8)
-                if let count {
-                    Text(count, format: .number)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .fixedSize()
-                        .captureFrame("\(id)-count")
-                }
-                if !isSidebar {
-                    Image(
-                        systemName: isExpanded
-                            ? "chevron.down.circle.fill" : "chevron.forward.circle.fill"
-                    )
-                    .foregroundStyle(.tertiary)
-                        .contentTransition(.symbolEffect(.replace))
-                }
+                .buttonStyle(.plain)
             }
         }
-        .buttonStyle(.plain)
         .captureFrame(id)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
