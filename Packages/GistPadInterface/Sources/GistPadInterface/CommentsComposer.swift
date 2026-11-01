@@ -94,7 +94,7 @@ public struct CommentsComposer: View {
                 .buttonStyle(.glassProminent)
                 .buttonBorderShape(.circle)
                 .controlSize(.large)
-                .tint(Color(uiColor: .systemBlue))
+                .tint(Color(uiColor: .tintColor))
                 .disabled(!canPost || isPosting)
                 .keyboardShortcut(.return, modifiers: .command)
                 .accessibilityIdentifier("comment-post")
