@@ -522,8 +522,8 @@ struct LibraryHostTests {
       named: "pinned-progress-\(dark ? "Dark" : "Light")-\(size)-\(increasedContrast)-contrast.txt")
   }
 
-  @Test(arguments: [false, true])
-  func nativeSearchFieldKeepsFocusAndSystemTextTint(dark: Bool) async throws {
+  @Test(arguments: [false, true], [true, false])
+  func nativeSearchFieldKeepsFocusAndSystemTextTint(dark: Bool, sidebar: Bool) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.windows.first(where: \.isKeyWindow)
@@ -534,15 +534,22 @@ struct LibraryHostTests {
     model.searchState = .results(
       notes: InterfaceFixtures.library.notes.filter { $0.id == "shape" },
       coverage: .init(totalDocuments: 7, documentsWithCachedContent: 1))
+    let library = LibraryView(
+      model: model, actions: .init(refresh: {}, create: {}, today: {}), isSidebar: sidebar)
     window.rootViewController = UIHostingController(
-      rootView: NavigationSplitView {
-        LibraryView(
-          model: model, actions: .init(refresh: {}, create: {}, today: {}), isSidebar: true)
-      } detail: {
-        Text("The retained document")
+      rootView: Group {
+        if sidebar {
+          NavigationSplitView {
+            library
+          } detail: {
+            Text("The retained document")
+          }
+        } else {
+          NavigationStack { library }
+        }
       }
-      .librarySearch(model: model, isPresented: .constant(true), isSidebar: true)
-      .environment(\.horizontalSizeClass, .regular)
+      .librarySearch(model: model, isPresented: .constant(true), isSidebar: sidebar)
+      .environment(\.horizontalSizeClass, sidebar ? .regular : .compact)
       .environment(\.dynamicTypeSize, .large)
       .environment(\.colorScheme, dark ? .dark : .light))
     window.makeKeyAndVisible()
@@ -572,7 +579,9 @@ struct LibraryHostTests {
         overlay.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
       }
     }
-    Attachment.record(image, named: "library-search-\(dark ? "Dark" : "Light")-Large.png", as: .png)
+    Attachment.record(
+      image, named: "library-search-\(sidebar ? "Sidebar" : "Compact")-\(dark ? "Dark" : "Light")-Large.png",
+      as: .png)
     Attachment.record(
       "Key window: \(window.isKeyWindow), scene: \(scene.activationState.rawValue)\n"
         + descendants(window).compactMap { $0 as? UITextField }.map {
@@ -767,29 +776,6 @@ struct LibraryHostTests {
     Attachment.record(
       image, named: "multi-tag-summary-\(dark ? "Dark" : "Light")-\(increasedContrast ? "High" : "Normal").png",
       as: .png)
-  }
-
-  @Test func compactSearchSubmissionAndFocusLossKeepTheQueryWithoutCancel() {
-    var query = "notebook"
-    var presented = true
-    let coordinator = LibrarySearchField.Coordinator(
-      text: Binding(get: { query }, set: { query = $0 }),
-      isPresented: Binding(get: { presented }, set: { presented = $0 }))
-    let bar = LibrarySearchField.SearchBar()
-    bar.text = query
-    coordinator.searchBarSearchButtonClicked(bar)
-    #expect(query == "notebook")
-    #expect(bar.text == "notebook")
-    #expect(!presented)
-    #expect(!bar.showsCancelButton)
-    coordinator.searchBarTextDidBeginEditing(bar)
-    #expect(presented)
-    coordinator.searchBar(bar, textDidChange: "")
-    #expect(query.isEmpty)
-    #expect(presented, "Clear leaves the field focused.")
-    coordinator.searchBarTextDidEndEditing(bar)
-    #expect(query.isEmpty)
-    #expect(!presented)
   }
 
   private func descendants(_ view: UIView) -> [UIView] {

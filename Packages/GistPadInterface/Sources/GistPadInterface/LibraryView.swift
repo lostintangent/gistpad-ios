@@ -34,19 +34,19 @@ private struct LibrarySearchModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         searchableContent(content)
-            .searchToolbarBehavior(isSidebar ? .minimize : .automatic)
+            .searchToolbarBehavior(.minimize)
             .environment(\.librarySearchManagedByContainer, true)
             .environment(\.librarySearchPresentation, presentation)
     }
 
     @ViewBuilder
     private func searchableContent(_ content: Content) -> some View {
-        if model.loadState == .signedOut || !isSidebar {
+        if model.loadState == .signedOut {
             content
         } else {
             content.searchable(
                 text: $model.query, isPresented: presentation,
-                placement: .sidebar,
+                placement: isSidebar ? .sidebar : .automatic,
                 prompt: Text("Search notes", bundle: .module)
             )
         }
@@ -234,7 +234,6 @@ public struct LibraryView: View {
     @State private var tagQuery = ""
     @State private var isPullRefreshing = false
     @State private var searchPresented = false
-    @State private var windowContentWidth: CGFloat?
     @ScaledMetric(relativeTo: .body) private var headingCountSpacing = 4
     @ScaledMetric(relativeTo: .body) private var compactRowInset: CGFloat = 16
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -268,63 +267,44 @@ public struct LibraryView: View {
     #endif
 
     public var body: some View {
-        GeometryReader { geometry in
-            navigationList
-                .navigationTitle(navigationTitle)
-                .navigationSubtitle(navigationSubtitle)
-                .toolbarTitleDisplayMode(.large)
-                .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 400)
-                .refreshable {
-                    isPullRefreshing = true
-                    defer { isPullRefreshing = false }
-                    await actions.refresh()
-                }
-                .toolbar { libraryToolbar }
-                .safeAreaBar(edge: .bottom, spacing: 0) {
-                    if !isSidebar, model.loadState != .signedOut {
-                        LibrarySearchField(
-                            text: $model.query,
-                            isPresented: containerSearchPresentation ?? $searchPresented,
-                            windowContentWidth: $windowContentWidth
-                        )
-                        .frame(height: dynamicTypeSize.isAccessibilitySize ? nil : 56)
-                        .padding(.horizontal, 12)
-                        .padding(
-                            .bottom,
-                            dynamicTypeSize.isAccessibilitySize && hasSideToolbar(in: geometry)
-                                ? 14 : 20)
-                        .ignoresSafeArea(
-                            .container, edges: hasSideToolbar(in: geometry) ? .bottom : [])
-                    }
-                }
-                .sheet(isPresented: $showingTags) { tagFilters }
-                .scrollEdgeEffectStyle(.soft, for: .all)
-        }
-        .onChange(of: model.query) { resetSearchDisclosures() }
-        .onChange(of: model.selectedTagIDs) { resetSearchDisclosures() }
-        .onChange(of: actions.deletionConfirmation?.rowID) { _, rowID in
-            if rowID == nil { deletionSelection = nil }
-        }
-        .onReceive(NotificationCenter.default.publisher(
-            for: UIApplication.significantTimeChangeNotification)
-        ) { _ in
-            now = .now
-        }
+        navigationList
+            .navigationTitle(navigationTitle)
+            .navigationSubtitle(navigationSubtitle)
+            .toolbarTitleDisplayMode(.large)
+            .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 400)
+            .refreshable {
+                isPullRefreshing = true
+                defer { isPullRefreshing = false }
+                await actions.refresh()
+            }
+            .toolbar { libraryToolbar }
+            .sheet(isPresented: $showingTags) { tagFilters }
+            .scrollEdgeEffectStyle(.soft, for: .all)
+            .onChange(of: model.query) { resetSearchDisclosures() }
+            .onChange(of: model.selectedTagIDs) { resetSearchDisclosures() }
+            .onChange(of: actions.deletionConfirmation?.rowID) { _, rowID in
+                if rowID == nil { deletionSelection = nil }
+            }
+            .onReceive(NotificationCenter.default.publisher(
+                for: UIApplication.significantTimeChangeNotification)
+            ) { _ in
+                now = .now
+            }
     }
 
     @ViewBuilder
     private var navigationList: some View {
         if model.loadState == .signedOut {
             signedOutInvitation
-        } else if searchManagedByContainer || !isSidebar {
+        } else if searchManagedByContainer {
             adaptiveList
         } else {
             adaptiveList
                 .searchable(
                     text: $model.query, isPresented: $searchPresented,
-                    placement: .sidebar,
+                    placement: isSidebar ? .sidebar : .automatic,
                     prompt: Text("Search notes", bundle: .module))
-                .searchToolbarBehavior(isSidebar ? .minimize : .automatic)
+                .searchToolbarBehavior(.minimize)
         }
     }
 
@@ -338,13 +318,6 @@ public struct LibraryView: View {
     }
 
     private var isSidebar: Bool { sidebarOverride ?? (horizontalSizeClass == .regular) }
-
-    private func hasSideToolbar(in geometry: GeometryProxy) -> Bool {
-        guard let windowContentWidth else { return false }
-        let availableWidth = geometry.size.width
-            - geometry.safeAreaInsets.leading - geometry.safeAreaInsets.trailing
-        return windowContentWidth - availableWidth > 1
-    }
 
     private var navigationTitle: String {
         if model.loadState == .signedOut { return "" }
@@ -873,9 +846,7 @@ public struct LibraryView: View {
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
         if model.loadState != .signedOut {
-            if isSidebar {
-                DefaultToolbarItem(kind: .search, placement: .bottomBar)
-            }
+            DefaultToolbarItem(kind: .search, placement: .bottomBar)
             if !(containerSearchPresentation?.wrappedValue ?? searchPresented) {
                 if showsGitHubStatusControl {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
