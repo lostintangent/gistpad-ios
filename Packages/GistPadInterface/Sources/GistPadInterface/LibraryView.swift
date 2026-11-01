@@ -367,11 +367,7 @@ public struct LibraryView: View {
                     Section {} header: { searchSummary }
                 }
                 if !pinnedNotes.isEmpty {
-                    Section(isExpanded: pinnedExpansion) {
-                        ForEach(pinnedNotes) { noteRow($0) }
-                    } header: {
-                        Text("Pinned", bundle: .module)
-                    }
+                    pinnedSection
                 }
                 ForEach(dateSections) { dateSection($0) }
                 ForEach(displayedCollections) { collectionSection($0) }
@@ -399,6 +395,26 @@ public struct LibraryView: View {
             for: model.matchingNotes(in: .gists).filter { !$0.isPinned },
             relativeTo: now, calendar: calendar)
     }
+
+    @ViewBuilder
+    private var pinnedSection: some View {
+        // Compact `.insetGrouped` draws no disclosure chevron, so Pinned stays open there.
+        if isSidebar {
+            Section(isExpanded: pinnedExpansion) {
+                ForEach(pinnedNotes) { noteRow($0) }
+            } header: {
+                Text("Pinned", bundle: .module)
+            }
+        } else {
+            Section {
+                ForEach(pinnedNotes) { noteRow($0) }
+            } header: {
+                Text("Pinned", bundle: .module)
+            }
+        }
+    }
+
+    private var pinnedRowsVisible: Bool { !isSidebar || pinnedExpansion.wrappedValue }
 
     private var pinnedExpansion: Binding<Bool> {
         Binding(
@@ -451,7 +467,7 @@ public struct LibraryView: View {
 
     private func isVisible(_ id: String, in collection: LibraryCollection) -> Bool {
         if collection == .gists {
-            return (pinnedExpansion.wrappedValue && pinnedNotes.contains { $0.id == id })
+            return (pinnedRowsVisible && pinnedNotes.contains { $0.id == id })
                 || dateSections.contains { section in section.notes.contains { $0.id == id } }
         }
         return displayedCollections.contains(collection) && expansion(for: collection).wrappedValue
@@ -760,8 +776,6 @@ public struct LibraryView: View {
         .navigationLinkIndicatorVisibility(.hidden)
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
-        .listRowInsets(EdgeInsets(
-            top: 0, leading: 12, bottom: 0, trailing: 12))
         .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
         .modifier(LibraryCommentsAccessibilityAction(note: note, action: openComments))
         .modifier(LibraryRowDeletionConfirmation(
