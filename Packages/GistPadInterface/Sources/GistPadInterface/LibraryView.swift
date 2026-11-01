@@ -580,7 +580,7 @@ public struct LibraryView: View {
         Section {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Label(String(localized: "All Notes", bundle: .module), systemImage: "doc.text")
+                    Text("All Notes", bundle: .module)
                         .font(.subheadline.weight(.semibold))
                     Spacer(minLength: 8)
                     Button(String(localized: "Clear", bundle: .module)) { model.clearFilters() }
