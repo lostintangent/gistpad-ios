@@ -9,7 +9,7 @@ import UIKit
 @MainActor
 struct LibraryRowHostTests {
   @Test(arguments: [false, true], [false, true])
-  func metadataUsesUndimmedNativeInkOnSelectedAndUnselectedRows(
+  func metadataUsesSystemSecondaryInkOnSelectedAndUnselectedRows(
     dark: Bool, increased: Bool
   ) async throws {
     let scene = try #require(
@@ -66,7 +66,7 @@ struct LibraryRowHostTests {
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
     let ink = try #require(
-      RGBColor(uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
+      RGBColor(uiColor: UIColor.secondaryLabel.resolvedColor(with: window.traitCollection)))
     for id in ["selected", "unselected"] {
       for part in ["date", "excerpt"] {
         let marker = try #require(descendants(window).first {
@@ -83,7 +83,7 @@ struct LibraryRowHostTests {
             && abs(Int(color.blue) - Int(ink.blue)) <= 4
           return count + (matches ? pixel.value : 0)
         }
-        #expect(solidInkCount >= 8, "\(id) \(part) must not apply hierarchical dimming.")
+        #expect(solidInkCount >= 8, "\(id) \(part) must render the system secondary ink.")
         let ratio = ink.contrast(with: background)
         #expect(
           ratio >= (increased ? 7 : 4.5),
