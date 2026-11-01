@@ -12,29 +12,33 @@ struct LibraryDeletionTests {
         (true, false, false), (true, false, true),
         (true, true, false), (true, true, true),
     ])
-    func deletionRequiresOwnershipPublicationAndAnAppCallback(
+    func deletionRequiresOwnershipAndAnAppCallbackForPublishedAndLocalNotes(
         owned: Bool, published: Bool, supported: Bool
     ) {
         let note = LibraryNote(
             id: "gist/日本語.md", title: "A thought", updatedAt: .now,
-            isOwned: owned, canDeleteFromGitHub: published)
+            gistID: published ? "gist" : nil, isOwned: owned, canDeleteFromGitHub: published)
         var targets: [String] = []
         var actions = LibraryActions(refresh: {}, create: {}, today: {})
         if supported { actions.delete = { targets.append($0) } }
         let action = actions.deletionAction(for: note)
-        #expect((action != nil) == (owned && published && supported))
+        #expect((action != nil) == (owned && supported))
         #expect(targets.isEmpty)
         action?()
-        #expect(targets == (owned && published && supported ? [note.id] : []))
+        #expect(targets == (owned && supported ? [note.id] : []))
     }
 
-    @Test func ordinaryLocalRowsDoNotAcquireRemoteDeleteByDefault() {
+    @Test func unpublishedLocalRowsOfferOnlyALocalDeletionCallback() {
         let note = LibraryNote(id: UUID().uuidString, title: "A local draft", updatedAt: .now)
+        var targets: [String] = []
         var actions = LibraryActions(refresh: {}, create: {}, today: {})
-        actions.delete = { _ in Issue.record("A local draft must not request a GitHub deletion.") }
+        actions.delete = { targets.append($0) }
         #expect(note.isOwned)
         #expect(!note.canDeleteFromGitHub)
-        #expect(actions.deletionAction(for: note) == nil)
+        let delete = actions.deletionAction(for: note)
+        #expect(delete != nil)
+        delete?()
+        #expect(targets == [note.id])
     }
 
     @Test func recoveryRowsOfferOnlyALocalDeletionCallback() {

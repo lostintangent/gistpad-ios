@@ -7,8 +7,31 @@ import SwiftUI
 struct NotebookLibraryDeletionCaptureWorkspace: View {
   @State private var notebook = NotebookModel(provider: LibraryDeletionCaptureProvider())
 
+  init() {
+    if ProcessInfo.processInfo.arguments.contains("--capture-publication-hold") {
+      LibraryPublicationHold.shared.enable()
+    }
+  }
+
   var body: some View {
     LiveNotebookWorkspace(notebook: notebook, routes: NotebookRouteInbox())
+      .overlay(alignment: .center) { PublicationHoldMarker() }
+  }
+}
+
+/// Exposes a parked publication to UI tests as a non-interactive element, so a test can wait for the hold
+/// without tapping anything. It never takes hits, so it cannot intercept list taps.
+private struct PublicationHoldMarker: View {
+  var body: some View {
+    TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+      if LibraryPublicationHold.shared.isParked {
+        Color.clear
+          .frame(width: 1, height: 1)
+          .allowsHitTesting(false)
+          .accessibilityElement(children: .ignore)
+          .accessibilityIdentifier("publication-parked")
+      }
+    }
   }
 }
 
@@ -95,7 +118,11 @@ actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding 
         expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
     publicationReasons.append(reason)
     cache = try await store.cachedLibrary(accountID: accountID)
-    if let id = saved.gistID, let gist = cache?.details[id] { published = [gist] }
+    if let id = saved.gistID, !published.contains(where: { $0.id == id }),
+      try !fixtureGists(includeDeleted: true).contains(where: { $0.id == id })
+    {
+      published.append(try createdGist(for: saved, gistID: id))
+    }
     return saved
   }
 
@@ -178,6 +205,21 @@ actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding 
     return created
   }
 
+  private func createdGist(for saved: DraftSnapshot, gistID: String) throws -> Gist {
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let payload: [String: Any] = [
+      "id": gistID, "description": saved.description, "public": false,
+      "updated_at": "2026-10-25T21:00:00Z", "created_at": "2026-10-25T21:00:00Z",
+      "owner": ["id": 1, "login": account.login],
+      "files": [
+        saved.filename: ["filename": saved.filename, "language": "Markdown", "content": saved.text]
+      ],
+      "history": [["version": "published"]],
+    ]
+    return try decoder.decode(Gist.self, from: JSONSerialization.data(withJSONObject: payload))
+  }
+
   private func fixtureGists(includeDeleted: Bool = false) throws -> [Gist] {
     let payload = [
       ("a", "A thought to keep"), ("b", "A finished thought"), ("shared", "A friend's field guide"),
@@ -204,6 +246,59 @@ actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding 
   private enum CaptureError: LocalizedError {
     case unsupported
     var errorDescription: String? { "This synthetic fixture does not perform that account action." }
+  }
+}
+
+/// Parks the synthetic create response so a test can act while the publication is in flight.
+final class LibraryPublicationHold: @unchecked Sendable {
+  static let shared = LibraryPublicationHold()
+
+  private let lock = NSLock()
+  private var isEnabled = false
+  private var parkedDelivery: (() -> Void)?
+
+  func enable() {
+    lock.withLock { isEnabled = true }
+  }
+
+  func park(_ deliver: @escaping () -> Void) -> Bool {
+    lock.withLock {
+      guard isEnabled else { return false }
+      parkedDelivery = deliver
+      return true
+    }
+  }
+
+  var isParked: Bool { lock.withLock { parkedDelivery != nil } }
+
+  func waitUntilParked(timeout: Duration = .seconds(5)) async -> Bool {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while ContinuousClock.now < deadline {
+      if isParked { return true }
+      try? await Task.sleep(for: .milliseconds(5))
+    }
+    return false
+  }
+
+  /// Releases a parked publication when the app asks to delete the note it is saving. The app waits for that
+  /// publication before it performs a destructive action, so the request is the first point it can be released.
+  func releaseForDeletion(_ action: NotebookAction) {
+    switch action {
+    case .delete, .discardLocalCopy, .discardUncertainCreation:
+      guard isParked else { return }
+      release()
+    default: break
+    }
+  }
+
+  func release() {
+    let delivery = lock.withLock { () -> (() -> Void)? in
+      isEnabled = false
+      let delivery = parkedDelivery
+      parkedDelivery = nil
+      return delivery
+    }
+    delivery?()
   }
 }
 
@@ -247,9 +342,13 @@ private final class LibraryPublicationCaptureProtocol: URLProtocol {
       guard let response = HTTPURLResponse(
         url: url, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)
       else { throw URLError(.badServerResponse) }
-      client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-      client?.urlProtocol(self, didLoad: try JSONSerialization.data(withJSONObject: payload))
-      client?.urlProtocolDidFinishLoading(self)
+      let responseData = try JSONSerialization.data(withJSONObject: payload)
+      let deliver: () -> Void = {
+        self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        self.client?.urlProtocol(self, didLoad: responseData)
+        self.client?.urlProtocolDidFinishLoading(self)
+      }
+      if !LibraryPublicationHold.shared.park(deliver) { deliver() }
     } catch {
       client?.urlProtocol(self, didFailWithError: error)
     }

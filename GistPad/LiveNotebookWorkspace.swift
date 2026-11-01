@@ -91,29 +91,25 @@ struct LiveNotebookWorkspace: View {
           .personalAccent(savedHex: notebook.account?.preferences.accentColor)
       }
       .confirmationDialog(
-        deletionTarget?.localDraft != nil
-          ? String(localized: "Delete local copy of “\(deletionTarget?.title ?? "")”?")
-          : String(localized: "Delete “\(deletionTarget?.title ?? "")” from GitHub?"),
+        String(localized: "Delete “\(deletionTarget?.title ?? "")”?"),
         isPresented: Binding(
           get: { deletionTarget != nil && libraryDeletionRowID == nil },
           set: { if !$0, libraryDeletionRowID == nil { deletionTarget = nil } }),
         titleVisibility: .visible
       ) {
         if let target = deletionTarget {
-          Button(
-            target.localDraft == nil ? String(localized: "Delete from GitHub")
-              : String(localized: "Delete Local Copy"), role: .destructive
-          ) {
+          Button(String(localized: "Delete"), role: .destructive) {
             run(target.action, accountID: target.accountID)
           }
         }
         Button("Cancel", role: .cancel) {}
       } message: {
-        if deletionTarget?.localDraft != nil {
-          Text("This removes this local copy, its pending photos and local history from this iPhone. It doesn't delete anything on GitHub. This cannot be undone.")
-        } else {
+        Text(
+          "This removes the note from this iPhone and from GitHub if it was saved there, including unsynced changes. This can’t be undone."
+        )
+        if deletionTarget?.isUncertainCreation == true {
           Text(
-            "This deletes every file from GitHub and this iPhone, including unsynced drafts and local history. This cannot be undone."
+            "GitHub may already have received this note. Check your GitHub Gists page and delete any copy there."
           )
         }
       }
@@ -604,7 +600,7 @@ struct LiveNotebookWorkspace: View {
     }
     if let rowID = libraryDeletionRowID, let target = deletionTarget {
       actions.deletionConfirmation = .init(
-        rowID: rowID, title: target.title, isLocalCopy: target.localDraft != nil,
+        rowID: rowID, title: target.title, isUncertainCreation: target.isUncertainCreation,
         confirm: { run(target.action, accountID: target.accountID) },
         dismiss: {
           deletionTarget = nil
@@ -1057,7 +1053,7 @@ struct LiveNotebookWorkspace: View {
     if controller.document.chrome.access.canEdit, !controller.document.isRecovery {
       actions.rename = { requestName(.title, controller: controller) }
     }
-    if controller.document.isRecovery {
+    if controller.document.isRecovery || controller.draft.gistID == nil {
       actions.delete = {
         libraryDeletionRowID = nil
         deletionTarget = .init(
@@ -1384,6 +1380,9 @@ struct LiveNotebookWorkspace: View {
   private func execute(_ action: NotebookAction, accountID: UUID) async throws
     -> NotebookActionResult
   {
+    #if DEBUG
+    LibraryPublicationHold.shared.releaseForDeletion(action)
+    #endif
     guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
       throw AccountError.accountChanged
     }
@@ -1394,6 +1393,13 @@ struct LiveNotebookWorkspace: View {
       for controller in locked { controller.endDestructiveAction() }
       isPerformingAction = false
     }
+    let confirmedWithoutGist: Bool = switch action {
+    case .discardUncertainCreation: true
+    case .discardLocalCopy(let draftID, _):
+      notebook.localDrafts.first { $0.id == draftID }?.gistID == nil
+    default: false
+    }
+    var effectiveAction = action
     do {
       for controller in sessions.values {
         let requiresLock: Bool = switch action {
@@ -1402,17 +1408,20 @@ struct LiveNotebookWorkspace: View {
             || notebook.localDrafts.contains {
               $0.id == controller.draft.id && $0.gistID == gistID
             }
-        case .discardLocalCopy(let draftID, _): controller.draft.id == draftID
+        case .discardLocalCopy(let draftID, _), .discardUncertainCreation(let draftID, _):
+          controller.draft.id == draftID
         case .signOut: controller.draft.accountID == accountID
         default: false
         }
         if requiresLock {
-          if case .delete = action {
+          switch action {
+          case .delete, .discardLocalCopy, .discardUncertainCreation:
             await controller.waitForPublication()
             try Task.checkCancellation()
             guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
               throw AccountError.accountChanged
             }
+          default: break
           }
           try controller.beginDestructiveAction()
           locked.append(controller)
@@ -1426,7 +1435,9 @@ struct LiveNotebookWorkspace: View {
       guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
         throw AccountError.accountChanged
       }
-      let result = try await notebook.perform(action)
+      effectiveAction = try await notebook.settledDeletionAction(
+        action, confirmedWithoutGist: confirmedWithoutGist, accountID: accountID)
+      let result = try await notebook.perform(effectiveAction)
       switch result {
       case .signedOut:
         let keys = sessions.filter { $0.value.draft.accountID == accountID }.map(\.key)
@@ -1465,7 +1476,7 @@ struct LiveNotebookWorkspace: View {
       }
       return result
     } catch {
-      if case .delete(let id) = action, notebook.deletedGistIDs.contains(id) {
+      if case .delete(let id) = effectiveAction, notebook.deletedGistIDs.contains(id) {
         try await discardDeletedGistSessions(gistID: id, accountID: accountID)
       }
       Logger(subsystem: "dev.gistpad.GistPad", category: "Notebook")

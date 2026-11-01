@@ -14,9 +14,8 @@ final class LibraryDeletionUITests: XCTestCase {
       XCTAssertFalse(app.buttons["Pin"].exists)
       record(app, name: "local-copy-menu-\(dark ? "Dark" : "Light")")
       app.buttons["Delete"].tap()
-      let confirmation = app.buttons["Delete Local Copy"]
+      let confirmation = app.buttons["Delete"].firstMatch
       try await waitUntil("the local-only deletion confirmation") { confirmation.isHittable }
-      XCTAssertFalse(app.buttons["Delete from GitHub"].exists)
       record(app, name: "local-copy-confirmation-\(dark ? "Dark" : "Light")")
       let cancel = app.buttons["Cancel"]
       if cancel.exists { cancel.tap() }
@@ -56,9 +55,8 @@ final class LibraryDeletionUITests: XCTestCase {
     XCTAssertFalse(app.buttons["Archive"].exists)
     XCTAssertFalse(app.buttons["Pin"].exists)
     delete.tap()
-    let confirmation = app.buttons["Delete Local Copy"]
+    let confirmation = app.buttons["Delete"].firstMatch
     try await waitUntil("the local-only note confirmation") { confirmation.isHittable }
-    XCTAssertFalse(app.buttons["Delete from GitHub"].exists)
     record(app, name: "local-copy-note-confirmation")
   }
 
@@ -88,8 +86,8 @@ final class LibraryDeletionUITests: XCTestCase {
     try await Task.sleep(for: .milliseconds(450))
     record(app, name: "newly-published-swipe-delete")
     app.buttons["Delete"].tap()
-    try await waitUntil("the just-published note's GitHub confirmation") {
-      app.buttons["Delete from GitHub"].isHittable
+    try await waitUntil("the just-published note's deletion confirmation") {
+      app.buttons["Delete"].firstMatch.isHittable
     }
   }
 
@@ -105,6 +103,58 @@ final class LibraryDeletionUITests: XCTestCase {
     for contextMenu in [false, true] {
       try await checkAutomaticPublicationDeletion(leaving: true, contextMenu: contextMenu)
     }
+  }
+
+  @MainActor
+  func testDeletingANoteWhileItsLeavingPublicationIsInFlightClosed() async throws {
+    try await checkParkedDeletion(wide: false)
+  }
+
+  @MainActor
+  func testDeletingANoteWhileItsLeavingPublicationIsInFlightOpen() async throws {
+    try await checkParkedDeletion(wide: true)
+  }
+
+  @MainActor
+  private func checkParkedDeletion(wide: Bool) async throws {
+    let app = launch(dark: false, publicationHold: true)
+    defer { app.terminate() }
+    try await waitForPosture(wide: wide, in: app)
+    let posture = wide ? "Open" : "Closed"
+    let create = app.buttons["library-create"]
+    try await waitUntil("the New Note button") { create.isHittable }
+    create.tap()
+    let editor = app.textViews["source-editor"]
+    try await waitUntil("the new note's editor") { editor.isHittable }
+    editor.typeText("Parked thought")
+    if app.buttons["Hide Keyboard"].isHittable { app.buttons["Hide Keyboard"].tap() }
+    if wide {
+      let other = app.descendants(matching: .any).matching(
+        NSPredicate(format: "identifier BEGINSWITH %@ AND NOT label CONTAINS %@", "library-note-", "Parked thought")
+      ).firstMatch
+      try await waitUntil("another note to select, leaving the parked note") { other.isHittable }
+      other.tap()
+    } else if app.buttons["BackButton"].isHittable {
+      app.buttons["BackButton"].tap()
+    }
+    let parked = app.descendants(matching: .any)["publication-parked"]
+    try await waitUntil("the leaving publication to park") { parked.exists }
+    let row = app.descendants(matching: .any).matching(
+      NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "library-note-", "Parked thought")
+    ).firstMatch
+    try await waitUntil("the parked note's row") { row.isHittable }
+    row.swipeLeft()
+    let delete = app.buttons["Delete"]
+    try await waitUntil("Delete on the parked note") { delete.isHittable }
+    delete.tap()
+    let confirmation = app.buttons["Delete"].firstMatch
+    try await waitUntil("the parked note's deletion confirmation") { confirmation.isHittable }
+    XCTAssertTrue(app.staticTexts["Delete “Untitled”?"].exists)
+    record(app, name: "parked-delete-confirmation-\(posture)")
+    confirmation.tap()
+    try await waitUntil("the parked note to leave the list once publication settles") { !row.exists }
+    XCTAssertFalse(app.alerts.firstMatch.exists)
+    record(app, name: "parked-delete-result-\(posture)")
   }
 
   @MainActor
@@ -131,9 +181,8 @@ final class LibraryDeletionUITests: XCTestCase {
     let delete = app.buttons["Delete"]
     try await waitUntil("Delete on the automatically published gist") { delete.isHittable }
     delete.tap()
-    let confirmation = app.buttons["Delete from GitHub"]
-    try await waitUntil("the new gist's remote deletion confirmation") { confirmation.isHittable }
-    XCTAssertFalse(app.buttons["Delete Local Copy"].exists)
+    let confirmation = app.buttons["Delete"].firstMatch
+    try await waitUntil("the new gist's deletion confirmation") { confirmation.isHittable }
     record(
       app,
       name: "new-\(leaving ? "leave-note" : "autosave")-\(contextMenu ? "context" : "swipe")-delete")
@@ -175,8 +224,8 @@ final class LibraryDeletionUITests: XCTestCase {
     try await waitUntil("the red trailing Delete action") { delete.isHittable }
     record(app, name: "library-delete-swipe-\(dark ? "Dark" : "Light")")
     delete.tap()
-    let confirmation = app.buttons["Delete from GitHub"]
-    try await waitUntil("the existing GitHub confirmation") { confirmation.isHittable }
+    let confirmation = app.buttons["Delete"].firstMatch
+    try await waitUntil("the existing deletion confirmation") { confirmation.isHittable }
     XCTAssertTrue(row.exists)
     let cancel = app.buttons["Cancel"]
     if cancel.exists {
@@ -210,9 +259,9 @@ final class LibraryDeletionUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Archive"].exists)
     record(app, name: "library-delete-menu-\(dark ? "Dark" : "Light")")
     delete.tap()
-    let confirmation = app.buttons["Delete from GitHub"]
-    try await waitUntil("the existing GitHub deletion confirmation") { confirmation.isHittable }
-    XCTAssertTrue(app.staticTexts["Delete “A finished thought” from GitHub?"].exists)
+    let confirmation = app.buttons["Delete"].firstMatch
+    try await waitUntil("the existing deletion confirmation") { confirmation.isHittable }
+    XCTAssertTrue(app.staticTexts["Delete “A finished thought”?"].exists)
     XCTAssertTrue(row.exists)
     record(app, name: "library-delete-confirmation-\(dark ? "Dark" : "Light")")
     confirmation.tap()
@@ -227,7 +276,7 @@ final class LibraryDeletionUITests: XCTestCase {
 
   @MainActor
   private func launch(
-    dark: Bool, localCopies: Bool = false, autosave: Bool = false
+    dark: Bool, localCopies: Bool = false, autosave: Bool = false, publicationHold: Bool = false
   ) -> XCUIApplication {
     let app = XCUIApplication(bundleIdentifier: "dev.gistpad.GistPad")
     app.launchArguments = [
@@ -239,8 +288,22 @@ final class LibraryDeletionUITests: XCTestCase {
     if autosave {
       app.launchArguments += ["--capture-autosave", "--capture-slow-publication-metadata"]
     }
+    if publicationHold { app.launchArguments.append("--capture-publication-hold") }
     app.launch()
     return app
+  }
+
+  @MainActor
+  private func waitForPosture(wide: Bool, in app: XCUIApplication) async throws {
+    let expected = wide ? CGSize(width: 951, height: 669) : CGSize(width: 466, height: 678)
+    let deadline = ContinuousClock.now + .seconds(150)
+    while ContinuousClock.now < deadline {
+      let frame = app.windows.firstMatch.frame
+      if abs(frame.width - expected.width) <= 1, abs(frame.height - expected.height) <= 1 { return }
+      try await Task.sleep(for: .milliseconds(250))
+    }
+    XCTFail("The actual \(wide ? "Open" : "Closed") Duo window did not appear.")
+    throw DeletionTestError.timedOut
   }
 
   @MainActor

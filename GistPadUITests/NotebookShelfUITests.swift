@@ -62,10 +62,9 @@ final class NotebookShelfUITests: XCTestCase {
         && app.buttons["Delete"].isHittable && app.buttons["Open Comments"].isHittable
     }
     app.buttons["Delete"].tap()
-    let confirm = app.buttons["Delete from GitHub"].firstMatch
+    let confirm = app.buttons["Delete"].firstMatch
     try await waitUntil("one deletion confirmation for the pressed card") { confirm.isHittable }
-    XCTAssertEqual(app.buttons.matching(identifier: "Delete from GitHub").count, 1)
-    XCTAssertTrue(app.staticTexts["Delete “📚 Manga reading list” from GitHub?"].exists)
+    XCTAssertTrue(app.staticTexts["Delete “📚 Manga reading list”?"].exists)
     XCTAssertTrue(app.windows.firstMatch.frame.contains(confirm.frame))
     record(app, name: "square-card-delete-\(wide ? "open" : "closed")")
     let cancel = app.buttons["Cancel"].firstMatch

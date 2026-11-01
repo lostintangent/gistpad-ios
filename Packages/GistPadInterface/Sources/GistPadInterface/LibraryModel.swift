@@ -44,6 +44,8 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
 
     public var supportsComments: Bool { gistID != nil && !isDailyNote }
 
+    public var isLocalOnly: Bool { isRecovery || gistID == nil }
+
     public var visibleCommentCount: Int? {
         guard supportsComments, let commentCount, commentCount > 0 else { return nil }
         return commentCount

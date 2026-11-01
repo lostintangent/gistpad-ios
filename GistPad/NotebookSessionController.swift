@@ -155,7 +155,7 @@ final class NotebookSessionController {
     switch reason {
     case .manual: true
     case .autosave: autosaveAllowed
-    case .background:
+    case .background, .leaving:
       notebook.account?.id == draft.accountID && notebook.pendingAccount == nil
         && !session.isComposing && !session.writingToolsActive
         && session.textView.markedTextRange == nil && draft.attemptedGeneration == nil
@@ -485,7 +485,7 @@ final class NotebookSessionController {
       }
     }
     guard hasUnpublishedChanges else { return false }
-    await publish(reason: .autosave)
+    await publish(reason: .leaving)
     return false
   }
 
@@ -494,7 +494,7 @@ final class NotebookSessionController {
     shouldContinue: @escaping @MainActor @Sendable () -> Bool = { true }
   ) async {
     guard !Task.isCancelled, shouldContinue() else { return }
-    if reason == .background { await waitForPublication() }
+    if reason == .background || reason == .leaving { await waitForPublication() }
     guard !Task.isCancelled, shouldContinue(), publicationAllowed(reason: reason) else { return }
     if reason != .manual, !hasUnpublishedChanges { return }
     guard canMutate, !isPublishing, !document.isRecovery, saveState.canPublish else { return }
@@ -532,7 +532,7 @@ final class NotebookSessionController {
         session.generation == saved.generation
         ? NotebookModel.interfaceSaveState(saved.state) : .unsaved
       if saved.state == .savedToGitHub || saved.state == .savedLocally {
-        if reason == .background, Task.isCancelled || !shouldContinue() { return }
+        if reason == .background || reason == .leaving, Task.isCancelled || !shouldContinue() { return }
         do {
           let gist = try await notebook.adoptPublication(saved)
           if let gist {

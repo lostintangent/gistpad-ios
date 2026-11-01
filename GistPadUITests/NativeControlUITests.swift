@@ -411,9 +411,8 @@ final class NativeControlUITests: XCTestCase {
     let delete = app.buttons["Delete"].firstMatch
     try await waitUntil("the selected Starred occurrence's pending Delete action") { delete.isHittable }
     delete.tap()
-    let confirm = app.buttons["Delete from GitHub"].firstMatch
+    let confirm = app.buttons["Delete"].firstMatch
     try await waitUntil("one anchored deletion confirmation") { confirm.isHittable }
-    XCTAssertEqual(app.buttons.matching(identifier: "Delete from GitHub").count, 1)
     XCTAssertTrue(app.windows.firstMatch.frame.contains(confirm.frame))
     record(app, name: "home-overlapping-starred-deletion-confirmation")
     let cancel = app.buttons["Cancel"].firstMatch

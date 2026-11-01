@@ -307,6 +307,7 @@ final class NotebookModel {
   private(set) var openingDocument: NotebookOpeningDocument?
   private(set) var failedOpen: NotebookFailedOpen?
   private(set) var localDrafts: [DraftSnapshot] = []
+  private var publishingDraftIDs: Set<UUID> = []
   private(set) var cachedLibrary: CachedLibrarySnapshot?
   private(set) var isCreating = false
   private(set) var searchTargets: [String: NotebookSelection] = [:]
@@ -410,12 +411,12 @@ final class NotebookModel {
     let draftID = target?.draftID
     let draft = draftID.flatMap { id in localDrafts.first { $0.id == id } }
     if let draft,
-      let gistID = draft.gistID, cachedLibrary?.gists.contains(where: { $0.id == gistID }) != true
+      draft.gistID.flatMap({ gistID in cachedLibrary?.gists.contains(where: { $0.id == gistID }) }) != true
     {
       return .init(
         id: draft.id.uuidString, accountID: account.id,
         title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
-        localDraft: draft)
+        localDraft: draft, isPublishing: publishingDraftIDs.contains(draft.id))
     }
     let gistID = target?.gistID ?? draft?.gistID ?? rowID
     guard !deletedGistIDs.contains(gistID),
@@ -1330,6 +1331,26 @@ final class NotebookModel {
     return draft
   }
 
+  /// Re-reads a local discard once publication has settled. If the note reached GitHub after the
+  /// confirmation, the confirmed deletion becomes a GitHub deletion of the gist it created.
+  func settledDeletionAction(
+    _ action: NotebookAction, confirmedWithoutGist: Bool, accountID: UUID
+  ) async throws -> NotebookAction {
+    let draftID: UUID
+    switch action {
+    case .discardLocalCopy(let id, _), .discardUncertainCreation(let id, _): draftID = id
+    default: return action
+    }
+    let draft = try await draftSnapshot(id: draftID, accountID: accountID)
+    if confirmedWithoutGist, let gistID = draft.gistID {
+      return .delete(gistID: gistID)
+    }
+    if draft.gistID == nil, draft.attemptedGeneration != nil {
+      return .discardUncertainCreation(draftID: draft.id, generation: draft.generation)
+    }
+    return .discardLocalCopy(draftID: draft.id, generation: draft.generation)
+  }
+
   func isDraftSelected(_ id: UUID) -> Bool {
     library.selectedNoteID != nil && presentedDocument?.draft?.id == id
   }
@@ -1689,6 +1710,8 @@ final class NotebookModel {
     guard account?.id == accountID || reason == .manual, pendingAccount == nil else {
       throw AccountError.accountChanged
     }
+    publishingDraftIDs.insert(draftID)
+    defer { publishingDraftIDs.remove(draftID) }
     let saved = try await provider.publish(
       draftID: draftID, accountID: accountID, reason: reason,
       expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)

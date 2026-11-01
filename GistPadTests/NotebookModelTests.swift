@@ -337,7 +337,9 @@ struct NotebookModelTests {
     #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.canDeleteFromGitHub == true)
     #expect(model.libraryDeletionTarget(for: recovery.id.uuidString)?.localDraft?.id == recovery.id)
     #expect(model.library.snapshot.notes.first(where: { $0.id == recovery.id.uuidString })?.canDeleteFromGitHub == false)
-    for id in [local.id.uuidString, "missing", "unknown", "shared"] {
+    #expect(model.libraryDeletionTarget(for: local.id.uuidString)?.localDraft?.id == local.id)
+    #expect(model.library.snapshot.notes.first(where: { $0.id == local.id.uuidString })?.canDeleteFromGitHub == false)
+    for id in ["missing", "unknown", "shared"] {
       #expect(model.libraryDeletionTarget(for: id) == nil)
       #expect(model.library.snapshot.notes.first(where: { $0.id == id })?.canDeleteFromGitHub != true)
     }
@@ -351,6 +353,9 @@ struct NotebookModelTests {
       } else if note.isRecovery {
         #expect(!note.canDeleteFromGitHub)
         #expect(model.libraryDeletionTarget(for: note.id)?.localDraft?.id == recovery.id)
+      } else if note.id == local.id.uuidString {
+        #expect(!note.canDeleteFromGitHub)
+        #expect(model.libraryDeletionTarget(for: note.id)?.localDraft?.id == local.id)
       } else {
         #expect(!note.canDeleteFromGitHub)
         #expect(model.libraryDeletionTarget(for: note.id) == nil)
