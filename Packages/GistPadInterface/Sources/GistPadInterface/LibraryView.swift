@@ -327,8 +327,13 @@ public struct LibraryView: View {
         }
     }
 
+    @ViewBuilder
     private var adaptiveList: some View {
-        libraryList.listStyle(.sidebar)
+        if isSidebar {
+            libraryList.listStyle(.sidebar)
+        } else {
+            libraryList.listStyle(.insetGrouped)
+        }
     }
 
     private var isSidebar: Bool { sidebarOverride ?? (horizontalSizeClass == .regular) }
@@ -362,11 +367,7 @@ public struct LibraryView: View {
                     Section {} header: { searchSummary }
                 }
                 if !pinnedNotes.isEmpty {
-                    Section(isExpanded: pinnedExpansion) {
-                        ForEach(pinnedNotes) { noteRow($0) }
-                    } header: {
-                        Text("Pinned", bundle: .module)
-                    }
+                    pinnedSection
                 }
                 ForEach(dateSections) { dateSection($0) }
                 ForEach(displayedCollections) { collectionSection($0) }
@@ -394,6 +395,34 @@ public struct LibraryView: View {
             for: model.matchingNotes(in: .gists).filter { !$0.isPinned },
             relativeTo: now, calendar: calendar)
     }
+
+    @ViewBuilder
+    private var pinnedSection: some View {
+        // Compact `.insetGrouped` draws no disclosure chevron, so Pinned stays open there.
+        if isSidebar {
+            Section(isExpanded: pinnedExpansion) {
+                pinnedRows
+            } header: {
+                pinnedHeader
+            }
+        } else {
+            Section {
+                pinnedRows
+            } header: {
+                pinnedHeader
+            }
+        }
+    }
+
+    private var pinnedRows: some View {
+        ForEach(pinnedNotes) { noteRow($0) }
+    }
+
+    private var pinnedHeader: some View {
+        sectionHeader(Text("Pinned", bundle: .module), symbol: "pin")
+    }
+
+    private var pinnedRowsVisible: Bool { !isSidebar || pinnedExpansion.wrappedValue }
 
     private var pinnedExpansion: Binding<Bool> {
         Binding(
@@ -446,7 +475,7 @@ public struct LibraryView: View {
 
     private func isVisible(_ id: String, in collection: LibraryCollection) -> Bool {
         if collection == .gists {
-            return (pinnedExpansion.wrappedValue && pinnedNotes.contains { $0.id == id })
+            return (pinnedRowsVisible && pinnedNotes.contains { $0.id == id })
                 || dateSections.contains { section in section.notes.contains { $0.id == id } }
         }
         return displayedCollections.contains(collection) && expansion(for: collection).wrappedValue
@@ -490,9 +519,24 @@ public struct LibraryView: View {
         Section(isExpanded: expansion(for: collection)) {
             ForEach(model.matchingNotes(in: collection)) { noteRow($0, collection: collection) }
         } header: {
-            collectionLabel(collection)
-                .accessibilityIdentifier("library-collection-\(collection.rawValue)")
+            listHeader(collectionLabel(collection)
+                .accessibilityIdentifier("library-collection-\(collection.rawValue)"))
         }
+    }
+
+    // Compact headers align their icon to the card's leading edge. The sidebar keeps the system inset.
+    private func listHeader<Content: View>(_ content: Content) -> some View {
+        Group {
+            if isSidebar {
+                content
+            } else {
+                content.listRowInsets(.leading, 0)
+            }
+        }
+    }
+
+    private func sectionHeader(_ title: Text, symbol: String) -> some View {
+        listHeader(Label { title } icon: { Image(systemName: symbol) })
     }
 
     @ViewBuilder
@@ -505,7 +549,9 @@ public struct LibraryView: View {
             Section {
                 ForEach(section.notes) { noteRow($0) }
             } header: {
-                Text(verbatim: section.group.title(locale: locale, calendar: calendar))
+                sectionHeader(
+                    Text(verbatim: section.group.title(locale: locale, calendar: calendar)),
+                    symbol: "calendar")
             }
         }
     }
