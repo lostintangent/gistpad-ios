@@ -2270,11 +2270,6 @@ final class NotebookModel {
           localized:
             "The note was deleted from GitHub, but couldn't be fully removed from this iPhone. Delete it again to finish cleanup."
         )
-      case .deletionBlockedByUnsavedNotes:
-        String(
-          localized:
-            "Another daily note has edits that haven’t reached GitHub. Wait for them to sync, then try again."
-        )
       case .staleReview:
         String(localized: "Your draft changed while this review was open. Review the latest draft.")
       case .remoteReviewChanged:

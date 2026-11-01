@@ -796,15 +796,6 @@ public actor DraftStore {
         return try snapshot(draft)
     }
 
-    public func hasUnsyncedSiblings(
-        gistID: String, excludingFilename filename: String, accountID: UUID
-    ) throws -> Bool {
-        try drafts(accountID: accountID).contains {
-            $0.gistID == gistID && $0.filename != filename
-                && (!sourceEqual($0.text, $0.baseContent) || $0.attemptedGeneration != nil)
-        }
-    }
-
     public func hasUnsyncedWork(accountID: UUID) throws -> Bool {
         try drafts(accountID: accountID).contains {
             $0.gistID == nil || !sourceEqual($0.text, $0.baseContent) || $0.attemptedGeneration != nil

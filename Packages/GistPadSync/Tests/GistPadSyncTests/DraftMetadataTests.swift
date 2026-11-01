@@ -334,21 +334,4 @@ import Testing
         #expect(cached.details["abc123"] != nil)
         #expect(cached.fileContent["abc123/2026-10-24.md"] == nil)
     }
-
-    @Test func onlyAnUnsyncedSiblingInTheSameGistBlocksAFileDelete() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let target = try await store.openDraft(
-            accountID: account, githubUserID: 42, gistID: "abc123", filename: "2026-10-24.md",
-            description: "Daily", content: "base", revision: "one")
-        let sibling = try await store.openDraft(
-            accountID: account, githubUserID: 42, gistID: "abc123", filename: "2026-10-23.md",
-            description: "Daily", content: "base", revision: "one")
-        _ = try await store.persist(id: target.id, accountID: account, text: "unsynced", generation: 1)
-        #expect(try await store.hasUnsyncedSiblings(
-            gistID: "abc123", excludingFilename: "2026-10-24.md", accountID: account) == false)
-        _ = try await store.persist(id: sibling.id, accountID: account, text: "edited", generation: 1)
-        #expect(try await store.hasUnsyncedSiblings(
-            gistID: "abc123", excludingFilename: "2026-10-24.md", accountID: account))
-    }
 }

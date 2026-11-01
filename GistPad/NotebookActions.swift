@@ -48,7 +48,6 @@ enum NotebookActionError: Error, Equatable {
   case remoteChangedLocalUpdateFailed(gistID: String)
   case remoteDeletedLocalCleanupFailed(gistID: String)
   case remoteDeletedFileCleanupFailed(gistID: String, filename: String)
-  case deletionBlockedByUnsavedNotes(gistID: String, filename: String)
   case staleReview
   case remoteReviewChanged
   case archiveChangedElsewhere
@@ -268,15 +267,7 @@ extension LiveNotebookProvider {
       let (client, gist, _) = try await ownedGist(id: id, account: account)
       let isLastRemoteFile = gist.files[filename] != nil && gist.files.count == 1
       if isLastRemoteFile {
-        // A truncated listing can hide files, so it can't prove this is the last one.
-        guard gist.truncated != true else { throw GitHubClientError.incompleteGist }
-        // GitHub can't leave a gist without files, so deleting the last file deletes the gist,
-        // which must not take unsaved notes from the same gist with it.
-        let hasUnsyncedSiblings = try await drafts.hasUnsyncedSiblings(
-          gistID: id, excludingFilename: filename, accountID: accountID)
-        guard !hasUnsyncedSiblings else {
-          throw NotebookActionError.deletionBlockedByUnsavedNotes(gistID: id, filename: filename)
-        }
+        // GitHub can't leave a gist without files, so deleting the last file deletes the gist.
         return try await deleteGist(id, client: client, accountID: accountID)
       }
       // A retry after a partial failure finds the file already gone, so only local cleanup remains.
