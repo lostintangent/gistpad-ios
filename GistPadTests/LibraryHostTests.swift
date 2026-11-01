@@ -975,7 +975,7 @@ struct LibraryHostTests {
       uiColor: UIColor.label.resolvedColor(with: canvas.traitCollection)))
     let inheritedTint = try #require(RGBColor(
       uiColor: UIColor.systemGreen.resolvedColor(with: canvas.traitCollection)))
-    for id in ["library-tag-filter-ideas", "library-tag-filter-work", "library-tag-filter-done"] {
+    for id in ["library-tag-filter-ideas", "library-tag-filter-work", "library-tag-filter-close"] {
       let view = try #require(descendants(canvas).first {
         $0.accessibilityIdentifier == "capture-frame-\(id)"
       })

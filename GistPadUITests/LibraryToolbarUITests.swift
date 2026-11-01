@@ -70,7 +70,7 @@ final class LibraryToolbarUITests: XCTestCase {
     let idea = app.buttons["library-tag-filter-ideas"]
     try await waitUntil { idea.isHittable }
     idea.tap()
-    app.buttons["library-tag-filter-done"].tap()
+    app.buttons["library-tag-filter-close"].tap()
     try await waitUntil { tags.isHittable && tags.label.contains("1") }
     settings.tap()
     let callback = app.staticTexts["Settings opened for this synthetic notebook."]
@@ -91,14 +91,14 @@ final class LibraryToolbarUITests: XCTestCase {
     let ideas = app.buttons["library-tag-filter-ideas"]
     try await waitUntil { ideas.isHittable }
     ideas.tap()
-    app.buttons["library-tag-filter-done"].tap()
+    app.buttons["library-tag-filter-close"].tap()
     try await waitUntil { tags.isHittable && tags.label.contains("1") }
     XCTAssertFalse(summary.exists)
     tags.tap()
     let design = app.buttons["library-tag-filter-design"]
     try await waitUntil { design.isHittable }
     design.tap()
-    app.buttons["library-tag-filter-done"].tap()
+    app.buttons["library-tag-filter-close"].tap()
     try await waitUntil { summary.exists }
     XCTAssertEqual(summary.label, "Matches all selected tags.")
     XCTAssertFalse(app.otherElements["library-search-coverage"].exists)
@@ -445,7 +445,7 @@ final class LibraryToolbarUITests: XCTestCase {
         try await waitUntil { tags.isHittable && settings.isHittable }
         tags.tap()
         try await waitUntil { app.navigationBars["Filter by tags"].exists }
-        app.buttons["library-tag-filter-done"].tap()
+        app.buttons["library-tag-filter-close"].tap()
         try await waitUntil { more.isHittable }
         more.tap()
         try await waitUntil { settings.isHittable }

@@ -991,8 +991,6 @@ public struct LibraryView: View {
                         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: model.selectedTagIDs.contains(tag.id))
                     }
-                } footer: {
-                    Text("All selected tags must match. Tags apply to the whole gist.", bundle: .module)
                 }
                 if !model.selectedTagIDs.isEmpty {
                     Button(String(localized: "Clear tag filters", bundle: .module)) {
@@ -1009,12 +1007,11 @@ public struct LibraryView: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Done", bundle: .module)) { showingTags = false }
-                        .tint(.primary)
-                        .frame(minHeight: 44)
-                        .accessibilityIdentifier("library-tag-filter-done")
-                        .captureFrame("library-tag-filter-done")
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { showingTags = false }
+                        .accessibilityLabel(Text("Close", bundle: .module))
+                        .accessibilityIdentifier("library-tag-filter-close")
+                        .captureFrame("library-tag-filter-close")
                 }
             }
         }

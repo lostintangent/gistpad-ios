@@ -241,9 +241,6 @@
     "Star a gist on GitHub to find it here." : {
 
     },
-    "Tags apply to every file in this note." : {
-
-    },
     "Try another search or clear your filters." : {
 
     },
@@ -304,9 +301,6 @@
 
     },
     "All selected tags must match." : {
-
-    },
-    "All selected tags must match. Tags apply to the whole gist." : {
 
     },
     "All tags" : {

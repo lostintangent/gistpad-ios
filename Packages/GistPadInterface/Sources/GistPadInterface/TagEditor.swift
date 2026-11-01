@@ -87,9 +87,6 @@ public struct TagEditor: View {
                         .accessibilityIdentifier("tag-create")
                         .captureFrame("tag-create")
                     }
-                } footer: {
-                    Text("Tags apply to every file in this note.", bundle: .module)
-                        .foregroundStyle(.secondary)
                 }
                 .listSectionSeparator(.hidden)
             }
@@ -195,13 +192,15 @@ public struct TagEditor: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        if save != nil {
-            ToolbarItem(placement: .cancellationAction) {
+        ToolbarItem(placement: .cancellationAction) {
+            if save != nil {
                 Button(role: .cancel) {
                     if draft.edits.isEmpty { dismiss() } else { confirmingDiscard = true }
                 }
-                .accessibilityLabel(Text("Cancel", bundle: .module))
-                .tint(.primary)
+                .accessibilityLabel(Text("Close", bundle: .module))
+            } else {
+                Button(role: .close) { dismiss() }
+                    .accessibilityLabel(Text("Close", bundle: .module))
             }
         }
         DefaultToolbarItem(kind: .search, placement: .bottomBar)
@@ -209,15 +208,9 @@ public struct TagEditor: View {
             if isSaving {
                 ProgressView(String(localized: "Saving tags", bundle: .module))
             } else if save != nil {
-                Button(String(localized: "Save", bundle: .module), role: .confirm, action: commit)
-                    .buttonStyle(.glassProminent)
-                    .tint(Color(uiColor: .label))
-                    .accessibilityLabel(Text("Save Tags", bundle: .module))
+                Button(role: .confirm, action: commit)
+                    .accessibilityLabel(Text("Save", bundle: .module))
                     .accessibilityIdentifier("tag-save")
-            } else {
-                Button(role: .close) { dismiss() }
-                    .accessibilityLabel(Text("Close", bundle: .module))
-                    .tint(.primary)
             }
         }
     }
@@ -308,7 +301,6 @@ private struct TagEditForm: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .cancel) { dismiss() }
                         .accessibilityLabel(Text("Cancel", bundle: .module))
-                        .tint(.primary)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {
@@ -319,8 +311,6 @@ private struct TagEditForm: View {
                             self.error = error.localizedDescription
                         }
                     }
-                    .buttonStyle(.glassProminent)
-                    .tint(Color(uiColor: .label))
                     .accessibilityLabel(Text("Save Tag", bundle: .module))
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
