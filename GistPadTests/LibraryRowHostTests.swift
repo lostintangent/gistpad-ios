@@ -66,6 +66,17 @@ struct LibraryRowHostTests {
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
     for id in ["selected", "unselected"] {
+      let content = try #require(descendants(window).first {
+        $0.accessibilityIdentifier == "capture-frame-note-content-\(id)"
+          && !$0.bounds.isEmpty && $0.window === window
+      })
+      let contentRect = content.convert(content.bounds, to: window)
+      // The strip above the title holds only card or selection surface, so it is the true background.
+      let surface = CGRect(
+        x: contentRect.minX + 4, y: contentRect.minY + 2,
+        width: contentRect.width - 8, height: 6)
+      let surfacePixels = try metadataPixels(in: image, rect: surface)
+      let background = try #require(surfacePixels.max { $0.value < $1.value }?.key)
       for part in ["date", "excerpt"] {
         let marker = try #require(descendants(window).first {
           $0.accessibilityIdentifier == "capture-frame-note-\(part)-\(id)"
@@ -73,7 +84,6 @@ struct LibraryRowHostTests {
         })
         let rect = marker.convert(marker.bounds, to: window).insetBy(dx: -1, dy: -1)
         let pixels = try metadataPixels(in: image, rect: rect)
-        let background = try #require(pixels.max { $0.value < $1.value }?.key)
         let ink = renderedSecondaryInk(over: background, traits: window.traitCollection)
         let solidInkCount = pixels.reduce(0) { count, pixel in
           let color = pixel.key
@@ -82,7 +92,11 @@ struct LibraryRowHostTests {
             && abs(Int(color.blue) - Int(ink.blue)) <= 4
           return count + (matches ? pixel.value : 0)
         }
-        #expect(solidInkCount >= 8, "\(id) \(part) must render the system secondary ink.")
+        let dominant = pixels.sorted { $0.value > $1.value }.prefix(4)
+          .map { "\($0.key.hex)x\($0.value)" }
+        #expect(
+          solidInkCount >= 8,
+          "\(id) \(part) must render \(ink.hex) on \(background.hex); dominant colors \(dominant)")
         let ratio = ink.contrast(with: background)
         let normalInk = renderedSecondaryInk(
           over: background,
@@ -157,7 +171,7 @@ struct LibraryRowHostTests {
     let metrics = UIFontMetrics(forTextStyle: .body)
     let gap = metrics.scaledValue(for: 3, compatibleWith: traits)
     let tagGap = metrics.scaledValue(for: 6, compatibleWith: traits)
-    let padding = metrics.scaledValue(for: 12, compatibleWith: traits)
+    let padding = metrics.scaledValue(for: 18, compatibleWith: traits)
 
     #expect(abs(content.width - CGFloat(width)) <= 1)
     #expect(content.contains(title))
@@ -219,7 +233,7 @@ struct LibraryRowHostTests {
     let secondary = try frame("secondary")
     let metrics = UIFontMetrics(forTextStyle: .body)
     let gap = metrics.scaledValue(for: 3, compatibleWith: traits)
-    let padding = metrics.scaledValue(for: 12, compatibleWith: traits)
+    let padding = metrics.scaledValue(for: 18, compatibleWith: traits)
     let titleFont = UIFont.preferredFont(forTextStyle: .headline, compatibleWith: traits)
     let twoLines = UILabel()
     twoLines.font = titleFont
