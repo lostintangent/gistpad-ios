@@ -99,7 +99,7 @@ Use native compact ordinary rows, inset separators, swipe/context actions and on
 | Row content | Contract |
 | --- | --- |
 | Title | Scaled headline semibold, wrapping with content-driven height. Keep intrinsic trailing task state; move it below only when needed rather than shrinking either |
-| Secondary line | Localized date, an 8-pt gap and clean cached excerpt. One full-opacity readable footnote role for both; typography supplies hierarchy, not nested secondary opacity |
+| Secondary line | Localized date in the system `.secondary` label role, an 8-pt gap and clean cached excerpt in readable primary label ink. The date is the one muted element, set by the user's direct request. Measure its resolved ink against the actual row surfaces at 4.5:1 or better, and 7:1 under Increased Contrast. Neither uses custom opacity |
 | Date | Localized time today, Yesterday, weekday in the current calendar week, then short date with year when needed. Use the row's actual update, not a guessed timestamp or ticking seconds |
 | Tags | Optional third line, 6 pt below. Complete dot-free labels and honest overflow. No mandatory tag space or nested tiny buttons |
 | Daily | Localized date title, excerpt and task state. Keep filenames/source and overdue-first ordering. No repeated date, filename, gist file count or relative modification line |

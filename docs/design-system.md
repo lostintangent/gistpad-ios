@@ -19,7 +19,7 @@ Resolve semantic colors against the containing view's actual traits. Do not hard
 | Page | `systemBackground`, opaque document backing |
 | Content surface | `secondarySystemBackground`; tertiary only for genuine nesting |
 | Prose ink | Shared exact assets: Light `#1E293B`, Dark `#E2E8F0`, Light Increased `#0F172A`, Dark Increased `#F8FAFC` |
-| Metadata | Readable resolved label role. Necessary row date/excerpt share full-opacity ink; typography provides hierarchy, not compounded secondary opacity |
+| Metadata | Row date uses the system `.secondary` label role, which the system adapts for Increased Contrast. Row excerpt keeps readable primary label ink. Neither stacks opacity on top of the role |
 | Separators / boundaries | Semantic separator / opaque separator; required visible affordances measured at 3:1 |
 | Links | Semantic link role plus underline or another explicit non-color affordance |
 | Error / completion | System red / fixed system green, with meaning also expressed through symbols/text |
