@@ -114,7 +114,6 @@ struct LibraryNoteRow: View {
             }
         }
         .font(.footnote)
-        .foregroundStyle(Color(uiColor: .label))
     }
 
     @ViewBuilder
@@ -135,6 +134,7 @@ struct LibraryNoteRow: View {
                         VStack(alignment: .leading, spacing: titleSpacing) {
                             if let updated {
                                 Text(verbatim: updated)
+                                    .foregroundStyle(.secondary)
                                     .captureFrame("note-date-\(note.id)")
                             }
                             if let excerpt = note.excerpt, !excerpt.isEmpty {
@@ -146,6 +146,7 @@ struct LibraryNoteRow: View {
                             if let updated {
                                 Text(verbatim: updated)
                                     .fixedSize(horizontal: true, vertical: false)
+                                    .foregroundStyle(.secondary)
                                     .captureFrame("note-date-\(note.id)")
                             }
                             if let excerpt = note.excerpt, !excerpt.isEmpty {
