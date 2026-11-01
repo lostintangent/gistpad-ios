@@ -268,6 +268,8 @@ extension LiveNotebookProvider {
       let (client, gist, _) = try await ownedGist(id: id, account: account)
       let isLastRemoteFile = gist.files[filename] != nil && gist.files.count == 1
       if isLastRemoteFile {
+        // A truncated listing can hide files, so it can't prove this is the last one.
+        guard gist.truncated != true else { throw GitHubClientError.incompleteGist }
         // GitHub can't leave a gist without files, so deleting the last file deletes the gist,
         // which must not take unsaved notes from the same gist with it.
         let hasUnsyncedSiblings = try await drafts.hasUnsyncedSiblings(
