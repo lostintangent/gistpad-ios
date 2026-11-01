@@ -12,6 +12,7 @@ enum NotebookAction: Sendable {
   case renameFile(gistID: String, filename: String, newFilename: String)
   case addFile(gistID: String, filename: String)
   case delete(gistID: String)
+  case deleteFile(gistID: String, filename: String)
   case inspectRemote(draftID: UUID, generation: UInt64)
   case confirmNewCreation(draftID: UUID, generation: UInt64)
   case discardUncertainCreation(draftID: UUID, generation: UInt64)
@@ -29,6 +30,7 @@ enum NotebookActionResult: Sendable {
   case archived(Gist, undo: NotebookArchiveUndo)
   case draft(DraftSnapshot, gist: Gist? = nil)
   case deleted(gistID: String, drafts: DeletedGistDrafts)
+  case deletedFile(gistID: String, filename: String, gist: Gist)
   case review(DraftSnapshot)
   case discardedDraft(UUID)
 }
@@ -45,6 +47,8 @@ enum NotebookActionError: Error, Equatable {
   case publicationInProgress
   case remoteChangedLocalUpdateFailed(gistID: String)
   case remoteDeletedLocalCleanupFailed(gistID: String)
+  case remoteDeletedFileCleanupFailed(gistID: String, filename: String)
+  case deletionBlockedByUnsavedNotes(gistID: String)
   case staleReview
   case remoteReviewChanged
   case archiveChangedElsewhere
@@ -259,17 +263,51 @@ extension LiveNotebookProvider {
       return .draft(draft, gist: gist)
     case .delete(let id):
       let (client, _, _) = try await ownedGist(id: id, account: account)
-      try await client.deleteGist(id: id)
-      do {
-        try await CommentConversationDiskStore.applicationStore().removeDrafts(
-          scope: .init(accountID: accountID, gistID: id))
-        return .deleted(
-          gistID: id,
-          drafts: try await drafts.removeDraftsForDeletedGist(gistID: id, accountID: accountID)
-        )
-      } catch {
-        throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: id)
+      return try await deleteGist(id, client: client, accountID: accountID)
+    case .deleteFile(let id, let filename):
+      let (client, gist, _) = try await ownedGist(id: id, account: account)
+      let isLastRemoteFile = gist.files[filename] != nil && gist.files.count == 1
+      if isLastRemoteFile {
+        // GitHub can't leave a gist without files, so deleting the last file deletes the gist,
+        // which must not take unsaved notes from the same gist with it.
+        let siblings = try await drafts.drafts(accountID: accountID).filter {
+          $0.gistID == id && $0.filename != filename
+        }
+        guard siblings.isEmpty else {
+          throw NotebookActionError.deletionBlockedByUnsavedNotes(gistID: id)
+        }
+        return try await deleteGist(id, client: client, accountID: accountID)
       }
+      // A retry after a partial failure finds the file already gone, so only local cleanup remains.
+      let updated: Gist
+      if gist.files[filename] == nil {
+        updated = gist
+      } else {
+        updated = try await client.updateGist(id: id, files: [filename: .delete])
+      }
+      do {
+        _ = try await drafts.removeDraftsForDeletedFile(
+          gistID: id, filename: filename, updated: updated, accountID: accountID)
+        return .deletedFile(gistID: id, filename: filename, gist: updated)
+      } catch {
+        throw NotebookActionError.remoteDeletedFileCleanupFailed(gistID: id, filename: filename)
+      }
+    }
+  }
+
+  private func deleteGist(
+    _ id: String, client: GitHubClient, accountID: UUID
+  ) async throws -> NotebookActionResult {
+    try await client.deleteGist(id: id)
+    do {
+      try await CommentConversationDiskStore.applicationStore().removeDrafts(
+        scope: .init(accountID: accountID, gistID: id))
+      return .deleted(
+        gistID: id,
+        drafts: try await drafts.removeDraftsForDeletedGist(gistID: id, accountID: accountID)
+      )
+    } catch {
+      throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: id)
     }
   }
 

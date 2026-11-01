@@ -1940,11 +1940,12 @@ struct NotebookModelTests {
     #expect(readOnly.rowID == "daily/2026-10-24.md")
     let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
     #expect(deletion.id == daily.id)
-    #expect(deletion.title == daily.displayName)
-    if case .delete(let gistID) = deletion.action {
+    #expect(deletion.title == GistConventions.fileDisplayName("2026-10-24.md"))
+    if case .deleteFile(let gistID, let filename) = deletion.action {
       #expect(gistID == daily.id)
+      #expect(filename == "2026-10-24.md")
     } else {
-      Issue.record("A Daily row retains the existing whole-gist deletion boundary.")
+      Issue.record("A Daily row deletes only its own file.")
     }
     #expect(await provider.readIDs.isEmpty)
   }
@@ -2054,6 +2055,24 @@ struct NotebookModelTests {
     #expect(model.library.snapshot.notes.allSatisfy { $0.gistID != daily.id })
     #expect(model.library.dailyNoteCount == 0)
     #expect(await provider.deletedIDs == [daily.id])
+  }
+
+  @Test func deletingOneDailyNoteRemovesOnlyItsFileAndKeepsTheSibling() async throws {
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription,
+      content: "The alpha day", filename: "2026-10-23.md",
+      additionalFiles: ["2026-10-24.md": "The beta day"])
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
+    await provider.failToday(true)
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    #expect(model.library.dailyNoteCount == 2)
+    let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
+    _ = try await model.perform(deletion.action)
+    #expect(model.library.dailyNoteCount == 1)
+    #expect(model.library.snapshot.notes.map(\.id) == ["daily/2026-10-23.md"])
+    #expect(await provider.deletedFiles == ["daily/2026-10-24.md"])
+    #expect(await provider.deletedIDs.isEmpty)
   }
 }
 
@@ -3123,6 +3142,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
   private(set) var readIDs: [String] = []
   private(set) var publicationReasons: [PublishReason] = []
   private(set) var deletedIDs: [String] = []
+  private(set) var deletedFiles: [String] = []
   private var failingReadIDs: Set<String> = []
   private var isSignedOut = false
   private var failsSignOutAfterCleanup = false
@@ -3337,6 +3357,34 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
       return .review(draft)
     default:
       break
+    }
+    if case .deleteFile(let id, let filename) = action {
+      guard let original = notes.first(where: { $0.id == id }) else {
+        throw URLError(.fileDoesNotExist)
+      }
+      if original.files.count == 1, original.files[filename] != nil {
+        return try await perform(.delete(gistID: id), accountID: accountID)
+      }
+      var files = original.files
+      files[filename] = nil
+      let updated = Gist(
+        id: original.id, description: original.description, files: files,
+        updatedAt: original.updatedAt, createdAt: original.createdAt, isPublic: original.isPublic,
+        owner: original.owner, truncated: original.truncated, history: original.history,
+        commentCount: original.commentCount)
+      deletedFiles.append("\(id)/\(filename)")
+      notes = notes.map { $0.id == id ? updated : $0 }
+      starredNotes = starredNotes.map { $0.id == id ? updated : $0 }
+      if var cached {
+        cached.owned = cached.owned.map { $0.id == id ? updated : $0 }
+        cached.starred = cached.starred.map { $0.id == id ? updated : $0 }
+        if cached.details[id] != nil { cached.details[id] = updated }
+        cached.fileContent[id + "/" + filename] = nil
+        self.cached = cached
+      }
+      _ = try await draftStore().removeDraftsForDeletedFile(
+        gistID: id, filename: filename, updated: updated, accountID: accountID)
+      return .deletedFile(gistID: id, filename: filename, gist: updated)
     }
     if case .delete(let id) = action {
       deletedIDs.append(id)

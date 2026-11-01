@@ -515,6 +515,11 @@ final class NotebookModel {
     guard !deletedGistIDs.contains(gistID),
       let gist = cachedLibrary?.owned.first(where: { $0.id == gistID })
     else { return nil }
+    if gist.isDailyNote, let filename = target?.filename {
+      return .init(
+        id: gist.id, accountID: account.id,
+        title: GistConventions.fileDisplayName(filename), filename: filename)
+    }
     return .init(id: gist.id, accountID: account.id, title: gist.displayName)
   }
 
@@ -1764,6 +1769,8 @@ final class NotebookModel {
           owned: cache.owned.filter { $0.id != id }, starred: cache.starred.filter { $0.id != id },
           account: account)
       }
+    case .deletedFile(let id, let filename, _):
+      clearDeletedFile(gistID: id, filename: filename, accountID: account.id)
     case .review:
       break
     case .discardedDraft(let id):
@@ -1812,6 +1819,36 @@ final class NotebookModel {
       && loadedDocument?.draft?.id != draft.id
       && loadedDocument?.selection.gistID != draft.gistID
       && openingDocument == nil && !isDraftSelected(draft.id)
+  }
+
+  private func clearDeletedFile(gistID: String, filename: String, accountID: UUID) {
+    func isDeletedFile(_ selection: NotebookSelection?) -> Bool {
+      selection?.gistID == gistID && selection?.filename == filename
+    }
+    if isDeletedFile(loadedDocument?.selection) {
+      loadedDocument = nil
+      library.selectedNoteID = nil
+    }
+    if let opening = openingDocument, isDeletedFile(rowSelection(for: opening.rowID)) {
+      documentRequest = UUID()
+      openingDocument = nil
+      isOpeningDocument = false
+    }
+    if failedOpen?.gistID == gistID, failedOpen?.filename == filename { failedOpen = nil }
+    do {
+      if let selection = try selections.selection(accountID: accountID), isDeletedFile(selection) {
+        selections.clear(accountID: accountID)
+      }
+    } catch {
+      report(error, operation: "clear-deleted-file-selection")
+    }
+    searchRequest = UUID()
+    searchTargets = searchTargets.filter { !isDeletedFile($0.value) }
+    if case .results(let notes, let coverage) = library.searchState {
+      library.searchState = .results(
+        notes: notes.filter { !($0.gistID == gistID && $0.filename == filename) },
+        coverage: coverage)
+    }
   }
 
   private func recordDeletedGist(_ id: String, accountID: UUID) {
@@ -2227,6 +2264,16 @@ final class NotebookModel {
         String(
           localized:
             "The note was deleted from GitHub, but couldn't be fully removed from this iPhone. Local cleanup is incomplete."
+        )
+      case .remoteDeletedFileCleanupFailed:
+        String(
+          localized:
+            "The note was deleted from GitHub, but couldn't be fully removed from this iPhone. Delete it again to finish cleanup."
+        )
+      case .deletionBlockedByUnsavedNotes:
+        String(
+          localized:
+            "Another note in this daily gist has changes that aren't on GitHub yet. Wait for them to save, then delete this note."
         )
       case .staleReview:
         String(localized: "Your draft changed while this review was open. Review the latest draft.")
