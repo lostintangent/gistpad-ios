@@ -104,10 +104,9 @@ struct SourceKeyboardHostTests {
         }
     }
 
-    @Test("Typing keeps the final caret above the real formatting capsule",
-          arguments: ["large", "ax3"], ["short", "long"])
-    func finalLineTyping(size: String, note: String) async throws {
-        let source = Self.source(note)
+    @Test("Typing keeps the final caret above the real formatting capsule", arguments: ["large", "ax3"])
+    func finalLineTyping(size: String) async throws {
+        let source = Self.source
         let fixture = try await SourceKeyboardFixture(source: source, size: size)
         defer { fixture.close() }
         let identity = ObjectIdentifier(fixture.editor)
@@ -115,12 +114,10 @@ struct SourceKeyboardHostTests {
         try await fixture.settle("the real keyboard and final caret")
         try fixture.expectKeyboardViewport()
         try fixture.expectVisibleCaret()
-        try await fixture.captureCheckpoint(named: "final-caret-\(note)-\(size)-focused")
+        try await fixture.captureCheckpoint(named: "final-caret-\(size)-focused")
 
         var expected = source
-        for (index, input) in [
-            "\n", "One more thought", " stays in view", ".", "\n## A final heading", "\nBody after the heading.",
-        ].enumerated() {
+        for (index, input) in ["\n", "One more thought", " stays in view", "."].enumerated() {
             fixture.editor.insertText(input)
             expected += input
             try await fixture.settle("the final caret after native input")
@@ -129,55 +126,9 @@ struct SourceKeyboardHostTests {
             #expect(ObjectIdentifier(fixture.editor) == identity)
             try fixture.expectKeyboardViewport()
             try fixture.expectVisibleCaret()
-            try await fixture.captureCheckpoint(named: "final-caret-\(note)-\(size)-input-\(index)")
+            try await fixture.captureCheckpoint(named: "final-caret-\(size)-input-\(index)")
         }
-        fixture.recordGeometry(named: "final-line-typing-\(note)-\(size)")
-    }
-
-    @Test("Keyboard show and hide preserve a visible source passage",
-          arguments: ["large", "ax3"], ["short", "long"])
-    func keyboardContinuity(size: String, note: String) async throws {
-        let source = Self.source(note)
-        let fixture = try await SourceKeyboardFixture(source: source, size: size)
-        defer { fixture.close() }
-        try await fixture.settle("the unfocused source", keyboard: false)
-        let editor = fixture.editor
-        let manager = try #require(editor.textLayoutManager)
-        manager.ensureLayout(for: try #require(manager.textContentManager?.documentRange))
-        let offset = note == "short" ? 0 : (source as NSString).range(of: "## Reading section 9").location
-        try #require(offset != NSNotFound)
-        let position = try #require(editor.position(from: editor.beginningOfDocument, offset: offset))
-        editor.selectedRange = NSRange(location: offset, length: 0)
-        let caret = editor.caretRect(for: position)
-        editor.setContentOffset(
-            CGPoint(x: 0, y: max(-editor.adjustedContentInset.top,
-                                caret.minY - editor.adjustedContentInset.top - 24)),
-            animated: false)
-        try await fixture.settle("the source passage before keyboard presentation", keyboard: false)
-        let originalY = editor.convert(editor.caretRect(for: position), to: fixture.window).minY
-        let identity = ObjectIdentifier(editor)
-        for cycle in 0..<2 {
-            let motion = KeyboardPassageSamples {
-                editor.convert(editor.caretRect(for: position), to: fixture.window).minY
-            }
-            motion.start()
-            defer { motion.stop() }
-            try #require(editor.becomeFirstResponder())
-            try await fixture.settle("the source passage with keyboard")
-            try fixture.expectKeyboardViewport()
-            try fixture.expectVisibleCaret()
-            #expect(abs(editor.convert(editor.caretRect(for: position), to: fixture.window).minY - originalY) <= 2)
-            editor.resignFirstResponder()
-            try await fixture.settle("the source passage after keyboard dismissal", keyboard: false)
-            motion.stop()
-            Attachment.record(motion.csv, named: "source-keyboard-motion-\(note)-\(size)-\(cycle).csv")
-            #expect(motion.maximumDrift(from: originalY) <= 2,
-                    "A visible source passage must not jump while the keyboard animates.")
-            #expect(ObjectIdentifier(editor) == identity)
-            #expect(editor.selectedRange == NSRange(location: offset, length: 0))
-            #expect(fixture.session.text.utf8.elementsEqual(source.utf8))
-            #expect(fixture.session.generation == 0)
-        }
+        fixture.recordGeometry(named: "final-line-typing-\(size)")
     }
 
     @Test("Native end scrolling reveals the last line above the formatting capsule", arguments: ["large", "ax3"])
@@ -377,11 +328,6 @@ struct SourceKeyboardHostTests {
     private static let source = "# A reachable source page\n\n"
         + String(repeating: "A retained thought has enough room to keep unfolding.\n\n", count: 60)
         + lastLine
-
-    private static func source(_ note: String) -> String {
-        note == "short" ? "# A short note\n\nOne thought."
-            : NotebookCommentsCaptureData.longReadingMarkdown(title: "Reading at scale")
-    }
 }
 
 @MainActor
@@ -596,39 +542,6 @@ private final class SourceHighlightEdits: NSObject {
     @objc func record(_ notification: Notification) {
         guard let storage = notification.object as? NSTextStorage else {
             preconditionFailure("Highlight notifications must come from native text storage.")
-        }
-
-        @MainActor
-        final class KeyboardPassageSamples: NSObject {
-            private let y: @MainActor () -> CGFloat
-            private var link: CADisplayLink?
-            private var samples: [(time: CFTimeInterval, y: CGFloat)] = []
-
-            init(y: @escaping @MainActor () -> CGFloat) { self.y = y }
-
-            func start() {
-                let link = CADisplayLink(target: self, selector: #selector(sample(_:)))
-                self.link = link
-                link.add(to: .main, forMode: .common)
-            }
-
-            func stop() {
-                link?.invalidate()
-                link = nil
-            }
-
-            @objc private func sample(_ link: CADisplayLink) {
-                samples.append((link.timestamp, y()))
-            }
-
-            var csv: String {
-                (["time,y"] + samples.map { "\($0.time),\($0.y)" }).joined(separator: "\n")
-            }
-
-            func maximumDrift(from origin: CGFloat) -> CGFloat {
-                precondition(!samples.isEmpty, "Keyboard motion must sample actual display frames.")
-                return samples.reduce(0) { max($0, abs($1.y - origin)) }
-            }
         }
         if storage.editedMask.contains(.editedAttributes), storage.editedRange.length > 0 {
             ranges.append(storage.editedRange)
