@@ -271,7 +271,7 @@ public struct LibraryView: View {
             navigationList
                 .navigationTitle(navigationTitle)
                 .navigationSubtitle(navigationSubtitle)
-                .toolbarTitleDisplayMode(.inline)
+                .toolbarTitleDisplayMode(.large)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 400)
                 .refreshable {
                     isPullRefreshing = true
