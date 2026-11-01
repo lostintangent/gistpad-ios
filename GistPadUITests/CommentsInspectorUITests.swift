@@ -696,6 +696,33 @@ final class CommentsInspectorUITests: XCTestCase {
     }
   }
 
+  func testT166CommentStateCaptures() throws {
+    for appearance in ["light", "dark"] {
+      let app = launch(scenario: "empty", appearance: appearance, holdsPost: true)
+      defer { app.terminate() }
+      try openComments(in: app, waitsForConversation: false)
+      try wait("the loaded blank conversation") {
+        app.buttons["comments-close"].isHittable
+          && !app.descendants(matching: .any)["comments-loading"].exists
+      }
+      XCTAssertFalse(app.staticTexts["No comments yet"].exists)
+      record(app, name: "t166-comments-empty-\(appearance)")
+      let field = composer(in: app)
+      field.tap()
+      field.typeText("Looks good to me.")
+      try wait("the enabled send button") { app.buttons["comment-post"].isEnabled }
+      record(app, name: "t166-comments-composer-text-\(appearance)")
+      app.buttons["comment-post"].tap()
+      try wait("the posting state") { !app.buttons["comment-post"].isEnabled }
+      record(app, name: "t166-comments-posting-\(appearance)")
+      try wait("the posted comment") {
+        app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Looks good to me.")).firstMatch.exists
+          && !app.buttons["comment-post"].isEnabled
+      }
+      record(app, name: "t166-comments-posted-\(appearance)")
+    }
+  }
+
   private func checkAppearances(wide: Bool) throws {
     for appearance in ["light", "dark"] {
       for accessibility in [false, true] {
@@ -739,7 +766,8 @@ final class CommentsInspectorUITests: XCTestCase {
 
   private func launch(
     scenario: String = "threads", appearance: String = "light",
-    accessibility: Bool = false, increased: Bool = false, controlledRefresh: Bool = false
+    accessibility: Bool = false, increased: Bool = false, controlledRefresh: Bool = false,
+    holdsPost: Bool = false
   ) -> XCUIApplication {
     continueAfterFailure = false
     let app = XCUIApplication()
@@ -753,6 +781,7 @@ final class CommentsInspectorUITests: XCTestCase {
     ]
     if increased { app.launchArguments.append("--capture-increased-contrast") }
     if controlledRefresh { app.launchArguments.append("--capture-controlled-comment-refresh") }
+    if holdsPost { app.launchArguments.append("--capture-hold-comment-post") }
     app.launch()
     return app
   }
