@@ -41,18 +41,11 @@ struct NotebookCommentsInspector: View {
             .accessibilityIdentifier("comments-close")
           }
           ToolbarItem(placement: .primaryAction) {
-            Menu("Comments actions", systemImage: "ellipsis") {
-              Button("New Comment", systemImage: "square.and.pencil") {
-                conversation.beginComment()
-                focusComposer()
-              }
-              .disabled(!conversation.composer.canEdit || conversation.pendingMutation != nil)
-              Button("Refresh Comments", systemImage: "arrow.clockwise") {
-                Task { await conversation.refresh() }
-              }
-              .disabled(conversation.isRefreshing || conversation.mutation == .working)
+            Button("Refresh Comments", systemImage: "arrow.clockwise") {
+              Task { await conversation.refresh() }
             }
-            .accessibilityIdentifier("comments-actions")
+            .disabled(conversation.isRefreshing || conversation.mutation == .working)
+            .accessibilityIdentifier("comments-refresh")
           }
         }
     }

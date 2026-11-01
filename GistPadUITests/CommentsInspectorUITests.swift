@@ -156,8 +156,7 @@ final class CommentsInspectorUITests: XCTestCase {
     let field = composer(in: app)
     field.tap()
     field.typeText("Save this without posting.")
-    app.buttons["comments-actions"].tap()
-    app.buttons["Refresh Comments"].tap()
+    app.buttons["comments-refresh"].tap()
     try wait("the refreshed thread") { app.buttons["comment-actions-300"].isHittable }
     try closeAndExpectPinnedLibrary(in: app)
     row.press(forDuration: 1)
@@ -527,8 +526,7 @@ final class CommentsInspectorUITests: XCTestCase {
     try wait("the native fixture refresh control") { hold.isHittable }
     hold.tap()
     try wait("the controlled remote refresh to arm") { hold.value as? String == "Armed" }
-    app.buttons["comments-actions"].tap()
-    app.buttons["Refresh Comments"].tap()
+    app.buttons["comments-refresh"].tap()
     try wait("the in-content refreshing status") { app.staticTexts["Updating comments"].exists }
     try waitForSelectedThread(10_011, in: app)
     record(app, name: "comments-selected-thread-during-refresh")
@@ -586,8 +584,7 @@ final class CommentsInspectorUITests: XCTestCase {
         forDuration: 0.05, thenDragTo: end,
         withVelocity: .slow, thenHoldForDuration: 0.2)
     } else {
-      app.buttons["comments-actions"].tap()
-      app.buttons["Refresh Comments"].tap()
+      app.buttons["comments-refresh"].tap()
     }
     try wait("refreshing at the user's reading position") {
       app.staticTexts["Updating comments"].exists
