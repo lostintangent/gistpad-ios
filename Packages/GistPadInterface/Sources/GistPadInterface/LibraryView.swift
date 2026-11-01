@@ -200,20 +200,6 @@ public struct LibraryView: View {
         let noteID: String
     }
 
-    struct SearchSummary: View {
-        let selectedTagCount: Int
-
-        var body: some View {
-            if selectedTagCount > 1 {
-                Text("Matches all selected tags.", bundle: .module)
-                    .font(.footnote)
-                    .foregroundStyle(Color(uiColor: .secondaryLabel))
-                    .textCase(nil)
-                    .accessibilityIdentifier("library-search-tag-summary")
-            }
-        }
-    }
-
     @Bindable private var model: LibraryModel
     private let actions: LibraryActions
     private let footer: Text?
@@ -337,9 +323,6 @@ public struct LibraryView: View {
                     searchScope
                 }
                 searchStatus
-                if model.selectedTagIDs.count > 1 {
-                    Section {} header: { searchSummary }
-                }
                 if !pinnedNotes.isEmpty {
                     pinnedSection
                 }
@@ -583,16 +566,22 @@ public struct LibraryView: View {
                     tags: model.snapshot.tags.filter { model.selectedTagIDs.contains($0.id) },
                     isSelected: true
                 )
-                Button(String(localized: "Clear", bundle: .module)) { model.clearFilters() }
-                    .tint(.primary)
-                    .font(.subheadline)
+                Button {
+                    model.clearFilters()
+                } label: {
+                    Label {
+                        Text("Clear Tag Filter", bundle: .module)
+                    } icon: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("library-filter-clear")
             }
             .padding(.vertical, 4)
         }
-    }
-
-    private var searchSummary: some View {
-        SearchSummary(selectedTagCount: model.selectedTagIDs.count)
     }
 
     private var canShowEmptyState: Bool {

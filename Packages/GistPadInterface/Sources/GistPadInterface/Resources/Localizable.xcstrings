@@ -184,7 +184,7 @@
     "Choose an opaque RGB color." : {
 
     },
-    "Clear" : {
+    "Clear Tag Filter" : {
 
     },
     "Delete Note…" : {
@@ -349,9 +349,6 @@
 
     },
     "Color" : {
-
-    },
-    "Matches all selected tags." : {
 
     },
     "Searches titles, filenames and tags, plus text from %lld of %lld notes." : {

@@ -80,29 +80,26 @@ final class LibraryToolbarUITests: XCTestCase {
   }
 
   @MainActor
-  func testSearchSummaryAppearsOnlyForMultipleSelectedTags() async throws {
+  func testTagFilterCountTracksSelectedTagsAndSearchKeepsScope() async throws {
     let app = launch(state: "populated", appearance: "light")
     defer { app.terminate() }
-    let summary = app.descendants(matching: .any)["library-search-tag-summary"].firstMatch
     let tags = app.buttons["library-filter-tags"]
     try await waitUntil { tags.isHittable }
-    XCTAssertFalse(summary.exists)
+    XCTAssertTrue(tags.label.contains("0 selected"))
     tags.tap()
     let ideas = app.buttons["library-tag-filter-ideas"]
     try await waitUntil { ideas.isHittable }
     ideas.tap()
     app.buttons["library-tag-filter-close"].tap()
-    try await waitUntil { tags.isHittable && tags.label.contains("1") }
-    XCTAssertFalse(summary.exists)
+    try await waitUntil { tags.isHittable && tags.label.contains("1 selected") }
     tags.tap()
     let design = app.buttons["library-tag-filter-design"]
     try await waitUntil { design.isHittable }
     design.tap()
     app.buttons["library-tag-filter-close"].tap()
-    try await waitUntil { summary.exists }
-    XCTAssertEqual(summary.label, "Matches all selected tags.")
+    try await waitUntil { tags.isHittable && tags.label.contains("2 selected") }
     XCTAssertFalse(app.otherElements["library-search-coverage"].exists)
-    record(app, name: "home-search-multi-tag-only-summary")
+    record(app, name: "home-search-multi-tag-scope")
     let field = app.searchFields.firstMatch
     field.tap()
     field.typeText("notebook")
@@ -111,8 +108,8 @@ final class LibraryToolbarUITests: XCTestCase {
     clear.tap()
     try scrollVisibleResults(in: app)
     try await waitUntil { !app.keyboards.firstMatch.exists }
-    XCTAssertTrue(summary.exists, "Ending empty text search preserves independent tag scope.")
-    XCTAssertTrue(tags.label.contains("2"))
+    XCTAssertTrue(
+      tags.label.contains("2 selected"), "Ending empty text search preserves independent tag scope.")
   }
 
   @MainActor
