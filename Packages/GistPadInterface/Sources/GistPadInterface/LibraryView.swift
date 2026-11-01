@@ -907,7 +907,7 @@ public struct LibraryView: View {
                     Text("Filter by tags, \(model.selectedTagIDs.count) selected", bundle: .module)
                 }
             } icon: {
-                Image(systemName: "tag").symbolVariant(isFiltered ? .fill : .none)
+                Image(systemName: "tag")
             }
             .frame(minWidth: isSidebar ? nil : 44, minHeight: isSidebar ? nil : 44)
             .contentShape(.rect)
