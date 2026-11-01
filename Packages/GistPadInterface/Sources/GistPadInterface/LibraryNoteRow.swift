@@ -67,7 +67,7 @@ struct LibraryNoteRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(verbatim: displayTitle(relativeTo: now))
                 .font(.headline)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .accessibilityLabel(Text(verbatim: spokenTitle))
                 .captureFrame("note-title-\(note.id)")
             if note.isStarred && showsStar {
@@ -89,18 +89,10 @@ struct LibraryNoteRow: View {
     private func secondaryLine(relativeTo now: Date) -> some View {
         Group {
             if let count = note.visibleCommentCount {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(alignment: .leading, spacing: titleSpacing) {
-                        metadata(relativeTo: now)
-                        LibraryCommentCount(count: count, noteID: note.id)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
-                } else {
-                    HStack(alignment: .center, spacing: 8) {
-                        metadata(relativeTo: now)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        LibraryCommentCount(count: count, noteID: note.id)
-                    }
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    metadata(relativeTo: now)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    LibraryCommentCount(count: count, noteID: note.id)
                 }
             } else {
                 metadata(relativeTo: now)
@@ -186,15 +178,13 @@ struct LibraryCommentCount: View {
     let noteID: String
 
     var body: some View {
-        Label {
-            Text(count, format: .number)
-        } icon: {
-            Image(systemName: "text.bubble")
-        }
-        .labelStyle(.titleAndIcon)
-        .fixedSize()
-        .accessibilityLabel(Text("\(count) comments", bundle: .module))
-        .captureFrame("note-comment-count-\(noteID)")
+        // Inline text keeps the glyph on the row's baseline. A Label here takes
+        // List row icon layout, which hides the count and adds row height.
+        Text("\(Image(systemName: "text.bubble")) \(count)", bundle: .module)
+            .foregroundStyle(.secondary)
+            .fixedSize()
+            .accessibilityLabel(Text("\(count) comments", bundle: .module))
+            .captureFrame("note-comment-count-\(noteID)")
     }
 }
 
