@@ -578,21 +578,14 @@ public struct LibraryView: View {
 
     private var searchScope: some View {
         Section {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("All Notes", bundle: .module)
-                        .font(.subheadline.weight(.semibold))
-                    Spacer(minLength: 8)
-                    Button(String(localized: "Clear", bundle: .module)) { model.clearFilters() }
-                        .tint(.primary)
-                        .font(.subheadline)
-                }
-                if !model.selectedTagIDs.isEmpty {
-                    TagLabels(
-                        tags: model.snapshot.tags.filter { model.selectedTagIDs.contains($0.id) },
-                        isSelected: true
-                    )
-                }
+            HStack(alignment: .center, spacing: 12) {
+                TagLabels(
+                    tags: model.snapshot.tags.filter { model.selectedTagIDs.contains($0.id) },
+                    isSelected: true
+                )
+                Button(String(localized: "Clear", bundle: .module)) { model.clearFilters() }
+                    .tint(.primary)
+                    .font(.subheadline)
             }
             .padding(.vertical, 4)
         }
