@@ -8,6 +8,8 @@ public struct Preferences: Codable, Equatable, Sendable {
 
     public init(metadata: [String: MetadataValue]) { self.metadata = metadata }
 
+    public var isEmpty: Bool { metadata.isEmpty }
+
     public init(isAutoSaveEnabled: Bool, accentColor: String?) {
         var metadata: [String: MetadataValue] = ["isAutoSaveEnabled": .bool(isAutoSaveEnabled)]
         metadata["accentColor"] = accentColor.map(MetadataValue.string)

@@ -109,7 +109,7 @@ actor LiveNotebookProvider: NotebookProviding {
   func connectedAccount() async throws -> NotebookAccount? {
     guard let snapshot = try await accounts.connectedAccount() else { return nil }
     let account = NotebookAccount(snapshot)
-    guard account.preferences.metadata.isEmpty else { return account }
+    guard account.preferences.isEmpty else { return account }
     // Pre-snapshot installs have no preferences until Supabase returns, so keep the library cache's.
     let hasSession = try await accounts.hasSupabaseSession()
     guard !hasSession, let cached = try await drafts.cachedLibrary(accountID: account.id)?.preferences
