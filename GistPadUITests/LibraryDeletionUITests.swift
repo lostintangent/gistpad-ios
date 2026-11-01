@@ -106,6 +106,41 @@ final class LibraryDeletionUITests: XCTestCase {
   }
 
   @MainActor
+  func testDeletingANoteWhileItsLeavingPublicationIsInFlightLeavesNothingBehind() async throws {
+    let app = launch(dark: false, publicationHold: true)
+    defer { app.terminate() }
+    let create = app.buttons["library-create"]
+    try await waitUntil("the New Note button") { create.isHittable }
+    create.tap()
+    let editor = app.textViews["source-editor"]
+    try await waitUntil("the new note's editor") { editor.isHittable }
+    editor.typeText("Parked thought")
+    if app.buttons["Hide Keyboard"].isHittable { app.buttons["Hide Keyboard"].tap() }
+    if app.buttons["BackButton"].isHittable { app.buttons["BackButton"].tap() }
+    let release = app.buttons["release-publication"]
+    try await waitUntil("the leaving publication to park") { release.exists }
+    let row = app.descendants(matching: .any).matching(
+      NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "library-note-", "Parked thought")
+    ).firstMatch
+    try await waitUntil("the parked note's row") { row.isHittable }
+    row.swipeLeft()
+    let delete = app.buttons["Delete"]
+    try await waitUntil("Delete on the parked note") { delete.isHittable }
+    delete.tap()
+    let confirmation = app.buttons["Delete"].firstMatch
+    try await waitUntil("the parked note's deletion confirmation") { confirmation.isHittable }
+    XCTAssertTrue(app.staticTexts["Delete “Parked thought”?"].exists)
+    record(app, name: "parked-delete-confirmation")
+    confirmation.tap()
+    try await Task.sleep(for: .milliseconds(300))
+    XCTAssertTrue(row.exists, "The deletion should wait for the publication to settle.")
+    release.tap()
+    try await waitUntil("the parked note to leave the list once publication settles") { !row.exists }
+    XCTAssertFalse(app.alerts.firstMatch.exists)
+    record(app, name: "parked-delete-result")
+  }
+
+  @MainActor
   private func checkAutomaticPublicationDeletion(leaving: Bool, contextMenu: Bool) async throws {
     let app = launch(dark: leaving, autosave: true)
     defer { app.terminate() }
@@ -224,7 +259,7 @@ final class LibraryDeletionUITests: XCTestCase {
 
   @MainActor
   private func launch(
-    dark: Bool, localCopies: Bool = false, autosave: Bool = false
+    dark: Bool, localCopies: Bool = false, autosave: Bool = false, publicationHold: Bool = false
   ) -> XCUIApplication {
     let app = XCUIApplication(bundleIdentifier: "dev.gistpad.GistPad")
     app.launchArguments = [
@@ -236,6 +271,7 @@ final class LibraryDeletionUITests: XCTestCase {
     if autosave {
       app.launchArguments += ["--capture-autosave", "--capture-slow-publication-metadata"]
     }
+    if publicationHold { app.launchArguments.append("--capture-publication-hold") }
     app.launch()
     return app
   }

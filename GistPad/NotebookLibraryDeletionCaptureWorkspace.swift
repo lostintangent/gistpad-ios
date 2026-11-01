@@ -7,8 +7,30 @@ import SwiftUI
 struct NotebookLibraryDeletionCaptureWorkspace: View {
   @State private var notebook = NotebookModel(provider: LibraryDeletionCaptureProvider())
 
+  init() {
+    if ProcessInfo.processInfo.arguments.contains("--capture-publication-hold") {
+      LibraryPublicationHold.shared.enable()
+    }
+  }
+
   var body: some View {
     LiveNotebookWorkspace(notebook: notebook, routes: NotebookRouteInbox())
+      .overlay(alignment: .bottomLeading) { PublicationHoldRelease() }
+  }
+}
+
+/// Test-only control. It is invisible and appears only while a publication is parked, so UI tests can
+/// release the hold without a visible affordance in captured frames.
+private struct PublicationHoldRelease: View {
+  var body: some View {
+    TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+      if LibraryPublicationHold.shared.isParked {
+        Button("Release publication") { LibraryPublicationHold.shared.release() }
+          .accessibilityIdentifier("release-publication")
+          .opacity(0.01)
+          .frame(width: 44, height: 44)
+      }
+    }
   }
 }
 
@@ -227,10 +249,12 @@ final class LibraryPublicationHold: @unchecked Sendable {
     }
   }
 
+  var isParked: Bool { lock.withLock { parkedDelivery != nil } }
+
   func waitUntilParked(timeout: Duration = .seconds(5)) async -> Bool {
     let deadline = ContinuousClock.now.advanced(by: timeout)
     while ContinuousClock.now < deadline {
-      if lock.withLock({ parkedDelivery != nil }) { return true }
+      if isParked { return true }
       try? await Task.sleep(for: .milliseconds(5))
     }
     return false
