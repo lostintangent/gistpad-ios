@@ -70,8 +70,7 @@ struct InterfaceCaptureWorkspace: View {
             for: pin, URLError(.notConnectedToInternet)) {
             failures.append(.init(operation: pin, accountID: accountID, problem: problem))
         }
-        let noteError: any Error = mixed ? DraftError.readOnly : URLError(.notConnectedToInternet)
-        if let problem = NotebookModel.writeProblem(for: note, noteError) {
+        if let problem = NotebookModel.writeProblem(for: note, DraftError.readOnly) {
             failures.append(.init(operation: note, accountID: accountID, problem: problem))
         }
         guard !failures.isEmpty else { return nil }
@@ -700,8 +699,13 @@ struct InterfaceCaptureWorkspace: View {
             }
             if presentsStatusPopover,
                window.rootViewController?.presentedViewController == nil {
-                guard let button = notebookAccessibilityElement("github-status-attention", in: window)
-                else {
+                var button: NSObject?
+                let buttonDeadline = ContinuousClock.now + .seconds(8)
+                while button == nil, ContinuousClock.now < buttonDeadline {
+                    button = notebookAccessibilityElement("github-status-attention", in: window)
+                    if button == nil { try await Task.sleep(for: .milliseconds(50)) }
+                }
+                guard let button else {
                     actionMessage = "Capture readiness requires the native GitHub status button."
                     return
                 }
