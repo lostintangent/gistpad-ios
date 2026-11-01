@@ -84,12 +84,14 @@ public struct CommentsComposer: View {
                 .tint(Color(uiColor: .systemBlue))
                 .disabled(!isEditable || isPosting)
                 .accessibilityIdentifier("comment-composer-text")
-                Button(role: .confirm, action: post)
-                    .buttonStyle(.glassProminent)
-                    .disabled(!canPost || isPosting)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .accessibilityLabel(Text(verbatim: sendLabel))
-                    .accessibilityIdentifier("comment-post")
+                Button(role: .confirm, action: post) {
+                    Label(String(localized: "Post", bundle: .module), systemImage: "checkmark")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.glassProminent)
+                .disabled(!canPost || isPosting)
+                .keyboardShortcut(.return, modifiers: .command)
+                .accessibilityIdentifier("comment-post")
             }
         }
         .padding(.horizontal, 12)
@@ -121,17 +123,6 @@ public struct CommentsComposer: View {
             String(localized: "Edit your comment", bundle: .module)
         case .root, .quote:
             String(localized: "Write a comment", bundle: .module)
-        }
-    }
-
-    private var sendLabel: String {
-        switch context {
-        case .reply:
-            String(localized: "Post reply to GitHub", bundle: .module)
-        case .editing:
-            String(localized: "Save comment to GitHub", bundle: .module)
-        case .root, .quote:
-            String(localized: "Post comment to GitHub", bundle: .module)
         }
     }
 
