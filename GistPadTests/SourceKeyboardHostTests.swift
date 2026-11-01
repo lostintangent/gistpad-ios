@@ -145,11 +145,14 @@ struct SourceKeyboardHostTests {
         manager.ensureLayout(for: range)
         fixture.editor.layoutIfNeeded()
         try await fixture.settle("the fully laid-out document before end scrolling")
+        fixture.recordGeometry(named: "last-line-before-maximum")
         let maximum = fixture.editor.contentSize.height - fixture.editor.bounds.height
             + fixture.editor.adjustedContentInset.bottom
         try #require(maximum > fixture.editor.bounds.height)
         fixture.editor.setContentOffset(CGPoint(x: 0, y: maximum), animated: false)
+        fixture.recordGeometry(named: "last-line-after-set-offset")
         try await fixture.settle("native end scrolling")
+        fixture.recordGeometry(named: "last-line-after-end-settle")
         let settledMaximum = fixture.editor.contentSize.height - fixture.editor.bounds.height
             + fixture.editor.adjustedContentInset.bottom
         #expect(abs(fixture.editor.contentOffset.y - settledMaximum) <= 1)
@@ -412,6 +415,7 @@ private final class SourceKeyboardFixture {
                 keyboardReady = editor.isFirstResponder && accessory.window != nil
                     && host.view.keyboardLayoutGuide.layoutFrame.height
                         > accessory.bounds.height + window.safeAreaInsets.bottom + 1
+                    && viewportMeetsAccessory(accessory)
             } else if keyboard {
                 keyboardReady = false
             } else {
@@ -439,6 +443,13 @@ private final class SourceKeyboardFixture {
         }
         recordGeometry(named: "unsettled-\(name)")
         throw SourceKeyboardFailure.unsettled(name)
+    }
+
+    /// The editor's bottom inset can lag a keyboard resize, so readiness also requires it to match the accessory.
+    private func viewportMeetsAccessory(_ accessory: UIView) -> Bool {
+        let accessoryTop = accessory.convert(accessory.bounds, to: window).minY
+        let viewport = editor.convert(editor.bounds.inset(by: editor.adjustedContentInset), to: window)
+        return abs(viewport.maxY - accessoryTop) <= 1
     }
 
     func expectKeyboardViewport() throws {
