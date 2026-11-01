@@ -8,20 +8,24 @@ enum NotebookRemoteReadError: Error {
 }
 
 struct NotebookRemoteReadProblem: Equatable {
-  enum Recovery: Equatable { case retry, reconnect }
+  enum Recovery: Equatable { case retry, reconnect, showNote }
 
   let message: String
   var recovery: Recovery = .retry
   var retryAfter: Date?
 
   func status(
-    heading: String, detail: String, isRecovering: Bool
+    heading: String, detail: String?, isRecovering: Bool
   ) -> GitHubStatusState {
-    .problem(
+    let recoveryTitle: String
+    switch recovery {
+    case .retry: recoveryTitle = String(localized: "Retry")
+    case .reconnect: recoveryTitle = String(localized: "Reconnect GitHub")
+    case .showNote: recoveryTitle = String(localized: "Show Note")
+    }
+    return .problem(
       .init(
-        heading: heading, message: message,
-        recoveryTitle: recovery == .reconnect
-          ? String(localized: "Reconnect GitHub") : String(localized: "Retry"),
+        heading: heading, message: message, recoveryTitle: recoveryTitle,
         detail: detail, isRecovering: isRecovering, retryAfter: retryAfter))
   }
 }

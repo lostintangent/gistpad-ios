@@ -454,6 +454,30 @@ final class NotebookSessionController {
     if saveState == .reconnectRequired { saveState = .savedLocally }
   }
 
+  // Library retries can save this note while it is open, so its persisted state is re-read.
+  func refreshPersistedState() async {
+    guard !isPublishing, !isDiscarded, !document.isRecovery else { return }
+    let persisted: DraftSnapshot
+    do {
+      persisted = try await notebook.draftSnapshot(id: draft.id, accountID: draft.accountID)
+    } catch {
+      logger.error(
+        "Note state refresh failed: \(String(reflecting: type(of: error)), privacy: .public)")
+      return
+    }
+    draft = persisted
+    document.draft = persisted
+    document.chrome = notebook.chrome(gist: document.gist, draft: persisted)
+    saveState =
+      session.generation == persisted.generation
+      ? NotebookModel.interfaceSaveState(persisted.state) : .unsaved
+    guard persisted.state == .savedToGitHub,
+      let gist = try? await notebook.adoptPublication(persisted)
+    else { return }
+    document.gist = gist
+    document.chrome = notebook.chrome(gist: gist, draft: persisted)
+  }
+
   func waitForPublication() async {
     if isPublishing {
       await withCheckedContinuation { publicationWaiters.append($0) }

@@ -607,6 +607,14 @@ public struct LibraryView: View {
         return state
     }
 
+    private var showsGitHubStatusControl: Bool {
+        guard isGitHubStatusVisible, !(containerSearchPresentation?.wrappedValue ?? searchPresented) else {
+            return false
+        }
+        if case .problem = remoteStatus { return true }
+        return false
+    }
+
     private var searchScope: some View {
         Section {
             VStack(alignment: .leading, spacing: 12) {
@@ -694,7 +702,7 @@ public struct LibraryView: View {
                 }
                 .tint(.primary)
             }
-        case .reconnectRequired(let message):
+        case .reconnectRequired(let message) where !showsGitHubStatusControl:
             Section {
                 Label(String(localized: "Reconnect GitHub", bundle: .module), systemImage: "person.crop.circle.badge.exclamationmark")
                 Text(verbatim: message)
@@ -705,6 +713,8 @@ public struct LibraryView: View {
                             .tint(.primary)
                 }
             }
+        case .reconnectRequired:
+            EmptyView()
         case .signedOut, .ready:
             EmptyView()
         }
@@ -882,7 +892,7 @@ public struct LibraryView: View {
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
             }
             if !(containerSearchPresentation?.wrappedValue ?? searchPresented) {
-                if isGitHubStatusVisible, case .problem = remoteStatus {
+                if showsGitHubStatusControl {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
                     ToolbarItem(placement: .bottomBar) {
                         GitHubStatusControl(state: remoteStatus) {

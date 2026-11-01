@@ -90,7 +90,6 @@ public struct GitHubStatusControl: View {
                 if spinnerOperation == operation {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(.secondary)
                         .accessibilityLabel(operation)
                         .accessibilityIdentifier("github-status-checking")
                 }
@@ -104,7 +103,6 @@ public struct GitHubStatusControl: View {
                 .labelStyle(.iconOnly)
                 .buttonStyle(.glass)
                 .controlSize(.large)
-                .tint(.primary)
                 .accessibilityValue(problem.message)
                 .accessibilityHint(Text("Shows details and recovery actions", bundle: .module))
                 .accessibilityIdentifier("github-status-attention")
@@ -159,11 +157,9 @@ public struct GitHubStatusControl: View {
                     HStack(spacing: 12) {
                         Button(action: recover) {
                             Text(verbatim: problem.recoveryTitle)
-                                .foregroundStyle(Color(uiColor: .systemBackground))
                         }
                         .buttonStyle(.glassProminent)
                         .controlSize(.large)
-                        .tint(Color(uiColor: .label))
                         .frame(minHeight: 44)
                         .disabled(
                             problem.isRecovering || !problem.canRecover
@@ -173,7 +169,6 @@ public struct GitHubStatusControl: View {
                         if problem.isRecovering {
                             ProgressView()
                                 .controlSize(.small)
-                                .tint(.secondary)
                                 .accessibilityLabel(Text("Trying again", bundle: .module))
                         }
                     }
@@ -196,7 +191,6 @@ public struct GitHubStatusControl: View {
                     Button(String(localized: "Close", bundle: .module), systemImage: "xmark") {
                         showingDetails = false
                     }
-                    .tint(.primary)
                     .accessibilityIdentifier("github-status-close")
                 }
             }

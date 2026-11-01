@@ -564,6 +564,10 @@ struct LiveNotebookWorkspace: View {
     }
     actions.reconnect = reconnect
     actions.recoverStatus = {
+      if notebook.writeFailure != nil {
+        Task { await recoverWrite() }
+        return
+      }
       switch (notebook.library.loadState, notebook.remoteRefreshProblem?.recovery) {
       case (.reconnectRequired, _), (_, .reconnect?):
         reconnect()
@@ -692,11 +696,19 @@ struct LiveNotebookWorkspace: View {
       }
     }
     .toolbar {
-      if isGitHubStatusVisible, controller.remoteInspectionStatus != .idle {
+      if isGitHubStatusVisible,
+        (notebook.writeAttentionStatus ?? controller.remoteInspectionStatus) != .idle
+      {
         ToolbarSpacer(.flexible, placement: .bottomBar)
         ToolbarItem(placement: .bottomBar) {
-          GitHubStatusControl(state: controller.remoteInspectionStatus) {
+          GitHubStatusControl(
+            state: notebook.writeAttentionStatus ?? controller.remoteInspectionStatus
+          ) {
             Task {
+              if notebook.writeFailure != nil {
+                await recoverWrite()
+                return
+              }
               if controller.remoteInspectionProblem?.recovery == .reconnect {
                 await notebook.signIn()
                 guard notebook.account?.id == controller.draft.accountID,
@@ -1369,9 +1381,21 @@ struct LiveNotebookWorkspace: View {
       tags: notebook.library.snapshot.tags, selectedTagIDs: target.selected, save: save)
   }
 
+  private func recoverWrite() async {
+    if let draftID = notebook.blockedNoteDraftID {
+      selectRow(draftID.uuidString)
+      return
+    }
+    do { try await notebook.recoverWrite() } catch {
+      actionMessage = NotebookModel.message(for: error)
+    }
+    await active?.refreshPersistedState()
+  }
+
   private func run(_ action: NotebookAction, accountID: UUID) {
     Task {
       do { _ = try await execute(action, accountID: accountID) } catch {
+        guard NotebookModel.writeProblem(for: .action(action), error) == nil else { return }
         actionMessage = NotebookModel.message(for: error)
       }
     }
