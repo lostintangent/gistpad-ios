@@ -36,15 +36,6 @@ extension LibraryCollection {
         case .archive: String(localized: "Archived Gists", bundle: .module)
         }
     }
-
-    var symbol: String {
-        switch self {
-        case .gists: "doc.text"
-        case .dailyNotes: "calendar"
-        case .starred: "star"
-        case .archive: "archivebox"
-        }
-    }
 }
 
 struct TagSwatch: View {

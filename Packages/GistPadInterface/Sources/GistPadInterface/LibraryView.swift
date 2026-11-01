@@ -420,7 +420,7 @@ public struct LibraryView: View {
     }
 
     private var pinnedHeader: some View {
-        sectionHeader(Text("Pinned", bundle: .module), symbol: "pin")
+        Text("Pinned", bundle: .module)
     }
 
     private var pinnedRowsVisible: Bool { !isSidebar || pinnedExpansion.wrappedValue }
@@ -525,10 +525,6 @@ public struct LibraryView: View {
         }
     }
 
-    private func sectionHeader(_ title: Text, symbol: String) -> some View {
-        Label { title } icon: { Image(systemName: symbol) }
-    }
-
     @ViewBuilder
     private func dateSection(_ section: LibraryDateSection) -> some View {
         if section.group == .undated {
@@ -539,9 +535,7 @@ public struct LibraryView: View {
             Section {
                 ForEach(section.notes) { noteRow($0) }
             } header: {
-                sectionHeader(
-                    Text(verbatim: section.group.title(locale: locale, calendar: calendar)),
-                    symbol: "calendar")
+                Text(verbatim: section.group.title(locale: locale, calendar: calendar))
             }
         }
     }
@@ -557,16 +551,13 @@ public struct LibraryView: View {
                 .fixedSize()
                 .captureFrame("library-collection-count-\(collection.rawValue)")
         }
-        let title = Label(collection.title, systemImage: collection.symbol)
-            .labelStyle(.titleAndIcon)
+        let title = Text(verbatim: collection.title)
             .fixedSize(horizontal: false, vertical: true)
             .captureFrame("library-collection-title-\(collection.rawValue)")
         return Group {
             if dynamicTypeSize.isAccessibilitySize {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(verbatim: collection.title)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .captureFrame("library-collection-title-\(collection.rawValue)")
+                    title
                     Spacer(minLength: 0)
                     countText
                 }
