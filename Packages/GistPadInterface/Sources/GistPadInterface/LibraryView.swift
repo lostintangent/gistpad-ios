@@ -1000,6 +1000,7 @@ public struct LibraryView: View {
                 }
             }
             .navigationTitle(Text("Filter by tags", bundle: .module))
+            .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $tagQuery, prompt: Text("Search tags", bundle: .module))
             .overlay {
                 if matchingTags.isEmpty {
