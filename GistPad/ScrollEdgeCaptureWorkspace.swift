@@ -36,6 +36,7 @@ struct ScrollEdgeCaptureWorkspace: View {
     private let token: String?
     private let supportedState: Bool
     private let wantsKeyboard: Bool
+    private let wantsFind: Bool
 
     init() {
         let arguments = ProcessInfo.processInfo.arguments
@@ -45,8 +46,9 @@ struct ScrollEdgeCaptureWorkspace: View {
             return arguments[index + 1]
         }
         let state = argument("--capture-state") ?? "preview"
-        supportedState = ["preview", "source", "source-keyboard"].contains(state)
-        wantsKeyboard = state == "source-keyboard"
+        supportedState = ["preview", "source", "source-keyboard", "source-find"].contains(state)
+        wantsFind = state == "source-find"
+        wantsKeyboard = state == "source-keyboard" || wantsFind
         _mode = State(initialValue: state == "preview" ? .reading : .source)
         token = argument("--capture-ready-token").flatMap { UUID(uuidString: $0) == nil ? nil : $0 }
     }
@@ -82,7 +84,12 @@ struct ScrollEdgeCaptureWorkspace: View {
                             ScrollEdgeReadiness(
                                 source: session.textView, mode: mode, previewReady: rendered,
                                 heading: Self.heading, token: token,
-                                wantsKeyboard: wantsKeyboard, keyboardHeight: keyboardHeight
+                                wantsKeyboard: wantsKeyboard, wantsFind: wantsFind,
+                                keyboardHeight: keyboardHeight,
+                                presentFind: {
+                                    session.textView.findInteraction?.searchText = "Room for thought"
+                                    session.presentFind(replacing: true)
+                                }
                             ) { failure = $0 }
                         }
                     }
@@ -127,7 +134,9 @@ private struct ScrollEdgeReadiness: UIViewRepresentable {
     let heading: String
     let token: String?
     let wantsKeyboard: Bool
+    let wantsFind: Bool
     let keyboardHeight: CGFloat
+    let presentFind: @MainActor () -> Void
     let failure: @MainActor (String) -> Void
 
     func makeUIView(context: Context) -> ScrollEdgeProbe { ScrollEdgeProbe() }
@@ -136,7 +145,8 @@ private struct ScrollEdgeReadiness: UIViewRepresentable {
         view.configure(
             source: source, mode: mode, previewReady: previewReady,
             heading: heading, token: token, wantsKeyboard: wantsKeyboard,
-            keyboardHeight: keyboardHeight, failure: failure
+            wantsFind: wantsFind, keyboardHeight: keyboardHeight,
+            presentFind: presentFind, failure: failure
         )
     }
 
@@ -152,8 +162,11 @@ private final class ScrollEdgeProbe: UIView {
     private var heading = ""
     private var token: String?
     private var wantsKeyboard = false
+    private var wantsFind = false
     private var keyboardHeight: CGFloat = 0
     private var requestedFocus = false
+    private var requestedFind = false
+    private var presentFind: (@MainActor () -> Void)?
     private var failure: (@MainActor (String) -> Void)?
     private var displayLink: CADisplayLink?
     private var resolvingHeading = false
@@ -175,7 +188,8 @@ private final class ScrollEdgeProbe: UIView {
 
     func configure(
         source: UITextView, mode: NoteMode, previewReady: Bool, heading: String,
-        token: String?, wantsKeyboard: Bool, keyboardHeight: CGFloat,
+        token: String?, wantsKeyboard: Bool, wantsFind: Bool, keyboardHeight: CGFloat,
+        presentFind: @escaping @MainActor () -> Void,
         failure: @escaping @MainActor (String) -> Void
     ) {
         self.source = source
@@ -184,7 +198,9 @@ private final class ScrollEdgeProbe: UIView {
         self.heading = heading
         self.token = token
         self.wantsKeyboard = wantsKeyboard
+        self.wantsFind = wantsFind
         self.keyboardHeight = keyboardHeight
+        self.presentFind = presentFind
         self.failure = failure
         startIfAttached()
     }
@@ -226,6 +242,13 @@ private final class ScrollEdgeProbe: UIView {
             }
             guard source.isFirstResponder, keyboardHeight >= 150,
                   source.inputAccessoryView?.window != nil else { return }
+            if wantsFind {
+                if !requestedFind {
+                    requestedFind = true
+                    presentFind?()
+                }
+                guard source.findInteraction?.isFindNavigatorVisible == true else { return }
+            }
         }
         if mode == .source, let source, targetY != nil {
             let range = (source.text as NSString).range(of: "## \(heading)")

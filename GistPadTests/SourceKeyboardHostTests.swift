@@ -446,8 +446,8 @@ private final class SourceKeyboardFixture {
         #expect(accessoryFrame.height > 0)
         #expect(editorFrame.maxY >= accessoryFrame.minY - 1,
                 "Source must reach the actual formatting accessory.")
-        #expect(editorFrame.maxY <= accessoryFrame.maxY + 1,
-                "Source must never extend behind the system keys.")
+        #expect(editorFrame.maxY >= accessoryFrame.maxY - 1,
+                "Source must flow beneath the formatting accessory with no hard edge.")
         let viewport = editor.convert(editor.bounds.inset(by: editor.adjustedContentInset), to: window)
         #expect(abs(viewport.maxY - accessoryFrame.minY) <= 1,
                 "The unobscured writing region must stop above the actual capsule.")

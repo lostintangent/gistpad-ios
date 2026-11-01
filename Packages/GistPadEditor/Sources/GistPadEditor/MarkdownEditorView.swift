@@ -55,7 +55,7 @@
               && session.textView.markedTextRange == nil && intelligence != nil)
         )
         .id(session.viewIdentity)
-        .ignoresSafeArea(.container, edges: .vertical)
+        .ignoresSafeArea([.container, .keyboard], edges: .vertical)
       }
       .overlay { SourceViewport(session: session).allowsHitTesting(false) }
       .sheet(
