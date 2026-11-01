@@ -14,7 +14,7 @@ public enum AccountError: Error, Equatable, Sendable {
     case keychain(OSStatus)
 }
 
-public struct AccountSnapshot: Equatable, Sendable, Identifiable {
+public struct AccountSnapshot: Codable, Equatable, Sendable, Identifiable {
     public let id: UUID
     public let login: String
     public let githubUserID: Int64?
@@ -113,12 +113,14 @@ public actor AccountService {
     public static let callbackURL = URL(string: "gistpad://auth-callback")!
     private static let sessionKey = "gistpad-supabase-session"
     private static let connectionKey = "github-connection"
+    private static let accountKey = "github-account"
     private static let providerPrefix = "github-provider-"
     private static let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "account")
     private let auth: AuthClient
     private let credentials: any AccountCredentialStorage
     private let authEvents: Task<Void, Never>
     private let publishableKey: String
+    private let httpSession: URLSession
     private var signingIn = false
     private var signingOut = false
     private var updatingPreferences = false
@@ -135,6 +137,7 @@ public actor AccountService {
         self.credentials = credentials
         self.publishableKey = publishableKey
         let session = session ?? GitHubClient.makeSession()
+        httpSession = session
         auth = AuthClient(
             url: Self.projectURL.appendingPathComponent("auth/v1"),
             headers: ["apikey": publishableKey, "Authorization": "Bearer \(publishableKey)"],
@@ -167,6 +170,22 @@ public actor AccountService {
         guard let session = try persistedSession() else { return nil }
         try retainConnection(session)
         return snapshot(session.user)
+    }
+
+    /// The connected GitHub account for launch. It doesn't need a live Supabase session, so the library never waits on Supabase.
+    public func connectedAccount() async throws -> AccountSnapshot? {
+        if try persistedSession() != nil { return try await cachedAccount() }
+        guard let id = try connectedAccountID() else { return nil }
+        if let stored = try storedAccount(), stored.id == id { return stored }
+        // Installs from before the snapshot learn their identity once from GitHub. Preferences stay empty until a Supabase session returns, so callers keep their cached preferences.
+        let user = try await githubClient(accountID: id, session: httpSession).authenticatedUser()
+        guard try connectedAccountID() == id else { throw AccountError.accountChanged }
+        let account = AccountSnapshot(
+            id: id, login: user.login, githubUserID: user.id,
+            avatarURL: user.avatarURL, preferences: Preferences(metadata: [:])
+        )
+        persistAccount(account)
+        return account
     }
 
     public func refreshAccount() async throws -> AccountSnapshot {
@@ -265,6 +284,9 @@ public actor AccountService {
         guard !updatingPreferences, !signingIn, !signingOut else { throw PreferenceError.operationInProgress }
         updatingPreferences = true
         defer { updatingPreferences = false }
+        // Without a Supabase session there is nowhere to write, so fail before any network call.
+        guard let session = try persistedSession() else { throw AccountError.signedOut }
+        guard session.user.id == accountID else { throw AccountError.accountChanged }
         let user = try await auth.user()
         guard user.id == accountID, try persistedSession()?.user.id == accountID else {
             throw AccountError.accountChanged
@@ -274,7 +296,9 @@ public actor AccountService {
         guard updated.id == accountID, try persistedSession()?.user.id == accountID else {
             throw AccountError.accountChanged
         }
-        return snapshot(updated)
+        let account = snapshot(updated)
+        persistAccount(account)
+        return account
     }
 
     // The caller must first let the user keep/export/discard account-scoped unsynced work.
@@ -304,9 +328,14 @@ public actor AccountService {
             guard case .success = providerRemoval else { return }
             try credentials.remove(key: Self.connectionKey)
         }
+        let accountRemoval = Result {
+            guard case .success = providerRemoval else { return }
+            try credentials.remove(key: Self.accountKey)
+        }
         let sessionRemoval = Result { try credentials.remove(key: Self.sessionKey) }
         try providerRemoval.get()
         try connectionRemoval.get()
+        try accountRemoval.get()
         try sessionRemoval.get()
     }
 
@@ -348,9 +377,28 @@ public actor AccountService {
         if try credentials.retrieve(key: Self.connectionKey) != connection {
             try credentials.store(key: Self.connectionKey, value: connection)
         }
+        persistAccount(snapshot(session.user))
     }
 
     private func providerKey(_ id: UUID) -> String { Self.providerPrefix + id.uuidString }
+
+    private func storedAccount() throws -> AccountSnapshot? {
+        guard let data = try credentials.retrieve(key: Self.accountKey) else { return nil }
+        return try? JSONDecoder().decode(AccountSnapshot.self, from: data)
+    }
+
+    // The snapshot is a launch cache. Supabase and GitHub stay authoritative, so a failed write is logged, not surfaced as a failed sign-in or save.
+    private func persistAccount(_ account: AccountSnapshot) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        do {
+            let data = try encoder.encode(account)
+            guard try credentials.retrieve(key: Self.accountKey) != data else { return }
+            try credentials.store(key: Self.accountKey, value: data)
+        } catch {
+            Self.logger.error("Couldn't save the account snapshot: \(String(describing: error), privacy: .public)")
+        }
+    }
 
     private func persistedSession() throws -> Session? {
         try credentials.retrieve(key: Self.sessionKey).map {
