@@ -673,7 +673,12 @@ final class CommentsInspectorUITests: XCTestCase {
       defer { app.terminate() }
       try openComments(in: app, waitsForConversation: false)
       if scenario == "empty" {
-        XCTAssertTrue(app.staticTexts["No comments yet"].waitForExistence(timeout: 6))
+        try wait("the loaded blank conversation") {
+          app.buttons["comments-close"].exists
+            && !app.descendants(matching: .any)["comments-loading"].exists
+        }
+        XCTAssertFalse(app.staticTexts["No comments yet"].exists)
+        XCTAssertTrue(composer(in: app).exists)
         record(app, name: "comments-empty-count")
         XCTAssertEqual(app.buttons["note-comments"].label, "Comments, 0 comments")
       } else if scenario == "offline" {

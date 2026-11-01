@@ -60,6 +60,7 @@ public struct CommentsComposer: View {
                     }
                 }
                 .font(.footnote)
+                .tint(.primary)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("comment-draft-error")
             }
@@ -83,22 +84,12 @@ public struct CommentsComposer: View {
                 .tint(Color(uiColor: .systemBlue))
                 .disabled(!isEditable || isPosting)
                 .accessibilityIdentifier("comment-composer-text")
-                Button(action: post) {
-                    Group {
-                        if isPosting {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.title2)
-                        }
-                    }
-                    .frame(minWidth: 44, minHeight: 44)
-                }
-                .buttonStyle(.borderless)
-                .disabled(!canPost || isPosting)
-                .keyboardShortcut(.return, modifiers: .command)
-                .accessibilityLabel(Text(verbatim: sendLabel))
-                .accessibilityIdentifier("comment-post")
+                Button(role: .confirm, action: post)
+                    .buttonStyle(.glassProminent)
+                    .disabled(!canPost || isPosting)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .accessibilityLabel(Text(verbatim: sendLabel))
+                    .accessibilityIdentifier("comment-post")
             }
         }
         .padding(.horizontal, 12)
@@ -106,7 +97,6 @@ public struct CommentsComposer: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 24))
         .padding(.horizontal, 20)
         .padding(.vertical, 8)
-        .tint(.primary)
         .onChange(of: focusRequest, initial: true) { _, request in
             isFocused = request > 0
         }
@@ -184,6 +174,7 @@ public struct CommentsComposer: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(!isEditable || isPosting)
+                .tint(.primary)
                 .accessibilityIdentifier("comment-remove-context")
             }
         }

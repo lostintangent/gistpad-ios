@@ -30,7 +30,7 @@ struct NotebookCommentsInspector: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
-            Button("Close", systemImage: "xmark") {
+            Button(role: .close) {
               Task {
                 isClosing = true
                 defer { isClosing = false }
@@ -56,7 +56,6 @@ struct NotebookCommentsInspector: View {
           }
         }
     }
-    .tint(.primary)
     .interactiveDismissDisabled(
       conversation.draftSaveState != .saved || conversation.mutation == .working)
     .environment(\.openURL, OpenURLAction { url in
@@ -175,6 +174,7 @@ struct NotebookCommentsInspector: View {
       Text(verbatim: message)
       Button(action) { Task { await perform() } }
         .buttonStyle(.glass)
+        .tint(.primary)
     }
     .font(.footnote)
     .frame(maxWidth: .infinity, alignment: .leading)

@@ -163,14 +163,6 @@ public struct CommentsConversation: View {
                 ProgressView(String(localized: "Loading comments", bundle: .module))
                     .accessibilityIdentifier("comments-loading")
             }
-        } else if comments?.isEmpty == true, failure == nil {
-            VStack(spacing: 8) {
-                Text("No comments yet", bundle: .module).font(.headline)
-                Text("Start a conversation about this gist.", bundle: .module)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(20)
-            .accessibilityIdentifier("comments-empty")
         }
     }
 
