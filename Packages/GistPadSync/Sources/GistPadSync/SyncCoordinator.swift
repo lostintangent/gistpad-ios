@@ -34,7 +34,7 @@ public actor SyncCoordinator {
         defer { release() }
         try Task.checkCancellation()
         var draft = try await store.draft(id: id, accountID: accountID)
-        if case .conflict = draft.state { return draft }
+        if case .conflict = draft.state, !isCleanDraft(draft) { return draft }
         try await validatePublication(
             draft, reason: reason, expectedGeneration: expectedGeneration,
             shouldPublish: shouldPublish)
@@ -73,6 +73,12 @@ public actor SyncCoordinator {
                         id: id, accountID: accountID, gistID: gistID, content: draft.text,
                         revision: remoteGist.revision, generation: draft.generation, publishedGist: remoteGist
                     )
+                }
+                if isCleanDraft(draft), let remote {
+                    return try await store.refreshCleanDraft(
+                        id: id, accountID: accountID, expectedGeneration: draft.generation,
+                        content: remote, revision: remoteGist.revision
+                    ).snapshot
                 }
                 guard sourceEqual(remote, draft.baseContent) else {
                     let conflict = DraftConflict(
@@ -161,7 +167,28 @@ public actor SyncCoordinator {
         guard latest.generation == draft.generation,
               reason != .autosave || !latest.autosavePaused,
               latest.attemptedGeneration == nil else { throw CancellationError() }
-        if case .conflict = latest.state { throw CancellationError() }
+        if case .conflict = latest.state, !isCleanDraft(latest) { throw CancellationError() }
+    }
+
+    public func adoptRemoteIfClean(id: UUID, accountID: UUID) async throws -> DraftSnapshot {
+        await acquire()
+        defer { release() }
+        try Task.checkCancellation()
+        let draft = try await store.draft(id: id, accountID: accountID)
+        guard isCleanDraft(draft), let gistID = draft.gistID else { return draft }
+        let remoteGist = try await client.gist(id: gistID)
+        guard remoteGist.truncated != true else { throw GitHubClientError.incompleteGist }
+        guard remoteGist.files[draft.filename] != nil else { return draft }
+        let remote = try await client.content(gist: remoteGist, filename: draft.filename)
+        return try await store.refreshCleanDraft(
+            id: id, accountID: accountID, expectedGeneration: draft.generation,
+            content: remote, revision: remoteGist.revision
+        ).snapshot
+    }
+
+    private func isCleanDraft(_ draft: DraftSnapshot) -> Bool {
+        draft.attemptedContent == nil && draft.attemptedGeneration == nil
+            && sourceEqual(draft.text, draft.baseContent)
     }
 
     public func reconcileCreation(

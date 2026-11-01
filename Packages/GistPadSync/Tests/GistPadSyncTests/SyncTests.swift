@@ -130,6 +130,84 @@ private func editedDraft(
         #expect(calls.withLock { $0 } == ["GET"])
     }
 
+    @Test func cleanDraftAdoptsAChangedRemoteWithoutAConflictOrWrite() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let draft = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "abc123", filename: "README.md",
+            description: "Note", content: "base", revision: "revision1"
+        )
+        let calls = Mutex<[String]>([])
+        let client = GitHubClient(session: FakeURLProtocol.session { request in
+            calls.withLock { $0.append(request.httpMethod ?? "") }
+            return FakeResponse(data: try gistData(content: "remote", revision: "revision2"))
+        }) { "fake" }
+        let adopted = try await SyncCoordinator(client: client, store: store)
+            .publish(id: draft.id, accountID: account, reason: .leaving)
+        #expect(adopted.state == .savedToGitHub)
+        #expect(adopted.text == "remote")
+        #expect(adopted.baseContent == "remote")
+        #expect(adopted.generation == 1)
+        #expect(calls.withLock { $0 } == ["GET"])
+    }
+
+    @Test func aStuckCleanConflictClearsOnTheNextPublish() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let draft = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "abc123", filename: "README.md",
+            description: "Note", content: "base", revision: "revision1"
+        )
+        try await store.setState(.conflict(DraftConflict(
+            generation: draft.generation, base: "base", local: "base",
+            remote: "remote", remoteRevision: "revision2"
+        )), id: draft.id, accountID: account)
+        let client = GitHubClient(session: FakeURLProtocol.session { _ in
+            FakeResponse(data: try gistData(content: "remote", revision: "revision2"))
+        }) { "fake" }
+        let adopted = try await SyncCoordinator(client: client, store: store)
+            .publish(id: draft.id, accountID: account, reason: .background)
+        #expect(adopted.state == .savedToGitHub)
+        #expect(adopted.text == "remote")
+        #expect(adopted.baseContent == "remote")
+    }
+
+    @Test func openAdoptsAChangedRemoteForACleanNote() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let draft = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "abc123", filename: "README.md",
+            description: "Note", content: "base", revision: "revision1"
+        )
+        let calls = Mutex<[String]>([])
+        let client = GitHubClient(session: FakeURLProtocol.session { request in
+            calls.withLock { $0.append(request.httpMethod ?? "") }
+            return FakeResponse(data: try gistData(content: "remote", revision: "revision2"))
+        }) { "fake" }
+        let opened = try await SyncCoordinator(client: client, store: store)
+            .adoptRemoteIfClean(id: draft.id, accountID: account)
+        #expect(opened.state == .savedToGitHub)
+        #expect(opened.text == "remote")
+        #expect(opened.baseContent == "remote")
+        #expect(calls.withLock { $0 } == ["GET"])
+    }
+
+    @Test func openLeavesAnEditedNoteAloneWithoutFetching() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let edited = try await editedDraft(store: store, account: account)
+        let calls = Mutex<[String]>([])
+        let client = GitHubClient(session: FakeURLProtocol.session { request in
+            calls.withLock { $0.append(request.httpMethod ?? "") }
+            return FakeResponse(data: try gistData(content: "remote", revision: "revision2"))
+        }) { "fake" }
+        let opened = try await SyncCoordinator(client: client, store: store)
+            .adoptRemoteIfClean(id: edited.id, accountID: account)
+        #expect(opened.text == "local")
+        #expect(opened.baseContent == "base")
+        #expect(calls.withLock { $0 }.isEmpty)
+    }
+
     @Test func disjointMergeIsAProposalUntilAppliedAsANewGeneration() async throws {
         let base = "one\ntwo\nthree\n"
         let local = "ONE\ntwo\nthree\n"

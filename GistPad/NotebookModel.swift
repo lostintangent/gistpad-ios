@@ -153,6 +153,13 @@ actor LiveNotebookProvider: NotebookProviding {
 
   func openDraft(for document: NotebookDocument) async throws -> DraftSnapshot {
     if let draft = document.draft {
+      let coordinator = await coordinator(accountID: document.accountID)
+      // A failed refresh shows the stored note, so opening still works offline.
+      if let adopted = try? await mutationQueue.run({
+        try await coordinator.adoptRemoteIfClean(id: draft.id, accountID: document.accountID)
+      }) {
+        return adopted
+      }
       return try await drafts.draft(id: draft.id, accountID: document.accountID)
     }
     guard let gist = document.gist else { throw GitHubClientError.missingFile }
