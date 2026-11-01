@@ -207,6 +207,46 @@ actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding 
   }
 }
 
+/// Parks the synthetic create response so a test can act while the publication is in flight.
+final class LibraryPublicationHold: @unchecked Sendable {
+  static let shared = LibraryPublicationHold()
+
+  private let lock = NSLock()
+  private var isEnabled = false
+  private var parkedDelivery: (() -> Void)?
+
+  func enable() {
+    lock.withLock { isEnabled = true }
+  }
+
+  func park(_ deliver: @escaping () -> Void) -> Bool {
+    lock.withLock {
+      guard isEnabled else { return false }
+      parkedDelivery = deliver
+      return true
+    }
+  }
+
+  func waitUntilParked(timeout: Duration = .seconds(5)) async -> Bool {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while ContinuousClock.now < deadline {
+      if lock.withLock({ parkedDelivery != nil }) { return true }
+      try? await Task.sleep(for: .milliseconds(5))
+    }
+    return false
+  }
+
+  func release() {
+    let delivery = lock.withLock { () -> (() -> Void)? in
+      isEnabled = false
+      let delivery = parkedDelivery
+      parkedDelivery = nil
+      return delivery
+    }
+    delivery?()
+  }
+}
+
 private final class LibraryPublicationCaptureProtocol: URLProtocol {
   override class func canInit(with request: URLRequest) -> Bool { true }
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -247,9 +287,13 @@ private final class LibraryPublicationCaptureProtocol: URLProtocol {
       guard let response = HTTPURLResponse(
         url: url, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)
       else { throw URLError(.badServerResponse) }
-      client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-      client?.urlProtocol(self, didLoad: try JSONSerialization.data(withJSONObject: payload))
-      client?.urlProtocolDidFinishLoading(self)
+      let body = try JSONSerialization.data(withJSONObject: payload)
+      let deliver: () -> Void = {
+        self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        self.client?.urlProtocol(self, didLoad: body)
+        self.client?.urlProtocolDidFinishLoading(self)
+      }
+      if !LibraryPublicationHold.shared.park(deliver) { deliver() }
     } catch {
       client?.urlProtocol(self, didFailWithError: error)
     }

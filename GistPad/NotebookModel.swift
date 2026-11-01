@@ -1330,6 +1330,26 @@ final class NotebookModel {
     return draft
   }
 
+  /// Re-reads a local discard once publication has settled. If the note reached GitHub after the
+  /// confirmation, the confirmed deletion becomes a GitHub deletion of the gist it created.
+  func settledDeletionAction(
+    _ action: NotebookAction, confirmedWithoutGist: Bool, accountID: UUID
+  ) async throws -> NotebookAction {
+    let draftID: UUID
+    switch action {
+    case .discardLocalCopy(let id, _), .discardUncertainCreation(let id, _): draftID = id
+    default: return action
+    }
+    let draft = try await draftSnapshot(id: draftID, accountID: accountID)
+    if confirmedWithoutGist, let gistID = draft.gistID {
+      return .delete(gistID: gistID)
+    }
+    if draft.gistID == nil, draft.attemptedGeneration != nil {
+      return .discardUncertainCreation(draftID: draft.id, generation: draft.generation)
+    }
+    return .discardLocalCopy(draftID: draft.id, generation: draft.generation)
+  }
+
   func isDraftSelected(_ id: UUID) -> Bool {
     library.selectedNoteID != nil && presentedDocument?.draft?.id == id
   }

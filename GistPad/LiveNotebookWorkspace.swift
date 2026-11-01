@@ -1390,6 +1390,13 @@ struct LiveNotebookWorkspace: View {
       for controller in locked { controller.endDestructiveAction() }
       isPerformingAction = false
     }
+    let confirmedWithoutGist: Bool = switch action {
+    case .discardUncertainCreation: true
+    case .discardLocalCopy(let draftID, _):
+      notebook.localDrafts.first { $0.id == draftID }?.gistID == nil
+    default: false
+    }
+    var effectiveAction = action
     do {
       for controller in sessions.values {
         let requiresLock: Bool = switch action {
@@ -1404,12 +1411,14 @@ struct LiveNotebookWorkspace: View {
         default: false
         }
         if requiresLock {
-          if case .delete = action {
+          switch action {
+          case .delete, .discardLocalCopy, .discardUncertainCreation:
             await controller.waitForPublication()
             try Task.checkCancellation()
             guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
               throw AccountError.accountChanged
             }
+          default: break
           }
           try controller.beginDestructiveAction()
           locked.append(controller)
@@ -1423,7 +1432,9 @@ struct LiveNotebookWorkspace: View {
       guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
         throw AccountError.accountChanged
       }
-      let result = try await notebook.perform(action)
+      effectiveAction = try await notebook.settledDeletionAction(
+        action, confirmedWithoutGist: confirmedWithoutGist, accountID: accountID)
+      let result = try await notebook.perform(effectiveAction)
       switch result {
       case .signedOut:
         let keys = sessions.filter { $0.value.draft.accountID == accountID }.map(\.key)
@@ -1462,7 +1473,7 @@ struct LiveNotebookWorkspace: View {
       }
       return result
     } catch {
-      if case .delete(let id) = action, notebook.deletedGistIDs.contains(id) {
+      if case .delete(let id) = effectiveAction, notebook.deletedGistIDs.contains(id) {
         try await discardDeletedGistSessions(gistID: id, accountID: accountID)
       }
       Logger(subsystem: "dev.gistpad.GistPad", category: "Notebook")
