@@ -19,7 +19,7 @@ struct TagLabelHostTests {
       Configuration(increasedContrast: false, size: .accessibility3),
       Configuration(increasedContrast: true, size: .accessibility3)
     ])
-  func pillsUseOnlyTextAndTintWithReadableResolvedContrast(
+  func pillsUseExactFillWithBlackOrWhiteInk(
     dark: Bool, configuration: Configuration
   ) async throws {
     let increasedContrast = configuration.increasedContrast
@@ -76,7 +76,7 @@ struct TagLabelHostTests {
     let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
-    let ink = try #require(RGBColor(
+    let label = try #require(RGBColor(
       uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
     for tag in tags {
       let frame = try #require(pillFrames[tag.id])
@@ -85,13 +85,29 @@ struct TagLabelHostTests {
       #expect(window.bounds.contains(frame))
       let fill = try sampledColor(
         at: CGPoint(x: frame.midX, y: frame.minY + 2), in: image)
-      #expect(
-        ink.contrast(with: fill) >= (increasedContrast ? 7 : 4.5),
-        "\(tag.id): \(ink.hex) on \(fill.hex)")
+      if let hex = tag.colorHex, let saved = RGBColor(hex: hex) {
+        #expect(
+          channelsMatch(fill, saved),
+          "\(tag.id): saved \(saved.hex) rendered as \(fill.hex)")
+        #expect(
+          max(saved.contrast(with: .black), saved.contrast(with: .white)) >= 4.5,
+          "\(tag.id): neither black nor white reaches 4.5:1 on \(saved.hex)")
+      } else {
+        #expect(
+          label.contrast(with: fill) >= 4.5,
+          "\(tag.id): \(label.hex) on \(fill.hex)")
+      }
     }
     Attachment.record(
-      image, named: "dot-free-tags-\(dark ? "Dark" : "Light")-\(increasedContrast ? "High" : "Normal")-\(size.isAccessibilitySize ? "AX3" : "Large").png",
+      image, named: "exact-fill-tags-\(dark ? "Dark" : "Light")-\(increasedContrast ? "High" : "Normal")-\(size.isAccessibilitySize ? "AX3" : "Large").png",
       as: .png)
+  }
+
+  private func channelsMatch(_ rendered: RGBColor, _ saved: RGBColor) -> Bool {
+    let tolerance = 6
+    return abs(Int(rendered.red) - Int(saved.red)) <= tolerance
+      && abs(Int(rendered.green) - Int(saved.green)) <= tolerance
+      && abs(Int(rendered.blue) - Int(saved.blue)) <= tolerance
   }
 
   private func sampledColor(at point: CGPoint, in image: UIImage) throws -> RGBColor {
