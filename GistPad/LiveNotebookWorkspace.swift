@@ -73,6 +73,13 @@ struct LiveNotebookWorkspace: View {
       set: { layout.setExpandedCollections($0, accountID: accountID) })
   }
 
+  private var pinnedExpanded: Binding<Bool> {
+    guard let accountID = notebook.account?.id else { return .constant(true) }
+    return Binding(
+      get: { layout.isPinnedExpanded(accountID: accountID) },
+      set: { layout.setPinnedExpanded($0, accountID: accountID) })
+  }
+
   private struct NotebookCreationChoiceTarget {
     let controller: NotebookSessionController
     let generation: UInt64
@@ -161,7 +168,8 @@ struct LiveNotebookWorkspace: View {
         model: notebook.library, actions: libraryActions,
         isTodaySelected: notebook.isTodaySelected,
         isSidebar: horizontalSizeClass == .regular,
-        expandedCollections: libraryCollections)
+        expandedCollections: libraryCollections,
+        pinnedExpanded: pinnedExpanded)
         .id(notebook.account?.id)
     } detail: {
       NavigationStack {

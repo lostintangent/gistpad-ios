@@ -4,7 +4,6 @@ import SwiftUI
 public struct TagLabel: View {
     private let tag: LibraryTag
     private let isSelected: Bool
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
 
     public init(tag: LibraryTag, isSelected: Bool = false) {
@@ -13,25 +12,26 @@ public struct TagLabel: View {
     }
 
     public var body: some View {
+        let style = TagLabelStyle(hex: tag.colorHex)
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(verbatim: tag.name)
                 .fixedSize(horizontal: false, vertical: true)
             if isSelected {
                 Image(systemName: "checkmark")
-                    .foregroundStyle(.primary)
             }
         }
         .font(.footnote.weight(.medium))
-        .foregroundStyle(.primary)
+        .foregroundStyle(style.ink)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background {
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color(uiColor: .secondarySystemBackground))
+                .fill(style.fill)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(TagSwatch.color(hex: tag.colorHex).opacity(
-                            colorScheme == .dark ? (contrast == .increased ? 0.22 : 0.28) : 0.24))
+                    if let edge = style.edge {
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(edge, lineWidth: 0.5)
+                    }
                 }
                 .overlay {
                     if contrast == .increased {
@@ -43,6 +43,44 @@ public struct TagLabel: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: tag.name))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+struct TagLabelStyle {
+    let fill: Color
+    let ink: Color
+    let edge: Color?
+
+    init(hex: String?) {
+        guard let rgb = TagSwatch.rgb(hex: hex) else {
+            fill = Color(uiColor: .tertiarySystemFill)
+            ink = .primary
+            edge = nil
+            return
+        }
+        let luminance = TagContrast.relativeLuminance(rgb)
+        fill = TagSwatch.color(hex: hex)
+        ink = TagContrast.prefersBlackInk(luminance: luminance) ? .black : .white
+        // Near-white and near-black fills need an edge against the surface.
+        edge = luminance >= 0.8 || luminance <= 0.05 ? Color(uiColor: .separator) : nil
+    }
+}
+
+enum TagContrast {
+    static func relativeLuminance(_ rgb: UInt32) -> Double {
+        func linear(_ shift: UInt32) -> Double {
+            let value = Double((rgb >> shift) & 255) / 255
+            return value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(16) + 0.7152 * linear(8) + 0.0722 * linear(0)
+    }
+
+    static func prefersBlackInk(luminance: Double) -> Bool {
+        contrastRatio(luminance, 0) >= contrastRatio(luminance, 1)
+    }
+
+    static func contrastRatio(_ first: Double, _ second: Double) -> Double {
+        (max(first, second) + 0.05) / (min(first, second) + 0.05)
     }
 }
 

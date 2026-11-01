@@ -8,11 +8,13 @@ final class NotebookLayoutPreferences {
   private(set) var preferredMode: NoteMode
   private(set) var compactMode: NoteMode
   private var libraryCollections: [String: Set<LibraryCollection>]
+  private var collapsedPinned: Set<String>
   @ObservationIgnored private let defaults: UserDefaults
 
   private static let modeKey = "dev.gistpad.workspace.note-mode"
   private static let compactModeKey = "dev.gistpad.workspace.compact-note-mode"
   private static let libraryCollectionsKey = "dev.gistpad.workspace.expanded-library-collections"
+  private static let collapsedPinnedKey = "dev.gistpad.workspace.collapsed-pinned-library"
 
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
@@ -24,6 +26,7 @@ final class NotebookLayoutPreferences {
       guard let names = value as? [String] else { return nil }
       return Set(names.compactMap(LibraryCollection.init(rawValue:)).filter { $0 != .gists })
     }
+    collapsedPinned = Set(defaults.stringArray(forKey: Self.collapsedPinnedKey) ?? [])
   }
 
   func expandedCollections(accountID: UUID) -> Set<LibraryCollection> {
@@ -37,6 +40,22 @@ final class NotebookLayoutPreferences {
     defaults.set(
       libraryCollections.mapValues { $0.map(\.rawValue).sorted() },
       forKey: Self.libraryCollectionsKey)
+  }
+
+  func isPinnedExpanded(accountID: UUID) -> Bool {
+    !collapsedPinned.contains(accountID.uuidString)
+  }
+
+  func setPinnedExpanded(_ expanded: Bool, accountID: UUID) {
+    var collapsed = collapsedPinned
+    if expanded {
+      collapsed.remove(accountID.uuidString)
+    } else {
+      collapsed.insert(accountID.uuidString)
+    }
+    guard collapsed != collapsedPinned else { return }
+    collapsedPinned = collapsed
+    defaults.set(collapsed.sorted(), forKey: Self.collapsedPinnedKey)
   }
 
   static func allowsSplit(availableWidth: CGFloat) -> Bool {

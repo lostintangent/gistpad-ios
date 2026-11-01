@@ -35,6 +35,7 @@ struct InterfaceCaptureWorkspace: View {
     @State private var todaySession: DocumentSession
     @State private var library: LibraryModel
     @State private var expandedCollections: Set<LibraryCollection>
+    @State private var pinnedExpanded = true
     @State private var deletionConfirmation: LibraryDeletionConfirmation?
     @State private var compactColumn: NavigationSplitViewColumn
     @State private var selectedFileID = "README.md"
@@ -315,7 +316,8 @@ struct InterfaceCaptureWorkspace: View {
                         footer: Text(actionMessage ?? "Synthetic library. No account connected."),
                         isTodaySelected: library.selectedNoteID == "today",
                         isSidebar: horizontalSizeClass == .regular,
-                        expandedCollections: $expandedCollections
+                        expandedCollections: $expandedCollections,
+                        pinnedExpanded: $pinnedExpanded
                     )
                     .captureTagFilters(captureState == "tag-filters")
                     .task {

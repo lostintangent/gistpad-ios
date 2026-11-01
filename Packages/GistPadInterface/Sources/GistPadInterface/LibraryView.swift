@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 
 private struct LibrarySearchOwnerKey: EnvironmentKey {
     static let defaultValue = false
@@ -221,6 +222,12 @@ public struct LibraryView: View {
     private let savedCollections: Binding<Set<LibraryCollection>>?
     @State private var localCollections: Set<LibraryCollection> = []
     @State private var collapsedSearchCollections: Set<LibraryCollection> = []
+    private let savedPinnedExpanded: Binding<Bool>?
+    @State private var localPinnedExpanded = true
+    @State private var collapsedSearchPinned = false
+    @State private var now = Date.now
+    @Environment(\.calendar) private var calendar
+    @Environment(\.locale) private var locale
     @State private var selectedCollection: LibraryCollection = .gists
     @State private var deletionSelection: Selection?
     @State private var showingTags = false
@@ -239,7 +246,8 @@ public struct LibraryView: View {
     public init(
         model: LibraryModel, actions: LibraryActions, footer: Text? = nil,
         isTodaySelected: Bool = false, isSidebar: Bool? = nil,
-        expandedCollections: Binding<Set<LibraryCollection>>? = nil
+        expandedCollections: Binding<Set<LibraryCollection>>? = nil,
+        pinnedExpanded: Binding<Bool>? = nil
     ) {
         self.model = model
         self.actions = actions
@@ -247,6 +255,7 @@ public struct LibraryView: View {
         self.isTodaySelected = isTodaySelected
         sidebarOverride = isSidebar
         savedCollections = expandedCollections
+        savedPinnedExpanded = pinnedExpanded
     }
 
     #if DEBUG
@@ -262,7 +271,7 @@ public struct LibraryView: View {
             navigationList
                 .navigationTitle(navigationTitle)
                 .navigationSubtitle(navigationSubtitle)
-                .toolbarTitleDisplayMode(.inline)
+                .toolbarTitleDisplayMode(.large)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 400)
                 .refreshable {
                     isPullRefreshing = true
@@ -295,6 +304,11 @@ public struct LibraryView: View {
         .onChange(of: actions.deletionConfirmation?.rowID) { _, rowID in
             if rowID == nil { deletionSelection = nil }
         }
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIApplication.significantTimeChangeNotification)
+        ) { _ in
+            now = .now
+        }
     }
 
     @ViewBuilder
@@ -318,10 +332,7 @@ public struct LibraryView: View {
         if isSidebar {
             libraryList.listStyle(.sidebar)
         } else {
-            libraryList
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
-                .background(Color(uiColor: .systemGroupedBackground))
+            libraryList.listStyle(.insetGrouped)
         }
     }
 
@@ -354,35 +365,16 @@ public struct LibraryView: View {
                 searchStatus
                 if model.selectedTagIDs.count > 1 {
                     Section {} header: { searchSummary }
-                        .listSectionMargins(.vertical, 0)
                 }
-                if !pinnedCards.isEmpty {
-                    Section {
-                        pinnedGrid
+                if !pinnedNotes.isEmpty {
+                    Section(isExpanded: pinnedExpansion) {
+                        ForEach(pinnedNotes) { noteRow($0) }
+                    } header: {
+                        Text("Pinned", bundle: .module)
                     }
-                    .listSectionMargins(.top, 16)
-                    .listSectionMargins(.bottom, mainNotes.isEmpty ? 0 : 24)
-                    .listSectionMargins(.vertical, 0)
-                    .listSectionSeparator(.hidden)
                 }
-                if !mainNotes.isEmpty {
-                    Section {
-                        ForEach(mainNotes) { note in
-                            noteRow(note, hidesTopSeparator: note.id == mainNotes.first?.id)
-                        }
-                    }
-                    .listSectionMargins(.top, pinnedCards.isEmpty && !model.hasFilters ? 8 : 0)
-                    .listSectionMargins(.vertical, 0)
-                    .listSectionSeparator(.hidden, edges: .top)
-                }
-                if !displayedCollections.isEmpty {
-                    Section {
-                        ForEach(displayedCollections) { collectionDisclosure($0) }
-                    }
-                    .listSectionMargins(.top, 16)
-                    .listSectionMargins(.vertical, 0)
-                    .listSectionSeparator(.hidden)
-                }
+                ForEach(dateSections) { dateSection($0) }
+                ForEach(displayedCollections) { collectionSection($0) }
                 if !hasVisibleNotes && model.loadState != .loading && canShowEmptyState {
                     emptyState
                 }
@@ -392,25 +384,37 @@ public struct LibraryView: View {
             }
         }
         .tint(.primary)
-        .contentMargins(.horizontal, 20, for: .scrollContent)
-        .listSectionSpacing(0)
         .scrollDismissesKeyboard(.immediately)
         .environment(\.defaultMinListRowHeight, 44)
-        .environment(\.defaultMinListHeaderHeight, 0)
         .accessibilityIdentifier("library-list")
         .animation(reduceMotion ? nil : .default, value: model.matchingNotes.map(\.id))
     }
 
-    private var pinnedCards: [LibraryNote] {
-        model.hasFilters ? [] : model.unfilteredNotes(in: .gists).filter(\.isPinned)
+    private var pinnedNotes: [LibraryNote] {
+        model.matchingNotes(in: .gists).filter(\.isPinned)
     }
 
-    private var mainNotes: [LibraryNote] {
-        model.matchingNotes(in: .gists).filter { model.hasFilters || !$0.isPinned }
+    private var dateSections: [LibraryDateSection] {
+        LibraryDateSection.sections(
+            for: model.matchingNotes(in: .gists).filter { !$0.isPinned },
+            relativeTo: now, calendar: calendar)
+    }
+
+    private var pinnedExpansion: Binding<Bool> {
+        Binding(
+            get: { model.hasFilters ? !collapsedSearchPinned : pinnedPreference.wrappedValue },
+            set: { expanded in
+                if model.hasFilters { collapsedSearchPinned = !expanded }
+                else { pinnedPreference.wrappedValue = expanded }
+            })
+    }
+
+    private var pinnedPreference: Binding<Bool> {
+        savedPinnedExpanded ?? $localPinnedExpanded
     }
 
     private var hasVisibleNotes: Bool {
-        !pinnedCards.isEmpty || !mainNotes.isEmpty || !displayedCollections.isEmpty
+        !model.matchingNotes(in: .gists).isEmpty || !displayedCollections.isEmpty
     }
 
     private var librarySelection: Binding<Selection?> {
@@ -436,57 +440,6 @@ public struct LibraryView: View {
         }
     }
 
-    private var pinnedGrid: some View {
-        LazyVGrid(
-            columns: Array(
-                repeating: GridItem(.flexible(), spacing: 12, alignment: .top),
-                count: dynamicTypeSize.isAccessibilitySize ? 1 : 2),
-            alignment: .leading, spacing: 12
-        ) {
-            ForEach(pinnedCards) { pinnedCard($0) }
-        }
-        .captureFrame("library-pinned-grid")
-        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
-        .selectionDisabled()
-    }
-
-    private func pinnedCard(_ note: LibraryNote) -> some View {
-        let selection = Selection(collection: .gists, noteID: note.id)
-        let isSelected = librarySelection.wrappedValue == selection
-        let openComments: (@MainActor (String) -> Void)? = actions.openComments.map { action in
-            { @MainActor id in
-                selectedCollection = .gists
-                action(id)
-            }
-        }
-        let delete: (@MainActor () -> Void)? = actions.deletionAction(for: note).map { action in
-            { @MainActor in
-                deletionSelection = selection
-                action()
-            }
-        }
-        return Button {
-            select(selection)
-        } label: {
-            LibraryPinnedCard(
-                note: note, tags: model.tags(for: note),
-                isSelected: isSelected, isSidebar: isSidebar)
-        }
-        .buttonStyle(.plain)
-        .contentShape(.interaction, .rect(cornerRadius: 16))
-        .contentShape(.contextMenuPreview, .rect(cornerRadius: 16))
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("library-note-\(note.id)")
-        .accessibilityValue(Text(verbatim: note.accessibilityDetail))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
-        .accessibilityActions { rowActions(note, openComments: openComments, delete: delete) }
-        .modifier(LibraryRowDeletionConfirmation(
-            rowID: note.id, target: deletionConfirmation(for: selection)))
-    }
-
     private func visibleSelection(for id: String) -> Selection? {
         let candidates = [selectedCollection] + LibraryCollection.allCases.filter {
             $0 != selectedCollection
@@ -498,7 +451,8 @@ public struct LibraryView: View {
 
     private func isVisible(_ id: String, in collection: LibraryCollection) -> Bool {
         if collection == .gists {
-            return pinnedCards.contains { $0.id == id } || mainNotes.contains { $0.id == id }
+            return (pinnedExpansion.wrappedValue && pinnedNotes.contains { $0.id == id })
+                || dateSections.contains { section in section.notes.contains { $0.id == id } }
         }
         return displayedCollections.contains(collection) && expansion(for: collection).wrappedValue
             && model.matchingNotes(in: collection).contains { $0.id == id }
@@ -534,19 +488,31 @@ public struct LibraryView: View {
 
     private func resetSearchDisclosures() {
         collapsedSearchCollections.removeAll()
+        collapsedSearchPinned = false
     }
 
-    private func collectionDisclosure(_ collection: LibraryCollection) -> some View {
-        DisclosureGroup(isExpanded: expansion(for: collection)) {
+    private func collectionSection(_ collection: LibraryCollection) -> some View {
+        Section(isExpanded: expansion(for: collection)) {
             ForEach(model.matchingNotes(in: collection)) { noteRow($0, collection: collection) }
-        } label: {
-            // A DisclosureGroup identifier would override its child row identifiers.
+        } header: {
             collectionLabel(collection)
                 .accessibilityIdentifier("library-collection-\(collection.rawValue)")
         }
-        .listRowBackground(isSidebar ? nil : Color.clear)
-        .listRowSeparator(.hidden)
-        .listRowInsets(.vertical, isSidebar || dynamicTypeSize.isAccessibilitySize ? nil : 0)
+    }
+
+    @ViewBuilder
+    private func dateSection(_ section: LibraryDateSection) -> some View {
+        if section.group == .undated {
+            Section {
+                ForEach(section.notes) { noteRow($0) }
+            }
+        } else {
+            Section {
+                ForEach(section.notes) { noteRow($0) }
+            } header: {
+                Text(verbatim: section.group.title(locale: locale, calendar: calendar))
+            }
+        }
     }
 
     private func collectionLabel(_ collection: LibraryCollection) -> some View {
@@ -780,8 +746,7 @@ public struct LibraryView: View {
     }
 
     private func noteRow(
-        _ note: LibraryNote, collection: LibraryCollection = .gists,
-        hidesTopSeparator: Bool = false
+        _ note: LibraryNote, collection: LibraryCollection = .gists
     ) -> some View {
         let selection = Selection(collection: collection, noteID: note.id)
         let openComments: (@MainActor (String) -> Void)? = actions.openComments.map { action in
@@ -807,10 +772,6 @@ public struct LibraryView: View {
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
         .listRowInsets(EdgeInsets(
             top: 0, leading: 12, bottom: 0, trailing: 12))
-        .listRowSeparator(hidesTopSeparator ? .hidden : .visible, edges: .top)
-        .listRowSeparator(.visible, edges: .bottom)
-        .listRowSeparatorTint(Color(uiColor: .separator))
-        .listRowBackground(isSidebar ? nil : Color.clear)
         .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
         .modifier(LibraryCommentsAccessibilityAction(note: note, action: openComments))
         .modifier(LibraryRowDeletionConfirmation(
@@ -1001,8 +962,6 @@ public struct LibraryView: View {
                         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: model.selectedTagIDs.contains(tag.id))
                     }
-                } footer: {
-                    Text("All selected tags must match. Tags apply to the whole gist.", bundle: .module)
                 }
                 if !model.selectedTagIDs.isEmpty {
                     Button(String(localized: "Clear tag filters", bundle: .module)) {
@@ -1012,6 +971,7 @@ public struct LibraryView: View {
                 }
             }
             .navigationTitle(Text("Filter by tags", bundle: .module))
+            .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $tagQuery, prompt: Text("Search tags", bundle: .module))
             .overlay {
                 if matchingTags.isEmpty {
@@ -1019,12 +979,11 @@ public struct LibraryView: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Done", bundle: .module)) { showingTags = false }
-                        .tint(.primary)
-                        .frame(minHeight: 44)
-                        .accessibilityIdentifier("library-tag-filter-done")
-                        .captureFrame("library-tag-filter-done")
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { showingTags = false }
+                        .accessibilityLabel(Text("Close", bundle: .module))
+                        .accessibilityIdentifier("library-tag-filter-close")
+                        .captureFrame("library-tag-filter-close")
                 }
             }
         }

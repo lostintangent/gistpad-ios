@@ -4,7 +4,6 @@ import SwiftUI
 struct LibraryNoteRow: View {
     let note: LibraryNote
     let tags: [LibraryTag]
-    var showsPin = true
     var showsStar = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.locale) private var locale
@@ -71,12 +70,6 @@ struct LibraryNoteRow: View {
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 .accessibilityLabel(Text(verbatim: spokenTitle))
                 .captureFrame("note-title-\(note.id)")
-            if note.isPinned && showsPin {
-                Image(systemName: "pin.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-            }
             if note.isStarred && showsStar {
                 Image(systemName: "star.fill")
                     .font(.footnote)
@@ -114,7 +107,6 @@ struct LibraryNoteRow: View {
             }
         }
         .font(.footnote)
-        .foregroundStyle(Color(uiColor: .label))
     }
 
     @ViewBuilder
@@ -135,6 +127,7 @@ struct LibraryNoteRow: View {
                         VStack(alignment: .leading, spacing: titleSpacing) {
                             if let updated {
                                 Text(verbatim: updated)
+                                    .foregroundStyle(.secondary)
                                     .captureFrame("note-date-\(note.id)")
                             }
                             if let excerpt = note.excerpt, !excerpt.isEmpty {
@@ -146,6 +139,7 @@ struct LibraryNoteRow: View {
                             if let updated {
                                 Text(verbatim: updated)
                                     .fixedSize(horizontal: true, vertical: false)
+                                    .foregroundStyle(.secondary)
                                     .captureFrame("note-date-\(note.id)")
                             }
                             if let excerpt = note.excerpt, !excerpt.isEmpty {

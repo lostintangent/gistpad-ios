@@ -90,7 +90,7 @@ struct TagSwatch: View {
         return nil
     }
 
-    private static func rgb(hex: String?) -> UInt32? {
+    static func rgb(hex: String?) -> UInt32? {
         guard let hex else { return nil }
         let value = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
         guard value.count == 6 else { return nil }
