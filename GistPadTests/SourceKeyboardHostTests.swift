@@ -144,12 +144,15 @@ struct SourceKeyboardHostTests {
         let range = try #require(manager.textContentManager?.documentRange)
         manager.ensureLayout(for: range)
         fixture.editor.layoutIfNeeded()
-        let insets = fixture.editor.adjustedContentInset
-        let maximum = fixture.editor.contentSize.height - fixture.editor.bounds.height + insets.bottom
+        try await fixture.settle("the fully laid-out document before end scrolling")
+        let maximum = fixture.editor.contentSize.height - fixture.editor.bounds.height
+            + fixture.editor.adjustedContentInset.bottom
         try #require(maximum > fixture.editor.bounds.height)
         fixture.editor.setContentOffset(CGPoint(x: 0, y: maximum), animated: false)
         try await fixture.settle("native end scrolling")
-        #expect(abs(fixture.editor.contentOffset.y - maximum) <= 1)
+        let settledMaximum = fixture.editor.contentSize.height - fixture.editor.bounds.height
+            + fixture.editor.adjustedContentInset.bottom
+        #expect(abs(fixture.editor.contentOffset.y - settledMaximum) <= 1)
         #expect(fixture.editor.selectedRange == NSRange(location: 0, length: 0))
         #expect(fixture.session.text.utf8.elementsEqual(Self.source.utf8))
         #expect(fixture.session.generation == 0)

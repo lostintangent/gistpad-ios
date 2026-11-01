@@ -240,14 +240,17 @@ private final class ScrollEdgeProbe: UIView {
                     return
                 }
             }
-            guard source.isFirstResponder, keyboardHeight >= 150,
-                  source.inputAccessoryView?.window != nil else { return }
-            if wantsFind {
-                if !requestedFind {
+            if wantsFind, requestedFind {
+                guard source.findInteraction?.isFindNavigatorVisible == true, keyboardHeight >= 150
+                else { return }
+            } else {
+                guard source.isFirstResponder, keyboardHeight >= 150,
+                      source.inputAccessoryView?.window != nil else { return }
+                if wantsFind {
                     requestedFind = true
                     presentFind?()
+                    return
                 }
-                guard source.findInteraction?.isFindNavigatorVisible == true else { return }
             }
         }
         if mode == .source, let source, targetY != nil {
@@ -360,7 +363,7 @@ private final class ScrollEdgeProbe: UIView {
               sample.frame.minY < navigationFrame.maxY,
               wantsKeyboard || sample.frame.maxY >= window.bounds.maxY - 1,
               headingWindowY < navigationFrame.maxY,
-              wantsKeyboard == sourceIsFocused else {
+              wantsKeyboard == (sourceIsFocused || wantsFind) else {
             fail("The capture requires a 466-point viewport, real bar underlap and the requested keyboard state.")
             return
         }
@@ -380,7 +383,7 @@ private final class ScrollEdgeProbe: UIView {
                 "navigationBar": NSCoder.string(for: navigationFrame),
                 "navigationBarMaxY": navigationFrame.maxY, "headingWindowY": headingWindowY,
                 "stableFrames": stableFrames, "stableDuration": stableDuration,
-                "keyboardVisible": sourceIsFocused && keyboardHeight >= 150,
+                "keyboardVisible": (sourceIsFocused || wantsFind) && keyboardHeight >= 150,
                 "keyboardHeight": keyboardHeight,
                 "accessoryFrame": accessoryFrame,
             ], options: [.sortedKeys])
