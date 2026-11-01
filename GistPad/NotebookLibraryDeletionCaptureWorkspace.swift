@@ -284,7 +284,7 @@ final class LibraryPublicationHold: @unchecked Sendable {
   /// publication before it performs a destructive action, so the request is the first point it can be released.
   func releaseForDeletion(_ action: NotebookAction) {
     switch action {
-    case .delete, .discardLocalCopy, .discardUncertainCreation:
+    case .delete, .deleteFile, .discardLocalCopy, .discardUncertainCreation:
       guard isParked else { return }
       release()
     default: break

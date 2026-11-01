@@ -352,6 +352,48 @@ public actor DraftStore {
         return DeletedGistDrafts(removedDraftIDs: removed)
     }
 
+    public func removeDraftsForDeletedFile(
+        gistID: String, filename: String, updated gist: Gist, accountID: UUID
+    ) throws -> DeletedGistDrafts {
+        let candidates = try modelContext.fetch(FetchDescriptor<StoredDraft>(
+            predicate: #Predicate {
+                $0.accountID == accountID && $0.gistID == gistID && $0.filename == filename
+            }
+        ))
+        let removed = Set(candidates.map(\.id))
+        let recoveries = try modelContext.fetch(FetchDescriptor<StoredRecovery>(
+            predicate: #Predicate { $0.accountID == accountID }
+        )).filter { removed.contains($0.draftID) }
+        let images = try modelContext.fetch(FetchDescriptor<StoredImageUpload>(
+            predicate: #Predicate { $0.accountID == accountID }
+        )).filter { removed.contains($0.draftID) }
+        let receipts = try modelContext.fetch(FetchDescriptor<StoredCommandReceipt>()).filter {
+            let command = try JSONDecoder().decode(SharedDraftCommand.self, from: $0.payload)
+            return command.accountID == accountID && removed.contains(command.draftID)
+        }
+        let library = try modelContext.fetch(FetchDescriptor<StoredLibrary>(
+            predicate: #Predicate { $0.accountID == accountID }
+        )).first
+        let libraryPayload: Data?
+        if let library {
+            var cached = try JSONDecoder().decode(CachedLibrarySnapshot.self, from: library.payload)
+            cached.owned = cached.owned.map { $0.id == gistID ? gist : $0 }
+            cached.starred = cached.starred.map { $0.id == gistID ? gist : $0 }
+            if cached.details[gistID] != nil { cached.details[gistID] = gist }
+            cached.fileContent[gistID + "/" + filename] = nil
+            libraryPayload = try JSONEncoder().encode(cached)
+        } else {
+            libraryPayload = nil
+        }
+        for recovery in recoveries { modelContext.delete(recovery) }
+        for image in images { modelContext.delete(image) }
+        for receipt in receipts { modelContext.delete(receipt) }
+        for draft in candidates { modelContext.delete(draft) }
+        if let libraryPayload { library?.payload = libraryPayload }
+        try commit()
+        return DeletedGistDrafts(removedDraftIDs: removed)
+    }
+
     public func recoveries(id: UUID, accountID: UUID) throws -> [RecoverySnapshot] {
         _ = try find(id, accountID: accountID)
         return try modelContext.fetch(FetchDescriptor<StoredRecovery>(
@@ -752,6 +794,15 @@ public actor DraftStore {
         draft.autosavePaused = false
         try commit()
         return try snapshot(draft)
+    }
+
+    public func hasUnsyncedSiblings(
+        gistID: String, excludingFilename filename: String, accountID: UUID
+    ) throws -> Bool {
+        try drafts(accountID: accountID).contains {
+            $0.gistID == gistID && $0.filename != filename
+                && (!sourceEqual($0.text, $0.baseContent) || $0.attemptedGeneration != nil)
+        }
     }
 
     public func hasUnsyncedWork(accountID: UUID) throws -> Bool {
