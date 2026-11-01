@@ -72,9 +72,7 @@ The Library list is one native `List`, in this order: **Pinned**, date groups, t
 
 Build every control from semantic, declarative SDK and SwiftUI behavior: system roles (`.close`, `.confirm`, `.cancel`), standard placements, native styles and SDK state. Do not write custom logic or custom styling (tints, labels, frames, glass or hand-drawn chrome) to replace what the system provides unless the user asks for it. Use `.axisBehavior` or another placement hint only when the automatic placement is wrong, and name any remaining custom code, with its reason, in the handoff.
 
-Compact Home's upper native group is **New, Today, Settings**, in that order. Open places **Today directly below Compose in the detail rail**, retaining the document's other eligible actions. Tags is the only lower compact rail button, beside an always-visible real `UISearchBar`. There is no compact Search button. The regular sidebar keeps native `.searchable`, overflow and one supported trailing sidebar toggle, with no blank leading placeholder.
-
-Search placement follows geometry: compare usable Library width, excluding safe areas, with window content width. A narrower Library reserves the native side rail and aligns the visible Search glass bottom with Tags at every text size. Otherwise the field stacks above the bottom toolbar. Do not use device checks or fixed rail coordinates.
+Compact Home's upper native group is **New, Today, Settings**, in that order. Open places **Today directly below Compose in the detail rail**, retaining the document's other eligible actions. In the compact bottom toolbar, **Tags** sits beside a system **Search** magnifier, as in Notes. Search is native `.searchable` with `.searchToolbarBehavior(.minimize)`: it shows only the magnifier until tapped, then expands in place to the full content width with the system close X. Do not write a custom field, a bottom `safeAreaBar`, width or geometry math, or fixed rail coordinates. While the field is open, Tags hides so the query gets the full width; the GitHub attention action is never hidden by search. The regular sidebar keeps native `.searchable`, overflow and one supported trailing sidebar toggle, with no blank leading placeholder.
 
 Preserve full-size Dynamic Type, native placeholder tail truncation, typed-text scrolling, the in-field Clear button and internal trailing clearance. Never shrink the placeholder or let it cross the glass. Compact Search floats above the keyboard without a separate Cancel button. Open retains the system-owned dismissal X supplied by native `.searchable`; this is the accepted exception, not an app-owned Cancel. Hide it only through supported native API, not private view-tree surgery. Clear empties the query without dismissing the focused field. Keyboard Search or scrolling results dismisses the keyboard while retaining the query and results. Losing focus with an empty query ends text search without clearing independently selected tags. Native insertion/selection stays blue. Routine checks never replace the search input. [Search fields](https://developer.apple.com/design/human-interface-guidelines/search-fields).
 
@@ -156,7 +154,7 @@ Settings is a small native Form for account, writing behavior, saved accent and 
 
 ## Saving and recovery
 
-Local durability and GitHub publication are different states. Keep edits on device. With autosave on, publish after five quiet seconds and when leaving a note. Always attempt eligible publication when leaving the app, within the existing background-task lease and safety checks. No additional sync machinery.
+Local durability and GitHub publication are different states. Keep edits on device. With autosave on, publish after five quiet seconds and when leaving a note. Always attempt eligible publication when leaving the app, within the existing background-task lease and safety checks. No additional sync machinery. A note with no unsent edits, meaning its text equals the last version fetched from GitHub, silently shows GitHub's latest version on open, on return from background and before publishing. That is never a conflict.
 
 Healthy editing has no footer, reserved strip, success pill, recurring haptic or narrated save pipeline. Hide manual Save when effective autosave is on; retain it when off, after publication failure and while conflict review's durable autosave pause requires deliberate publication. Known offline pending changes get one explainable `icloud.slash` icon, not a permanent warning when nothing is pending.
 
@@ -172,7 +170,7 @@ If the writing keyboard covers the nonblocking remote-status slot, remove it fro
 | --- | --- |
 | Local write failed | **Changes aren't saved. Keep this note open.** Retry, no safe-offline claim |
 | Publication/creation uncertain | Check Status / Check GitHub before retrying. Never blindly duplicate a gist or write |
-| Changed remotely | Explicit Review changes. Preserve local text and pause publication |
+| Changed remotely while this note has unsent edits | Explicit Review changes. Preserve local text and pause publication |
 | Truncated, unavailable or blocked source | Explain the actual reason and recovery. Never offer unsafe replacement |
 | First read failed without cache | Selected-identity page recovery, not a tiny status icon over emptiness |
 
