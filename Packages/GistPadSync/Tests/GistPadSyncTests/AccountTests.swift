@@ -1,5 +1,6 @@
 import Auth
 import Foundation
+import Security
 import Synchronization
 import Testing
 @testable import GistPadSync
@@ -28,7 +29,7 @@ private func authSession(includeProvider: Bool = true) throws -> Data {
     return try JSONSerialization.data(withJSONObject: body)
 }
 
-private final class ProviderRemovalFailureCredentials: AuthLocalStorage, Sendable {
+private final class ProviderRemovalFailureCredentials: AccountCredentialStorage, Sendable {
     let memory = MemoryCredentials()
     let failsProviderRemoval = Mutex(false)
 
@@ -40,6 +41,27 @@ private final class ProviderRemovalFailureCredentials: AuthLocalStorage, Sendabl
         }
         try memory.remove(key: key)
     }
+    func keys(withPrefix prefix: String) throws -> [String] { try memory.keys(withPrefix: prefix) }
+    func upgradeAccessibility() throws {}
+}
+
+// Signs in through the fake so the account, connection, and session are all persisted. Writes return `update`.
+private func signedInAccount(
+    credentials: any AccountCredentialStorage, update: FakeResponse = FakeResponse()
+) async throws -> AccountService {
+    let userData = try JSONSerialization.data(withJSONObject: authUser())
+    let sessionData = try authSession()
+    let account = try AccountService(
+        publishableKey: "sb_publishable_fake", credentials: credentials,
+        session: FakeURLProtocol.session { request in
+            if request.httpMethod == "PUT" { return update }
+            if request.url?.path.hasSuffix("/user") == true { return FakeResponse(data: userData) }
+            return FakeResponse(data: sessionData)
+        },
+        automaticallyRefreshesToken: false
+    )
+    _ = try await account.signIn { _ in URL(string: "gistpad://auth-callback?code=fake")! }
+    return account
 }
 
 @Suite struct AccountTests {
@@ -236,10 +258,12 @@ private final class ProviderRemovalFailureCredentials: AuthLocalStorage, Sendabl
     }
 
     @Test func keychainReadFailuresAreNotReportedAsSignedOut() async throws {
-        struct LockedCredentials: AuthLocalStorage {
+        struct LockedCredentials: AccountCredentialStorage {
             func store(key: String, value: Data) throws { throw AccountError.keychain(-25308) }
             func retrieve(key: String) throws -> Data? { throw AccountError.keychain(-25308) }
             func remove(key: String) throws { throw AccountError.keychain(-25308) }
+            func keys(withPrefix prefix: String) throws -> [String] { throw AccountError.keychain(-25308) }
+            func upgradeAccessibility() throws { throw AccountError.keychain(-25308) }
         }
         let account = try AccountService(
             publishableKey: "sb_publishable_fake", credentials: LockedCredentials(),
@@ -311,5 +335,283 @@ private final class ProviderRemovalFailureCredentials: AuthLocalStorage, Sendabl
         #expect(updated.preferences.pinnedGists == ["web-pin", "native-pin"])
         #expect(updated.preferences.metadata["future"]?.objectValue?["web-edit"] == .integer(7))
         #expect(requests.withLock { $0 } == ["POST token", "GET user", "PUT user"])
+    }
+
+    @Test func gitHubAccessSurvivesSupabaseSessionRevocation() async throws {
+        let credentials = MemoryCredentials()
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            session: FakeURLProtocol.session { _ in FakeResponse(data: try authSession()) },
+            automaticallyRefreshesToken: false
+        )
+        _ = try await account.signIn { _ in URL(string: "gistpad://auth-callback?code=fake")! }
+        // The SDK drops its session when Supabase revokes it.
+        try credentials.remove(key: "gistpad-supabase-session")
+        #expect(try await account.cachedAccount() == nil)
+        #expect(try await account.connectedAccountID() == testAccountID)
+        #expect(try await account.githubToken(accountID: testAccountID) == "fake-github")
+        let reopened = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            automaticallyRefreshesToken: false
+        )
+        #expect(try await reopened.githubToken(accountID: testAccountID) == "fake-github")
+        await #expect(throws: AccountError.accountChanged) {
+            try await account.githubToken(accountID: UUID())
+        }
+    }
+
+    @Test func existingInstallsRecordTheGitHubConnectionWhenTheSessionIsRestored() async throws {
+        let credentials = MemoryCredentials()
+        let signedIn = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            session: FakeURLProtocol.session { _ in FakeResponse(data: try authSession()) },
+            automaticallyRefreshesToken: false
+        )
+        _ = try await signedIn.signIn { _ in URL(string: "gistpad://auth-callback?code=fake")! }
+        // Builds before the connection record stored only the token and the Supabase session.
+        var session = try JSONDecoder().decode(
+            Session.self, from: try #require(try credentials.retrieve(key: "gistpad-supabase-session"))
+        )
+        session.providerToken = nil
+        try credentials.store(key: "gistpad-supabase-session", value: JSONEncoder().encode(session))
+        try credentials.remove(key: "github-connection")
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            session: FakeURLProtocol.session { _ in
+                Issue.record("Restoring a stored session must not use the network")
+                return FakeResponse(status: 500)
+            }, automaticallyRefreshesToken: false
+        )
+        #expect(try await account.cachedAccount()?.id == testAccountID)
+        #expect(try credentials.retrieve(key: "github-connection") == Data(testAccountID.uuidString.utf8))
+        try credentials.remove(key: "gistpad-supabase-session")
+        #expect(try await account.githubToken(accountID: testAccountID) == "fake-github")
+    }
+
+    @Test func missingGitHubTokenAsksForReconnectWhileSupabaseIsSignedIn() async throws {
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: MemoryCredentials(),
+            session: FakeURLProtocol.session { _ in FakeResponse(data: try authSession(includeProvider: false)) },
+            automaticallyRefreshesToken: false
+        )
+        _ = try await account.signIn { _ in URL(string: "gistpad://auth-callback?code=fake")! }
+        await #expect(throws: AccountError.reconnectGitHub) {
+            try await account.githubToken(accountID: testAccountID)
+        }
+    }
+
+    @Test func signOutAfterSessionRevocationStillDisconnectsGitHubWithoutNetwork() async throws {
+        let credentials = MemoryCredentials()
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            session: FakeURLProtocol.session { request in
+                if request.url?.path.hasSuffix("/logout") == true {
+                    Issue.record("Sign-out with no Supabase session must not call Supabase")
+                    return FakeResponse(status: 500)
+                }
+                return FakeResponse(data: try authSession())
+            },
+            automaticallyRefreshesToken: false
+        )
+        _ = try await account.signIn { _ in URL(string: "gistpad://auth-callback?code=fake")! }
+        try credentials.remove(key: "gistpad-supabase-session")
+        try await account.signOut(accountID: testAccountID)
+        #expect(try await account.connectedAccountID() == nil)
+        #expect(try credentials.retrieve(key: "github-provider-\(testAccountID.uuidString)") == nil)
+        await #expect(throws: AccountError.signedOut) {
+            try await account.githubToken(accountID: testAccountID)
+        }
+    }
+
+    @Test func legacyInstallWithOnlyATokenAdoptsItsGitHubConnection() async throws {
+        let credentials = MemoryCredentials()
+        try credentials.store(
+            key: "github-provider-\(testAccountID.uuidString)", value: Data("fake-github".utf8)
+        )
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            automaticallyRefreshesToken: false
+        )
+        #expect(try await account.githubToken(accountID: testAccountID) == "fake-github")
+        #expect(try credentials.retrieve(key: "github-connection") == Data(testAccountID.uuidString.utf8))
+    }
+
+    @Test func ambiguousLegacyTokensAreNotAdopted() async throws {
+        let credentials = MemoryCredentials()
+        try credentials.store(key: "github-provider-\(testAccountID.uuidString)", value: Data("a".utf8))
+        try credentials.store(key: "github-provider-\(UUID().uuidString)", value: Data("b".utf8))
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            automaticallyRefreshesToken: false
+        )
+        #expect(try await account.connectedAccountID() == nil)
+        #expect(try credentials.retrieve(key: "github-connection") == nil)
+    }
+
+    @Test func keychainItemsUpgradeToAfterFirstUnlockWithoutLosingValues() throws {
+        let service = "dev.gistpad.GistPad.tests.\(UUID().uuidString)"
+        let store = CredentialStore(service: service)
+        let scope: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service
+        ]
+        defer { SecItemDelete(scope as CFDictionary) }
+        let item = scope.merging([
+            kSecAttrAccount as String: "legacy",
+            kSecValueData as String: Data("token".utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]) { _, new in new }
+        #expect(SecItemAdd(item as CFDictionary, nil) == errSecSuccess)
+
+        try store.upgradeAccessibility()
+
+        #expect(try store.retrieve(key: "legacy") == Data("token".utf8))
+        #expect(try store.keys(withPrefix: "") == ["legacy"])
+        var result: CFTypeRef?
+        let lookup = scope.merging([
+            kSecAttrAccount as String: "legacy",
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]) { _, new in new }
+        #expect(SecItemCopyMatching(lookup as CFDictionary, &result) == errSecSuccess)
+        // macOS's legacy file keychain does not report the accessibility class, so the class is
+        // asserted only where the data protection keychain (iOS) reports it.
+        #if os(iOS)
+        let attributes = result as? [String: Any]
+        #expect(
+            attributes?[kSecAttrAccessible as String] as? String
+                == kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String
+        )
+        #endif
+    }
+
+    @Test func connectedAccountLaunchesFromTheSnapshotWithoutSupabaseOrNetwork() async throws {
+        let credentials = MemoryCredentials()
+        _ = try await signedInAccount(credentials: credentials)
+        try credentials.remove(key: "gistpad-supabase-session")
+        let requests = Mutex(0)
+        let relaunched = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            session: FakeURLProtocol.session { _ in
+                requests.withLock { $0 += 1 }
+                return FakeResponse(status: 500)
+            },
+            automaticallyRefreshesToken: false
+        )
+        let account = try #require(try await relaunched.connectedAccount())
+        #expect(account.id == testAccountID)
+        #expect(account.login == "test-user")
+        #expect(requests.withLock { $0 } == 0)
+    }
+
+    @Test func upgradedInstallLearnsTheAccountOnceFromGitHubThenReusesTheSnapshot() async throws {
+        let credentials = MemoryCredentials()
+        try credentials.store(key: "github-connection", value: Data(testAccountID.uuidString.utf8))
+        try credentials.store(key: "github-provider-\(testAccountID.uuidString)", value: Data("fake-github".utf8))
+        let requests = Mutex<[(url: URL?, authorization: String?)]>([])
+        let github = FakeURLProtocol.session { request in
+            requests.withLock { $0.append((request.url, request.value(forHTTPHeaderField: "Authorization"))) }
+            return FakeResponse(data: Data(
+                #"{"id":42,"login":"test-user","avatar_url":"https://avatars.example/test.png"}"#.utf8
+            ))
+        }
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials, session: github,
+            automaticallyRefreshesToken: false
+        )
+        let learned = try await account.connectedAccount()
+        #expect(learned?.id == testAccountID)
+        #expect(learned?.login == "test-user")
+        #expect(learned?.githubUserID == 42)
+        #expect(learned?.avatarURL == URL(string: "https://avatars.example/test.png"))
+        let sent = requests.withLock { $0 }
+        #expect(sent.count == 1)
+        #expect(sent.first?.url == URL(string: "https://api.github.com/user"))
+        #expect(sent.first?.authorization?.contains("fake-github") == true)
+
+        let relaunched = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials, session: github,
+            automaticallyRefreshesToken: false
+        )
+        #expect(try await relaunched.connectedAccount() == learned)
+        #expect(requests.withLock { $0.count } == 1)
+    }
+
+    @Test func signOutAfterSessionLossClearsTheAccountSnapshot() async throws {
+        let credentials = MemoryCredentials()
+        _ = try await signedInAccount(credentials: credentials)
+        try credentials.remove(key: "gistpad-supabase-session")
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            session: FakeURLProtocol.session { _ in FakeResponse(status: 500) },
+            automaticallyRefreshesToken: false
+        )
+        try await account.signOut(accountID: testAccountID)
+        #expect(try credentials.retrieve(key: "github-account") == nil)
+        #expect(try await account.connectedAccount() == nil)
+    }
+
+    @Test func failedGitHubDisconnectKeepsTheConnectionAndSnapshot() async throws {
+        let credentials = ProviderRemovalFailureCredentials()
+        _ = try await signedInAccount(credentials: credentials)
+        try credentials.memory.remove(key: "gistpad-supabase-session")
+        credentials.failsProviderRemoval.withLock { $0 = true }
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            session: FakeURLProtocol.session { _ in FakeResponse(status: 500) },
+            automaticallyRefreshesToken: false
+        )
+        await #expect(throws: AccountError.keychain(-25308)) {
+            try await account.signOut(accountID: testAccountID)
+        }
+        #expect(try await account.connectedAccountID() == testAccountID)
+        #expect(try await account.connectedAccount()?.login == "test-user")
+    }
+
+    @Test func failedPreferenceWriteThrowsAndKeepsTheStoredSnapshot() async throws {
+        let credentials = MemoryCredentials()
+        let failure = FakeResponse(status: 500, data: Data(#"{"message":"unavailable"}"#.utf8))
+        let account = try await signedInAccount(credentials: credentials, update: failure)
+        let stored = try #require(try credentials.retrieve(key: "github-account"))
+        await #expect(throws: (any Error).self) {
+            try await account.apply(.setAccentColor("#ff0000"), accountID: testAccountID)
+        }
+        #expect(try credentials.retrieve(key: "github-account") == stored)
+    }
+
+    @Test func successfulPreferenceWriteIsReflectedInTheLaunchSnapshot() async throws {
+        let credentials = MemoryCredentials()
+        let updated = try JSONSerialization.data(withJSONObject: authUser(
+            metadata: ["user_name": "test-user", "sub": "42", "accentColor": "#ff0000"]
+        ))
+        let account = try await signedInAccount(credentials: credentials, update: FakeResponse(data: updated))
+        let written = try await account.apply(.setAccentColor("#ff0000"), accountID: testAccountID)
+        #expect(written.preferences.metadata["accentColor"]?.stringValue == "#ff0000")
+        try credentials.remove(key: "gistpad-supabase-session")
+        let relaunched = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            session: FakeURLProtocol.session { _ in FakeResponse(status: 500) },
+            automaticallyRefreshesToken: false
+        )
+        #expect(try await relaunched.connectedAccount() == written)
+    }
+
+    @Test func preferenceWriteWithoutASupabaseSessionFailsBeforeAnyNetworkCall() async throws {
+        let credentials = MemoryCredentials()
+        _ = try await signedInAccount(credentials: credentials)
+        try credentials.remove(key: "gistpad-supabase-session")
+        let requests = Mutex(0)
+        let account = try AccountService(
+            publishableKey: "sb_publishable_fake", credentials: credentials,
+            session: FakeURLProtocol.session { _ in
+                requests.withLock { $0 += 1 }
+                return FakeResponse(status: 500)
+            },
+            automaticallyRefreshesToken: false
+        )
+        await #expect(throws: AccountError.signedOut) {
+            try await account.apply(.setAccentColor("#ff0000"), accountID: testAccountID)
+        }
+        #expect(requests.withLock { $0 } == 0)
     }
 }

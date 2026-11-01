@@ -34,8 +34,26 @@ struct NotebookAccount: Equatable, Sendable, Identifiable {
   }
 }
 
+struct NotebookWriteFailure {
+  enum Operation {
+    case action(NotebookAction)
+    case note(draftID: UUID)
+  }
+
+  let id = UUID()
+  let operation: Operation
+  let accountID: UUID
+  let problem: NotebookRemoteReadProblem
+
+  var isNote: Bool {
+    if case .note = operation { return true }
+    return false
+  }
+}
+
 protocol NotebookProviding: Sendable {
   func cachedAccount() async throws -> NotebookAccount?
+  func connectedAccount() async throws -> NotebookAccount?
   func signIn() async throws -> NotebookAccount
   func refreshAccount() async throws -> NotebookAccount
   func gists(accountID: UUID) async throws -> [Gist]
@@ -55,6 +73,12 @@ protocol NotebookProviding: Sendable {
   func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool
   func today(accountID: UUID, target: DailyNoteTarget) async throws -> TodayNote
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult
+}
+
+extension NotebookProviding {
+  func connectedAccount() async throws -> NotebookAccount? {
+    try await cachedAccount()
+  }
 }
 
 actor LiveNotebookProvider: NotebookProviding {
@@ -80,6 +104,19 @@ actor LiveNotebookProvider: NotebookProviding {
 
   func cachedAccount() async throws -> NotebookAccount? {
     try await accounts.cachedAccount().map(NotebookAccount.init)
+  }
+
+  func connectedAccount() async throws -> NotebookAccount? {
+    guard let snapshot = try await accounts.connectedAccount() else { return nil }
+    let account = NotebookAccount(snapshot)
+    guard account.preferences.metadata.isEmpty else { return account }
+    // Pre-snapshot installs have no preferences until Supabase returns, so keep the library cache's.
+    let hasSession = try await accounts.hasSupabaseSession()
+    guard !hasSession, let cached = try await drafts.cachedLibrary(accountID: account.id)?.preferences
+    else { return account }
+    return NotebookAccount(
+      id: account.id, login: account.login, githubUserID: account.githubUserID,
+      avatarURL: account.avatarURL, preferences: cached)
   }
 
   func signIn() async throws -> NotebookAccount {
@@ -316,6 +353,9 @@ final class NotebookModel {
   var documentError: String?
   private(set) var remoteRefreshProblem: NotebookRemoteReadProblem?
   private(set) var isRefreshingRemote = false
+  private(set) var writeFailures: [NotebookWriteFailure] = []
+  var writeFailure: NotebookWriteFailure? { writeFailures.last }
+  private(set) var isRetryingWrite = false
 
   @ObservationIgnored private let provider: any NotebookProviding
   @ObservationIgnored private let selections: NotebookSelectionStore
@@ -337,7 +377,43 @@ final class NotebookModel {
     library.gitHubStatus = .idle
   }
 
+  var writeAttentionStatus: GitHubStatusState? {
+    guard let failure = writeFailure, account?.id == failure.accountID else { return nil }
+    if let reconnect = writeFailures.last(where: { $0.problem.recovery == .reconnect }) {
+      return reconnect.problem.status(
+        heading: String(localized: "Couldn't reconnect GitHub."), detail: nil,
+        isRecovering: isRetryingWrite)
+    }
+    if let blocked = blockedNoteFailure {
+      return blocked.problem.status(
+        heading: String(localized: "Couldn't save to GitHub."), detail: nil, isRecovering: false)
+    }
+    let retryable = writeFailures.filter { $0.problem.recovery == .retry }
+    return .problem(
+      GitHubStatusProblem(
+        heading: String(localized: "Couldn't save to GitHub."),
+        message: Self.unsentChangesMessage(retryable),
+        recoveryTitle: String(localized: "Retry"),
+        detail: Self.unsentChangesDetail(retryable),
+        isRecovering: isRetryingWrite, retryAfter: retryable.last?.problem.retryAfter))
+  }
+
+  // A blocked note can't succeed by retrying, so Show Note waits until no retryable change is left.
+  private var blockedNoteFailure: NotebookWriteFailure? {
+    guard writeFailures.allSatisfy({ $0.problem.recovery == .showNote }) else { return nil }
+    return writeFailures.last
+  }
+
+  var blockedNoteDraftID: UUID? {
+    guard let failure = blockedNoteFailure, case .note(let draftID) = failure.operation else {
+      return nil
+    }
+    return draftID
+  }
+
+  // A failed GitHub-backed write outranks read problems, because it means local changes didn't reach GitHub.
   var remoteRefreshStatus: GitHubStatusState {
+    if let status = writeAttentionStatus { return status }
     if let problem = remoteRefreshProblem, cachedLibrary != nil || !localDrafts.isEmpty {
       return problem.status(
         heading: String(localized: "Couldn't update your gists"),
@@ -588,7 +664,7 @@ final class NotebookModel {
     libraryRequest = request
     library.loadState = .loading
     do {
-      let restored = try await provider.cachedAccount()
+      let restored = try await provider.connectedAccount()
       guard request == libraryRequest else { return }
       guard let restored else {
         library.loadState = .signedOut
@@ -650,6 +726,7 @@ final class NotebookModel {
     documentRequest = UUID()
     account = pendingAccount
     remoteRefreshProblem = nil
+    writeFailures = []
     isRefreshingRemote = false
     library.gitHubStatus = .idle
     deletedGistIDs = selections.deletedGistIDs(accountID: pendingAccount.id)
@@ -732,6 +809,17 @@ final class NotebookModel {
     }
   }
 
+  // Supabase only supplies preferences, so GitHub reads keep going when its refresh fails. A missing GitHub token still needs reconnecting.
+  private func refreshedAccount() async throws -> NotebookAccount {
+    do {
+      return try await provider.refreshAccount()
+    } catch {
+      if error is CancellationError || (error as? AccountError) == .reconnectGitHub { throw error }
+      guard let connected = try await provider.connectedAccount() else { throw error }
+      return connected
+    }
+  }
+
   func refresh() async {
     guard pendingAccount == nil, !isSigningOut else { return }
     guard let account else {
@@ -760,7 +848,7 @@ final class NotebookModel {
             && self.pendingAccount == nil && !self.isSigningOut
         }
       ) {
-        let refreshed = try await self.provider.refreshAccount()
+        let refreshed = try await self.refreshedAccount()
         guard refreshed.id == account.id else { throw AccountError.accountChanged }
         async let owned = self.provider.gists(accountID: account.id)
         async let starred = self.provider.starredGists(accountID: account.id)
@@ -1217,6 +1305,7 @@ final class NotebookModel {
     }
     guard account?.id == accountID, pendingAccount == nil else { return }
     localDrafts = local.drafts.filter { $0.accountID == accountID && !removed.contains($0.id) }
+    pruneNoteFailures()
     cachedLibrary = local.library.map(libraryExcludingDeletedGists)
     projectLibrary()
     updateToday()
@@ -1424,6 +1513,162 @@ final class NotebookModel {
     }
   }
 
+  // Re-runs every unresolved write in order. Each stored action is absolute, so repeating one is safe.
+  func retryWrite() async throws {
+    let retryable = writeFailures.filter { $0.problem.recovery == .retry }
+    guard !retryable.isEmpty, !isRetryingWrite else { return }
+    isRetryingWrite = true
+    library.gitHubStatus = remoteRefreshStatus
+    defer {
+      isRetryingWrite = false
+      library.gitHubStatus = remoteRefreshStatus
+    }
+    var firstError: (any Error)?
+    for failure in retryable {
+      do {
+        try await replay(failure)
+      } catch {
+        // Attention-raising failures are already recorded by perform or publish.
+        guard Self.writeProblem(for: failure.operation, error) == nil else { continue }
+        if (error as? NotebookActionError) == .archiveChangedElsewhere {
+          writeFailures.removeAll { $0.id == failure.id }
+        }
+        firstError = firstError ?? error
+      }
+    }
+    if let firstError { throw firstError }
+  }
+
+  private func replay(_ failure: NotebookWriteFailure) async throws {
+    guard account?.id == failure.accountID else { throw AccountError.accountChanged }
+    switch failure.operation {
+    case .action(let action): _ = try await perform(action)
+    case .note(let draftID): _ = try await publish(draftID: draftID, accountID: failure.accountID)
+    }
+  }
+
+  func recoverWrite() async throws {
+    if writeFailures.contains(where: { $0.problem.recovery == .reconnect }) { await signIn() }
+    try await retryWrite()
+  }
+
+  private func recordWriteFailure(_ failure: NotebookWriteFailure) {
+    writeFailures.removeAll { Self.supersedes(failure.operation, $0.operation) }
+    writeFailures.append(failure)
+  }
+
+  private func recordNoteFailure(draftID: UUID, accountID: UUID, error: any Error) {
+    let operation = NotebookWriteFailure.Operation.note(draftID: draftID)
+    guard let problem = Self.writeProblem(for: operation, error) else { return }
+    recordWriteFailure(
+      NotebookWriteFailure(operation: operation, accountID: accountID, problem: problem))
+    library.gitHubStatus = remoteRefreshStatus
+  }
+
+  private func clearWriteFailures(superseding operation: NotebookWriteFailure.Operation) {
+    let failureCount = writeFailures.count
+    writeFailures.removeAll { Self.supersedes(operation, $0.operation) }
+    if writeFailures.count != failureCount { library.gitHubStatus = remoteRefreshStatus }
+  }
+
+  // A deleted note has nothing left to save, so its failure no longer needs attention.
+  private func pruneNoteFailures() {
+    let draftIDs = Set(localDrafts.map(\.id))
+    let failureCount = writeFailures.count
+    writeFailures.removeAll {
+      if case .note(let draftID) = $0.operation { return !draftIDs.contains(draftID) }
+      return false
+    }
+    if writeFailures.count != failureCount { library.gitHubStatus = remoteRefreshStatus }
+  }
+
+  static func writeProblem(
+    for operation: NotebookWriteFailure.Operation, _ error: any Error
+  ) -> NotebookRemoteReadProblem? {
+    if let accountError = error as? AccountError, accountError == .accountChanged { return nil }
+    switch operation {
+    case .action(let action):
+      switch action {
+      case .preference, .star, .archive, .undoArchive: break
+      default: return nil
+      }
+      if let actionError = error as? NotebookActionError {
+        switch actionError {
+        case .publicationInProgress, .archiveChangedElsewhere: return nil
+        default: break
+        }
+      }
+    case .note:
+      switch error as? DraftError {
+      case .readOnly?:
+        return .init(
+          message: String(localized: "This note can't be published as it is."),
+          recovery: .showNote)
+      case .ambiguousCreation?:
+        return .init(
+          message: String(localized: "GitHub may already have received this note."),
+          recovery: .showNote)
+      default: break
+      }
+    }
+    return NotebookRemoteRead.problem(for: error)
+  }
+
+  // Writes to one target are absolute, so a newer write to the same target supersedes an older one.
+  static func writeTarget(_ operation: NotebookWriteFailure.Operation) -> String? {
+    switch operation {
+    case .action(let action): return writeTarget(action)
+    case .note(let draftID): return "note:\(draftID.uuidString)"
+    }
+  }
+
+  static func writeTarget(_ action: NotebookAction) -> String? {
+    switch action {
+    case .preference(let operation):
+      switch operation {
+      case .setBoolean(let preference, _): return "preference:\(preference.rawValue)"
+      case .setAccentColor: return "preference:accentColor"
+      case .setPinned(let gistID, _): return "pin:\(gistID)"
+      case .upsertTag(let id, _, _), .deleteTag(let id): return "tag:\(id)"
+      case .setTag(let gistID, let tagID, _): return "gist-tag:\(gistID):\(tagID)"
+      }
+    case .star(let gistID, _): return "star:\(gistID)"
+    case .archive(let gistID, _): return "archive:\(gistID)"
+    case .undoArchive(let undo): return "archive:\(undo.gistID)"
+    default: return nil
+    }
+  }
+
+  static func unsentChangesMessage(_ failures: [NotebookWriteFailure]) -> String {
+    guard failures.count == 1, let failure = failures.first else {
+      return String(localized: "\(failures.count) changes didn't reach GitHub.")
+    }
+    switch failure.operation {
+    case .note:
+      return String(localized: "This note didn't reach GitHub.")
+    case .action(.preference(.setPinned)):
+      return String(localized: "This pin didn't reach GitHub.")
+    case .action(.preference(.upsertTag)), .action(.preference(.deleteTag)),
+      .action(.preference(.setTag)):
+      return String(localized: "This tag didn't reach GitHub.")
+    case .action:
+      return String(localized: "This change didn't reach GitHub.")
+    }
+  }
+
+  // Only notes stay on this iPhone until they reach GitHub, so the reassurance applies only to them.
+  static func unsentChangesDetail(_ failures: [NotebookWriteFailure]) -> String? {
+    guard !failures.isEmpty, failures.allSatisfy(\.isNote) else { return nil }
+    return String(localized: "It's still on this iPhone.")
+  }
+
+  static func supersedes(
+    _ operation: NotebookWriteFailure.Operation, _ failed: NotebookWriteFailure.Operation
+  ) -> Bool {
+    guard let target = writeTarget(failed) else { return false }
+    return writeTarget(operation) == target
+  }
+
   func perform(_ action: NotebookAction) async throws -> NotebookActionResult {
     guard let account, pendingAccount == nil else { throw AccountError.accountChanged }
     guard !isSigningOut else { throw NotebookActionError.publicationInProgress }
@@ -1450,9 +1695,15 @@ final class NotebookModel {
           report(error, operation: "confirm-local-sign-out")
         }
       }
+      if let problem = Self.writeProblem(for: .action(action), error) {
+        recordWriteFailure(
+          NotebookWriteFailure(operation: .action(action), accountID: account.id, problem: problem))
+        library.gitHubStatus = remoteRefreshStatus
+      }
       throw error
     }
     guard self.account?.id == account.id else { throw AccountError.accountChanged }
+    clearWriteFailures(superseding: .action(action))
     switch result {
     case .signedOut:
       clearSignedOutPresentation(accountID: account.id)
@@ -1600,6 +1851,7 @@ final class NotebookModel {
     cachedLibrary = nil
     documentError = nil
     remoteRefreshProblem = nil
+    writeFailures = []
     isRefreshingRemote = false
     library.gitHubStatus = .idle
     isOpeningDocument = false
@@ -1712,9 +1964,20 @@ final class NotebookModel {
     }
     publishingDraftIDs.insert(draftID)
     defer { publishingDraftIDs.remove(draftID) }
-    let saved = try await provider.publish(
-      draftID: draftID, accountID: accountID, reason: reason,
-      expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
+    let saved: DraftSnapshot
+    do {
+      saved = try await provider.publish(
+        draftID: draftID, accountID: accountID, reason: reason,
+        expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
+    } catch {
+      if account?.id == accountID, pendingAccount == nil {
+        recordNoteFailure(draftID: draftID, accountID: accountID, error: error)
+      }
+      throw error
+    }
+    if saved.state == .savedToGitHub {
+      clearWriteFailures(superseding: .note(draftID: draftID))
+    }
     if account?.id == accountID {
       libraryRequest = UUID()
       isRefreshingRemote = false

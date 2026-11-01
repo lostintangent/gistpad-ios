@@ -1,6 +1,28 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%lld changes didn't reach GitHub." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld change didn't reach GitHub."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld changes didn't reach GitHub."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Comments" : {},
     "All files in this gist" : {},
     "Comments actions" : {},

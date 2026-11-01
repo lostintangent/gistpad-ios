@@ -77,7 +77,7 @@ public enum BooleanPreference: String, Sendable {
     case showFormattingToolbar
 }
 
-public enum PreferenceOperation: Sendable {
+public enum PreferenceOperation: Equatable, Sendable {
     case setBoolean(BooleanPreference, Bool)
     case setAccentColor(String)
     case setPinned(gistID: String, pinned: Bool)
