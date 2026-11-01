@@ -74,7 +74,7 @@ Use logical margins/direction for RTL and mixed script, isolating code only wher
 
 Library navigation uses the system large title **GistPad** with its count subtitle, collapsing on scroll, with no inline title, custom font or manual size. Library section headers, Pinned and the date groups, use the native list header style at every size: system font, no custom size, count or rule. Pinned uses the native collapse chevron. Headers wrap at AX rather than shrinking. Rows keep the ordinary row type and metadata rules. See the [Pinned and date groups contract](design-direction.md#pinned-and-date-groups).
 
-Library secondary disclosures retain their full titles and bare trailing numbers in full-opacity adaptive label ink, including at AX. Align the number with the first title baseline, wrap the title and let a decorative symbol yield before shrinking type. Use a 44-pt collapsed header pitch at Large without extra section gaps, growing for AX content. The 28-pt transition from the final ordinary separator to the first header's content includes normal row inset. Empty sections have no header or reserved space. See the [secondary collection contract](design-direction.md#secondary-collections).
+Library secondary disclosures retain their full titles and bare trailing numbers in full-opacity adaptive label ink, including at AX. Align the number with the first title baseline, wrap the title and let a decorative symbol yield before shrinking type. Headers take the system List section-header rhythm at every size, with no custom pitch, gap or transition. Empty sections have no header or reserved space. See the [secondary collection contract](design-direction.md#secondary-collections).
 
 ### Shared appearance bridge
 
