@@ -231,26 +231,26 @@ private final class ScrollEdgeProbe: UIView {
         }
         guard previewReady || mode == .source else { return }
         if wantsKeyboard, let source, source.window === window {
-            if !requestedFocus {
-                requestedFocus = true
-                let range = (source.text as NSString).range(of: "## \(heading)")
-                if range.location != NSNotFound { source.selectedRange = NSRange(location: range.location, length: 0) }
-                guard source.becomeFirstResponder() else {
-                    fail("The source editor could not receive keyboard focus.")
-                    return
-                }
-            }
-            if wantsFind, requestedFind {
-                guard source.findInteraction?.isFindNavigatorVisible == true, keyboardHeight >= 150
-                else { return }
-            } else {
-                guard source.isFirstResponder, keyboardHeight >= 150,
-                      source.inputAccessoryView?.window != nil else { return }
-                if wantsFind {
+            if wantsFind {
+                if !requestedFind {
                     requestedFind = true
                     presentFind?()
                     return
                 }
+                guard source.findInteraction?.isFindNavigatorVisible == true, keyboardHeight >= 150
+                else { return }
+            } else {
+                if !requestedFocus {
+                    requestedFocus = true
+                    let range = (source.text as NSString).range(of: "## \(heading)")
+                    if range.location != NSNotFound { source.selectedRange = NSRange(location: range.location, length: 0) }
+                    guard source.becomeFirstResponder() else {
+                        fail("The source editor could not receive keyboard focus.")
+                        return
+                    }
+                }
+                guard source.isFirstResponder, keyboardHeight >= 150,
+                      source.inputAccessoryView?.window != nil else { return }
             }
         }
         if mode == .source, let source, targetY != nil {

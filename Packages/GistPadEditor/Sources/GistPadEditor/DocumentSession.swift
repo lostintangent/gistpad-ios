@@ -307,7 +307,6 @@
         return
       }
       commentAnnotations.suspendForFind()
-      textView.becomeFirstResponder()
       interaction.presentFindNavigator(showingReplace: replacing)
     }
 
