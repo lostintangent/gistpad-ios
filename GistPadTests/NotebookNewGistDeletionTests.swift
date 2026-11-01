@@ -46,7 +46,7 @@ struct NotebookNewGistDeletionTests {
     let target = try #require(notebook.libraryDeletionTarget(for: row.id))
     #expect(target.localDraft == nil)
     #expect(target.id == gistID)
-    #expect(await provider.publicationReasons == [.autosave])
+    #expect(await provider.publicationReasons == [leaving ? PublishReason.leaving : .autosave])
     #expect(await provider.libraryReadCount == listReads)
     #expect(await provider.metadataReadCount == metadataReads)
     try controller.beginDestructiveAction()

@@ -14,9 +14,8 @@ final class LibraryDeletionUITests: XCTestCase {
       XCTAssertFalse(app.buttons["Pin"].exists)
       record(app, name: "local-copy-menu-\(dark ? "Dark" : "Light")")
       app.buttons["Delete"].tap()
-      let confirmation = app.buttons["Delete Local Copy"]
+      let confirmation = app.buttons["Delete"].firstMatch
       try await waitUntil("the local-only deletion confirmation") { confirmation.isHittable }
-      XCTAssertFalse(app.buttons["Delete from GitHub"].exists)
       record(app, name: "local-copy-confirmation-\(dark ? "Dark" : "Light")")
       let cancel = app.buttons["Cancel"]
       if cancel.exists { cancel.tap() }
@@ -56,9 +55,8 @@ final class LibraryDeletionUITests: XCTestCase {
     XCTAssertFalse(app.buttons["Archive"].exists)
     XCTAssertFalse(app.buttons["Pin"].exists)
     delete.tap()
-    let confirmation = app.buttons["Delete Local Copy"]
+    let confirmation = app.buttons["Delete"].firstMatch
     try await waitUntil("the local-only note confirmation") { confirmation.isHittable }
-    XCTAssertFalse(app.buttons["Delete from GitHub"].exists)
     record(app, name: "local-copy-note-confirmation")
   }
 
@@ -88,8 +86,8 @@ final class LibraryDeletionUITests: XCTestCase {
     try await Task.sleep(for: .milliseconds(450))
     record(app, name: "newly-published-swipe-delete")
     app.buttons["Delete"].tap()
-    try await waitUntil("the just-published note's GitHub confirmation") {
-      app.buttons["Delete from GitHub"].isHittable
+    try await waitUntil("the just-published note's deletion confirmation") {
+      app.buttons["Delete"].firstMatch.isHittable
     }
   }
 
@@ -131,9 +129,8 @@ final class LibraryDeletionUITests: XCTestCase {
     let delete = app.buttons["Delete"]
     try await waitUntil("Delete on the automatically published gist") { delete.isHittable }
     delete.tap()
-    let confirmation = app.buttons["Delete from GitHub"]
-    try await waitUntil("the new gist's remote deletion confirmation") { confirmation.isHittable }
-    XCTAssertFalse(app.buttons["Delete Local Copy"].exists)
+    let confirmation = app.buttons["Delete"].firstMatch
+    try await waitUntil("the new gist's deletion confirmation") { confirmation.isHittable }
     record(
       app,
       name: "new-\(leaving ? "leave-note" : "autosave")-\(contextMenu ? "context" : "swipe")-delete")
@@ -175,8 +172,8 @@ final class LibraryDeletionUITests: XCTestCase {
     try await waitUntil("the red trailing Delete action") { delete.isHittable }
     record(app, name: "library-delete-swipe-\(dark ? "Dark" : "Light")")
     delete.tap()
-    let confirmation = app.buttons["Delete from GitHub"]
-    try await waitUntil("the existing GitHub confirmation") { confirmation.isHittable }
+    let confirmation = app.buttons["Delete"].firstMatch
+    try await waitUntil("the existing deletion confirmation") { confirmation.isHittable }
     XCTAssertTrue(row.exists)
     let cancel = app.buttons["Cancel"]
     if cancel.exists {
@@ -210,9 +207,9 @@ final class LibraryDeletionUITests: XCTestCase {
     XCTAssertTrue(app.buttons["Archive"].exists)
     record(app, name: "library-delete-menu-\(dark ? "Dark" : "Light")")
     delete.tap()
-    let confirmation = app.buttons["Delete from GitHub"]
-    try await waitUntil("the existing GitHub deletion confirmation") { confirmation.isHittable }
-    XCTAssertTrue(app.staticTexts["Delete “A finished thought” from GitHub?"].exists)
+    let confirmation = app.buttons["Delete"].firstMatch
+    try await waitUntil("the existing deletion confirmation") { confirmation.isHittable }
+    XCTAssertTrue(app.staticTexts["Delete “A finished thought”?"].exists)
     XCTAssertTrue(row.exists)
     record(app, name: "library-delete-confirmation-\(dark ? "Dark" : "Light")")
     confirmation.tap()

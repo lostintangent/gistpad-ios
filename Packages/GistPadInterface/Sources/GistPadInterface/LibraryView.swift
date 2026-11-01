@@ -89,17 +89,17 @@ extension View {
 public struct LibraryDeletionConfirmation {
     public let rowID: String
     public let title: String
-    public let isLocalCopy: Bool
+    public let isUncertainCreation: Bool
     let confirm: () -> Void
     let dismiss: () -> Void
 
     public init(
-        rowID: String, title: String, isLocalCopy: Bool = false, confirm: @escaping () -> Void,
-        dismiss: @escaping () -> Void
+        rowID: String, title: String, isUncertainCreation: Bool = false,
+        confirm: @escaping () -> Void, dismiss: @escaping () -> Void
     ) {
         self.rowID = rowID
         self.title = title
-        self.isLocalCopy = isLocalCopy
+        self.isUncertainCreation = isUncertainCreation
         self.confirm = confirm
         self.dismiss = dismiss
     }
@@ -111,31 +111,23 @@ private struct LibraryRowDeletionConfirmation: ViewModifier {
 
     func body(content: Content) -> some View {
         content.confirmationDialog(
-            target?.isLocalCopy == true
-                ? String(localized: "Delete local copy of “\(target?.title ?? "")”?", bundle: .module)
-                : String(localized: "Delete “\(target?.title ?? "")” from GitHub?", bundle: .module),
+            String(localized: "Delete “\(target?.title ?? "")”?", bundle: .module),
             isPresented: Binding(
                 get: { target?.rowID == rowID },
                 set: { if !$0, target?.rowID == rowID { target?.dismiss() } }),
             titleVisibility: .visible
         ) {
-            Button(
-                target?.isLocalCopy == true
-                    ? String(localized: "Delete Local Copy", bundle: .module)
-                    : String(localized: "Delete from GitHub", bundle: .module),
-                role: .destructive
-            ) {
+            Button(String(localized: "Delete", bundle: .module), role: .destructive) {
                 target?.confirm()
             }
             Button(String(localized: "Cancel", bundle: .module), role: .cancel) {}
         } message: {
-            if target?.isLocalCopy == true {
+            Text(
+                "This removes the note from this iPhone and from GitHub if it was saved there, including unsynced changes. This can’t be undone.",
+                bundle: .module)
+            if target?.isUncertainCreation == true {
                 Text(
-                    "This removes this local copy, its pending photos and local history from this iPhone. It doesn't delete anything on GitHub. This cannot be undone.",
-                    bundle: .module)
-            } else {
-                Text(
-                    "This deletes every file from GitHub and this iPhone, including unsynced drafts and local history. This cannot be undone.",
+                    "GitHub may already have received this note. Check your GitHub Gists page and delete any copy there.",
                     bundle: .module)
             }
         }
@@ -184,7 +176,7 @@ public struct LibraryActions {
 
     @MainActor
     func deletionAction(for note: LibraryNote) -> (@MainActor () -> Void)? {
-        guard note.isOwned, note.canDeleteFromGitHub || note.isRecovery, let delete else { return nil }
+        guard note.isOwned, note.canDeleteFromGitHub || note.isLocalOnly, let delete else { return nil }
         return { delete(note.id) }
     }
 }

@@ -371,7 +371,9 @@ public actor DraftStore {
     ) throws -> Bool {
         let draft = try find(id, accountID: accountID)
         guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
-        guard draft.gistID != nil else { throw DraftError.ambiguousCreation }
+        guard draft.gistID != nil || draft.attemptedGeneration == nil else {
+            throw DraftError.ambiguousCreation
+        }
         if case .savingToGitHub = try decode(draft.stateData) { throw DraftError.publishInProgress }
         let images = try modelContext.fetch(FetchDescriptor<StoredImageUpload>(
             predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }))

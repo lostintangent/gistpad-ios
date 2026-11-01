@@ -103,9 +103,17 @@ struct NotebookDeletionTarget: Identifiable {
   let title: String
   var localDraft: DraftSnapshot? = nil
 
+  var isUncertainCreation: Bool {
+    localDraft.map { $0.gistID == nil && $0.attemptedGeneration != nil } ?? false
+  }
+
   var action: NotebookAction {
     if let localDraft {
-      .discardLocalCopy(draftID: localDraft.id, generation: localDraft.generation)
+      if isUncertainCreation {
+        .discardUncertainCreation(draftID: localDraft.id, generation: localDraft.generation)
+      } else {
+        .discardLocalCopy(draftID: localDraft.id, generation: localDraft.generation)
+      }
     } else {
       .delete(gistID: id)
     }

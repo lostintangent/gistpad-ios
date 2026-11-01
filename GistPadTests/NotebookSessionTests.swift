@@ -431,7 +431,7 @@ struct NotebookSessionTests {
     #expect(disabled.session.viewIdentity == disabledIdentity)
   }
 
-  @Test func leavingANotePublishesImmediatelyOnlyWithAutosaveEnabled() async throws {
+  @Test func leavingANotePublishesWithAndWithoutAutosave() async throws {
     let (enabled, provider) = try await makeController(autosave: true)
     edit(enabled, to: "Leaving this note")
     #expect(await enabled.waitForLocalSave())
@@ -440,16 +440,19 @@ struct NotebookSessionTests {
     await timer.value
     #expect(timer.isCancelled)
     #expect(await provider.publishCount == 1)
-    #expect(await provider.publicationReasons == [.autosave])
+    #expect(await provider.publicationReasons == [.leaving])
     #expect(try await provider.snapshot().baseContent == "Leaving this note")
+    #expect(enabled.saveState == .savedToGitHub)
 
     let (disabled, disabledProvider) = try await makeController(autosave: false)
-    edit(disabled, to: "Retain this local note")
+    edit(disabled, to: "Publish this note on leave")
     #expect(await disabled.waitForLocalSave())
     disabled.updateAutosave(isForeground: true)
     await disabled.finishLeavingNote()
-    #expect(await disabledProvider.publishCount == 0)
-    #expect(try await disabledProvider.snapshot().text == "Retain this local note")
+    #expect(await disabledProvider.publishCount == 1)
+    #expect(await disabledProvider.publicationReasons == [.leaving])
+    #expect(try await disabledProvider.snapshot().baseContent == "Publish this note on leave")
+    #expect(disabled.saveState == .savedToGitHub)
   }
 
   @Test func backgroundSkipsReadOnlyConflictCompositionWritingToolsAndRecovery() async throws {

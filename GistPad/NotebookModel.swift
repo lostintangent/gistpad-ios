@@ -410,7 +410,7 @@ final class NotebookModel {
     let draftID = target?.draftID
     let draft = draftID.flatMap { id in localDrafts.first { $0.id == id } }
     if let draft,
-      let gistID = draft.gistID, cachedLibrary?.gists.contains(where: { $0.id == gistID }) != true
+      draft.gistID.flatMap({ gistID in cachedLibrary?.gists.contains(where: { $0.id == gistID }) }) != true
     {
       return .init(
         id: draft.id.uuidString, accountID: account.id,

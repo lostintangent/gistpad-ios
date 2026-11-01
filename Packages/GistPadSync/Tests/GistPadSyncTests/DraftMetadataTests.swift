@@ -109,6 +109,30 @@ import Testing
         #expect(try await store.drafts(accountID: account).count == 3)
     }
 
+    @Test func neverPublishedDraftsCanBeDiscardedButAmbiguousCreationCannot() async throws {
+        let store = try DraftStore.open(inMemory: true)
+        let account = UUID()
+        let local = try await store.newDraft(
+            accountID: account, githubUserID: 42, text: "Only on this iPhone")
+        _ = try await store.persist(
+            id: local.id, accountID: account, text: "Edited only on this iPhone", generation: 1)
+        #expect(try await store.discardLocalCopy(
+            id: local.id, accountID: account, expectedGeneration: 1))
+        #expect(try await store.drafts(accountID: account).allSatisfy { $0.id != local.id })
+
+        let uncertain = try await store.newDraft(
+            accountID: account, githubUserID: 42, text: "Maybe on GitHub")
+        try await store.beginAttempt(
+            id: uncertain.id, accountID: account, content: uncertain.text, generation: 0, remote: nil)
+        try await store.setState(.failed(.creationUncertain), id: uncertain.id, accountID: account)
+        await #expect(throws: DraftError.ambiguousCreation) {
+            try await store.discardLocalCopy(id: uncertain.id, accountID: account, expectedGeneration: 0)
+        }
+        try await store.discardUncertainCreation(
+            id: uncertain.id, accountID: account, expectedGeneration: 0)
+        #expect(try await store.drafts(accountID: account).allSatisfy { $0.id != uncertain.id })
+    }
+
     @Test func explicitLocalDiscardRemovesOnlyTheConfirmedDraftAndItsLinkedBytes() async throws {
         let store = try DraftStore.open(inMemory: true)
         let account = UUID()
