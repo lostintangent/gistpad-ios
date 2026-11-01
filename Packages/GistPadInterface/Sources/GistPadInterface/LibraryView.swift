@@ -327,13 +327,8 @@ public struct LibraryView: View {
         }
     }
 
-    @ViewBuilder
     private var adaptiveList: some View {
-        if isSidebar {
-            libraryList.listStyle(.sidebar)
-        } else {
-            libraryList.listStyle(.insetGrouped)
-        }
+        libraryList.listStyle(.sidebar)
     }
 
     private var isSidebar: Bool { sidebarOverride ?? (horizontalSizeClass == .regular) }
@@ -770,8 +765,6 @@ public struct LibraryView: View {
         .navigationLinkIndicatorVisibility(.hidden)
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
-        .listRowInsets(EdgeInsets(
-            top: 0, leading: 12, bottom: 0, trailing: 12))
         .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
         .modifier(LibraryCommentsAccessibilityAction(note: note, action: openComments))
         .modifier(LibraryRowDeletionConfirmation(
