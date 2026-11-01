@@ -153,7 +153,7 @@ Show the current exact filename in the native subtitle, except case-insensitive 
 
 More begins with compact Pin / Star / Share / Copy Link, then Rename Note, Tags, Files, Find and applicable sidebar commands. Open in GitHub is separate, Archive is nondestructive, and Delete is isolated last. Use native menu sections, not disabled headings or custom separators. Direct Edit/Split/Preview controls stay outside More. Preserve exact accessible names, selection and toggle state.
 
-Delete uses one confirmation for every note row state, and its wording is true for all of them. Title **Delete “[title]”?** Message **This removes the note from this iPhone and GitHub, including unsynced changes. This can’t be undone.** Buttons **Cancel** and destructive **Delete**. Phone-only drafts get no separate copy. Only an uncertain creation adds one line: **GitHub may already have received this note. Check your GitHub Gists page and delete any copy there.**
+Delete uses one confirmation for every note row state, and its wording is true for all of them. Title **Delete “[title]”?** Message **This removes the note from this iPhone and from GitHub if it was saved there, including unsynced changes. This can’t be undone.** Buttons **Cancel** and destructive **Delete**. Phone-only drafts get no separate copy. Only an uncertain creation adds one line: **GitHub may already have received this note. Check your GitHub Gists page and delete any copy there.**
 
 Tags keep web-compatible names/colors and apply to every file in a gist. Metadata labels have tinted fills and primary text, no internal dot. Picker rows are untinted with one standalone swatch, neutral name and selected check. No duplicate chip shelf, All tags heading or enclosing group cards.
 
