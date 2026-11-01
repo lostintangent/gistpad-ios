@@ -1524,7 +1524,7 @@ struct NotebookModelTests {
     let provider = StubNotebookProvider(
       account: fixtureAccount, gists: [try makeGist(id: "a", title: "A note")]
     )
-    let model = NotebookModel(provider: provider)
+    let model = NotebookModel(provider: provider, remoteReadRetryDelays: [])
     await model.start()
     await model.open(gistID: "a")
     await provider.failRequests()
@@ -3195,7 +3195,8 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
     if shouldFail { throw URLError(.notConnectedToInternet) }
     return account
   }
-  func gists(accountID: UUID) async -> [Gist] {
+  func gists(accountID: UUID) async throws -> [Gist] {
+    if shouldFail { throw URLError(.notConnectedToInternet) }
     let result = listedOwned ?? notes
     if holdsLibraryRead {
       await withCheckedContinuation { continuation in
@@ -3206,7 +3207,10 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
     }
     return result
   }
-  func starredGists(accountID: UUID) -> [Gist] { listedStarred ?? starredNotes }
+  func starredGists(accountID: UUID) throws -> [Gist] {
+    if shouldFail { throw URLError(.notConnectedToInternet) }
+    return listedStarred ?? starredNotes
+  }
   func setListResponses(owned: [Gist], starred: [Gist]) {
     listedOwned = owned
     listedStarred = starred
