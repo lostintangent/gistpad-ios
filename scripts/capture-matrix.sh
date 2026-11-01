@@ -164,7 +164,7 @@ for pose in "${POSES[@]}"; do
                 xcrun simctl launch --terminate-running-process "$DEVICE" "$BUNDLE_ID" \
                     "${launch_arguments[@]}"
                 filename="$SCREEN-$STATE-$pose-$appearance-contrast-$increased-$size.png"
-                if [ "$SCREEN" = library ] || [ "$SCREEN" = note ] || [ "$SCREEN" = photos ]; then
+                if [ "$SCREEN" = library ] || [ "$SCREEN" = note ] || [ "$SCREEN" = photos ] || [ "$SCREEN" = scroll-edges ]; then
                     container="$(xcrun simctl get_app_container "$DEVICE" "$BUNDLE_ID" data)"
                     marker="$container/tmp/gistpad-capture-$token.ready"
                     deadline=$((SECONDS + 45))
