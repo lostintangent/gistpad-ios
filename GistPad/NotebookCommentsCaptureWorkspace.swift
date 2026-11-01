@@ -269,8 +269,11 @@ actor NotebookCommentsCaptureRemote: CommentConversationRemote {
     return comment
   }
 
-  func createComment(gistID: String, body: String) throws(CommentRemoteFailure) -> GistComment {
+  func createComment(gistID: String, body: String) async throws(CommentRemoteFailure) -> GistComment {
     if scenario == "rejected" { throw .forbidden }
+    if ProcessInfo.processInfo.arguments.contains("--capture-hold-comment-post") {
+      do { try await Task.sleep(for: .seconds(8)) } catch { throw .network }
+    }
     let created = NotebookCommentsCaptureData.comment(nextID, body: body, author: 1, createdAt: .now)
     nextID += 1
     records[gistID] = comments(gistID) + [created]
