@@ -72,29 +72,33 @@ public struct CommentsComposer: View {
             if context != .root {
                 contextLine
             }
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField(
-                    prompt, text: $text, axis: .vertical
-                )
-                .font(.body)
-                .lineLimit(1...maximumLines)
-                .textFieldStyle(.plain)
-                .frame(minHeight: 44)
-                .focused($isFocused)
-                .tint(Color(uiColor: .systemBlue))
-                .disabled(!isEditable || isPosting)
-                .accessibilityIdentifier("comment-composer-text")
-                Button(role: .confirm, action: post)
+            GlassEffectContainer(spacing: 8) {
+                HStack(alignment: .bottom, spacing: 8) {
+                    TextField(
+                        prompt, text: $text, axis: .vertical
+                    )
+                    .font(.body)
+                    .lineLimit(1...maximumLines)
+                    .textFieldStyle(.plain)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(minHeight: 44)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 22))
+                    .focused($isFocused)
+                    .tint(Color(uiColor: .systemBlue))
+                    .disabled(!isEditable || isPosting)
+                    .accessibilityIdentifier("comment-composer-text")
+                    Button(role: .confirm, action: post) {
+                        Label(String(localized: "Post", bundle: .module), systemImage: "checkmark")
+                            .labelStyle(.iconOnly)
+                    }
                     .buttonStyle(.glassProminent)
                     .disabled(!canPost || isPosting)
                     .keyboardShortcut(.return, modifiers: .command)
-                    .accessibilityLabel(Text(verbatim: sendLabel))
                     .accessibilityIdentifier("comment-post")
+                }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
         .padding(.horizontal, 20)
         .padding(.vertical, 8)
         .onChange(of: focusRequest, initial: true) { _, request in
@@ -121,17 +125,6 @@ public struct CommentsComposer: View {
             String(localized: "Edit your comment", bundle: .module)
         case .root, .quote:
             String(localized: "Write a comment", bundle: .module)
-        }
-    }
-
-    private var sendLabel: String {
-        switch context {
-        case .reply:
-            String(localized: "Post reply to GitHub", bundle: .module)
-        case .editing:
-            String(localized: "Save comment to GitHub", bundle: .module)
-        case .root, .quote:
-            String(localized: "Post comment to GitHub", bundle: .module)
         }
     }
 

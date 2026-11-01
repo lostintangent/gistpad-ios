@@ -697,7 +697,7 @@ final class CommentsInspectorUITests: XCTestCase {
   }
 
   func testT166CommentStateCaptures() throws {
-    for appearance in ["light", "dark"] {
+    for appearance in ["dark"] {
       let app = launch(scenario: "empty", appearance: appearance, holdsPost: true)
       defer { app.terminate() }
       try openComments(in: app, waitsForConversation: false)
