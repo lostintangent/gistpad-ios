@@ -17,7 +17,7 @@ struct LiveNotebookWorkspace: View {
   @State private var openRequest = UUID()
   @State private var compactColumn: NavigationSplitViewColumn = .sidebar
   @State private var actionMessage: String?
-  @State private var shareURL: URL?
+  @State private var deletionRefusal: (title: String, message: String)?
   @State private var showingShare = false
   @State private var sharingTarget: NotebookSharingTarget?
   @State private var tagTarget: NotebookTagTarget?
@@ -380,6 +380,16 @@ struct LiveNotebookWorkspace: View {
       }
     } message: {
       Text(actionMessage ?? notebook.documentError ?? "")
+    }
+    .alert(
+      String(localized: "Can’t delete “\(deletionRefusal?.title ?? "")” yet"),
+      isPresented: Binding(
+        get: { deletionRefusal != nil },
+        set: { if !$0 { deletionRefusal = nil } })
+    ) {
+      Button("OK") { deletionRefusal = nil }
+    } message: {
+      Text(deletionRefusal?.message ?? "")
     }
     .sheet(isPresented: $showingShare) {
       if let shareURL {
@@ -1403,6 +1413,15 @@ struct LiveNotebookWorkspace: View {
   private func run(_ action: NotebookAction, accountID: UUID) {
     Task {
       do { _ = try await execute(action, accountID: accountID) } catch {
+        if let refusal = error as? NotebookActionError,
+          case .deletionBlockedByUnsavedNotes(_, let filename) = refusal
+        {
+          deletionRefusal = (
+            title: GistConventions.fileDisplayName(filename),
+            message: NotebookModel.message(for: refusal)
+          )
+          return
+        }
         guard NotebookModel.writeProblem(for: .action(action), error) == nil else { return }
         actionMessage = NotebookModel.message(for: error)
       }

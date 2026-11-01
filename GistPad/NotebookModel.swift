@@ -2273,7 +2273,7 @@ final class NotebookModel {
       case .deletionBlockedByUnsavedNotes:
         String(
           localized:
-            "Another note in this daily gist has changes that aren't on GitHub yet. Wait for them to save, then delete this note."
+            "Another daily note has edits that haven’t reached GitHub. Wait for them to sync, then try again."
         )
       case .staleReview:
         String(localized: "Your draft changed while this review was open. Review the latest draft.")
