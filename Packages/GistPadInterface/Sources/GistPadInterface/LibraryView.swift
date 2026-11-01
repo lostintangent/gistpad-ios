@@ -520,24 +520,13 @@ public struct LibraryView: View {
         Section(isExpanded: expansion(for: collection)) {
             ForEach(model.matchingNotes(in: collection)) { noteRow($0, collection: collection) }
         } header: {
-            listHeader(collectionLabel(collection)
-                .accessibilityIdentifier("library-collection-\(collection.rawValue)"))
-        }
-    }
-
-    // Compact headers align their icon to the card's leading edge. The sidebar keeps the system inset.
-    private func listHeader<Content: View>(_ content: Content) -> some View {
-        Group {
-            if isSidebar {
-                content
-            } else {
-                content.listRowInsets(.leading, 0)
-            }
+            collectionLabel(collection)
+                .accessibilityIdentifier("library-collection-\(collection.rawValue)")
         }
     }
 
     private func sectionHeader(_ title: Text, symbol: String) -> some View {
-        listHeader(Label { title } icon: { Image(systemName: symbol) })
+        Label { title } icon: { Image(systemName: symbol) }
     }
 
     @ViewBuilder
