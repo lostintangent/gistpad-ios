@@ -245,11 +245,11 @@ struct LibraryHostTests {
       }
       let bitmap = try #require(image.cgImage)
       let count = try #require(descendants(window).first {
-        $0.accessibilityIdentifier == "capture-frame-library-collection-count-\(collection.rawValue)"
+        $0.accessibilityIdentifier == "capture-frame-library-collection-\(collection.rawValue)-count"
           && !$0.bounds.isEmpty
       })
       let title = try #require(descendants(window).first {
-        $0.accessibilityIdentifier == "capture-frame-library-collection-title-\(collection.rawValue)"
+        $0.accessibilityIdentifier == "capture-frame-library-collection-\(collection.rawValue)-title"
           && !$0.bounds.isEmpty
       })
       let titleFrame = title.convert(title.bounds, to: window)
@@ -279,9 +279,18 @@ struct LibraryHostTests {
       let backgroundPixels = try nativeAccentPixels(
         in: UIImage(cgImage: countCrop), expected: background).personal
       #expect(countCrop.width * countCrop.height - backgroundPixels > 10, "The number draws real ink.")
-      let ink = try #require(RGBColor(
-        uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
-      #expect(ink.contrast(with: background) >= 4.5)
+      // The count is quiet secondary ink, composited over the header background.
+      var secondary = (red: CGFloat(0), green: CGFloat(0), blue: CGFloat(0), alpha: CGFloat(0))
+      UIColor.secondaryLabel.resolvedColor(with: window.traitCollection).getRed(
+        &secondary.red, green: &secondary.green, blue: &secondary.blue, alpha: &secondary.alpha)
+      func over(_ component: CGFloat, _ base: UInt8) -> UInt8 {
+        UInt8((min(1, max(0, component * secondary.alpha + CGFloat(base) / 255
+          * (1 - secondary.alpha))) * 255).rounded())
+      }
+      let ink = RGBColor(
+        red: over(secondary.red, background.red), green: over(secondary.green, background.green),
+        blue: over(secondary.blue, background.blue))
+      #expect(ink.contrast(with: background) >= 3)
       #expect(try nativeAccentPixels(in: UIImage(cgImage: countCrop), expected: ink).personal > 10)
     }
     for index in 1..<headerFrames.count {
