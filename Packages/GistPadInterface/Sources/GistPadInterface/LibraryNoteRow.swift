@@ -157,6 +157,7 @@ struct LibraryNoteRow: View {
         Text(verbatim: excerpt)
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             .fixedSize(horizontal: false, vertical: true)
+            .foregroundStyle(.secondary)
             .captureFrame("note-excerpt-\(note.id)")
     }
 

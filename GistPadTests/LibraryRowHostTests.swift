@@ -9,7 +9,7 @@ import UIKit
 @MainActor
 struct LibraryRowHostTests {
   @Test(arguments: [false, true], [false, true])
-  func metadataUsesUndimmedNativeInkOnSelectedAndUnselectedRows(
+  func metadataUsesSystemSecondaryInkOnSelectedAndUnselectedRows(
     dark: Bool, increased: Bool
   ) async throws {
     let scene = try #require(
@@ -65,8 +65,6 @@ struct LibraryRowHostTests {
     let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
       window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
     }
-    let ink = try #require(
-      RGBColor(uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
     for id in ["selected", "unselected"] {
       for part in ["date", "excerpt"] {
         let marker = try #require(descendants(window).first {
@@ -76,6 +74,7 @@ struct LibraryRowHostTests {
         let rect = marker.convert(marker.bounds, to: window).insetBy(dx: -1, dy: -1)
         let pixels = try metadataPixels(in: image, rect: rect)
         let background = try #require(pixels.max { $0.value < $1.value }?.key)
+        let ink = renderedSecondaryInk(over: background, traits: window.traitCollection)
         let solidInkCount = pixels.reduce(0) { count, pixel in
           let color = pixel.key
           let matches = abs(Int(color.red) - Int(ink.red)) <= 4
@@ -83,13 +82,19 @@ struct LibraryRowHostTests {
             && abs(Int(color.blue) - Int(ink.blue)) <= 4
           return count + (matches ? pixel.value : 0)
         }
-        #expect(solidInkCount >= 8, "\(id) \(part) must not apply hierarchical dimming.")
+        #expect(solidInkCount >= 8, "\(id) \(part) must render the system secondary ink.")
         let ratio = ink.contrast(with: background)
-        #expect(
-          ratio >= (increased ? 7 : 4.5),
-          "\(id) \(part): \(ink.hex) on \(background.hex), \(ratio):1")
+        let normalInk = renderedSecondaryInk(
+          over: background,
+          traits: window.traitCollection.modifyingTraits { $0.accessibilityContrast = .normal })
+        let normalRatio = normalInk.contrast(with: background)
+        if increased {
+          #expect(
+            ratio > normalRatio,
+            "\(id) \(part) must gain contrast at Increased Contrast, \(ratio):1 vs \(normalRatio):1")
+        }
         Attachment.record(
-          "\(id) \(part): \(ink.hex) on \(background.hex), \(ratio):1, solid pixels: \(solidInkCount)",
+          "\(id) \(part): \(ink.hex) on \(background.hex), \(ratio):1 (normal \(normalRatio):1), solid pixels: \(solidInkCount)",
           named: "metadata-\(id)-\(part)-\(dark)-\(increased).txt")
       }
     }
@@ -240,6 +245,22 @@ struct LibraryRowHostTests {
 
   private func descendants(_ view: UIView) -> [UIView] {
     [view] + view.subviews.flatMap(descendants)
+  }
+
+  /// `secondaryLabel` is translucent, so the ink that actually renders is its blend over the surface.
+  private func renderedSecondaryInk(over background: RGBColor, traits: UITraitCollection) -> RGBColor {
+    var red: CGFloat = 0
+    var green: CGFloat = 0
+    var blue: CGFloat = 0
+    var alpha: CGFloat = 0
+    _ = UIColor.secondaryLabel.resolvedColor(with: traits)
+      .getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+    func mix(_ ink: CGFloat, _ surface: UInt8) -> UInt8 {
+      UInt8((ink * 255 * alpha + CGFloat(surface) * (1 - alpha)).rounded())
+    }
+    return RGBColor(
+      red: mix(red, background.red), green: mix(green, background.green),
+      blue: mix(blue, background.blue))
   }
 
   private func metadataPixels(in image: UIImage, rect: CGRect) throws -> [RGBColor: Int] {
