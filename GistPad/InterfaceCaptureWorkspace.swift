@@ -54,6 +54,29 @@ struct InterfaceCaptureWorkspace: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.isGitHubStatusVisible) private var isGitHubStatusVisible
 
+    private var presentsStatusPopover: Bool {
+        ["status-details", "status-write-note", "status-write-mixed"].contains(captureState)
+    }
+
+    // Failures are classified by the production path, so the capture shows what a real failed write displays.
+    private static func captureWriteStatus(mixed: Bool) -> GitHubStatusState? {
+        let accountID = UUID()
+        let pin = NotebookWriteFailure.Operation.action(
+            .preference(.setPinned(gistID: "capture", pinned: true)))
+        let note = NotebookWriteFailure.Operation.note(draftID: UUID())
+        var failures: [NotebookWriteFailure] = []
+        if mixed, let problem = NotebookModel.writeProblem(
+            for: pin, URLError(.notConnectedToInternet)) {
+            failures.append(.init(operation: pin, accountID: accountID, problem: problem))
+        }
+        let noteError: any Error = mixed ? DraftError.readOnly : URLError(.notConnectedToInternet)
+        if let problem = NotebookModel.writeProblem(for: note, noteError) {
+            failures.append(.init(operation: note, accountID: accountID, problem: problem))
+        }
+        guard !failures.isEmpty else { return nil }
+        return NotebookModel.attentionStatus(failures, isRetrying: false)
+    }
+
     init(session: DocumentSession) {
         let arguments = ProcessInfo.processInfo.arguments
         func argument(_ name: String, default fallback: String) -> String {
@@ -92,7 +115,8 @@ struct InterfaceCaptureWorkspace: View {
             "tag-editor", "tag-readonly", "search", "search-active", "no-results", "filtered", "signed-out",
             "daily", "daily-progress", "starred", "archive", "notes", "featured", "header-file",
             "mode-long", "mode-emoji", "today-done", "today-no-tasks",
-            "status-busy", "status-error", "status-details", "status-limited", "tag-filters", "row-anatomy",
+            "status-busy", "status-error", "status-details", "status-write-note", "status-write-mixed",
+            "status-limited", "tag-filters", "row-anatomy",
             "collection-loading", "no-pins", "three-pins", "today-0", "today-3", "today-99plus",
             "collections-expanded", "collections-collapsed", "collections-empty",
             "collection-search", "collection-overlap", "long-library", "square-pins"
@@ -264,6 +288,8 @@ struct InterfaceCaptureWorkspace: View {
         )
         if state == "status-busy" {
             model.gitHubStatus = .checking(operation: "Checking GitHub")
+        } else if state == "status-write-note" || state == "status-write-mixed" {
+            model.gitHubStatus = Self.captureWriteStatus(mixed: state == "status-write-mixed")
         } else if ["status-error", "status-details", "status-limited"].contains(state) {
             model.gitHubStatus = .problem(.init(
                 heading: "Couldn't check for updates",
@@ -670,7 +696,7 @@ struct InterfaceCaptureWorkspace: View {
                 actionMessage = "Capture readiness requires a visible native window."
                 return
             }
-            if captureState == "status-details",
+            if presentsStatusPopover,
                window.rootViewController?.presentedViewController == nil {
                 guard let button = notebookAccessibilityElement("github-status-attention", in: window)
                 else {
@@ -694,7 +720,7 @@ struct InterfaceCaptureWorkspace: View {
                     try await Task.sleep(for: .milliseconds(20))
                 }
             }
-            guard captureState != "status-details"
+            guard !presentsStatusPopover
                 || notebookAccessibilityElement("github-status-recover", in: window) != nil
                 || notebookAccessibilityElement("capture-frame-github-status-recover", in: window) != nil
             else {
