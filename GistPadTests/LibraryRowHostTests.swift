@@ -84,23 +84,17 @@ struct LibraryRowHostTests {
         }
         #expect(solidInkCount >= 8, "\(id) \(part) must render the system secondary ink.")
         let ratio = ink.contrast(with: background)
-        if part == "excerpt" {
+        let normalInk = renderedSecondaryInk(
+          over: background,
+          traits: window.traitCollection.modifyingTraits { $0.accessibilityContrast = .normal })
+        let normalRatio = normalInk.contrast(with: background)
+        if increased {
           #expect(
-            ratio >= (increased ? 7 : 4.5),
-            "\(id) \(part): \(ink.hex) on \(background.hex), \(ratio):1")
-        }
-        if part == "date" && increased {
-          let normal = renderedSecondaryInk(
-            over: background,
-            traits: UITraitCollection(traitsFrom: [
-              window.traitCollection, UITraitCollection(accessibilityContrast: .normal),
-            ]))
-          #expect(
-            ratio > normal.contrast(with: background),
-            "\(id) date must gain contrast at Increased Contrast, \(ratio):1 vs \(normal.contrast(with: background)):1")
+            ratio > normalRatio,
+            "\(id) \(part) must gain contrast at Increased Contrast, \(ratio):1 vs \(normalRatio):1")
         }
         Attachment.record(
-          "\(id) \(part): \(ink.hex) on \(background.hex), \(ratio):1, solid pixels: \(solidInkCount)",
+          "\(id) \(part): \(ink.hex) on \(background.hex), \(ratio):1 (normal \(normalRatio):1), solid pixels: \(solidInkCount)",
           named: "metadata-\(id)-\(part)-\(dark)-\(increased).txt")
       }
     }
