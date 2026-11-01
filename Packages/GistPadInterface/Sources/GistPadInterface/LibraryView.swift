@@ -362,44 +362,58 @@ public struct LibraryView: View {
             sectionHeader(
                 Text("Pinned", bundle: .module), count: pinnedNotes.count,
                 countLabel: LibraryModel.gistCountLabel(pinnedNotes.count),
-                isExpanded: pinnedExpansion.wrappedValue, id: "library-section-pinned")
+                expansion: pinnedExpansion, id: "library-section-pinned")
         }
     }
 
-    /// The header's own tap toggles its section. Compact `.insetGrouped` draws no disclosure for
-    /// it, so the header adds Notes' circled chevron there; the sidebar draws the system one.
+    /// The whole header is one disclosure button. The sidebar draws its own disclosure, so the
+    /// compact disc appears only where the list style does not.
     private func sectionHeader(
         _ title: Text, symbol: String? = nil, count: Int?, countLabel: String?,
-        isExpanded: Bool, id: String
+        expansion: Binding<Bool>, id: String
     ) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Group {
-                if let symbol {
-                    Label { title } icon: { Image(systemName: symbol) }
-                } else {
-                    title
+        let isExpanded = expansion.wrappedValue
+        let state = isExpanded
+            ? String(localized: "Expanded", bundle: .module)
+            : String(localized: "Collapsed", bundle: .module)
+        let value = [countLabel, state].compactMap { $0 }.joined(separator: ", ")
+        return Button {
+            withAnimation(reduceMotion ? nil : .default) {
+                expansion.wrappedValue.toggle()
+            }
+        } label: {
+            HStack(alignment: .firstTextBaseline) {
+                Group {
+                    if let symbol {
+                        Label { title } icon: { Image(systemName: symbol) }
+                    } else {
+                        title
+                    }
+                }
+                .captureFrame("\(id)-title")
+                Spacer(minLength: 8)
+                if let count {
+                    Text(count, format: .number)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                        .captureFrame("\(id)-count")
+                }
+                if !isSidebar {
+                    Image(
+                        systemName: isExpanded
+                            ? "chevron.down.circle.fill" : "chevron.forward.circle.fill"
+                    )
+                    .foregroundStyle(.tertiary)
+                        .contentTransition(.symbolEffect(.replace))
                 }
             }
-            .captureFrame("\(id)-title")
-            Spacer(minLength: 8)
-            if let count {
-                Text(count, format: .number)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .fixedSize()
-                    .captureFrame("\(id)-count")
-            }
-            if !isSidebar {
-                Image(systemName: "chevron.down.circle.fill")
-                    .foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(isExpanded ? 0 : -90))
-                    .animation(reduceMotion ? nil : .default, value: isExpanded)
-            }
         }
+        .buttonStyle(.plain)
         .captureFrame(id)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
-        .accessibilityValue(Text(verbatim: countLabel ?? ""))
+        .accessibilityValue(Text(verbatim: value))
         .accessibilityAddTraits(.isHeader)
         .accessibilityIdentifier(id)
     }
@@ -529,7 +543,7 @@ public struct LibraryView: View {
                     collection == .dailyNotes
                         ? LibraryModel.noteCountLabel($0) : LibraryModel.gistCountLabel($0)
                 },
-                isExpanded: expansion.wrappedValue,
+                expansion: expansion,
                 id: "library-collection-\(collection.rawValue)")
         }
     }
@@ -549,7 +563,7 @@ public struct LibraryView: View {
                 sectionHeader(
                     Text(verbatim: title), count: section.notes.count,
                     countLabel: LibraryModel.gistCountLabel(section.notes.count),
-                    isExpanded: expansion.wrappedValue, id: "library-section-\(title)")
+                    expansion: expansion, id: "library-section-\(title)")
             }
         }
     }
