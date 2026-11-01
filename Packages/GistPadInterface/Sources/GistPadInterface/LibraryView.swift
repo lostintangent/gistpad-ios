@@ -236,6 +236,7 @@ public struct LibraryView: View {
     @State private var searchPresented = false
     @State private var windowContentWidth: CGFloat?
     @ScaledMetric(relativeTo: .body) private var headingCountSpacing = 4
+    @ScaledMetric(relativeTo: .body) private var compactRowInset: CGFloat = 16
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -801,8 +802,10 @@ public struct LibraryView: View {
         .navigationLinkIndicatorVisibility(.hidden)
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
-        // The row's own 12 pt padding is its whole vertical rhythm, so the List adds none.
+        // The row's own padding is its whole vertical rhythm, so the List adds none.
         .listRowInsets(.vertical, 0)
+        // Compact rows sit 16 pt inside the card. The sidebar keeps the system inset.
+        .listRowInsets(.horizontal, isSidebar ? nil : compactRowInset)
         .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
         .modifier(LibraryCommentsAccessibilityAction(note: note, action: openComments))
         .modifier(LibraryRowDeletionConfirmation(

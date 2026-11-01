@@ -171,7 +171,7 @@ struct LibraryRowHostTests {
     let metrics = UIFontMetrics(forTextStyle: .body)
     let gap = metrics.scaledValue(for: 3, compatibleWith: traits)
     let tagGap = metrics.scaledValue(for: 6, compatibleWith: traits)
-    let padding = metrics.scaledValue(for: 12, compatibleWith: traits)
+    let padding = metrics.scaledValue(for: 18, compatibleWith: traits)
 
     #expect(abs(content.width - CGFloat(width)) <= 1)
     #expect(content.contains(title))
@@ -233,7 +233,7 @@ struct LibraryRowHostTests {
     let secondary = try frame("secondary")
     let metrics = UIFontMetrics(forTextStyle: .body)
     let gap = metrics.scaledValue(for: 3, compatibleWith: traits)
-    let padding = metrics.scaledValue(for: 12, compatibleWith: traits)
+    let padding = metrics.scaledValue(for: 18, compatibleWith: traits)
     let titleFont = UIFont.preferredFont(forTextStyle: .headline, compatibleWith: traits)
     let twoLines = UILabel()
     twoLines.font = titleFont
