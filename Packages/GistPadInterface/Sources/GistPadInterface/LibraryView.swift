@@ -903,7 +903,8 @@ public struct LibraryView: View {
     }
 
     private var tagFilterButton: some View {
-        Button {
+        let isFiltered = !model.selectedTagIDs.isEmpty
+        return Button {
             showingTags = true
         } label: {
             Label {
@@ -913,13 +914,13 @@ public struct LibraryView: View {
                     Text("Filter by tags, \(model.selectedTagIDs.count) selected", bundle: .module)
                 }
             } icon: {
-                Image(systemName: model.selectedTagIDs.isEmpty ? "tag" : "tag.fill")
+                Image(systemName: "tag").symbolVariant(isFiltered ? .fill : .none)
             }
             .frame(minWidth: isSidebar ? nil : 44, minHeight: isSidebar ? nil : 44)
             .contentShape(.rect)
         }
         .disabled(model.snapshot.tags.isEmpty)
-        .tint(.primary)
+        .tint(isFiltered ? Color(uiColor: .tintColor) : .primary)
         .accessibilityValue(Text("\(model.selectedTagIDs.count) selected", bundle: .module))
         .accessibilityIdentifier("library-filter-tags")
     }
