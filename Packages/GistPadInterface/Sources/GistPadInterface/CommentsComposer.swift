@@ -72,31 +72,32 @@ public struct CommentsComposer: View {
             if context != .root {
                 contextLine
             }
-            GlassEffectContainer(spacing: 8) {
-                HStack(alignment: .bottom, spacing: 8) {
-                    TextField(
-                        prompt, text: $text, axis: .vertical
-                    )
-                    .font(.body)
-                    .lineLimit(1...maximumLines)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .frame(minHeight: 44)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 22))
-                    .focused($isFocused)
-                    .tint(Color(uiColor: .systemBlue))
-                    .disabled(!isEditable || isPosting)
-                    .accessibilityIdentifier("comment-composer-text")
-                    Button(role: .confirm, action: post) {
-                        Label(String(localized: "Post", bundle: .module), systemImage: "checkmark")
-                            .labelStyle(.iconOnly)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .disabled(!canPost || isPosting)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .accessibilityIdentifier("comment-post")
+            HStack(alignment: .center, spacing: 8) {
+                TextField(
+                    prompt, text: $text, axis: .vertical
+                )
+                .font(.body)
+                .lineLimit(1...maximumLines)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(minHeight: 44)
+                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
+                .focused($isFocused)
+                .tint(Color(uiColor: .systemBlue))
+                .disabled(!isEditable || isPosting)
+                .accessibilityIdentifier("comment-composer-text")
+                Button(role: .confirm, action: post) {
+                    Label(String(localized: "Post", bundle: .module), systemImage: "arrow.up")
+                        .labelStyle(.iconOnly)
                 }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .controlSize(.large)
+                .tint(Color(uiColor: .systemBlue))
+                .disabled(!canPost || isPosting)
+                .keyboardShortcut(.return, modifiers: .command)
+                .accessibilityIdentifier("comment-post")
             }
         }
         .padding(.horizontal, 20)
