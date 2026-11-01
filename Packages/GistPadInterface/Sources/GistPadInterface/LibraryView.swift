@@ -360,7 +360,7 @@ public struct LibraryView: View {
             ForEach(pinnedNotes) { noteRow($0) }
         } header: {
             sectionHeader(
-                Text("Pinned", bundle: .module), count: pinnedNotes.count,
+                Text("Pinned", bundle: .module), symbol: "pin", count: pinnedNotes.count,
                 countLabel: LibraryModel.gistCountLabel(pinnedNotes.count),
                 expansion: pinnedExpansion, id: "library-section-pinned")
         }
