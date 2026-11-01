@@ -968,16 +968,21 @@ public struct LibraryView: View {
                                 Text(verbatim: tag.name)
                                     .foregroundStyle(.primary)
                                 Spacer()
-                                if model.selectedTagIDs.contains(tag.id) {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(.primary)
-                                        .transition(.opacity)
-                                }
+                                Text(model.gistCount(tagged: tag.id), format: .number)
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityHidden(true)
+                                // Reserves its width so the count never shifts when a tag is selected.
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.primary)
+                                    .opacity(model.selectedTagIDs.contains(tag.id) ? 1 : 0)
+                                    .accessibilityHidden(true)
                             }
                             .frame(minHeight: 44)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityValue(Text(verbatim: LibraryModel.gistCountLabel(model.gistCount(tagged: tag.id))))
                         .accessibilityAddTraits(model.selectedTagIDs.contains(tag.id) ? .isSelected : [])
                         .accessibilityIdentifier("library-tag-filter-\(tag.id)")
                         .captureFrame("library-tag-filter-\(tag.id)")
