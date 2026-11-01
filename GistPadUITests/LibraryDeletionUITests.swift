@@ -106,9 +106,21 @@ final class LibraryDeletionUITests: XCTestCase {
   }
 
   @MainActor
-  func testDeletingANoteWhileItsLeavingPublicationIsInFlightLeavesNothingBehind() async throws {
+  func testDeletingANoteWhileItsLeavingPublicationIsInFlightClosed() async throws {
+    try await checkParkedDeletion(wide: false)
+  }
+
+  @MainActor
+  func testDeletingANoteWhileItsLeavingPublicationIsInFlightOpen() async throws {
+    try await checkParkedDeletion(wide: true)
+  }
+
+  @MainActor
+  private func checkParkedDeletion(wide: Bool) async throws {
     let app = launch(dark: false, publicationHold: true)
     defer { app.terminate() }
+    try await waitForPosture(wide: wide, in: app)
+    let posture = wide ? "Open" : "Closed"
     let create = app.buttons["library-create"]
     try await waitUntil("the New Note button") { create.isHittable }
     create.tap()
@@ -130,14 +142,15 @@ final class LibraryDeletionUITests: XCTestCase {
     let confirmation = app.buttons["Delete"].firstMatch
     try await waitUntil("the parked note's deletion confirmation") { confirmation.isHittable }
     XCTAssertTrue(app.staticTexts["Delete “Parked thought”?"].exists)
-    record(app, name: "parked-delete-confirmation")
+    record(app, name: "parked-delete-confirmation-\(posture)")
     confirmation.tap()
     try await Task.sleep(for: .milliseconds(300))
     XCTAssertTrue(row.exists, "The deletion should wait for the publication to settle.")
+    XCTAssertTrue(release.exists, "The publication should still be parked before release.")
     release.tap()
     try await waitUntil("the parked note to leave the list once publication settles") { !row.exists }
     XCTAssertFalse(app.alerts.firstMatch.exists)
-    record(app, name: "parked-delete-result")
+    record(app, name: "parked-delete-result-\(posture)")
   }
 
   @MainActor
@@ -274,6 +287,19 @@ final class LibraryDeletionUITests: XCTestCase {
     if publicationHold { app.launchArguments.append("--capture-publication-hold") }
     app.launch()
     return app
+  }
+
+  @MainActor
+  private func waitForPosture(wide: Bool, in app: XCUIApplication) async throws {
+    let expected = wide ? CGSize(width: 951, height: 669) : CGSize(width: 466, height: 678)
+    let deadline = ContinuousClock.now + .seconds(150)
+    while ContinuousClock.now < deadline {
+      let frame = app.windows.firstMatch.frame
+      if abs(frame.width - expected.width) <= 1, abs(frame.height - expected.height) <= 1 { return }
+      try await Task.sleep(for: .milliseconds(250))
+    }
+    XCTFail("The actual \(wide ? "Open" : "Closed") Duo window did not appear.")
+    throw DeletionTestError.timedOut
   }
 
   @MainActor
