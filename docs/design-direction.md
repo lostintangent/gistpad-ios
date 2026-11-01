@@ -79,6 +79,8 @@ Search/tag-filter results remain ordinary rows with a small pin and existing ord
 
 ### Controls and Search
 
+Build every control from semantic, declarative SDK and SwiftUI behavior: system roles (`.close`, `.confirm`, `.cancel`), standard placements, native styles and SDK state. Do not write custom logic or custom styling (tints, labels, frames, glass or hand-drawn chrome) to replace what the system provides unless the user asks for it. Use `.axisBehavior` or another placement hint only when the automatic placement is wrong, and name any remaining custom code, with its reason, in the handoff.
+
 Compact Home's upper native group is **New, Today, Settings**, in that order. Open places **Today directly below Compose in the detail rail**, retaining the document's other eligible actions. Tags is the only lower compact rail button, beside an always-visible real `UISearchBar`. There is no compact Search button. The regular sidebar keeps native `.searchable`, overflow and one supported trailing sidebar toggle, with no blank leading placeholder.
 
 Search placement follows geometry: compare usable Library width, excluding safe areas, with window content width. A narrower Library reserves the native side rail and aligns the visible Search glass bottom with Tags at every text size. Otherwise the field stacks above the bottom toolbar. Do not use device checks or fixed rail coordinates.
