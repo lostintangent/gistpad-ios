@@ -883,6 +883,12 @@
       previousWidth = bounds.width
       previousHeight = bounds.height
       restoringAnchor = false
+      if needsInitialAnchor, bounds.width > 0, let manager = textLayoutManager,
+        let range = manager.textContentManager?.documentRange
+      {
+        // TextKit 2 estimates offscreen heights until laid out, so the scroll limit is short until the whole note is.
+        manager.ensureLayout(for: range)
+      }
       if needsInitialAnchor { rememberReadingAnchor() }
       (delegate as? DocumentSession)?.commentAnnotations.layoutBackgrounds()
       (delegate as? DocumentSession)?.commentAnnotations.scrollSelectedCommentIfNeeded()
