@@ -801,6 +801,8 @@ public struct LibraryView: View {
         .navigationLinkIndicatorVisibility(.hidden)
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
+        // The row's own 12 pt padding is its whole vertical rhythm, so the List adds none.
+        .listRowInsets(.vertical, 0)
         .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
         .modifier(LibraryCommentsAccessibilityAction(note: note, action: openComments))
         .modifier(LibraryRowDeletionConfirmation(
