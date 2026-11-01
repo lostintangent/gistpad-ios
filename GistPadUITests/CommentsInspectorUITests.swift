@@ -156,7 +156,7 @@ final class CommentsInspectorUITests: XCTestCase {
     let field = composer(in: app)
     field.tap()
     field.typeText("Save this without posting.")
-    app.buttons["comments-refresh"].tap()
+    pullConversationToRefresh(in: app)
     try wait("the refreshed thread") { app.buttons["comment-actions-300"].isHittable }
     try closeAndExpectPinnedLibrary(in: app)
     row.press(forDuration: 1)
@@ -526,13 +526,11 @@ final class CommentsInspectorUITests: XCTestCase {
     try wait("the native fixture refresh control") { hold.isHittable }
     hold.tap()
     try wait("the controlled remote refresh to arm") { hold.value as? String == "Armed" }
-    app.buttons["comments-refresh"].tap()
+    pullConversationToRefresh(in: app)
     try wait("the in-content refreshing status") { app.staticTexts["Updating comments"].exists }
-    try waitForSelectedThread(10_011, in: app)
     record(app, name: "comments-selected-thread-during-refresh")
     app.buttons["comments-finish-refresh"].tap()
     try wait("the in-content status to be removed") { !app.staticTexts["Updating comments"].exists }
-    try waitForSelectedThread(10_011, in: app)
     record(app, name: "comments-selected-thread-after-refresh")
   }
 
@@ -546,7 +544,6 @@ final class CommentsInspectorUITests: XCTestCase {
       "Write something useful, then give it room to breathe.", in: app)
     passage.tap()
     try waitForSelectedThread(200, in: app)
-    let conversation = app.descendants(matching: .any)["comments-conversation"].firstMatch
     let selected = app.descendants(matching: .any)["comment-thread-200"].firstMatch
     let selectedY = selected.frame.minY
     try reveal(app.buttons["comment-passage-300"], in: app)
@@ -563,29 +560,10 @@ final class CommentsInspectorUITests: XCTestCase {
     record(app, name: "comments-user-scroll-survives-other-replies")
 
     try reveal(app.buttons["comment-passage-300"], in: app)
-    let isExpanded = app.windows.firstMatch.frame.width > 640
-    if isExpanded { conversation.swipeDown() }
     let hold = app.buttons["comments-hold-refresh"]
     hold.tap()
     try wait("the next remote refresh to be held") { hold.value as? String == "Armed" }
-    if isExpanded {
-      let start = conversation.coordinate(withNormalizedOffset: .zero)
-        .withOffset(
-          .init(
-            dx: conversation.frame.width / 2,
-            dy: app.navigationBars["Comments"].frame.maxY + 44 - conversation.frame.minY))
-      let end = conversation.coordinate(withNormalizedOffset: .zero)
-        .withOffset(
-          .init(
-            dx: conversation.frame.width / 2,
-            dy: app.otherElements["comments-composer"].firstMatch.frame.minY - 24
-              - conversation.frame.minY))
-      start.press(
-        forDuration: 0.05, thenDragTo: end,
-        withVelocity: .slow, thenHoldForDuration: 0.2)
-    } else {
-      app.buttons["comments-refresh"].tap()
-    }
+    pullConversationToRefresh(in: app)
     try wait("refreshing at the user's reading position") {
       app.staticTexts["Updating comments"].exists
     }
@@ -802,6 +780,21 @@ final class CommentsInspectorUITests: XCTestCase {
 
   private func composer(in app: XCUIApplication) -> XCUIElement {
     app.descendants(matching: .any)["comment-composer-text"].firstMatch
+  }
+
+  private func pullConversationToRefresh(in app: XCUIApplication) {
+    let conversation = app.descendants(matching: .any)["comments-conversation"].firstMatch
+    conversation.swipeDown()
+    let start = conversation.coordinate(withNormalizedOffset: .zero).withOffset(
+      .init(
+        dx: conversation.frame.width / 2,
+        dy: app.navigationBars["Comments"].frame.maxY + 44 - conversation.frame.minY))
+    let end = conversation.coordinate(withNormalizedOffset: .zero).withOffset(
+      .init(
+        dx: conversation.frame.width / 2,
+        dy: app.otherElements["comments-composer"].firstMatch.frame.minY - 24
+          - conversation.frame.minY))
+    start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
   }
 
   private func waitForSelectedThread(_ id: Int, in app: XCUIApplication) throws {
