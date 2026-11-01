@@ -53,11 +53,15 @@ final class FakeURLProtocol: URLProtocol, @unchecked Sendable {
     override func stopLoading() { operationTask.withLock { $0?.cancel(); $0 = nil } }
 }
 
-final class MemoryCredentials: AuthLocalStorage, Sendable {
+final class MemoryCredentials: AccountCredentialStorage, Sendable {
     private let values = Mutex<[String: Data]>([:])
     func store(key: String, value: Data) throws { values.withLock { $0[key] = value } }
     func retrieve(key: String) throws -> Data? { values.withLock { $0[key] } }
     func remove(key: String) throws { _ = values.withLock { $0.removeValue(forKey: key) } }
+    func keys(withPrefix prefix: String) throws -> [String] {
+        values.withLock { $0.keys.filter { $0.hasPrefix(prefix) } }
+    }
+    func upgradeAccessibility() throws {}
 }
 
 func gistData(
