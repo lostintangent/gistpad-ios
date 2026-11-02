@@ -49,6 +49,7 @@ public struct GistDetails: Equatable, Sendable {
     public var isPinned: Bool
     public var isStarred: Bool
     public var isArchived: Bool
+    public var isDailyNote: Bool
     public var tags: [Tag]
     public var isAutoSaveEnabled: Bool
     public var commentCount: Int?
@@ -65,7 +66,7 @@ public struct GistDetails: Equatable, Sendable {
     public init(
         title: String, files: [File], selectedFileID: String,
         access: FileAccess = .editable, isPinned: Bool = false,
-        isStarred: Bool = false, isArchived: Bool = false, tags: [Tag] = [],
+        isStarred: Bool = false, isArchived: Bool = false, isDailyNote: Bool = false, tags: [Tag] = [],
         isAutoSaveEnabled: Bool = false, commentCount: Int? = nil, shareURL: URL? = nil
     ) {
         self.title = title
@@ -75,6 +76,7 @@ public struct GistDetails: Equatable, Sendable {
         self.isPinned = isPinned
         self.isStarred = isStarred
         self.isArchived = isArchived
+        self.isDailyNote = isDailyNote
         self.tags = tags
         self.isAutoSaveEnabled = isAutoSaveEnabled
         self.commentCount = commentCount

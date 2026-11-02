@@ -100,6 +100,17 @@ extension XCTestCase {
     try waitUntil(description, file: file, line: line) { element.isHittable }
     element.tap()
   }
+
+  /// Taps the destructive button in the confirmation dialog that a Delete action presents.
+  @MainActor
+  func confirmDeletion(in app: XCUIApplication) throws {
+    var confirm: XCUIElement?
+    try waitUntil("the delete confirmation") {
+      confirm = app.buttons.matching(identifier: "Delete").allElementsBoundByIndex.last(where: \.isHittable)
+      return confirm != nil
+    }
+    confirm?.tap()
+  }
 }
 
 struct UITestTimeout: Error {}

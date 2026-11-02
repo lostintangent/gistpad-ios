@@ -10,7 +10,6 @@ public struct GistScreen<Source: View, Preview: View>: View {
     private let actions: GistActions
     private let source: Source
     private let preview: Preview
-    private let isFocused: Bool
     private let allowsSplit: Bool
     private let isSidebarHidden: Bool
     private let areCommentsPresented: Bool
@@ -18,7 +17,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
     // Match the native toolbar's settled segment size on its first layout.
     @ScaledMetric(relativeTo: .body) private var minimumModeSegmentWidth = 48
 
-    private var showingSplit: Bool { gist.access.canEdit && (isFocused || (allowsSplit && mode == .split)) }
+    private var showingSplit: Bool { gist.access.canEdit && allowsSplit && mode == .split }
     private var showingSource: Bool { gist.access.canEdit && (showingSplit || mode != .preview) }
     private var paneLayout: AnyLayout {
         showingSplit ? AnyLayout(HStackLayout(spacing: 1)) : AnyLayout(ZStackLayout())
@@ -29,7 +28,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
 
     public init(
         gist: GistDetails, mode: Binding<FileMode>, saveState: PublishState,
-        actions: GistActions = .init(), isFocused: Bool = false,
+        actions: GistActions = .init(),
         allowsSplit: Bool = false, isSidebarHidden: Bool = false,
         areCommentsPresented: Bool = false,
         @ViewBuilder source: () -> Source, @ViewBuilder preview: () -> Preview
@@ -38,7 +37,6 @@ public struct GistScreen<Source: View, Preview: View>: View {
         self._mode = mode
         self.saveState = saveState
         self.actions = actions
-        self.isFocused = isFocused
         self.allowsSplit = allowsSplit
         self.isSidebarHidden = isSidebarHidden
         self.areCommentsPresented = areCommentsPresented
@@ -80,7 +78,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
 
     @ToolbarContentBuilder
     private var primaryToolbar: some ToolbarContent {
-        if gist.access.canEdit, !isFocused {
+        if gist.access.canEdit {
             ToolbarItem(placement: .topBarPinnedTrailing) {
                 modePicker
                     .frame(minWidth: minimumModeSegmentWidth * CGFloat(allowsSplit ? 3 : 2))
@@ -226,7 +224,12 @@ public struct GistScreen<Source: View, Preview: View>: View {
                 }
                 if actions.delete != nil, gist.access.canEdit {
                     Section {
-                        Button(String(localized: "Delete Note…", bundle: .module), systemImage: "trash", role: .destructive) {
+                        Button(
+                            gist.isDailyNote
+                                ? String(localized: "Delete Daily Note…", bundle: .module)
+                                : String(localized: "Delete Gist…", bundle: .module),
+                            systemImage: "trash", role: .destructive
+                        ) {
                             confirmingDeletion = true
                         }
                     }
@@ -235,10 +238,19 @@ public struct GistScreen<Source: View, Preview: View>: View {
                 Label(String(localized: "More", bundle: .module), systemImage: "ellipsis")
             }
             .accessibilityIdentifier("note-actions")
-            .deletionConfirmation(title: gist.title, isPresented: $confirmingDeletion) {
+            .deletionConfirmation(
+                title: deletionTitle, isDailyNote: gist.isDailyNote, isPresented: $confirmingDeletion
+            ) {
                 actions.delete?()
             }
         }
+    }
+
+    /// A daily note's confirmation names its day, like its Library row, not the daily notes gist.
+    private var deletionTitle: String {
+        guard gist.isDailyNote,
+              let file = gist.files.first(where: { $0.id == gist.selectedFileID }) else { return gist.title }
+        return GistFile.displayName(file.filename)
     }
 
     private var commentsLabel: String {

@@ -149,16 +149,6 @@ final class LibraryUITests: XCTestCase {
     XCTAssertTrue(ideas.label.contains("Big Ideas"))
     XCTAssertFalse(design.exists)
   }
-
-  /// Taps the destructive button in the confirmation dialog that a Delete action presents.
-  private func confirmDeletion(in app: XCUIApplication) throws {
-    var confirm: XCUIElement?
-    try waitUntil("the delete confirmation") {
-      confirm = app.buttons.matching(identifier: "Delete").allElementsBoundByIndex.last(where: \.isHittable)
-      return confirm != nil
-    }
-    confirm?.tap()
-  }
 }
 
 extension XCUIElement {

@@ -539,6 +539,25 @@ struct RootView: View {
     let showsInline: Bool
   }
 
+  /// What Delete on a file's screen removes, the same as its Library row: a copy that's only on
+  /// this iPhone, one day of the daily notes gist, or the whole gist.
+  private func deletionTarget(_ session: FileSession) -> DeleteTarget? {
+    let accountID = session.draft.accountID
+    let title = session.details.title
+    if session.file.isRecovery || session.draft.gistID == nil {
+      return .init(
+        id: session.draft.id.uuidString, accountID: accountID, title: title,
+        localDraft: session.draft)
+    }
+    guard let gist = session.file.gist, session.details.access.canEdit else { return nil }
+    if gist.isDailyNote {
+      return .init(
+        id: gist.id, accountID: accountID, title: GistFile.displayName(session.file.filename),
+        filename: session.file.filename)
+    }
+    return .init(id: gist.id, accountID: accountID, title: title)
+  }
+
   private func gistActions(_ session: FileSession) -> GistActions {
     var actions = GistActions()
     actions.focus = {
@@ -603,9 +622,6 @@ struct RootView: View {
               !session.details.isArchived, gistID: gistID,
               accountID: session.draft.accountID)
           }
-          actions.delete = {
-            library.run(.delete(gistID: gistID), accountID: session.draft.accountID)
-          }
           actions.addFile = { rename(.addFile, session: session) }
           actions.renameFile = { rename(.filename, session: session) }
         }
@@ -614,11 +630,10 @@ struct RootView: View {
     if session.details.access.canEdit, !session.file.isRecovery {
       actions.rename = { rename(.title, session: session) }
     }
-    if session.file.isRecovery || session.draft.gistID == nil {
+    if deletionTarget(session) != nil {
       actions.delete = {
-        let target = DeleteTarget(
-          id: session.draft.id.uuidString, accountID: session.draft.accountID,
-          title: session.details.title, localDraft: session.draft)
+        // Read at confirmation, so a file that published meanwhile deletes from GitHub.
+        guard let target = deletionTarget(session) else { return }
         library.run(target.action, accountID: target.accountID)
       }
     }

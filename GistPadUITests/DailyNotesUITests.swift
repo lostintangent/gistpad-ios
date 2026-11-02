@@ -29,6 +29,26 @@ final class DailyNotesUITests: XCTestCase {
     XCTAssertTrue((editor.value as? String)?.contains("First thought of the day") == true)
   }
 
+  func testDeletingADailyNoteFromItsScreenKeepsTheOtherDays() throws {
+    // The fixture's daily notes gist holds four days, ending today.
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd"
+    let yesterday = formatter.string(from: .now.addingTimeInterval(-86_400))
+    let app = launchGistPad(open: "daily/\(yesterday).md")
+    try tap(app.buttons["note-actions"].firstMatch, "More")
+    try tap(app.buttons["Delete Daily Note…"].firstMatch, "Delete Daily Note…")
+    try waitUntil("a confirmation that names the day") { app.staticTexts["Delete “\(yesterday)”?"].exists }
+    try confirmDeletion(in: app)
+
+    // Deleting the open file returns to the Library.
+    XCTAssertTrue(app.element("library-list").waitForExistence(timeout: 10))
+    let dailyNotes = app.element("library-collection-dailyNotes")
+    dailyNotes.scrollIntoView(in: app)
+    try waitUntil("the other three days") { dailyNotes.countValue == "3 daily notes" }
+  }
+
   func testAddToTodayAppendsATask() throws {
     let app = launchGistPad(sheet: "today")
     let input = app.textFields["today-capture-input"]

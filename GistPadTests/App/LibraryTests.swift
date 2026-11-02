@@ -633,6 +633,42 @@ struct LibraryTests {
     #expect(fixture.server.gists.isEmpty)
     #expect(!library.state.gists.contains { $0.gistID == "daily" })
   }
+
+  @Test func aDayThatPublishesWhileItsDeletionWaitsRemovesOnlyThatDay() async throws {
+    let fixture = try await LibraryFixture(
+      selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+    ) {
+      $0.addGist(id: "a", description: "Somewhere else", files: ["README.md": "Text"])
+    }
+    let accountID = fixture.account.id
+    // An earlier day written offline, before there was a daily notes gist.
+    let earlier = try await fixture.store.newGistDraft(
+      accountID: accountID, githubUserID: FixtureServer.you.id, filename: "2026-10-23.md",
+      description: DailyNote.gistDescription, content: "The alpha day")
+    let library = fixture.library
+    await library.start()
+    // Its deletion is confirmed, then Today publishes it and joins the gist it creates.
+    await library.open(.today())
+    let gistID = try #require(fixture.server.gists.first(where: \.isDailyNote)?.id)
+    let today = try #require(library.loadedFile?.draft)
+    #expect(today.gistID == gistID)
+    _ = try await library.persist(
+      draftID: today.id, accountID: accountID, text: "- [ ] Today's task",
+      generation: today.generation + 1)
+    _ = try await library.publish(draftID: today.id, accountID: accountID)
+    #expect(fixture.remote(gistID, "2026-10-23.md") == "The alpha day")
+
+    let settled = try await library.settledDeletionAction(
+      .discardLocalCopy(draftID: earlier.id, generation: earlier.generation),
+      confirmedWithoutGist: true, accountID: accountID)
+    guard case .deleteFile(gistID, "2026-10-23.md") = settled else {
+      Issue.record("A day that reached GitHub after its deletion was confirmed deletes only its file.")
+      return
+    }
+    _ = try await library.perform(settled)
+    #expect(fixture.remote(gistID, "2026-10-23.md") == nil)
+    #expect(fixture.remote(gistID, today.filename) == "- [ ] Today's task")
+  }
 }
 
 @Suite(.serialized)

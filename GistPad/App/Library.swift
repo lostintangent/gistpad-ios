@@ -716,7 +716,9 @@ final class Library {
   }
 
   /// Re-reads a local discard once publication has settled. If the file reached GitHub after the
-  /// confirmation, the confirmed deletion becomes a GitHub deletion of the gist it created.
+  /// confirmation, the confirmed deletion removes it there too. That's only its own file, because a
+  /// new day can join the daily notes gist an earlier day created, and `deleteFile` takes the gist
+  /// with its last file.
   func settledDeletionAction(
     _ action: Change, confirmedWithoutGist: Bool, accountID: UUID
   ) async throws -> Change {
@@ -727,7 +729,7 @@ final class Library {
     }
     let draft = try await self.draft(id: draftID, accountID: accountID)
     if confirmedWithoutGist, let gistID = draft.gistID {
-      return .delete(gistID: gistID)
+      return .deleteFile(gistID: gistID, filename: draft.filename)
     }
     return .discardLocalCopy(draftID: draft.id, generation: draft.generation)
   }
@@ -1047,6 +1049,7 @@ final class Library {
       return GistDetails(
         title: title, files: [.init(id: file.filename, filename: file.filename)],
         selectedFileID: file.filename,
+        isDailyNote: file.gist?.isDailyNote ?? (file.draft?.description == DailyNote.gistDescription),
         isAutoSaveEnabled: account?.id == file.accountID
           && account?.preferences.isAutoSaveEnabled == true)
     }
@@ -1064,7 +1067,7 @@ final class Library {
       access: owns(gist) ? .editable : .readOnly,
       isPinned: account.preferences.pinnedGists.contains(gist.id),
       isStarred: cachedLibrary?.starred.contains(where: { $0.id == gist.id }) ?? false,
-      isArchived: gist.isArchived,
+      isArchived: gist.isArchived, isDailyNote: gist.isDailyNote,
       tags: state.tags.filter {
         account.preferences.gistTags[gist.id]?.contains($0.id) == true
       },

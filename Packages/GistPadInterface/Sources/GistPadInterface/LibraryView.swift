@@ -59,7 +59,7 @@ extension View {
     }
 
     func deletionConfirmation(
-        title: String, isPresented: Binding<Bool>, delete: @escaping () -> Void
+        title: String, isDailyNote: Bool, isPresented: Binding<Bool>, delete: @escaping () -> Void
     ) -> some View {
         confirmationDialog(
             String(localized: "Delete “\(title)”?", bundle: .module),
@@ -67,9 +67,15 @@ extension View {
         ) {
             Button(String(localized: "Delete", bundle: .module), role: .destructive, action: delete)
         } message: {
-            Text(
-                "This removes the note from this iPhone and from GitHub if it was saved there, including unsynced changes. This can’t be undone.",
-                bundle: .module)
+            if isDailyNote {
+                Text(
+                    "This deletes the daily note from this iPhone and GitHub, including changes that haven’t been published. This can’t be undone.",
+                    bundle: .module)
+            } else {
+                Text(
+                    "This deletes the gist from this iPhone and GitHub, including changes that haven’t been published. This can’t be undone.",
+                    bundle: .module)
+            }
         }
     }
 }
@@ -461,7 +467,7 @@ public struct LibraryView: View {
             }
         }
         .deletionConfirmation(
-            title: gist.title,
+            title: gist.title, isDailyNote: gist.isDailyNote,
             isPresented: Binding(
                 get: { pendingDeletion == gist.id },
                 set: { if !$0 { pendingDeletion = nil } }),
