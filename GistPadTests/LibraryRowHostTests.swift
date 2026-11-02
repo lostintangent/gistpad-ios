@@ -140,7 +140,7 @@ struct LibraryRowHostTests {
     let content = try frame("content")
     let title = try frame("title")
     let progress = try frame("progress")
-    let padding = UIFontMetrics(forTextStyle: .body).scaledValue(for: 21, compatibleWith: traits)
+    let padding = UIFontMetrics(forTextStyle: .body).scaledValue(for: 14, compatibleWith: traits)
 
     #expect(abs(content.width - CGFloat(width)) <= 1)
     #expect(content.contains(title))
@@ -201,7 +201,7 @@ struct LibraryRowHostTests {
     let title = try frame("title")
     let date = try frame("date")
     let count = try frame("comment-count")
-    let padding = UIFontMetrics(forTextStyle: .body).scaledValue(for: 21, compatibleWith: traits)
+    let padding = UIFontMetrics(forTextStyle: .body).scaledValue(for: 14, compatibleWith: traits)
     let titleFont = UIFont.preferredFont(forTextStyle: .headline, compatibleWith: traits)
     let twoLines = UILabel()
     twoLines.font = titleFont

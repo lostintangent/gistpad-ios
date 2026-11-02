@@ -9,7 +9,7 @@ struct LibraryNoteRow: View {
     @Environment(\.locale) private var locale
     @Environment(\.calendar) private var calendar
     @Environment(\.timeZone) private var timeZone
-    @ScaledMetric(relativeTo: .body) private var verticalPadding = 21
+    @ScaledMetric(relativeTo: .body) private var verticalPadding = 14
     @ScaledMetric(relativeTo: .body) private var lineSpacing = 6
 
     var body: some View {
