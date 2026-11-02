@@ -68,6 +68,32 @@ struct PlatformTests {
     #expect(fixture.publishes.isEmpty)
   }
 
+  @Test func addToTodayLandsAfterTodaysPublishIsCutOffAndPublishesOnceOnline() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    let draft = try await fixture.today().draft
+    let typed = draft.text + "- [ ] Written offline\n"
+    _ = try await fixture.store.persist(
+      id: draft.id, accountID: fixture.account.id, text: typed, generation: draft.generation + 1)
+    // Today's publish goes out and is cut off, so GitHub may or may not have it.
+    fixture.fixture.fail("PATCH")
+    _ = try? await fixture.library.publish(draftID: draft.id, accountID: fixture.account.id)
+    #expect(try await fixture.store.draft(id: draft.id, accountID: fixture.account.id)
+      .attemptedContent == typed)
+    fixture.fixture.restore()
+
+    let session = try await fixture.session()
+    try await fixture.bridge.addToToday(text: "A thought", asTask: true, target: DailyNote.Day())
+    #expect(session.editor.text == typed + "- [ ] A thought\n")
+    #expect(session.saveState == .savedLocally)
+    #expect(fixture.publishes.isEmpty)
+
+    await session.leave()
+    #expect(fixture.publishes == ["PATCH /gists/daily123"])
+    #expect(fixture.fixture.remote("daily123", DailyNote.Day().filename) == session.editor.text)
+    #expect(session.saveState == .savedToGitHub)
+  }
+
   @Test func aPickedPhotoUploadsThenInsertsItsMarkdownAtTheCursorAsOneUndo() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
