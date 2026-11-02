@@ -19,7 +19,6 @@ public struct LauncherWidgetView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.locale) private var locale
     @Environment(\.calendar) private var calendar
-    @ScaledMetric(relativeTo: .caption) private var dateColumnWidth = 100
     @ScaledMetric(relativeTo: .title3) private var newGistSize = 26
 
     public init(snapshot: LibrarySnapshot?, date: Date, state: LauncherWidgetState) {
@@ -69,7 +68,8 @@ public struct LauncherWidgetView: View {
                 Spacer(minLength: 0)
                 newGist.offset(x: -3 - newGistInset, y: 4 + newGistInset)
             }
-            .frame(width: dateColumnWidth, alignment: .leading)
+            // A fixed column keeps titles their room at accessibility sizes, widening only for a long weekday.
+            .frame(minWidth: 100, alignment: .leading)
             .frame(maxHeight: .infinity, alignment: .topLeading)
             VStack(alignment: .leading, spacing: 0) {
                 if recents.isEmpty {
