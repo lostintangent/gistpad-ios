@@ -1,19 +1,14 @@
 import Foundation
-import GistPadIntelligence
+import GistPadEditor
 
 extension NoteSnapshot {
-  init(parsing source: String, documentID: String, sessionID: UUID, generation: UInt64) {
-    let spans = MarkdownSyntax.spans(in: source)
-    let protected = spans.filter { $0.kind == .code || $0.kind == .frontmatter }
-    let markers = spans.filter { span in
-      (span.kind == .task || span.kind == .checkedTask)
-        && !protected.contains { NSIntersectionRange($0.range, span.range).length > 0 }
-    }.map(\.range)
-    let headings = spans.filter { $0.kind == .heading }.map(\.range)
+  public init(parsing source: String, documentID: String, sessionID: UUID, generation: UInt64) {
+    let outline = MarkdownSyntax.outline(in: source)
     self.init(
       documentID: documentID, sessionID: sessionID, generation: generation, source: source,
-      headingOffsets: headings.map(\.location),
-      tasks: NoteTask.indexed(in: source, markers: markers, headings: headings))
+      headingOffsets: outline.headings.map(\.location),
+      tasks: NoteTask.indexed(
+        in: source, markers: outline.taskMarkers, headings: outline.headings))
   }
 }
 
@@ -21,7 +16,7 @@ extension NoteSnapshot {
   import UIKit
 
   extension DocumentSession {
-    public func intelligenceSnapshot() throws -> NoteSnapshot {
+    func intelligenceSnapshot() throws -> NoteSnapshot {
       guard !isComposing, !writingToolsActive, textView.markedTextRange == nil else {
         throw NoteIntelligenceError.unavailable(
           String(
@@ -34,7 +29,7 @@ extension NoteSnapshot {
     }
 
     @discardableResult
-    public func applyIntelligenceProposal(
+    func applyIntelligenceProposal(
       _ proposal: NoteProposal, commentID: UUID? = nil
     ) throws -> NoteProposal {
       guard textView.isEditable else {
@@ -45,12 +40,14 @@ extension NoteSnapshot {
       }
       let snapshot = try intelligenceSnapshot()
       let application = try proposal.application(to: snapshot, commentID: commentID)
-      let edit = SourceEdit(
-        mutation: SourceMutation(
+      let selection = try application.mappedSelection(textView.selectedRange)
+      try apply(
+        SourceMutation(
           range: NSRange(location: 0, length: snapshot.source.utf16.count),
           expected: snapshot.source, replacement: application.source),
-        selection: try application.mappedSelection(textView.selectedRange))
-      try apply(edit, generation: snapshot.generation)
+        documentID: documentID, generation: snapshot.generation)
+      textView.selectedRange = selection
+      textView.scrollRangeToVisible(selection)
       return try application.remainingReview(on: intelligenceSnapshot())
     }
   }

@@ -18,16 +18,12 @@ struct GistPadApp: App {
   @ViewBuilder
   private func fixtureWorkspace(session: DocumentSession) -> some View {
     #if DEBUG
-      if LaunchArguments.evaluatesIntelligence {
-        NotebookIntelligenceEvaluationWorkspace()
-      } else if LaunchArguments.captureScreen == "library-delete" {
+      if LaunchArguments.captureScreen == "library-delete" {
         NotebookLibraryDeletionCaptureWorkspace()
       } else if LaunchArguments.captureScreen == "today" {
         NotebookTodayCaptureWorkspace()
       } else if LaunchArguments.captureScreen == "photos" {
         PhotoCaptureWorkspace()
-      } else if LaunchArguments.captureScreen == "intelligence" {
-        NotebookIntelligenceCaptureWorkspace()
       } else if LaunchArguments.captureScreen == "scroll-edges" {
         ScrollEdgeCaptureWorkspace()
       } else if LaunchArguments.captureScreen == "comment-highlights" {
@@ -52,10 +48,6 @@ struct GistPadApp: App {
     loadError = nil
     do {
       #if DEBUG
-        if LaunchArguments.evaluatesIntelligence {
-          fixtureSession = DocumentSession(documentID: "intelligence-evaluation", text: "")
-          return
-        }
         let environment = ProcessInfo.processInfo.environment
         let isTesting =
           environment["GISTPAD_TESTING"] == "1" || environment["GISTPAD_FOLD_PROBE"] == "1"
@@ -164,9 +156,6 @@ struct GistPadApp: App {
 
 enum LaunchArguments {
   #if DEBUG
-    static let evaluatesIntelligence =
-      ProcessInfo.processInfo.arguments.contains("--evaluate-intelligence")
-
     static let captureColorScheme: ColorScheme? = {
       let arguments = ProcessInfo.processInfo.arguments
       guard captureScreen != nil,

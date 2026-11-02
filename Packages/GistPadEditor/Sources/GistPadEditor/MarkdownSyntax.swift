@@ -5,7 +5,7 @@ import Foundation
   import UIKit
 #endif
 
-enum MarkdownSyntax {
+public enum MarkdownSyntax {
   enum Kind: Sendable {
     case heading, strong, emphasis, blockquote, htmlTag, strikethrough, orderedMarker
     case code, frontmatter, link, task, checkedTask, punctuation, linkDestination
@@ -79,6 +79,17 @@ enum MarkdownSyntax {
       preconditionFailure("Invalid built-in Markdown fence expression: \(error)")
     }
   }()
+
+  /// Heading ranges and task-marker ranges outside code and front matter.
+  public static func outline(in text: String) -> (headings: [NSRange], taskMarkers: [NSRange]) {
+    let spans = spans(in: text)
+    let protected = spans.filter { $0.kind == .code || $0.kind == .frontmatter }
+    let taskMarkers = spans.filter { span in
+      (span.kind == .task || span.kind == .checkedTask)
+        && !protected.contains { NSIntersectionRange($0.range, span.range).length > 0 }
+    }.map(\.range)
+    return (spans.filter { $0.kind == .heading }.map(\.range), taskMarkers)
+  }
 
   static func spans(in text: String) -> [Span] {
     let source = text as NSString

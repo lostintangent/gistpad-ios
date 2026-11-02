@@ -89,7 +89,7 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
     case .invalidEdit:
       String(
         localized:
-          "Apple Intelligence proposed a change that couldn't be safely located in your note. Nothing was changed. Try again.",
+          "Apple Intelligence returned an edit that couldn't be found in your file. Nothing was changed.",
         bundle: .module)
     case .emptyAnswer:
       String(
@@ -102,7 +102,7 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
     case .unsafeEdit:
       String(
         localized:
-          "This suggestion repeats your instruction or would leave almost none of your note. Nothing was changed. Try a more specific edit.",
+          "This edit repeats your instruction or would leave almost none of your file. Nothing was changed.",
         bundle: .module)
     case .unverifiedQuotation:
       String(
@@ -130,28 +130,6 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
         localized: "Apple Intelligence took too long to respond. Try again.", bundle: .module)
     }
   }
-
-  public var diagnosticCode: String {
-    switch self {
-    case .unavailable: "unavailable"
-    case .emptyInstruction: "emptyInstruction"
-    case .insufficientContext: "insufficientContext"
-    case .invalidResponse: "invalidResponse"
-    case .emptyAnswer: "emptyAnswer"
-    case .invalidAnswer(let issue): issue.rawValue
-    case .invalidEdit: "invalidEdit"
-    case .unsafeEdit: "unsafeEdit"
-    case .responseTooLarge: "responseTooLarge"
-    case .unverifiedQuotation: "unverifiedQuotation"
-    case .noEvidence: "noEvidence"
-    case .staleSnapshot: "staleSnapshot"
-    case .noApplicableChanges: "noApplicableChanges"
-    case .invalidSelection: "invalidSelection"
-    case .refused: "refused"
-    case .rateLimited: "rateLimited"
-    case .timedOut: "timedOut"
-    }
-  }
 }
 
 public struct NoteModelInfo: Sendable {
@@ -170,21 +148,19 @@ public struct NoteModelPass: Sendable {
   public let instruction: String
   public let source: String
   public let responseTokens: Int
-  public let evidenceOnly: Bool
   public let requestID: UUID
   public let tasks: [NoteTask]
   public let evidenceBlocks: [String]?
 
   public init(
     purpose: Purpose, instruction: String, source: String, responseTokens: Int,
-    evidenceOnly: Bool = false, requestID: UUID = UUID(), tasks: [NoteTask] = [],
+    requestID: UUID = UUID(), tasks: [NoteTask] = [],
     evidenceBlocks: [String]? = nil
   ) {
     self.purpose = purpose
     self.instruction = instruction
     self.source = source
     self.responseTokens = responseTokens
-    self.evidenceOnly = evidenceOnly
     self.requestID = requestID
     self.tasks = tasks
     self.evidenceBlocks = evidenceBlocks
@@ -260,7 +236,6 @@ public enum NoteAnswerPart: Sendable, Equatable {
 }
 
 public struct NoteAnswer: Sendable {
-  public let snapshot: NoteSnapshot
   public let parts: [NoteAnswerPart]
 }
 
@@ -273,22 +248,15 @@ public struct NoteIntelligenceProgress: Sendable {
 
 @MainActor
 public protocol NoteModelBackend {
-  func beginAttempt(id: UUID, action: NoteIntelligenceAction)
-  func finishAttempt(id: UUID, errorCode: String?, errorType: String?)
   func modelInfo() async throws -> NoteModelInfo
   func tokenCount(for pass: NoteModelPass) async throws -> Int
   func replacements(for pass: NoteModelPass) async throws -> [NoteReplacementCandidate]
   func editOperations(for pass: NoteModelPass) async throws -> [NoteEditOperation]
   func excerpts(for pass: NoteModelPass) async throws -> [String]
-  func answer(
-    for pass: NoteModelPass,
-    onUpdate: @MainActor ([ModelAnswerPart]) -> Void
-  ) async throws -> [ModelAnswerPart]
+  func answer(for pass: NoteModelPass) async throws -> [ModelAnswerPart]
 }
 
 extension NoteModelBackend {
-  public func beginAttempt(id: UUID, action: NoteIntelligenceAction) {}
-  public func finishAttempt(id: UUID, errorCode: String?, errorType: String?) {}
   public func editOperations(for pass: NoteModelPass) async throws -> [NoteEditOperation] {
     try await replacements(for: pass).map(NoteEditOperation.replace)
   }

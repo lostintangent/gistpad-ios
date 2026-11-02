@@ -147,8 +147,7 @@ public final class NoteIntelligenceEngine {
 
   public func ask(
     _ request: NoteIntelligenceRequest,
-    progress: @MainActor (NoteIntelligenceProgress) -> Void = { _ in },
-    onUpdate: @MainActor ([NoteAnswerPart]) -> Void = { _ in }
+    progress: @MainActor (NoteIntelligenceProgress) -> Void = { _ in }
   ) async throws -> NoteAnswer {
     guard request.action == .ask else { throw NoteIntelligenceError.invalidResponse }
     try validate(request)
@@ -177,42 +176,26 @@ public final class NoteIntelligenceEngine {
       guard !evidence.isEmpty else { throw NoteIntelligenceError.noEvidence }
       input = try await combine(evidence, request: request, model: model, progress: progress)
     }
-    try Task.checkCancellation()
     progress(NoteIntelligenceProgress(phase: .answering, current: 1, total: 1))
-    let generated = try await backend.answer(for: input) { partial in
-      let prose = partial.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
+    var generated: [ModelAnswerPart] = []
+    for attempt in 1...2 {
+      try Task.checkCancellation()
+      generated = try await backend.answer(for: input)
+      let prose = generated.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
       guard
-        NoteAnswerIssue.check(
-          prose, source: request.snapshot.source, instruction: request.instruction) == nil
-      else { return }
-      var verified: [NoteAnswerPart] = []
-      for part in partial
-      where !part.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-        switch part.kind {
-        case .prose:
-          verified.append(.prose(part.text))
-        case .quote:
-          let ranges = NoteAnchors.matches(part.text, in: request.snapshot.source)
-          guard !ranges.isEmpty else {
-            onUpdate(verified)
-            return
-          }
-          verified.append(.quotation(NoteCitation(quote: part.text, ranges: ranges)))
-        }
-      }
-      onUpdate(verified)
+        let issue = NoteAnswerIssue.check(
+          prose, source: input.source, instruction: input.instruction)
+      else { break }
+      logger.notice(
+        "request=\(request.id.uuidString, privacy: .public) answerRejected=\(issue.rawValue, privacy: .public) attempt=\(attempt)"
+      )
+      if attempt == 2 { throw NoteIntelligenceError.invalidAnswer(issue) }
     }
     try Task.checkCancellation()
     let visible = generated.filter {
       !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     guard !visible.isEmpty else { throw NoteIntelligenceError.emptyAnswer }
-    let prose = visible.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
-    if let issue = NoteAnswerIssue.check(
-      prose, source: request.snapshot.source, instruction: request.instruction)
-    {
-      throw NoteIntelligenceError.invalidAnswer(issue)
-    }
     let parts = try visible.map { part -> NoteAnswerPart in
       switch part.kind {
       case .prose: return .prose(part.text)
@@ -222,8 +205,7 @@ public final class NoteIntelligenceEngine {
         return .quotation(NoteCitation(quote: part.text, ranges: ranges))
       }
     }
-    onUpdate(parts)
-    return NoteAnswer(snapshot: request.snapshot, parts: parts)
+    return NoteAnswer(parts: parts)
   }
 
   private func combine(
@@ -234,8 +216,7 @@ public final class NoteIntelligenceEngine {
     for _ in 0..<8 {
       let source = evidence.joined(separator: "\n\n")
       let answer = pass(
-        request, purpose: .answer, source: source, model: model, evidenceOnly: true,
-        evidenceBlocks: evidence)
+        request, purpose: .answer, source: source, model: model, evidenceBlocks: evidence)
       if try await fits(answer, model: model) { return answer }
       var batches: [[String]] = []
       var batch: [String] = []
@@ -373,13 +354,12 @@ public final class NoteIntelligenceEngine {
 
   private func pass(
     _ request: NoteIntelligenceRequest, purpose: NoteModelPass.Purpose,
-    source: String, model: NoteModelInfo, evidenceOnly: Bool = false, scope: NSRange? = nil,
+    source: String, model: NoteModelInfo, scope: NSRange? = nil,
     evidenceBlocks: [String]? = nil
   ) -> NoteModelPass {
     NoteModelPass(
       purpose: purpose, instruction: request.instruction, source: source,
-      responseTokens: min(1_536, model.contextSize / 3), evidenceOnly: evidenceOnly,
-      requestID: request.id,
+      responseTokens: min(1_536, model.contextSize / 3), requestID: request.id,
       tasks: purpose == .edit
         ? request.snapshot.tasks.filter { task in
           guard let scope else { return true }

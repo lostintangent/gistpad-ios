@@ -601,33 +601,6 @@ struct NotebookModelTests {
     #expect(model.library.snapshot.notes.first(where: { $0.id == gist.id })?.commentCount == 2)
   }
 
-  @Test func reviewIsOwnedByTheOpenSessionAndClosedHandlesCannotReviveOnReopen() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "a", title: "A reviewed note")])
-    let notebook = NotebookModel(provider: provider)
-    await notebook.start()
-    await notebook.open(gistID: "a")
-    let document = try #require(notebook.loadedDocument)
-    let draft = try await notebook.openDraft(for: document)
-    let controller = NotebookSessionController(
-      document: document, draft: draft, notebook: notebook)
-    let review = controller.reviewState()
-    #expect(controller.review === review)
-    #expect(controller.reviewState() === review)
-    #expect(!review.hasReview)
-    #expect(!review.isStale)
-    controller.clearReview()
-    #expect(controller.review == nil)
-    #expect(review.isStale)
-    #expect(!review.hasReview)
-    let reopened = controller.reviewState()
-    #expect(reopened !== review)
-    #expect(!reopened.isStale)
-    #expect(review.isStale)
-    #expect(controller.session.text == draft.text)
-    #expect(controller.session.generation == draft.generation)
-  }
-
   @Test func libraryDeleteSeparatesRemoteGistsAndLocalCopiesFromUnpublishedAndSharedRows() async throws {
     let owned = try makeGist(
       id: "a", title: "An owned notebook", content: "Find this thought",
@@ -2282,7 +2255,7 @@ struct NotebookNavigationHostTests {
     entry.performPrimaryAction()
     try await host.waitUntil {
       notebookAccessibilityElement(
-        "capture-frame-note-intelligence-sheet", in: host.window) != nil
+        "intelligence-prompt", in: host.window) != nil
     }
     #expect(!editor.isFirstResponder)
     #expect(editor.selectedRange == selection)

@@ -1,5 +1,6 @@
 import GistPadAppearance
 import GistPadEditor
+import GistPadIntelligence
 import Observation
 import SwiftUI
 import UIKit
@@ -8,23 +9,13 @@ import UIKit
 @Observable
 final class NotebookIntelligencePresentation {
   var target: Target?
-  var errorMessage: String?
   private var retainedTarget: Target?
 
   func present(
     session: DocumentSession, title: String,
-    reviewState: NoteReviewState? = nil,
-    isCurrent: @escaping @MainActor () -> Bool,
     revealSource: @escaping @MainActor (NSRange) -> Void
   ) {
-    guard isCurrent() else {
-      errorMessage = String(localized: "The note changed. Open Intelligence again.")
-      return
-    }
-    let target = Target(
-      session: session, title: title,
-      reviewState: reviewState ?? NoteReviewState(session: session, isCurrent: isCurrent),
-      isCurrent: isCurrent, revealSource: revealSource)
+    let target = Target(session: session, title: title, revealSource: revealSource)
     retainedTarget = target
     session.textView.resignFirstResponder()
     self.target = target
@@ -33,14 +24,8 @@ final class NotebookIntelligencePresentation {
   func dismissed() {
     guard let target = retainedTarget else { return }
     retainedTarget = nil
-    guard target.isCurrent() else { return }
     if let reference = target.reference {
-      guard target.session.generation == reference.generation else {
-        errorMessage = String(
-          localized: "The note changed. Open the reference from a fresh answer.")
-        return
-      }
-      target.revealSource(reference.range)
+      target.revealSource(reference)
       return
     }
     let session = target.session
@@ -65,30 +50,19 @@ final class NotebookIntelligencePresentation {
     let id = UUID()
     let session: DocumentSession
     let title: String
-    let reviewState: NoteReviewState
-    let isCurrent: @MainActor () -> Bool
     let revealSource: @MainActor (NSRange) -> Void
     let generation: UInt64
     let selection: NSRange
     let offset: CGPoint
     let wasEditing: Bool
-    struct Reference {
-      let range: NSRange
-      let generation: UInt64
-    }
-
-    var reference: Reference?
+    var reference: NSRange?
 
     init(
       session: DocumentSession, title: String,
-      reviewState: NoteReviewState,
-      isCurrent: @escaping @MainActor () -> Bool,
       revealSource: @escaping @MainActor (NSRange) -> Void
     ) {
       self.session = session
       self.title = title
-      self.reviewState = reviewState
-      self.isCurrent = isCurrent
       self.revealSource = revealSource
       generation = session.generation
       selection = session.textView.selectedRange
@@ -113,26 +87,9 @@ private struct NotebookIntelligenceModifier: ViewModifier {
       .sheet(item: $presentation.target, onDismiss: presentation.dismissed) { target in
         NoteIntelligenceSheet(
           session: target.session, title: target.title,
-          reviewState: target.reviewState,
-          isCurrent: target.isCurrent,
-          revealSource: {
-            target.reference = .init(range: $0, generation: target.session.generation)
-          }
+          revealSource: { target.reference = $0 }
         )
         .environment(\.personalAccent, personalAccent)
-      }
-      .onChange(of: presentation.target.map { $0.isCurrent() } ?? true) { _, current in
-        if !current { presentation.target = nil }
-      }
-      .alert(
-        String(localized: "Couldn't Complete Action"),
-        isPresented: Binding(
-          get: { presentation.errorMessage != nil },
-          set: { if !$0 { presentation.errorMessage = nil } })
-      ) {
-        Button(String(localized: "OK"), role: .cancel) { presentation.errorMessage = nil }
-      } message: {
-        Text(presentation.errorMessage ?? "")
       }
   }
 }

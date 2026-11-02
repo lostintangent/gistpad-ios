@@ -35,7 +35,6 @@ struct LiveNotebookWorkspace: View {
   @State private var sharedPreviewGistID: String?
   @State private var intelligence = NotebookIntelligencePresentation()
   @State private var comments: NotebookCommentsPresentation
-  @State private var intelligenceAccountScope = UUID()
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.openURL) private var openURL
   @Environment(\.scenePhase) private var scenePhase
@@ -296,7 +295,7 @@ struct LiveNotebookWorkspace: View {
     .onChange(of: compactColumn) { previous, current in
       guard previous != current, current == .sidebar, let outgoing = active else { return }
       if horizontalSizeClass == .compact { comments.hide() }
-      finishLeavingNote(outgoing, preservingReview: true)
+      finishLeavingNote(outgoing)
     }
   }
 
@@ -321,19 +320,14 @@ struct LiveNotebookWorkspace: View {
     }
     .onChange(of: notebook.pendingAccount?.id) { _, pending in
       NotebookPlatformBootstrap.scheduleRefresh()
-      if pending != nil {
-        comments.reset()
-        for controller in sessions.values { controller.clearReview() }
-      }
+      if pending != nil { comments.reset() }
     }
     .onChange(of: notebook.localDrafts) {
       NotebookPlatformBootstrap.scheduleRefresh()
     }
     .onChange(of: notebook.account?.id) { _, accountID in
       comments.reset()
-      for controller in sessions.values { controller.clearReview() }
       archiveUndo = nil
-      intelligenceAccountScope = UUID()
       intelligence.target = nil
       creationChoiceTarget = nil
       let inactivePhotos = photoControllers.values.filter { $0.accountID != accountID }
@@ -348,8 +342,6 @@ struct LiveNotebookWorkspace: View {
     .onChange(of: notebook.isSigningIn) { _, signingIn in
       if signingIn {
         comments.reset()
-        for controller in sessions.values { controller.clearReview() }
-        intelligenceAccountScope = UUID()
         intelligence.target = nil
         creationChoiceTarget = nil
       }
@@ -515,7 +507,6 @@ struct LiveNotebookWorkspace: View {
           if let error = target.controller.metadataError { actionMessage = error }
         case .discard:
           let key = target.controller.draft.id.uuidString
-          target.controller.clearReview()
           await photoControllers[key]?.stop()
           photoControllers[key] = nil
           sessions[key] = nil
@@ -1275,17 +1266,13 @@ struct LiveNotebookWorkspace: View {
     }
   }
 
-  private func finishLeavingNote(
-    _ controller: NotebookSessionController, preservingReview: Bool = false
-  ) {
-    if !preservingReview { controller.clearReview() }
+  private func finishLeavingNote(_ controller: NotebookSessionController) {
     Task {
       if !(await comments.flushDrafts()) {
         actionMessage = String(localized: "A comment draft couldn’t be saved. Return to Comments for that note and try saving again.")
       }
       guard await controller.finishLeavingNote() else { return }
       let id = controller.draft.id.uuidString
-      controller.clearReview()
       sessions[id] = nil
       if activeID == id { activeID = nil }
       if let photos = photoControllers.removeValue(forKey: id) { await photos.stop() }
@@ -1298,20 +1285,9 @@ struct LiveNotebookWorkspace: View {
         localized: "Finish composition or Writing Tools before opening Intelligence.")
       return
     }
-    let accountID = controller.draft.accountID
-    let scope = intelligenceAccountScope
-    let identity = controller.session.viewIdentity
-    let isCurrent: @MainActor () -> Bool = {
-      notebook.account?.id == accountID && notebook.pendingAccount == nil
-        && !notebook.isSigningIn && intelligenceAccountScope == scope
-        && active?.session.viewIdentity == identity
-    }
     intelligence.present(
       session: controller.session, title: controller.document.chrome.title,
-      reviewState: controller.reviewState(),
-      isCurrent: isCurrent,
       revealSource: { range in
-        guard isCurrent() else { return }
         guard controller.document.chrome.access.canEdit else {
           actionMessage = String(
             localized: "This note is read-only. Its source reference can't be opened in the editor.")
@@ -1327,7 +1303,6 @@ struct LiveNotebookWorkspace: View {
         controller.mode = .source
         Task { @MainActor in
           await Task.yield()
-          guard isCurrent() else { return }
           guard controller.session.generation == generation else {
             actionMessage = String(localized: "This reference no longer matches the note.")
             return
@@ -1489,7 +1464,6 @@ struct LiveNotebookWorkspace: View {
       case .signedOut:
         let keys = sessions.filter { $0.value.draft.accountID == accountID }.map(\.key)
         for key in keys {
-          sessions[key]?.clearReview()
           sessions[key] = nil
           await photoControllers[key]?.stop()
           photoControllers[key] = nil
@@ -1524,7 +1498,6 @@ struct LiveNotebookWorkspace: View {
       case .review, .remoteRead:
         break
       case .discardedDraft(let id):
-        sessions[id.uuidString]?.clearReview()
         sessions[id.uuidString] = nil
         await photoControllers[id.uuidString]?.stop()
         photoControllers[id.uuidString] = nil
@@ -1556,7 +1529,6 @@ struct LiveNotebookWorkspace: View {
   private func closeSessions(where matches: (NotebookSessionController) -> Bool) async {
     let keys = sessions.filter { matches($0.value) }.map(\.key)
     for key in keys {
-      sessions[key]?.clearReview()
       sessions[key] = nil
       await photoControllers[key]?.stop()
       photoControllers[key] = nil
@@ -1627,7 +1599,7 @@ struct LiveNotebookWorkspace: View {
         && sharingTarget == nil && tagTarget == nil && nameTarget == nil
         && deletionTarget == nil && reviewTarget == nil
         && creationChoiceTarget == nil
-        && intelligence.target == nil && intelligence.errorMessage == nil
+        && intelligence.target == nil
         && actionMessage == nil && notebook.documentError == nil,
       isEditing: active?.session.isComposing == true || active?.session.writingToolsActive == true)
   }

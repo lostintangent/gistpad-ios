@@ -80,45 +80,6 @@ final class NativeControlUITests: XCTestCase {
   }
 
   @MainActor
-  func testIntelligenceStartsWithItsActionPickerBelowTheTitle() async throws {
-    for accessibility in [false, true] {
-      for appearance in ["light", "dark"] {
-        let app = launch(
-          screen: "intelligence", state: "ask", accessibility: accessibility,
-          appearance: appearance)
-        defer {
-          record(
-            app,
-            name: "intelligence-title-actions-\(accessibility ? "AX3" : "Large")-\(appearance)")
-          app.terminate()
-        }
-        let sheet = app.descendants(matching: .any)["note-intelligence-sheet"].firstMatch
-        let actions = sheet.descendants(matching: .any)["intelligence-actions"].firstMatch
-        let bar = sheet.navigationBars["Saturday walk"]
-        try await waitUntil("the Intelligence title and first action control") {
-          bar.exists && actions.exists && actions.isHittable
-        }
-        let window = app.windows.firstMatch
-        XCTAssertTrue(window.frame.contains(actions.frame))
-        XCTAssertEqual(actions.frame.minY - bar.frame.maxY, 20, accuracy: 1)
-        XCTAssertTrue(bar.staticTexts["Saturday walk"].exists)
-        XCTAssertFalse(app.staticTexts["Saturday.md"].exists)
-        XCTAssertFalse(app.staticTexts["On device"].exists)
-      }
-    }
-  }
-
-  @MainActor
-  func testLongRequestKeepsAnAccessibleCancelDuringAZeroAnswerWait() async throws {
-    try await checkPendingCancellation(accessibility: false)
-  }
-
-  @MainActor
-  func testLongRequestKeepsAnAccessibleCancelAtAccessibilitySize() async throws {
-    try await checkPendingCancellation(accessibility: true)
-  }
-
-  @MainActor
   func testEmojiTitleKeepsBothModesVisible() async throws {
     try await checkNativeModes(accessibility: false)
   }
@@ -554,30 +515,6 @@ final class NativeControlUITests: XCTestCase {
   }
 
   @MainActor
-  func testNativeCloseReturnsToTheRetainedEditableSource() async throws {
-    for appearance in ["light", "dark"] {
-      let app = launch(screen: "intelligence", state: "edit", appearance: appearance)
-      defer { app.terminate() }
-      let close = app.buttons["intelligence-close"]
-      try await waitUntil("the result and native Close") {
-        app.buttons["intelligence-apply"].exists && close.isHittable
-      }
-      close.tap()
-      let editor = app.textViews["source-editor"]
-      try await waitUntil("Close to restore the original source") {
-        editor.isHittable && !close.exists
-      }
-      let source = "# Saturday walk\n\nTake teh river path.\nLeave at 9am, before the cafe opens at 8am."
-      XCTAssertEqual(editor.value as? String, source)
-      record(app, name: "native-close-retained-source-\(appearance)")
-      editor.tap()
-      editor.typeText("\nStill editable.")
-      XCTAssertEqual(
-        (editor.value as? String)?.replacingOccurrences(of: "\nStill editable.", with: ""), source)
-    }
-  }
-
-  @MainActor
   func testNativeLibrarySwipeActionsInLightAndDark() async throws {
     for appearance in ["light", "dark"] {
       for leading in [false, true] {
@@ -686,42 +623,6 @@ final class NativeControlUITests: XCTestCase {
         }
       }
     }
-  }
-
-  @MainActor
-  private func checkPendingCancellation(accessibility: Bool) async throws {
-    let app = launch(screen: "intelligence", state: "pending-cancel", accessibility: accessibility)
-    defer { app.terminate() }
-    let cancel = app.buttons["intelligence-cancel"]
-    let progress = app.descendants(matching: .any)["intelligence-progress"]
-    let request = app.descendants(matching: .any)["intelligence-submitted-request"]
-    try await waitUntil("the accessible empty-answer pending controls") {
-      cancel.isHittable && progress.exists && progress.label == "Answering…" && request.exists
-    }
-    let started = ContinuousClock.now
-    while started.duration(to: .now) < .seconds(5.1) {
-      XCTAssertTrue(cancel.isHittable && cancel.isEnabled)
-      XCTAssertTrue(progress.exists)
-      XCTAssertTrue(app.frame.contains(progress.frame))
-      if accessibility {
-        XCTAssertTrue(app.frame.intersects(request.frame))
-        XCTAssertLessThan(cancel.frame.maxY, request.frame.minY)
-      } else {
-        XCTAssertTrue(app.frame.contains(request.frame))
-      }
-      try await Task.sleep(for: .milliseconds(200))
-    }
-    XCTAssertEqual(cancel.label, "Cancel")
-    XCTAssertGreaterThanOrEqual(cancel.frame.height, 44)
-    XCTAssertGreaterThan(request.label.count, 200)
-    XCTAssertFalse(app.buttons["intelligence-generate"].exists)
-    record(app, name: "zero-answer-pending-\(accessibility ? "AX3" : "Large")")
-    cancel.tap()
-    let generate = app.buttons["intelligence-generate"]
-    try await waitUntil("Cancel to restore the retained request") {
-      generate.exists && generate.isEnabled && !cancel.exists
-    }
-    XCTAssertTrue(app.staticTexts["Cancelled. Your note is unchanged."].exists)
   }
 
   @MainActor

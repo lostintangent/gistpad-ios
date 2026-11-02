@@ -1,5 +1,5 @@
 #if canImport(UIKit)
-  import GistPadIntelligence
+  import GistPadEditor
   import Observation
   import OSLog
   import UIKit
@@ -24,33 +24,15 @@
     var appliedCount = 0
     var applyFeedback = 0
     private(set) var snapshot: NoteSnapshot?
-    private(set) var submittedPrompt: String?
     private let backend: any NoteModelBackend
     private let engine: NoteIntelligenceEngine
-    private let isCurrent: @MainActor () -> Bool
     private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
     @ObservationIgnored private(set) var task: Task<Void, Never>?
 
-    init(
-      session: DocumentSession, backend: any NoteModelBackend,
-      isCurrent: @escaping @MainActor () -> Bool
-    ) {
+    init(session: DocumentSession, backend: any NoteModelBackend) {
       self.session = session
       self.backend = backend
       engine = NoteIntelligenceEngine(backend: backend)
-      self.isCurrent = isCurrent
-    }
-
-    func modelFactory(action: NoteIntelligenceAction) -> @MainActor () -> NoteIntelligenceModel {
-      let session = session
-      let backend = backend
-      let isCurrent = isCurrent
-      return {
-        let model = NoteIntelligenceModel(
-          session: session, backend: backend, isCurrent: isCurrent)
-        model.action = action
-        return model
-      }
     }
 
     var prompt: String {
@@ -61,7 +43,6 @@
     }
 
     var isStale: Bool {
-      guard isCurrent() else { return true }
       guard let snapshot else { return false }
       return session.viewIdentity != snapshot.sessionID || session.documentID != snapshot.documentID
         || session.generation != snapshot.generation
@@ -69,7 +50,7 @@
     }
 
     var canGenerate: Bool {
-      available && !isRunning && isCurrent()
+      available && !isRunning
         && (action == .review || !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         && (action != .edit || session.textView.isEditable)
     }
@@ -102,7 +83,6 @@
       appliedEdit = nil
       appliedCount = 0
       snapshot = nil
-      submittedPrompt = nil
     }
 
     func generate() {
@@ -112,62 +92,39 @@
       isCancelling = false
       let selectedAction = action
       let instruction = selectedAction == .review ? "" : prompt
-      submittedPrompt = selectedAction == .review ? nil : instruction
       let requestID = UUID()
       logger.notice(
         "request=\(requestID.uuidString, privacy: .public) action=\(selectedAction.rawValue, privacy: .public) state=started sourceUTF16=\(self.session.text.utf16.count)"
       )
       task = Task { [weak self] in
         guard let self else { return }
-        var failureCode: String?
-        var failureType: String?
-        self.backend.beginAttempt(id: requestID, action: selectedAction)
         defer {
-          if selectedAction == .ask, self.answerParts.isEmpty,
-            self.errorMessage == nil, self.notice == nil
-          {
-            self.errorMessage = NoteIntelligenceError.emptyAnswer.localizedDescription
-            failureCode = NoteIntelligenceError.emptyAnswer.diagnosticCode
-            failureType = String(reflecting: NoteIntelligenceError.self)
-          }
           self.isRunning = false
           self.isCancelling = false
           self.progress = nil
           self.task = nil
-          self.backend.finishAttempt(
-            id: requestID, errorCode: failureCode, errorType: failureType)
-          self.logger.notice(
-            "request=\(requestID.uuidString, privacy: .public) state=finished answerParts=\(self.answerParts.count) changes=\(self.proposal?.comments.count ?? 0) hasError=\(self.errorMessage != nil) cancelled=\(Task.isCancelled)"
-          )
         }
         do {
-          guard self.isCurrent() else { throw NoteIntelligenceError.staleSnapshot }
           let snapshot = try self.session.intelligenceSnapshot()
           self.snapshot = snapshot
           let request = NoteIntelligenceRequest(
             snapshot: snapshot, action: selectedAction, instruction: instruction, id: requestID)
           if selectedAction == .ask {
-            let answer = try await self.engine.ask(
-              request, progress: { self.progress = $0 }, onUpdate: { self.answerParts = $0 })
-            self.answerParts = answer.parts
+            self.answerParts = try await self.engine.ask(
+              request, progress: { self.progress = $0 }
+            ).parts
           } else {
             self.proposal = try await self.engine.propose(request, progress: { self.progress = $0 })
           }
         } catch is CancellationError {
-          failureCode = "cancelled"
-          failureType = String(reflecting: CancellationError.self)
-          self.answerParts = []
-          self.proposal = nil
           self.notice = String(localized: "Cancelled. Your note is unchanged.", bundle: .module)
         } catch {
-          self.answerParts = []
-          self.proposal = nil
           self.errorMessage = Self.message(for: error)
-          let code = (error as? NoteIntelligenceError)?.diagnosticCode ?? "unexpected"
-          failureCode = code
-          failureType = String(reflecting: type(of: error))
+          let failure =
+            (error as? NoteIntelligenceError).map { String(describing: $0) }
+            ?? String(reflecting: type(of: error))
           self.logger.error(
-            "request=\(requestID.uuidString, privacy: .public) failure=\(code, privacy: .public)")
+            "request=\(requestID.uuidString, privacy: .public) failure=\(failure, privacy: .public)")
         }
       }
     }
@@ -188,10 +145,7 @@
     }
 
     func apply(commentID: UUID? = nil) {
-      guard let proposal else {
-        errorMessage = NoteIntelligenceError.noApplicableChanges.localizedDescription
-        return
-      }
+      guard let proposal else { return }
       do {
         guard !isRunning, !isStale else { throw NoteIntelligenceError.staleSnapshot }
         let count = proposal.comments.filter {
@@ -206,6 +160,16 @@
         errorMessage = nil
         notice = String(
           localized: "Applied. The editor's Undo restores your text.", bundle: .module)
+      } catch {
+        errorMessage = error.localizedDescription
+      }
+    }
+
+    func dismiss(commentID: UUID) {
+      guard let proposal else { return }
+      do {
+        self.proposal = try proposal.dismissing(commentID: commentID)
+        errorMessage = nil
       } catch {
         errorMessage = error.localizedDescription
       }
