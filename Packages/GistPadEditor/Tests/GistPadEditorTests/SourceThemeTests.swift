@@ -67,28 +67,33 @@
             #expect(metadata.pointSize == bodySize)
             #expect(code.fontDescriptor.symbolicTraits.contains(.traitMonoSpace))
             #expect(metadata.fontDescriptor.symbolicTraits.contains(.traitMonoSpace))
-            // As on gistpad.dev, headings, bold and italic are GitHub Dark's purple, markers
-            // included. Other markers that start a line are markup, and their text is content.
-            let purple =
-              appearance == .light
-              ? UIColor.label
-              : contrast == .high
-                ? UIColor(red: 0xE6 / 255, green: 0xCC / 255, blue: 1, alpha: 1)
-                : UIColor(red: 0xD2 / 255, green: 0xA8 / 255, blue: 1, alpha: 1)
+            // gistpad.dev's GitHub palette, markers included, where nil is the text ink. List
+            // and task markers and fences are markup, and the text they introduce is content.
+            func web(
+              _ light: UInt32?, _ dark: UInt32?, highContrast highLight: UInt32?,
+              _ highDark: UInt32?
+            ) -> UIColor {
+              let high = contrast == .high
+              guard let hex = appearance == .dark ? (high ? highDark : dark) : (high ? highLight : light)
+              else { return .label }
+              return UIColor(
+                red: CGFloat(hex >> 16) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+            }
             let inks: [(UIColor, [String])] = [
-              (.label, ["Plain", "Bullet", "Numbered", "code", "title", "fenced line"]),
+              (.label, ["Plain", "HTML", "Bullet", "Numbered", "code", "title", "fenced line"]),
               (
-                purple,
+                web(nil, 0xD2A8FF, highContrast: nil, 0xE6CCFF),
                 ["# Heading", "Heading", "_emphasis", "**strong", "***both", "**outer", "_inner"]
               ),
+              (web(0x22863A, 0x7EE787, highContrast: 0x155D27, 0xB0F5B7), ["> Quoted", "> 2)"]),
+              (web(0x116329, 0x7EE787, highContrast: 0x0B4B1E, 0xB0F5B7), ["<span>", "</span>"]),
+              (web(0x032F62, 0xA5D6FF, highContrast: 0x02234A, 0xD1ECFF), ["https://example.com"]),
+              (web(0x032F62, nil, highContrast: 0x02234A, nil), ["[link]"]),
               (
                 .secondaryLabel,
-                [
-                  "> Quoted", "2)", "14.", "- Bullet", "* Nested", "+ Another",
-                  "<span>", "</span>", "[ ]", "[x]", "```toc",
-                ]
+                ["2)", "14.", "- Bullet", "* Nested", "+ Another", "[ ]", "[x]", "```toc"]
               ),
-              (.link, ["[link]", "https://example.com"]),
             ]
             for (ink, texts) in inks {
               for text in texts {

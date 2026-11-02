@@ -333,12 +333,26 @@
       commentAnnotations.editMenu(ranges: ranges.map(\.rangeValue), suggestedActions: suggestedActions)
     }
 
-    /// gistpad.dev's GitHub Dark purple for headings, bold and italic. Light keeps the text ink, as the web does.
-    static let emphasisInk = UIColor { traits in
-      guard traits.userInterfaceStyle == .dark else { return .label.resolvedColor(with: traits) }
-      return traits.accessibilityContrast == .high
-        ? UIColor(red: 0xE6 / 255, green: 0xCC / 255, blue: 1, alpha: 1)
-        : UIColor(red: 0xD2 / 255, green: 0xA8 / 255, blue: 1, alpha: 1)
+    // gistpad.dev's GitHub palette in Light, Dark, and each with Increase Contrast. Where the
+    // web uses its text ink, nil keeps `label`: Light headings, bold and italic, and Dark link labels.
+    private static let headingInk = ink(nil, 0xD2A8FF, highContrast: nil, 0xE6CCFF)
+    private static let quoteInk = ink(0x22863A, 0x7EE787, highContrast: 0x155D27, 0xB0F5B7)
+    private static let htmlTagInk = ink(0x116329, 0x7EE787, highContrast: 0x0B4B1E, 0xB0F5B7)
+    private static let urlInk = ink(0x032F62, 0xA5D6FF, highContrast: 0x02234A, 0xD1ECFF)
+    private static let linkLabelInk = ink(0x032F62, nil, highContrast: 0x02234A, nil)
+
+    private static func ink(
+      _ light: UInt32?, _ dark: UInt32?, highContrast highLight: UInt32?, _ highDark: UInt32?
+    ) -> UIColor {
+      UIColor { traits in
+        let high = traits.accessibilityContrast == .high
+        let hex =
+          traits.userInterfaceStyle == .dark ? (high ? highDark : dark) : (high ? highLight : light)
+        guard let hex else { return .label.resolvedColor(with: traits) }
+        return UIColor(
+          red: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255,
+          blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+      }
     }
 
     func highlight() {
@@ -372,10 +386,14 @@
         let attributes: [NSAttributedString.Key: Any]
         switch span.kind {
         case .heading:
-          attributes = [.foregroundColor: Self.emphasisInk, .font: headingFont]
+          attributes = [.foregroundColor: Self.headingInk, .font: headingFont]
         case .strong, .emphasis:
-          attributes = [.foregroundColor: Self.emphasisInk]
-        case .blockquote, .htmlTag, .orderedMarker, .punctuation, .task, .checkedTask:
+          attributes = [.foregroundColor: Self.headingInk]
+        case .blockquote:
+          attributes = [.foregroundColor: Self.quoteInk]
+        case .htmlTag:
+          attributes = [.foregroundColor: Self.htmlTagInk]
+        case .orderedMarker, .punctuation, .task, .checkedTask:
           attributes = [.foregroundColor: UIColor.secondaryLabel]
         case .strikethrough:
           attributes = [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
@@ -390,7 +408,7 @@
           attributes = [.foregroundColor: UIColor.label, .font: codeFont]
         case .link, .linkDestination:
           attributes = [
-            .foregroundColor: UIColor.link,
+            .foregroundColor: span.kind == .link ? Self.linkLabelInk : Self.urlInk,
             .underlineStyle: NSUnderlineStyle.single.rawValue,
           ]
         }
