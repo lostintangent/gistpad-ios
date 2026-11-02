@@ -35,14 +35,6 @@ final class NotebookIntelligencePresentation {
         session.inputError = String(localized: "Tap the note to resume writing.")
       }
     }
-    guard session.generation == target.generation else { return }
-    view.selectedRange = target.selection
-    view.layoutIfNeeded()
-    let minimum = -view.adjustedContentInset.top
-    let maximum = max(
-      minimum, view.contentSize.height - view.bounds.height + view.adjustedContentInset.bottom)
-    view.setContentOffset(
-      CGPoint(x: target.offset.x, y: min(maximum, max(minimum, target.offset.y))), animated: false)
   }
 
   @MainActor
@@ -51,9 +43,6 @@ final class NotebookIntelligencePresentation {
     let session: DocumentSession
     let title: String
     let revealSource: @MainActor (NSRange) -> Void
-    let generation: UInt64
-    let selection: NSRange
-    let offset: CGPoint
     let wasEditing: Bool
     var reference: NSRange?
 
@@ -64,9 +53,6 @@ final class NotebookIntelligencePresentation {
       self.session = session
       self.title = title
       self.revealSource = revealSource
-      generation = session.generation
-      selection = session.textView.selectedRange
-      offset = session.textView.contentOffset
       wasEditing = session.textView.isFirstResponder
     }
   }

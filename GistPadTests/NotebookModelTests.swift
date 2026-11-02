@@ -2253,10 +2253,8 @@ struct NotebookNavigationHostTests {
       })
     #expect(entry.isEnabled)
     entry.performPrimaryAction()
-    try await host.waitUntil {
-      notebookAccessibilityElement(
-        "intelligence-prompt", in: host.window) != nil
-    }
+    let root = try #require(host.window.rootViewController)
+    try await host.waitUntil { intelligencePrompt(presentedOver: root) != nil }
     #expect(!editor.isFirstResponder)
     #expect(editor.selectedRange == selection)
     #expect(host.editor(text: "A little room to think.") === editor)

@@ -11,10 +11,11 @@
   @MainActor
   struct IntelligenceSurfaceTests {
     @Test func closingIntelligenceRestoresSourceSelectionFocusAndUndo() async throws {
-      let source = NoteModelFixture.source
+      let source =
+        NoteModelFixture.source + "\n" + (1...120).map { "Stop \($0) on the river path." }.joined(separator: "\n")
       let session = DocumentSession(documentID: "intelligence-return", text: source)
       let editor = session.textView
-      let selection = (source as NSString).range(of: "river")
+      let selection = (source as NSString).range(of: "Stop 60 ")
       var changes = 0
       session.onSourceChange = { _, _ in changes += 1 }
       let presentation = NotebookIntelligencePresentation()
@@ -42,15 +43,16 @@
       }
       try #require(editor.becomeFirstResponder())
       editor.selectedRange = selection
+      editor.scrollRangeToVisible(selection)
+      editor.layoutIfNeeded()
+      let offset = editor.contentOffset
+      try #require(offset.y > 0)
       presentation.present(
         session: session, title: "Saturday walk",
         revealSource: { _ in Issue.record("Closing must not navigate to a reference.") })
       try #require(presentation.target?.wasEditing == true)
-      try await waitForNativeReturnState("the sheet to mount") {
-        guard let sheet = host.presentedViewController, !sheet.isBeingPresented else {
-          return false
-        }
-        return notebookAccessibilityElement("intelligence-prompt", in: sheet.view) != nil
+      try await waitForNativeReturnState("the sheet's prompt to mount") {
+        intelligencePrompt(presentedOver: host) != nil
       }
       #expect(!editor.isFirstResponder)
       presentation.target = nil
@@ -60,6 +62,7 @@
       }
       #expect(session.textView === editor)
       #expect(editor.selectedRange == selection)
+      #expect(abs(editor.contentOffset.y - offset.y) < 1)
       #expect(session.text.utf8.elementsEqual(source.utf8))
       #expect(session.generation == 0)
       #expect(changes == 0)
@@ -87,5 +90,19 @@
       case timedOut
     }
 
+  }
+
+  /// The sheet's prompt field, found as a view because SwiftUI only builds
+  /// accessibility identifiers while an accessibility client is running.
+  @MainActor
+  func intelligencePrompt(presentedOver root: UIViewController) -> UITextView? {
+    var presented = root.presentedViewController
+    while let next = presented?.presentedViewController { presented = next }
+    guard let sheet = presented, !sheet.isBeingPresented else { return nil }
+    func find(in view: UIView) -> UITextView? {
+      if let field = view as? UITextView { return field }
+      return view.subviews.lazy.compactMap(find).first
+    }
+    return find(in: sheet.view)
   }
 #endif
