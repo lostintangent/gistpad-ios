@@ -16,12 +16,12 @@ struct LibraryNoteRow: View {
         TimelineView(.everyMinute) { context in
             let count = note.visibleCommentCount
             // Daily notes stay one line, and only tagged notes earn a second line.
-            let tags = note.isDailyNote ? [] : tags
+            let rowTags = note.isDailyNote ? [] : tags
             VStack(alignment: .leading, spacing: lineSpacing) {
-                titleRow(relativeTo: context.date, count: tags.isEmpty ? count : nil)
-                if !tags.isEmpty {
+                titleRow(relativeTo: context.date, count: rowTags.isEmpty ? count : nil)
+                if !rowTags.isEmpty {
                     HStack(spacing: 8) {
-                        TagLabels(tags: tags, limit: 2)
+                        TagLabels(tags: rowTags, limit: 2)
                             .captureFrame("note-tags-\(note.id)")
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if let count {
