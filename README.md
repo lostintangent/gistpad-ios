@@ -6,7 +6,7 @@ A native iPhone app for [GistPad](https://gistpad.dev), the notebook that keeps 
 
 ## Features
 
-- **Start your day from the Home Screen:** The GistPad widget shows today's date, your most recent gists and `New Gist`. Tap the date to open today's daily note, or a gist to pick up where you left off.
+- **Start your day from the Home Screen or Lock Screen:** The GistPad widget shows today's date, your most recent gists and `New Gist`. Tap the date to open today's daily note, or a gist to pick up where you left off. The round `Today` widget opens it straight from the Lock Screen.
 - **Capture a thought in seconds:** Say `Add to Today in GistPad`, or run `Add to Today` from Shortcuts, and the line lands in today's note as text or a task without opening the app. `Add to Today`, `Open Today` and `New Gist` are also controls for Control Center, the Lock Screen and the Action button.
 - **Find any gist from anywhere:** Spotlight finds gists by title, tags and opening lines. Ask Siri to `Open Today in GistPad` or open a gist by name, and build your own automations from GistPad's actions in Shortcuts.
 - **Write Markdown, read it beautifully:** A native Markdown editor with a glass formatting bar, `Find and Replace` and images from your library. `Preview` uses the same renderer as gistpad.dev, so Mermaid diagrams, calculations and tasks you can check off look just like they do on the web. Select any passage to comment on it, and the conversation shows up on gistpad.dev too.
