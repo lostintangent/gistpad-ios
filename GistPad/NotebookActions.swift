@@ -106,7 +106,7 @@ extension LiveNotebookProvider {
     }
     switch action {
     case .preference(let operation):
-      return .account(Account(try await accounts.apply(operation, accountID: accountID)))
+      return .account(try await accounts.apply(operation, accountID: accountID))
     case .signOut:
       try await accounts.signOut(accountID: accountID)
       return .signedOut

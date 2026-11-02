@@ -193,7 +193,7 @@ public actor AccountService {
         guard let id = try connectedAccountID() else { return nil }
         if let stored = try storedAccount(), stored.id == id { return stored }
         // Installs from before the snapshot learn their identity once from GitHub. Preferences stay empty until a Supabase session returns, so callers keep their cached preferences.
-        let user = try await githubClient(accountID: id, session: httpSession).authenticatedUser()
+        let user = try await githubClient(accountID: id).authenticatedUser()
         guard try connectedAccountID() == id else { throw AccountError.accountChanged }
         let account = Account(
             id: id, login: user.login, githubUserID: user.id,
@@ -263,12 +263,12 @@ public actor AccountService {
         return json["role"] as? String == "anon"
     }
 
-    public func githubClient(accountID: UUID, session: URLSession? = nil) -> GitHubClient {
-        GitHubClient(session: session) { [self] in try await githubToken(accountID: accountID) }
+    public func githubClient(accountID: UUID) -> GitHubClient {
+        GitHubClient(session: httpSession) { [self] in try await githubToken(accountID: accountID) }
     }
 
-    public func imageStorageClient(accountID: UUID, session: URLSession? = nil) throws -> ImageStorageClient {
-        try ImageStorageClient(publishableKey: publishableKey, session: session) { [self] in
+    public func imageStorageClient(accountID: UUID) throws -> ImageStorageClient {
+        try ImageStorageClient(publishableKey: publishableKey, session: httpSession) { [self] in
             try await storageToken(accountID: accountID)
         }
     }

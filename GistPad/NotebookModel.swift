@@ -80,8 +80,7 @@ actor LiveNotebookProvider: NotebookProviding {
   }
 
   func connectedAccount() async throws -> Account? {
-    guard let snapshot = try await accounts.connectedAccount() else { return nil }
-    let account = Account(snapshot)
+    guard let account = try await accounts.connectedAccount() else { return nil }
     guard account.preferences.isEmpty else { return account }
     // Pre-snapshot installs have no preferences until Supabase returns, so keep the library cache's.
     let hasSession = try await accounts.hasSupabaseSession()
@@ -93,11 +92,11 @@ actor LiveNotebookProvider: NotebookProviding {
   }
 
   func signIn() async throws -> Account {
-    Account(try await accounts.signIn())
+    try await accounts.signIn()
   }
 
   func refreshAccount() async throws -> Account {
-    Account(try await accounts.refreshAccount())
+    try await accounts.refreshAccount()
   }
 
   func gists(accountID: UUID) async throws -> [Gist] {
