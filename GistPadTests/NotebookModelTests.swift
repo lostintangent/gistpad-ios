@@ -42,7 +42,9 @@ struct NotebookModelTests {
   }
 
   @Test func theLibraryFilterMatchesTitlesAndEveryTagAndKeepsTheOpenNoteLikeTheWeb() async throws {
-    let fixture = try await NotebookFixture(preferences: Self.ideas) {
+    let fixture = try await NotebookFixture(
+      preferences: Self.ideas, selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+    ) {
       $0.addGist(id: "a", description: "A tagged needle", files: ["a.md": "A"])
       $0.addGist(id: "b", description: "An untagged needle", files: ["b.md": "B"])
       $0.addGist(id: "c", description: "Ordinary title", files: ["c.md": "A needle in the body."])
@@ -159,15 +161,13 @@ struct NotebookModelTests {
     await model.start()
     await model.open(.gist(id: "b"))
     await model.open(.gist(id: "a"))
-    let first = try #require(model.loadedDocument)
     let requests = fixture.server.requests
-    #expect(!model.beginOpeningRow(id: "b"))
+    model.select(rowID: "b")
+    #expect(model.opening == nil)
     #expect(model.presentedDocument.map(model.chrome(for:))?.title == "Second")
     #expect(model.presentedDocument?.text == "Second source")
-    #expect(model.presentedDocument?.refersToSameFile(as: first) == false)
-    await model.openRow(id: "b")
-    #expect(model.opening == nil)
     #expect(model.activeFile?.document.gist?.id == "b")
+    await Task.yield()
     #expect(fixture.server.requests == requests)
   }
 
@@ -556,6 +556,8 @@ struct NotebookModelTests {
     let model = fixture.model
     await model.start()
     let rowID = "daily/2026-01-02.md"
+    // GitHub lists gists without their text, so a day's tasks are known once it's been opened.
+    await model.openRow(id: rowID)
     #expect(model.gistID(forRow: rowID) == "daily")
     #expect(model.gistID(forRow: "daily/2026-01-03.md") == nil)
     let index = try #require(model.library.snapshot.notes.firstIndex { $0.id == rowID })
@@ -762,6 +764,7 @@ struct NotebookNavigationHostTests {
     await host.model.open(.new)
     let second = try #require(host.model.presentedDocument?.draft)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
+    try await host.waitForKeyboard(visible: true)
     host.returnToLibrary()
     try await host.waitUntil {
       host.isLibraryVisible && !host.model.localDrafts.contains { $0.id == second.id }

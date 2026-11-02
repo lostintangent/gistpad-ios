@@ -762,7 +762,12 @@ final class NotebookModel {
     }
     do {
       var opened = try await document(for: request, account: account)
-      if opened.draft == nil { opened.draft = try await provider.openDraft(for: opened) }
+      if opened.draft == nil {
+        let draft = try await provider.openDraft(for: opened)
+        // Recorded, so selecting this note again presents it at once.
+        if self.account?.id == account.id { recordLocalDraft(draft) }
+        opened.draft = draft
+      }
       guard token == documentRequest else { return }
       present(opened)
     } catch is CancellationError {
