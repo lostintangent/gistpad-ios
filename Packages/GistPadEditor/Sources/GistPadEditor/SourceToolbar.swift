@@ -18,10 +18,15 @@
   }
 
   /// The glass capsule above the keyboard. Its buttons call the latest actions SwiftUI passed in.
+  /// It centers over the editor's column rather than the keyboard, so an open sidebar doesn't push it off the note.
   @MainActor
   final class SourceAccessoryView: UIView {
     let buttons = UIStackView()
     let glass: UIVisualEffectView
+    weak var editor: UIView?
+    private let column = UILayoutGuide()
+    private lazy var columnLeft = column.leftAnchor.constraint(equalTo: leftAnchor)
+    private lazy var columnRight = column.rightAnchor.constraint(equalTo: rightAnchor)
     private var actions: SourceToolbarActions
     private var configuration: SourceToolbarConfiguration?
 
@@ -46,10 +51,20 @@
       buttons.distribution = .fillEqually
       buttons.translatesAutoresizingMaskIntoConstraints = false
       glass.contentView.addSubview(buttons)
-      let preferredWidth = glass.widthAnchor.constraint(equalTo: widthAnchor, constant: -32)
+      addLayoutGuide(column)
+      let preferredWidth = glass.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -32)
       preferredWidth.priority = .defaultHigh
-      NSLayoutConstraint.activate([
-        glass.centerXAnchor.constraint(equalTo: centerXAnchor),
+      // A column too narrow for the buttons lets the capsule overhang it, never the screen.
+      let inColumn = [
+        glass.centerXAnchor.constraint(equalTo: column.centerXAnchor),
+        glass.leadingAnchor.constraint(greaterThanOrEqualTo: column.leadingAnchor, constant: 16),
+        glass.trailingAnchor.constraint(lessThanOrEqualTo: column.trailingAnchor, constant: -16),
+      ]
+      for constraint in inColumn { constraint.priority = .required - 1 }
+      NSLayoutConstraint.activate(inColumn + [
+        columnLeft, columnRight,
+        column.topAnchor.constraint(equalTo: topAnchor),
+        column.bottomAnchor.constraint(equalTo: bottomAnchor),
         glass.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 16),
         glass.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
         glass.widthAnchor.constraint(lessThanOrEqualToConstant: 380),
@@ -65,6 +80,21 @@
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("Use init(actions:)") }
+
+    override func layoutSubviews() {
+      var left: CGFloat = 0
+      var right = bounds.width
+      if let editor, editor.window != nil, window != nil {
+        let frame = editor.convert(editor.bounds, to: self)
+        if frame.maxX > 0, frame.minX < bounds.width {
+          left = max(frame.minX, 0)
+          right = min(frame.maxX, bounds.width)
+        }
+      }
+      columnLeft.constant = left
+      columnRight.constant = right - bounds.width
+      super.layoutSubviews()
+    }
 
     func update(actions: SourceToolbarActions, configuration: SourceToolbarConfiguration) {
       self.actions = actions

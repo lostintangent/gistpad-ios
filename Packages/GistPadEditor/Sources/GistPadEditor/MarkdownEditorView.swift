@@ -165,6 +165,7 @@
         view.isAccessibilityElement = isPaneVisible
         view.accessibilityElementsHidden = !isPaneVisible
         accessory.update(actions: actions, configuration: configuration)
+        accessory.editor = view
         if view.inputAccessoryView !== accessory {
           view.inputAccessoryView = accessory
           if view.isFirstResponder { view.reloadInputViews() }
@@ -218,6 +219,11 @@
       guard session.sourceHost === self else { return }
       if !ownsEditor { adoptEditor() }
       if session.textView.frame != bounds { session.textView.frame = bounds }
+      // Laying out now, inside any column animation, lets the keyboard capsule glide with the note.
+      if let accessory = session.textView.inputAccessoryView, accessory.window != nil {
+        accessory.setNeedsLayout()
+        accessory.layoutIfNeeded()
+      }
     }
 
     func dismantle() {
