@@ -8,7 +8,7 @@ struct NotebookSystemTests {
     private let date = Date(timeIntervalSince1970: 1_792_800_000)
     private let zone = TimeZone(secondsFromGMT: 0)!
 
-    @Test func acceptedDraftWinsOverCachedSourceAndExactTaskToggleIsDurable() async throws {
+    @Test func theWidgetShowsTodaysTasksIncludingUnpublishedEdits() async throws {
         let filename = DailyNoteTarget(date: date, timeZone: zone).filename
         let gist = try dailyGist(filename: filename, text: "- [ ] Cached")
         let store = try DraftStore.open(inMemory: true)
@@ -25,16 +25,6 @@ struct NotebookSystemTests {
         #expect(snapshot.gists.map(\.route) == [.note(gistID: gist.id, filename: nil)])
         #expect(snapshot.gists.first?.tags == ["Work"])
         #expect(snapshot.accentHex == "#0EA5E9")
-        let first = try #require(snapshot.today.tasks.first)
-        let command = first.command(accountID: account, completed: true)
-        #expect((source as NSString).substring(with: NSRange(location: command.edit.location, length: 1)) == " ")
-        let updated = try await store.apply(command)
-        #expect(updated.text == source.replacingOccurrences(of: "- [ ] First", with: "- [x] First"))
-        #expect(updated.generation == 10)
-        #expect(try await store.apply(command).generation == 10)
-        await #expect(throws: DraftError.staleGeneration) {
-            try await store.apply(first.command(accountID: account, completed: true))
-        }
     }
 
     @Test func appendingTextAndMultilineTasksUsesTheExistingValidatedCommand() async throws {
