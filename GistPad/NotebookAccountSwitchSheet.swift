@@ -1,5 +1,4 @@
 import GistPadInterface
-import GistPadSync
 import SwiftUI
 import UniformTypeIdentifiers
 

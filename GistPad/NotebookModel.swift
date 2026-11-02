@@ -248,7 +248,6 @@ struct NotebookDocument: Equatable, Sendable, Identifiable {
   var libraryRowID: String?
   var editingRequestID: UUID?
   var revealsDetail = true
-  var opensForEditing: Bool { editingRequestID != nil }
   var activationID: String { editingRequestID?.uuidString ?? id }
   let id: String
 
@@ -328,7 +327,6 @@ final class NotebookModel {
   private(set) var isSigningIn = false
   private(set) var isSigningOut = false
   private(set) var isStarting = false
-  private(set) var isOpeningDocument = false
   private(set) var openingDocument: NotebookOpeningDocument?
   private(set) var failedOpen: NotebookFailedOpen?
   private(set) var localDrafts: [DraftSnapshot] = []
@@ -411,14 +409,6 @@ final class NotebookModel {
       ? .checking(operation: String(localized: "Checking GitHub for changes")) : .idle
   }
 
-  convenience init(publishableKey: String) throws {
-    self.init(
-      provider: LiveNotebookProvider(
-        accounts: try AccountService(publishableKey: publishableKey),
-        drafts: try DraftStore.open()
-      ), selections: NotebookSelectionStore(defaults: .standard))
-  }
-
   var presentedDocument: NotebookDocument? {
     if failedOpen != nil { return nil }
     if let openingDocument { return cachedDocument(rowID: openingDocument.rowID) }
@@ -455,7 +445,6 @@ final class NotebookModel {
     failedOpen = nil
     if let document = cachedDocument(rowID: id) {
       openingDocument = nil
-      isOpeningDocument = false
       do { try present(document) } catch {
         report(error, operation: "remember-selection")
         documentError = Self.message(for: error)
@@ -463,7 +452,6 @@ final class NotebookModel {
       return true
     }
     openingDocument = opening(gistID: rowSelection(for: id)?.gistID ?? id, rowID: id)
-    isOpeningDocument = true
     library.selectedNoteID = id
     return false
   }
@@ -717,7 +705,6 @@ final class NotebookModel {
     localDrafts = []
     cachedLibrary = nil
     documentError = nil
-    isOpeningDocument = false
     ownedGistIDs = []
     library.replaceSnapshot(nil)
     library.selectedNoteID = nil
@@ -860,13 +847,11 @@ final class NotebookModel {
     }
     let request = UUID()
     documentRequest = request
-    isOpeningDocument = true
     openingDocument = opening(gistID: gistID, rowID: rowID)
     documentError = nil
     failedOpen = nil
     defer {
       if request == documentRequest {
-        isOpeningDocument = false
         openingDocument = nil
       }
     }
@@ -953,14 +938,12 @@ final class NotebookModel {
     guard let account, pendingAccount == nil else { return }
     documentRequest = UUID()
     let request = documentRequest
-    isOpeningDocument = true
     failedOpen = nil
     openingDocument = .init(
       rowID: rowID ?? id.uuidString,
       title: localDrafts.first(where: { $0.id == id })?.description ?? String(localized: "Note"))
     defer {
       if request == documentRequest {
-        isOpeningDocument = false
         openingDocument = nil
       }
     }
@@ -1027,7 +1010,6 @@ final class NotebookModel {
     documentRequest = UUID()
     let request = documentRequest
     openingDocument = .init(rowID: "new/\(request)", title: String(localized: "Untitled"))
-    isOpeningDocument = false
     defer {
       isCreating = false
       if request == documentRequest { openingDocument = nil }
@@ -1039,7 +1021,6 @@ final class NotebookModel {
       var document = NotebookDocument(draft: draft)
       document.editingRequestID = UUID()
       openingDocument = nil
-      isOpeningDocument = false
       try present(document)
     } catch {
       guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id else { return }
@@ -1056,7 +1037,6 @@ final class NotebookModel {
     documentRequest = UUID()
     let request = documentRequest
     openingDocument = .init(rowID: "today/\(request)", title: String(localized: "Today"))
-    isOpeningDocument = false
     defer {
       if focusEditor { isCreating = false }
       if request == documentRequest { openingDocument = nil }
@@ -1080,7 +1060,6 @@ final class NotebookModel {
       document.editingRequestID = focusEditor ? UUID() : nil
       document.revealsDetail = focusEditor
       openingDocument = nil
-      isOpeningDocument = false
       failedOpen = nil
       try present(document)
     } catch {
@@ -1097,7 +1076,6 @@ final class NotebookModel {
   func showLibrary() {
     documentRequest = UUID()
     openingDocument = nil
-    isOpeningDocument = false
     failedOpen = nil
     library.selectedNoteID = nil
   }
@@ -1588,7 +1566,6 @@ final class NotebookModel {
     if let opening = openingDocument, isDeletedFile(rowSelection(for: opening.rowID)) {
       documentRequest = UUID()
       openingDocument = nil
-      isOpeningDocument = false
     }
     if failedOpen?.gistID == gistID, failedOpen?.filename == filename { failedOpen = nil }
     do {
@@ -1611,7 +1588,6 @@ final class NotebookModel {
     if isOpeningDeleted {
       documentRequest = UUID()
       openingDocument = nil
-      isOpeningDocument = false
     }
     if failedOpen?.gistID == id { failedOpen = nil }
     do {
@@ -1642,7 +1618,6 @@ final class NotebookModel {
     writeFailures = []
     isRefreshingRemote = false
     library.gitHubStatus = .idle
-    isOpeningDocument = false
     ownedGistIDs = []
     library.replaceSnapshot(nil)
     library.selectedNoteID = nil
@@ -1677,10 +1652,6 @@ final class NotebookModel {
       },
       isAutoSaveEnabled: account.preferences.isAutoSaveEnabled,
       commentCount: gist.isDailyNote ? nil : gist.commentCount)
-  }
-
-  func refreshedGist(id: String, accountID: UUID) async throws -> Gist {
-    try await provider.gist(id: id, accountID: accountID)
   }
 
   func adoptPublication(_ saved: DraftSnapshot) async throws -> Gist? {
@@ -1912,7 +1883,7 @@ final class NotebookModel {
         break
       }
     }
-    if (error as? SourceMutation.MutationError) == .compositionActive {
+    if (error as? SourceEdit.MutationError) == .compositionActive {
       return String(
         localized: "Finish composition or Writing Tools before continuing. Your current draft is unchanged.")
     }

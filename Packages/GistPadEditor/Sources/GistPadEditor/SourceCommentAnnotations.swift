@@ -21,15 +21,12 @@
     private var linkedIDs: Set<Int64>?
     private var passages: [Passage] = []
     private var verifiedHighlights: [CommentQuoteHighlight] = []
-    private var matchedGeneration: UInt64?
-    private var matchedQuotes: [CommentQuote] = []
-    private var sourceHighlights: [CommentQuoteHighlight] = []
     private var originalInk: [(range: NSRange, color: Any)] = []
     private var paintedGeneration: UInt64?
     private var suspendsForFind = false
     private var suspendsForWritingTools = false
     private var updatingSelection = false
-    private var pendingTap: (ids: [Int64], generation: UInt64)?
+    private var pendingTap: [Int64]?
     private var pendingFindUpdate: Task<Void, Never>?
     private var publication: Task<Void, Never>?
     private var scrollTask: Task<Void, Never>?
@@ -87,16 +84,11 @@
       session.textView.setNeedsLayout()
       originalInk = []
       paintedGeneration = session.generation
-      if matchedGeneration != session.generation || matchedQuotes != configuration.quotes {
-        sourceHighlights =
-          configuration.quotes.isEmpty
-          ? []
-          : CommentQuoteMatcher.highlights(
-            quotes: configuration.quotes, segments: [session.text])
-        matchedGeneration = session.generation
-        matchedQuotes = configuration.quotes
-      }
-      let highlights = sourceHighlights.filter { $0.start >= session.contentStart }
+      let highlights =
+        configuration.quotes.isEmpty
+        ? []
+        : CommentQuoteMatcher.highlights(quotes: configuration.quotes, segments: [session.text])
+          .filter { $0.start >= session.contentStart }
       verifiedHighlights = highlights
       publish(Set(highlights.flatMap(\.commentIDs)))
       updateAccessibility()
@@ -150,9 +142,7 @@
     func selectionDidChange() {
       session.textView.setNeedsLayout()
       guard !updatingSelection, !originalInk.isEmpty, paintedGeneration == session.generation,
-        !session.isComposing, !session.writingToolsActive,
-        session.textView.markedTextRange == nil,
-        session.textView.textStorage.length == session.text.utf16.count
+        session.isSettled, session.textView.textStorage.length == session.text.utf16.count
       else { return }
       updatingSelection = true
       defer { updatingSelection = false }
@@ -185,8 +175,7 @@
       backgroundLayer.sublayers = nil
       guard let manager = session.textView.textLayoutManager,
         paintedGeneration == session.generation, !suspendsForFind, !suspendsForWritingTools,
-        !session.isComposing,
-        session.textView.markedTextRange == nil, !session.writingToolsActive
+        session.isSettled
       else { return }
       let inset = session.textView.textContainerInset
       var selectedFrames: [CGRect] = []
@@ -258,43 +247,28 @@
 
     private func addAction(ranges: [NSRange]) -> UIAction? {
       guard onAdd != nil, !suspendsForFind, !suspendsForWritingTools,
-        ranges.count == 1, let range = ranges.first,
-        !session.isComposing, !session.writingToolsActive, session.textView.markedTextRange == nil,
-        range.location >= session.contentStart, range.length >= 0,
-        range.location <= session.text.utf16.count,
-        range.length <= session.text.utf16.count - range.location,
-        let native = Range(range, in: session.text)
+        ranges.count == 1, let range = ranges.first, session.isSettled,
+        range.location >= session.contentStart,
+        let quote = try? SourceEdit.text(in: session.text, at: range),
+        CommentQuoteMatcher.isEligibleSelection(quote)
       else { return nil }
-      let quote = String(session.text[native])
-      guard CommentQuoteMatcher.isEligibleSelection(quote) else { return nil }
-      let generation = session.generation
       return UIAction(
         title: String(localized: "Add Comment", bundle: .module),
         image: UIImage(systemName: "text.bubble")
       ) { [weak self] _ in
-        guard let self else { return }
-        guard self.session.generation == generation, !self.session.isComposing,
-          !self.session.writingToolsActive
-        else {
-          self.session.inputError = String(
-            localized: "The note changed. Select the text again before commenting.", bundle: .module
-          )
-          return
-        }
-        self.onAdd?(quote)
+        self?.onAdd?(quote)
       }
     }
 
     private func openAction(ids: [Int64]) -> UIAction? {
       guard !ids.isEmpty, onOpen != nil else { return nil }
-      let generation = session.generation
       return UIAction(
         title: String(localized: "View Comment", bundle: .module),
         image: UIImage(systemName: "text.bubble")
       ) { [weak self] _ in
         guard let self else { return }
         let currentIDs = Set(self.threadIDs(intersecting: self.verifiedHighlights.map(\.range)))
-        guard self.session.generation == generation, ids.allSatisfy(currentIDs.contains) else {
+        guard ids.allSatisfy(currentIDs.contains) else {
           self.reportChangedQuote()
           return
         }
@@ -303,10 +277,7 @@
     }
 
     private func threadIDs(intersecting ranges: [NSRange]) -> [Int64] {
-      guard paintedGeneration == session.generation, !suspendsForFind, !suspendsForWritingTools,
-        !session.isComposing,
-        !session.writingToolsActive
-      else { return [] }
+      guard !suspendsForFind, !suspendsForWritingTools, session.isSettled else { return [] }
       var seen: Set<Int64> = []
       return verifiedHighlights.filter { highlight in
         ranges.contains { range in
@@ -321,13 +292,10 @@
       -> Bool
     {
       guard !session.textView.isFirstResponder, onOpen != nil,
-        !suspendsForFind, !suspendsForWritingTools,
-        paintedGeneration == session.generation,
-        !session.writingToolsActive, !session.isComposing
+        !suspendsForFind, !suspendsForWritingTools, session.isSettled
       else { return false }
-      let point = touch.location(in: session.textView)
-      let ids = threadIDs(at: point)
-      pendingTap = ids.isEmpty ? nil : (ids, session.generation)
+      let ids = threadIDs(at: touch.location(in: session.textView))
+      pendingTap = ids.isEmpty ? nil : ids
       return !ids.isEmpty
     }
 
@@ -380,19 +348,16 @@
       guard let pendingTap else { return }
       self.pendingTap = nil
       let currentIDs = Set(passages.flatMap(\.highlight.commentIDs))
-      guard pendingTap.generation == session.generation,
-        pendingTap.ids.allSatisfy(currentIDs.contains)
-      else {
+      guard pendingTap.allSatisfy(currentIDs.contains) else {
         reportChangedQuote()
         return
       }
-      onOpen?(pendingTap.ids)
+      onOpen?(pendingTap)
     }
 
     @objc private func selectTappedWord() {
       let view = session.textView
-      guard !view.isFirstResponder, !session.isComposing, !session.writingToolsActive,
-        !suspendsForFind, !suspendsForWritingTools,
+      guard !view.isFirstResponder, session.isSettled, !suspendsForFind, !suspendsForWritingTools,
         let position = view.closestPosition(to: selectionTap.location(in: view)),
         let caret = view.textRange(from: position, to: position)
       else { return }
@@ -419,20 +384,15 @@
         guard !Task.isCancelled, let self else { return }
         defer { if !Task.isCancelled { self.scrollTask = nil } }
         guard self.needsSelectedScroll,
-          !self.suspendsForFind, !self.suspendsForWritingTools,
-          !self.session.isComposing, !self.session.writingToolsActive,
-          self.paintedGeneration == self.session.generation,
+          !self.suspendsForFind, !self.suspendsForWritingTools, self.session.isSettled,
           let selectedID = self.configuration.selectedCommentID,
           let highlight = self.verifiedHighlights.first(where: {
             $0.commentIDs.contains(selectedID)
           }),
           self.session.textView.window != nil, !self.session.textView.isHidden
         else { return }
-        guard !Task.isCancelled, self.paintedGeneration == self.session.generation,
-          self.configuration.selectedCommentID == selectedID
-        else { return }
         self.needsSelectedScroll = false
-        guard (self.session.textView as? AnchoredTextView)?.revealPassage(highlight.range) == true else {
+        guard self.session.sourceView.revealPassage(highlight.range) else {
           self.session.inputError = String(
             localized: "The comment passage could not be revealed.", bundle: .module)
           return
@@ -517,9 +477,7 @@
     }
 
     private func updateAccessibility() {
-      guard let view = session.textView as? AnchoredTextView else {
-        preconditionFailure("Comment annotations require the retained source text view.")
-      }
+      let view = session.sourceView
       guard !suspendsForFind, !suspendsForWritingTools,
         let selectedID = configuration.selectedCommentID,
         verifiedHighlights.contains(where: { $0.commentIDs.contains(selectedID) }),
@@ -538,12 +496,9 @@
     private func publish(_ ids: Set<Int64>, force: Bool = false) {
       guard force || linkedIDs != ids else { return }
       linkedIDs = ids
-      let generation = session.generation
       publication?.cancel()
       publication = Task { @MainActor [weak self] in
-        guard !Task.isCancelled, let self, self.session.generation == generation,
-          self.linkedIDs == ids
-        else { return }
+        guard !Task.isCancelled, let self, self.linkedIDs == ids else { return }
         self.publication = nil
         self.onLinkedIDs?(ids)
       }

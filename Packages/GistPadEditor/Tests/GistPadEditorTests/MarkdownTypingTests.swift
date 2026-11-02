@@ -24,8 +24,8 @@ import Testing
     let edit = try #require(
       try MarkdownTyping.edit(
         in: source, selection: NSRange(location: source.utf16.count, length: 0),
-        replacement: "\n", isComposing: false))
-    #expect(try edit.mutation.applying(to: source) == expected)
+        replacement: "\n"))
+    #expect(try edit.applying(to: source) == expected)
     #expect(edit.selection == NSRange(location: expected.utf16.count, length: 0))
   }
 
@@ -34,8 +34,8 @@ import Testing
     let edit = try #require(
       try MarkdownTyping.edit(
         in: source, selection: NSRange(location: source.utf16.count, length: 0),
-        replacement: "\n", isComposing: false))
-    #expect(try edit.mutation.applying(to: source) == "")
+        replacement: "\n"))
+    #expect(try edit.applying(to: source) == "")
     #expect(edit.selection == NSRange(location: 0, length: 0))
   }
 
@@ -44,8 +44,8 @@ import Testing
     let range = (source as NSString).range(of: "👩🏽‍💻 ")
     let edit = try #require(
       try MarkdownTyping.edit(
-        in: source, selection: range, replacement: "\n", isComposing: false))
-    let changed = try edit.mutation.applying(to: source)
+        in: source, selection: range, replacement: "\n"))
+    let changed = try edit.applying(to: source)
     #expect(changed == "- 日本語 \n- after")
     #expect(edit.selection == NSRange(location: "- 日本語 \n- ".utf16.count, length: 0))
   }
@@ -55,15 +55,15 @@ import Testing
     let edit = try #require(
       try MarkdownTyping.edit(
         in: source, selection: NSRange(location: 8, length: 0),
-        replacement: "\n", isComposing: false))
-    #expect(try edit.mutation.applying(to: source) == "8. First\r\n9. \r\n10. Next\r\n")
+        replacement: "\n"))
+    #expect(try edit.applying(to: source) == "8. First\r\n9. \r\n10. Next\r\n")
     let empty = "1. First\r\n2. \r\nAfter"
     let range = (empty as NSString).range(of: "2. ")
     let exit = try #require(
       try MarkdownTyping.edit(
         in: empty, selection: NSRange(location: NSMaxRange(range), length: 0),
-        replacement: "\n", isComposing: false))
-    #expect(try exit.mutation.applying(to: empty) == "1. First\r\n\r\nAfter")
+        replacement: "\n"))
+    #expect(try exit.applying(to: empty) == "1. First\r\n\r\nAfter")
   }
 
   @Test(arguments: ["Plain paragraph", "1.not a list", "-not a list", "999999999. item"])
@@ -71,7 +71,7 @@ import Testing
     #expect(
       try MarkdownTyping.edit(
         in: source, selection: NSRange(location: source.utf16.count, length: 0),
-        replacement: "\n", isComposing: false) == nil)
+        replacement: "\n") == nil)
   }
 
   @Test func rangeValidationRejectsOverflowAndSplitSurrogates() {
@@ -79,11 +79,11 @@ import Testing
       NSRange(location: -1, length: 0), NSRange(location: Int.max, length: 1),
       NSRange(location: 0, length: Int.max), NSRange(location: 3, length: 0),
     ] {
-      #expect(throws: SourceMutation.MutationError.invalidRange) {
-        try MarkdownTyping.edit(in: "- 👩", selection: range, replacement: "\n", isComposing: false)
+      #expect(throws: SourceEdit.MutationError.invalidRange) {
+        try MarkdownTyping.edit(in: "- 👩", selection: range, replacement: "\n")
       }
 
-      #expect(throws: SourceMutation.MutationError.invalidRange) {
+      #expect(throws: SourceEdit.MutationError.invalidRange) {
         try MarkdownTyping.indent(in: "- 👩", selection: range, outdent: false)
       }
     }
@@ -93,10 +93,9 @@ import Testing
     let source = "1. First\n2. Second\n   1. Nested\n3. Third\n- Other\n1. Independent"
     let edit = try #require(
       try MarkdownTyping.edit(
-        in: source, selection: NSRange(location: 8, length: 0), replacement: "\n",
-        isComposing: false))
+        in: source, selection: NSRange(location: 8, length: 0), replacement: "\n"))
     #expect(
-      try edit.mutation.applying(to: source)
+      try edit.applying(to: source)
         == "1. First\n2. \n3. Second\n   1. Nested\n4. Third\n- Other\n1. Independent")
     #expect(edit.selection == NSRange(location: "1. First\n2. ".utf16.count, length: 0))
   }
@@ -111,8 +110,8 @@ import Testing
       let edit = try #require(
         try MarkdownTyping.edit(
           in: source, selection: NSRange(location: 8, length: 0),
-          replacement: "\n", isComposing: false))
-      #expect(try edit.mutation.applying(to: source) == "1. First\n2. " + tail)
+          replacement: "\n"))
+      #expect(try edit.applying(to: source) == "1. First\n2. " + tail)
     }
   }
 
@@ -122,13 +121,13 @@ import Testing
     let edit = try #require(
       try MarkdownTyping.edit(
         in: source, selection: NSRange(location: insertion, length: 0),
-        replacement: "\n", isComposing: false))
-    let result = try edit.mutation.applying(to: source)
+        replacement: "\n"))
+    let result = try edit.applying(to: source)
     #expect(result.hasPrefix("1. Item 👩🏽‍💻\n2. \n3. Item 👩🏽‍💻"))
     #expect(result.hasSuffix("201. Item 👩🏽‍💻"))
     #expect(edit.selection == NSRange(location: insertion + "\n2. ".utf16.count, length: 0))
-    #expect(throws: SourceMutation.MutationError.sourceChanged) {
-      try edit.mutation.applying(to: source.replacingOccurrences(of: "200.", with: "201."))
+    #expect(throws: SourceEdit.MutationError.sourceChanged) {
+      try edit.applying(to: source.replacingOccurrences(of: "200.", with: "201."))
     }
   }
 
@@ -137,7 +136,7 @@ import Testing
     #expect(
       try MarkdownTyping.edit(
         in: source, selection: NSRange(location: 3, length: 7),
-        replacement: "\n", isComposing: false) == nil)
+        replacement: "\n") == nil)
   }
 
   @Test(arguments: [
@@ -150,22 +149,17 @@ import Testing
     #expect(
       try MarkdownTyping.edit(
         in: source, selection: NSRange(location: source.utf16.count, length: 0),
-        replacement: "\n", isComposing: false) == nil)
+        replacement: "\n") == nil)
     #expect(
       try MarkdownTyping.indent(
         in: source, selection: NSRange(location: 0, length: source.utf16.count), outdent: false)
         == nil)
   }
 
-  @Test func closedBlocksPermitFollowingListsAndIMEAlwaysFallsBack() throws {
+  @Test func closedBlocksPermitFollowingLists() throws {
     for source in ["---\ntitle: test\n---\n- prose", "```\n- code\n```\n- prose"] {
       let range = NSRange(location: source.utf16.count, length: 0)
-      #expect(
-        try MarkdownTyping.edit(in: source, selection: range, replacement: "\n", isComposing: false)
-          != nil)
-      #expect(
-        try MarkdownTyping.edit(in: source, selection: range, replacement: "\n", isComposing: true)
-          == nil)
+      #expect(try MarkdownTyping.edit(in: source, selection: range, replacement: "\n") != nil)
     }
   }
 
@@ -174,7 +168,7 @@ import Testing
     let code = (source as NSString).range(of: "code")
     #expect(
       try MarkdownTyping.edit(
-        in: source, selection: code, replacement: "https://example.test", isComposing: false) == nil
+        in: source, selection: code, replacement: "https://example.test") == nil
     )
     let crossing = NSRange(location: 0, length: source.utf16.count)
     #expect(try MarkdownTyping.indent(in: source, selection: crossing, outdent: false) == nil)
@@ -185,13 +179,13 @@ import Testing
     let selection = NSRange(location: 2, length: "- 日本語\r\n  - 👩🏽‍💻".utf16.count - 2)
     let edit = try #require(
       try MarkdownTyping.indent(in: source, selection: selection, outdent: false))
-    let changed = try edit.mutation.applying(to: source)
+    let changed = try edit.applying(to: source)
     #expect(changed == "  - 日本語\r\n    - 👩🏽‍💻\r\nAfter")
-    #expect(edit.selection.location == selection.location + 2)
-    #expect(edit.selection.length == selection.length + 2)
+    #expect(edit.selection?.location == selection.location + 2)
+    #expect(edit.selection?.length == selection.length + 2)
     let undo = try #require(
-      try MarkdownTyping.indent(in: changed, selection: edit.selection, outdent: true))
-    #expect(try undo.mutation.applying(to: changed) == source)
+      try MarkdownTyping.indent(in: changed, selection: edit.selection!, outdent: true))
+    #expect(try undo.applying(to: changed) == source)
     #expect(undo.selection == selection)
   }
 
@@ -200,8 +194,8 @@ import Testing
     let selection = NSRange(location: 0, length: "First\nSecond\n".utf16.count)
     let edit = try #require(
       try MarkdownTyping.indent(in: source, selection: selection, outdent: false))
-    #expect(try edit.mutation.applying(to: source) == "  First\n  Second\nThird")
-    #expect(NSMaxRange(edit.selection) == "  First\n  Second\n".utf16.count)
+    #expect(try edit.applying(to: source) == "  First\n  Second\nThird")
+    #expect(NSMaxRange(edit.selection!) == "  First\n  Second\n".utf16.count)
   }
 
   @Test func tabsPartialIndentEmptyTextAndUnindentedOutdentAreExplicit() throws {
@@ -209,7 +203,7 @@ import Testing
       let edit = try #require(
         try MarkdownTyping.indent(
           in: source, selection: NSRange(location: source.utf16.count, length: 0), outdent: false))
-      #expect(try edit.mutation.applying(to: source) == expected)
+      #expect(try edit.applying(to: source) == expected)
     }
     for (source, expected) in [
       ("\t- Item", "- Item"), (" - Item", "- Item"), ("   - Item", " - Item"),
@@ -217,7 +211,7 @@ import Testing
       let edit = try #require(
         try MarkdownTyping.indent(
           in: source, selection: NSRange(location: source.utf16.count, length: 0), outdent: true))
-      #expect(try edit.mutation.applying(to: source) == expected)
+      #expect(try edit.applying(to: source) == expected)
     }
     #expect(
       try MarkdownTyping.indent(
@@ -229,9 +223,8 @@ import Testing
     let selection = (source as NSString).range(of: "日本語 [a]\\b")
     let edit = try #require(
       try MarkdownTyping.edit(
-        in: source, selection: selection, replacement: "https://example.test/a_(b)?q=c",
-        isComposing: false))
-    let changed = try edit.mutation.applying(to: source)
+        in: source, selection: selection, replacement: "https://example.test/a_(b)?q=c"))
+    let changed = try edit.applying(to: source)
     #expect(changed == "Before [日本語 \\[a\\]\\\\b](https://example.test/a_%28b%29?q=c) after")
     #expect(
       edit.selection == NSRange(location: changed.utf16.count - " after".utf16.count, length: 0))
@@ -245,7 +238,7 @@ import Testing
     #expect(
       try MarkdownTyping.edit(
         in: "Label", selection: NSRange(location: 0, length: 5),
-        replacement: replacement, isComposing: false) == nil)
+        replacement: replacement) == nil)
   }
 
   @Test func URLPasteRequiresANonemptySingleLineSelection() throws {
@@ -256,8 +249,7 @@ import Testing
     ] {
       #expect(
         try MarkdownTyping.edit(
-          in: source, selection: selection, replacement: "https://example.test",
-          isComposing: false) == nil)
+          in: source, selection: selection, replacement: "https://example.test") == nil)
     }
   }
 }

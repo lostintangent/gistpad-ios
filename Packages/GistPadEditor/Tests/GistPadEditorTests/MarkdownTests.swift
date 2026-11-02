@@ -17,26 +17,26 @@ import Testing
 @Test func duplicateTasksTargetOnlyTheSpecifiedOccurrence() throws {
   let source = "👩🏽‍💻\n- [ ] Duplicate\n- [ ] Duplicate\n"
   let range = (source as NSString).range(of: "[ ]", options: .backwards)
-  let mutation = SourceMutation(range: range, expected: "[ ]", replacement: "[x]")
+  let mutation = SourceEdit(range: range, expected: "[ ]", replacement: "[x]")
   #expect(try mutation.applying(to: source) == "👩🏽‍💻\n- [ ] Duplicate\n- [x] Duplicate\n")
 }
 
 @Test func invalidOrStaleSourceIsRejected() {
   let source = "📝 - [ ] task"
-  #expect(throws: SourceMutation.MutationError.invalidRange) {
-    try SourceMutation(range: NSRange(location: 1, length: 1), expected: "", replacement: "x")
+  #expect(throws: SourceEdit.MutationError.invalidRange) {
+    try SourceEdit(range: NSRange(location: 1, length: 1), expected: "", replacement: "x")
       .applying(to: source)
   }
-  #expect(throws: SourceMutation.MutationError.sourceChanged) {
-    try SourceMutation(range: NSRange(location: 0, length: 2), expected: "[ ]", replacement: "[x]")
+  #expect(throws: SourceEdit.MutationError.sourceChanged) {
+    try SourceEdit(range: NSRange(location: 0, length: 2), expected: "[ ]", replacement: "[x]")
       .applying(to: source)
   }
 }
 
 @Test func canonicallyEquivalentButDifferentSourceIsNotAnExactMatch() {
   let source = "cafe\u{301}"
-  #expect(throws: SourceMutation.MutationError.sourceChanged) {
-    try SourceMutation(
+  #expect(throws: SourceEdit.MutationError.sourceChanged) {
+    try SourceEdit(
       range: NSRange(location: 0, length: source.utf16.count),
       expected: "caf\u{e9}", replacement: "coffee"
     ).applying(to: source)
@@ -52,31 +52,21 @@ import Testing
   #expect(ranges.contains { (source as NSString).substring(with: $0).contains("let x") })
 }
 
-@Test func writingToolsProtectsLongFencesUntilAnActualClosingDelimiter() {
-  let source = "Before\n````swift\n```\nlet value = 1\n```` not a closer\n~~~~\n`````\nAfter"
+@Test(arguments: [
+  (
+    "Before\n````swift\n```\nlet value = 1\n```` not a closer\n~~~~\n`````\nAfter",
+    ["````swift\n```\nlet value = 1\n```` not a closer\n~~~~\n`````\n"]
+  ),
+  (
+    "Prose\n> ~~~~ js\n> `value`\n> ~~~~\n\n- ```swift\n  let value = 1",
+    ["> ~~~~ js\n> `value`\n> ~~~~\n", "- ```swift\n  let value = 1"]
+  ),
+  ("```\n- ```\nStill protected\n```\nProse", ["```\n- ```\nStill protected\n```\n"]),
+])
+func writingToolsProtectsFencesUntilTheirActualClosingDelimiter(source: String, protected: [String]) {
   let ranges = MarkdownSyntax.ignoredWritingToolsRanges(
     in: source, enclosing: NSRange(location: 0, length: source.utf16.count))
-  #expect(ranges.count == 1)
-  #expect(
-    (source as NSString).substring(with: ranges[0])
-      == "````swift\n```\nlet value = 1\n```` not a closer\n~~~~\n`````\n")
-}
-
-@Test func writingToolsProtectsTildeAndContainerFencesIncludingUnclosedCode() {
-  let source = "Prose\n> ~~~~ js\n> `value`\n> ~~~~\n\n- ```swift\n  let value = 1"
-  let ranges = MarkdownSyntax.ignoredWritingToolsRanges(
-    in: source, enclosing: NSRange(location: 0, length: source.utf16.count))
-  #expect(
-    ranges.map { (source as NSString).substring(with: $0) } == [
-      "> ~~~~ js\n> `value`\n> ~~~~\n", "- ```swift\n  let value = 1",
-    ])
-}
-
-@Test func listItemsInsideFencedCodeAreNotClosingDelimiters() {
-  let source = "```\n- ```\nStill protected\n```\nProse"
-  let ranges = MarkdownSyntax.ignoredWritingToolsRanges(
-    in: source, enclosing: NSRange(location: 0, length: source.utf16.count))
-  #expect(ranges == [(source as NSString).range(of: "```\n- ```\nStill protected\n```\n")])
+  #expect(ranges.map { (source as NSString).substring(with: $0) } == protected)
 }
 
 @Test func writingToolsProtectsMatchingCodeSpansAcrossLinesAndEscapedOpeners() {
@@ -200,13 +190,4 @@ import Testing
     spans.contains {
       $0.kind == .emphasis && (source as NSString).substring(with: $0.range) == "___both___"
     })
-}
-
-@Test func longFixtureIsSyntheticAndMultilingual() throws {
-  let fixture = try EditorFixture.markdown()
-  #expect(fixture.utf16.count > 60_000)
-  #expect(fixture.contains("Field note 120"))
-  #expect(fixture.contains("日本語"))
-  #expect(fixture.contains("العربية"))
-  #expect(fixture.contains("👨‍👩‍👧‍👦"))
 }

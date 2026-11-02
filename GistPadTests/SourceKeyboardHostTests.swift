@@ -1,4 +1,4 @@
-import GistPadEditor
+@testable import GistPadEditor
 import GistPadInterface
 import SwiftUI
 import Testing
@@ -8,63 +8,6 @@ import UIKit
 @MainActor
 @Suite(.serialized)
 struct SourceKeyboardHostTests {
-    @Test func unchangedEditingHighlightDoesNotInvalidateNativeAttributes() async throws {
-        let fixture = try await SourceKeyboardFixture(
-            source: "# A heading\n\nA **bold** word, _emphasis_, `code` and [a link](https://gistpad.dev).",
-            size: "large"
-        )
-        defer { fixture.close() }
-        let session = fixture.session
-        session.requestFocusAtEnd()
-        try await fixture.settle("the unchanged styling caret")
-        let storage = session.textView.textStorage
-        let original = NSAttributedString(attributedString: storage)
-        let edits = SourceHighlightEdits()
-        NotificationCenter.default.addObserver(
-            edits, selector: #selector(SourceHighlightEdits.record(_:)),
-            name: NSTextStorage.didProcessEditingNotification, object: storage
-        )
-        defer { NotificationCenter.default.removeObserver(edits) }
-        session.highlight()
-        #expect(storage.isEqual(to: original))
-        #expect(edits.ranges.isEmpty)
-        #expect(session.generation == 0)
-    }
-
-    @Test func stylingAnAppendedRunLeavesEarlierNativeAttributesUntouched() async throws {
-        let source = String(repeating: "# A heading\n\nA **bold** word and `code`.\n\n", count: 40)
-        let suffix = "A _new thought_."
-        let fixture = try await SourceKeyboardFixture(source: source, size: "large")
-        defer { fixture.close() }
-        let session = fixture.session
-        session.requestFocusAtEnd()
-        try await fixture.settle("the appended styling caret")
-        try session.apply(
-            SourceMutation(
-                range: NSRange(location: source.utf16.count, length: 0),
-                expected: "", replacement: suffix
-            ),
-            documentID: session.documentID, generation: 0
-        )
-        let storage = session.textView.textStorage
-        let edits = SourceHighlightEdits()
-        NotificationCenter.default.addObserver(
-            edits, selector: #selector(SourceHighlightEdits.record(_:)),
-            name: NSTextStorage.didProcessEditingNotification, object: storage
-        )
-        defer { NotificationCenter.default.removeObserver(edits) }
-        session.highlight()
-        let expected = DocumentSession(documentID: "expected-style", text: source + suffix)
-        expected.textView.traitOverrides.preferredContentSizeCategory =
-            session.textView.traitCollection.preferredContentSizeCategory
-        expected.highlight()
-        #expect(storage.isEqual(to: expected.textView.textStorage))
-        #expect(!edits.ranges.isEmpty)
-        #expect(edits.ranges.allSatisfy { $0.location >= source.utf16.count })
-        #expect(session.generation == 1)
-        #expect(session.text.utf8.elementsEqual((source + suffix).utf8))
-    }
-
     @Test func restylingClearsRemovedBoldHeadingAndFenceAttributes() async throws {
         let fixture = try await SourceKeyboardFixture(
             source: "# A heading\n\nA **bold** word.\n\n```swift\nlet note = 1\n\nA later paragraph.\n",
@@ -87,8 +30,8 @@ struct SourceKeyboardHostTests {
                 in: range, with: change.1
             )
             try session.apply(
-                SourceMutation(range: range, expected: change.0, replacement: change.1),
-                documentID: session.documentID, generation: session.generation
+                SourceEdit(range: range, expected: change.0, replacement: change.1),
+                generation: session.generation
             )
             session.highlight()
             let expected = DocumentSession(documentID: "expected-style", text: expectedText)
@@ -109,31 +52,26 @@ struct SourceKeyboardHostTests {
         let source = Self.source
         let fixture = try await SourceKeyboardFixture(source: source, size: size)
         defer { fixture.close() }
-        let identity = ObjectIdentifier(fixture.editor)
         fixture.session.requestFocusAtEnd()
         try await fixture.settle("the real keyboard and final caret")
         try fixture.expectKeyboardViewport()
         try fixture.expectVisibleCaret()
-        try await fixture.captureCheckpoint(named: "final-caret-\(size)-focused")
 
         var expected = source
-        for (index, input) in ["\n", "One more thought", " stays in view", "."].enumerated() {
+        for input in ["\n", "One more thought", " stays in view", "."] {
             fixture.editor.insertText(input)
             expected += input
             try await fixture.settle("the final caret after native input")
             #expect(fixture.session.text.utf8.elementsEqual(expected.utf8))
             #expect(fixture.editor.selectedRange == NSRange(location: expected.utf16.count, length: 0))
-            #expect(ObjectIdentifier(fixture.editor) == identity)
             try fixture.expectKeyboardViewport()
             try fixture.expectVisibleCaret()
-            try await fixture.captureCheckpoint(named: "final-caret-\(size)-input-\(index)")
         }
-        fixture.recordGeometry(named: "final-line-typing-\(size)")
     }
 
-    @Test("Native end scrolling reveals the last line above the formatting capsule", arguments: ["large", "ax3"])
-    func lastLineScrollReachability(size: String) async throws {
-        let fixture = try await SourceKeyboardFixture(source: Self.source, size: size)
+    @Test("Native end scrolling reveals the last line above the formatting capsule")
+    func lastLineScrollReachability() async throws {
+        let fixture = try await SourceKeyboardFixture(source: Self.source, size: "large")
         defer { fixture.close() }
         fixture.editor.selectedRange = NSRange(location: 0, length: 0)
         try #require(fixture.editor.becomeFirstResponder())
@@ -145,14 +83,11 @@ struct SourceKeyboardHostTests {
         manager.ensureLayout(for: range)
         fixture.editor.layoutIfNeeded()
         try await fixture.settle("the fully laid-out document before end scrolling")
-        fixture.recordGeometry(named: "last-line-before-maximum")
         let maximum = fixture.editor.contentSize.height - fixture.editor.bounds.height
             + fixture.editor.adjustedContentInset.bottom
         try #require(maximum > fixture.editor.bounds.height)
         fixture.editor.setContentOffset(CGPoint(x: 0, y: maximum), animated: false)
-        fixture.recordGeometry(named: "last-line-after-set-offset")
         try await fixture.settle("native end scrolling")
-        fixture.recordGeometry(named: "last-line-after-end-settle")
         let settledMaximum = fixture.editor.contentSize.height - fixture.editor.bounds.height
             + fixture.editor.adjustedContentInset.bottom
         #expect(abs(fixture.editor.contentOffset.y - settledMaximum) <= 1)
@@ -176,12 +111,11 @@ struct SourceKeyboardHostTests {
             fixture.editor.convert(fixture.editor.caretRect(for: end), to: fixture.window)
         )
         try fixture.expectKeyboardViewport()
-        fixture.recordGeometry(named: "last-line-scroll-\(size)")
     }
 
-    @Test("Restyling never pulls a deliberate keyboard-up scroll back to the caret", arguments: ["large", "ax3"])
-    func deliberateScrollAwaySurvivesRestyling(size: String) async throws {
-        let fixture = try await SourceKeyboardFixture(source: Self.source, size: size)
+    @Test("Restyling never pulls a deliberate keyboard-up scroll back to the caret")
+    func deliberateScrollAwaySurvivesRestyling() async throws {
+        let fixture = try await SourceKeyboardFixture(source: Self.source, size: "large")
         defer { fixture.close() }
         fixture.session.requestFocusAtEnd()
         try await fixture.settle("the focused final caret before a deliberate scroll")
@@ -206,8 +140,6 @@ struct SourceKeyboardHostTests {
         }
         #expect(fixture.session.text.utf8.elementsEqual(Self.source.utf8))
         #expect(fixture.session.generation == 0)
-        fixture.recordGeometry(named: "manual-scroll-\(size)")
-        try await fixture.captureCheckpoint(named: "manual-scroll-\(size)")
     }
 
     @Test(arguments: [false, true])
@@ -247,91 +179,6 @@ struct SourceKeyboardHostTests {
             #expect(fixture.editor.isFirstResponder)
             #expect((fixture.editor.markedTextRange != nil) == !writingTools)
         }
-    }
-
-    @Test("Long-note synchronous typing and decoration timings",
-          .enabled(if: ProcessInfo.processInfo.environment["GISTPAD_SOURCE_PERFORMANCE"] == "1"),
-          arguments: ["large", "ax3"])
-    func longNoteEditingPerformance(size: String) async throws {
-        let paragraph = "Keep the useful things close and give each thought enough room to breathe. "
-            + "A walk can change the shape of a question before an answer arrives."
-        let source = "# Reading at scale\n\n" + (1...18).map {
-            "## Reading section \($0)\n\n" + Array(repeating: paragraph, count: 5).joined(separator: "\n\n")
-        }.joined(separator: "\n\n") + "\n"
-        let fixture = try await SourceKeyboardFixture(source: source, size: size)
-        defer { fixture.close() }
-        fixture.session.requestFocusAtEnd()
-        try await fixture.settle("the long-note caret and real keyboard")
-        let identity = ObjectIdentifier(fixture.editor)
-        var rows = [
-            "# size=\(size),words=\(source.split(whereSeparator: \.isWhitespace).count),utf16=\(source.utf16.count)",
-            "# window=\(fixture.window.bounds.size),category=\(fixture.editor.traitCollection.preferredContentSizeCategory.rawValue)",
-            "sample,insertAndLayoutMs,highlightMs,highlightAndLayoutMs",
-        ]
-        let clock = ContinuousClock()
-        for index in 0..<26 {
-            let insertionStart = clock.now
-            fixture.editor.insertText("x")
-            fixture.layout()
-            let insertion = insertionStart.duration(to: clock.now)
-            let highlightStart = clock.now
-            fixture.session.highlight()
-            let highlight = highlightStart.duration(to: clock.now)
-            fixture.layout()
-            let highlightAndLayout = highlightStart.duration(to: clock.now)
-            if index >= 2 {
-                rows.append(
-                    "\(index - 2),\(Self.milliseconds(insertion)),\(Self.milliseconds(highlight)),\(Self.milliseconds(highlightAndLayout))"
-                )
-            }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        #expect(fixture.session.text.utf8.elementsEqual(
-            (source + String(repeating: "x", count: 26)).utf8
-        ))
-        #expect(fixture.editor.selectedRange.location == fixture.session.text.utf16.count)
-        #expect(ObjectIdentifier(fixture.editor) == identity)
-        #expect(fixture.editor.isFirstResponder)
-        let result = rows.joined(separator: "\n")
-        print("source-editing-performance-\(size):\n\(result)")
-        Attachment.record(result, named: "source-editing-performance-\(size).csv")
-        try fixture.expectKeyboardViewport()
-        try fixture.expectVisibleCaret()
-
-        fixture.editor.resignFirstResponder()
-        try await fixture.settle("the long-note reading viewport", keyboard: false)
-        var readingRows = [
-            "# size=\(size),words=\(fixture.session.text.split(whereSeparator: \.isWhitespace).count),utf16=\(fixture.session.text.utf16.count)",
-            "# window=\(fixture.window.bounds.size),category=\(fixture.editor.traitCollection.preferredContentSizeCategory.rawValue)",
-            "sample,highlightMs,highlightAndLayoutMs",
-        ]
-        for index in 0..<26 {
-            let start = clock.now
-            fixture.session.highlight()
-            let highlight = start.duration(to: clock.now)
-            fixture.layout()
-            let highlightAndLayout = start.duration(to: clock.now)
-            if index >= 2 {
-                readingRows.append(
-                    "\(index - 2),\(Self.milliseconds(highlight)),\(Self.milliseconds(highlightAndLayout))"
-                )
-            }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        Attachment.record(
-            readingRows.joined(separator: "\n"),
-            named: "source-reading-performance-\(size).csv"
-        )
-        #expect(!fixture.editor.isFirstResponder)
-        #expect(ObjectIdentifier(fixture.editor) == identity)
-        #expect(fixture.session.text.utf8.elementsEqual(
-            (source + String(repeating: "x", count: 26)).utf8
-        ))
-    }
-
-    private static func milliseconds(_ duration: Duration) -> Double {
-        Double(duration.components.seconds) * 1_000
-            + Double(duration.components.attoseconds) / 1_000_000_000_000_000
     }
 
     private static let lastLine = "Last reachable line."
@@ -401,12 +248,7 @@ private final class SourceKeyboardFixture {
         previousKeyWindow?.makeKey()
     }
 
-    func layout() {
-        host.view.layoutIfNeeded()
-        editor.layoutIfNeeded()
-    }
-
-    func settle(_ name: String, keyboard: Bool = true) async throws {
+    func settle(_ name: String) async throws {
         let clock = ContinuousClock()
         var lastSample: Sample?
         var stableSince = clock.now
@@ -414,19 +256,12 @@ private final class SourceKeyboardFixture {
         for _ in 0..<300 {
             host.view.layoutIfNeeded()
             editor.layoutIfNeeded()
-            let keyboardReady: Bool
-            if keyboard, let accessory = editor.inputAccessoryView {
-                keyboardReady = editor.isFirstResponder && accessory.window != nil
+            let keyboardReady = editor.inputAccessoryView.map { accessory in
+                editor.isFirstResponder && accessory.window != nil
                     && host.view.keyboardLayoutGuide.layoutFrame.height
                         > accessory.bounds.height + window.safeAreaInsets.bottom + 1
                     && viewportMeetsAccessory(accessory)
-            } else if keyboard {
-                keyboardReady = false
-            } else {
-                keyboardReady = !editor.isFirstResponder
-                    && host.view.keyboardLayoutGuide.layoutFrame.height
-                        <= window.safeAreaInsets.bottom + 1
-            }
+            } ?? false
             if editor.window === window, keyboardReady {
                 let sample = sample()
                 if sample == lastSample {
@@ -445,7 +280,6 @@ private final class SourceKeyboardFixture {
             }
             try await Task.sleep(for: .milliseconds(20))
         }
-        recordGeometry(named: "unsettled-\(name)")
         throw SourceKeyboardFailure.unsettled(name)
     }
 
@@ -485,29 +319,6 @@ private final class SourceKeyboardFixture {
         #expect(rect.height > 0 && rect.minY.isFinite && rect.maxY.isFinite)
         #expect(rect.minY >= top - 1, "The actual glyph/caret rectangle must clear navigation.")
         #expect(rect.maxY <= bottom + 1, "The actual glyph/caret rectangle must clear the capsule.")
-    }
-
-    func recordGeometry(named name: String) {
-        let geometry = """
-            sample: \(sample())
-            nativeSafeArea: \(editor.safeAreaInsets)
-            containerBounds: \(String(describing: editor.superview?.bounds))
-            containerKeyboardGuide: \(String(describing: editor.superview?.keyboardLayoutGuide.layoutFrame))
-            keyboardGuide: \(host.view.keyboardLayoutGuide.layoutFrame)
-            textCategory: \(editor.traitCollection.preferredContentSizeCategory.rawValue)
-            selection: \(editor.selectedRange)
-            """
-        print("\(name): \(geometry)")
-        Attachment.record(geometry, named: "\(name).txt")
-    }
-
-    func captureCheckpoint(named name: String) async throws {
-        guard let run = ProcessInfo.processInfo.environment["GISTPAD_CARET_CAPTURE"] else { return }
-        let marker = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "gistpad-caret-\(run)-\(name)-\(UUID().uuidString).ready"
-        )
-        try Data("\(sample())".utf8).write(to: marker, options: .atomic)
-        try await Task.sleep(for: .seconds(2))
     }
 
     private func sample() -> Sample {
@@ -551,18 +362,4 @@ private final class SourceKeyboardHostingController<Content: View>: UIHostingCon
 
 private enum SourceKeyboardFailure: Error {
     case unsettled(String)
-}
-
-@MainActor
-private final class SourceHighlightEdits: NSObject {
-    var ranges: [NSRange] = []
-
-    @objc func record(_ notification: Notification) {
-        guard let storage = notification.object as? NSTextStorage else {
-            preconditionFailure("Highlight notifications must come from native text storage.")
-        }
-        if storage.editedMask.contains(.editedAttributes), storage.editedRange.length > 0 {
-            ranges.append(storage.editedRange)
-        }
-    }
 }

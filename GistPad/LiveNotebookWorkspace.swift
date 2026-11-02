@@ -894,7 +894,7 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func open(gistID: String, filename: String? = nil) {
-    guard active?.session.isComposing != true, active?.session.writingToolsActive != true else {
+    guard active?.session.isSettled != false else {
       notebook.library.selectedNoteID = active?.document.rowID
       actionMessage = String(
         localized: "Finish composition or Writing Tools before switching notes.")
@@ -1026,7 +1026,7 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func presentIntelligence(_ controller: NotebookSessionController) {
-    guard !controller.session.isComposing, !controller.session.writingToolsActive else {
+    guard controller.session.isSettled else {
       actionMessage = String(
         localized: "Finish composition or Writing Tools before opening Intelligence.")
       return
@@ -1316,7 +1316,7 @@ struct LiveNotebookWorkspace: View {
         && reviewTarget == nil
         && intelligence.target == nil
         && actionMessage == nil && notebook.documentError == nil,
-      isEditing: active?.session.isComposing == true || active?.session.writingToolsActive == true)
+      isEditing: active?.session.isSettled == false)
   }
 
   #if DEBUG
@@ -1366,7 +1366,7 @@ struct LiveNotebookWorkspace: View {
   }
 
   private var canSwitchDocument: Bool {
-    guard active?.session.isComposing != true, active?.session.writingToolsActive != true else {
+    guard active?.session.isSettled != false else {
       actionMessage = String(
         localized: "Finish composition or Writing Tools before switching notes.")
       return false
@@ -1416,8 +1416,8 @@ struct LiveNotebookWorkspace: View {
       guard !controller.isPublishing, !controller.isApplyingDurableEdit else {
         throw NotebookActionError.publicationInProgress
       }
-      guard !controller.session.isComposing, !controller.session.writingToolsActive else {
-        throw SourceMutation.MutationError.compositionActive
+      guard controller.session.isSettled else {
+        throw SourceEdit.MutationError.compositionActive
       }
       guard await controller.waitForLocalSave() else {
         throw NotebookEditError.localPersistenceFailed

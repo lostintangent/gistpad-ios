@@ -27,22 +27,17 @@ struct FrontMatterRangeTests {
   @Suite(.serialized)
   @MainActor
   struct FrontMatterLayoutTests {
-    @Test func hiddenParagraphsOccupyNoSpaceAndSelectAllKeepsSourceBytes() throws {
-      let prefix = "---\nedit:\n  commands:\n    update: Preserve all source bytes\n---\n\n\n"
+    @Test(arguments: [
+      "---\nedit:\n  commands:\n    update: Preserve all source bytes\n---\n\n\n",
+      "---\r\nkey: e\u{301} 👩🏽‍💻\r\n---\r\n\r\n",
+    ])
+    func hiddenPrefixOccupiesNoSpaceAndKeepsSourceBytesThroughEditsAndUndo(prefix: String) throws {
       let body = "# Visible content\n\n- [ ] A thought 日本語"
-      let session = DocumentSession(documentID: "frontmatter", text: prefix + body)
+      let source = prefix + body
+      let session = DocumentSession(documentID: "frontmatter", text: source)
       let view = session.textView
-      let root = UIViewController()
-      root.view.addSubview(view)
-      let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-      window.rootViewController = root
-      view.frame = CGRect(x: 0, y: 0, width: 390, height: 700)
-      window.makeKeyAndVisible()
-      defer {
-        window.endEditing(true)
-        window.isHidden = true
-        window.rootViewController = nil
-      }
+      let window = host(session, focused: false)
+      defer { window.isHidden = true }
       let manager = try #require(view.textLayoutManager)
       manager.ensureLayout(for: try #require(manager.textContentManager?.documentRange))
       view.layoutIfNeeded()
@@ -51,7 +46,7 @@ struct FrontMatterRangeTests {
       let caret = view.caretRect(for: position)
       #expect(abs(caret.minY - view.textContainerInset.top) < 2)
       #expect(session.contentStart == prefix.utf16.count)
-      #expect(session.selection == NSRange(location: prefix.utf16.count, length: 0))
+      #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
       view.selectAll(nil)
       #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: body.utf16.count))
       #expect(
@@ -62,7 +57,7 @@ struct FrontMatterRangeTests {
       #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
       try #require(view.becomeFirstResponder())
       session.requestFocusAtEnd()
-      #expect(view.selectedRange == NSRange(location: (prefix + body).utf16.count, length: 0))
+      #expect(view.selectedRange == NSRange(location: source.utf16.count, length: 0))
       session.requestFocusAtContentStart()
       #expect(view.isFirstResponder)
       #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
@@ -70,7 +65,7 @@ struct FrontMatterRangeTests {
         from: view.beginningOfDocument, to: view.beginningOfDocument)
       #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
       view.deleteBackward()
-      #expect(session.text.utf8.elementsEqual((prefix + body).utf8))
+      #expect(session.text.utf8.elementsEqual(source.utf8))
       #expect(session.generation == 0)
       session.setShowsFrontMatter(true)
       manager.ensureLayout(for: try #require(manager.textContentManager?.documentRange))
@@ -81,44 +76,24 @@ struct FrontMatterRangeTests {
       manager.ensureLayout(for: try #require(manager.textContentManager?.documentRange))
       view.layoutIfNeeded()
       #expect(abs(view.caretRect(for: position).minY - caret.minY) < 2)
-      #expect(view.text.utf8.elementsEqual((prefix + body).utf8))
-      #expect(session.text.utf8.elementsEqual((prefix + body).utf8))
+      #expect(view.text.utf8.elementsEqual(source.utf8))
+      #expect(session.text.utf8.elementsEqual(source.utf8))
       #expect(session.generation == 0)
       #expect(view.undoManager?.canUndo != true)
       #expect(view.accessibilityValue == body)
-    }
 
-    @Test func editingAndNativeUndoKeepTheHiddenPrefixAndFullSourceCoordinates() throws {
-      let prefix = "---\r\nkey: e\u{301} 👩🏽‍💻\r\n---\r\n\r\n"
-      let body = "# A task\r\n- [ ] Clean up\r\n"
-      let session = DocumentSession(documentID: "frontmatter-edits", text: prefix + body)
-      let view = session.textView
-      let root = UIViewController()
-      root.view.addSubview(view)
-      let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-      window.rootViewController = root
-      view.frame = CGRect(x: 0, y: 0, width: 390, height: 700)
-      window.makeKeyAndVisible()
-      defer {
-        window.endEditing(true)
-        window.isHidden = true
-        window.rootViewController = nil
-      }
-      try #require(view.becomeFirstResponder())
-      let before = view.text ?? ""
-      let range = (before as NSString).range(of: "[ ]")
       try session.apply(
-        SourceMutation(range: range, expected: "[ ]", replacement: "[x]"),
-        documentID: session.documentID, generation: 0)
+        SourceEdit(
+          range: (source as NSString).range(of: "[ ]"), expected: "[ ]", replacement: "[x]"),
+        generation: 0)
       #expect(session.text == prefix + body.replacingOccurrences(of: "[ ]", with: "[x]"))
-      try #require(view.undoManager?.canUndo == true)
-      let editedGeneration = session.generation
+      let edited = session.generation
       session.setShowsFrontMatter(true)
       session.setShowsFrontMatter(false)
-      #expect(session.generation == editedGeneration)
-      #expect(view.undoManager?.canUndo == true)
+      #expect(session.generation == edited)
+      try #require(view.undoManager?.canUndo == true)
       view.undoManager?.undo()
-      #expect(session.text.utf8.elementsEqual(before.utf8))
+      #expect(session.text.utf8.elementsEqual(source.utf8))
       view.selectAll(nil)
       view.undoManager?.beginUndoGrouping()
       view.insertText("A replacement body")
@@ -126,48 +101,14 @@ struct FrontMatterRangeTests {
       #expect(session.text.utf8.elementsEqual((prefix + "A replacement body").utf8))
       #expect(view.accessibilityValue == "A replacement body")
       view.undoManager?.undo()
-      #expect(session.text.utf8.elementsEqual(before.utf8))
-      #expect(view.text.utf8.elementsEqual(before.utf8))
-      #expect(view.selectedRange.location >= prefix.utf16.count)
-      let fullRange = NSRange(location: 0, length: before.utf16.count)
-      let ignored = session.textView(view, writingToolsIgnoredRangesInEnclosingRange: fullRange)
-        .map(\.rangeValue)
-      #expect(ignored.contains(NSRange(location: 0, length: prefix.utf16.count)))
-      #expect(zip(ignored, ignored.dropFirst()).allSatisfy { NSMaxRange($0) < $1.location })
-    }
-
-    @Test(arguments: ["---\nkey: value\n---\n", "---\nkey: value\n---\n\n  "])
-    func anEmptyBodyRemainsARealTypingParagraph(source: String) throws {
-      let session = DocumentSession(documentID: "frontmatter-empty", text: source)
-      let view = session.textView
-      let root = UIViewController()
-      root.view.addSubview(view)
-      let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-      window.rootViewController = root
-      view.frame = CGRect(x: 0, y: 0, width: 390, height: 700)
-      window.makeKeyAndVisible()
-      defer {
-        window.endEditing(true)
-        window.isHidden = true
-        window.rootViewController = nil
-      }
-      try #require(view.becomeFirstResponder())
-      let manager = try #require(view.textLayoutManager)
-      manager.ensureLayout(for: try #require(manager.textContentManager?.documentRange))
-      view.layoutIfNeeded()
-      let position = try #require(
-        view.position(
-          from: view.beginningOfDocument, offset: session.contentStart))
-      #expect(abs(view.caretRect(for: position).minY - view.textContainerInset.top) < 2)
-      let prefix = (source as NSString).substring(to: session.contentStart)
-      view.selectAll(nil)
-      view.undoManager?.beginUndoGrouping()
-      view.insertText("A new thought")
-      view.undoManager?.endUndoGrouping()
-      #expect(session.text.utf8.elementsEqual((prefix + "A new thought").utf8))
-      view.undoManager?.undo()
       #expect(session.text.utf8.elementsEqual(source.utf8))
       #expect(view.selectedRange.location >= prefix.utf16.count)
+      let ignored = session.textView(
+        view, writingToolsIgnoredRangesInEnclosingRange: NSRange(
+          location: 0, length: source.utf16.count)
+      ).map(\.rangeValue)
+      #expect(ignored.contains(NSRange(location: 0, length: prefix.utf16.count)))
+      #expect(zip(ignored, ignored.dropFirst()).allSatisfy { NSMaxRange($0) < $1.location })
     }
 
     @Test func fullSourceMutationsCanChangeHiddenMetadataAndUndoItWithoutMovingIntoThePrefix()
@@ -178,31 +119,22 @@ struct FrontMatterRangeTests {
       let source = prefix + body
       let session = DocumentSession(documentID: "frontmatter-mutation", text: source)
       let view = session.textView
-      let root = UIViewController()
-      root.view.addSubview(view)
-      let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-      window.rootViewController = root
-      view.frame = CGRect(x: 0, y: 0, width: 390, height: 700)
-      window.makeKeyAndVisible()
-      defer {
-        window.endEditing(true)
-        window.isHidden = true
-        window.rootViewController = nil
-      }
-      try #require(view.becomeFirstResponder())
+      let window = host(session)
+      defer { window.isHidden = true }
+      try #require(view.isFirstResponder)
       let range = (source as NSString).range(of: "A longer value 👩🏽‍💻")
       try session.apply(
-        SourceMutation(range: range, expected: "A longer value 👩🏽‍💻", replacement: "Short"),
-        documentID: session.documentID, generation: session.generation)
+        SourceEdit(range: range, expected: "A longer value 👩🏽‍💻", replacement: "Short"),
+        generation: session.generation)
       let nextPrefix = "---\nkey: Short\n---\n\n"
       #expect(session.text.utf8.elementsEqual((nextPrefix + body).utf8))
       #expect(session.contentStart == nextPrefix.utf16.count)
-      #expect(session.selection == NSRange(location: nextPrefix.utf16.count, length: 0))
+      #expect(view.selectedRange == NSRange(location: nextPrefix.utf16.count, length: 0))
       try #require(view.undoManager?.canUndo == true)
       view.undoManager?.undo()
       #expect(session.text.utf8.elementsEqual(source.utf8))
       #expect(session.contentStart == prefix.utf16.count)
-      #expect(session.selection == NSRange(location: prefix.utf16.count, length: 0))
+      #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
     }
 
     @Test func showingMetadataWaitsForCompositionAndDoesNotChangeSourceGeneration() throws {
@@ -238,23 +170,14 @@ struct FrontMatterRangeTests {
       let source = prefix + "A retained thought"
       let session = DocumentSession(documentID: "frontmatter-replacement", text: source)
       let view = session.textView
-      let root = UIViewController()
-      root.view.addSubview(view)
-      let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-      window.rootViewController = root
-      view.frame = CGRect(x: 0, y: 0, width: 390, height: 700)
-      window.makeKeyAndVisible()
-      defer {
-        window.endEditing(true)
-        window.isHidden = true
-        window.rootViewController = nil
-      }
-      try #require(view.becomeFirstResponder())
+      let window = host(session)
+      defer { window.isHidden = true }
+      try #require(view.isFirstResponder)
       try session.apply(
-        SourceMutation(
+        SourceEdit(
           range: NSRange(location: 0, length: source.utf16.count), expected: source,
           replacement: replacement),
-        documentID: session.documentID, generation: session.generation)
+        generation: session.generation)
       #expect(session.text.utf8.elementsEqual(replacement.utf8))
       #expect(session.contentStart == 0)
       #expect(view.selectedRange.location <= replacement.utf16.count)
@@ -262,7 +185,7 @@ struct FrontMatterRangeTests {
       view.undoManager?.undo()
       #expect(session.text.utf8.elementsEqual(source.utf8))
       #expect(session.contentStart == prefix.utf16.count)
-      #expect(session.selection == NSRange(location: prefix.utf16.count, length: 0))
+      #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
     }
 
     @Test func visibilityChangesWaitForWritingToolsAndDoNotAddAnUndoStep() {

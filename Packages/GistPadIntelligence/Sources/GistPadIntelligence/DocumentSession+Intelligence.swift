@@ -17,7 +17,7 @@ extension NoteSnapshot {
 
   extension DocumentSession {
     func intelligenceSnapshot() throws -> NoteSnapshot {
-      guard !isComposing, !writingToolsActive, textView.markedTextRange == nil else {
+      guard isSettled else {
         throw NoteIntelligenceError.unavailable(
           String(
             localized:
@@ -40,14 +40,11 @@ extension NoteSnapshot {
       }
       let snapshot = try intelligenceSnapshot()
       let application = try proposal.application(to: snapshot, commentID: commentID)
-      let selection = try application.mappedSelection(textView.selectedRange)
-      try apply(
-        SourceMutation(
-          range: NSRange(location: 0, length: snapshot.source.utf16.count),
-          expected: snapshot.source, replacement: application.source),
-        documentID: documentID, generation: snapshot.generation)
-      textView.selectedRange = selection
-      textView.scrollRangeToVisible(selection)
+      let edit = SourceEdit(
+        range: NSRange(location: 0, length: snapshot.source.utf16.count),
+        expected: snapshot.source, replacement: application.source,
+        selection: try application.mappedSelection(textView.selectedRange))
+      try apply(edit, generation: snapshot.generation)
       return try application.remainingReview(on: intelligenceSnapshot())
     }
   }

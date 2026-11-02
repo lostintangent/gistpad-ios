@@ -1,18 +1,18 @@
 import Foundation
 
-struct SourceEdit: Sendable {
-  let mutation: SourceMutation
-  let selection: NSRange
+/// One change to a note's source, with UTF-16 offsets.
+public struct SourceEdit: Sendable {
+  public let range: NSRange
+  public let expected: String
+  public let replacement: String
+  /// The selection after the edit, or nil to keep the caret where it was.
+  public let selection: NSRange?
 
-  init(mutation: SourceMutation, selection: NSRange) {
-    self.mutation = mutation
+  public init(range: NSRange, expected: String, replacement: String, selection: NSRange? = nil) {
+    self.range = range
+    self.expected = expected
+    self.replacement = replacement
     self.selection = selection
-  }
-
-  init(range: NSRange, expected: String, replacement: String, selection: NSRange) {
-    self.init(
-      mutation: SourceMutation(range: range, expected: expected, replacement: replacement),
-      selection: selection)
   }
 
   /// Replacements are ordered, nonoverlapping UTF-16 ranges in the original source.
@@ -43,10 +43,39 @@ struct SourceEdit: Sendable {
       selection: NSRange(location: start, length: end - start))
   }
 
+  public func applying(to source: String) throws -> String {
+    guard try Self.text(in: source, at: range).utf8.elementsEqual(expected.utf8) else {
+      throw MutationError.sourceChanged
+    }
+    return (source as NSString).replacingCharacters(in: range, with: replacement)
+  }
+
+  /// The source at `range`, which must be in bounds and must not split a surrogate pair.
+  static func text(in source: String, at range: NSRange) throws -> String {
+    let utf16 = source as NSString
+    guard range.location >= 0, range.length >= 0, range.location <= utf16.length,
+      range.length <= utf16.length - range.location
+    else { throw MutationError.invalidRange }
+    for boundary in [range.location, NSMaxRange(range)]
+    where boundary > 0 && boundary < utf16.length {
+      guard !(0xD800...0xDBFF).contains(utf16.character(at: boundary - 1))
+        || !(0xDC00...0xDFFF).contains(utf16.character(at: boundary))
+      else { throw MutationError.invalidRange }
+    }
+    return utf16.substring(with: range)
+  }
+
   private static func remap(_ offset: Int, through range: NSRange, replacementLength: Int) -> Int {
     if offset < range.location { return offset }
     if offset >= NSMaxRange(range) { return offset + replacementLength - range.length }
     return range.location + min(offset - range.location, replacementLength)
+  }
+
+  public enum MutationError: Error, Equatable {
+    case invalidRange
+    case sourceChanged
+    case staleGeneration
+    case compositionActive
   }
 }
 
@@ -66,13 +95,7 @@ enum MarkdownFormatting {
     _ format: MarkdownFormat, in source: String, selection: NSRange
   ) throws -> SourceEdit? {
     let text = source as NSString
-    guard selection.location >= 0, selection.length >= 0,
-      selection.location <= text.length, selection.length <= text.length - selection.location,
-      let range = Range(selection, in: source)
-    else { throw SourceMutation.MutationError.invalidRange }
-    let selected = String(source[range])
-    _ = try SourceMutation(range: selection, expected: selected, replacement: selected).applying(
-      to: source)
+    let selected = try SourceEdit.text(in: source, at: selection)
     switch format {
     case .bold:
       return wrapped("**", source: source, selection: selection, selected: selected)
@@ -279,10 +302,10 @@ enum MarkdownFormatting {
       .sorted { $0.range.location < $1.range.location }
     let edit = SourceEdit(
       range: block, expected: content, replacements: changes, selection: selection)
-    return edit.mutation.replacement.utf8.elementsEqual(content.utf8) ? nil : edit
+    return edit.replacement.utf8.elementsEqual(content.utf8) ? nil : edit
   }
 
-  private static func lineRange(in source: NSString, selection: NSRange) -> NSRange {
+  static func lineRange(in source: NSString, selection: NSRange) -> NSRange {
     let first = source.lineRange(for: NSRange(location: selection.location, length: 0))
     let last = source.lineRange(
       for: NSRange(location: max(selection.location, NSMaxRange(selection) - 1), length: 0))
@@ -299,7 +322,7 @@ enum MarkdownFormatting {
     return longest
   }
 
-  private static func expression(_ pattern: String) -> NSRegularExpression {
+  static func expression(_ pattern: String) -> NSRegularExpression {
     do { return try NSRegularExpression(pattern: pattern) } catch {
       preconditionFailure("Invalid built-in formatting expression: \(error)")
     }

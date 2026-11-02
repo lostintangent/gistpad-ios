@@ -51,8 +51,7 @@
           configuration: SourceToolbarConfiguration(
             canFormat: session.canFormat,
             canInsertPhoto: canInsertPhoto && insertPhoto != nil,
-            canUseIntelligence: !session.isComposing && !session.writingToolsActive
-              && session.textView.markedTextRange == nil && intelligence != nil)
+            canUseIntelligence: session.isSettled && intelligence != nil)
         )
         .id(session.viewIdentity)
         .ignoresSafeArea([.container, .keyboard], edges: .vertical)
@@ -67,9 +66,6 @@
         }
       ) { request in
         LinkEditor(label: request.label) { label, destination in
-          guard session.documentID == request.documentID else {
-            throw SourceMutation.MutationError.documentMismatch
-          }
           if let edit = try MarkdownFormatting.edit(
             .link(label: label, destination: destination), in: request.source,
             selection: request.selection)
@@ -105,7 +101,7 @@
         {
           try session.apply(edit, generation: session.generation)
         }
-      } catch SourceMutation.MutationError.compositionActive {
+      } catch SourceEdit.MutationError.compositionActive {
         actionError = String(
           localized:
             "The source couldn't be formatted. Try again after composition or Writing Tools finishes.",
@@ -119,16 +115,15 @@
 
     private func beginLink() {
       let selection = session.textView.selectedRange
-      guard session.canFormat, let range = Range(selection, in: session.text) else {
+      guard session.canFormat, let label = try? SourceEdit.text(in: session.text, at: selection)
+      else {
         actionError = String(
           localized: "Finish the current text edit, then select the link text again.",
           bundle: .module)
         return
       }
       linkRequest = LinkRequest(
-        documentID: session.documentID, source: session.text, generation: session.generation,
-        selection: selection,
-        label: String(session.text[range]))
+        source: session.text, generation: session.generation, selection: selection, label: label)
     }
 
     private func indent(outdent: Bool) {
@@ -153,8 +148,8 @@
     @Environment(\.isNotebookPaneVisible) private var isPaneVisible
     @Environment(\.personalAccent) private var personalAccent
 
-    func makeCoordinator() -> SourceToolbarCoordinator {
-      SourceToolbarCoordinator(actions: actions)
+    func makeCoordinator() -> SourceAccessoryView {
+      SourceAccessoryView(actions: actions)
     }
 
     func makeUIView(context: Context) -> SourceTextViewHost {
@@ -164,25 +159,24 @@
     }
 
     func updateUIView(_ host: SourceTextViewHost, context: Context) {
-      let coordinator = context.coordinator
+      let accessory = context.coordinator
       host.configure { view in
         view.isHidden = !isPaneVisible
         view.isAccessibilityElement = isPaneVisible
         view.accessibilityElementsHidden = !isPaneVisible
-        coordinator.update(actions: actions, configuration: configuration)
-        if view.inputAccessoryView !== coordinator.toolbar {
-          view.inputAccessoryView = coordinator.toolbar
+        accessory.update(actions: actions, configuration: configuration)
+        if view.inputAccessoryView !== accessory {
+          view.inputAccessoryView = accessory
           if view.isFirstResponder { view.reloadInputViews() }
         }
         view.traitOverrides[PersonalAccentTrait.self] = personalAccent
         session.setCommentHighlights(
           comments, onOpenCommentThreads: onOpenCommentThreads,
           onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment)
-        session.updateAppearanceIfNeeded()
       }
     }
 
-    static func dismantleUIView(_ host: SourceTextViewHost, coordinator: SourceToolbarCoordinator) {
+    static func dismantleUIView(_ host: SourceTextViewHost, coordinator: SourceAccessoryView) {
       host.dismantle()
     }
   }
@@ -259,7 +253,6 @@
       editor.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       configuration?(editor)
       addSubview(editor)
-      session.updateAppearanceIfNeeded()
     }
   }
 
@@ -269,13 +262,13 @@
     func makeUIView(context: Context) -> SourceViewportView {
       let view = SourceViewportView()
       view.editor = session.textView
-      session.updateViewportView(view)
+      session.sourceView.updateViewportView(view)
       return view
     }
 
     func updateUIView(_ view: SourceViewportView, context: Context) {
       view.editor = session.textView
-      session.updateViewportView(view)
+      session.sourceView.updateViewportView(view)
     }
   }
 
@@ -325,7 +318,6 @@
 
   private struct LinkRequest: Identifiable {
     let id = UUID()
-    let documentID: String
     let source: String
     let generation: UInt64
     let selection: NSRange

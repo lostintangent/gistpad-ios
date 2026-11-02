@@ -3,10 +3,9 @@ import Foundation
 enum MarkdownTyping {
   /// Returns nil for ordinary input or protected syntax so the caller can use native input.
   static func edit(
-    in source: String, selection: NSRange, replacement: String, isComposing: Bool
+    in source: String, selection: NSRange, replacement: String
   ) throws -> SourceEdit? {
-    guard !isComposing else { return nil }
-    let selected = try selectedText(in: source, selection: selection)
+    let selected = try SourceEdit.text(in: source, at: selection)
     if ["\n", "\r", "\r\n"].contains(replacement) {
       let protected = protectedRanges(in: source)
       guard !isProtected(selection, ranges: protected) else { return nil }
@@ -36,12 +35,9 @@ enum MarkdownTyping {
   static func indent(
     in source: String, selection: NSRange, outdent: Bool
   ) throws -> SourceEdit? {
-    _ = try selectedText(in: source, selection: selection)
+    _ = try SourceEdit.text(in: source, at: selection)
     let text = source as NSString
-    let first = text.lineRange(for: NSRange(location: selection.location, length: 0))
-    let last = text.lineRange(
-      for: NSRange(location: max(selection.location, NSMaxRange(selection) - 1), length: 0))
-    let block = NSUnionRange(first, last)
+    let block = MarkdownFormatting.lineRange(in: text, selection: selection)
     guard !isProtected(block, ranges: protectedRanges(in: source)) else { return nil }
     var changes: [(range: NSRange, replacement: String)] = []
     var offset = block.location
@@ -164,19 +160,6 @@ enum MarkdownTyping {
       selection: NSRange(location: selection.location + replacement.utf16.count, length: 0))
   }
 
-  private static func selectedText(in source: String, selection: NSRange) throws -> String {
-    let text = source as NSString
-    guard selection.location >= 0, selection.length >= 0, selection.location <= text.length,
-      selection.length <= text.length - selection.location
-    else {
-      throw SourceMutation.MutationError.invalidRange
-    }
-    let expected = text.substring(with: selection)
-    _ = try SourceMutation(range: selection, expected: expected, replacement: expected).applying(
-      to: source)
-    return expected
-  }
-
   private static func protectedRanges(in source: String) -> [NSRange] {
     // Probe the next character so an EOF caret in an unfinished block stays protected.
     MarkdownSyntax.spans(in: source + "\u{FFFC}").compactMap { span in
@@ -193,13 +176,6 @@ enum MarkdownTyping {
     }
   }
 
-  private static let listPrefix: NSRegularExpression = {
-    do {
-      return try NSRegularExpression(
-        pattern:
-          "^([ \\t]*)(?:([-*+])([ \\t]+)(?:\\[([ xX])\\]([ \\t]+|$))?|([0-9]{1,9})([.)])([ \\t]+))")
-    } catch {
-      preconditionFailure("Invalid built-in list typing expression: \(error)")
-    }
-  }()
+  private static let listPrefix = MarkdownFormatting.expression(
+    "^([ \\t]*)(?:([-*+])([ \\t]+)(?:\\[([ xX])\\]([ \\t]+|$))?|([0-9]{1,9})([.)])([ \\t]+))")
 }

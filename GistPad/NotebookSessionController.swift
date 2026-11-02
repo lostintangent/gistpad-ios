@@ -62,7 +62,7 @@ final class NotebookSessionController {
   }
 
   var canMutate: Bool {
-    document.chrome.access.canEdit && !isDiscarded && !session.isComposing && !session.writingToolsActive
+    document.chrome.access.canEdit && !isDiscarded && session.isSettled
       && !isPerformingDestructiveAction
       && !isApplyingDurableEdit
   }
@@ -120,7 +120,7 @@ final class NotebookSessionController {
     case .autosave: autosaveAllowed
     case .background, .leaving:
       notebook.account?.id == draft.accountID && notebook.pendingAccount == nil
-        && !session.isComposing && !session.writingToolsActive
+        && session.isSettled
         && session.textView.markedTextRange == nil && draft.attemptedGeneration == nil
     }
   }
@@ -196,7 +196,7 @@ final class NotebookSessionController {
         // Every text change bumps the generation, so this commit is refused if any edit or publish
         // landed after the fetch. Adoption can't overwrite unpublished text.
         try await commitMutation(
-          SourceMutation(
+          SourceEdit(
             range: NSRange(location: 0, length: session.text.utf16.count),
             expected: session.text, replacement: content),
           expectedGeneration: current.generation
@@ -277,7 +277,7 @@ final class NotebookSessionController {
     let changed = !text.utf8.elementsEqual(session.text.utf8)
     let generation = session.generation + (changed ? 1 : 0)
     try await commitMutation(
-      SourceMutation(
+      SourceEdit(
         range: NSRange(location: 0, length: session.text.utf16.count),
         expected: session.text, replacement: text),
       expectedGeneration: review.draft.generation
@@ -312,17 +312,17 @@ final class NotebookSessionController {
       throw AccountError.accountChanged
     }
     try await commitMutation(
-      SourceMutation(range: edit.range, expected: edit.expectedText, replacement: edit.replacement),
+      SourceEdit(range: edit.range, expected: edit.expectedText, replacement: edit.replacement),
       expectedGeneration: edit.expectedGeneration, commit: commit)
   }
 
   func commitMutation(
-    _ mutation: SourceMutation, expectedGeneration: UInt64,
+    _ edit: SourceEdit, expectedGeneration: UInt64,
     commit: @MainActor () async throws -> DraftSnapshot
   ) async throws {
-    guard canMutate else { throw SourceMutation.MutationError.compositionActive }
+    guard canMutate else { throw SourceEdit.MutationError.compositionActive }
     guard session.generation == expectedGeneration else { throw DraftError.staleGeneration }
-    let result = try mutation.applying(to: session.text)
+    let result = try edit.applying(to: session.text)
     let changed = !result.utf8.elementsEqual(session.text.utf8)
     isApplyingDurableEdit = true
     let wasFirstResponder = session.textView.isFirstResponder
@@ -333,8 +333,7 @@ final class NotebookSessionController {
       if wasFirstResponder { session.textView.becomeFirstResponder() }
     }
     guard await waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
-    guard session.generation == expectedGeneration, !session.isComposing,
-      !session.writingToolsActive
+    guard session.generation == expectedGeneration, session.isSettled
     else { throw DraftError.staleGeneration }
     let committed = try await commit()
     guard committed.id == draft.id, committed.accountID == draft.accountID,
@@ -344,7 +343,7 @@ final class NotebookSessionController {
       throw NotebookEditError.invalidCommittedEdit
     }
     if changed {
-      try session.apply(mutation, documentID: session.documentID, generation: expectedGeneration)
+      try session.apply(edit, generation: expectedGeneration)
     }
     draft = committed
     document.draft = committed

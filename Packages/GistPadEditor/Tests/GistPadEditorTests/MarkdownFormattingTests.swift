@@ -20,7 +20,7 @@ struct MarkdownFormattingTests {
           edit.selection == NSRange(
             location: boundaries[start], length: boundaries[end] - boundaries[start]))
         #expect(
-          try edit.mutation.applying(to: source).utf8.elementsEqual("before|# aX|after".utf8))
+          try edit.applying(to: source).utf8.elementsEqual("before|# aX|after".utf8))
       }
     }
   }
@@ -29,26 +29,26 @@ struct MarkdownFormattingTests {
     let source = "日本語 👩🏽‍💻 cafe\u{301}"
     let selection = (source as NSString).range(of: "👩🏽‍💻")
     let edit = try #require(try MarkdownFormatting.edit(.bold, in: source, selection: selection))
-    let result = try edit.mutation.applying(to: source)
+    let result = try edit.applying(to: source)
     #expect(result == "日本語 **👩🏽‍💻** cafe\u{301}")
-    #expect((result as NSString).substring(with: edit.selection) == "👩🏽‍💻")
+    #expect((result as NSString).substring(with: edit.selection!) == "👩🏽‍💻")
     let undo = try #require(
-      try MarkdownFormatting.edit(.bold, in: result, selection: edit.selection))
-    #expect(try undo.mutation.applying(to: result).utf8.elementsEqual(source.utf8))
+      try MarkdownFormatting.edit(.bold, in: result, selection: edit.selection!))
+    #expect(try undo.applying(to: result).utf8.elementsEqual(source.utf8))
   }
 
   @Test func italicDoesNotRemoveHalfOfBoldSyntax() throws {
     for selection in [NSRange(location: 0, length: 8), NSRange(location: 2, length: 4)] {
       let edit = try #require(
         try MarkdownFormatting.edit(.italic, in: "**note**", selection: selection))
-      #expect(try edit.mutation.applying(to: "**note**") == "***note***")
+      #expect(try edit.applying(to: "**note**") == "***note***")
     }
   }
 
   @Test func emptyCaretFormattingLeavesAnInsertionPointBetweenMarkers() throws {
     let edit = try #require(
       try MarkdownFormatting.edit(.bold, in: "abc", selection: NSRange(location: 1, length: 0)))
-    #expect(try edit.mutation.applying(to: "abc") == "a****bc")
+    #expect(try edit.applying(to: "abc") == "a****bc")
     #expect(edit.selection == NSRange(location: 3, length: 0))
   }
 
@@ -57,7 +57,7 @@ struct MarkdownFormattingTests {
       NSRange(location: -1, length: 0), NSRange(location: 0, length: 9),
       NSRange(location: 1, length: 0), NSRange(location: 0, length: 1),
     ] {
-      #expect(throws: SourceMutation.MutationError.invalidRange) {
+      #expect(throws: SourceEdit.MutationError.invalidRange) {
         try MarkdownFormatting.edit(.bold, in: "📝", selection: selection)
       }
     }
@@ -71,7 +71,7 @@ struct MarkdownFormattingTests {
     let edit = try #require(
       try MarkdownFormatting.edit(
         .heading(2), in: source, selection: NSRange(location: 0, length: 6)))
-    #expect(try edit.mutation.applying(to: source) == "## First\nSecond\nThird")
+    #expect(try edit.applying(to: source) == "## First\nSecond\nThird")
     #expect(edit.selection == NSRange(location: 3, length: 6))
   }
 
@@ -80,7 +80,7 @@ struct MarkdownFormattingTests {
     let edit = try #require(
       try MarkdownFormatting.edit(
         .heading(0), in: source, selection: NSRange(location: 0, length: source.utf16.count)))
-    #expect(try edit.mutation.applying(to: source) == "Heading\r\nC#\r\n")
+    #expect(try edit.applying(to: source) == "Heading\r\nC#\r\n")
     #expect(edit.selection == NSRange(location: 0, length: 13))
     #expect(
       try MarkdownFormatting.edit(
@@ -92,13 +92,13 @@ struct MarkdownFormattingTests {
     let edit = try #require(
       try MarkdownFormatting.edit(
         .checklist, in: source, selection: NSRange(location: 0, length: source.utf16.count)))
-    let result = try edit.mutation.applying(to: source)
+    let result = try edit.applying(to: source)
     #expect(result == "  - [x] Done\r\n\t- [ ] Next\r\n- [ ] Plain")
-    #expect(Range(edit.selection, in: result) != nil)
+    #expect(Range(edit.selection!, in: result) != nil)
     let toggle = try #require(
       try MarkdownFormatting.edit(
         .checklist, in: result, selection: NSRange(location: 0, length: result.utf16.count)))
-    #expect(try toggle.mutation.applying(to: result) == "  Done\r\n\tNext\r\nPlain")
+    #expect(try toggle.applying(to: result) == "  Done\r\n\tNext\r\nPlain")
   }
 
   @Test func numberedListConversionUsesOneMutationAndMapsTheCaret() throws {
@@ -106,7 +106,7 @@ struct MarkdownFormattingTests {
     let selection = NSRange(location: 0, length: source.utf16.count)
     let edit = try #require(
       try MarkdownFormatting.edit(.numberedList, in: source, selection: selection))
-    #expect(try edit.mutation.applying(to: source) == "1. One\n2. Two")
+    #expect(try edit.applying(to: source) == "1. One\n2. Two")
     #expect(edit.selection == NSRange(location: 0, length: 13))
     let caret = try #require(
       try MarkdownFormatting.edit(
@@ -119,19 +119,19 @@ struct MarkdownFormattingTests {
     let edit = try #require(
       try MarkdownFormatting.edit(
         .inlineCode, in: source, selection: NSRange(location: 0, length: source.utf16.count)))
-    let result = try edit.mutation.applying(to: source)
+    let result = try edit.applying(to: source)
     #expect(result == "``a ` b``")
     let toggle = try #require(
-      try MarkdownFormatting.edit(.inlineCode, in: result, selection: edit.selection))
-    #expect(try toggle.mutation.applying(to: result) == source)
+      try MarkdownFormatting.edit(.inlineCode, in: result, selection: edit.selection!))
+    #expect(try toggle.applying(to: result) == source)
     let padded = try #require(
       try MarkdownFormatting.edit(
         .inlineCode, in: "`hello", selection: NSRange(location: 0, length: 6)))
-    #expect(try padded.mutation.applying(to: "`hello") == "`` `hello ``")
-    let paddedSource = try padded.mutation.applying(to: "`hello")
+    #expect(try padded.applying(to: "`hello") == "`` `hello ``")
+    let paddedSource = try padded.applying(to: "`hello")
     let unpadded = try #require(
-      try MarkdownFormatting.edit(.inlineCode, in: paddedSource, selection: padded.selection))
-    #expect(try unpadded.mutation.applying(to: paddedSource) == "`hello")
+      try MarkdownFormatting.edit(.inlineCode, in: paddedSource, selection: padded.selection!))
+    #expect(try unpadded.applying(to: paddedSource) == "`hello")
   }
 
   @Test func fencedCodeRetainsCRLFAndCannotCloseEarly() throws {
@@ -139,7 +139,7 @@ struct MarkdownFormattingTests {
     let edit = try #require(
       try MarkdownFormatting.edit(
         .codeBlock, in: source, selection: NSRange(location: 0, length: source.utf16.count)))
-    #expect(try edit.mutation.applying(to: source) == "````\r\na\r\n```\r\nb\r\n````\r\n")
+    #expect(try edit.applying(to: source) == "````\r\na\r\n```\r\nb\r\n````\r\n")
     #expect(edit.selection == NSRange(location: 6, length: source.utf16.count))
   }
 
@@ -148,7 +148,7 @@ struct MarkdownFormattingTests {
       try MarkdownFormatting.edit(
         .link(label: "A [draft]", destination: "https://example.com/a(b)"),
         in: "note", selection: NSRange(location: 0, length: 4)))
-    #expect(try edit.mutation.applying(to: "note") == "[A \\[draft\\]](<https://example.com/a(b)>)")
+    #expect(try edit.applying(to: "note") == "[A \\[draft\\]](<https://example.com/a(b)>)")
   }
 
   @Test func linkRejectsUnsafeOrIncompleteDestinations() {

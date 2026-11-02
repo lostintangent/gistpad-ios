@@ -4,12 +4,14 @@ import SwiftUI
 import Testing
 import UIKit
 
+@testable import GistPad
+
 @Suite(.serialized)
 @MainActor
 struct DuoPostureProbe {
   @Test(.enabled(if: ProcessInfo.processInfo.environment["GISTPAD_FOLD_PROBE"] == "1"))
   func markedTextThroughRealSimulatorPostures() async throws {
-    let original = try EditorFixture.markdown()
+    let original = EditorFixture.markdown
     let session = DocumentSession(documentID: "manual-fold-probe", text: original)
     let probe = PostureProbeState(session: session)
     let scene = try #require(

@@ -1,10 +1,5 @@
 import Foundation
 
-#if canImport(UIKit)
-  import GistPadInterface
-  import UIKit
-#endif
-
 public enum MarkdownSyntax {
   enum Kind: Sendable {
     case heading, strong, emphasis, blockquote, htmlTag, strikethrough, orderedMarker
@@ -226,88 +221,5 @@ public enum MarkdownSyntax {
       }
     }
     return result
-  }
-}
-
-#if canImport(UIKit)
-  @MainActor
-  enum SourceSyntaxColor {
-    static let emphasis = color(
-      light: 0x1E293B, dark: 0xD2A8FF, highLight: 0x0F172A, highDark: 0xE6CCFF)
-    static let quote = color(
-      light: 0x22863A, dark: 0x7EE787, highLight: 0x155D27, highDark: 0xB0F5B7)
-    static let htmlTag = color(
-      light: 0x116329, dark: 0x7EE787, highLight: 0x0B4B1E, highDark: 0xB0F5B7)
-    static let destination = color(
-      light: 0x032F62, dark: 0xA5D6FF, highLight: 0x02234A, highDark: 0xD1ECFF)
-    static let listBullet = color(
-      light: 0xD4D4D4, dark: 0x525252, highLight: 0x475569, highDark: 0xE2E8F0)
-    static let listNumber = color(
-      light: 0x737373, dark: 0xA1A1A1, highLight: 0x475569, highDark: 0xE2E8F0)
-    static let link: UIColor = {
-      let ink = UIColor(InterfaceTheme.text)
-      let urlColor = destination
-      return UIColor { traits in
-        (traits.userInterfaceStyle == .dark ? ink : urlColor).resolvedColor(with: traits)
-      }
-    }()
-
-    private static func color(
-      light: UInt32, dark: UInt32, highLight: UInt32, highDark: UInt32
-    ) -> UIColor {
-      UIColor { traits in
-        let darkMode = traits.userInterfaceStyle == .dark
-        let value =
-          traits.accessibilityContrast == .high
-          ? (darkMode ? highDark : highLight) : (darkMode ? dark : light)
-        return UIColor(
-          red: CGFloat((value >> 16) & 255) / 255,
-          green: CGFloat((value >> 8) & 255) / 255,
-          blue: CGFloat(value & 255) / 255, alpha: 1)
-      }
-    }
-  }
-#endif
-
-public struct SourceMutation: Sendable {
-  public let range: NSRange
-  public let expected: String
-  public let replacement: String
-
-  public init(range: NSRange, expected: String, replacement: String) {
-    self.range = range
-    self.expected = expected
-    self.replacement = replacement
-  }
-
-  public func applying(to source: String) throws -> String {
-    let utf16 = source as NSString
-    guard range.location >= 0, range.length >= 0,
-      range.location <= utf16.length,
-      range.length <= utf16.length - range.location
-    else {
-      throw MutationError.invalidRange
-    }
-    for boundary in [range.location, NSMaxRange(range)]
-    where boundary > 0 && boundary < utf16.length {
-      let previous = utf16.character(at: boundary - 1)
-      let next = utf16.character(at: boundary)
-      guard !(0xD800...0xDBFF).contains(previous) || !(0xDC00...0xDFFF).contains(next) else {
-        throw MutationError.invalidRange
-      }
-    }
-    guard let swiftRange = Range(range, in: source) else { throw MutationError.invalidRange }
-    guard source[swiftRange].utf8.elementsEqual(expected.utf8) else {
-      throw MutationError.sourceChanged
-    }
-    return source.replacingCharacters(in: swiftRange, with: replacement)
-  }
-
-  public enum MutationError: Error, Equatable {
-    case invalidRange
-    case sourceChanged
-    case staleGeneration
-    case compositionActive
-    case documentMismatch
   }
 }

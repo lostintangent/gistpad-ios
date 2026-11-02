@@ -48,9 +48,9 @@ struct SessionPreview: View {
     case .taskToggle(let edit):
       // The bridge only sends toggles for editable notes, for the current generation's exact marker.
       try? session.apply(
-        SourceMutation(
+        SourceEdit(
           range: edit.range, expected: edit.expectedMarker, replacement: edit.replacementMarker),
-        documentID: edit.documentID, generation: edit.generation)
+        generation: edit.generation)
     case .linkTapped(let link):
       if link.kind == .external, let url = URL(string: link.target) {
         openURL(url)

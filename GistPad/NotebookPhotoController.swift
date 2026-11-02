@@ -70,10 +70,10 @@ final class NotebookPhotoController {
       let markdown = ImageStorageClient.markdown(try await upload(png, gistID))
       let session = note.session
       try session.apply(
-        SourceMutation(
-          range: NSRange(location: NSMaxRange(session.selection), length: 0), expected: "",
+        SourceEdit(
+          range: NSRange(location: NSMaxRange(session.textView.selectedRange), length: 0), expected: "",
           replacement: markdown),
-        documentID: session.documentID, generation: session.generation)
+        generation: session.generation)
     } catch {
       failure = Failure(message: Self.message(for: error), png: png)
     }

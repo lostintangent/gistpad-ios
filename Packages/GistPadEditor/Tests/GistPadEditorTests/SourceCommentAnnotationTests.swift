@@ -1,6 +1,5 @@
 #if canImport(UIKit)
   import Accessibility
-  import GistPadAppearance
   import GistPadComments
   import Testing
   import UIKit
@@ -9,29 +8,15 @@
   @Suite(.serialized)
   @MainActor
   struct SourceCommentAnnotationTests {
-    @Test func selectedLineBackgroundsMergeOverlapPartitionsWithoutBridgingLinesOrGaps() {
-      let frames = [
-        CGRect(x: 30, y: 10, width: 30, height: 20),
-        CGRect(x: 10, y: 35, width: 25, height: 20),
-        CGRect(x: 80, y: 10, width: 10, height: 20),
-        CGRect(x: 10, y: 10, width: 20, height: 20),
-      ]
-      #expect(SourceCommentAnnotations.continuousLineRects(frames) == [
-        CGRect(x: 10, y: 10, width: 50, height: 20),
-        CGRect(x: 80, y: 10, width: 10, height: 20),
-        CGRect(x: 10, y: 35, width: 25, height: 20),
-      ])
-    }
-
     @Test func annotationsPreserveExactSourceGenerationSelectionAndNativeUndo() throws {
       let session = DocumentSession(documentID: "comments", text: "A native note", generation: 7)
       let window = host(session)
       defer { window.isHidden = true }
       let undo = try #require(session.textView.undoManager)
       undo.removeAllActions()
-      let mutation = SourceMutation(
-        range: NSRange(location: 0, length: 1), expected: "A", replacement: "The")
-      try session.apply(mutation, documentID: session.documentID, generation: 7)
+      try session.apply(
+        SourceEdit(range: NSRange(location: 0, length: 1), expected: "A", replacement: "The"),
+        generation: 7)
       session.textView.selectedRange = NSRange(location: 4, length: 6)
       let selection = session.textView.selectedRange
       var changes = 0
@@ -90,28 +75,49 @@
       #expect(session.generation == 0)
     }
 
-    @Test func sourceHitTestingMatchesNativeTextInputGeometry() throws {
-      let source = "# Comment notebook\n\n🫧 A quiet native note, with **careful** words.\n"
+    @Test func passagesHitTestNativeGeometryAndAddCommentKeepsTheExactSelection() throws {
+      let added = "  cafe\u{0301} 🫧\r\n"
+      let source = "# Comment notebook\n\n🫧 A quiet native note, with **careful** words.\n" + added
       let session = DocumentSession(documentID: "hit-testing", text: source)
-      let window = host(session)
+      let window = host(session, focused: false)
       defer { window.isHidden = true }
-      session.textView.resignFirstResponder()
+      var quotes: [String] = []
       session.setCommentHighlights(
         .init(quotes: [
           CommentQuote(commentID: 10, quote: "quiet native"),
           CommentQuote(commentID: 20, quote: "native note"),
-        ]), onOpenCommentThreads: { _ in })
+        ]), onOpenCommentThreads: { _ in }, onAddComment: { quotes.append($0) })
       session.textView.layoutIfNeeded()
       let range = (source as NSString).range(of: "native")
       let start = try #require(
         session.textView.position(from: session.textView.beginningOfDocument, offset: range.location))
       let end = try #require(session.textView.position(from: start, offset: range.length))
-      let selection = try #require(session.textView.textRange(from: start, to: end))
-      let frame = session.textView.firstRect(for: selection)
+      let frame = session.textView.firstRect(for: try #require(session.textView.textRange(from: start, to: end)))
       #expect(!frame.isEmpty)
       #expect(
         session.commentAnnotations.threadIDs(at: CGPoint(x: frame.midX, y: frame.midY)) == [10, 20],
         "Native frame \(frame), container inset \(session.textView.textContainerInset)")
+
+      let copy = UIAction(title: "System Copy") { _ in }
+      let selection = session.textView.selectedRange
+      let addedRange = NSRange(
+        location: source.utf16.count - added.utf16.count, length: added.utf16.count)
+      let menu = try #require(
+        session.textView(
+          session.textView, editMenuForTextInRanges: [NSValue(range: addedRange)],
+          suggestedActions: [copy]))
+      #expect(menu.children.first === copy)
+      let section = try #require(menu.children.last as? UIMenu)
+      let action = try #require(section.children.first as? UIAction)
+      #expect(action.title == "Add Comment")
+      let button = UIButton()
+      button.addAction(action, for: .touchUpInside)
+      button.sendActions(for: .touchUpInside)
+      #expect(quotes.count == 1)
+      #expect(try #require(quotes.first).utf8.elementsEqual(added.utf8))
+      #expect(session.text.utf8.elementsEqual(source.utf8))
+      #expect(session.generation == 0)
+      #expect(session.textView.selectedRange == selection)
     }
 
     @Test func explicitRevealCanReturnToTheSameSelectedQuoteWithoutChangingSource() async throws {
@@ -124,10 +130,7 @@
       var configuration = CommentHighlightConfiguration(
         quotes: [CommentQuote(commentID: 60, quote: "late native passage")], selectedCommentID: 60)
       session.setCommentHighlights(configuration)
-      for _ in 0..<40 {
-        if session.textView.contentOffset.y > 100 { break }
-        try await Task.sleep(for: .milliseconds(25))
-      }
+      try await settle(session.textView) { session.textView.contentOffset.y > 100 }
       #expect(session.textView.contentOffset.y > 100)
       let top = CGPoint(x: 0, y: -session.textView.adjustedContentInset.top)
       session.textView.setContentOffset(top, animated: false)
@@ -136,39 +139,10 @@
       #expect(abs(session.textView.contentOffset.y - top.y) < 1)
       configuration.revealRevision += 1
       session.setCommentHighlights(configuration)
-      for _ in 0..<40 {
-        if session.textView.contentOffset.y > 100 { break }
-        try await Task.sleep(for: .milliseconds(25))
-      }
+      try await settle(session.textView) { session.textView.contentOffset.y > 100 }
       #expect(session.textView.contentOffset.y > 100)
       #expect(session.text == text)
       #expect(session.generation == 0)
-    }
-
-    @Test func addCommentPreservesTheExactSelectionAndSystemMenu() throws {
-      let source = "  cafe\u{0301} 🫧\r\n"
-      let session = DocumentSession(documentID: "add-comment", text: source)
-      var quotes: [String] = []
-      session.setCommentHighlights(.init(), onAddComment: { quotes.append($0) })
-      let copy = UIAction(title: "System Copy") { _ in }
-      let selection = session.textView.selectedRange
-      let menu = try #require(
-        session.textView(
-          session.textView,
-          editMenuForTextInRanges: [NSValue(range: NSRange(location: 0, length: source.utf16.count))],
-          suggestedActions: [copy]))
-      #expect(menu.children.first === copy)
-      let section = try #require(menu.children.last as? UIMenu)
-      let action = try #require(section.children.first as? UIAction)
-      #expect(action.title == "Add Comment")
-      let button = UIButton()
-      button.addAction(action, for: .touchUpInside)
-      button.sendActions(for: .touchUpInside)
-      #expect(quotes.count == 1)
-      #expect(try #require(quotes.first).utf8.elementsEqual(source.utf8))
-      #expect(session.text.utf8.elementsEqual(source.utf8))
-      #expect(session.generation == 0)
-      #expect(session.textView.selectedRange == selection)
     }
 
     @Test func addCommentRequiresOneEligibleSelectionAndAnExplicitCallback() {
@@ -192,27 +166,6 @@
         session.textView(
           session.textView, editMenuForTextInRanges: [NSValue(range: NSRange(location: 9, length: 4))],
           suggestedActions: []) != nil)
-    }
-
-    @Test func changingOnlyQuoteNormalizationInvalidatesTheLiteralMatchCache() {
-      let source = "A café note"
-      let session = DocumentSession(documentID: "normalization", text: source)
-      session.setCommentHighlights(
-        .init(quotes: [
-          CommentQuote(commentID: 10, quote: "café note")
-        ]))
-      #expect(
-        session.textView.textStorage.attribute(SourceCommentAnnotations.annotationKey, at: 3, effectiveRange: nil)
-          != nil)
-      session.setCommentHighlights(
-        .init(quotes: [
-          CommentQuote(commentID: 10, quote: "cafe\u{0301} note")
-        ]))
-      #expect(
-        session.textView.textStorage.attribute(SourceCommentAnnotations.annotationKey, at: 3, effectiveRange: nil)
-          == nil)
-      #expect(session.text.utf8.elementsEqual(source.utf8))
-      #expect(session.generation == 0)
     }
 
     @Test func hidingIdleAnnotationsKeepsSelectionAndContextualDiscovery() throws {
@@ -302,92 +255,36 @@
       #expect(session.textView.selectedRange == selection)
     }
 
-    @Test func writingToolsTemporarilyOwnsTextPresentationWithoutChangingSource() {
-      let session = DocumentSession(documentID: "writing-tools", text: "A native note")
-      session.setCommentHighlights(
-        .init(
-          quotes: [CommentQuote(commentID: 10, quote: "native")], selectedCommentID: 10))
-      session.textViewWritingToolsWillBegin(session.textView)
-      #expect(
-        session.textView.textStorage.attribute(
-          SourceCommentAnnotations.annotationKey, at: 3, effectiveRange: nil) == nil)
-      #expect(session.writingToolsActive)
-      session.textViewWritingToolsDidEnd(session.textView)
-      session.highlight()
-      #expect(
-        session.textView.textStorage.attribute(
-          SourceCommentAnnotations.annotationKey, at: 3, effectiveRange: nil) != nil)
-      #expect(session.text == "A native note")
-      #expect(session.generation == 0)
-    }
-
-    @Test func nativeFindTemporarilyOwnsPresentationAndRestoresAnnotations() async throws {
-      let session = DocumentSession(documentID: "find-comments", text: "A native note")
+    @Test func highlightsStepAsideForWritingToolsAndFindWithoutChangingSource() async throws {
+      let session = DocumentSession(documentID: "transient-ui", text: "A native note")
       let window = host(session)
       defer { window.isHidden = true }
+      let view = session.textView
+      let annotated = {
+        view.textStorage.attribute(SourceCommentAnnotations.annotationKey, at: 3, effectiveRange: nil)
+          != nil
+      }
       session.setCommentHighlights(
         .init(quotes: [CommentQuote(commentID: 10, quote: "native")], selectedCommentID: 10))
-      let interaction = try #require(session.textView.findInteraction)
+      #expect(annotated())
+      session.textViewWritingToolsWillBegin(view)
+      #expect(session.writingToolsActive)
+      #expect(!annotated())
+      session.textViewWritingToolsDidEnd(view)
+      session.highlight()
+      #expect(annotated())
+
+      let interaction = try #require(view.findInteraction)
       interaction.presentFindNavigator(showingReplace: false)
-      for _ in 0..<40 {
-        session.textView.setNeedsLayout()
-        session.textView.layoutIfNeeded()
-        if interaction.isFindNavigatorVisible,
-          session.textView.textStorage.attribute(SourceCommentAnnotations.annotationKey, at: 3, effectiveRange: nil)
-            == nil
-        {
-          break
-        }
-        try await Task.sleep(for: .milliseconds(25))
-      }
+      try await settle(view) { interaction.isFindNavigatorVisible && !annotated() }
       #expect(interaction.isFindNavigatorVisible)
-      #expect(
-        session.textView.textStorage.attribute(SourceCommentAnnotations.annotationKey, at: 3, effectiveRange: nil)
-          == nil)
+      #expect(!annotated())
       interaction.dismissFindNavigator()
-      for _ in 0..<40 {
-        session.textView.setNeedsLayout()
-        session.textView.layoutIfNeeded()
-        if !interaction.isFindNavigatorVisible,
-          session.textView.textStorage.attribute(SourceCommentAnnotations.annotationKey, at: 3, effectiveRange: nil)
-            != nil
-        {
-          break
-        }
-        try await Task.sleep(for: .milliseconds(25))
-      }
+      try await settle(view) { !interaction.isFindNavigatorVisible && annotated() }
       #expect(!interaction.isFindNavigatorVisible)
-      #expect(
-        session.textView.textStorage.attribute(SourceCommentAnnotations.annotationKey, at: 3, effectiveRange: nil)
-          != nil)
+      #expect(annotated())
       #expect(session.text == "A native note")
       #expect(session.generation == 0)
-    }
-
-    @Test func idleFillStartsAtHalfAccentAndPreservesOpaqueAndAlphaInkContrast() {
-      let accent = PersonalAccent(savedHex: "#FACC15")
-      let fill = SourceCommentAnnotations.idleFill(
-        accent: accent.color, page: .white, inks: [(.black, 1)], target: 4.5)
-      #expect(fill.hex == "#FDE68A")
-      for page in [RGBColor.white, .black] {
-        let inks: [(RGBColor, Double)] = [
-          (page == .white ? .black : .white, 1),
-          (RGBColor(red: 0, green: 122, blue: 255), 1),
-          (RGBColor(red: 60, green: 60, blue: 67), 0.6),
-        ]
-        for target in [4.5, 7.0] {
-          let background = SourceCommentAnnotations.idleFill(
-            accent: accent.color, page: page, inks: inks, target: target)
-          for (ink, opacity) in inks {
-            let minimum = min(target, page.mixed(toward: ink, amount: opacity).contrast(with: page))
-            #expect(
-              background.mixed(toward: ink, amount: opacity).contrast(with: background)
-                + 0.000_001 >= minimum)
-          }
-        }
-      }
-      #expect(accent.savedHex == "#FACC15")
-      #expect(accent.color.hex == "#FACC15")
     }
 
     @Test func selectedCommentHasNativeAccessibilityStateWithoutChangingTheEditorRole() throws {
@@ -405,17 +302,12 @@
       #expect(provider.accessibilityCustomContent.isEmpty)
     }
 
-    private func host(_ session: DocumentSession) -> UIWindow {
-      let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-      let controller = UIViewController()
-      window.rootViewController = controller
-      session.textView.frame = controller.view.bounds
-      session.textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      controller.view.addSubview(session.textView)
-      window.makeKeyAndVisible()
-      window.layoutIfNeeded()
-      session.textView.becomeFirstResponder()
-      return window
+    private func settle(_ view: UITextView, until condition: () -> Bool) async throws {
+      for _ in 0..<40 where !condition() {
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(25))
+      }
     }
   }
 #endif

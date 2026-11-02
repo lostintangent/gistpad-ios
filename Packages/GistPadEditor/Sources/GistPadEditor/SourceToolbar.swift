@@ -17,16 +17,20 @@
     let canUseIntelligence: Bool
   }
 
+  /// The glass capsule above the keyboard. Its buttons call the latest actions SwiftUI passed in.
   @MainActor
   final class SourceAccessoryView: UIView {
     let buttons = UIStackView()
     let glass: UIVisualEffectView
+    private var actions: SourceToolbarActions
+    private var configuration: SourceToolbarConfiguration?
 
     override var intrinsicContentSize: CGSize {
       CGSize(width: UIView.noIntrinsicMetric, height: 72)
     }
 
-    init() {
+    init(actions: SourceToolbarActions) {
+      self.actions = actions
       let effect = UIGlassEffect(style: .regular)
       effect.isInteractive = true
       glass = UIVisualEffectView(effect: effect)
@@ -60,30 +64,7 @@
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("Use init()") }
-
-    func setButtons(_ items: [UIButton]) {
-      for view in buttons.arrangedSubviews {
-        buttons.removeArrangedSubview(view)
-        view.removeFromSuperview()
-      }
-      for item in items {
-        buttons.addArrangedSubview(item)
-        item.widthAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
-      }
-    }
-  }
-
-  @MainActor
-  final class SourceToolbarCoordinator: NSObject {
-    let toolbar = SourceAccessoryView()
-    private var actions: SourceToolbarActions
-    private var configuration: SourceToolbarConfiguration?
-
-    init(actions: SourceToolbarActions) {
-      self.actions = actions
-      super.init()
-    }
+    required init?(coder: NSCoder) { fatalError("Use init(actions:)") }
 
     func update(actions: SourceToolbarActions, configuration: SourceToolbarConfiguration) {
       self.actions = actions
@@ -163,7 +144,11 @@
       for item in [style, list, insertion] {
         item.isEnabled = configuration.canFormat
       }
-      toolbar.setButtons([style, list, insertion, intelligence, dismiss])
+      for view in buttons.arrangedSubviews { view.removeFromSuperview() }
+      for item in [style, list, insertion, intelligence, dismiss] {
+        buttons.addArrangedSubview(item)
+        item.widthAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+      }
     }
 
     private func item(
@@ -178,7 +163,7 @@
 
     private func command(
       _ title: String.LocalizationValue, image: String,
-      perform: @escaping @MainActor (SourceToolbarCoordinator) -> Void
+      perform: @escaping @MainActor (SourceAccessoryView) -> Void
     ) -> UIButton {
       let title = String(localized: title, bundle: .module)
       let button = UIButton(type: .system)
@@ -199,7 +184,7 @@
 
     private func action(
       _ title: String, image: String? = nil,
-      perform: @escaping @MainActor (SourceToolbarCoordinator) -> Void
+      perform: @escaping @MainActor (SourceAccessoryView) -> Void
     ) -> UIAction {
       UIAction(title: title, image: image.flatMap { UIImage(systemName: $0) }) { [weak self] _ in
         guard let self else { return }

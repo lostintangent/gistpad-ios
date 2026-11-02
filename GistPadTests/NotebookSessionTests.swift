@@ -626,7 +626,7 @@ struct NotebookSessionTests {
       draftID: controller.draft.id, accountID: controller.draft.accountID,
       expectedGeneration: 0, range: NSRange(location: 4, length: 0),
       expectedText: "", replacement: " image")
-    await #expect(throws: SourceMutation.MutationError.compositionActive) {
+    await #expect(throws: SourceEdit.MutationError.compositionActive) {
       try await controller.applyDurableEdit(insertion) { try await provider.store.apply(insertion) }
     }
     #expect(controller.session.text == "Base")

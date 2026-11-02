@@ -1,6 +1,6 @@
 import Foundation
 import GistPadComments
-import GistPadEditor
+@testable import GistPadEditor
 import GistPadInterface
 import GistPadPlatform
 import SwiftUI
@@ -543,7 +543,7 @@ struct NotebookModelTests {
     _ = try await model.perform(.delete(gistID: target.id))
     #expect(await provider.deletedIDs == ["a"])
     #expect(model.isTodaySelected)
-    #expect(model.loadedDocument?.opensForEditing == false)
+    #expect(model.loadedDocument?.editingRequestID == nil)
     #expect(model.library.selectedNoteID == model.loadedDocument?.rowID)
     #expect(model.library.snapshot.notes.allSatisfy { $0.id != "a" })
     #expect(model.libraryDeletionTarget(for: "a") == nil)
@@ -571,7 +571,7 @@ struct NotebookModelTests {
     await model.refresh()
     #expect(model.library.snapshot.notes.allSatisfy { $0.isDailyNote })
     #expect(model.isTodaySelected)
-    #expect(model.loadedDocument?.opensForEditing == false)
+    #expect(model.loadedDocument?.editingRequestID == nil)
     let restarted = NotebookModel(provider: provider)
     await restarted.start()
     #expect(restarted.localDrafts.count == 1)
@@ -621,7 +621,7 @@ struct NotebookModelTests {
     #expect(controller.session.showsFrontMatter == (shown ?? false))
     #expect(controller.session.contentStart == (shown == true ? 0 : prefix.utf16.count))
     #expect(
-      controller.session.selection
+      controller.session.textView.selectedRange
         == .init(
           location: shown == true ? 0 : prefix.utf16.count, length: 0))
     #expect(controller.session.text.utf8.elementsEqual(source.utf8))
@@ -870,7 +870,7 @@ struct NotebookModelTests {
     let document = try #require(model.loadedDocument)
     let draft = try #require(document.draft)
     #expect(document.filename == DailyNoteTarget().filename)
-    #expect(!document.opensForEditing)
+    #expect(document.editingRequestID == nil)
     #expect(model.isTodaySelected)
     #expect(draft.isDiscardableBlank)
     let controller = NotebookSessionController(
@@ -881,7 +881,7 @@ struct NotebookModelTests {
     #expect(await provider.publicationReasons.isEmpty)
     await model.startToday()
     #expect(model.loadedDocument?.draft?.id == draft.id)
-    #expect(model.loadedDocument?.opensForEditing == true)
+    #expect(model.loadedDocument?.editingRequestID != nil)
     #expect(await provider.todayTargets.count == 1)
     controller.adoptPresentation(try #require(model.loadedDocument))
     controller.requestCreationFocus()
@@ -909,7 +909,7 @@ struct NotebookModelTests {
     await model.retryFailedOpen()
     #expect(model.failedOpen == nil)
     #expect(model.loadedDocument?.filename == failure.todayTarget?.filename)
-    #expect(model.loadedDocument?.opensForEditing == false)
+    #expect(model.loadedDocument?.editingRequestID == nil)
     #expect(await provider.todayTargets.count == 2)
   }
 
@@ -964,7 +964,7 @@ struct NotebookModelTests {
     await model.createNote()
     let chosen = try #require(model.loadedDocument)
     #expect(chosen.filename == "README.md")
-    #expect(chosen.opensForEditing)
+    #expect(chosen.editingRequestID != nil)
     await provider.releaseToday()
     await start.value
     #expect(model.loadedDocument?.id == chosen.id)
@@ -1131,7 +1131,7 @@ struct NotebookModelTests {
     await firstOpen.value
     #expect(model.loadedDocument?.gist?.id == "b")
     #expect(model.library.selectedNoteID == "b")
-    #expect(!model.isOpeningDocument)
+    #expect(model.openingDocument == nil)
   }
 
   @Test func cachedSelectionPresentsTheTargetSynchronouslyWithoutRemoteReads() async throws {
@@ -1151,7 +1151,7 @@ struct NotebookModelTests {
     #expect(model.presentedDocument?.text == "Second source")
     #expect(model.presentedDocument?.refersToSameFile(as: first) == false)
     #expect(model.openingDocument == nil)
-    #expect(!model.isOpeningDocument)
+    #expect(model.openingDocument == nil)
     #expect(await provider.readIDs == reads)
   }
 
@@ -1217,7 +1217,7 @@ struct NotebookModelTests {
     #expect(model.failedOpen?.title == "Requested")
     #expect(model.library.selectedNoteID == "b")
     #expect(model.documentError == nil)
-    #expect(!model.isOpeningDocument)
+    #expect(model.openingDocument == nil)
     await provider.setReadFailure(id: "b", fails: false)
     await model.retryFailedOpen()
     #expect(model.failedOpen == nil)
@@ -1234,7 +1234,7 @@ struct NotebookModelTests {
     await model.createNote()
     let document = try #require(model.presentedDocument)
     let draft = try #require(document.draft)
-    #expect(document.opensForEditing)
+    #expect(document.editingRequestID != nil)
     #expect(model.localDrafts.contains { $0.id == draft.id })
     #expect(model.library.snapshot.notes.contains { $0.id == draft.id.uuidString })
     #expect(await provider.localStateReads == reloads)
@@ -1324,7 +1324,7 @@ struct NotebookModelTests {
     await model.startToday(target: target)
     #expect(await provider.todayTargets == [target])
     #expect(model.loadedDocument?.draft?.filename == target.filename)
-    #expect(model.loadedDocument?.opensForEditing == true)
+    #expect(model.loadedDocument?.editingRequestID != nil)
   }
 
   @Test func launchOpensExistingTodayWithoutCallingTheCreatingService() async throws {
@@ -1369,7 +1369,7 @@ struct NotebookModelTests {
     let document = try #require(model.loadedDocument)
     let draft = try #require(document.draft)
     #expect(document.gist == nil)
-    #expect(document.opensForEditing)
+    #expect(document.editingRequestID != nil)
     #expect(draft.gistID == nil)
     #expect(draft.state == .savedLocally)
     #expect(await provider.creationCount == 1)
@@ -1692,7 +1692,7 @@ struct NotebookModelTests {
     _ = try await model.perform(deletion.action)
     await provider.releaseRead()
     await opening.value
-    #expect(!model.isOpeningDocument)
+    #expect(model.openingDocument == nil)
     #expect(model.loadedDocument?.gist?.id != daily.id)
     #expect(model.library.selectedNoteID != "daily/2026-10-24.md")
     #expect(model.library.snapshot.notes.allSatisfy { $0.gistID != daily.id })
@@ -1877,7 +1877,7 @@ struct NotebookNavigationHostTests {
     }
     let today = try #require(host.model.loadedDocument?.draft)
     #expect(today.isDiscardableBlank)
-    #expect(host.model.loadedDocument?.opensForEditing == false)
+    #expect(host.model.loadedDocument?.editingRequestID == nil)
     #expect(!host.model.library.snapshot.notes.contains { $0.id == blank.id.uuidString })
     #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.map(\.id) == [today.id])
     #expect(await provider.publicationReasons.isEmpty)

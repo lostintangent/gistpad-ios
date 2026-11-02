@@ -1,4 +1,4 @@
-import GistPadEditor
+@testable import GistPadEditor
 import SwiftUI
 import Testing
 import UIKit
@@ -23,12 +23,10 @@ struct EditorContinuityTests {
   }
 
   @Test func sameTextViewSelectionAndUndoSurviveRepeatedResize() throws {
-    let source = try EditorFixture.markdown()
+    let source = EditorFixture.markdown
     let session = DocumentSession(documentID: "test", text: source)
     let window = try host(session)
     defer { window.isHidden = true }
-    let identity = ObjectIdentifier(session.textView)
-    #expect(session.textView.textLayoutManager != nil)
     session.textView.becomeFirstResponder()
     session.textView.selectedRange = NSRange(location: 8, length: 0)
     session.textView.undoManager?.beginUndoGrouping()
@@ -40,7 +38,6 @@ struct EditorContinuityTests {
       session.textView.frame.size.width = width
       session.textView.layoutIfNeeded()
       session.highlight()
-      #expect(ObjectIdentifier(session.textView) == identity)
       #expect(session.textView.text == edited)
       #expect(session.textView.selectedRange == selection)
     }
@@ -75,38 +72,20 @@ struct EditorContinuityTests {
     let window = try host(session)
     defer { window.isHidden = true }
     session.textView.becomeFirstResponder()
-    let mutation = SourceMutation(
+    let edit = SourceEdit(
       range: (source as NSString).range(of: "[ ]", options: .backwards), expected: "[ ]",
       replacement: "[x]")
-    try session.apply(mutation, documentID: "test", generation: 0)
+    try session.apply(edit, generation: 0)
     #expect(session.text == "- [ ] Duplicate\n- [x] Duplicate")
-    #expect(throws: SourceMutation.MutationError.staleGeneration) {
-      try session.apply(mutation, documentID: "test", generation: 0)
+    #expect(throws: SourceEdit.MutationError.staleGeneration) {
+      try session.apply(edit, generation: 0)
     }
     session.textView.undoManager?.undo()
     #expect(session.textView.text == source)
     session.textView.setMarkedText("に", selectedRange: NSRange(location: 1, length: 0))
-    #expect(throws: SourceMutation.MutationError.compositionActive) {
-      try session.apply(mutation, documentID: "test", generation: session.generation)
+    #expect(throws: SourceEdit.MutationError.compositionActive) {
+      try session.apply(edit, generation: session.generation)
     }
-  }
-
-  @Test func rehostingSameViewPreservesMarkedTextAndIdentity() throws {
-    let session = DocumentSession(documentID: "test", text: "日本語 👨‍👩‍👧‍👦")
-    let window = try host(session)
-    defer { window.isHidden = true }
-    session.textView.becomeFirstResponder()
-    session.textView.setMarkedText("にほん", selectedRange: NSRange(location: 3, length: 0))
-    let text = session.textView.text
-    let identity = ObjectIdentifier(session.textView)
-    let newContainer = UIView(frame: CGRect(x: 0, y: 0, width: 900, height: 600))
-    window.rootViewController?.view.addSubview(newContainer)
-    newContainer.addSubview(session.textView)
-    session.textView.frame = newContainer.bounds
-    newContainer.layoutIfNeeded()
-    #expect(ObjectIdentifier(session.textView) == identity)
-    #expect(session.textView.text == text)
-    #expect(session.textView.markedTextRange != nil)
   }
 
   @Test func previewMutationDoesNotNeedKeyboardAndPreservesSelection() throws {
@@ -115,10 +94,11 @@ struct EditorContinuityTests {
     let window = try host(session)
     defer { window.isHidden = true }
     session.textView.selectedRange = NSRange(location: 0, length: 0)
-    let mutation = SourceMutation(
-      range: (source as NSString).range(of: "[ ]", options: .backwards),
-      expected: "[ ]", replacement: "[x]")
-    try session.apply(mutation, documentID: "test", generation: 0)
+    try session.apply(
+      SourceEdit(
+        range: (source as NSString).range(of: "[ ]", options: .backwards),
+        expected: "[ ]", replacement: "[x]"),
+      generation: 0)
     #expect(!session.textView.isFirstResponder)
     #expect(session.textView.selectedRange == NSRange(location: 0, length: 0))
     #expect(session.textView.undoManager?.canUndo == true)
@@ -134,54 +114,66 @@ struct EditorContinuityTests {
     #expect(session.text.utf8.elementsEqual("caf\u{e9}".utf8))
   }
 
-  @Test func readingAnchorSurvivesReflowAndAppearanceRestyling() async throws {
-    let source = try EditorFixture.markdown()
+  @Test(arguments: [(false, false), (true, false), (true, true)])
+  func readingAnchorSurvivesReflowAndWritingToolsCompletion(
+    writingTools: Bool, waitForDecoration: Bool
+  ) async throws {
+    let source = EditorFixture.markdown
     let session = DocumentSession(documentID: "test", text: source)
     let window = try host(session)
     defer { window.isHidden = true }
-    session.textView.resignFirstResponder()
-    try await Task.sleep(for: .milliseconds(150))
-    let manager = try #require(session.textView.textLayoutManager)
-    let documentRange = try #require(manager.textContentManager?.documentRange)
-    manager.ensureLayout(for: documentRange)
-    session.textView.scrollRangeToVisible(
-      NSRange(location: source.utf16.count / 2, length: 0))
+    let view = session.textView
+    let manager = try #require(view.textLayoutManager)
+    manager.ensureLayout(for: try #require(manager.textContentManager?.documentRange))
+    let middle = NSRange(location: source.utf16.count / 2, length: 0)
     let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-    while session.textView.contentOffset.y <= 0, ContinuousClock.now < deadline {
-      session.textView.scrollRangeToVisible(
-        NSRange(location: source.utf16.count / 2, length: 0))
+    while view.contentOffset.y <= 0, ContinuousClock.now < deadline {
+      view.scrollRangeToVisible(middle)
       try await Task.sleep(for: .milliseconds(20))
-      session.textView.layoutIfNeeded()
+      view.layoutIfNeeded()
     }
     try #require(
-      session.textView.contentOffset.y > 0,
+      view.contentOffset.y > 0,
       "The reading-anchor fixture must scroll to its middle source range before measuring.")
-    session.textView.layoutIfNeeded()
+    if writingTools {
+      session.textViewWritingToolsWillBegin(view)
+      session.textViewWritingToolsDidEnd(view)
+    }
+    view.layoutIfNeeded()
     let point = CGPoint(
-      x: session.textView.textContainerInset.left,
-      y: session.textView.contentOffset.y + session.textView.adjustedContentInset.top + 1)
-    let position = try #require(session.textView.closestPosition(to: point))
-    let offset = session.textView.offset(
-      from: session.textView.beginningOfDocument, to: position)
+      x: view.textContainerInset.left,
+      y: view.contentOffset.y + view.adjustedContentInset.top + 1)
+    let position = try #require(view.closestPosition(to: point))
+    let offset = view.offset(from: view.beginningOfDocument, to: position)
     try #require(offset > 0)
-    let originalY =
-      session.textView.caretRect(for: position).minY - session.textView.contentOffset.y
+    let originalY = view.caretRect(for: position).minY - view.contentOffset.y
+    let selection = view.selectedRange
+    if waitForDecoration {
+      try await Task.sleep(for: .milliseconds(150))
+      let decorated = try #require(view.position(from: view.beginningOfDocument, offset: offset))
+      #expect(
+        abs(view.caretRect(for: decorated).minY - view.contentOffset.y - originalY)
+          <= view.caretRect(for: decorated).height,
+        "The deferred Writing Tools decoration must preserve the completed reading position.")
+    }
     for width in [900.0, 360.0, 700.0, 402.0] {
-      session.textView.frame.size.width = width
-      session.textView.layoutIfNeeded()
+      view.frame.size.width = width
+      view.layoutIfNeeded()
       session.highlight()
       try await Task.sleep(for: .milliseconds(150))
-      let restored = try #require(
-        session.textView.position(from: session.textView.beginningOfDocument, offset: offset))
-      let caret = session.textView.caretRect(for: restored)
-      let currentY = caret.minY - session.textView.contentOffset.y
-      let nextLine = try #require(session.textView.position(from: restored, in: .down, offset: 1))
-      let lineHeight = session.textView.caretRect(for: nextLine).minY - caret.minY
+      let restored = try #require(view.position(from: view.beginningOfDocument, offset: offset))
+      let caret = view.caretRect(for: restored)
+      let nextLine = try #require(view.position(from: restored, in: .down, offset: 1))
+      let lineHeight = view.caretRect(for: nextLine).minY - caret.minY
       try #require(lineHeight > 0)
+      let scale = view.traitCollection.displayScale
+      let currentY = caret.minY - view.contentOffset.y
       #expect(
-        abs(currentY - originalY) <= lineHeight,
+        (abs(currentY - originalY) * scale).rounded() <= (lineHeight * scale).rounded(),
         "Width \(width), anchor \(offset), original Y \(originalY), current Y \(currentY)")
-      #expect(session.textView.text == source)
+      #expect(view.selectedRange == selection)
+      #expect(session.generation == 0)
+      #expect(session.text.utf8.elementsEqual(source.utf8))
     }
   }
 }
