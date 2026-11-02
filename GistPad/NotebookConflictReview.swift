@@ -39,7 +39,7 @@ struct NotebookConflictReview: View {
             Label(
               "Your draft changed while this review was open. Review the latest draft.",
               systemImage: "exclamationmark.circle")
-            Button("Review latest draft") {
+            Button("Review Latest Draft") {
               do {
                 review = try controller.reviewContext()
                 error = nil
@@ -56,7 +56,7 @@ struct NotebookConflictReview: View {
           switch tab {
           case .changes:
             if isComparing {
-              ProgressView("Comparing source")
+              ProgressView()
             } else {
               changes(title: String(localized: "On this iPhone"), lines: localChanges)
               changes(title: String(localized: "On GitHub"), lines: remoteChanges)
@@ -65,13 +65,6 @@ struct NotebookConflictReview: View {
             source(review.conflict.local)
           case .remote:
             source(review.conflict.remote ?? "")
-          }
-          DisclosureGroup("Show original") {
-            if let base = review.conflict.base {
-              source(base)
-            } else {
-              Text("There was no saved file when this local draft was created.")
-            }
           }
           if review.conflict.remote != nil {
             Text(
@@ -93,11 +86,11 @@ struct NotebookConflictReview: View {
         .frame(maxWidth: 720, alignment: .leading)
         .frame(maxWidth: .infinity)
       }
-      .navigationTitle("Review changes")
+      .navigationTitle("Review Changes")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Done") { dismiss() }.disabled(isApplying)
+          Button(role: .close) { dismiss() }.disabled(isApplying)
         }
       }
       .disabled(isApplying)
