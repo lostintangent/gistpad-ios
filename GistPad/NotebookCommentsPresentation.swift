@@ -30,7 +30,7 @@ final class NotebookCommentsPresentation {
   var requestedRowID: String?
   private(set) var sessionID: UUID?
   private(set) var scope: Scope?
-  @ObservationIgnored private let notebook: NotebookModel
+  @ObservationIgnored let notebook: NotebookModel
   @ObservationIgnored private var controller: NotebookSessionController?
   @ObservationIgnored private var afterDismiss: (() -> Void)?
   @ObservationIgnored private var returnsToEditing = false

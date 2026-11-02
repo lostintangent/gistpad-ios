@@ -21,7 +21,6 @@ struct LiveNotebookWorkspace: View {
   @Environment(\.undoManager) private var undoManager
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   init(
     notebook: NotebookModel, layout: NotebookLayoutPreferences = NotebookLayoutPreferences(),
@@ -115,57 +114,7 @@ struct LiveNotebookWorkspace: View {
     }
     .navigationSplitViewStyle(.balanced)
     .librarySearch(model: notebook.library)
-    .toolbar(removing: comments.isPresented && horizontalSizeClass == .regular ? .sidebarToggle : nil)
-    .inspector(isPresented: $comments.isPresented) {
-      commentsPanel
-        .inspectorColumnWidth(min: 280, ideal: 320, max: 360)
-        .presentationDetents(
-          dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large],
-          selection: Binding(
-            get: { dynamicTypeSize.isAccessibilitySize ? .large : comments.detent },
-            set: { comments.detent = $0 }))
-        .presentationDragIndicator(.visible)
-        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-        .onDisappear {
-          if !comments.isPresented, let previous = comments.sidebarBeforeOpening {
-            comments.sidebarBeforeOpening = nil
-            columnVisibility = previous
-          }
-          comments.didDismiss()
-        }
-    }
-    .onChange(of: comments.isPresented) { _, presented in
-      if presented, horizontalSizeClass == .regular {
-        if comments.sidebarBeforeOpening == nil {
-          comments.sidebarBeforeOpening = columnVisibility
-        }
-        columnVisibility = .detailOnly
-      } else if !presented, comments.sidebarBeforeOpening != nil {
-        // Dismiss any temporary overlay before restoring the pinned column at native completion.
-        columnVisibility = .detailOnly
-      }
-    }
-    .onChange(of: horizontalSizeClass) { _, sizeClass in
-      if comments.isPresented, sizeClass == .regular {
-        if comments.sidebarBeforeOpening == nil {
-          comments.sidebarBeforeOpening = columnVisibility
-        }
-        columnVisibility = .detailOnly
-      }
-    }
-    .onChange(of: commentCount, initial: true) { _, count in
-      if let count {
-        notebook.recordCommentCount(
-          accountID: count.scope.accountID, gistID: count.scope.gistID, total: count.total)
-      }
-    }
-    .confirmationDialog(
-      String(localized: "Choose Comment"),
-      isPresented: commentsChoicePresented(inInspector: false),
-      titleVisibility: .visible
-    ) {
-      commentChoices
-    }
+    .commentsInspector(comments, active: active, columnVisibility: $columnVisibility)
   }
 
   private var workspaceNavigationLifecycle: some View {
@@ -273,9 +222,6 @@ struct LiveNotebookWorkspace: View {
       switch sheet {
       case .settings: settingsSheet
       case .addToToday: AddToTodaySheet()
-      case .share(let url): NotebookActivitySheet(item: .url(url))
-      case .sharing(let target):
-        NotebookSharingSheet(controller: target.controller, copiesLink: target.copiesLink)
       case .tags(let target): tagEditor(target)
       case .name(let target): nameEditor(target)
       case .review(let target):
@@ -287,8 +233,6 @@ struct LiveNotebookWorkspace: View {
   /// The one sheet over the workspace. A route or another account replaces it.
   private enum WorkspaceSheet: Identifiable {
     case settings, addToToday
-    case share(URL)
-    case sharing(NotebookSharingTarget)
     case tags(NotebookTagTarget)
     case name(NotebookNameTarget)
     case review(NotebookConflictTarget)
@@ -297,8 +241,6 @@ struct LiveNotebookWorkspace: View {
       switch self {
       case .settings: "settings"
       case .addToToday: "addToToday"
-      case .share(let url): "share/\(url)"
-      case .sharing(let target): "sharing/\(target.id)"
       case .tags(let target): "tags/\(target.id)"
       case .name(let target): "name/\(target.id)"
       case .review(let target): "review/\(target.id)"
@@ -554,81 +496,6 @@ struct LiveNotebookWorkspace: View {
       .id(controller.session.viewIdentity)
   }
 
-  @ViewBuilder
-  private var commentsPanel: some View {
-    Group {
-      if let conversation = comments.conversation {
-        NotebookCommentsInspector(
-          conversation: conversation, selectedRootID: comments.selectedRootID,
-          threadRevealRevision: comments.threadRevealRevision,
-          linkedRootIDs: comments.documentMode == .source
-            ? comments.sourceLinkedIDs : comments.previewLinkedIDs,
-          isComposerFocused: $comments.isComposerFocused,
-          close: { comments.hide() },
-          revealPassage: comments.revealPassage,
-          didFocus: { comments.detent = .large })
-      } else {
-        NavigationStack {
-          Group {
-            if let failure = comments.preparationFailure {
-              VStack(alignment: .leading, spacing: 12) {
-                Text("Comments couldn’t be opened").font(.headline)
-                Text(verbatim: failure)
-                Button("Try Again") { comments.retryOpening() }
-                  .buttonStyle(.glass)
-              }
-              .padding(20)
-            } else {
-              ProgressView("Opening comments")
-            }
-          }
-          .navigationTitle("Comments")
-          .navigationSubtitle("All files in this gist")
-          .navigationBarTitleDisplayMode(.inline)
-          .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-              Button(role: .close) { comments.hide() }
-            }
-          }
-        }
-      }
-    }
-    .onChange(of: dynamicTypeSize, initial: true) { _, size in
-      if size.isAccessibilitySize { comments.detent = .large }
-    }
-    .confirmationDialog(
-      String(localized: "Choose Comment"),
-      isPresented: commentsChoicePresented(inInspector: true),
-      titleVisibility: .visible
-    ) {
-      commentChoices
-    }
-  }
-
-  private func commentsChoicePresented(inInspector: Bool) -> Binding<Bool> {
-    Binding(
-      get: { comments.isPresented == inInspector && !comments.overlappingIDs.isEmpty },
-      set: { presented in
-        if !presented, comments.isPresented == inInspector { comments.overlappingIDs = [] }
-      })
-  }
-
-  @ViewBuilder
-  private var commentChoices: some View {
-    ForEach(comments.overlappingIDs, id: \.self) { id in
-      if let thread = comments.conversation?.threads.first(where: { $0.id == id }),
-        let active {
-        let author = thread.comment.user?.login ?? String(localized: "Unknown author")
-        let excerpt = String(thread.comment.parsedBody.text.prefix(80))
-        Button("\(author): \(excerpt)") {
-          comments.overlappingIDs = []
-          comments.open(for: active, origin: comments.documentMode, rootID: id)
-        }
-      }
-    }
-    Button("Cancel", role: .cancel) { comments.overlappingIDs = [] }
-  }
-
   private func commentConfiguration(
     _ controller: NotebookSessionController
   ) -> CommentHighlightConfiguration {
@@ -686,16 +553,6 @@ struct LiveNotebookWorkspace: View {
     let isReady: Bool
     let allowsComments: Bool
     let showsInline: Bool
-  }
-
-  private struct CommentCount: Equatable {
-    let scope: NotebookCommentsPresentation.Scope
-    let total: Int
-  }
-
-  private var commentCount: CommentCount? {
-    guard let scope = comments.scope, let total = comments.conversation?.comments?.count else { return nil }
-    return .init(scope: scope, total: total)
   }
 
   private func noteActions(_ controller: NotebookSessionController) -> NoteActions {
@@ -786,8 +643,6 @@ struct LiveNotebookWorkspace: View {
       controller.session.presentFind(replacing: true)
     }
     actions.intelligence = { presentIntelligence(controller) }
-    actions.share = { presentSharing(controller, copiesLink: false) }
-    actions.copyLink = { presentSharing(controller, copiesLink: true) }
     if !controller.document.isRecovery, let gist = controller.document.gist {
       actions.openInGitHub = {
         do { openURL(try DocumentLinks(gist: gist).githubURL) } catch {
@@ -800,8 +655,6 @@ struct LiveNotebookWorkspace: View {
     actions.rename = afterCommentsClose(actions.rename)
     actions.renameFile = afterCommentsClose(actions.renameFile)
     actions.addFile = afterCommentsClose(actions.addFile)
-    actions.share = afterCommentsClose(actions.share)
-    actions.copyLink = afterCommentsClose(actions.copyLink)
     actions.find = afterCommentsClose(actions.find)
     actions.reviewChanges = afterCommentsClose(actions.reviewChanges)
     actions.delete = afterCommentsClose(actions.delete)
@@ -1006,32 +859,6 @@ struct LiveNotebookWorkspace: View {
       compactColumn = .detail
     }
     routes.clear()
-  }
-
-  private func presentSharing(_ controller: NotebookSessionController, copiesLink: Bool) {
-    Task {
-      guard await controller.waitForLocalSave() else {
-        notebook.documentError = NotebookEditError.localPersistenceFailed.localizedDescription
-        return
-      }
-      do {
-        if let links = try controller.savedLinks(), !links.isSecret,
-          !controller.hasUnpublishedChanges
-        {
-          if copiesLink {
-            UIPasteboard.general.url = links.shareURL
-            UIAccessibility.post(
-              notification: .announcement, argument: String(localized: "Link copied"))
-          } else {
-            sheet = .share(links.shareURL)
-          }
-        } else {
-          sheet = .sharing(.init(controller: controller, copiesLink: copiesLink))
-        }
-      } catch {
-        notebook.documentError = error.localizedDescription
-      }
-    }
   }
 
   private func finishBackgroundSaves() {

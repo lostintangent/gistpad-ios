@@ -50,6 +50,8 @@ public struct NoteChrome: Equatable, Sendable {
     public var tags: [LibraryTag]
     public var isAutoSaveEnabled: Bool
     public var commentCount: Int?
+    /// The gistpad.dev link to this file, once it's on GitHub.
+    public var shareURL: URL?
 
     var headerFilename: String? {
         guard files.count > 1,
@@ -62,7 +64,7 @@ public struct NoteChrome: Equatable, Sendable {
         title: String, files: [NoteFile], selectedFileID: String,
         access: NoteAccess = .editable, isPinned: Bool = false,
         isStarred: Bool = false, isArchived: Bool = false, tags: [LibraryTag] = [],
-        isAutoSaveEnabled: Bool = false, commentCount: Int? = nil
+        isAutoSaveEnabled: Bool = false, commentCount: Int? = nil, shareURL: URL? = nil
     ) {
         self.title = title
         self.files = files
@@ -74,6 +76,7 @@ public struct NoteChrome: Equatable, Sendable {
         self.tags = tags
         self.isAutoSaveEnabled = isAutoSaveEnabled
         self.commentCount = commentCount
+        self.shareURL = shareURL
     }
 }
 
@@ -83,8 +86,6 @@ public struct NoteActions {
     public var save: () -> Void = {}
     public var reconnect: () -> Void = {}
     public var reviewChanges: () -> Void = {}
-    public var share: () -> Void = {}
-    public var copyLink: () -> Void = {}
     public var focus: () -> Void = {}
     public var find: () -> Void = {}
     public var intelligence: () -> Void = {}

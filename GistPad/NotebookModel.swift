@@ -1357,7 +1357,9 @@ final class NotebookModel {
         account.preferences.gistTags[gist.id]?.contains($0.id) == true
       },
       isAutoSaveEnabled: account.preferences.isAutoSaveEnabled,
-      commentCount: gist.isDailyNote ? nil : gist.commentCount)
+      commentCount: gist.isDailyNote ? nil : gist.commentCount,
+      shareURL: document.isRecovery || gist.files[document.filename] == nil
+        ? nil : try? DocumentLinks(gist: gist, filename: document.filename).shareURL)
   }
 
   func adoptPublication(_ saved: DraftSnapshot) async throws -> Gist? {

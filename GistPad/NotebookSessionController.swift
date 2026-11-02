@@ -269,22 +269,6 @@ final class NotebookSessionController {
     return !session.text.utf8.elementsEqual(base.utf8) || draft.attemptedGeneration != nil
   }
 
-  func savedLinks() throws -> DocumentLinks? {
-    guard !document.isRecovery, let gist = document.gist, draft.gistID != nil,
-      gist.files[draft.filename] != nil
-    else { return nil }
-    return try DocumentLinks(gist: gist, filename: draft.filename)
-  }
-
-  func refreshPublicationMetadata() async throws {
-    guard let gist = try await notebook.adoptPublication(draft) else {
-      throw DocumentLinkError.notPublished
-    }
-    document.gist = gist
-    document.draft = draft
-    metadataError = nil
-  }
-
   func reviewContext() throws -> NotebookReviewContext {
     let review = try NotebookReviewContext(draft: draft)
     guard session.generation == draft.generation,

@@ -525,17 +525,14 @@ struct NotebookSessionTests {
     #expect(controller.canMutate)
   }
 
-  @Test func publishedLinksUseGistPadsShareRouteAndKeepLocalChangesSeparate() async throws {
-    let (controller, _) = try await makeController()
-    let links = try #require(try controller.savedLinks())
-    #expect(links.shareURL.absoluteString == "https://gistpad.dev/#/share/synthetic/README.md")
-    #expect(links.githubURL.absoluteString == "https://gist.github.com/synthetic")
-    #expect(links.isSecret)
-    #expect(!controller.hasUnpublishedChanges)
+  @Test func publishedFilesShareGistPadsLinkWhileEditing() async throws {
+    let (controller, _) = try await makeController(autosave: false)
+    let url = try #require(controller.chrome.shareURL)
+    #expect(url.absoluteString == "https://gistpad.dev/#/share/synthetic/README.md")
     edit(controller, to: "Not published")
     #expect(controller.hasUnpublishedChanges)
     #expect(await controller.waitForLocalSave())
-    #expect(try controller.savedLinks()?.shareURL == links.shareURL)
+    #expect(controller.chrome.shareURL == url)
   }
 
   @Test func sourceDiffsDistinguishUnicodeNormalizationAndMissingFiles() {

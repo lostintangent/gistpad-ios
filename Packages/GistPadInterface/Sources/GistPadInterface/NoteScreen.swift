@@ -165,8 +165,17 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                             systemImage: document.isStarred ? "star.fill" : "star", action: star
                         )
                     }
-                    Button(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up", action: actions.share)
-                    Button(String(localized: "Copy Link", bundle: .module), systemImage: "link", action: actions.copyLink)
+                    if let url = document.shareURL {
+                        ShareLink(item: url, preview: SharePreview(document.title)) {
+                            Label(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up")
+                        }
+                        Button(String(localized: "Copy Link", bundle: .module), systemImage: "link") {
+                            UIPasteboard.general.url = url
+                            AccessibilityNotification.Announcement(
+                                String(localized: "Link copied", bundle: .module)
+                            ).post()
+                        }
+                    }
                 }
                 .controlGroupStyle(.compactMenu)
                 Section {

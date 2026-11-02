@@ -43,7 +43,8 @@ public enum InterfaceFixtures {
     public static let note = NoteChrome(
         title: "The shape of a notebook",
         files: [.init(id: "README.md", filename: "README.md"), .init(id: "Ideas.md", filename: "Ideas.md")],
-        selectedFileID: "README.md", isPinned: true, tags: library.tags.filter { ["ideas", "design"].contains($0.id) }
+        selectedFileID: "README.md", isPinned: true, tags: library.tags.filter { ["ideas", "design"].contains($0.id) },
+        shareURL: URL(string: "https://gistpad.dev/#/share/fixture/README.md")
     )
 }
 
