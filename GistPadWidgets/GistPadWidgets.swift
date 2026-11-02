@@ -34,7 +34,7 @@ struct TodayProvider: TimelineProvider {
   func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
     let current = entry()
     var calendar = Calendar(identifier: .gregorian)
-    if let zone = current.snapshot?.today.timeZoneIdentifier,
+    if let zone = current.snapshot?.today.day.timeZoneIdentifier,
       let timeZone = TimeZone(identifier: zone)
     {
       calendar.timeZone = timeZone

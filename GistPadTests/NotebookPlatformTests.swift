@@ -17,13 +17,14 @@ struct NotebookPlatformTests {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
     let stale = try #require(try fixture.shared.read()?.today.tasks.first)
-    let typed = "# Today\n\n- [ ] A real task\nStill typing\n"
+    let typed = "# Today\n\nStill typing\n- [ ] A real task\n"
+    let draft = try await fixture.today()
     _ = try await fixture.store.persist(
-      id: stale.draftID, accountID: fixture.account.id, text: typed, generation: 1)
-    await #expect(throws: DraftError.staleGeneration) {
+      id: draft.id, accountID: fixture.account.id, text: typed, generation: 1)
+    await #expect(throws: NotebookPlatformError.staleTask) {
       try await fixture.bridge.setTask(id: stale.id, completed: true)
     }
-    #expect(try await fixture.store.draft(id: stale.draftID, accountID: fixture.account.id).text == typed)
+    #expect(try await fixture.store.draft(id: draft.id, accountID: fixture.account.id).text == typed)
 
     try await fixture.bridge.refresh()
     let controller = try await fixture.controller()
@@ -60,7 +61,6 @@ struct NotebookPlatformTests {
     _ = try await intent.perform()
     #expect(controller.session.text.hasSuffix("- [ ] A real task\n- [ ] A thought\n- [ ] Second task\n"))
     #expect(try fixture.shared.read()?.today.tasks.map(\.title) == ["A real task", "A thought", "Second task"])
-    #expect(await fixture.provider.targets.count == 1)
     #expect(NotebookRouteInbox.shared.pending == previousRoute)
     #expect(await fixture.provider.publishCount == 0)
   }
@@ -140,8 +140,12 @@ private struct PlatformFixture {
       shared: try SharedNotebookStore())
   }
 
+  func today() async throws -> DraftSnapshot {
+    try await provider.today(accountID: account.id, target: DailyNoteTarget()).draft
+  }
+
   func controller() async throws -> NotebookSessionController {
-    let draft = try #require(try await store.drafts(accountID: account.id).first)
+    let draft = try await today()
     let document = NotebookDocument(draft: draft, gist: provider.gist)
     let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
     bridge.register(controller)
@@ -158,7 +162,6 @@ private actor PlatformNotebookProvider: NotebookProviding {
   let gist: Gist
   let store: DraftStore
   private(set) var publishCount = 0
-  private(set) var targets: [DailyNoteTarget] = []
 
   init(account: Account, gist: Gist, store: DraftStore) {
     self.account = account
@@ -202,9 +205,10 @@ private actor PlatformNotebookProvider: NotebookProviding {
       keeping: keeping)
   }
   func today(accountID: UUID, target: DailyNoteTarget) async throws -> TodayNote {
-    targets.append(target)
-    let draft = try #require(try await store.drafts(accountID: accountID).first { $0.filename == target.filename })
-    return TodayNote(gist: gist, draft: draft)
+    TodayNote(gist: gist, draft: try await store.openDraft(
+      accountID: accountID, githubUserID: 42, gistID: gist.id, filename: target.filename,
+      description: gist.description ?? "", content: gist.files[target.filename]?.content ?? "",
+      revision: gist.revision))
   }
   func createDraft(accountID: UUID) async throws -> DraftSnapshot {
     throw CocoaError(.featureUnsupported)

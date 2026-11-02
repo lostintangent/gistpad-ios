@@ -65,6 +65,13 @@ private func day(_ iso: String) throws -> DailyNoteTarget {
         #expect(sync.count("POST /gists") == 1)
     }
 
+    @Test func addToTodayAppendsAParagraphOrOneTaskPerLine() throws {
+        var text = "# Today\n\nA thought"
+        text = try DraftSourceEdit.addToToday("A second thought", asTask: false, in: text).apply(to: text)
+        text = try DraftSourceEdit.addToToday("First task\n  \t\n日本語 👩🏽‍💻\n", asTask: true, in: text).apply(to: text)
+        #expect(text == "# Today\n\nA thought\n\nA second thought\n- [ ] First task\n- [ ] 日本語 👩🏽‍💻\n")
+    }
+
     @Test func todayAndItsTasksFollowTheWeb() throws {
         let instant = try Date.ISO8601FormatStyle().parse("2026-10-24T01:00:00Z")
         let la = try #require(TimeZone(identifier: "America/Los_Angeles"))

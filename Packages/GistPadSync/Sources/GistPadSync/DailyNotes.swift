@@ -56,6 +56,23 @@ public struct DailyNote: Codable, Equatable, Sendable {
     }
 }
 
+extension DraftSourceEdit {
+    /// Adds `text` to the end of the day's `source`: a paragraph, or with `asTask`, one task per line.
+    public static func addToToday(_ text: String, asTask: Bool, in source: String) -> Self {
+        let content = asTask
+            ? text.split(whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+                .map { "- [ ] " + $0 }
+                .joined(separator: "\n")
+            : text.trimmingCharacters(in: .newlines)
+        let separator = source.isEmpty || source.hasSuffix(asTask ? "\n" : "\n\n") ? ""
+            : asTask || source.hasSuffix("\n") ? "\n" : "\n\n"
+        return Self(
+            location: source.utf16.count, length: 0, expectedText: "", replacement: separator + content + "\n")
+    }
+}
+
 public enum DailyNotesIndex {
     /// The day a daily note's `YYYY-MM-DD.md` filename names, in `timeZone`.
     public static func parseDateFilename(_ filename: String, timeZone: TimeZone = .current) -> Date? {

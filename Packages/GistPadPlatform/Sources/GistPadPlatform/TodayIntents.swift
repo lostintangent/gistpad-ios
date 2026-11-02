@@ -10,12 +10,12 @@ public struct SetTodayTaskIntent: AppIntent {
     public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
     public static var isDiscoverable: Bool { false }
 
-    @Parameter(title: "Task") public var taskID: String
+    @Parameter(title: "Task") public var taskID: Int
     @Parameter(title: "Completed") public var completed: Bool
     @Dependency private var notebook: any NotebookIntentServing
 
     public init() {}
-    public init(task: TodayTask, completed: Bool) {
+    public init(task: FileTask, completed: Bool) {
         taskID = task.id
         self.completed = completed
     }

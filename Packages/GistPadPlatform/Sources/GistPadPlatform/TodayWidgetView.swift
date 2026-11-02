@@ -28,16 +28,19 @@ public struct TodayWidgetView: View {
     private var accent: Color {
         renderingMode == .fullColor ? Color(uiColor: AccentRole.text.uiColor) : .primary
     }
-    private var today: SystemToday? {
+    private var today: DailyNote? {
         guard let today = snapshot?.today else { return nil }
-        let timeZone = TimeZone(identifier: today.timeZoneIdentifier) ?? .current
-        return today.filename == DailyNoteTarget(date: date, timeZone: timeZone).filename ? today : nil
+        let timeZone = TimeZone(identifier: today.day.timeZoneIdentifier) ?? .current
+        return today.day == DailyNoteTarget(date: date, timeZone: timeZone) ? today : nil
     }
-    private var destination: URL {
-        state == .available ? today?.route.url ?? NotebookRoute.today.url : NotebookRoute.today.url
+    private var tasks: [FileTask] { today?.tasks ?? [] }
+    private var remaining: Int { today?.progress?.remaining ?? 0 }
+    private var needsAttention: Bool {
+        switch today?.state {
+        case .reconnect, .failed, .conflict: true
+        default: false
+        }
     }
-    private var tasks: [TodayTask] { today?.tasks ?? [] }
-    private var remaining: Int { tasks.filter { !$0.isCompleted }.count }
 
     public var body: some View {
         Group {
@@ -74,9 +77,9 @@ public struct TodayWidgetView: View {
         }
         .environment(\.personalAccent, PersonalAccent(savedHex: snapshot?.accentHex))
         .environment(\.timeZone, snapshot.flatMap {
-            TimeZone(identifier: $0.today.timeZoneIdentifier)
+            TimeZone(identifier: $0.today.day.timeZoneIdentifier)
         } ?? .current)
-        .widgetURL(destination)
+        .widgetURL(NotebookRoute.today.url)
         .redacted(reason: state == .placeholder ? .placeholder : [])
     }
 
@@ -136,13 +139,13 @@ public struct TodayWidgetView: View {
             ForEach(tasks.prefix(limit)) { task in
                 taskButton(task, compact: false)
             }
-            if today?.needsAttention == true {
+            if needsAttention {
                 Label("Open GistPad", systemImage: "exclamationmark.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         } else {
-            Text(state == .available ? today?.excerpt ?? invitation : invitation)
+            Text(state == .available ? NotebookSystemSnapshot.excerpt(today?.text) ?? invitation : invitation)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
@@ -155,21 +158,21 @@ public struct TodayWidgetView: View {
         case .signedOut: String(localized: "Sign in to GistPad")
         case .unavailable: String(localized: "Open GistPad to refresh")
         case .available, .placeholder:
-            today?.isAvailable == true ? String(localized: "Open Today") : String(localized: "Start Today")
+            today?.text != nil ? String(localized: "Open Today") : String(localized: "Start Today")
         }
     }
 
-    private func taskButton(_ task: TodayTask, compact: Bool) -> some View {
-        Button(intent: SetTodayTaskIntent(task: task, completed: !task.isCompleted)) {
+    private func taskButton(_ task: FileTask, compact: Bool) -> some View {
+        Button(intent: SetTodayTaskIntent(task: task, completed: !task.isChecked)) {
             HStack(spacing: 8) {
-                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                Image(systemName: task.isChecked ? "checkmark.circle.fill" : "circle")
                     .font(compact ? .title3 : .title2)
                     .foregroundStyle(accent)
                     .contentTransition(.symbolEffect(.replace))
                     .frame(minWidth: compact ? 28 : 32, alignment: .leading)
                 Text(task.title)
                     .font(compact ? .caption : .subheadline)
-                    .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                    .foregroundStyle(task.isChecked ? .secondary : .primary)
                     .multilineTextAlignment(.leading)
                     .lineLimit(compact ? 1 : 2)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -181,9 +184,8 @@ public struct TodayWidgetView: View {
         .privacySensitive()
         .invalidatableContent()
         .accessibilityLabel(task.title)
-        .accessibilityValue(task.isCompleted ? Text("Completed") : Text("Not completed"))
-        .accessibilityHint(task.isCompleted ? Text("Mark incomplete") : Text("Complete task"))
-        .accessibilityIdentifier("today-task-\(task.id)")
+        .accessibilityValue(task.isChecked ? Text("Completed") : Text("Not completed"))
+        .accessibilityHint(task.isChecked ? Text("Mark incomplete") : Text("Complete task"))
     }
 }
 #endif

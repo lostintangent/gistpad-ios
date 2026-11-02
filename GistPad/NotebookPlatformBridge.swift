@@ -101,20 +101,8 @@ final class NotebookPlatformBridge: NotebookIntentServing {
     } else {
       local = nil
     }
-    var drafts = local?.drafts ?? []
-    let filename = GistConventions.todayFilename(date: date)
-    if let account, account.id == accountID, let userID = account.githubUserID,
-      let cache = local?.library, let daily = cache.owned.first(where: \.isDailyNote),
-      daily.owner?.id == userID, let text = cache.content(gist: daily, filename: filename),
-      !drafts.contains(where: { $0.gistID == daily.id && $0.filename == filename })
-    {
-      let draft = try await store.openDraft(
-        accountID: account.id, githubUserID: userID, gistID: daily.id, filename: filename,
-        description: daily.description ?? "", content: text, revision: daily.revision)
-      drafts.append(draft)
-    }
     let snapshot = NotebookSystemSnapshot.make(
-      accountID: accountID, cache: local?.library, drafts: drafts, date: date)
+      accountID: accountID, cache: local?.library, drafts: local?.drafts ?? [], date: date)
     try Task.checkCancellation()
     let current = try await provider.cachedAccount()
     guard current?.id == account?.id else { throw NotebookPlatformError.accountChanged }
@@ -123,18 +111,23 @@ final class NotebookPlatformBridge: NotebookIntentServing {
     try await NotebookEntityIndex.shared.update(snapshot)
   }
 
-  func setTask(id: String, completed: Bool) async throws {
+  func setTask(id: Int, completed: Bool) async throws {
     try await serially {
-      let snapshot = try SharedNotebookStore().read()
-      guard let accountID = snapshot?.accountID,
-        let today = snapshot?.today,
-        today.filename == GistConventions.todayFilename(),
-        let task = today.tasks.first(where: { $0.id == id })
+      guard let snapshot = try SharedNotebookStore().read(), let accountID = snapshot.accountID,
+        snapshot.today.day.filename == GistConventions.todayFilename(),
+        let shown = snapshot.today.tasks.first(where: { $0.id == id })
       else { throw NotebookPlatformError.staleTask }
-      try await self.validateAccount(accountID)
-      if task.isCompleted == completed { return }
-      let command = task.command(accountID: accountID, completed: completed)
-      try await self.apply(command)
+      let draft = try await self.todayDraft(accountID: accountID)
+      // The task you tapped must still be at its place in your latest text.
+      guard let task = FileTask.tasks(in: draft.text).first(where: { $0.id == id }),
+        task.title == shown.title
+      else { throw NotebookPlatformError.staleTask }
+      guard task.isChecked != completed else { return }
+      try await self.apply(SharedDraftCommand(
+        accountID: accountID, draftID: draft.id, expectedGeneration: draft.generation,
+        edit: DraftSourceEdit(
+          location: task.markerRange.location + 1, length: 1,
+          expectedText: task.isChecked ? "x" : " ", replacement: completed ? "x" : " ")))
     }
   }
 
@@ -143,33 +136,29 @@ final class NotebookPlatformBridge: NotebookIntentServing {
     text: String, asTask: Bool, target: DailyNoteTarget
   ) async throws -> NotebookRoute {
     try await serially {
-      guard let account = try await self.provider.cachedAccount() else {
+      guard let accountID = try await self.provider.cachedAccount()?.id else {
         throw NotebookPlatformError.accountChanged
       }
-      try await self.validateAccount(account.id)
-      let today = try await self.provider.today(accountID: account.id, target: target)
-      if let gist = today.gist {
-        guard gist.owner?.id == today.draft.githubUserID else { throw DraftError.readOnly }
-        let cache = try await self.store.cachedLibrary(accountID: account.id)
-        var owned = cache?.owned ?? []
-        owned.removeAll { $0.id == gist.id }
-        owned.append(gist)
-        owned.sort { $0.updatedAt == $1.updatedAt ? $0.id < $1.id : $0.updatedAt > $1.updatedAt }
-        try await self.store.cacheLibrary(
-          owned: owned, starred: cache?.starred ?? [], preferences: account.preferences,
-          accountID: account.id)
-        try await self.store.cacheGist(gist, accountID: account.id)
-      }
-      if let session = self.sessions[today.draft.id]?.value {
-        guard session.canMutate, await session.waitForLocalSave() else {
-          throw NotebookPlatformError.editingInProgress
-        }
-      }
-      let draft = try await self.store.draft(id: today.draft.id, accountID: account.id)
-      let command = try TodayAppend.command(draft: draft, text: text, asTask: asTask)
-      try await self.apply(command)
-      return .draft(accountID: account.id, draftID: draft.id)
+      let draft = try await self.todayDraft(accountID: accountID, target: target)
+      try await self.apply(SharedDraftCommand(
+        accountID: accountID, draftID: draft.id, expectedGeneration: draft.generation,
+        edit: .addToToday(text, asTask: asTask, in: draft.text)))
+      return .draft(accountID: accountID, draftID: draft.id)
     }
+  }
+
+  /// Today's file as you last saved it, started the same way the app starts today.
+  private func todayDraft(
+    accountID: UUID, target: DailyNoteTarget = DailyNoteTarget()
+  ) async throws -> DraftSnapshot {
+    try await validateAccount(accountID)
+    let today = try await provider.today(accountID: accountID, target: target)
+    if let session = sessions[today.draft.id]?.value {
+      guard session.canMutate, await session.waitForLocalSave() else {
+        throw NotebookPlatformError.editingInProgress
+      }
+    }
+    return try await store.draft(id: today.draft.id, accountID: accountID)
   }
 
   func validateAccount(_ accountID: UUID) async throws {
