@@ -507,6 +507,19 @@ final class FileSession {
     await persistence?.value ?? true
   }
 
+  /// Leaving the app saves every open file on this iPhone first, then publishes them one by one
+  /// for as long as the system lets the app keep running.
+  static func publishOnBackground(
+    _ sessions: [FileSession],
+    shouldContinue: @escaping @MainActor @Sendable () -> Bool
+  ) async {
+    for session in sessions { _ = await session.waitForLocalSave() }
+    for session in sessions {
+      guard !Task.isCancelled, shouldContinue() else { return }
+      await session.publish(reason: .background, shouldContinue: shouldContinue)
+    }
+  }
+
   private func persist(text: String, generation: UInt64) {
     let previous = persistence
     let draftID = draft.id

@@ -868,19 +868,6 @@ struct RootView: View {
   }
 }
 
-extension FileSession {
-  static func publishOnBackground(
-    _ sessions: [FileSession],
-    shouldContinue: @escaping @MainActor @Sendable () -> Bool
-  ) async {
-    for session in sessions { _ = await session.waitForLocalSave() }
-    for session in sessions {
-      guard !Task.isCancelled, shouldContinue() else { return }
-      await session.publish(reason: .background, shouldContinue: shouldContinue)
-    }
-  }
-}
-
 @MainActor
 final class BackgroundLease {
   private var identifier = UIBackgroundTaskIdentifier.invalid
