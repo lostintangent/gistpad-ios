@@ -5,41 +5,41 @@ import Observation
 @MainActor
 @Observable
 final class NotebookLayoutPreferences {
-  private(set) var preferredMode: NoteMode
-  private(set) var compactMode: NoteMode
-  private var libraryCollections: [String: Set<LibraryCollection>]
+  private(set) var preferredMode: FileMode
+  private(set) var compactMode: FileMode
+  private var librarySections: [String: Set<LibrarySection>]
   private var collapsedPinned: Set<String>
   @ObservationIgnored private let defaults: UserDefaults
 
   private static let modeKey = "dev.gistpad.workspace.note-mode"
   private static let compactModeKey = "dev.gistpad.workspace.compact-note-mode"
-  private static let libraryCollectionsKey = "dev.gistpad.workspace.expanded-library-collections"
+  private static let librarySectionsKey = "dev.gistpad.workspace.expanded-library-collections"
   private static let collapsedPinnedKey = "dev.gistpad.workspace.collapsed-pinned-library"
 
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
-    preferredMode = defaults.string(forKey: Self.modeKey).flatMap(NoteMode.init(rawValue:)) ?? .split
-    let storedCompact = defaults.string(forKey: Self.compactModeKey).flatMap(NoteMode.init(rawValue:))
-    compactMode = storedCompact == .source ? .source : .reading
-    let savedCollections = defaults.dictionary(forKey: Self.libraryCollectionsKey) ?? [:]
-    libraryCollections = savedCollections.compactMapValues { value in
+    preferredMode = defaults.string(forKey: Self.modeKey).flatMap(FileMode.init(rawValue:)) ?? .split
+    let storedCompact = defaults.string(forKey: Self.compactModeKey).flatMap(FileMode.init(rawValue:))
+    compactMode = storedCompact == .edit ? .edit : .preview
+    let savedSections = defaults.dictionary(forKey: Self.librarySectionsKey) ?? [:]
+    librarySections = savedSections.compactMapValues { value in
       guard let names = value as? [String] else { return nil }
-      return Set(names.compactMap(LibraryCollection.init(rawValue:)).filter { $0 != .gists })
+      return Set(names.compactMap(LibrarySection.init(rawValue:)).filter { $0 != .gists })
     }
     collapsedPinned = Set(defaults.stringArray(forKey: Self.collapsedPinnedKey) ?? [])
   }
 
-  func expandedCollections(accountID: UUID) -> Set<LibraryCollection> {
-    libraryCollections[accountID.uuidString] ?? []
+  func expandedSections(accountID: UUID) -> Set<LibrarySection> {
+    librarySections[accountID.uuidString] ?? []
   }
 
-  func setExpandedCollections(_ collections: Set<LibraryCollection>, accountID: UUID) {
-    let secondary = collections.subtracting([.gists])
-    guard expandedCollections(accountID: accountID) != secondary else { return }
-    libraryCollections[accountID.uuidString] = secondary
+  func setExpandedSections(_ sections: Set<LibrarySection>, accountID: UUID) {
+    let secondary = sections.subtracting([.gists])
+    guard expandedSections(accountID: accountID) != secondary else { return }
+    librarySections[accountID.uuidString] = secondary
     defaults.set(
-      libraryCollections.mapValues { $0.map(\.rawValue).sorted() },
-      forKey: Self.libraryCollectionsKey)
+      librarySections.mapValues { $0.map(\.rawValue).sorted() },
+      forKey: Self.librarySectionsKey)
   }
 
   func isPinnedExpanded(accountID: UUID) -> Bool {
@@ -62,7 +62,7 @@ final class NotebookLayoutPreferences {
     availableWidth.isFinite && availableWidth >= 641
   }
 
-  func select(_ mode: NoteMode) {
+  func select(_ mode: FileMode) {
     preferredMode = mode
     defaults.set(mode.rawValue, forKey: Self.modeKey)
     if mode != .split {
@@ -71,17 +71,17 @@ final class NotebookLayoutPreferences {
     }
   }
 
-  func initialMode(isUnpublished: Bool) -> NoteMode {
-    isUnpublished ? .source : compactMode
+  func initialMode(isUnpublished: Bool) -> FileMode {
+    isUnpublished ? .edit : compactMode
   }
 
   func presentedMode(
-    availableWidth: CGFloat, sessionMode: NoteMode, isEditing: Bool, canEdit: Bool
-  ) -> NoteMode {
-    guard canEdit else { return .reading }
+    availableWidth: CGFloat, sessionMode: FileMode, isEditing: Bool, canEdit: Bool
+  ) -> FileMode {
+    guard canEdit else { return .preview }
     if preferredMode == .split {
       if Self.allowsSplit(availableWidth: availableWidth) { return .split }
-      if isEditing { return .source }
+      if isEditing { return .edit }
     }
     return sessionMode == .split ? compactMode : sessionMode
   }

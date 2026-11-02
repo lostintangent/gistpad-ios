@@ -6,7 +6,7 @@ public struct TagEditor: View {
     private let save: (@MainActor ([TagEdit]) async throws -> Void)?
     @State private var draft: TagEditorDraft
     @State private var query = ""
-    @State private var editingTag: LibraryTag?
+    @State private var editingTag: Tag?
     @State private var isSaving = false
     @State private var saveError: String?
     @State private var confirmingDiscard = false
@@ -17,7 +17,7 @@ public struct TagEditor: View {
     @ScaledMetric(relativeTo: .body) private var swatchSize: CGFloat = 12
 
     public init(
-        tags: [LibraryTag], selectedTagIDs: Set<String>,
+        tags: [Tag], selectedTagIDs: Set<String>,
         save: (@MainActor ([TagEdit]) async throws -> Void)? = nil
     ) {
         self.save = save
@@ -82,7 +82,7 @@ public struct TagEditor: View {
         }
     }
 
-    private var selectedTags: [LibraryTag] {
+    private var selectedTags: [Tag] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return draft.tags.filter {
             draft.selectedTagIDs.contains($0.id)
@@ -91,13 +91,13 @@ public struct TagEditor: View {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    private var matchingTags: [LibraryTag] {
+    private var matchingTags: [Tag] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return draft.tags.filter { query.isEmpty || $0.name.localizedStandardContains(query) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    private func editableRow(_ tag: LibraryTag) -> some View {
+    private func editableRow(_ tag: Tag) -> some View {
         Button {
             if draft.selectedTagIDs.contains(tag.id) {
                 draft.selectedTagIDs.remove(tag.id)
@@ -121,7 +121,7 @@ public struct TagEditor: View {
         }
     }
 
-    private func tagRow(_ tag: LibraryTag) -> some View {
+    private func tagRow(_ tag: Tag) -> some View {
         HStack(spacing: 12) {
             TagSwatch(hex: tag.colorHex, size: min(swatchSize, 24))
                 .accessibilityHidden(true)
@@ -160,7 +160,7 @@ public struct TagEditor: View {
             ToolbarSpacer(.flexible, placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) {
                 Button(String(localized: "New Tag", bundle: .module), systemImage: "plus") {
-                    editingTag = LibraryTag(id: UUID().uuidString, name: "")
+                    editingTag = Tag(id: UUID().uuidString, name: "")
                 }
                 .accessibilityIdentifier("tag-create")
             }
@@ -196,9 +196,9 @@ public struct TagEditor: View {
 }
 
 private struct TagEditForm: View {
-    let tag: LibraryTag
+    let tag: Tag
     let isNew: Bool
-    let update: (LibraryTag) throws -> Void
+    let update: (Tag) throws -> Void
     let delete: () -> Void
     @State private var name: String
     @State private var colorHex: String?
@@ -209,7 +209,7 @@ private struct TagEditForm: View {
     @Environment(\.self) private var environment
 
     init(
-        tag: LibraryTag, isNew: Bool, update: @escaping (LibraryTag) throws -> Void,
+        tag: Tag, isNew: Bool, update: @escaping (Tag) throws -> Void,
         delete: @escaping () -> Void
     ) {
         self.tag = tag
@@ -239,7 +239,7 @@ private struct TagEditForm: View {
                 }
                 if !name.isEmpty {
                     Section {
-                        TagLabel(tag: LibraryTag(id: tag.id, name: name, colorHex: colorHex))
+                        TagLabel(tag: Tag(id: tag.id, name: name, colorHex: colorHex))
                     } header: {
                         Text("Preview", bundle: .module)
                     }
@@ -264,7 +264,7 @@ private struct TagEditForm: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {
                         do {
-                            try update(LibraryTag(id: tag.id, name: name, colorHex: colorHex))
+                            try update(Tag(id: tag.id, name: name, colorHex: colorHex))
                             dismiss()
                         } catch {
                             self.error = error.localizedDescription

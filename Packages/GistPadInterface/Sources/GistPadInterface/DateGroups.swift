@@ -1,6 +1,6 @@
 import Foundation
 
-enum LibraryDateGroup: Hashable, Sendable {
+enum DateGroup: Hashable, Sendable {
     case today
     case yesterday
     case previousSevenDays
@@ -11,7 +11,7 @@ enum LibraryDateGroup: Hashable, Sendable {
 
     static func group(
         for updatedAt: Date?, relativeTo now: Date, calendar: Calendar
-    ) -> LibraryDateGroup {
+    ) -> DateGroup {
         guard let updatedAt else { return .undated }
         let days = calendar.dateComponents(
             [.day],
@@ -64,19 +64,19 @@ enum LibraryDateGroup: Hashable, Sendable {
     }
 }
 
-struct LibraryDateSection: Identifiable, Equatable, Sendable {
-    let group: LibraryDateGroup
-    let notes: [LibraryNote]
+struct DateSection: Identifiable, Equatable, Sendable {
+    let group: DateGroup
+    let gists: [GistItem]
 
-    var id: LibraryDateGroup { group }
+    var id: DateGroup { group }
 
     static func sections(
-        for notes: [LibraryNote], relativeTo now: Date, calendar: Calendar
-    ) -> [LibraryDateSection] {
-        var buckets: [LibraryDateGroup: [LibraryNote]] = [:]
-        for note in notes {
-            let group = LibraryDateGroup.group(for: note.updatedAt, relativeTo: now, calendar: calendar)
-            buckets[group, default: []].append(note)
+        for gists: [GistItem], relativeTo now: Date, calendar: Calendar
+    ) -> [DateSection] {
+        var buckets: [DateGroup: [GistItem]] = [:]
+        for gist in gists {
+            let group = DateGroup.group(for: gist.updatedAt, relativeTo: now, calendar: calendar)
+            buckets[group, default: []].append(gist)
         }
         return buckets
             .sorted { $0.key.sortKey < $1.key.sortKey }
@@ -84,7 +84,7 @@ struct LibraryDateSection: Identifiable, Equatable, Sendable {
                 let members = entry.key == .undated
                     ? entry.value
                     : entry.value.sorted { ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast) }
-                return LibraryDateSection(group: entry.key, notes: members)
+                return DateSection(group: entry.key, gists: members)
             }
     }
 }

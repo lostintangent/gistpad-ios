@@ -2,7 +2,7 @@
 import GistPadSync
 import SwiftUI
 
-struct LibraryTodayButton: View {
+struct TodayButton: View {
     let summary: DailyNote
     var isSelected = false
     let action: @MainActor () -> Void

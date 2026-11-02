@@ -3,11 +3,11 @@ import GistPadAccent
 import GistPadSync
 import SwiftUI
 
-public struct NoteScreen<Source: View, Preview: View>: View {
-    private let document: NoteChrome
-    @Binding private var mode: NoteMode
+public struct GistScreen<Source: View, Preview: View>: View {
+    private let gist: GistDetails
+    @Binding private var mode: FileMode
     private let saveState: PublishState
-    private let actions: NoteActions
+    private let actions: GistActions
     private let source: Source
     private let preview: Preview
     private let isFocused: Bool
@@ -18,23 +18,23 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     // Match the native toolbar's settled segment size on its first layout.
     @ScaledMetric(relativeTo: .body) private var minimumModeSegmentWidth = 48
 
-    private var showingSplit: Bool { document.access.canEdit && (isFocused || (allowsSplit && mode == .split)) }
-    private var showingSource: Bool { document.access.canEdit && (showingSplit || mode != .reading) }
+    private var showingSplit: Bool { gist.access.canEdit && (isFocused || (allowsSplit && mode == .split)) }
+    private var showingSource: Bool { gist.access.canEdit && (showingSplit || mode != .preview) }
     private var paneLayout: AnyLayout {
         showingSplit ? AnyLayout(HStackLayout(spacing: 1)) : AnyLayout(ZStackLayout())
     }
     private var showsFiles: Bool {
-        document.files.count > 1 || (document.access.canEdit && (actions.addFile != nil || actions.renameFile != nil))
+        gist.files.count > 1 || (gist.access.canEdit && (actions.addFile != nil || actions.renameFile != nil))
     }
 
     public init(
-        document: NoteChrome, mode: Binding<NoteMode>, saveState: PublishState,
-        actions: NoteActions = .init(), isFocused: Bool = false,
+        gist: GistDetails, mode: Binding<FileMode>, saveState: PublishState,
+        actions: GistActions = .init(), isFocused: Bool = false,
         allowsSplit: Bool = false, isSidebarHidden: Bool = false,
         areCommentsPresented: Bool = false,
         @ViewBuilder source: () -> Source, @ViewBuilder preview: () -> Preview
     ) {
-        self.document = document
+        self.gist = gist
         self._mode = mode
         self.saveState = saveState
         self.actions = actions
@@ -68,10 +68,10 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             }
         }
         .background(Color(uiColor: .systemBackground))
-        .navigationTitle(document.title)
+        .navigationTitle(gist.title)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationSubtitle(document.headerFilename ?? "")
-        .modifier(NoteTitleMenu(isEnabled: document.files.count > 1) { fileChoices })
+        .navigationSubtitle(gist.headerFilename ?? "")
+        .modifier(FileMenu(isEnabled: gist.files.count > 1) { fileChoices })
         .toolbar {
             primaryToolbar
             secondaryToolbar
@@ -80,7 +80,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
 
     @ToolbarContentBuilder
     private var primaryToolbar: some ToolbarContent {
-        if document.access.canEdit, !isFocused {
+        if gist.access.canEdit, !isFocused {
             ToolbarItem(placement: .topBarPinnedTrailing) {
                 modePicker
                     .frame(minWidth: minimumModeSegmentWidth * CGFloat(allowsSplit ? 3 : 2))
@@ -89,14 +89,14 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             }
             .sharedBackgroundVisibility(.hidden)
         }
-        if document.access.canEdit, saveState.showsPublish(isAutoSaveEnabled: document.isAutoSaveEnabled) {
+        if gist.access.canEdit, saveState.showsPublish(isAutoSaveEnabled: gist.isAutoSaveEnabled) {
             ToolbarItem(placement: .primaryAction) {
                 Button(String(localized: "Publish", bundle: .module), systemImage: "arrow.up.doc", action: actions.save)
                     .disabled(!saveState.canPublish)
                     .accessibilityIdentifier("note-publish")
             }
         }
-        if document.access.canEdit, let needsYou {
+        if gist.access.canEdit, let needsYou {
             ToolbarItem(placement: .primaryAction) {
                 Button(String(localized: "GitHub needs attention", bundle: .module), systemImage: "exclamationmark", action: needsYou)
                     .accessibilityIdentifier("note-needs-you")
@@ -117,15 +117,15 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         Picker(
             String(localized: "View", bundle: .module),
             selection: Binding(
-                get: { mode == .split && !allowsSplit ? .source : mode },
+                get: { mode == .split && !allowsSplit ? .edit : mode },
                 set: { mode = $0 }
             )
         ) {
-            Label(String(localized: "Edit", bundle: .module), systemImage: "square.and.pencil").tag(NoteMode.source)
+            Label(String(localized: "Edit", bundle: .module), systemImage: "square.and.pencil").tag(FileMode.edit)
             if allowsSplit {
-                Label(String(localized: "Split", bundle: .module), systemImage: "rectangle.split.2x1").tag(NoteMode.split)
+                Label(String(localized: "Split", bundle: .module), systemImage: "rectangle.split.2x1").tag(FileMode.split)
             }
-            Label(String(localized: "Preview", bundle: .module), systemImage: "eye").tag(NoteMode.reading)
+            Label(String(localized: "Preview", bundle: .module), systemImage: "eye").tag(FileMode.preview)
         }
         .pickerStyle(.segmented)
         .labelStyle(.iconOnly)
@@ -155,18 +155,18 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 ControlGroup {
                     if let pin = actions.togglePin {
                         Button(
-                            document.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
-                            systemImage: document.isPinned ? "pin.fill" : "pin", action: pin
+                            gist.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
+                            systemImage: gist.isPinned ? "pin.fill" : "pin", action: pin
                         )
                     }
                     if let star = actions.toggleStar {
                         Button(
-                            document.isStarred ? String(localized: "Unstar", bundle: .module) : String(localized: "Star", bundle: .module),
-                            systemImage: document.isStarred ? "star.fill" : "star", action: star
+                            gist.isStarred ? String(localized: "Unstar", bundle: .module) : String(localized: "Star", bundle: .module),
+                            systemImage: gist.isStarred ? "star.fill" : "star", action: star
                         )
                     }
-                    if let url = document.shareURL {
-                        ShareLink(item: url, preview: SharePreview(document.title))
+                    if let url = gist.shareURL {
+                        ShareLink(item: url, preview: SharePreview(gist.title))
                         Button(String(localized: "Copy Link", bundle: .module), systemImage: "link") {
                             UIPasteboard.general.url = url
                             AccessibilityNotification.Announcement(
@@ -177,7 +177,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 }
                 .controlGroupStyle(.compactMenu)
                 Section {
-                    if let rename = actions.rename, document.access.canEdit {
+                    if let rename = actions.rename, gist.access.canEdit {
                         Button(
                             String(localized: "Rename Gist…", bundle: .module),
                             systemImage: "pencil", action: rename
@@ -199,7 +199,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                         systemImage: "sparkles", action: actions.intelligence
                     )
                     .accessibilityIdentifier("note-intelligence")
-                    if document.access.canEdit {
+                    if gist.access.canEdit {
                         Button(String(localized: "Find and Replace", bundle: .module), systemImage: "text.magnifyingglass", action: actions.find)
                         Button(
                             isSidebarHidden ? String(localized: "Show Library", bundle: .module) : String(localized: "Hide Library", bundle: .module),
@@ -215,12 +215,12 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 if let archive = actions.toggleArchive {
                     Section {
                         Button(
-                            document.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
+                            gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
                             systemImage: "archivebox", action: archive
                         )
                     }
                 }
-                if actions.delete != nil, document.access.canEdit {
+                if actions.delete != nil, gist.access.canEdit {
                     Section {
                         Button(String(localized: "Delete Note…", bundle: .module), systemImage: "trash", role: .destructive) {
                             confirmingDeletion = true
@@ -231,7 +231,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 Label(String(localized: "More", bundle: .module), systemImage: "ellipsis")
             }
             .accessibilityIdentifier("note-actions")
-            .deletionConfirmation(title: document.title, isPresented: $confirmingDeletion) {
+            .deletionConfirmation(title: gist.title, isPresented: $confirmingDeletion) {
                 actions.delete?()
             }
         }
@@ -239,7 +239,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
 
     private var commentsLabel: String {
         let title = String(localized: "Comments", bundle: .module)
-        guard let count = document.commentCount else { return title }
+        guard let count = gist.commentCount else { return title }
         return title + ", " + String(localized: "\(count) comments", bundle: .module)
     }
 
@@ -248,14 +248,14 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         Picker(
             String(localized: "Files", bundle: .module),
             selection: Binding(
-                get: { document.selectedFileID },
-                set: { if $0 != document.selectedFileID { actions.selectFile?($0) } })
+                get: { gist.selectedFileID },
+                set: { if $0 != gist.selectedFileID { actions.selectFile?($0) } })
         ) {
-            ForEach(document.files) { Text(verbatim: $0.filename).tag($0.id) }
+            ForEach(gist.files) { Text(verbatim: $0.filename).tag($0.id) }
         }
         .pickerStyle(.inline)
         .disabled(actions.selectFile == nil)
-        if document.access.canEdit && (actions.renameFile != nil || actions.addFile != nil) {
+        if gist.access.canEdit && (actions.renameFile != nil || actions.addFile != nil) {
             Section {
                 if let rename = actions.renameFile {
                     Button(
@@ -273,7 +273,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     }
 }
 
-private struct NoteTitleMenu<Items: View>: ViewModifier {
+private struct FileMenu<Items: View>: ViewModifier {
     let isEnabled: Bool
     @ViewBuilder var items: () -> Items
 

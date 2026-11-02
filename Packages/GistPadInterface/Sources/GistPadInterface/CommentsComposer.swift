@@ -74,7 +74,7 @@ public struct CommentsComposer: View {
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.circle)
             .controlSize(.large)
-            // The inspector's compact sheet inherits the dimmed accent of the note it covers at large.
+            // The inspector's compact sheet inherits the dimmed accent of the gist it covers at large.
             .tint(Color(uiColor: .tintColor))
             .disabled(!canPost || isPosting)
             .keyboardShortcut(.return, modifiers: .command)

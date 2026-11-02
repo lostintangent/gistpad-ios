@@ -2,7 +2,7 @@ import Foundation
 
 public enum TagEdit: Equatable, Sendable {
     case setMembership(tagID: String, included: Bool)
-    case upsert(LibraryTag)
+    case upsert(Tag)
     case delete(tagID: String)
 }
 
@@ -19,25 +19,25 @@ enum TagEditingError: LocalizedError {
 }
 
 struct TagEditorDraft {
-    private let originalTags: [LibraryTag]
+    private let originalTags: [Tag]
     private let originalSelection: Set<String>
-    private(set) var tags: [LibraryTag]
+    private(set) var tags: [Tag]
     var selectedTagIDs: Set<String>
 
-    init(tags: [LibraryTag], selectedTagIDs: Set<String>) {
+    init(tags: [Tag], selectedTagIDs: Set<String>) {
         originalTags = tags
         originalSelection = selectedTagIDs
         self.tags = tags
         self.selectedTagIDs = selectedTagIDs
     }
 
-    mutating func upsert(_ tag: LibraryTag) throws {
+    mutating func upsert(_ tag: Tag) throws {
         let name = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw TagEditingError.emptyName }
         guard !tags.contains(where: {
             $0.id != tag.id && $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame
         }) else { throw TagEditingError.duplicateName }
-        let updated = LibraryTag(id: tag.id, name: name, colorHex: tag.colorHex)
+        let updated = Tag(id: tag.id, name: name, colorHex: tag.colorHex)
         if let index = tags.firstIndex(where: { $0.id == tag.id }) {
             tags[index] = updated
         } else {
@@ -46,7 +46,7 @@ struct TagEditorDraft {
         }
     }
 
-    mutating func delete(_ tag: LibraryTag) {
+    mutating func delete(_ tag: Tag) {
         tags.removeAll { $0.id == tag.id }
         selectedTagIDs.remove(tag.id)
     }

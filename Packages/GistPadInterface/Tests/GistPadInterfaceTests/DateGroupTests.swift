@@ -3,7 +3,7 @@ import Testing
 
 @testable import GistPadInterface
 
-struct LibraryDateTests {
+struct DateGroupTests {
     private let locale = Locale(identifier: "en_US")
 
     @Test(arguments: [
@@ -27,20 +27,20 @@ struct LibraryDateTests {
         var losAngeles = Calendar(identifier: .gregorian)
         losAngeles.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
         let now = try date("2026-10-24T08:00:00Z")
-        #expect(LibraryDateGroup.group(
+        #expect(DateGroup.group(
             for: try date("2026-10-23T06:30:00Z"), relativeTo: now,
             calendar: losAngeles) == .previousSevenDays)
-        #expect(LibraryDateGroup.group(
+        #expect(DateGroup.group(
             for: try date("2026-10-24T06:30:00Z"), relativeTo: now,
             calendar: losAngeles) == .yesterday)
     }
 
     @Test func dailyTitlesIncludeTheWeekdayAndOnlyTheNeededYear() throws {
         let now = try date("2026-10-24T12:30:00Z")
-        #expect(LibraryDatePresentation.dailyTitle(
+        #expect(DateLabels.dailyTitle(
             for: try date("2026-10-23T00:00:00Z"), relativeTo: now,
             locale: locale, calendar: calendar) == "Friday, Oct 23")
-        #expect(LibraryDatePresentation.dailyTitle(
+        #expect(DateLabels.dailyTitle(
             for: try date("2025-10-23T00:00:00Z"), relativeTo: now,
             locale: locale, calendar: calendar).contains("2025"))
     }
@@ -52,8 +52,8 @@ struct LibraryDateTests {
         return value
     }
 
-    private func group(_ updatedAt: String?, now: String) throws -> LibraryDateGroup {
-        LibraryDateGroup.group(
+    private func group(_ updatedAt: String?, now: String) throws -> DateGroup {
+        DateGroup.group(
             for: try updatedAt.map { try date($0) }, relativeTo: try date(now), calendar: calendar)
     }
 

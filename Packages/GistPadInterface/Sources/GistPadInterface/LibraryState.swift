@@ -2,8 +2,10 @@ import Foundation
 import GistPadSync
 import Observation
 
-public enum LibraryCollection: String, CaseIterable, Identifiable, Sendable {
-    case gists, dailyNotes, starred, archive
+public enum LibrarySection: String, CaseIterable, Identifiable, Sendable {
+    case gists, dailyNotes, starred
+    /// Expanded sections are saved by raw value, so Archived keeps its original one.
+    case archived = "archive"
 
     public var id: Self { self }
 
@@ -12,7 +14,7 @@ public enum LibraryCollection: String, CaseIterable, Identifiable, Sendable {
         case .gists: String(localized: "Your Gists", bundle: .module)
         case .dailyNotes: String(localized: "Daily Notes", bundle: .module)
         case .starred: String(localized: "Starred Gists", bundle: .module)
-        case .archive: String(localized: "Archived Gists", bundle: .module)
+        case .archived: String(localized: "Archived Gists", bundle: .module)
         }
     }
 
@@ -21,12 +23,12 @@ public enum LibraryCollection: String, CaseIterable, Identifiable, Sendable {
         case .gists: "doc.text"
         case .dailyNotes: "calendar"
         case .starred: "star"
-        case .archive: "archivebox"
+        case .archived: "archivebox"
         }
     }
 }
 
-public struct LibraryTag: Equatable, Identifiable, Sendable {
+public struct Tag: Equatable, Identifiable, Sendable {
     public let id: String
     public let name: String
     public let colorHex: String?
@@ -38,7 +40,7 @@ public struct LibraryTag: Equatable, Identifiable, Sendable {
     }
 }
 
-public struct LibraryNote: Equatable, Identifiable, Sendable {
+public struct GistItem: Equatable, Identifiable, Sendable {
     public let id: String
     public var gistID: String?
     public var title: String
@@ -95,20 +97,6 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
     }
 }
 
-public struct LibrarySnapshot: Equatable, Sendable {
-    public var notes: [LibraryNote]
-    public var tags: [LibraryTag]
-    public var dailyNoteCount: Int?
-
-    public init(
-        notes: [LibraryNote], tags: [LibraryTag] = [], dailyNoteCount: Int? = nil
-    ) {
-        self.notes = notes
-        self.tags = tags
-        self.dailyNoteCount = dailyNoteCount
-    }
-}
-
 public enum LibraryLoadState: Equatable, Sendable {
     case loading
     case ready
@@ -118,21 +106,27 @@ public enum LibraryLoadState: Equatable, Sendable {
 }
 
 @MainActor @Observable
-public final class LibraryModel {
-    public var snapshot: LibrarySnapshot
-    public private(set) var hasKnownGistSnapshot: Bool
+public final class LibraryState {
+    public var gists: [GistItem]
+    public private(set) var tags: [Tag]
+    /// Nil until the account's gists are known, and while the daily gist is too large to count.
+    public private(set) var dailyNoteCount: Int?
+    public private(set) var hasKnownGists: Bool
     public var loadState: LibraryLoadState
     public var query = ""
     public var selectedTagIDs: Set<String> = []
-    public var selectedNoteID: String?
+    public var selectedID: String?
     public var today: DailyNote
 
+    /// Nil gists mean the account's gists aren't known yet.
     public init(
-        snapshot: LibrarySnapshot? = nil, loadState: LibraryLoadState = .loading,
-        today: DailyNote = .init()
+        gists: [GistItem]? = nil, tags: [Tag] = [], dailyNoteCount: Int? = nil,
+        loadState: LibraryLoadState = .loading, today: DailyNote = .init()
     ) {
-        self.snapshot = snapshot ?? .init(notes: [])
-        hasKnownGistSnapshot = snapshot != nil
+        self.gists = gists ?? []
+        self.tags = tags
+        self.dailyNoteCount = gists == nil ? nil : dailyNoteCount
+        hasKnownGists = gists != nil
         self.loadState = loadState
         self.today = today
     }
@@ -141,12 +135,12 @@ public final class LibraryModel {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedTagIDs.isEmpty
     }
 
-    /// Like the web, a filter matches titles and tags, and the open note stays listed.
-    public var matchingNotes: [LibraryNote] {
-        snapshot.notes.filter { note in
+    /// Like the web, a filter matches titles and tags, and the open gist stays listed.
+    public var matchingGists: [GistItem] {
+        gists.filter { gist in
             hasFilters
-                ? Self.primaryCollection(for: note) != nil && (note.id == selectedNoteID || matchesFilter(note))
-                : Self.includes(note, in: .gists)
+                ? Self.primarySection(for: gist) != nil && (gist.id == selectedID || matchesFilter(gist))
+                : Self.includes(gist, in: .gists)
         }.sorted {
             if $0.updatedAt != $1.updatedAt {
                 return ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast)
@@ -155,51 +149,50 @@ public final class LibraryModel {
         }
     }
 
-    public func replaceSnapshot(_ snapshot: LibrarySnapshot?) {
-        self.snapshot = snapshot ?? .init(notes: [])
-        hasKnownGistSnapshot = snapshot != nil
-    }
-
-    public var dailyNoteCount: Int? {
-        hasKnownGistSnapshot ? snapshot.dailyNoteCount : nil
+    /// Until the account's gists are `known`, only gists still on the phone are listed and nothing is counted.
+    public func replace(gists: [GistItem], tags: [Tag] = [], dailyNoteCount: Int? = nil, known: Bool = true) {
+        self.gists = gists
+        self.tags = tags
+        self.dailyNoteCount = known ? dailyNoteCount : nil
+        hasKnownGists = known
     }
 
     public var mainGistCount: Int? {
         count(in: .gists)
     }
 
-    public func count(in collection: LibraryCollection) -> Int? {
-        guard hasKnownGistSnapshot else { return nil }
-        if collection == .dailyNotes { return dailyNoteCount }
-        return Self.gistCount(in: snapshot.notes.filter { Self.includes($0, in: collection) })
+    public func count(in section: LibrarySection) -> Int? {
+        guard hasKnownGists else { return nil }
+        if section == .dailyNotes { return dailyNoteCount }
+        return Self.gistCount(in: gists.filter { Self.includes($0, in: section) })
     }
 
-    var secondaryCollections: [LibraryCollection] {
-        [.dailyNotes, .starred, .archive].filter { collection in
-            count(in: collection) != 0
-                && snapshot.notes.contains { Self.includes($0, in: collection) }
+    var secondarySections: [LibrarySection] {
+        [.dailyNotes, .starred, .archived].filter { section in
+            count(in: section) != 0
+                && gists.contains { Self.includes($0, in: section) }
         }
     }
 
-    public func unfilteredNotes(in collection: LibraryCollection) -> [LibraryNote] {
-        Self.ordered(snapshot.notes.filter { Self.includes($0, in: collection) }, in: collection)
+    public func unfilteredGists(in section: LibrarySection) -> [GistItem] {
+        Self.ordered(gists.filter { Self.includes($0, in: section) }, in: section)
     }
 
-    public func matchingNotes(in collection: LibraryCollection) -> [LibraryNote] {
-        guard hasFilters else { return unfilteredNotes(in: collection) }
-        let notes = matchingNotes.filter { Self.primaryCollection(for: $0) == collection }
-        return collection == .dailyNotes ? Self.ordered(notes, in: collection) : notes
+    public func matchingGists(in section: LibrarySection) -> [GistItem] {
+        guard hasFilters else { return unfilteredGists(in: section) }
+        let gists = matchingGists.filter { Self.primarySection(for: $0) == section }
+        return section == .dailyNotes ? Self.ordered(gists, in: section) : gists
     }
 
-    private static func primaryCollection(for note: LibraryNote) -> LibraryCollection? {
-        LibraryCollection.allCases.first { includes(note, in: $0) }
+    private static func primarySection(for gist: GistItem) -> LibrarySection? {
+        LibrarySection.allCases.first { includes(gist, in: $0) }
     }
 
     private static func ordered(
-        _ notes: [LibraryNote], in collection: LibraryCollection
-    ) -> [LibraryNote] {
-        notes.sorted {
-            if collection == .dailyNotes {
+        _ gists: [GistItem], in section: LibrarySection
+    ) -> [GistItem] {
+        gists.sorted {
+            if section == .dailyNotes {
                 if $0.isOverdue != $1.isOverdue { return $0.isOverdue }
                 if $0.dailyDate != $1.dailyDate {
                     return ($0.dailyDate ?? .distantPast) > ($1.dailyDate ?? .distantPast)
@@ -211,30 +204,30 @@ public final class LibraryModel {
         }
     }
 
-    /// Gists the filter matches. The open note is listed without counting as a match.
+    /// Gists the filter matches. The open gist is listed without counting as a match.
     public var resultGistCount: Int? {
-        guard hasFilters, hasKnownGistSnapshot else { return nil }
-        return Self.gistCount(in: matchingNotes.filter(matchesFilter))
+        guard hasFilters, hasKnownGists else { return nil }
+        return Self.gistCount(in: matchingGists.filter(matchesFilter))
     }
 
-    /// Whether anything besides the open note matches the filter.
-    public var hasMatches: Bool { matchingNotes.contains(where: matchesFilter) }
+    /// Whether anything besides the open gist matches the filter.
+    public var hasMatches: Bool { matchingGists.contains(where: matchesFilter) }
 
-    private func matchesFilter(_ note: LibraryNote) -> Bool {
+    private func matchesFilter(_ gist: GistItem) -> Bool {
         let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return selectedTagIDs.isSubset(of: note.tagIDs)
-            && (search.isEmpty || note.title.localizedStandardContains(search))
+        return selectedTagIDs.isSubset(of: gist.tagIDs)
+            && (search.isEmpty || gist.title.localizedStandardContains(search))
     }
 
-    /// Gists carrying the tag, counted over the same notes a tag filter searches.
+    /// Gists carrying the tag, counted over the same gists a tag filter searches.
     public func gistCount(tagged tagID: String) -> Int {
-        Self.gistCount(in: snapshot.notes.filter {
-            $0.tagIDs.contains(tagID) && Self.primaryCollection(for: $0) != nil
+        Self.gistCount(in: gists.filter {
+            $0.tagIDs.contains(tagID) && Self.primarySection(for: $0) != nil
         })
     }
 
-    public static func gistCount(in notes: [LibraryNote]) -> Int {
-        Set(notes.compactMap(\.gistID)).count
+    public static func gistCount(in gists: [GistItem]) -> Int {
+        Set(gists.compactMap(\.gistID)).count
     }
 
     public static func gistCountLabel(_ count: Int) -> String {
@@ -243,18 +236,18 @@ public final class LibraryModel {
             : String(localized: "\(count) gists", bundle: .module)
     }
 
-    public static func noteCountLabel(_ count: Int) -> String {
+    public static func dailyNoteCountLabel(_ count: Int) -> String {
         count == 1
-            ? String(localized: "1 note", bundle: .module)
-            : String(localized: "\(count) notes", bundle: .module)
+            ? String(localized: "1 daily note", bundle: .module)
+            : String(localized: "\(count) daily notes", bundle: .module)
     }
 
-    private static func includes(_ note: LibraryNote, in collection: LibraryCollection) -> Bool {
-        switch collection {
-        case .gists: !note.isArchived && !note.isDailyNote && note.isOwned
-        case .dailyNotes: note.isDailyNote && !note.isArchived && note.isOwned
-        case .starred: note.isStarred && !note.isOwned
-        case .archive: note.isArchived && note.isOwned
+    private static func includes(_ gist: GistItem, in section: LibrarySection) -> Bool {
+        switch section {
+        case .gists: !gist.isArchived && !gist.isDailyNote && gist.isOwned
+        case .dailyNotes: gist.isDailyNote && !gist.isArchived && gist.isOwned
+        case .starred: gist.isStarred && !gist.isOwned
+        case .archived: gist.isArchived && gist.isOwned
         }
     }
 
@@ -263,8 +256,8 @@ public final class LibraryModel {
         selectedTagIDs = []
     }
 
-    public func tags(for note: LibraryNote) -> [LibraryTag] {
-        snapshot.tags.filter { note.tagIDs.contains($0.id) }
+    public func tags(for gist: GistItem) -> [Tag] {
+        tags.filter { gist.tagIDs.contains($0.id) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 }

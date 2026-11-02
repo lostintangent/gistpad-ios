@@ -14,7 +14,7 @@
 
     let fixture: Fixture
     let route: NotebookRoute?
-    let mode: NoteMode?
+    let mode: FileMode?
     let query: String?
     let sheet: Sheet?
     let accent: String?
@@ -30,7 +30,7 @@
       route = value("--open").map {
         NotebookRoute(url: URL(string: $0 == "today" ? "gistpad://today" : "gistpad://note/\($0)")!)!
       }
-      mode = value("--mode").map { ["edit": NoteMode.source, "preview": .reading, "split": .split][$0]! }
+      mode = value("--mode").map { ["edit": FileMode.edit, "preview": .preview, "split": .split][$0]! }
       query = value("--query")
       sheet = value("--sheet").map { Sheet(rawValue: $0)! }
       accent = value("--accent")

@@ -7,7 +7,7 @@
     "%lld files" : {
 
     },
-    "%lld notes" : {
+    "%lld daily notes" : {
 
     },
     "%lld unfinished tasks" : {
@@ -151,7 +151,7 @@
     "A thought, a list, a little thing worth keeping. Start with your first note." : {
 
     },
-    "1 note" : {
+    "1 daily note" : {
 
     },
     "By %@" : {
@@ -634,7 +634,7 @@
     "Tags: %@" : {
 
     },
-    "The shape of a notebook" : {
+    "The shape of a gist" : {
 
     },
     "These are synthetic screen fixtures. Nothing is connected to GitHub." : {

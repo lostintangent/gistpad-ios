@@ -1,9 +1,9 @@
 #if os(iOS)
 import SwiftUI
 
-struct NotebookArtwork: View {
+struct GistPadArtwork: View {
     var body: some View {
-        Image("Notebook", bundle: .module)
+        Image("Artwork", bundle: .module)
             .resizable()
             .scaledToFit()
             .frame(width: 64, height: 64)

@@ -3,11 +3,11 @@ import GistPadAccent
 import SwiftUI
 
 struct TagLabel: View {
-    private let tag: LibraryTag
+    private let tag: Tag
     private let isSelected: Bool
     @Environment(\.colorSchemeContrast) private var contrast
 
-    init(tag: LibraryTag, isSelected: Bool = false) {
+    init(tag: Tag, isSelected: Bool = false) {
         self.tag = tag
         self.isSelected = isSelected
     }
@@ -95,13 +95,13 @@ extension RGBColor {
 }
 
 struct TagLabels: View {
-    private let tags: [LibraryTag]
+    private let tags: [Tag]
     private let limit: Int?
     private let isSelected: Bool
     @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    init(tags: [LibraryTag], limit: Int? = nil, isSelected: Bool = false) {
+    init(tags: [Tag], limit: Int? = nil, isSelected: Bool = false) {
         precondition(limit.map { $0 > 0 } ?? true)
         self.tags = tags
         self.limit = limit
@@ -119,7 +119,7 @@ struct TagLabels: View {
                     line(showing: 1).lineLimit(1)
                 }
             } else {
-                MetadataFlowLayout(layoutDirection: layoutDirection) {
+                TagFlowLayout(layoutDirection: layoutDirection) {
                     ForEach(visibleTags) { TagLabel(tag: $0, isSelected: isSelected) }
                     if overflow > 0 {
                         TagOverflowLabel(count: overflow)
@@ -152,11 +152,11 @@ struct TagLabels: View {
         }
     }
 
-    private var visibleTags: [LibraryTag] { Array(tags.prefix(limit ?? tags.count)) }
+    private var visibleTags: [Tag] { Array(tags.prefix(limit ?? tags.count)) }
     private var overflow: Int { tags.count - visibleTags.count }
 }
 
-struct MetadataFlowLayout: Layout {
+struct TagFlowLayout: Layout {
     var layoutDirection: LayoutDirection
     private let spacing: CGFloat = 6
 

@@ -1,9 +1,9 @@
 #if os(iOS)
 import SwiftUI
 
-struct LibraryNoteRow: View {
-    let note: LibraryNote
-    let tags: [LibraryTag]
+struct GistRow: View {
+    let gist: GistItem
+    let tags: [Tag]
     let now: Date
     var showsStar = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -15,9 +15,9 @@ struct LibraryNoteRow: View {
     @ScaledMetric(relativeTo: .footnote) private var metadataSpacing = 8
 
     var body: some View {
-        let count = note.visibleCommentCount
-        // Daily notes stay one line, and only tagged notes earn a tag line.
-        let rowTags = note.isDailyNote ? [] : tags
+        let count = gist.visibleCommentCount
+        // Daily notes stay one line, and only tagged gists earn a tag line.
+        let rowTags = gist.isDailyNote ? [] : tags
         // At accessibility sizes the row stacks, so the count joins the date
         // and the tag line holds only tags.
         let isStacked = dynamicTypeSize.isAccessibilitySize
@@ -39,7 +39,7 @@ struct LibraryNoteRow: View {
                     TagLabels(tags: rowTags, limit: 2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if let count, !countOnTitleLine {
-                        LibraryCommentCount(count: count)
+                        CommentCount(count: count)
                             .font(.footnote)
                     }
                 }
@@ -47,7 +47,7 @@ struct LibraryNoteRow: View {
         }
         .padding(.vertical, verticalPadding)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(Text(verbatim: note.accessibilityDetail))
+        .accessibilityValue(Text(verbatim: gist.accessibilityDetail))
     }
 
     private var titleContent: some View {
@@ -56,7 +56,7 @@ struct LibraryNoteRow: View {
                 .font(.headline)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .accessibilityLabel(Text(verbatim: spokenTitle))
-            if note.isStarred && showsStar {
+            if gist.isStarred && showsStar {
                 Image(systemName: "star.fill")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -67,15 +67,15 @@ struct LibraryNoteRow: View {
 
     @ViewBuilder
     private func metadata(count: Int?) -> some View {
-        if note.isDailyNote {
-            if let progress = note.progress, progress.total > 0 {
-                TaskProgressLabel(progress: progress, isOverdue: note.isOverdue)
+        if gist.isDailyNote {
+            if let progress = gist.progress, progress.total > 0 {
+                TaskProgressLabel(progress: progress, isOverdue: gist.isOverdue)
                     .fixedSize()
             }
         } else if count != nil || updateLabel != nil {
             HStack(alignment: .firstTextBaseline, spacing: metadataSpacing) {
                 if let count {
-                    LibraryCommentCount(count: count)
+                    CommentCount(count: count)
                 }
                 if let updateLabel {
                     Text(verbatim: updateLabel)
@@ -88,19 +88,19 @@ struct LibraryNoteRow: View {
     }
 
     private var updateLabel: String? {
-        guard !note.isDailyNote, let updatedAt = note.updatedAt else { return nil }
-        return LibraryDatePresentation.updateLabel(
+        guard !gist.isDailyNote, let updatedAt = gist.updatedAt else { return nil }
+        return DateLabels.updateLabel(
             for: updatedAt, relativeTo: now, locale: locale, calendar: displayCalendar)
     }
 
     private var displayTitle: String {
-        guard note.isDailyNote, let dailyDate = note.dailyDate else { return note.title }
-        return LibraryDatePresentation.dailyTitle(
+        guard gist.isDailyNote, let dailyDate = gist.dailyDate else { return gist.title }
+        return DateLabels.dailyTitle(
             for: dailyDate, relativeTo: now, locale: locale, calendar: displayCalendar)
     }
 
     private var spokenTitle: String {
-        guard note.isDailyNote, let dailyDate = note.dailyDate else { return note.title }
+        guard gist.isDailyNote, let dailyDate = gist.dailyDate else { return gist.title }
         return dailyDate.formatted(Date.FormatStyle(
             date: .complete, time: .omitted, locale: locale,
             calendar: displayCalendar, timeZone: timeZone))
@@ -113,7 +113,7 @@ struct LibraryNoteRow: View {
     }
 }
 
-struct LibraryCommentCount: View {
+struct CommentCount: View {
     let count: Int
 
     var body: some View {
@@ -126,7 +126,7 @@ struct LibraryCommentCount: View {
     }
 }
 
-extension LibraryNote {
+extension GistItem {
     var accessibilityDetail: String {
         var details: [String] = []
         if isPinned { details.append(String(localized: "Pinned", bundle: .module)) }

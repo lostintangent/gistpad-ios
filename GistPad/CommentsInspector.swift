@@ -192,7 +192,7 @@ private struct CommentsInspectorHost: ViewModifier {
         CommentsInspector(
           conversation: conversation, selectedRootID: comments.selectedRootID,
           threadRevealRevision: comments.threadRevealRevision,
-          linkedRootIDs: comments.documentMode == .source
+          linkedRootIDs: comments.documentMode == .edit
             ? comments.sourceLinkedIDs : comments.previewLinkedIDs,
           isComposerFocused: $comments.isComposerFocused,
           close: { comments.hide() },

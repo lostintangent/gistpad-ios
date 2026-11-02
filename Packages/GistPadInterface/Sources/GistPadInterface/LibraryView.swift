@@ -7,7 +7,7 @@ extension EnvironmentValues {
 }
 
 private struct LibrarySearchModifier: ViewModifier {
-    @Bindable var model: LibraryModel
+    @Bindable var state: LibraryState
     @State private var isPresented = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -19,11 +19,11 @@ private struct LibrarySearchModifier: ViewModifier {
 
     @ViewBuilder
     private func searchableContent(_ content: Content) -> some View {
-        if model.loadState == .signedOut {
+        if state.loadState == .signedOut {
             content
         } else {
             content.searchable(
-                text: $model.query, isPresented: $isPresented,
+                text: $state.query, isPresented: $isPresented,
                 placement: horizontalSizeClass == .regular ? .sidebar : .automatic
             )
         }
@@ -40,8 +40,8 @@ private struct LibraryCreateButton: View {
 }
 
 extension View {
-    public func librarySearch(model: LibraryModel) -> some View {
-        modifier(LibrarySearchModifier(model: model))
+    public func librarySearch(state: LibraryState) -> some View {
+        modifier(LibrarySearchModifier(state: state))
     }
 
     public func libraryRail(
@@ -52,7 +52,7 @@ extension View {
             if isVisible {
                 ToolbarItemGroup(placement: .primaryAction) {
                     LibraryCreateButton(action: create)
-                    LibraryTodayButton(summary: today, isSelected: isTodaySelected, action: openToday)
+                    TodayButton(summary: today, isSelected: isTodaySelected, action: openToday)
                 }
             }
         }
@@ -100,14 +100,14 @@ public struct LibraryActions {
 }
 
 public struct LibraryView: View {
-    @Bindable private var model: LibraryModel
+    @Bindable private var state: LibraryState
     private let actions: LibraryActions
     private let isTodaySelected: Bool
     private let problem: GitHubStatusProblem?
     private let isSidebar: Bool
-    @Binding private var expandedCollections: Set<LibraryCollection>
+    @Binding private var expandedSections: Set<LibrarySection>
     @Binding private var isPinnedExpanded: Bool
-    @State private var collapsedDateGroups: Set<LibraryDateGroup> = []
+    @State private var collapsedDateGroups: Set<DateGroup> = []
     @State private var pendingDeletion: String?
     @State private var showingTags = false
     @State private var tagQuery = ""
@@ -120,16 +120,16 @@ public struct LibraryView: View {
 
     /// `isSidebar` comes from the split view's owner, because a sidebar column always reads as compact.
     public init(
-        model: LibraryModel, actions: LibraryActions, isSidebar: Bool, isTodaySelected: Bool = false,
+        state: LibraryState, actions: LibraryActions, isSidebar: Bool, isTodaySelected: Bool = false,
         problem: GitHubStatusProblem? = nil,
-        expandedCollections: Binding<Set<LibraryCollection>>, isPinnedExpanded: Binding<Bool>
+        expandedSections: Binding<Set<LibrarySection>>, isPinnedExpanded: Binding<Bool>
     ) {
-        self.model = model
+        self.state = state
         self.actions = actions
         self.isSidebar = isSidebar
         self.isTodaySelected = isTodaySelected
         self.problem = problem
-        _expandedCollections = expandedCollections
+        _expandedSections = expandedSections
         _isPinnedExpanded = isPinnedExpanded
     }
 
@@ -147,7 +147,7 @@ public struct LibraryView: View {
 
     @ViewBuilder
     private var navigationList: some View {
-        if model.loadState == .signedOut {
+        if state.loadState == .signedOut {
             signedOutInvitation
         } else if isSidebar {
             libraryList.listStyle(.sidebar)
@@ -157,28 +157,28 @@ public struct LibraryView: View {
     }
 
     private var navigationTitle: String {
-        if model.loadState == .signedOut { return "" }
+        if state.loadState == .signedOut { return "" }
         return String(localized: "GistPad", bundle: .module)
     }
 
     private var navigationSubtitle: String {
-        guard model.loadState != .signedOut else { return "" }
-        return model.mainGistCount.map(LibraryModel.gistCountLabel) ?? ""
+        guard state.loadState != .signedOut else { return "" }
+        return state.mainGistCount.map(LibraryState.gistCountLabel) ?? ""
     }
 
     private var libraryList: some View {
         // One clock moves rows between date sections and refreshes their relative dates.
         TimelineView(.everyMinute) { context in
             List(selection: selection) {
-                if !model.selectedTagIDs.isEmpty {
+                if !state.selectedTagIDs.isEmpty {
                     searchScope
                 }
                 if !pinnedNotes.isEmpty {
                     pinnedSection(now: context.date)
                 }
                 ForEach(dateSections(now: context.date)) { dateSection($0, now: context.date) }
-                ForEach(displayedCollections) { collectionSection($0, now: context.date) }
-                if model.loadState != .loading && (model.hasFilters ? !model.hasMatches : !hasVisibleNotes) {
+                ForEach(displayedSections) { librarySection($0, now: context.date) }
+                if state.loadState != .loading && (state.hasFilters ? !state.hasMatches : !hasVisibleGists) {
                     emptyState
                 }
             }
@@ -187,34 +187,34 @@ public struct LibraryView: View {
         .scrollDismissesKeyboard(.immediately)
         .environment(\.defaultMinListRowHeight, 44)
         .accessibilityIdentifier("library-list")
-        .animation(reduceMotion ? nil : .default, value: model.matchingNotes.map(\.id))
+        .animation(reduceMotion ? nil : .default, value: state.matchingGists.map(\.id))
     }
 
     /// The sidebar highlights the open gist. Compact lists push it instead, and losing a
     /// visible row is not leaving the open gist.
     private var selection: Binding<String?> {
         Binding(
-            get: { isSidebar ? model.selectedNoteID : nil },
+            get: { isSidebar ? state.selectedID : nil },
             set: { if let id = $0 { actions.select(id) } })
     }
 
-    private var pinnedNotes: [LibraryNote] {
-        model.matchingNotes(in: .gists).filter(\.isPinned)
+    private var pinnedNotes: [GistItem] {
+        state.matchingGists(in: .gists).filter(\.isPinned)
     }
 
-    private func dateSections(now: Date) -> [LibraryDateSection] {
-        LibraryDateSection.sections(
-            for: model.matchingNotes(in: .gists).filter { !$0.isPinned },
+    private func dateSections(now: Date) -> [DateSection] {
+        DateSection.sections(
+            for: state.matchingGists(in: .gists).filter { !$0.isPinned },
             relativeTo: now, calendar: calendar)
     }
 
     private func pinnedSection(now: Date) -> some View {
         disclosureSection(isExpanded: $isPinnedExpanded) {
-            ForEach(pinnedNotes) { noteRow($0, now: now) }
+            ForEach(pinnedNotes) { gistRow($0, now: now) }
         } header: {
             sectionHeader(
                 Text("Pinned", bundle: .module), symbol: "pin", count: pinnedNotes.count,
-                countLabel: LibraryModel.gistCountLabel(pinnedNotes.count),
+                countLabel: LibraryState.gistCountLabel(pinnedNotes.count),
                 isExpanded: $isPinnedExpanded, id: "library-section-pinned")
         }
     }
@@ -224,7 +224,7 @@ public struct LibraryView: View {
     private func disclosureSection<Rows: View, Header: View>(
         isExpanded: Binding<Bool>, @ViewBuilder rows: () -> Rows, @ViewBuilder header: () -> Header
     ) -> some View {
-        if model.hasFilters {
+        if state.hasFilters {
             Section { rows() } header: { header() }
         } else {
             Section(isExpanded: isExpanded) { rows() } header: { header() }
@@ -238,7 +238,7 @@ public struct LibraryView: View {
         _ title: Text, symbol: String? = nil, count: Int?, countLabel: String?,
         isExpanded: Binding<Bool>, id: String
     ) -> some View {
-        let isCollapsible = !model.hasFilters
+        let isCollapsible = !state.hasFilters
         // At accessibility sizes the sidebar header keeps only its title, so it wraps between
         // words. VoiceOver still reads the count from the header's value.
         let titleOnly = isSidebar && dynamicTypeSize.isAccessibilitySize
@@ -266,10 +266,10 @@ public struct LibraryView: View {
                 .contentTransition(.symbolEffect(.replace))
             }
         }
-        let state = !isCollapsible ? nil : isExpanded.wrappedValue
+        let expansion = !isCollapsible ? nil : isExpanded.wrappedValue
             ? String(localized: "Expanded", bundle: .module)
             : String(localized: "Collapsed", bundle: .module)
-        let value = [countLabel, state].compactMap { $0 }.joined(separator: ", ")
+        let value = [countLabel, expansion].compactMap { $0 }.joined(separator: ", ")
         Group {
             if isSidebar || !isCollapsible {
                 label
@@ -291,58 +291,58 @@ public struct LibraryView: View {
         .accessibilityIdentifier(id)
     }
 
-    private var hasVisibleNotes: Bool {
-        !model.matchingNotes(in: .gists).isEmpty || !displayedCollections.isEmpty
+    private var hasVisibleGists: Bool {
+        !state.matchingGists(in: .gists).isEmpty || !displayedSections.isEmpty
     }
 
-    private var displayedCollections: [LibraryCollection] {
-        model.secondaryCollections.filter {
-            !model.hasFilters || !model.matchingNotes(in: $0).isEmpty
+    private var displayedSections: [LibrarySection] {
+        state.secondarySections.filter {
+            !state.hasFilters || !state.matchingGists(in: $0).isEmpty
         }
     }
 
-    private func isExpanded(_ collection: LibraryCollection) -> Binding<Bool> {
+    private func isExpanded(_ section: LibrarySection) -> Binding<Bool> {
         Binding(
-            get: { expandedCollections.contains(collection) },
-            set: { if $0 { expandedCollections.insert(collection) } else { expandedCollections.remove(collection) } })
+            get: { expandedSections.contains(section) },
+            set: { if $0 { expandedSections.insert(section) } else { expandedSections.remove(section) } })
     }
 
-    private func isExpanded(_ group: LibraryDateGroup) -> Binding<Bool> {
+    private func isExpanded(_ group: DateGroup) -> Binding<Bool> {
         Binding(
             get: { !collapsedDateGroups.contains(group) },
             set: { if $0 { collapsedDateGroups.remove(group) } else { collapsedDateGroups.insert(group) } })
     }
 
-    private func collectionSection(_ collection: LibraryCollection, now: Date) -> some View {
-        let count = model.count(in: collection)
-        return disclosureSection(isExpanded: isExpanded(collection)) {
-            ForEach(model.matchingNotes(in: collection)) { noteRow($0, now: now, collection: collection) }
+    private func librarySection(_ section: LibrarySection, now: Date) -> some View {
+        let count = state.count(in: section)
+        return disclosureSection(isExpanded: isExpanded(section)) {
+            ForEach(state.matchingGists(in: section)) { gistRow($0, now: now, section: section) }
         } header: {
             sectionHeader(
-                Text(verbatim: collection.title), symbol: collection.symbol, count: count,
+                Text(verbatim: section.title), symbol: section.symbol, count: count,
                 countLabel: count.map {
-                    collection == .dailyNotes
-                        ? LibraryModel.noteCountLabel($0) : LibraryModel.gistCountLabel($0)
+                    section == .dailyNotes
+                        ? LibraryState.dailyNoteCountLabel($0) : LibraryState.gistCountLabel($0)
                 },
-                isExpanded: isExpanded(collection),
-                id: "library-collection-\(collection.rawValue)")
+                isExpanded: isExpanded(section),
+                id: "library-collection-\(section.rawValue)")
         }
     }
 
     @ViewBuilder
-    private func dateSection(_ section: LibraryDateSection, now: Date) -> some View {
+    private func dateSection(_ section: DateSection, now: Date) -> some View {
         if section.group == .undated {
             Section {
-                ForEach(section.notes) { noteRow($0, now: now) }
+                ForEach(section.gists) { gistRow($0, now: now) }
             }
         } else {
             let title = section.group.title(locale: locale, calendar: calendar)
             disclosureSection(isExpanded: isExpanded(section.group)) {
-                ForEach(section.notes) { noteRow($0, now: now) }
+                ForEach(section.gists) { gistRow($0, now: now) }
             } header: {
                 sectionHeader(
-                    Text(verbatim: title), count: section.notes.count,
-                    countLabel: LibraryModel.gistCountLabel(section.notes.count),
+                    Text(verbatim: title), count: section.gists.count,
+                    countLabel: LibraryState.gistCountLabel(section.gists.count),
                     isExpanded: isExpanded(section.group), id: "library-section-\(title)")
             }
         }
@@ -356,11 +356,11 @@ public struct LibraryView: View {
         Section {
             HStack(alignment: .center, spacing: 12) {
                 TagLabels(
-                    tags: model.snapshot.tags.filter { model.selectedTagIDs.contains($0.id) },
+                    tags: state.tags.filter { state.selectedTagIDs.contains($0.id) },
                     isSelected: true
                 )
-                if let count = model.resultGistCount {
-                    Text(verbatim: LibraryModel.gistCountLabel(count))
+                if let count = state.resultGistCount {
+                    Text(verbatim: LibraryState.gistCountLabel(count))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -368,7 +368,7 @@ public struct LibraryView: View {
                         .accessibilityIdentifier("library-filter-count")
                 }
                 Button {
-                    model.clearFilters()
+                    state.clearFilters()
                 } label: {
                     Label {
                         Text("Clear Tag Filter", bundle: .module)
@@ -387,7 +387,7 @@ public struct LibraryView: View {
 
     private var signedOutInvitation: some View {
         ContentUnavailableView {
-            NotebookArtwork()
+            GistPadArtwork()
             Text("Your gists, on GitHub", bundle: .module)
                 .font(.title2.weight(.semibold))
         } description: {
@@ -403,9 +403,9 @@ public struct LibraryView: View {
     /// With no gists to show, the empty state is also where a failed first load explains itself.
     private var emptyState: some View {
         Section {
-            switch model.loadState {
-            case _ where model.hasFilters:
-                ContentUnavailableView.search(text: model.query)
+            switch state.loadState {
+            case _ where state.hasFilters:
+                ContentUnavailableView.search(text: state.query)
             case .failed(let message):
                 ContentUnavailableView {
                     Label(String(localized: "Couldn't Load Your Gists", bundle: .module), systemImage: "exclamationmark.circle")
@@ -426,7 +426,7 @@ public struct LibraryView: View {
                 }
             default:
                 ContentUnavailableView {
-                    NotebookArtwork()
+                    GistPadArtwork()
                     Text("No Gists Yet", bundle: .module)
                         .font(.title2.weight(.semibold))
                 } description: {
@@ -440,15 +440,15 @@ public struct LibraryView: View {
         .listRowBackground(Color.clear)
     }
 
-    private func noteRow(
-        _ note: LibraryNote, now: Date, collection: LibraryCollection = .gists
+    private func gistRow(
+        _ gist: GistItem, now: Date, section: LibrarySection = .gists
     ) -> some View {
-        NavigationLink(value: note.id) {
-            LibraryNoteRow(
-                note: note, tags: model.tags(for: note), now: now,
-                showsStar: collection != .starred)
+        NavigationLink(value: gist.id) {
+            GistRow(
+                gist: gist, tags: state.tags(for: gist), now: now,
+                showsStar: section != .starred)
         }
-        .accessibilityIdentifier("library-note-\(note.id)")
+        .accessibilityIdentifier("library-note-\(gist.id)")
         .navigationLinkIndicatorVisibility(.hidden)
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
@@ -456,45 +456,45 @@ public struct LibraryView: View {
         .listRowInsets(.vertical, 0)
         // Compact rows sit 16 pt inside the card. The sidebar keeps the system inset.
         .listRowInsets(.horizontal, isSidebar ? nil : compactRowInset)
-        .contextMenu { rowActions(note) }
+        .contextMenu { rowActions(gist) }
         .accessibilityActions {
-            if note.supportsComments {
-                Button(String(localized: "Open Comments", bundle: .module)) { actions.openComments(note.id) }
+            if gist.supportsComments {
+                Button(String(localized: "Open Comments", bundle: .module)) { actions.openComments(gist.id) }
             }
         }
         .deletionConfirmation(
-            title: note.title,
+            title: gist.title,
             isPresented: Binding(
-                get: { pendingDeletion == note.id },
+                get: { pendingDeletion == gist.id },
                 set: { if !$0 { pendingDeletion = nil } }),
-            delete: { actions.delete(note.id) })
+            delete: { actions.delete(gist.id) })
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if note.isOwned {
+            if gist.isOwned {
                 // The confirmation owns the destructive role, not this pending swipe.
                 Button(String(localized: "Delete", bundle: .module), systemImage: "trash") {
-                    pendingDeletion = note.id
+                    pendingDeletion = gist.id
                 }
                 .tint(.red)
             }
-            if note.isOwned, !note.isRecovery {
+            if gist.isOwned, !gist.isRecovery {
                 Button {
-                    actions.toggleArchive(note.id)
+                    actions.toggleArchive(gist.id)
                 } label: {
                     Label(
-                        note.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
+                        gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
                         systemImage: "archivebox"
                     )
                 }
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            if note.isOwned, !note.isRecovery {
+            if gist.isOwned, !gist.isRecovery {
                 Button {
-                    actions.togglePin(note.id)
+                    actions.togglePin(gist.id)
                 } label: {
                     Label(
-                        note.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
-                        systemImage: note.isPinned ? "pin.slash" : "pin"
+                        gist.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
+                        systemImage: gist.isPinned ? "pin.slash" : "pin"
                     )
                 }
             }
@@ -502,34 +502,34 @@ public struct LibraryView: View {
     }
 
     @ViewBuilder
-    private func rowActions(_ note: LibraryNote) -> some View {
-        if note.supportsComments {
+    private func rowActions(_ gist: GistItem) -> some View {
+        if gist.supportsComments {
             Button(
                 String(localized: "Open Comments", bundle: .module), systemImage: "text.bubble"
-            ) { actions.openComments(note.id) }
+            ) { actions.openComments(gist.id) }
         }
-        if note.isOwned, !note.isRecovery {
+        if gist.isOwned, !gist.isRecovery {
             Button(
-                note.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
-                systemImage: note.isPinned ? "pin.slash" : "pin"
-            ) { actions.togglePin(note.id) }
+                gist.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
+                systemImage: gist.isPinned ? "pin.slash" : "pin"
+            ) { actions.togglePin(gist.id) }
             Button(
-                note.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
+                gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
                 systemImage: "archivebox"
-            ) { actions.toggleArchive(note.id) }
+            ) { actions.toggleArchive(gist.id) }
         }
-        if note.isOwned {
+        if gist.isOwned {
             Divider()
             Button(
                 String(localized: "Delete", bundle: .module), systemImage: "trash",
                 role: .destructive
-            ) { pendingDeletion = note.id }
+            ) { pendingDeletion = gist.id }
         }
     }
 
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
-        if model.loadState != .signedOut {
+        if state.loadState != .signedOut {
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             if !isSearchPresented {
                 if let statusProblem {
@@ -550,8 +550,8 @@ public struct LibraryView: View {
             if !isSidebar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     LibraryCreateButton(action: actions.create)
-                    LibraryTodayButton(
-                        summary: model.today, isSelected: isTodaySelected, action: actions.today)
+                    TodayButton(
+                        summary: state.today, isSelected: isTodaySelected, action: actions.today)
                     settingsButton
                 }
             }
@@ -561,7 +561,7 @@ public struct LibraryView: View {
                 }
             }
         }
-        if isSidebar || model.loadState == .signedOut {
+        if isSidebar || state.loadState == .signedOut {
             ToolbarItem(placement: .secondaryAction) {
                 settingsButton
             }
@@ -577,9 +577,9 @@ public struct LibraryView: View {
         Button(String(localized: "Filter by tags", bundle: .module), systemImage: "tag") {
             showingTags = true
         }
-        .symbolVariant(model.selectedTagIDs.isEmpty ? .none : .fill)
-        .disabled(model.snapshot.tags.isEmpty)
-        .accessibilityValue(Text("\(model.selectedTagIDs.count) selected", bundle: .module))
+        .symbolVariant(state.selectedTagIDs.isEmpty ? .none : .fill)
+        .disabled(state.tags.isEmpty)
+        .accessibilityValue(Text("\(state.selectedTagIDs.count) selected", bundle: .module))
         .accessibilityIdentifier("library-filter-tags")
     }
 
@@ -589,10 +589,10 @@ public struct LibraryView: View {
                 Section {
                     ForEach(matchingTags) { tag in
                         Button {
-                            if model.selectedTagIDs.contains(tag.id) {
-                                model.selectedTagIDs.remove(tag.id)
+                            if state.selectedTagIDs.contains(tag.id) {
+                                state.selectedTagIDs.remove(tag.id)
                             } else {
-                                model.selectedTagIDs.insert(tag.id)
+                                state.selectedTagIDs.insert(tag.id)
                             }
                         } label: {
                             HStack(spacing: 12) {
@@ -600,30 +600,30 @@ public struct LibraryView: View {
                                 Text(verbatim: tag.name)
                                     .foregroundStyle(.primary)
                                 Spacer()
-                                Text(model.gistCount(tagged: tag.id), format: .number)
+                                Text(state.gistCount(tagged: tag.id), format: .number)
                                     .monospacedDigit()
                                     .foregroundStyle(.secondary)
                                     .accessibilityHidden(true)
                                 // Reserves its width so the count never shifts when a tag is selected.
                                 Image(systemName: "checkmark")
                                     .foregroundStyle(.tint)
-                                    .opacity(model.selectedTagIDs.contains(tag.id) ? 1 : 0)
+                                    .opacity(state.selectedTagIDs.contains(tag.id) ? 1 : 0)
                                     .accessibilityHidden(true)
                             }
                             .frame(minHeight: 44)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityValue(Text(verbatim: LibraryModel.gistCountLabel(model.gistCount(tagged: tag.id))))
-                        .accessibilityAddTraits(model.selectedTagIDs.contains(tag.id) ? .isSelected : [])
+                        .accessibilityValue(Text(verbatim: LibraryState.gistCountLabel(state.gistCount(tagged: tag.id))))
+                        .accessibilityAddTraits(state.selectedTagIDs.contains(tag.id) ? .isSelected : [])
                         .accessibilityIdentifier("library-tag-filter-\(tag.id)")
                         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: model.selectedTagIDs.contains(tag.id))
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: state.selectedTagIDs.contains(tag.id))
                     }
                 }
-                if !model.selectedTagIDs.isEmpty {
+                if !state.selectedTagIDs.isEmpty {
                     Button(String(localized: "Clear tag filters", bundle: .module)) {
-                        model.selectedTagIDs = []
+                        state.selectedTagIDs = []
                     }
                 }
             }
@@ -647,9 +647,9 @@ public struct LibraryView: View {
         .presentationDragIndicator(.visible)
     }
 
-    private var matchingTags: [LibraryTag] {
+    private var matchingTags: [Tag] {
         let query = tagQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        return model.snapshot.tags.filter { query.isEmpty || $0.name.localizedStandardContains(query) }
+        return state.tags.filter { query.isEmpty || $0.name.localizedStandardContains(query) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 }

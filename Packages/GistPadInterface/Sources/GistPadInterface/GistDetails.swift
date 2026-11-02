@@ -1,18 +1,11 @@
 import Foundation
 import GistPadSync
 
-public enum NoteMode: String, Sendable {
-    case reading, source, split
-}
-
-public struct NoteFile: Equatable, Identifiable, Sendable {
-    public let id: String
-    public let filename: String
-
-    public init(id: String, filename: String) {
-        self.id = id
-        self.filename = filename
-    }
+/// Layout preferences save modes by raw value, so Preview and Edit keep their original ones.
+public enum FileMode: String, Sendable {
+    case preview = "reading"
+    case edit = "source"
+    case split
 }
 
 extension PublishState {
@@ -31,22 +24,32 @@ extension PublishState {
     }
 }
 
-public enum NoteAccess: Equatable, Sendable {
+public enum FileAccess: Equatable, Sendable {
     case editable
     case readOnly
 
     public var canEdit: Bool { self == .editable }
 }
 
-public struct NoteChrome: Equatable, Sendable {
+public struct GistDetails: Equatable, Sendable {
+    public struct File: Equatable, Identifiable, Sendable {
+        public let id: String
+        public let filename: String
+
+        public init(id: String, filename: String) {
+            self.id = id
+            self.filename = filename
+        }
+    }
+
     public var title: String
-    public var files: [NoteFile]
+    public var files: [File]
     public var selectedFileID: String
-    public var access: NoteAccess
+    public var access: FileAccess
     public var isPinned: Bool
     public var isStarred: Bool
     public var isArchived: Bool
-    public var tags: [LibraryTag]
+    public var tags: [Tag]
     public var isAutoSaveEnabled: Bool
     public var commentCount: Int?
     /// The gistpad.dev link to this file, once it's on GitHub.
@@ -60,9 +63,9 @@ public struct NoteChrome: Equatable, Sendable {
     }
 
     public init(
-        title: String, files: [NoteFile], selectedFileID: String,
-        access: NoteAccess = .editable, isPinned: Bool = false,
-        isStarred: Bool = false, isArchived: Bool = false, tags: [LibraryTag] = [],
+        title: String, files: [File], selectedFileID: String,
+        access: FileAccess = .editable, isPinned: Bool = false,
+        isStarred: Bool = false, isArchived: Bool = false, tags: [Tag] = [],
         isAutoSaveEnabled: Bool = false, commentCount: Int? = nil, shareURL: URL? = nil
     ) {
         self.title = title
@@ -79,9 +82,9 @@ public struct NoteChrome: Equatable, Sendable {
     }
 }
 
-/// Actions every note has. Optional members are capabilities only some gists have.
+/// Actions every gist has. Optional members are capabilities only some gists have.
 @MainActor
-public struct NoteActions {
+public struct GistActions {
     public var save: () -> Void = {}
     public var reconnect: () -> Void = {}
     public var reviewChanges: () -> Void = {}

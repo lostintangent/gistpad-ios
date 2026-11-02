@@ -206,13 +206,13 @@ private final class SourceKeyboardFixture {
         self.window = window
         let controller = SourceKeyboardHostingController(rootView:
             NavigationStack {
-                NoteScreen(
-                    document: .init(
+                GistScreen(
+                    gist: .init(
                         title: "A reachable source page",
                         files: [.init(id: "README.md", filename: "README.md")],
                         selectedFileID: "README.md"
                     ),
-                    mode: .constant(.source), saveState: .savedToGitHub
+                    mode: .constant(.edit), saveState: .savedToGitHub
                 ) {
                     EditorView(session: session)
                 } preview: {

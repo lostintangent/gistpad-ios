@@ -18,17 +18,17 @@ struct NotebookLayoutTests {
     let account = UUID()
     let otherAccount = UUID()
     let layout = NotebookLayoutPreferences(defaults: defaults)
-    #expect(layout.expandedCollections(accountID: account).isEmpty)
-    layout.setExpandedCollections([.gists, .dailyNotes, .archive], accountID: account)
-    #expect(layout.expandedCollections(accountID: account) == [.dailyNotes, .archive])
-    #expect(layout.expandedCollections(accountID: otherAccount).isEmpty)
+    #expect(layout.expandedSections(accountID: account).isEmpty)
+    layout.setExpandedSections([.gists, .dailyNotes, .archived], accountID: account)
+    #expect(layout.expandedSections(accountID: account) == [.dailyNotes, .archived])
+    #expect(layout.expandedSections(accountID: otherAccount).isEmpty)
     let restored = NotebookLayoutPreferences(defaults: defaults)
-    #expect(restored.expandedCollections(accountID: account) == [.dailyNotes, .archive])
-    restored.setExpandedCollections([.starred], accountID: otherAccount)
-    restored.setExpandedCollections([], accountID: account)
+    #expect(restored.expandedSections(accountID: account) == [.dailyNotes, .archived])
+    restored.setExpandedSections([.starred], accountID: otherAccount)
+    restored.setExpandedSections([], accountID: account)
     let relaunched = NotebookLayoutPreferences(defaults: defaults)
-    #expect(relaunched.expandedCollections(accountID: account).isEmpty)
-    #expect(relaunched.expandedCollections(accountID: otherAccount) == [.starred])
+    #expect(relaunched.expandedSections(accountID: account).isEmpty)
+    #expect(relaunched.expandedSections(accountID: otherAccount) == [.starred])
   }
 
   @Test func modeChoicePersistsOnThisDeviceWithoutAffectingTheCompactFallback() throws {
@@ -37,15 +37,15 @@ struct NotebookLayoutTests {
     defer { defaults.removePersistentDomain(forName: name) }
     let layout = NotebookLayoutPreferences(defaults: defaults)
     #expect(layout.preferredMode == .split)
-    #expect(layout.compactMode == .reading)
-    layout.select(.source)
+    #expect(layout.compactMode == .preview)
+    layout.select(.edit)
     layout.select(.split)
     let restored = NotebookLayoutPreferences(defaults: defaults)
     #expect(restored.preferredMode == .split)
-    #expect(restored.compactMode == .source)
-    restored.select(.reading)
-    #expect(NotebookLayoutPreferences(defaults: defaults).preferredMode == .reading)
-    #expect(restored.initialMode(isUnpublished: true) == .source)
+    #expect(restored.compactMode == .edit)
+    restored.select(.preview)
+    #expect(NotebookLayoutPreferences(defaults: defaults).preferredMode == .preview)
+    #expect(restored.initialMode(isUnpublished: true) == .edit)
   }
 
   @Test func splitEligibilityUsesTheDocumentWidthAndKeepsReadOnlyNotesReadOnly() throws {
@@ -59,16 +59,16 @@ struct NotebookLayoutTests {
     #expect(NotebookLayoutPreferences.allowsSplit(availableWidth: 641))
     #expect(
       layout.presentedMode(
-        availableWidth: 800, sessionMode: .reading, isEditing: false, canEdit: true) == .split)
+        availableWidth: 800, sessionMode: .preview, isEditing: false, canEdit: true) == .split)
     #expect(
       layout.presentedMode(
-        availableWidth: 402, sessionMode: .reading, isEditing: true, canEdit: true) == .source)
+        availableWidth: 402, sessionMode: .preview, isEditing: true, canEdit: true) == .edit)
     #expect(
       layout.presentedMode(
-        availableWidth: 402, sessionMode: .reading, isEditing: false, canEdit: true) == .reading)
+        availableWidth: 402, sessionMode: .preview, isEditing: false, canEdit: true) == .preview)
     #expect(
       layout.presentedMode(
-        availableWidth: 800, sessionMode: .source, isEditing: true, canEdit: false) == .reading)
+        availableWidth: 800, sessionMode: .edit, isEditing: true, canEdit: false) == .preview)
     #expect(layout.preferredMode == .split)
   }
 
@@ -205,12 +205,12 @@ private struct LayoutNoteFixture: View {
   var body: some View {
     GeometryReader { _ in
       NavigationStack {
-        NoteScreen(
-          document: .init(title: "Retained draft", files: [], selectedFileID: ""),
+        GistScreen(
+          gist: .init(title: "Retained draft", files: [], selectedFileID: ""),
           mode: Binding(
             get: {
               layout.presentedMode(
-                availableWidth: width, sessionMode: .source,
+                availableWidth: width, sessionMode: .edit,
                 isEditing: session.isEditing, canEdit: true)
             },
             set: { layout.select($0) }),

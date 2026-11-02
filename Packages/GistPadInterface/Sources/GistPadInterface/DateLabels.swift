@@ -1,6 +1,6 @@
 import Foundation
 
-enum LibraryDatePresentation {
+enum DateLabels {
     static func updateLabel(
         for date: Date, relativeTo now: Date, locale: Locale, calendar: Calendar
     ) -> String {

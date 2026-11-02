@@ -34,11 +34,11 @@ struct LiveNotebookWorkspace: View {
 
   private var active: NotebookSessionController? { notebook.activeFile }
 
-  private var libraryCollections: Binding<Set<LibraryCollection>> {
+  private var librarySections: Binding<Set<LibrarySection>> {
     guard let accountID = notebook.account?.id else { return .constant([]) }
     return Binding(
-      get: { layout.expandedCollections(accountID: accountID) },
-      set: { layout.setExpandedCollections($0, accountID: accountID) })
+      get: { layout.expandedSections(accountID: accountID) },
+      set: { layout.setExpandedSections($0, accountID: accountID) })
   }
 
   private var pinnedExpanded: Binding<Bool> {
@@ -61,8 +61,8 @@ struct LiveNotebookWorkspace: View {
       if notebook.account == nil {
         NavigationStack {
           LibraryView(
-            model: notebook.library, actions: libraryActions, isSidebar: horizontalSizeClass == .regular,
-            expandedCollections: libraryCollections, isPinnedExpanded: pinnedExpanded)
+            state: notebook.library, actions: libraryActions, isSidebar: horizontalSizeClass == .regular,
+            expandedSections: librarySections, isPinnedExpanded: pinnedExpanded)
         }
       } else {
         notebookNavigation
@@ -79,11 +79,11 @@ struct LiveNotebookWorkspace: View {
       columnVisibility: $columnVisibility, preferredCompactColumn: $compactColumn
     ) {
       LibraryView(
-        model: notebook.library, actions: libraryActions,
+        state: notebook.library, actions: libraryActions,
         isSidebar: horizontalSizeClass == .regular,
         isTodaySelected: notebook.isTodaySelected,
         problem: libraryProblem,
-        expandedCollections: libraryCollections,
+        expandedSections: librarySections,
         isPinnedExpanded: pinnedExpanded)
         .id(notebook.account?.id)
     } detail: {
@@ -100,7 +100,7 @@ struct LiveNotebookWorkspace: View {
               .id(document.id)
           } else if let title = notebook.openingTitle {
             NotebookOpeningView(title: title)
-              .id(notebook.opening?.rowID ?? notebook.library.selectedNoteID)
+              .id(notebook.opening?.rowID ?? notebook.library.selectedID)
           } else {
             NotebookOpeningView(title: String(localized: "Today"))
           }
@@ -113,7 +113,7 @@ struct LiveNotebookWorkspace: View {
       .frame(minWidth: comments.isPresented && horizontalSizeClass == .regular ? 320 : 0)
     }
     .navigationSplitViewStyle(.balanced)
-    .librarySearch(model: notebook.library)
+    .librarySearch(state: notebook.library)
     .commentsInspector(comments, active: active, columnVisibility: $columnVisibility)
   }
 
@@ -133,7 +133,7 @@ struct LiveNotebookWorkspace: View {
         Task { await outgoing.finishLeavingNote() }
       }
     }
-    .onChange(of: notebook.library.selectedNoteID) { _, selected in
+    .onChange(of: notebook.library.selectedID) { _, selected in
       if selected == nil, notebook.opening == nil { compactColumn = .sidebar }
     }
     .onChange(of: compactColumn) { previous, current in
@@ -155,7 +155,7 @@ struct LiveNotebookWorkspace: View {
     active.requestCreationFocus()
     openRequestedComments()
     // A completed restoration must not reopen detail after returning to Library.
-    if notebook.library.selectedNoteID != nil, active.document.revealsDetail {
+    if notebook.library.selectedID != nil, active.document.revealsDetail {
       compactColumn = .detail
     }
     #if DEBUG
@@ -381,9 +381,9 @@ struct LiveNotebookWorkspace: View {
           layout.select($0)
           if $0 != .split { controller.mode = $0 }
         }
-        if $0 == .source {
+        if $0 == .edit {
           controller.session.requestFocusAtContentStart()
-        } else if $0 == .reading {
+        } else if $0 == .preview {
           controller.session.textView.resignFirstResponder()
         }
       })
@@ -391,8 +391,8 @@ struct LiveNotebookWorkspace: View {
     if comments.matches(controller.document) {
       chrome.commentCount = comments.conversation?.comments?.count ?? chrome.commentCount
     }
-    return NoteScreen(
-      document: chrome, mode: mode,
+    return GistScreen(
+      gist: chrome, mode: mode,
       saveState: controller.saveState, actions: noteActions(controller),
       allowsSplit: !comments.isPresented && NotebookLayoutPreferences.allowsSplit(availableWidth: availableWidth),
       isSidebarHidden: columnVisibility == .detailOnly,
@@ -404,12 +404,12 @@ struct LiveNotebookWorkspace: View {
         canInsertPhoto: photos.canChoosePhoto,
         intelligence: { comments.performAfterClosing { presentIntelligence(controller) } },
         comments: commentConfiguration(controller),
-        onOpenCommentThreads: commentOpener(controller, origin: .source),
+        onOpenCommentThreads: commentOpener(controller, origin: .edit),
         onLinkedCommentIDsChange: { ids in
           guard comments.sessionID == controller.session.id else { return }
           comments.sourceLinkedIDs = ids
         },
-        onAddComment: commentComposer(controller, origin: .source))
+        onAddComment: commentComposer(controller, origin: .edit))
     } preview: {
       preview(controller)
     }
@@ -458,7 +458,7 @@ struct LiveNotebookWorkspace: View {
     }
     .onChange(of: NotebookLayoutPreferences.allowsSplit(availableWidth: availableWidth)) { _, allows in
       if !allows, layout.preferredMode == .split, controller.session.isEditing {
-        controller.mode = .source
+        controller.mode = .edit
       }
     }
   }
@@ -467,14 +467,14 @@ struct LiveNotebookWorkspace: View {
     FilePreview(
       session: controller.session, allowsMutations: controller.chrome.access.canEdit,
       comments: commentConfiguration(controller),
-      onOpenCommentThreads: commentOpener(controller, origin: .reading),
+      onOpenCommentThreads: commentOpener(controller, origin: .preview),
       onLinkedCommentIDsChange: { ids in
         guard comments.sessionID == controller.session.id else { return }
         comments.previewLinkedIDs = ids
       },
-      onAddComment: commentComposer(controller, origin: .reading),
+      onAddComment: commentComposer(controller, origin: .preview),
       openWikilink: { target in
-        if let note = notebook.library.snapshot.notes.first(where: {
+        if let note = notebook.library.gists.first(where: {
           $0.title.localizedStandardCompare(target) == .orderedSame
         }) {
           open(gistID: note.id)
@@ -500,7 +500,7 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func commentOpener(
-    _ controller: NotebookSessionController, origin: NoteMode
+    _ controller: NotebookSessionController, origin: FileMode
   ) -> (@MainActor ([Int64]) -> Void)? {
     guard CommentsPresentation.supports(controller.document) else { return nil }
     return { ids in
@@ -518,7 +518,7 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func commentComposer(
-    _ controller: NotebookSessionController, origin: NoteMode
+    _ controller: NotebookSessionController, origin: FileMode
   ) -> (@MainActor (String) -> Void)? {
     guard CommentsPresentation.supports(controller.document) else { return nil }
     return { selection in
@@ -544,8 +544,8 @@ struct LiveNotebookWorkspace: View {
     let showsInline: Bool
   }
 
-  private func noteActions(_ controller: NotebookSessionController) -> NoteActions {
-    var actions = NoteActions()
+  private func noteActions(_ controller: NotebookSessionController) -> GistActions {
+    var actions = GistActions()
     actions.focus = {
       let target: NavigationSplitViewVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
       comments.performAfterClosing {
@@ -628,7 +628,7 @@ struct LiveNotebookWorkspace: View {
       }
     }
     actions.find = {
-      controller.mode = .source
+      controller.mode = .edit
       controller.session.find(replacing: true)
     }
     actions.intelligence = { presentIntelligence(controller) }
@@ -687,8 +687,8 @@ struct LiveNotebookWorkspace: View {
           notebook.documentError = String(localized: "This reference no longer matches the file.")
           return
         }
-        layout.select(.source)
-        controller.mode = .source
+        layout.select(.edit)
+        controller.mode = .edit
         Task { @MainActor in
           await Task.yield()
           guard controller.session.generation == generation else {
@@ -762,7 +762,7 @@ struct LiveNotebookWorkspace: View {
       save = nil
     }
     return TagEditor(
-      tags: notebook.library.snapshot.tags, selectedTagIDs: target.selected, save: save)
+      tags: notebook.library.tags, selectedTagIDs: target.selected, save: save)
   }
 
   private func recoverWrite() async {

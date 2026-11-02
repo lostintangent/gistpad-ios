@@ -197,7 +197,7 @@ struct NotebookDocumentSwitchingTests {
       }
       try await Task.sleep(for: .milliseconds(250))
       host.traitOverrides.horizontalSizeClass = index.isMultiple(of: 2) ? .regular : .compact
-      for mode in [NoteMode.reading, .split, .source] {
+      for mode in [FileMode.preview, .split, .edit] {
         state.mode = mode
         try await Task.sleep(for: .milliseconds(150))
         host.view.layoutIfNeeded()
@@ -208,7 +208,7 @@ struct NotebookDocumentSwitchingTests {
         #expect(editor.contentSize.width > 0)
         #expect(editor.selectedRange == selection)
         #expect(session.generation == 0)
-        if mode == .source {
+        if mode == .edit {
           #expect(!editor.isHidden)
           let caret = editor.caretRect(for: editor.beginningOfDocument)
           #expect(caret.height > 0)
@@ -371,7 +371,7 @@ private final class SourceHostWindow {
 @Observable
 private final class ReidentifiedSourceState {
   var identity = 0
-  var mode = NoteMode.source
+  var mode = FileMode.edit
 }
 
 private struct ReidentifiedSourceFixture: View {
@@ -392,8 +392,8 @@ private struct ReidentifiedSourceFixture: View {
   }
 
   private var detail: some View {
-    NoteScreen(
-      document: .init(
+    GistScreen(
+      gist: .init(
         title: "A visible source",
         files: [.init(id: "README.md", filename: "README.md")],
         selectedFileID: "README.md"),

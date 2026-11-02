@@ -21,7 +21,7 @@ final class CommentsPresentation {
   var threadRevealRevision: UInt64 = 0
   var sourceLinkedIDs: Set<Int64>?
   var previewLinkedIDs: Set<Int64>?
-  var documentMode: NoteMode = .reading
+  var documentMode: FileMode = .preview
   var detent = PresentationDetent.medium
   var isComposerFocused = false
   var preparationFailure: String?
@@ -71,7 +71,7 @@ final class CommentsPresentation {
   }
 
   func open(
-    for next: NotebookSessionController, origin: NoteMode? = nil,
+    for next: NotebookSessionController, origin: FileMode? = nil,
     rootID: Int64? = nil, quote: String? = nil
   ) {
     guard sessionID == next.session.id, Self.supports(next.document) else { return }
@@ -79,12 +79,12 @@ final class CommentsPresentation {
     if opening {
       returnsToEditing = next.session.textView.isFirstResponder
       if returnsToEditing { next.session.textView.resignFirstResponder() }
-      documentMode = origin ?? (returnsToEditing || next.session.isEditing ? .source : next.mode)
-      if documentMode == .split { documentMode = .reading }
+      documentMode = origin ?? (returnsToEditing || next.session.isEditing ? .edit : next.mode)
+      if documentMode == .split { documentMode = .preview }
     } else if let origin {
       documentMode = origin
     }
-    if !next.chrome.access.canEdit { documentMode = .reading }
+    if !next.chrome.access.canEdit { documentMode = .preview }
     detent = quote == nil ? .medium : .large
     selectedRootID = rootID
     preparationFailure = nil

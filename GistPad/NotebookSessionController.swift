@@ -36,7 +36,7 @@ final class NotebookSessionController {
   private(set) var isPerformingDestructiveAction = false
   private(set) var isApplyingDurableEdit = false
   private(set) var remoteInspectionProblem: NotebookRemoteReadProblem?
-  var mode: NoteMode = .reading
+  var mode: FileMode = .preview
   @ObservationIgnored let notebook: NotebookModel
   @ObservationIgnored private var persistence: Task<Bool, Never>?
   @ObservationIgnored private var autosaveTask: Task<Void, Never>?
@@ -61,7 +61,7 @@ final class NotebookSessionController {
       fileID: document.id, text: draft.text, generation: draft.generation,
       showsFrontMatter: notebook.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
     saveState = document.isRecovery ? .failed(.readOnly) : draft.state
-    if draft.baseContent == nil { mode = .source }
+    if draft.baseContent == nil { mode = .edit }
     session.textView.isEditable = chrome.access.canEdit
     applyWritingPreferences()
     session.onEdit = { [weak self] text, generation in
@@ -78,7 +78,7 @@ final class NotebookSessionController {
   }
 
   /// The note's header and actions, always current with the notebook.
-  var chrome: NoteChrome { notebook.chrome(for: document) }
+  var chrome: GistDetails { notebook.chrome(for: document) }
 
   var canMutate: Bool {
     chrome.access.canEdit && !isDiscarded && session.isSettled
@@ -102,7 +102,7 @@ final class NotebookSessionController {
     guard let request = document.editingRequestID, request != lastEditingRequestID, canMutate
     else { return }
     lastEditingRequestID = request
-    mode = .source
+    mode = .edit
     session.requestFocusAtEnd()
   }
 
