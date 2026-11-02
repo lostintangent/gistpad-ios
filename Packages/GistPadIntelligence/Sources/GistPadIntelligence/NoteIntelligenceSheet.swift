@@ -88,7 +88,7 @@
               .disabled(model.isCancelling)
               .accessibilityIdentifier("intelligence-cancel")
             } else {
-              Button(verb) {
+              Button(verb, role: .confirm) {
                 promptFocused = false
                 model.generate()
               }
