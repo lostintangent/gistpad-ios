@@ -16,6 +16,7 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 - **Publish** means sending to GitHub. Saving on the phone is never announced.
 - Inserted pictures are **images**, never "photos", because they can be screenshots or anything else.
 - Recovery buttons say **Try Again**.
+- Every sign-in button says **Sign in with GitHub**, as text with no mark, cased like Apple's Sign in with Apple.
 - `ContentUnavailableView` titles and alert titles are title case. Messages are sentence case and end with a period.
 - Failures use `exclamationmark.circle`.
 - Commands that open a dialog or sheet end with "…".
@@ -68,10 +69,10 @@ The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and
 
 | State | Title, message and action |
 | --- | --- |
-| Signed out | **Your gists, on GitHub** / Markdown and daily notes, kept in your GitHub gists. / Continue with GitHub |
+| Signed out | **Welcome to GistPad** / Your knowledge and daily notes, kept in GitHub gists. / Sign in with GitHub |
 | No gists | **No Gists Yet** / A thought, a list, a little thing worth keeping. Start your first gist. / New Gist |
 | Load failed | **Couldn't Load Your Gists** / the reason / Try Again |
-| Sign-in lapsed | **Reconnect GitHub** / the reason / Continue with GitHub |
+| Sign-in lapsed | **Reconnect GitHub** / the reason / Sign in with GitHub |
 
 ### Today and Comments buttons
 
@@ -116,7 +117,7 @@ The tag editor and filter are one family: searchable sheets at medium and large 
 
 Settings is a small Form:
 
-- **Account.** Signed out shows **Connect GitHub**, "Sign in to open your GitHub gists, daily notes and saved tags." and **Sign In with GitHub**.
+- **Account.** Signed out shows **Connect GitHub**, "Sign in to open your GitHub gists, daily notes and saved tags." and **Sign in with GitHub**.
 - **Writing.** Autosave While Writing, Check Spelling and Show Front Matter, with no footers.
 - **Appearance.** Accent Color.
 - **Switch GitHub Account**, then **Sign Out**, which confirms with **Sign Out?**
