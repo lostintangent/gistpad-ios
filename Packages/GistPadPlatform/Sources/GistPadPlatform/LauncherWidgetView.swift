@@ -63,37 +63,63 @@ public struct LauncherWidgetView: View {
 
     private var medium: some View {
         HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                Link(destination: GistPadLink.today.url) { dateBlock }
-                Spacer(minLength: 0)
-                newGist.offset(x: -3 - newGistInset, y: 4 + newGistInset)
-            }
-            // A fixed column keeps titles their room at accessibility sizes, widening only for a long weekday.
-            .frame(minWidth: 100, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .topLeading)
-            VStack(alignment: .leading, spacing: 0) {
-                if recents.isEmpty {
-                    note
-                } else {
-                    let shown = recents.prefix(dynamicTypeSize.isAccessibilitySize ? 2 : 3)
-                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, gist in
-                        if index > 0 { Divider().frame(height: 10) }
-                        row(gist, lineLimit: 1, showsTime: true)
+            Link(destination: GistPadLink.today.url) { dateBlock }
+                // A fixed column keeps titles their room at accessibility sizes, widening only for a long weekday.
+                .frame(minWidth: 100, alignment: .leading)
+                .frame(maxHeight: .infinity, alignment: .topLeading)
+            ZStack(alignment: .topLeading) {
+                rowSlots
+                VStack(alignment: .leading, spacing: 0) {
+                    if recents.isEmpty {
+                        note
+                    } else {
+                        ForEach(Array(recents.prefix(rowCount).enumerated()), id: \.element.id) { index, gist in
+                            if index > 0 { Divider().frame(height: rowGap) }
+                            row(gist, lineLimit: 1, showsTime: true)
+                        }
                     }
                 }
-                Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .overlay(alignment: Alignment(horizontal: .leading, vertical: .lastRowBaseline)) {
+            newGist.offset(x: -3 - newGistInset)
+        }
+    }
+
+    private var rowCount: Int { dynamicTypeSize.isAccessibilitySize ? 2 : 3 }
+    private let rowGap: CGFloat = 10
+
+    /// A full list's rows, unseen, so New Gist mirrors the date: its square sits on the last row's
+    /// baseline as the weekday's cap top meets the first title's, however many gists there are.
+    private var rowSlots: some View {
+        VStack(alignment: .leading, spacing: rowGap) {
+            ForEach(1..<rowCount, id: \.self) { _ in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(verbatim: " ").font(.subheadline.weight(.semibold))
+                    Text(verbatim: " ").font(.footnote)
+                }
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(verbatim: " ").font(.subheadline.weight(.semibold))
+                Text(verbatim: " ").font(.footnote)
+                    .alignmentGuide(.lastRowBaseline) { $0[.lastTextBaseline] }
+            }
+        }
+        .hidden()
+        .accessibilityHidden(true)
     }
 
     private var dateBlock: some View {
         VStack(alignment: .leading, spacing: -2) {
-            Text(date, format: .dateTime.weekday(.wide))
-                .textCase(.uppercase)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(accent)
-                .widgetAccentable()
+            ViewThatFits(in: .horizontal) {
+                Text(date, format: .dateTime.weekday(.wide))
+                Text(date, format: .dateTime.weekday(.abbreviated))
+            }
+            .textCase(.uppercase)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(accent)
+            .widgetAccentable()
             Text(date, format: .dateTime.day())
                 .font(.largeTitle)
         }
@@ -112,6 +138,8 @@ public struct LauncherWidgetView: View {
                     .font(.title3)
                     .foregroundStyle(accent)
                     .widgetAccentable()
+                    // The square's bottom edge hangs just under halfway from the symbol's baseline to its bounds.
+                    .alignmentGuide(.lastRowBaseline) { $0[.lastTextBaseline] + ($0[.bottom] - $0[.lastTextBaseline]) * 0.45 }
                     .frame(width: newGistSize, height: newGistSize)
                     .padding(newGistInset)
                     .contentShape(Rectangle())
@@ -170,5 +198,13 @@ public struct LauncherWidgetView: View {
         return updatedAt.formatted(
             calendar.isDate(updatedAt, equalTo: date, toGranularity: .year) ? day : day.year())
     }
+}
+
+private extension VerticalAlignment {
+    private enum LastRowBaseline: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat { context[.bottom] }
+    }
+
+    static let lastRowBaseline = VerticalAlignment(LastRowBaseline.self)
 }
 #endif
