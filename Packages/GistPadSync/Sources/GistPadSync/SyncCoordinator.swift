@@ -119,7 +119,7 @@ public actor SyncCoordinator {
                 }
                 throw CancellationError()
             }
-            let state: SaveState
+            let state: PublishState
             if latest.gistID == nil, latest.attemptedGeneration != nil {
                 state = .failed(.creationUncertain)
             } else if let error = error as? GitHubClientError {
@@ -132,10 +132,6 @@ public actor SyncCoordinator {
                 }
             } else if error is AccountError {
                 state = .reconnect
-            } else if let error = error as? URLError,
-                      [.notConnectedToInternet, .networkConnectionLost, .timedOut,
-                       .cannotConnectToHost, .cannotFindHost, .dataNotAllowed].contains(error.code) {
-                state = .offline
             } else if (error as? DraftError) == .readOnly {
                 state = .failed(.readOnly)
             } else {

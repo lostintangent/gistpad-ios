@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-public enum SaveFailure: Codable, Equatable, Sendable {
+public enum PublishFailure: Codable, Equatable, Sendable {
     case network
     case http(status: Int, retryAfter: Date?)
     case readOnly
@@ -18,13 +18,12 @@ public struct DraftConflict: Codable, Equatable, Sendable {
     public let remoteRevision: String?
 }
 
-public enum SaveState: Codable, Equatable, Sendable {
+public enum PublishState: Codable, Equatable, Sendable {
     case savedLocally
     case savingToGitHub(generation: UInt64)
     case savedToGitHub
-    case offline
     case reconnect
-    case failed(SaveFailure)
+    case failed(PublishFailure)
     case conflict(DraftConflict)
 }
 
@@ -42,7 +41,7 @@ public struct DraftSnapshot: Equatable, Sendable, Identifiable {
     public let attemptedContent: String?
     public let attemptedGeneration: UInt64?
     public let autosavePaused: Bool
-    public let state: SaveState
+    public let state: PublishState
     public let updatedAt: Date?
 
     public var isDiscardableBlank: Bool {
@@ -160,9 +159,9 @@ public actor DraftStore {
         context.autosaveEnabled = false
         modelExecutor = DefaultSerialModelExecutor(modelContext: context)
         for draft in try context.fetch(FetchDescriptor<StoredDraft>()) {
-            if case .savingToGitHub = try JSONDecoder().decode(SaveState.self, from: draft.stateData) {
-                let failure: SaveFailure = draft.gistID == nil ? .creationUncertain : .publicationUncertain
-                draft.stateData = try JSONEncoder().encode(SaveState.failed(failure))
+            if case .savingToGitHub = Self.decode(draft.stateData) {
+                let failure: PublishFailure = draft.gistID == nil ? .creationUncertain : .publicationUncertain
+                draft.stateData = try JSONEncoder().encode(PublishState.failed(failure))
             }
         }
         for image in try context.fetch(FetchDescriptor<StoredImageUpload>()) {
@@ -358,7 +357,7 @@ public actor DraftStore {
         guard draft.gistID != nil || draft.attemptedGeneration == nil else {
             throw DraftError.ambiguousCreation
         }
-        if case .savingToGitHub = try decode(draft.stateData) { throw DraftError.publishInProgress }
+        if case .savingToGitHub = Self.decode(draft.stateData) { throw DraftError.publishInProgress }
         let images = try modelContext.fetch(FetchDescriptor<StoredImageUpload>(
             predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }))
         if onlyIfClean {
@@ -538,7 +537,7 @@ public actor DraftStore {
     }
 
     private func replaceText(_ draft: StoredDraft, text: String, generation: UInt64) throws {
-        let previousState = try decode(draft.stateData)
+        let previousState = Self.decode(draft.stateData)
         if !sourceEqual(draft.text, text) { draft.updatedAt = .now }
         draft.text = text
         draft.generation = generation
@@ -641,13 +640,13 @@ public actor DraftStore {
         let draft = try find(id, accountID: accountID)
         guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
         guard draft.gistID == nil, draft.attemptedGeneration != nil,
-              case .failed(.creationUncertain) = try decode(draft.stateData) else {
+              case .failed(.creationUncertain) = Self.decode(draft.stateData) else {
             throw DraftError.ambiguousCreation
         }
         return draft
     }
 
-    func setState(_ state: SaveState, id: UUID, accountID: UUID) throws {
+    func setState(_ state: PublishState, id: UUID, accountID: UUID) throws {
         let draft = try find(id, accountID: accountID)
         draft.stateData = try encode(state)
         try commit()
@@ -659,7 +658,7 @@ public actor DraftStore {
     ) throws -> DraftSnapshot {
         let draft = try find(id, accountID: accountID)
         guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
-        guard case .conflict(let conflict) = try decode(draft.stateData),
+        guard case .conflict(let conflict) = Self.decode(draft.stateData),
               conflict.generation == expectedGeneration,
               conflict.generation == expectedConflict.generation,
               sourceEqual(conflict.base, expectedConflict.base),
@@ -682,7 +681,7 @@ public actor DraftStore {
     ) throws -> DraftSnapshot {
         let draft = try find(id, accountID: accountID)
         guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
-        let state = try decode(draft.stateData)
+        let state = Self.decode(draft.stateData)
         if case .conflict = state { return try snapshot(draft) }
         if let generation = draft.attemptedGeneration {
             if case .savingToGitHub = state { throw DraftError.publishInProgress }
@@ -713,7 +712,7 @@ public actor DraftStore {
                 || (generation == expectedGeneration && sourceEqual(text, draft.text)) else {
             throw DraftError.staleGeneration
         }
-        guard case .conflict(let conflict) = try decode(draft.stateData),
+        guard case .conflict(let conflict) = Self.decode(draft.stateData),
               conflict.generation == expectedGeneration else { throw DraftError.unresolvedConflict }
         draft.baseContent = conflict.remote
         draft.baseRevision = conflict.remoteRevision
@@ -752,12 +751,15 @@ public actor DraftStore {
             baseContent: draft.baseContent, baseRevision: draft.baseRevision,
             attemptedContent: draft.attemptedContent, attemptedGeneration: draft.attemptedGeneration,
             autosavePaused: draft.autosavePaused,
-            state: try decode(draft.stateData), updatedAt: draft.updatedAt
+            state: Self.decode(draft.stateData), updatedAt: draft.updatedAt
         )
     }
 
-    private func encode(_ state: SaveState) throws -> Data { try JSONEncoder().encode(state) }
-    private func decode(_ data: Data) throws -> SaveState { try JSONDecoder().decode(SaveState.self, from: data) }
+    private func encode(_ state: PublishState) throws -> Data { try JSONEncoder().encode(state) }
+    // Older builds stored states that no longer exist, such as `offline`. Those drafts are simply unpublished.
+    private static func decode(_ data: Data) -> PublishState {
+        (try? JSONDecoder().decode(PublishState.self, from: data)) ?? .savedLocally
+    }
 
     func commit() throws {
         do { try modelContext.save() }

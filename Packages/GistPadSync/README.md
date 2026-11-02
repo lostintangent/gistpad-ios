@@ -65,7 +65,7 @@ On reopen, capture the stored generation **before** requesting fresh remote cont
 
 The coordinator serializes publication, freshly reads the remote file, validates ownership/completeness, and persists the attempted content and generation before sending. Acknowledging one generation never clears newer local typing. The draft keeps the user's text until GitHub acknowledges that generation. On restart, an interrupted operation becomes uncertain rather than remaining labelled "Saving".
 
-`SaveState` distinguishes local durability, an in-flight generation, GitHub acknowledgement, offline, reconnect, typed failures and conflicts. A failure is persisted and thrown. The UI should reload the snapshot to show its state. A `404` retains the draft. A `403` is not sign-out. Rate-limit reset and `Retry-After` deadlines are honored.
+`PublishState` distinguishes local durability, an in-flight generation, GitHub acknowledgement, reconnect, typed failures and conflicts. A network failure is `.failed(.network)` and retries on the next publish. A failure is persisted and thrown. The UI should reload the snapshot to show its state. A `404` retains the draft. A `403` is not sign-out. Rate-limit reset and `Retry-After` deadlines are honored.
 
 The document session owns the web's five-second autosave delay and account/input eligibility. The coordinator only publishes accepted durable generations. Disabling autosave or changing accounts cancels the session's pending request. Leaving a note publishes when autosave is enabled. Leaving the app always attempts publication. Folding itself never requests publication. Pending AI proposals, marked text and temporary Writing Tools edits are not accepted draft generations.
 

@@ -1971,19 +1971,19 @@ final class NotebookModel {
   /// has a live editor and returns its state, or returns nil for a closed note. The first offline
   /// result stops the sweep, and the next launch or return to the app retries it.
   func publishUnsyncedEdits(
-    accountID: UUID, openEditorState: (UUID) async -> SaveState?
+    accountID: UUID, openEditorState: (UUID) async -> PublishState?
   ) async {
     let ids = localDrafts.filter { $0.accountID == accountID && $0.hasUnpublishedEdits }.map(\.id)
     for id in ids {
       guard !Task.isCancelled else { break }
-      let state: SaveState?
+      let state: PublishState?
       if let open = await openEditorState(id) {
         state = open
       } else {
         _ = try? await publish(draftID: id, accountID: accountID, reason: .background)
         state = (try? await draftSnapshot(id: id, accountID: accountID))?.state
       }
-      if state == .offline { break }
+      if state == .failed(.network) { break }
     }
     try? await reloadLocalState(accountID: accountID)
   }
@@ -2121,12 +2121,11 @@ final class NotebookModel {
     )
   }
 
-  static func interfaceSaveState(_ state: SaveState) -> NoteSaveState {
+  static func interfaceSaveState(_ state: PublishState) -> NoteSaveState {
     switch state {
     case .savedLocally: .savedLocally
     case .savingToGitHub: .savingToGitHub
     case .savedToGitHub: .savedToGitHub
-    case .offline: .offline
     case .reconnect: .reconnectRequired
     case .conflict: .remoteChange
     case .failed(let failure):
@@ -2141,12 +2140,7 @@ final class NotebookModel {
           message: String(
             localized:
               "GitHub returned an incomplete note. Publishing could overwrite missing content."))
-      case .network:
-        .cloudFailure(
-          message: String(
-            localized:
-              "GitHub couldn't confirm the save. Retry to check the remote version before publishing again."
-          ))
+      case .network: .offline
       case .http(let status, _):
         .cloudFailure(
           message: message(for: GitHubClientError.http(status: status, retryAfter: nil)))

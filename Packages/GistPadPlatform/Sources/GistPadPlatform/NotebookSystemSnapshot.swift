@@ -135,7 +135,7 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
         }
         let issue: String?
         switch draft?.state {
-        case .offline: issue = String(localized: "Offline. Changes are on this iPhone.")
+        case .failed(.network): issue = String(localized: "Offline. Changes are on this iPhone.")
         case .reconnect: issue = String(localized: "Open GistPad to reconnect GitHub.")
         case .failed: issue = String(localized: "Open GistPad to finish saving.")
         case .conflict: issue = String(localized: "Open GistPad to review changes.")

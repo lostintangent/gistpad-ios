@@ -306,7 +306,7 @@ private func editedDraft(
             try await coordinator.publish(id: draft.id, accountID: account)
         }
         let offline = try await store.draft(id: draft.id, accountID: account)
-        #expect(offline.state == .offline)
+        #expect(offline.state == .failed(.network))
         #expect(offline.text == "local")
         #expect(offline.attemptedContent == "local")
         let result = try await coordinator.publish(id: draft.id, accountID: account)

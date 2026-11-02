@@ -112,7 +112,7 @@ final class NotebookSessionController {
   var autosaveRequest: AutosaveRequest {
     let stateAllowsAutosave: Bool
     switch draft.state {
-    case .savedLocally, .offline, .reconnect: stateAllowsAutosave = true
+    case .savedLocally, .failed(.network), .reconnect: stateAllowsAutosave = true
     default: stateAllowsAutosave = false
     }
     return AutosaveRequest(
@@ -588,7 +588,7 @@ final class NotebookSessionController {
         let persisted = try await notebook.draftSnapshot(id: draft.id, accountID: draft.accountID)
         draft = persisted
         switch persisted.state {
-        case .failed, .conflict, .reconnect, .offline, .savingToGitHub:
+        case .failed, .conflict, .reconnect, .savingToGitHub:
           saveState = NotebookModel.interfaceSaveState(persisted.state)
           return
         case .savedLocally, .savedToGitHub:

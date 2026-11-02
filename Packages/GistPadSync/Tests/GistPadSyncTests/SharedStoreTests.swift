@@ -179,7 +179,7 @@ import Testing
                 id: id, accountID: account, githubUserID: 42, gistID: "abc123",
                 filename: "README.md", description: "Note", text: "unsynced source",
                 baseContent: "remote base", baseRevision: "one",
-                stateData: try JSONEncoder().encode(SaveState.savedLocally)
+                stateData: try JSONEncoder().encode(PublishState.savedLocally)
             )
             draft.generation = 7
             draft.autosavePaused = true

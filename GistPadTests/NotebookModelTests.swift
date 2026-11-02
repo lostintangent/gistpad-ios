@@ -219,8 +219,8 @@ struct NotebookModelTests {
     await model.publishUnsyncedEdits(accountID: fixtureAccount.id) { _ in nil }
     let first = try #require(model.localDrafts.first { $0.filename == "2026-10-24.md" })
     let second = try #require(model.localDrafts.first { $0.filename == "2026-10-25.md" })
-    #expect(first.state == .offline)
-    #expect(second.state != .offline)
+    #expect(first.state == .failed(.network))
+    #expect(second.state != .failed(.network))
     #expect(second.hasUnpublishedEdits)
   }
 
@@ -1048,12 +1048,6 @@ struct NotebookModelTests {
     #expect(await provider.localStateReads == reads)
     try await model.reloadPlatformState(accountID: fixtureAccount.id)
     #expect(await provider.localStateReads == reads + 1)
-  }
-
-  @Test func offlinePresentationStaysTypedAndRetryable() {
-    let state = NotebookModel.interfaceSaveState(.offline)
-    #expect(state == .offline)
-    #expect(state.canPublish)
   }
 
   @Test func coldStartEnsuresTodayQuietlyWithoutPublishingAnUntouchedTemplate() async throws {
@@ -3189,7 +3183,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
     if reason != .manual, !(await shouldPublish()) { throw CancellationError() }
     if let publishFailure { throw publishFailure }
     if failsWritesOffline {
-      try await draftStore().setState(.offline, id: draftID, accountID: accountID)
+      try await draftStore().setState(.failed(.network), id: draftID, accountID: accountID)
       throw URLError(.notConnectedToInternet)
     }
     if failsWrites { throw URLError(.notConnectedToInternet) }

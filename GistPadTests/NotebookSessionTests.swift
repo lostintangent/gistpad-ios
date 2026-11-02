@@ -951,7 +951,7 @@ private actor SessionNotebookProvider: NotebookProviding {
   private(set) var publicationReasons: [PublishReason] = []
   private var persistenceFails = false
   private var publicationRejected = false
-  private var publicationFailure: SaveState?
+  private var publicationFailure: PublishState?
   private var remoteContent: String? = "Base"
   private var publishing: CheckedContinuation<Void, Never>?
   private var publishObserver: CheckedContinuation<Void, Never>?
@@ -1140,7 +1140,7 @@ private actor SessionNotebookProvider: NotebookProviding {
 
   func failPersistence() { persistenceFails = true }
   func rejectPublication() { publicationRejected = true }
-  func failPublication(with state: SaveState) { publicationFailure = state }
+  func failPublication(with state: PublishState) { publicationFailure = state }
   func introduceConflict(remote: String?) async throws -> DraftSnapshot {
     let current = try await snapshot()
     try await store.setState(
