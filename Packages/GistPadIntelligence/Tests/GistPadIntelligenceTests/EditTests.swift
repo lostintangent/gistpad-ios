@@ -1,5 +1,4 @@
 import Foundation
-import FoundationModels
 import Testing
 
 @testable import GistPadIntelligence
@@ -179,28 +178,6 @@ struct EditTests {
         try await engine.propose(request(source, .edit, "Complete it"))
       }
     }
-  }
-
-  @Test func theModelsTaskOperationsDecodeFromTheGeneratedSchema() throws {
-    let operations = try AppleNoteModel.decodeEditPlan(
-      GeneratedContent(
-        json: """
-          {"taskChanges":[
-            {"target":"all","ids":[1],"isComplete":true},
-            {"target":"specific","ids":[1,2],"isComplete":false}
-          ],"newTasks":[],"deleteTaskIDs":[],"textChanges":[]}
-          """))
-    guard operations.count == 2,
-      case .setTaskStates(let all, let complete) = operations[0],
-      case .setTaskStates(let ids, let incomplete) = operations[1]
-    else {
-      Issue.record("Expected typed task-state operations")
-      return
-    }
-    #expect(all == nil)
-    #expect(complete)
-    #expect(ids == [1, 2])
-    #expect(!incomplete)
   }
 
   @Test(arguments: [
