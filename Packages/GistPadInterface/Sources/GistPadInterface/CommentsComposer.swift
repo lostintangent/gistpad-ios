@@ -74,7 +74,7 @@ public struct CommentsComposer: View {
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.circle)
             .controlSize(.large)
-            // In a full-height sheet the default accent resolves gray (t172), so Post names the system tint.
+            // The inspector's compact sheet inherits the dimmed accent of the note it covers at large.
             .tint(Color(uiColor: .tintColor))
             .disabled(!canPost || isPosting)
             .keyboardShortcut(.return, modifiers: .command)
