@@ -80,7 +80,6 @@ struct NotebookNewGistDeletionTests {
     #expect(controller.isPublishing)
 
     let target = try #require(notebook.libraryDeletionTarget(for: draft.id.uuidString))
-    #expect(target.isUncertainCreation)
     let action = target.action
     let confirmedWithoutGist = notebook.localDrafts.first { $0.id == draft.id }?.gistID == nil
     #expect(confirmedWithoutGist)
@@ -102,12 +101,11 @@ struct NotebookNewGistDeletionTests {
     await publication.value
     let result = try await deletion.value
 
-    guard case .deleted(let deletedID, _) = result else {
+    guard case .deleted(let deletedID) = result else {
       Issue.record("Expected the new gist to be deleted, got \(result)")
       return
     }
     #expect(deletedID == "newcapture")
-    #expect(notebook.deletedGistIDs.contains("newcapture"))
     #expect(notebook.localDrafts.allSatisfy { $0.id != draft.id })
     #expect(!controller.isPublishing)
     let remaining = try await provider.gists(accountID: accountID)

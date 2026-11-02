@@ -377,7 +377,7 @@ actor NotebookCommentsCaptureProvider: NotebookProviding, NotebookCommentProvidi
     .init(library: cache, drafts: try await store?.drafts(accountID: accountID) ?? [])
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>) {
     cache = .init(
       accountID: account.id, owned: owned, starred: starred, preferences: account.preferences)
   }
@@ -407,11 +407,9 @@ actor NotebookCommentsCaptureProvider: NotebookProviding, NotebookCommentProvidi
           id: id, accountID: accountID, expectedGeneration: generation,
           remote: remote, revision: revision))
     case .adoptRemote(let id, let generation, let remote, let revision):
-      guard
-        case .refreshed(let adopted) = try await store.refreshCleanDraft(
-          id: id, accountID: accountID, expectedGeneration: generation,
-          content: remote, revision: revision)
-      else { throw NotebookActionError.staleReview }
+      let adopted = try await store.refreshCleanDraft(
+        id: id, accountID: accountID, expectedGeneration: generation,
+        content: remote, revision: revision)
       return .review(adopted)
     default:
       throw CaptureError.unsupported

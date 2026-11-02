@@ -11,53 +11,23 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct NotebookSessionTests {
-  @Test func cancelledURLInspectionDoesNotBecomeAVisibleGitHubFailure() async throws {
+  @Test func checkingForChangesIsQuietUnlessGitHubNeedsReconnecting() async throws {
     let (controller, provider) = try await makeController(autosave: false)
-    await provider.failNextInspection(with: URLError(.cancelled))
+    await provider.failNextInspection(with: URLError(.notConnectedToInternet))
     await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionError == nil)
-    #expect(await provider.inspectionGenerations == [0, 0])
+    #expect(controller.remoteInspectionStatus == .idle)
     #expect(controller.saveState == .savedToGitHub)
     #expect(controller.session.text == "Base")
+    await provider.failNextInspection(with: GitHubClientError.http(status: 401, retryAfter: nil))
+    await controller.inspectRemoteChanges()
+    #expect(controller.remoteInspectionProblem?.recovery == .reconnect)
+    await controller.inspectRemoteChanges()
+    #expect(controller.remoteInspectionProblem == nil)
+    #expect(await provider.inspectionGenerations == [0, 0, 0])
     #expect(await provider.publishCount == 0)
   }
 
-  @Test func aOneOffConnectionLossRetriesBeforeShowingAnError() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    await provider.failNextInspection(with: URLError(.networkConnectionLost))
-    await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionError == nil)
-    #expect(await provider.inspectionGenerations == [0, 0])
-    #expect(controller.session.text == "Base")
-    #expect(await provider.publishCount == 0)
-  }
-
-  @Test func aWrappedURLCancellationAlsoRetriesWithoutWarning() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    await provider.failNextInspection(
-      with: ProviderReadFailure(underlying: URLError(.cancelled)))
-    await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionError == nil)
-    #expect(await provider.inspectionGenerations == [0, 0])
-    #expect(controller.session.text == "Base")
-  }
-
-  @Test func aCancelledPresentationNeverRetriesOrShowsItsProviderFailure() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    await provider.holdNextInspection()
-    await provider.failNextInspection(
-      with: ProviderReadFailure(underlying: URLError(.cancelled)))
-    let check = Task { await controller.inspectRemoteChanges() }
-    await provider.waitForInspection()
-    check.cancel()
-    await provider.releaseInspection()
-    await check.value
-    #expect(controller.remoteInspectionError == nil)
-    #expect(!controller.isInspectingRemote)
-    #expect(await provider.inspectionGenerations == [0])
-  }
-
-  @Test func aSupersededReadRetriesTheLatestDurableGenerationWithoutReplacingSource() async throws {
+  @Test func aCheckOvertakenByTypingLeavesTheNewerSourceAlone() async throws {
     let (controller, provider) = try await makeController(autosave: false)
     await provider.holdNextInspection()
     let check = Task { await controller.inspectRemoteChanges() }
@@ -67,113 +37,16 @@ struct NotebookSessionTests {
     #expect(await controller.waitForLocalSave())
     await provider.releaseInspection()
     await check.value
-    #expect(await provider.inspectionGenerations == [0, 1])
-    #expect(controller.remoteInspectionError == nil)
+    #expect(await provider.inspectionGenerations == [0])
     #expect(controller.session.text == "A newer retained draft")
     #expect(controller.session.textView.selectedRange == .init(location: 3, length: 2))
     #expect(try await provider.snapshot().text == "A newer retained draft")
     #expect(await provider.publishCount == 0)
   }
 
-  @Test func persistentConnectionFailureStaysVisibleUntilARealRecoveryCompletes() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    for _ in 0..<3 { await provider.failNextInspection(with: URLError(.notConnectedToInternet)) }
-    await controller.inspectRemoteChanges()
-    let problem = try #require(controller.remoteInspectionError)
-    #expect(await provider.inspectionGenerations.count == 3)
-    #expect(controller.saveState == .savedToGitHub)
-    #expect(controller.session.text == "Base")
-    for _ in 0..<3 { await provider.failNextInspection(with: URLError(.notConnectedToInternet)) }
-    await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionError == problem)
-    #expect(await provider.inspectionGenerations.count == 6)
-    await provider.holdNextInspection()
-    let retry = Task { await controller.inspectRemoteChanges() }
-    await provider.waitForInspection()
-    #expect(controller.isInspectingRemote)
-    #expect(controller.remoteInspectionError == problem)
-    await provider.releaseInspection()
-    await retry.value
-    #expect(controller.remoteInspectionError == nil)
-    #expect(!controller.isInspectingRemote)
-    #expect(await provider.inspectionGenerations.count == 7)
-    #expect(await provider.publishCount == 0)
-  }
-
-  @Test func repeatedCancellationRemainsQuietEvenAfterTheRetryBudgetIsExhausted() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    for _ in 0..<3 { await provider.failNextInspection(with: URLError(.cancelled)) }
-    await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionError == nil)
-    #expect(await provider.inspectionGenerations.count == 3)
-    #expect(!controller.isInspectingRemote)
-  }
-
-  @Test func authenticationAndRateLimitsAreActionableWithoutRepeatedRequests() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    await provider.failNextInspection(with: GitHubClientError.http(status: 401, retryAfter: nil))
-    await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionProblem?.recovery == .reconnect)
-    #expect(await provider.inspectionGenerations.count == 1)
-    let retryAfter = Date.now.addingTimeInterval(600)
-    await provider.failNextInspection(
-      with: GitHubClientError.http(status: 429, retryAfter: retryAfter))
-    await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionProblem?.retryAfter == retryAfter)
-    #expect(controller.remoteInspectionProblem?.recovery == .retry)
-    #expect(await provider.inspectionGenerations.count == 2)
-    await controller.inspectRemoteChanges()
-    #expect(await provider.inspectionGenerations.count == 2)
-    #expect(controller.remoteInspectionError != nil)
-    #expect(await provider.publishCount == 0)
-  }
-
-  @Test func anExpiredRateLimitCanRecoverWithoutChangingTheNote() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    let deadline = Date.now.addingTimeInterval(-1)
-    await provider.failNextInspection(
-      with: GitHubClientError.http(status: 429, retryAfter: deadline))
-    await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionProblem?.retryAfter == deadline)
-    await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionError == nil)
-    #expect(await provider.inspectionGenerations == [0, 0])
-    #expect(controller.session.text == "Base")
-    #expect(await provider.publishCount == 0)
-  }
-
-  @Test func aNonReviewProviderResultFailsHonestlyWithoutPretendingToBeStale() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    await provider.returnDraftInsteadOfReview()
-    await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionError != nil)
-    #expect(await provider.inspectionGenerations == [0])
-    #expect(controller.session.text == "Base")
-    #expect(controller.saveState == .savedToGitHub)
-    #expect(await provider.publishCount == 0)
-  }
-
-  @Test func saveSafetyIssuesTakePrecedenceOverTheRemoteCheckFooter() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    for _ in 0..<3 { await provider.failNextInspection(with: URLError(.notConnectedToInternet)) }
-    await controller.inspectRemoteChanges()
-    guard case .problem = controller.remoteInspectionStatus else {
-      Issue.record("The ordinary persistent check failure needs its quiet footer.")
-      return
-    }
-    edit(controller, to: "Keep this newer source")
-    #expect(await controller.waitForLocalSave())
-    await provider.setRemoteContent("A conflicting remote edit")
-    await controller.inspectRemoteChanges()
-    #expect(controller.saveState == .remoteChange)
-    #expect(controller.remoteInspectionStatus == .idle)
-    #expect(controller.session.text == "Keep this newer source")
-    #expect(await provider.publishCount == 0)
-  }
-
   @Test func firstLoadWithoutCacheKeepsItsExplicitFailureSurface() async throws {
     let (model, provider) = try makeRefreshModel()
-    for _ in 0..<3 { await provider.failNextGists(with: URLError(.notConnectedToInternet)) }
+    await provider.failNextGists(with: URLError(.notConnectedToInternet))
     await model.start()
     #expect(model.cachedLibrary == nil)
     guard case .failed = model.library.loadState else {
@@ -184,63 +57,6 @@ struct NotebookSessionTests {
     await model.refresh()
     #expect(model.library.loadState == .ready)
     #expect(model.remoteRefreshProblem == nil)
-  }
-
-  @Test func explicitlyConfirmingAnUnboundCreationPreservesTheEditorAndUsesOneManualPost() async throws {
-    let (controller, provider) = try await makeController(autosave: true, uncertainCreation: true)
-    let identity = controller.session.viewIdentity
-    let text = controller.session.text
-    let generation = controller.session.generation
-    controller.session.textView.selectedRange = .init(location: 2, length: 3)
-    #expect(controller.saveState == .creationUncertain)
-    #expect(controller.updateAutosave(isForeground: true) == nil)
-    try await controller.resolveUncertainCreation(.publishAsNew, expectedGeneration: generation)
-    #expect(controller.session.viewIdentity == identity)
-    #expect(controller.session.text.utf8.elementsEqual(text.utf8))
-    #expect(controller.session.generation == generation)
-    #expect(controller.session.textView.selectedRange == .init(location: 2, length: 3))
-    #expect(controller.draft.attemptedGeneration == nil)
-    #expect(controller.saveState == .savedLocally)
-    #expect(await provider.publishCount == 0)
-    let publication = Task { await controller.publish() }
-    await provider.waitForPublish()
-    #expect(await provider.publishCount == 1)
-    await provider.releasePublish()
-    await publication.value
-    #expect(await provider.publishCount == 1)
-    #expect(await provider.publicationReasons == [.manual])
-    #expect(controller.draft.gistID == "synthetic")
-    #expect(controller.saveState == .savedToGitHub)
-    #expect(controller.session.viewIdentity == identity)
-  }
-
-  @Test func discardingAnUnboundCreationRemovesOnlyItsLocalCopyAndNeverPublishes() async throws {
-    let (controller, provider) = try await makeController(autosave: true, uncertainCreation: true)
-    let other = try await provider.store.newDraft(
-      accountID: controller.draft.accountID, githubUserID: 1, text: "Keep this other copy")
-    try await controller.resolveUncertainCreation(
-      .discard, expectedGeneration: controller.session.generation)
-    await #expect(throws: DraftError.notFound) { _ = try await provider.snapshot() }
-    #expect(
-      try await provider.store.draft(id: other.id, accountID: other.accountID).text
-        == "Keep this other copy")
-    #expect(await provider.publishCount == 0)
-    #expect(controller.updateAutosave(isForeground: true) == nil)
-  }
-
-  @Test func aCreationChoiceCannotUseAnOlderGeneration() async throws {
-    let (controller, provider) = try await makeController(autosave: true, uncertainCreation: true)
-    let oldGeneration = controller.session.generation
-    edit(controller, to: "A newer unbound local thought")
-    #expect(await controller.waitForLocalSave())
-    for choice in [NotebookCreationChoice.publishAsNew, .discard] {
-      await #expect(throws: DraftError.staleGeneration) {
-        try await controller.resolveUncertainCreation(choice, expectedGeneration: oldGeneration)
-      }
-    }
-    #expect(try await provider.snapshot().text == "A newer unbound local thought")
-    #expect(controller.saveState == .creationUncertain)
-    #expect(await provider.publishCount == 0)
   }
 
   @Test func productionFocusArrangementRetainsTheEditorSelectionAndUndo() async throws {
@@ -299,8 +115,8 @@ struct NotebookSessionTests {
   @Test(arguments: [true, false])
   func restoredPublicationInspectionAdoptsOnlyAnExactMatchWithoutPublishing(matches: Bool) async throws {
     let (controller, provider) = try await makeController(
-      generation: 1, autosave: true, uncertainPublication: true)
-    #expect(controller.saveState == .publicationUncertain)
+      generation: 1, autosave: true, interruptedPublication: true)
+    #expect(controller.saveState == .offline)
     let editor = controller.session.textView
     let text = controller.session.text
     let generation = controller.session.generation
@@ -313,10 +129,10 @@ struct NotebookSessionTests {
     #expect(controller.session.generation == generation)
     #expect(editor.selectedRange == NSRange(location: 4, length: 3))
     #expect(editor.undoManager?.canUndo == undo)
-    #expect(controller.saveState == (matches ? .savedToGitHub : .publicationUncertain))
+    #expect(controller.saveState == (matches ? .savedToGitHub : .offline))
     #expect(controller.document.draft?.state == controller.draft.state)
     #expect(controller.draft.attemptedGeneration == (matches ? nil : 1))
-    #expect(controller.remoteInspectionError == nil)
+    #expect(controller.remoteInspectionProblem == nil)
     #expect(controller.updateAutosave(isForeground: true) == nil)
     #expect(await provider.publishCount == 0)
   }
@@ -729,7 +545,7 @@ struct NotebookSessionTests {
     edit(controller, to: "Not published")
     #expect(controller.hasUnpublishedChanges)
     #expect(await controller.waitForLocalSave())
-    #expect(try controller.savedLinks()?.hasUnpublishedChanges == true)
+    #expect(try controller.savedLinks()?.shareURL == links.shareURL)
   }
 
   @Test func sourceDiffsDistinguishUnicodeNormalizationAndMissingFiles() {
@@ -816,15 +632,6 @@ struct NotebookSessionTests {
     #expect(await provider.publishCount == 0)
   }
 
-  @Test func persistedPublicationUncertaintyIsNotLostToAGenericNetworkError() async throws {
-    let (controller, provider) = try await makeController(generation: 1)
-    await provider.failPublication(with: .failed(.publicationUncertain))
-    await controller.publish()
-    #expect(controller.saveState == .publicationUncertain)
-    #expect(controller.draft.state == .failed(.publicationUncertain))
-    #expect(!controller.saveState.canPublish)
-  }
-
   @Test func writingToolsBlocksDurableInsertionsBeforeTheirCommit() async throws {
     let (controller, provider) = try await makeController()
     controller.session.textViewWritingToolsWillBegin(controller.session.textView)
@@ -849,14 +656,12 @@ struct NotebookSessionTests {
     let provider = SessionNotebookProvider(
       store: try DraftStore.open(inMemory: true), id: UUID(), accountID: UUID(), autosave: false)
     return (
-      NotebookModel(
-        provider: provider, remoteReadRetryDelays: [.milliseconds(1), .milliseconds(1)]),
-      provider)
+      NotebookModel(provider: provider), provider)
   }
 
   private func makeController(
     generation: UInt64 = 0, autosave: Bool? = nil, isReadOnly: Bool = false,
-    uncertainPublication: Bool = false, uncertainCreation: Bool = false
+    interruptedPublication: Bool = false
   ) async throws -> (NotebookSessionController, SessionNotebookProvider) {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
@@ -871,47 +676,36 @@ struct NotebookSessionTests {
         """.utf8))
     let accountID = UUID()
     let store = try DraftStore.open(inMemory: true)
-    var draft: DraftSnapshot
-    if uncertainCreation {
-      draft = try await store.newDraft(
-        accountID: accountID, githubUserID: 1, text: "Unbound private note")
-    } else {
-      draft = try await store.openDraft(
-        accountID: accountID, githubUserID: 1, gistID: gist.id, filename: "README.md",
-        description: "Session fixture", content: "Base", revision: "1")
-    }
+    var draft = try await store.openDraft(
+      accountID: accountID, githubUserID: 1, gistID: gist.id, filename: "README.md",
+      description: "Session fixture", content: "Base", revision: "1")
     if generation > 0 {
       draft = try await store.persist(
         id: draft.id, accountID: accountID, text: "Restored local draft", generation: generation)
     }
-    if uncertainPublication || uncertainCreation {
+    if interruptedPublication {
       try await store.beginAttempt(
         id: draft.id, accountID: accountID, content: draft.text,
         generation: draft.generation)
-      try await store.setState(
-        .failed(uncertainCreation ? .creationUncertain : .publicationUncertain),
-        id: draft.id, accountID: accountID)
+      try await store.setState(.failed(.network), id: draft.id, accountID: accountID)
       draft = try await store.draft(id: draft.id, accountID: accountID)
     }
     let provider = SessionNotebookProvider(
       store: store, id: draft.id, accountID: accountID, autosave: autosave,
-      publishedGist: uncertainCreation ? nil : gist)
+      publishedGist: gist)
     let model = NotebookModel(provider: provider)
     if autosave != nil {
       await model.start()
       #expect(model.library.loadState == .ready)
     }
-    let document = uncertainCreation
-      ? NotebookDocument(draft: draft)
-      : NotebookDocument(
-        accountID: accountID, gist: gist, filename: "README.md", text: "Base",
-        chrome: NoteChrome(
-          title: "Session fixture", files: [.init(id: "README.md", filename: "README.md")],
-          selectedFileID: "README.md"))
+    let document = NotebookDocument(
+      accountID: accountID, gist: gist, filename: "README.md", text: "Base",
+      chrome: NoteChrome(
+        title: "Session fixture", files: [.init(id: "README.md", filename: "README.md")],
+        selectedFileID: "README.md"))
     return (
       NotebookSessionController(
-        document: document, draft: draft, notebook: model, autosaveDelay: .milliseconds(30),
-        remoteInspectionRetryDelays: [.milliseconds(1), .milliseconds(1)]),
+        document: document, draft: draft, notebook: model, autosaveDelay: .milliseconds(30)),
       provider
     )
   }
@@ -961,7 +755,6 @@ private actor SessionNotebookProvider: NotebookProviding {
   private var inspectionGate: CheckedContinuation<Void, Never>?
   private var inspectionObserver: CheckedContinuation<Void, Never>?
   private var pausesInspection = false
-  private var returnsDraftInsteadOfReview = false
   private var gistFailures: [any Error] = []
 
   init(
@@ -1008,9 +801,10 @@ private actor SessionNotebookProvider: NotebookProviding {
       library: try await store.cachedLibrary(accountID: accountID),
       drafts: try await store.drafts(accountID: accountID))
   }
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>) async throws {
     try await store.cacheLibrary(
-      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id)
+      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id,
+      keeping: keeping)
   }
   func createDraft(accountID: UUID) throws -> DraftSnapshot { throw DraftError.notFound }
   func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
@@ -1021,16 +815,6 @@ private actor SessionNotebookProvider: NotebookProviding {
     throw DraftError.notFound
   }
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
-    if case .confirmNewCreation(let id, let generation) = action {
-      return .review(
-        try await store.confirmNewCreation(
-          id: id, accountID: accountID, expectedGeneration: generation))
-    }
-    if case .discardUncertainCreation(let id, let generation) = action {
-      try await store.discardUncertainCreation(
-        id: id, accountID: accountID, expectedGeneration: generation)
-      return .discardedDraft(id)
-    }
     if case .fetchRemote(let id) = action {
       let draft = try await store.draft(id: id, accountID: accountID)
       inspectionGenerations.append(draft.generation)
@@ -1046,25 +830,21 @@ private actor SessionNotebookProvider: NotebookProviding {
       return .remoteRead(draft, try fixtureRemoteFile(content: remoteContent))
     }
     if case .recordRemote(let id, let generation, let remote, let revision) = action {
-      if returnsDraftInsteadOfReview { return .draft(try await snapshot()) }
       return .review(
         try await store.inspectRemoteChange(
           id: id, accountID: accountID, expectedGeneration: generation,
           remote: remote, revision: revision))
     }
     if case .adoptRemote(let id, let generation, let remote, let revision) = action {
-      guard
-        case .refreshed(let adopted) = try await store.refreshCleanDraft(
-          id: id, accountID: accountID, expectedGeneration: generation,
-          content: remote, revision: revision)
-      else { throw NotebookActionError.staleReview }
+      let adopted = try await store.refreshCleanDraft(
+        id: id, accountID: accountID, expectedGeneration: generation,
+        content: remote, revision: revision)
       return .review(adopted)
     }
     throw DraftError.notFound
   }
 
   func failNextInspection(with error: any Error) { inspectionFailures.append(error) }
-  func returnDraftInsteadOfReview() { returnsDraftInsteadOfReview = true }
   func holdNextInspection() { pausesInspection = true }
   func waitForInspection() async {
     if inspectionGate != nil { return }
@@ -1166,11 +946,4 @@ private func fixtureRemoteFile(content: String?) throws -> RemoteFile {
       "history":[{"version":"remote"}]}
       """.utf8))
   return RemoteFile(gist: gist, content: content)
-}
-
-private struct ProviderReadFailure: CustomNSError {
-  static let errorDomain = "GistPadTests.ProviderReadFailure"
-  let underlying: any Error
-  var errorCode: Int { 1 }
-  var errorUserInfo: [String: Any] { [NSUnderlyingErrorKey: underlying] }
 }

@@ -41,7 +41,8 @@ protocol NotebookProviding: Sendable {
     expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
   ) async throws -> DraftSnapshot
   func localState(accountID: UUID) async throws -> NotebookLocalState
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>)
+    async throws
   func createDraft(accountID: UUID) async throws -> DraftSnapshot
   func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool
   func today(accountID: UUID, target: DailyNoteTarget) async throws -> TodayNote
@@ -51,6 +52,10 @@ protocol NotebookProviding: Sendable {
 extension NotebookProviding {
   func connectedAccount() async throws -> Account? {
     try await cachedAccount()
+  }
+
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
+    try await cacheLibrary(owned: owned, starred: starred, account: account, keeping: [])
   }
 }
 
@@ -126,11 +131,11 @@ actor LiveNotebookProvider: NotebookProviding {
   func openDraft(for document: NotebookDocument) async throws -> DraftSnapshot {
     if let draft = document.draft {
       let coordinator = await coordinator(accountID: document.accountID)
-      // A failed refresh shows the stored note, so opening still works offline.
-      if let adopted = try? await mutationQueue.run({
-        try await coordinator.adoptRemoteIfClean(id: draft.id, accountID: document.accountID)
+      // A failed read shows the stored note, so opening still works offline.
+      if let inspected = try? await mutationQueue.run({
+        try await coordinator.inspect(id: draft.id, accountID: document.accountID)
       }) {
-        return adopted
+        return inspected
       }
       return try await drafts.draft(id: draft.id, accountID: document.accountID)
     }
@@ -170,9 +175,12 @@ actor LiveNotebookProvider: NotebookProviding {
     return NotebookLocalState(library: library, drafts: localDrafts)
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>)
+    async throws
+  {
     try await drafts.cacheLibrary(
-      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id)
+      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id,
+      keeping: keeping)
   }
 
   private func verifiedUserID(accountID: UUID) async throws -> Int64 {
@@ -319,12 +327,10 @@ final class NotebookModel {
   private(set) var openingDocument: NotebookOpeningDocument?
   private(set) var failedOpen: NotebookFailedOpen?
   private(set) var localDrafts: [DraftSnapshot] = []
-  private var publishingDraftIDs: Set<UUID> = []
   private(set) var cachedLibrary: CachedLibrarySnapshot?
   private(set) var isCreating = false
   private(set) var searchTargets: [String: NotebookSelection] = [:]
   private(set) var recoverySearchRows: Set<String> = []
-  private(set) var deletedGistIDs: Set<String> = []
   var documentError: String?
   private(set) var remoteRefreshProblem: NotebookRemoteReadProblem?
   private(set) var isRefreshingRemote = false
@@ -334,7 +340,6 @@ final class NotebookModel {
 
   @ObservationIgnored private let provider: any NotebookProviding
   @ObservationIgnored private let selections: NotebookSelectionStore
-  @ObservationIgnored private let remoteReadRetryDelays: [Duration]
   @ObservationIgnored private var libraryRequest = UUID()
   @ObservationIgnored private var documentRequest = UUID()
   @ObservationIgnored private var searchRequest = UUID()
@@ -343,12 +348,10 @@ final class NotebookModel {
     subsystem: "dev.gistpad.GistPad", category: "Notebook")
 
   init(
-    provider: any NotebookProviding, selections: NotebookSelectionStore = NotebookSelectionStore(),
-    remoteReadRetryDelays: [Duration] = NotebookRemoteRead.retryDelays
+    provider: any NotebookProviding, selections: NotebookSelectionStore = NotebookSelectionStore()
   ) {
     self.provider = provider
     self.selections = selections
-    self.remoteReadRetryDelays = remoteReadRetryDelays
     library.gitHubStatus = .idle
   }
 
@@ -472,12 +475,10 @@ final class NotebookModel {
       return .init(
         id: draft.id.uuidString, accountID: account.id,
         title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
-        localDraft: draft, isPublishing: publishingDraftIDs.contains(draft.id))
+        localDraft: draft)
     }
     let gistID = target?.gistID ?? draft?.gistID ?? rowID
-    guard !deletedGistIDs.contains(gistID),
-      let gist = cachedLibrary?.owned.first(where: { $0.id == gistID })
-    else { return nil }
+    guard let gist = cachedLibrary?.owned.first(where: { $0.id == gistID }) else { return nil }
     if gist.isDailyNote, let filename = target?.filename {
       return .init(
         id: gist.id, accountID: account.id,
@@ -561,7 +562,7 @@ final class NotebookModel {
     let gist = cachedLibrary?.gists.first { $0.id == draft.gistID }
     var document = NotebookDocument(
       draft: draft, gist: gist,
-      isRecovery: draft.gistID.map { deletedGistIDs.contains($0) || gist == nil } ?? false)
+      isRecovery: draft.gistID != nil && gist == nil)
     document.chrome = chrome(gist: gist, draft: draft)
     document.libraryRowID = rowID
     return document
@@ -651,7 +652,6 @@ final class NotebookModel {
         return
       }
       account = restored
-      deletedGistIDs = selections.deletedGistIDs(accountID: restored.id)
       try await reloadLocalState(accountID: restored.id, discardAbandonedBlanks: true)
       await refresh()
       await restoreSelectionIfNeeded()
@@ -709,7 +709,6 @@ final class NotebookModel {
     writeFailures = []
     isRefreshingRemote = false
     library.gitHubStatus = .idle
-    deletedGistIDs = selections.deletedGistIDs(accountID: pendingAccount.id)
     self.pendingAccount = nil
     loadedDocument = nil
     openingDocument = nil
@@ -806,11 +805,9 @@ final class NotebookModel {
       await start()
       return
     }
-    if let retryAfter = remoteRefreshProblem?.retryAfter, retryAfter > .now { return }
     let request = UUID()
     libraryRequest = request
     let previousState: LibraryLoadState = library.loadState == .loading ? .ready : library.loadState
-    let deletionsToConfirm = deletedGistIDs
     isRefreshingRemote = true
     defer {
       if request == libraryRequest {
@@ -821,73 +818,40 @@ final class NotebookModel {
     library.loadState = .loading
     library.gitHubStatus = remoteRefreshStatus
     do {
-      let (refreshed, ownedGists, starredGists) = try await NotebookRemoteRead.run(
-        retryDelays: remoteReadRetryDelays,
-        while: {
-          request == self.libraryRequest && self.account?.id == account.id
-            && self.pendingAccount == nil && !self.isSigningOut
-        }
-      ) {
-        let refreshed = try await self.refreshedAccount()
-        guard refreshed.id == account.id else { throw AccountError.accountChanged }
-        async let owned = self.provider.gists(accountID: account.id)
-        async let starred = self.provider.starredGists(accountID: account.id)
-        return try await (refreshed, owned, starred)
-      }
+      let refreshed = try await refreshedAccount()
+      guard refreshed.id == account.id else { throw AccountError.accountChanged }
+      async let ownedGists = provider.gists(accountID: account.id)
+      async let starredGists = provider.starredGists(accountID: account.id)
+      let (owned, starred) = try await (ownedGists, starredGists)
       guard request == libraryRequest, self.account?.id == account.id else { return }
-      let owned = ownedGists.filter { !deletedGistIDs.contains($0.id) }
-      let starred = starredGists.filter { !deletedGistIDs.contains($0.id) }
-      try await provider.cacheLibrary(owned: owned, starred: starred, account: refreshed)
+      try await provider.cacheLibrary(
+        owned: owned, starred: starred, account: refreshed, keeping: presentedDraftIDs)
       guard request == libraryRequest, self.account?.id == account.id else { return }
       self.account = refreshed
-      ownedGistIDs = Set(owned.map(\.id))
-      library.replaceSnapshot(Self.librarySnapshot(
-        owned: owned, starred: starred, account: refreshed, drafts: localDrafts,
-        cached: cachedLibrary, excluding: deletedGistIDs))
       library.loadState = .ready
-      let remoteIDs = Set((ownedGists + starredGists).map(\.id))
-      let local = try await provider.localState(accountID: account.id)
-      for draft in local.drafts where draft.gistID.map({ !remoteIDs.contains($0) }) == true {
-        guard request == libraryRequest, self.account?.id == account.id else { return }
-        guard draft.attemptedGeneration == nil,
-          draft.baseContent.map({ $0.utf8.elementsEqual(draft.text.utf8) }) == true,
-          loadedDocument?.draft?.id != draft.id,
-          loadedDocument?.selection.gistID != draft.gistID,
-          openingDocument == nil, !isDraftSelected(draft.id)
-        else { continue }
-        do {
-          if case .discardedDraft(let id) = try await provider.perform(
-            .discardCleanMissingCopy(
-              draftID: draft.id, generation: draft.generation,
-              shouldDiscard: { [weak self] in
-                await self?.canAutomaticallyDiscard(draft, accountID: account.id, request: request)
-                  == true
-              }),
-            accountID: account.id)
-          {
-            clearDiscardedDraft(id, accountID: account.id)
-          }
-        } catch DraftError.staleGeneration {
-          continue
-        }
-      }
       try await reloadLocalState(accountID: account.id)
       guard request == libraryRequest, self.account?.id == account.id else { return }
-      let confirmed = deletionsToConfirm.subtracting(Set((ownedGists + starredGists).map(\.id)))
-      selections.confirmDeleted(gistIDs: confirmed, accountID: account.id)
-      deletedGistIDs.subtract(confirmed)
       remoteRefreshProblem = nil
-    } catch is CancellationError {
-      if request == libraryRequest { library.loadState = previousState }
     } catch {
       guard request == libraryRequest else { return }
+      guard let problem = NotebookRemoteRead.problem(for: error) else {
+        library.loadState = previousState
+        return
+      }
       report(error, operation: "refresh")
-      remoteRefreshProblem = NotebookRemoteRead.problem(for: error)
+      remoteRefreshProblem = problem
       library.loadState =
-        remoteRefreshProblem?.recovery == .reconnect
+        problem.recovery == .reconnect
         ? .reconnectRequired(message: Self.message(for: error))
         : .failed(message: Self.message(for: error))
     }
+  }
+
+  /// Drafts a refresh keeps even when GitHub no longer lists their gist, because they're on screen.
+  private var presentedDraftIDs: Set<UUID> {
+    let gistID = loadedDocument?.selection.gistID
+    let shown: Set<UUID?> = [loadedDocument?.draft?.id, presentedDocument?.draft?.id]
+    return Set(localDrafts.filter { shown.contains($0.id) || (gistID != nil && $0.gistID == gistID) }.map(\.id))
   }
 
   func open(gistID: String, filename: String? = nil, rowID: String? = nil) async {
@@ -1017,9 +981,6 @@ final class NotebookModel {
       loadedDocument = NotebookDocument(
         draft: draft, gist: gist, isRecovery: draft.gistID != nil && gist == nil)
       loadedDocument?.libraryRowID = rowID
-      if let id = draft.gistID, deletedGistIDs.contains(id) {
-        loadedDocument?.isRecovery = true
-      }
       if let document = loadedDocument { try present(document) }
     } catch {
       guard !Task.isCancelled, request == documentRequest, self.account?.id == account.id else { return }
@@ -1275,13 +1236,9 @@ final class NotebookModel {
     guard account?.id == accountID, pendingAccount == nil else { return }
     localDrafts = local.drafts.filter { $0.accountID == accountID && !removed.contains($0.id) }
     pruneNoteFailures()
-    cachedLibrary = local.library.map(libraryExcludingDeletedGists)
+    cachedLibrary = local.library
     projectLibrary()
     updateToday()
-    if let cachedLibrary, cachedLibrary != local.library, let account {
-      try await provider.cacheLibrary(
-        owned: cachedLibrary.owned, starred: cachedLibrary.starred, account: account)
-    }
     await search()
   }
 
@@ -1289,7 +1246,7 @@ final class NotebookModel {
     guard let account else { return }
     let snapshot = Self.librarySnapshot(
       owned: cachedLibrary?.owned ?? [], starred: cachedLibrary?.starred ?? [],
-      account: account, drafts: localDrafts, cached: cachedLibrary, excluding: deletedGistIDs)
+      account: account, drafts: localDrafts, cached: cachedLibrary)
     if let cachedLibrary {
       ownedGistIDs = Set(cachedLibrary.owned.map(\.id))
       library.replaceSnapshot(snapshot)
@@ -1319,16 +1276,6 @@ final class NotebookModel {
     return cached ?? draft?.text
   }
 
-  private func libraryExcludingDeletedGists(_ cache: CachedLibrarySnapshot) -> CachedLibrarySnapshot {
-    var filtered = cache
-    filtered.owned.removeAll { deletedGistIDs.contains($0.id) }
-    filtered.starred.removeAll { deletedGistIDs.contains($0.id) }
-    filtered.details = filtered.details.filter { !deletedGistIDs.contains($0.key) }
-    filtered.fileContent = filtered.fileContent.filter {
-      !deletedGistIDs.contains(String($0.key.prefix(while: { $0 != "/" })))
-    }
-    return filtered
-  }
 
   private func updateToday() {
     let drafts = account.map {
@@ -1362,15 +1309,12 @@ final class NotebookModel {
   ) async throws -> NotebookAction {
     let draftID: UUID
     switch action {
-    case .discardLocalCopy(let id, _), .discardUncertainCreation(let id, _): draftID = id
+    case .discardLocalCopy(let id, _): draftID = id
     default: return action
     }
     let draft = try await draftSnapshot(id: draftID, accountID: accountID)
     if confirmedWithoutGist, let gistID = draft.gistID {
       return .delete(gistID: gistID)
-    }
-    if draft.gistID == nil, draft.attemptedGeneration != nil {
-      return .discardUncertainCreation(draftID: draft.id, generation: draft.generation)
     }
     return .discardLocalCopy(draftID: draft.id, generation: draft.generation)
   }
@@ -1524,7 +1468,7 @@ final class NotebookModel {
     switch operation {
     case .action(let action):
       switch action {
-      case .preference, .star, .archive, .undoArchive: break
+      case .preference, .saveTags, .star, .archive, .undoArchive: break
       default: return nil
       }
       if let actionError = error as? NotebookActionError {
@@ -1538,10 +1482,6 @@ final class NotebookModel {
       case .readOnly?:
         return .init(
           message: String(localized: "This note can't be published as it is."),
-          recovery: .showNote)
-      case .ambiguousCreation?:
-        return .init(
-          message: String(localized: "GitHub may already have received this note."),
           recovery: .showNote)
       default: break
       }
@@ -1584,7 +1524,7 @@ final class NotebookModel {
     case .action(.preference(.setPinned)):
       return String(localized: "This pin didn't reach GitHub.")
     case .action(.preference(.upsertTag)), .action(.preference(.deleteTag)),
-      .action(.preference(.setTag)):
+      .action(.preference(.setTag)), .action(.saveTags):
       return String(localized: "This tag didn't reach GitHub.")
     case .action:
       return String(localized: "This change didn't reach GitHub.")
@@ -1617,9 +1557,6 @@ final class NotebookModel {
     let result: NotebookActionResult
     do {
       result = try await provider.perform(action, accountID: account.id)
-    } catch NotebookActionError.remoteDeletedLocalCleanupFailed(let id) {
-      recordDeletedGist(id, accountID: account.id)
-      throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: id)
     } catch {
       if case .signOut = action {
         do {
@@ -1671,8 +1608,8 @@ final class NotebookModel {
       loadedDocument = document
       library.selectedNoteID = document.rowID
       try selections.save(document.selection, accountID: account.id)
-    case .deleted(let id, _):
-      recordDeletedGist(id, accountID: account.id)
+    case .deleted(let id):
+      clearDeletedGist(id, accountID: account.id)
       if loadedDocument?.selection.gistID == id {
         loadedDocument = nil
         library.selectedNoteID = nil
@@ -1724,15 +1661,6 @@ final class NotebookModel {
     searchTargets = searchTargets.filter { $0.value.draftID != id }
   }
 
-  private func canAutomaticallyDiscard(
-    _ draft: DraftSnapshot, accountID: UUID, request: UUID
-  ) -> Bool {
-    account?.id == accountID && pendingAccount == nil && libraryRequest == request
-      && loadedDocument?.draft?.id != draft.id
-      && loadedDocument?.selection.gistID != draft.gistID
-      && openingDocument == nil && !isDraftSelected(draft.id)
-  }
-
   private func clearDeletedFile(gistID: String, filename: String, accountID: UUID) {
     func isDeletedFile(_ selection: NotebookSelection?) -> Bool {
       selection?.gistID == gistID && selection?.filename == filename
@@ -1762,21 +1690,14 @@ final class NotebookModel {
     }
   }
 
-  private func recordDeletedGist(_ id: String, accountID: UUID) {
-    selections.markDeleted(gistID: id, accountID: accountID)
-    guard account?.id == accountID else { return }
+  private func clearDeletedGist(_ id: String, accountID: UUID) {
     let isOpeningDeleted = openingDocument.map {
       $0.rowID == id || rowSelection(for: $0.rowID)?.gistID == id
     } ?? false
-    deletedGistIDs.insert(id)
     libraryRequest = UUID()
     isRefreshingRemote = false
     if library.loadState == .loading { library.loadState = .ready }
-    ownedGistIDs.remove(id)
     let removedDraftIDs = Set(localDrafts.filter { $0.gistID == id }.map(\.id))
-    localDrafts.removeAll { $0.gistID == id }
-    cachedLibrary = cachedLibrary.map(libraryExcludingDeletedGists)
-    projectLibrary()
     if isOpeningDeleted {
       documentRequest = UUID()
       openingDocument = nil
@@ -1799,7 +1720,6 @@ final class NotebookModel {
     }
     searchTargets = searchTargets.filter { $0.value.gistID != id }
     library.gitHubStatus = remoteRefreshStatus
-    updateToday()
   }
 
   private func clearSignedOutPresentation(accountID: UUID) {
@@ -1820,7 +1740,6 @@ final class NotebookModel {
     library.gitHubStatus = .idle
     isOpeningDocument = false
     ownedGistIDs = []
-    deletedGistIDs = []
     library.replaceSnapshot(nil)
     library.selectedNoteID = nil
     library.clearFilters()
@@ -1832,7 +1751,6 @@ final class NotebookModel {
       var chrome = NotebookDocument(draft: draft).chrome
       chrome.isAutoSaveEnabled =
         account?.id == draft.accountID && account?.preferences.isAutoSaveEnabled == true
-        && !draft.autosavePaused
       return chrome
     }
     let owned = ownedGistIDs.contains(gist.id) || gist.owner?.id == draft.githubUserID
@@ -1853,7 +1771,7 @@ final class NotebookModel {
       tags: library.snapshot.tags.filter {
         account.preferences.gistTags[gist.id]?.contains($0.id) == true
       },
-      isAutoSaveEnabled: account.preferences.isAutoSaveEnabled && !draft.autosavePaused,
+      isAutoSaveEnabled: account.preferences.isAutoSaveEnabled,
       commentCount: gist.isDailyNote ? nil : gist.commentCount)
   }
 
@@ -1944,8 +1862,6 @@ final class NotebookModel {
     guard account?.id == accountID || reason == .manual, pendingAccount == nil else {
       throw AccountError.accountChanged
     }
-    publishingDraftIDs.insert(draftID)
-    defer { publishingDraftIDs.remove(draftID) }
     let saved: DraftSnapshot
     do {
       saved = try await provider.publish(
@@ -1987,14 +1903,14 @@ final class NotebookModel {
 
   static func librarySnapshot(
     owned: [Gist], starred: [Gist], account: Account, drafts: [DraftSnapshot] = [],
-    cached: CachedLibrarySnapshot? = nil, excluding deletedIDs: Set<String> = []
+    cached: CachedLibrarySnapshot? = nil
   )
     -> LibrarySnapshot
   {
     let ownedIDs = Set(owned.map(\.id))
     let starredIDs = Set(starred.map(\.id))
     var unique: [String: Gist] = [:]
-    for gist in owned + starred where !deletedIDs.contains(gist.id) {
+    for gist in owned + starred {
       if let existing = unique[gist.id], existing.updatedAt > gist.updatedAt { continue }
       unique[gist.id] = gist
     }
@@ -2078,8 +1994,6 @@ final class NotebookModel {
     case .conflict: .remoteChange
     case .failed(let failure):
       switch failure {
-      case .creationUncertain: .creationUncertain
-      case .publicationUncertain: .publicationUncertain
       case .readOnly:
         .publicationBlocked(
           message: String(localized: "This account no longer has permission to edit the gist."))
@@ -2118,8 +2032,6 @@ final class NotebookModel {
       switch error {
       case .staleGeneration:
         return String(localized: "This note changed. Review the latest version before continuing.")
-      case .ambiguousCreation:
-        return String(localized: "This copy no longer has an unconfirmed creation. Review its current save status.")
       default:
         break
       }
@@ -2193,9 +2105,6 @@ final class NotebookModel {
         )
       case .staleReview:
         String(localized: "Your draft changed while this review was open. Review the latest draft.")
-      case .remoteReviewChanged:
-        String(
-          localized: "GitHub has a newer version. Refresh the review before applying this choice.")
       case .archiveChangedElsewhere:
         String(
           localized:

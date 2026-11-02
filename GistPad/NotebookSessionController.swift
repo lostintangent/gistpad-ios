@@ -23,8 +23,6 @@ final class NotebookSessionController {
   private(set) var metadataError: String?
   private(set) var isApplyingDurableEdit = false
   private(set) var remoteInspectionProblem: NotebookRemoteReadProblem?
-  var remoteInspectionError: String? { remoteInspectionProblem?.message }
-  private(set) var isInspectingRemote = false
   var mode: NoteMode = .reading
   @ObservationIgnored private let notebook: NotebookModel
   @ObservationIgnored private var persistence: Task<Bool, Never>?
@@ -35,14 +33,13 @@ final class NotebookSessionController {
   @ObservationIgnored private var isDiscarded = false
   @ObservationIgnored private var publicationWaiters: [CheckedContinuation<Void, Never>] = []
   @ObservationIgnored private let autosaveDelay: Duration
-  @ObservationIgnored private let remoteInspectionRetryDelays: [Duration]
+  @ObservationIgnored private var isInspectingRemote = false
   @ObservationIgnored private let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "Document")
 
   init(
     document: NotebookDocument, draft: DraftSnapshot, notebook: NotebookModel,
-    autosaveDelay: Duration = .seconds(5),
-    remoteInspectionRetryDelays: [Duration] = NotebookRemoteRead.retryDelays
+    autosaveDelay: Duration = .seconds(5)
   ) {
     var initialDocument = document
     if notebook.account?.id == draft.accountID {
@@ -52,7 +49,6 @@ final class NotebookSessionController {
     self.draft = draft
     self.notebook = notebook
     self.autosaveDelay = autosaveDelay
-    self.remoteInspectionRetryDelays = remoteInspectionRetryDelays
     session = DocumentSession(
       documentID: document.id, text: draft.text, generation: draft.generation,
       showsFrontMatter: notebook.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
@@ -79,21 +75,17 @@ final class NotebookSessionController {
   }
 
   var remoteInspectionStatus: GitHubStatusState {
-    guard document.chrome.access != .truncated else { return .idle }
+    guard let problem = remoteInspectionProblem, document.chrome.access != .truncated else {
+      return .idle
+    }
     switch saveState {
-    case .cloudFailure, .localFailure, .remoteChange, .reconnectRequired,
-      .creationUncertain, .publicationUncertain, .publicationBlocked:
+    case .cloudFailure, .localFailure, .remoteChange, .reconnectRequired, .publicationBlocked:
       return .idle
     default:
-      break
-    }
-    if let problem = remoteInspectionProblem {
       return problem.status(
         heading: String(localized: "Couldn't check for updates"),
         detail: String(localized: "Your notes on this iPhone are unchanged."))
     }
-    return isInspectingRemote
-      ? .checking(operation: String(localized: "Checking GitHub for changes")) : .idle
   }
 
   func requestCreationFocus() {
@@ -126,7 +118,7 @@ final class NotebookSessionController {
       && notebook.library.loadState == .ready
       && notebook.account?.preferences.isAutoSaveEnabled == true
       && canMutate && session.textView.markedTextRange == nil
-      && !document.isRecovery && !draft.autosavePaused && draft.attemptedGeneration == nil
+      && !document.isRecovery && draft.attemptedGeneration == nil
   }
 
   private func publicationAllowed(reason: PublishReason) -> Bool {
@@ -172,7 +164,6 @@ final class NotebookSessionController {
     document.filename = draft.filename
     if let gist { document.gist = gist }
     document.chrome = notebook.chrome(gist: document.gist, draft: draft)
-    if let id = current.gistID, notebook.deletedGistIDs.contains(id) { markRecovery() }
     session.textView.isEditable =
       document.chrome.access.canEdit && !isPerformingDestructiveAction && !isApplyingDurableEdit
     applyWritingPreferences()
@@ -199,30 +190,17 @@ final class NotebookSessionController {
       notebook.account?.id == draft.accountID, notebook.pendingAccount == nil
     else { return }
     if case .conflict = draft.state { return }
-    if let retryAfter = remoteInspectionProblem?.retryAfter, retryAfter > .now { return }
     isInspectingRemote = true
     defer { isInspectingRemote = false }
     guard await waitForLocalSave() else { return }
+    let generation = session.generation
     do {
-      let (current, remote) = try await NotebookRemoteRead.run(
-        retryDelays: remoteInspectionRetryDelays,
-        while: {
-          self.notebook.account?.id == self.draft.accountID && self.notebook.pendingAccount == nil
-            && !self.notebook.isSigningOut && !self.isPublishing && self.canMutate
-            && !self.document.isRecovery
-        }
-      ) { () async throws -> (DraftSnapshot, RemoteFile?) in
-        guard await self.waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
-        let generation = self.session.generation
-        let result = try await self.notebook.perform(.fetchRemote(draftID: self.draft.id))
-        guard case .remoteRead(let current, let remote) = result,
-          current.id == self.draft.id, current.accountID == self.draft.accountID
-        else { throw NotebookRemoteReadError.invalidResult }
-        guard current.generation == generation, self.session.generation == generation else {
-          throw DraftError.staleGeneration
-        }
-        return (current, remote)
-      }
+      guard
+        case .remoteRead(let current, let remote) = try await notebook.perform(
+          .fetchRemote(draftID: draft.id)),
+        current.id == draft.id, current.generation == generation,
+        session.generation == generation, !isPublishing, canMutate
+      else { return }
       if let remote, let content = remote.content, current.adoptsRemote(content) {
         // Every text change bumps the generation, so this commit is refused if any edit or publish
         // landed after the fetch. Adoption can't overwrite unpublished text.
@@ -240,24 +218,21 @@ final class NotebookSessionController {
           else { throw NotebookActionError.staleReview }
           return adopted
         }
-      } else {
-        guard
-          case .review(let recorded) = try await notebook.perform(
-            .recordRemote(
-              draftID: draft.id, generation: current.generation, remote: remote?.content,
-              revision: remote?.gist.revision))
-        else { throw NotebookRemoteReadError.invalidResult }
+      } else if case .review(let recorded) = try await notebook.perform(
+        .recordRemote(
+          draftID: draft.id, generation: current.generation, remote: remote?.content,
+          revision: remote?.gist.revision))
+      {
         draft = recorded
         document.draft = recorded
         saveState = NotebookModel.interfaceSaveState(recorded.state)
       }
       remoteInspectionProblem = nil
-    } catch is CancellationError {
-      return
     } catch {
       logger.error(
         "Remote inspection failed: \(String(reflecting: type(of: error)), privacy: .public)")
-      remoteInspectionProblem = NotebookRemoteRead.problem(for: error)
+      remoteInspectionProblem =
+        NotebookRemoteRead.needsReconnect(error) ? NotebookRemoteRead.problem(for: error) : nil
     }
   }
 
@@ -283,7 +258,7 @@ final class NotebookSessionController {
     guard !document.isRecovery, let gist = document.gist, draft.gistID != nil,
       gist.files[draft.filename] != nil
     else { return nil }
-    return try DocumentLinks(gist: gist, filename: draft.filename, draft: draft)
+    return try DocumentLinks(gist: gist, filename: draft.filename)
   }
 
   func refreshPublicationMetadata() async throws {
@@ -304,23 +279,11 @@ final class NotebookSessionController {
     return review
   }
 
-  func refreshReview(_ review: NotebookReviewContext) async throws -> NotebookReviewContext {
-    guard await waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
-    guard case .review(let refreshed) = try await notebook.perform(.refreshConflict(review)) else {
-      throw NotebookActionError.staleReview
-    }
-    guard session.generation == refreshed.generation else { throw NotebookActionError.staleReview }
-    draft = refreshed
-    saveState = .remoteChange
-    return try NotebookReviewContext(draft: refreshed)
-  }
-
   func applyReview(_ review: NotebookReviewContext, text: String, publishes: Bool) async throws {
     guard review.matches(draft), session.generation == review.draft.generation else {
       throw NotebookActionError.staleReview
     }
     let changed = !text.utf8.elementsEqual(session.text.utf8)
-    guard !changed || session.generation < UInt64.max else { throw DraftError.staleGeneration }
     let generation = session.generation + (changed ? 1 : 0)
     try await commitMutation(
       SourceMutation(
@@ -372,7 +335,6 @@ final class NotebookSessionController {
     guard session.generation == expectedGeneration else { throw DraftError.staleGeneration }
     let result = try mutation.applying(to: session.text)
     let changed = !result.utf8.elementsEqual(session.text.utf8)
-    guard !changed || expectedGeneration < UInt64.max else { throw DraftError.staleGeneration }
     isApplyingDurableEdit = true
     let wasFirstResponder = session.textView.isFirstResponder
     session.textView.isEditable = false
@@ -409,41 +371,6 @@ final class NotebookSessionController {
 
   func retryLocalSave() {
     persist(text: session.text, generation: session.generation)
-  }
-
-  func resolveUncertainCreation(
-    _ choice: NotebookCreationChoice, expectedGeneration: UInt64
-  ) async throws {
-    guard notebook.account?.id == draft.accountID, notebook.pendingAccount == nil else {
-      throw AccountError.accountChanged
-    }
-    guard session.generation == expectedGeneration else { throw DraftError.staleGeneration }
-    try beginDestructiveAction()
-    defer { endDestructiveAction() }
-    guard await waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
-    guard session.generation == expectedGeneration else { throw DraftError.staleGeneration }
-    let action: NotebookAction = switch choice {
-    case .publishAsNew:
-      .confirmNewCreation(draftID: draft.id, generation: expectedGeneration)
-    case .discard:
-      .discardUncertainCreation(draftID: draft.id, generation: expectedGeneration)
-    }
-    let result = try await notebook.perform(action)
-    switch (choice, result) {
-    case (.publishAsNew, .review(let confirmed)):
-      guard confirmed.id == draft.id, confirmed.accountID == draft.accountID,
-        confirmed.generation == session.generation,
-        confirmed.text.utf8.elementsEqual(session.text.utf8)
-      else { throw NotebookEditError.invalidCommittedEdit }
-      draft = confirmed
-      document.draft = confirmed
-      document.chrome = notebook.chrome(gist: nil, draft: confirmed)
-      saveState = NotebookModel.interfaceSaveState(confirmed.state)
-    case (.discard, .discardedDraft(let id)) where id == draft.id:
-      break
-    default:
-      throw NotebookEditError.invalidCommittedEdit
-    }
   }
 
   func didReconnect() {
@@ -611,23 +538,9 @@ final class NotebookSessionController {
           ))
         return
       }
-      if error is AccountError {
-        saveState = .reconnectRequired
-      } else if let failure = error as? DraftError, failure == .readOnly {
-        saveState = .publicationBlocked(
-          message: String(localized: "This account no longer has permission to edit the gist."))
-      } else if let failure = error as? GitHubClientError {
-        switch failure {
-        case .http(let status, _) where status == 401:
-          saveState = .reconnectRequired
-        case .incompleteGist, .fileTooLarge:
-          saveState = .publicationBlocked(message: NotebookModel.message(for: failure))
-        default:
-          saveState = .cloudFailure(message: NotebookModel.message(for: failure))
-        }
-      } else {
-        saveState = .cloudFailure(message: NotebookModel.message(for: error))
-      }
+      saveState =
+        error is AccountError
+        ? .reconnectRequired : .cloudFailure(message: NotebookModel.message(for: error))
     }
   }
 

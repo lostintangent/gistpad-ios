@@ -569,7 +569,7 @@
     func localState(accountID: UUID) async throws -> NotebookLocalState {
       NotebookLocalState(library: nil, drafts: try await store.drafts(accountID: accountID))
     }
-    func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) {}
+    func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>) {}
     func createDraft(accountID: UUID) throws -> DraftSnapshot { throw DraftError.notFound }
     func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
       try await store.discardBlankDraft(

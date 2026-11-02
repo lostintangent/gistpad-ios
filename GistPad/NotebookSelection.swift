@@ -11,7 +11,6 @@ struct NotebookSelection: Codable, Equatable, Sendable {
 final class NotebookSelectionStore {
   private let defaults: UserDefaults?
   private var memory: [UUID: NotebookSelection] = [:]
-  private var deleted: [UUID: Set<String>] = [:]
 
   init(defaults: UserDefaults? = nil) { self.defaults = defaults }
 
@@ -37,34 +36,6 @@ final class NotebookSelectionStore {
 
   private func key(_ accountID: UUID) -> String {
     "notebook.selection.\(accountID.uuidString)"
-  }
-
-  func deletedGistIDs(accountID: UUID) -> Set<String> {
-    if let defaults { return Set(defaults.stringArray(forKey: deletedKey(accountID)) ?? []) }
-    return deleted[accountID] ?? []
-  }
-
-  func markDeleted(gistID: String, accountID: UUID) {
-    var ids = deletedGistIDs(accountID: accountID)
-    ids.insert(gistID)
-    if let defaults {
-      defaults.set(ids.sorted(), forKey: deletedKey(accountID))
-    } else {
-      deleted[accountID] = ids
-    }
-  }
-
-  func confirmDeleted(gistIDs: Set<String>, accountID: UUID) {
-    let remaining = deletedGistIDs(accountID: accountID).subtracting(gistIDs)
-    if let defaults {
-      defaults.set(remaining.sorted(), forKey: deletedKey(accountID))
-    } else {
-      deleted[accountID] = remaining
-    }
-  }
-
-  private func deletedKey(_ accountID: UUID) -> String {
-    "notebook.deleted-gists.\(accountID.uuidString)"
   }
 }
 

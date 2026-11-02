@@ -15,7 +15,6 @@ struct NotebookConflictReview: View {
   @State private var isApplying = false
   @State private var isConfirmingRemote = false
   @State private var error: String?
-  @State private var remoteChanged = false
   @State private var localChanges: [NotebookDiffLine] = []
   @State private var remoteChanges: [NotebookDiffLine] = []
   @State private var isComparing = true
@@ -46,20 +45,14 @@ struct NotebookConflictReview: View {
                 error = nil
               } catch { self.error = NotebookModel.message(for: error) }
             }
-            .tint(.primary)
           }
           if let error {
             Label(error, systemImage: "exclamationmark.circle")
-          }
-          if remoteChanged {
-            Button("Refresh GitHub version") { refreshRemote() }
-              .tint(.primary)
           }
           Picker("Version", selection: $tab) {
             ForEach(ReviewTab.allCases, id: \.self) { Text($0.title).tag($0) }
           }
           .pickerStyle(.segmented)
-          .tint(.primary)
           switch tab {
           case .changes:
             if isComparing {
@@ -80,24 +73,16 @@ struct NotebookConflictReview: View {
               Text("There was no saved file when this local draft was created.")
             }
           }
-          .tint(.primary)
           if review.conflict.remote != nil {
             Text(
               "Both versions changed the same passage. Choose a version, or return to your draft to combine the changes yourself."
             )
           }
           VStack(alignment: .leading, spacing: 12) {
-            Button {
-              apply(review.conflict.local, publishes: true)
-            } label: {
-              Text("Keep Mine")
-                .foregroundStyle(Color(uiColor: .systemBackground))
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color(uiColor: .label))
+            Button("Keep Mine") { apply(review.conflict.local, publishes: true) }
+              .buttonStyle(.borderedProminent)
             Button("Use GitHub's") { isConfirmingRemote = true }
               .buttonStyle(.bordered)
-              .tint(.primary)
           }
           .disabled(isStale || !controller.canMutate)
           if !controller.canMutate {
@@ -108,18 +93,11 @@ struct NotebookConflictReview: View {
         .frame(maxWidth: 720, alignment: .leading)
         .frame(maxWidth: .infinity)
       }
-      .background(Color(uiColor: .systemBackground))
       .navigationTitle("Review changes")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Done") { dismiss() }.disabled(isApplying)
-            .tint(.primary)
-        }
-        ToolbarItem(placement: .secondaryAction) {
-          Button("Refresh GitHub", systemImage: "arrow.clockwise", action: refreshRemote)
-            .tint(.primary)
-            .disabled(isStale || isApplying)
         }
       }
       .disabled(isApplying)
@@ -198,21 +176,7 @@ struct NotebookConflictReview: View {
         dismiss()
       } catch {
         self.error = NotebookModel.message(for: error)
-        if case NotebookActionError.remoteReviewChanged = error { remoteChanged = true }
       }
-    }
-  }
-
-  private func refreshRemote() {
-    guard !isApplying else { return }
-    isApplying = true
-    Task {
-      defer { isApplying = false }
-      do {
-        review = try await controller.refreshReview(review)
-        error = nil
-        remoteChanged = false
-      } catch { self.error = NotebookModel.message(for: error) }
     }
   }
 }

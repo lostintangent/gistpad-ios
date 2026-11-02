@@ -21,7 +21,6 @@ struct LiveNotebookWorkspace: View {
   @State private var sharingTarget: NotebookSharingTarget?
   @State private var tagTarget: NotebookTagTarget?
   @State private var nameTarget: NotebookNameTarget?
-  @State private var creationChoiceTarget: NotebookCreationChoiceTarget?
   @State private var reviewTarget: NotebookConflictTarget?
   @State private var isPerformingAction = false
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -75,12 +74,6 @@ struct LiveNotebookWorkspace: View {
       set: { layout.setPinnedExpanded($0, accountID: accountID) })
   }
 
-  private struct NotebookCreationChoiceTarget {
-    let controller: NotebookSessionController
-    let generation: UInt64
-    let choice: NotebookCreationChoice
-  }
-
   private var activeID: String? {
     get { activity.activeID }
     nonmutating set { activity.activeID = newValue }
@@ -91,30 +84,6 @@ struct LiveNotebookWorkspace: View {
       .sheet(isPresented: accountSwitchPresented) {
         accountSwitchSheet
           .personalAccent(savedHex: notebook.account?.preferences.accentColor)
-      }
-      .confirmationDialog(
-        creationChoiceTarget?.choice == .discard
-          ? String(localized: "Discard this local copy?")
-          : String(localized: "Publish as a new note?"),
-        isPresented: Binding(
-          get: { creationChoiceTarget != nil },
-          set: { if !$0 { creationChoiceTarget = nil } }),
-        titleVisibility: .visible
-      ) {
-        if let target = creationChoiceTarget {
-          if target.choice == .discard {
-            Button("Discard This Copy", role: .destructive) { resolveCreation(target) }
-          } else {
-            Button("Publish as New Note") { resolveCreation(target) }
-          }
-        }
-        Button("Cancel", role: .cancel) {}
-      } message: {
-        if creationChoiceTarget?.choice == .discard {
-          Text("This removes this copy, its pending photos and local recovery history from this iPhone. It doesn't delete anything on GitHub. This cannot be undone.")
-        } else {
-          Text("GitHub may already have created the original note. This creates a separate note and may duplicate it. Check GitHub before continuing.")
-        }
       }
       .notebookIntelligence(intelligence)
       .personalAccent(savedHex: notebook.account?.preferences.accentColor)
@@ -287,7 +256,6 @@ struct LiveNotebookWorkspace: View {
     }
     .onChange(of: notebook.cachedLibrary?.cachedAt) {
       NotebookPlatformBootstrap.scheduleRefresh()
-      Task { await active?.inspectRemoteChanges() }
     }
     .onChange(of: notebook.account, initial: true) {
       NotebookPlatformBootstrap.scheduleRefresh()
@@ -303,7 +271,6 @@ struct LiveNotebookWorkspace: View {
       comments.reset()
       archiveUndo = nil
       intelligence.target = nil
-      creationChoiceTarget = nil
       let inactivePhotos = photoControllers.values.filter { $0.accountID != accountID }
       if accountID == nil {
         sessions.removeAll()
@@ -317,7 +284,6 @@ struct LiveNotebookWorkspace: View {
       if signingIn {
         comments.reset()
         intelligence.target = nil
-        creationChoiceTarget = nil
       }
     }
     .onChange(of: notebook.isSigningOut) { _, signingOut in
@@ -452,44 +418,6 @@ struct LiveNotebookWorkspace: View {
       set: { presented in
         if !presented, notebook.pendingAccount != nil { notebook.keepCurrentNotebook() }
       })
-  }
-
-  private func resolveCreation(_ target: NotebookCreationChoiceTarget) {
-    Task {
-      guard notebook.account?.id == target.controller.draft.accountID,
-        notebook.pendingAccount == nil,
-        active?.session.viewIdentity == target.controller.session.viewIdentity
-      else {
-        actionMessage = NotebookModel.message(for: AccountError.accountChanged)
-        return
-      }
-      guard !isPerformingAction else {
-        actionMessage = NotebookModel.message(for: NotebookActionError.publicationInProgress)
-        return
-      }
-      isPerformingAction = true
-      defer { isPerformingAction = false }
-      do {
-        try await target.controller.resolveUncertainCreation(
-          target.choice, expectedGeneration: target.generation)
-        switch target.choice {
-        case .publishAsNew:
-          await target.controller.publish()
-          if let error = target.controller.metadataError { actionMessage = error }
-        case .discard:
-          let key = target.controller.draft.id.uuidString
-          await photoControllers[key]?.stop()
-          photoControllers[key] = nil
-          sessions[key] = nil
-          if activeID == key { activeID = nil }
-          compactColumn = .sidebar
-        }
-      } catch {
-        Logger(subsystem: "dev.gistpad.GistPad", category: "Document")
-          .error("Creation choice failed: \(String(reflecting: type(of: error)), privacy: .public)")
-        actionMessage = NotebookModel.message(for: error)
-      }
-    }
   }
 
   @ViewBuilder
@@ -691,7 +619,6 @@ struct LiveNotebookWorkspace: View {
         .sharedBackgroundVisibility(.hidden)
       }
     }
-    .task(id: controller.draft.id) { await controller.inspectRemoteChanges() }
     .task(id: CommentReadInput(
       session: controller.session.viewIdentity, gistID: controller.document.gist?.id,
       knownTotal: controller.document.gist?.commentCount,
@@ -1020,37 +947,6 @@ struct LiveNotebookWorkspace: View {
           actionMessage = NotebookModel.message(for: error)
         }
       }
-    } else if controller.saveState == .creationUncertain, controller.draft.gistID == nil,
-      !controller.document.isRecovery
-    {
-      actions.openInGitHub = {
-        guard let account = notebook.account, account.id == controller.draft.accountID,
-          !account.login.isEmpty
-        else {
-          actionMessage = NotebookModel.message(for: AccountError.accountChanged)
-          return
-        }
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = "gist.github.com"
-        components.path = "/\(account.login)"
-        guard let url = components.url else {
-          actionMessage = String(localized: "This account's GitHub Gists page couldn't be opened.")
-          return
-        }
-        openURL(url)
-      }
-    }
-    if controller.saveState == .creationUncertain {
-      let generation = controller.session.generation
-      actions.publishAsNew = {
-        creationChoiceTarget = .init(
-          controller: controller, generation: generation, choice: .publishAsNew)
-      }
-      actions.discardLocalCopy = {
-        creationChoiceTarget = .init(
-          controller: controller, generation: generation, choice: .discard)
-      }
     }
     actions.intelligence = afterCommentsClose(actions.intelligence)
     actions.tags = afterCommentsClose(actions.tags)
@@ -1282,18 +1178,15 @@ struct LiveNotebookWorkspace: View {
     let save: (@MainActor @Sendable ([TagEdit]) async throws -> Void)?
     if target.canEdit {
       save = { edits in
-        for edit in edits {
-          let operation: PreferenceOperation
+        let operations = edits.map { edit -> PreferenceOperation in
           switch edit {
           case .setMembership(let id, let included):
-            operation = .setTag(gistID: target.gistID, tagID: id, included: included)
-          case .upsert(let tag):
-            operation = .upsertTag(id: tag.id, name: tag.name, color: tag.colorHex)
-          case .delete(let id):
-            operation = .deleteTag(id: id)
+            .setTag(gistID: target.gistID, tagID: id, included: included)
+          case .upsert(let tag): .upsertTag(id: tag.id, name: tag.name, color: tag.colorHex)
+          case .delete(let id): .deleteTag(id: id)
           }
-          _ = try await execute(.preference(operation), accountID: target.accountID)
         }
+        _ = try await execute(.saveTags(operations), accountID: target.accountID)
       }
     } else {
       save = nil
@@ -1339,12 +1232,10 @@ struct LiveNotebookWorkspace: View {
       isPerformingAction = false
     }
     let confirmedWithoutGist: Bool = switch action {
-    case .discardUncertainCreation: true
     case .discardLocalCopy(let draftID, _):
       notebook.localDrafts.first { $0.id == draftID }?.gistID == nil
     default: false
     }
-    var effectiveAction = action
     do {
       for controller in sessions.values {
         let requiresLock: Bool = switch action {
@@ -1353,14 +1244,14 @@ struct LiveNotebookWorkspace: View {
             || notebook.localDrafts.contains {
               $0.id == controller.draft.id && $0.gistID == gistID
             }
-        case .discardLocalCopy(let draftID, _), .discardUncertainCreation(let draftID, _):
+        case .discardLocalCopy(let draftID, _):
           controller.draft.id == draftID
         case .signOut: controller.draft.accountID == accountID
         default: false
         }
         if requiresLock {
           switch action {
-          case .delete, .deleteFile, .discardLocalCopy, .discardUncertainCreation:
+          case .delete, .deleteFile, .discardLocalCopy:
             await controller.waitForPublication()
             try Task.checkCancellation()
             guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
@@ -1380,7 +1271,7 @@ struct LiveNotebookWorkspace: View {
       guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
         throw AccountError.accountChanged
       }
-      effectiveAction = try await notebook.settledDeletionAction(
+      let effectiveAction = try await notebook.settledDeletionAction(
         action, confirmedWithoutGist: confirmedWithoutGist, accountID: accountID)
       let result = try await notebook.perform(effectiveAction)
       switch result {
@@ -1407,7 +1298,7 @@ struct LiveNotebookWorkspace: View {
         if let controller = sessions[draft.id.uuidString] {
           try await controller.refreshMetadata(gist: gist)
         }
-      case .deleted(let gistID, _):
+      case .deleted(let gistID):
         try await discardDeletedGistSessions(gistID: gistID, accountID: accountID)
       case .deletedFile(let gistID, let filename, let gist):
         await closeSessions {
@@ -1428,12 +1319,8 @@ struct LiveNotebookWorkspace: View {
       }
       return result
     } catch {
-      switch effectiveAction {
-      case .delete(let id), .deleteFile(let id, _):
-        if notebook.deletedGistIDs.contains(id) {
-          try await discardDeletedGistSessions(gistID: id, accountID: accountID)
-        }
-      default: break
+      if case .remoteDeletedLocalCleanupFailed(let gistID)? = error as? NotebookActionError {
+        try await discardDeletedGistSessions(gistID: gistID, accountID: accountID)
       }
       if let failure = error as? NotebookActionError,
         case .remoteDeletedFileCleanupFailed(let gistID, let filename) = failure
@@ -1521,7 +1408,6 @@ struct LiveNotebookWorkspace: View {
         && !showingSettings && !showingShare && !showingAddToToday
         && sharingTarget == nil && tagTarget == nil && nameTarget == nil
         && reviewTarget == nil
-        && creationChoiceTarget == nil
         && intelligence.target == nil
         && actionMessage == nil && notebook.documentError == nil,
       isEditing: active?.session.isComposing == true || active?.session.writingToolsActive == true)

@@ -99,22 +99,12 @@ struct NotebookDeletionTarget: Identifiable {
   let accountID: UUID
   let title: String
   var localDraft: DraftSnapshot? = nil
-  // The local snapshot lags an in-flight create, so a publish in progress counts as possibly sent.
-  var isPublishing = false
   // Daily notes delete one day's file; nil deletes the whole gist.
   var filename: String? = nil
 
-  var isUncertainCreation: Bool {
-    localDraft.map { $0.gistID == nil && ($0.attemptedGeneration != nil || isPublishing) } ?? false
-  }
-
   var action: NotebookAction {
     if let localDraft {
-      if isUncertainCreation {
-        .discardUncertainCreation(draftID: localDraft.id, generation: localDraft.generation)
-      } else {
-        .discardLocalCopy(draftID: localDraft.id, generation: localDraft.generation)
-      }
+      .discardLocalCopy(draftID: localDraft.id, generation: localDraft.generation)
     } else if let filename {
       .deleteFile(gistID: id, filename: filename)
     } else {

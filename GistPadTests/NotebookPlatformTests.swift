@@ -86,10 +86,10 @@ struct NotebookPlatformTests {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
     let target = DailyNoteTarget(date: .now.addingTimeInterval(-86_400))
-    let draft = try await fixture.store.newFileDraft(
+    let draft = try await fixture.store.openDraft(
       accountID: fixture.account.id, githubUserID: 42, gistID: fixture.provider.gist.id,
       filename: target.filename, description: GistConventions.dailyNotesDescription,
-      text: "# Pinned day\n")
+      content: "# Pinned day\n", isNewFile: true)
     try await fixture.store.cacheLibrary(
       owned: [], starred: [], preferences: fixture.account.preferences,
       accountID: fixture.account.id)
@@ -274,14 +274,15 @@ private actor PlatformNotebookProvider: NotebookProviding {
       library: try await store.cachedLibrary(accountID: accountID),
       drafts: try await store.drafts(accountID: accountID))
   }
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>) async throws {
     try await store.cacheLibrary(
-      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id)
+      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id,
+      keeping: keeping)
   }
   func today(accountID: UUID, target: DailyNoteTarget) async throws -> TodayNote {
     targets.append(target)
     let draft = try #require(try await store.drafts(accountID: accountID).first { $0.filename == target.filename })
-    return TodayNote(target: target, gist: gist, draft: draft)
+    return TodayNote(gist: gist, draft: draft)
   }
   func createDraft(accountID: UUID) async throws -> DraftSnapshot {
     throw NotebookPlatformError.serviceUnavailable

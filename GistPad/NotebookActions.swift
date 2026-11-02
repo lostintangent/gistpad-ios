@@ -4,6 +4,7 @@ import GistPadSync
 enum NotebookAction: Sendable {
   case signOut
   case preference(PreferenceOperation)
+  case saveTags([PreferenceOperation])
   case star(gistID: String, starred: Bool)
   case archive(gistID: String, archived: Bool)
   case undoArchive(NotebookArchiveUndo)
@@ -16,12 +17,7 @@ enum NotebookAction: Sendable {
   case fetchRemote(draftID: UUID)
   case recordRemote(draftID: UUID, generation: UInt64, remote: String?, revision: String?)
   case adoptRemote(draftID: UUID, generation: UInt64, remote: String, revision: String?)
-  case confirmNewCreation(draftID: UUID, generation: UInt64)
-  case discardUncertainCreation(draftID: UUID, generation: UInt64)
   case discardLocalCopy(draftID: UUID, generation: UInt64)
-  case discardCleanMissingCopy(
-    draftID: UUID, generation: UInt64, shouldDiscard: @Sendable () async -> Bool)
-  case refreshConflict(NotebookReviewContext)
   case resolveConflict(NotebookReviewContext, text: String, generation: UInt64)
 }
 
@@ -31,16 +27,11 @@ enum NotebookActionResult: Sendable {
   case gist(Gist, starred: Bool? = nil)
   case archived(Gist, undo: NotebookArchiveUndo)
   case draft(DraftSnapshot, gist: Gist? = nil)
-  case deleted(gistID: String, drafts: DeletedGistDrafts)
+  case deleted(gistID: String)
   case deletedFile(gistID: String, filename: String, gist: Gist)
   case review(DraftSnapshot)
   case remoteRead(DraftSnapshot, RemoteFile?)
   case discardedDraft(UUID)
-}
-
-enum NotebookCreationChoice: Equatable, Sendable {
-  case publishAsNew
-  case discard
 }
 
 enum NotebookActionError: Error, Equatable {
@@ -52,7 +43,6 @@ enum NotebookActionError: Error, Equatable {
   case remoteDeletedLocalCleanupFailed(gistID: String)
   case remoteDeletedFileCleanupFailed(gistID: String, filename: String)
   case staleReview
-  case remoteReviewChanged
   case archiveChangedElsewhere
 }
 
@@ -106,38 +96,16 @@ extension LiveNotebookProvider {
     }
     switch action {
     case .preference(let operation):
-      return .account(try await accounts.apply(operation, accountID: accountID))
+      return .account(try await accounts.apply([operation], accountID: accountID))
+    case .saveTags(let operations):
+      return .account(try await accounts.apply(operations, accountID: accountID))
     case .signOut:
       try await accounts.signOut(accountID: accountID)
       return .signedOut
-    case .confirmNewCreation(let id, let generation):
-      return .review(
-        try await drafts.confirmNewCreation(
-          id: id, accountID: accountID, expectedGeneration: generation))
-    case .discardUncertainCreation(let id, let generation):
-      try await drafts.discardUncertainCreation(
-        id: id, accountID: accountID, expectedGeneration: generation)
-      return .discardedDraft(id)
     case .discardLocalCopy(let id, let generation):
       try await drafts.discardLocalCopy(
         id: id, accountID: accountID, expectedGeneration: generation)
       return .discardedDraft(id)
-    case .discardCleanMissingCopy(let id, let generation, let shouldDiscard):
-      let draft = try await drafts.draft(id: id, accountID: accountID)
-      guard let gistID = draft.gistID else { throw DraftError.ambiguousCreation }
-      do {
-        let client = await client(accountID: accountID)
-        _ = try await client.gist(id: gistID)
-        return .review(draft)
-      } catch GitHubClientError.http(status: 404, retryAfter: _) {
-        guard await shouldDiscard() else { return .review(draft) }
-        if try await drafts.discardLocalCopy(
-          id: id, accountID: accountID, expectedGeneration: generation, onlyIfClean: true)
-        {
-          return .discardedDraft(id)
-        }
-        return .review(try await drafts.draft(id: id, accountID: accountID))
-      }
     case .renameLocal(let id, let title):
       guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         throw NotebookActionError.invalidTitle
@@ -161,37 +129,18 @@ extension LiveNotebookProvider {
           id: id, accountID: accountID, expectedGeneration: generation,
           remote: remote, revision: revision))
     case .adoptRemote(let id, let generation, let remote, let revision):
-      guard
-        case .refreshed(let adopted) = try await drafts.refreshCleanDraft(
+      return .review(
+        try await drafts.refreshCleanDraft(
           id: id, accountID: accountID, expectedGeneration: generation,
-          content: remote, revision: revision)
-      else { throw NotebookActionError.staleReview }
-      return .review(adopted)
-    case .refreshConflict(let review), .resolveConflict(let review, _, _):
-      let client = await client(accountID: accountID)
-      guard review.draft.accountID == accountID, let gistID = review.draft.gistID else {
-        throw AccountError.accountChanged
-      }
+          content: remote, revision: revision))
+    case .resolveConflict(let review, let text, let generation):
+      guard review.draft.accountID == accountID else { throw AccountError.accountChanged }
       let current = try await drafts.draft(id: review.draft.id, accountID: accountID)
       guard review.matches(current) else { throw NotebookActionError.staleReview }
-      let remote = try await client.remoteFile(
-        gistID: gistID, ownerID: current.githubUserID, filename: current.filename)
-      if case .resolveConflict(_, let text, let generation) = action {
-        guard review.conflict.remoteRevision == remote.gist.revision,
-          NotebookReviewContext.exactlyEqual(review.conflict.remote, remote.content)
-        else {
-          throw NotebookActionError.remoteReviewChanged
-        }
-        return .review(
-          try await drafts.resolveConflict(
-            id: current.id, accountID: accountID, expectedGeneration: current.generation,
-            text: text, generation: generation))
-      }
       return .review(
-        try await drafts.refreshConflict(
+        try await drafts.resolveConflict(
           id: current.id, accountID: accountID, expectedGeneration: current.generation,
-          expectedConflict: review.conflict, remote: remote.content,
-          revision: remote.gist.revision))
+          text: text, generation: generation))
     case .star(let id, let starred):
       let client = await client(accountID: accountID)
       let gist = try await client.gist(id: id)
@@ -258,9 +207,9 @@ extension LiveNotebookProvider {
       let (_, gist, userID) = try await ownedGist(id: id, account: account)
       try Self.validateFilename(filename)
       guard gist.files[filename] == nil else { throw NotebookActionError.filenameExists }
-      let draft = try await drafts.newFileDraft(
+      let draft = try await drafts.openDraft(
         accountID: accountID, githubUserID: userID, gistID: id, filename: filename,
-        description: gist.description ?? "", text: "")
+        description: gist.description ?? "", content: "", isNewFile: true)
       return .draft(draft, gist: gist)
     case .delete(let id):
       let (client, _, _) = try await ownedGist(id: id, account: account)
@@ -280,7 +229,7 @@ extension LiveNotebookProvider {
         updated = try await client.updateGist(id: id, files: [filename: .delete])
       }
       do {
-        _ = try await drafts.removeDraftsForDeletedFile(
+        try await drafts.removeDrafts(
           gistID: id, filename: filename, updated: updated, accountID: accountID)
         return .deletedFile(gistID: id, filename: filename, gist: updated)
       } catch {
@@ -296,10 +245,8 @@ extension LiveNotebookProvider {
     do {
       try await CommentConversationDiskStore.applicationStore().removeDrafts(
         scope: .init(accountID: accountID, gistID: id))
-      return .deleted(
-        gistID: id,
-        drafts: try await drafts.removeDraftsForDeletedGist(gistID: id, accountID: accountID)
-      )
+      try await drafts.removeDrafts(gistID: id, accountID: accountID)
+      return .deleted(gistID: id)
     } catch {
       throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: id)
     }
