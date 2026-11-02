@@ -921,10 +921,15 @@ private struct NavigationHost {
     previousWindow = scene.windows.first(where: \.isKeyWindow)
     window = UIWindow(windowScene: scene)
     let sceneBounds = scene.effectiveGeometry.coordinateSpace.bounds
+    // A compact host is a phone even when the simulator is an open Duo.
+    let width: CGFloat =
+      switch sizeClass {
+      case .regular: 1180
+      case .compact: min(sceneBounds.width, 440)
+      default: sceneBounds.width
+      }
     window.frame = CGRect(
-      origin: sceneBounds.origin,
-      size: CGSize(
-        width: sizeClass == .regular ? 1180 : sceneBounds.width, height: sceneBounds.height))
+      origin: sceneBounds.origin, size: CGSize(width: width, height: sceneBounds.height))
     if let sizeClass { window.traitOverrides.horizontalSizeClass = sizeClass }
     window.rootViewController = UIHostingController(
       rootView: RootView(library: library, layout: layout, pending: pending))
