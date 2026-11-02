@@ -91,9 +91,6 @@ public struct LibrarySearchResult: Equatable, Sendable {
     public let totalDocuments: Int
     public let documentsWithCachedContent: Int
     public let incompleteGistIDs: Set<String>
-    public var hasCompleteCachedContent: Bool {
-        totalDocuments == documentsWithCachedContent && incompleteGistIDs.isEmpty
-    }
 }
 
 public enum LibrarySearch {

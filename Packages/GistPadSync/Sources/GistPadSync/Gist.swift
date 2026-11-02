@@ -99,10 +99,10 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-private enum FilenameDateFormat: CaseIterable {
+enum FilenameDateFormat: CaseIterable {
     case isoDay, monthFirstDay, month, year
 
-    func date(filename: String) -> Date? {
+    func date(filename: String, timeZone: TimeZone = .gmt) -> Date? {
         let name = String(filename.dropLast(3))
         let pattern: String
         switch self {
@@ -122,7 +122,7 @@ private enum FilenameDateFormat: CaseIterable {
         case .year: components = DateComponents(year: values[0], month: 1, day: 1)
         }
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.timeZone = timeZone
         guard let date = calendar.date(from: components) else { return nil }
         let actual = calendar.dateComponents([.year, .month, .day], from: date)
         guard actual.year == components.year, actual.month == components.month,

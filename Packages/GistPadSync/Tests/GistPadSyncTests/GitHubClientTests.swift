@@ -3,12 +3,15 @@ import Synchronization
 import Testing
 @testable import GistPadSync
 
+/// The typed GitHub client: fresh reads, the token's reach, and the web's conventions on the wire.
 @Suite struct GitHubClientTests {
-    @Test func paginatesAndMatchesDifferentLibraryAndStarredFilters() async throws {
+    @Test func libraryListsAreFreshAndCoverOwnedAndStarred() async throws {
         let count = Mutex(0)
         let session = FakeURLProtocol.session { request in
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fake")
             #expect(request.value(forHTTPHeaderField: "X-GitHub-Api-Version") == "2026-03-10")
+            #expect(request.cachePolicy == .reloadIgnoringLocalCacheData)
+            #expect(request.value(forHTTPHeaderField: "Cache-Control") == "no-cache")
             count.withLock { $0 += 1 }
             if request.url?.query?.contains("page=2") == true {
                 return FakeResponse(data: Data("[]".utf8))
@@ -17,118 +20,45 @@ import Testing
             let image = try gistData(id: "def456", filename: "photo.png", language: "")
             let list = Data("[".utf8) + markdown + Data(",".utf8) + image + Data("]".utf8)
             return FakeResponse(
-                headers: ["Link": "<https://api.github.com/gists?page=2>; rel=\"next\""], data: list
-            )
+                headers: ["Link": "<https://api.github.com/gists?page=2>; rel=\"next\"", "Cache-Control": "max-age=60"],
+                data: list)
         }
         let client = GitHubClient(session: session) { "fake" }
         #expect(try await client.listGists().count == 2)
         #expect(try await client.listStarredGists().count == 1)
-        #expect(count.withLock { $0 } == 4)
+        #expect(try await client.listGists().count == 2)
+        #expect(count.withLock { $0 } == 6)
     }
 
-    @Test func etagRevalidationUsesCachedBody() async throws {
+    @Test func theTokenOnlyGoesToGitHub() async throws {
+        let hosts = Mutex<[String]>([])
         let session = FakeURLProtocol.session { request in
-            if request.value(forHTTPHeaderField: "If-None-Match") == "\"one\"" {
-                return FakeResponse(status: 304)
+            hosts.withLock { $0.append(request.url?.host ?? "") }
+            if request.url?.host == "gist.githubusercontent.com" {
+                #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+                return FakeResponse(data: Data("raw".utf8))
             }
-            return FakeResponse(headers: ["ETag": "\"one\""], data: try gistData())
-        }
-        let client = GitHubClient(session: session) { "fake" }
-        let first = try await client.gist(id: "abc123")
-        #expect(try await client.gist(id: "abc123") == first)
-    }
-
-    @Test func deletingAGistInvalidatesBothListsAndRevalidatesPastTheHTTPCache() async throws {
-        let calls = Mutex<[String: Int]>([:])
-        let session = FakeURLProtocol.session { request in
-            if request.httpMethod == "DELETE" { return FakeResponse(status: 204) }
-            #expect(request.cachePolicy == .reloadIgnoringLocalCacheData)
-            #expect(request.value(forHTTPHeaderField: "Cache-Control") == "no-cache")
-            let count = calls.withLock { calls in
-                let path = request.url?.path ?? ""
-                calls[path, default: 0] += 1
-                return calls[path, default: 0]
-            }
-            #expect(request.value(forHTTPHeaderField: "If-None-Match") == nil)
             return FakeResponse(
-                headers: ["ETag": "\"list\"", "Cache-Control": "max-age=60"],
-                data: count == 1 ? Data("[".utf8) + (try gistData()) + Data("]".utf8)
-                    : Data("[]".utf8))
+                headers: ["Link": "<https://example.com/gists?page=2>; rel=\"next\""], data: Data("[]".utf8))
         }
-        let client = GitHubClient(session: session) { "fake" }
-        #expect(try await client.listGists().count == 1)
-        #expect(try await client.listStarredGists().count == 1)
-        try await client.deleteGist(id: "abc123")
-        #expect(try await client.listGists().isEmpty)
-        #expect(try await client.listStarredGists().isEmpty)
-    }
-
-    @Test func anOlderListCannotRefillTheETagCacheAfterAMutation() async throws {
-        let gate = GitHubListReadGate()
-        let calls = Mutex(0)
-        let session = FakeURLProtocol.session { request in
-            if request.httpMethod == "DELETE" { return FakeResponse(status: 204) }
-            let count = calls.withLock { $0 += 1; return $0 }
-            if count == 1 {
-                await gate.hold()
-                return FakeResponse(
-                    headers: ["ETag": "\"before-delete\""],
-                    data: Data("[".utf8) + (try gistData()) + Data("]".utf8))
-            }
-            #expect(request.value(forHTTPHeaderField: "If-None-Match") == nil)
-            return FakeResponse(data: Data("[]".utf8))
-        }
-        let client = GitHubClient(session: session) { "fake" }
-        let olderRead = Task { try await client.listGists() }
-        await gate.waitUntilHeld()
-        try await client.deleteGist(id: "abc123")
-        await gate.release()
-        _ = try await olderRead.value
-        #expect(try await client.listGists().isEmpty)
-    }
-
-    @Test func neverSendsCredentialsToPaginationHost() async throws {
-        let calls = Mutex(0)
-        let session = FakeURLProtocol.session { _ in
-            calls.withLock { $0 += 1 }
-            return FakeResponse(
-                headers: ["Link": "<https://example.com/gists?page=2>; rel=\"next\""],
-                data: Data("[]".utf8)
-            )
-        }
-
         let client = GitHubClient(session: session) { "fake" }
         await #expect(throws: GitHubClientError.unsafeURL) { try await client.listGists() }
-        #expect(calls.withLock { $0 } == 1)
+        #expect(try await client.content(gist: rawGist(), filename: "README.md") == "raw")
+        await #expect(throws: GitHubClientError.unsafeURL) {
+            try await client.content(gist: rawGist(url: "https://example.com/raw/README.md"), filename: "README.md")
+        }
+        #expect(hosts.withLock { $0 } == ["api.github.com", "gist.githubusercontent.com"])
     }
 
     @Test func emptySavesUseSentinelAndCreatesAreSecret() async throws {
-        let session = FakeURLProtocol.session { request in
-            let body = try requestBody(request)
-            let files = try #require(body["files"] as? [String: [String: String]])
-            if request.httpMethod == "POST" {
-                #expect(body["public"] as? Bool == false)
-                #expect(files["README.md"]?["content"] == GistConventions.emptyContent)
-            } else {
-                #expect(files["README.md"]?["content"] == GistConventions.emptyContent)
-            }
-            return FakeResponse(data: try gistData(content: GistConventions.emptyContent))
-        }
-        let client = GitHubClient(session: session) { "fake" }
-        _ = try await client.createGist()
-        let saved = try await client.updateGist(id: "abc123", files: ["README.md": .content("")])
+        let server = FixtureServer()
+        let client = GitHubClient(session: server.session) { "fixture-github" }
+        let created = try await client.createGist()
+        #expect(created.isPublic == false)
+        #expect(server.gists[0].files["README.md"]?.content == GistConventions.emptyContent)
+        let saved = try await client.updateGist(id: created.id, files: ["README.md": .content("")])
+        #expect(server.gists[0].files["README.md"]?.content == GistConventions.emptyContent)
         #expect(try await client.content(gist: saved, filename: "README.md") == "")
-    }
-
-    @Test func timeoutDoesNotRetryCreate() async throws {
-        let count = Mutex(0)
-        let session = FakeURLProtocol.session { _ in
-            count.withLock { $0 += 1 }
-            throw URLError(.timedOut)
-        }
-        let client = GitHubClient(session: session) { "fake" }
-        await #expect(throws: (any Error).self) { try await client.createGist() }
-        #expect(count.withLock { $0 } == 1)
     }
 
     @Test func throttlingDoesNotLookLikeSignOut() async throws {
@@ -145,111 +75,57 @@ import Testing
         }
     }
 
-    @Test func incompleteGistCannotBeEditedFromPartialContent() async throws {
-        let gist = try decodeGist(gistData(truncated: true))
+    @Test func largeFilesOpenInFullAndAnIncompleteGistIsNeverPublished() async throws {
+        let requests = Mutex(0)
         let client = GitHubClient(session: FakeURLProtocol.session { _ in
-            Issue.record("Incomplete gist must not issue a content request")
-            return FakeResponse()
-        }) { "fake" }
-        await #expect(throws: GitHubClientError.incompleteGist) {
-            try await client.content(gist: gist, filename: "README.md")
-        }
-    }
-
-    @Test func archiveAndDailyConventions() throws {
-        let gist = try decodeGist(gistData(description: "Note   [Archived]"))
-        #expect(gist.isArchived)
-        #expect(gist.displayDescription == "Note")
-        let daily = try decodeGist(gistData(description: GistConventions.dailyNotesDescription))
-        #expect(daily.isDailyNote)
-        #expect(GistConventions.dailyContent(
-            template: "# {{date}}\n", dateFilename: "2026-10-24.md"
-        ) == "# 2026-10-24\n")
-        let date = try Date.ISO8601FormatStyle().parse("2026-10-24T00:00:00Z")
-        #expect(GistConventions.todayFilename(date: date, timeZone: TimeZone(secondsFromGMT: 0)!)
-            == "2026-10-24.md")
-    }
-
-    @Test func typedMutationsMatchGitHubFileAndNoContentShapes() async throws {
-        let requests = Mutex<[String]>([])
-        let session = FakeURLProtocol.session { request in
-            requests.withLock { $0.append("\(request.httpMethod ?? "") \(request.url?.path ?? "")") }
-            if request.httpMethod == "PATCH" {
-                let body = try requestBody(request)
-                if let description = body["description"] as? String {
-                    #expect(description == "Note [Archived]")
-                } else {
-                    let files = try #require(body["files"] as? [String: Any])
-                    #expect((files["README.md"] as? [String: String])?["filename"] == "Renamed.md")
-                    #expect(files["old.md"] is NSNull)
-                }
-                return FakeResponse(data: try gistData())
-            }
-            #expect(request.httpBody == nil)
-            return FakeResponse(status: 204)
-        }
-        let client = GitHubClient(session: session) { "fake" }
-        _ = try await client.updateGist(
-            id: "abc123", files: ["README.md": .rename("Renamed.md"), "old.md": .delete]
-        )
-        _ = try await client.setArchived(true, gist: decodeGist(gistData()))
-        try await client.setStarred(true, id: "abc123")
-        try await client.setStarred(false, id: "abc123")
-        try await client.deleteGist(id: "abc123")
-        #expect(requests.withLock { $0 } == [
-            "PATCH /gists/abc123", "PATCH /gists/abc123", "PUT /gists/abc123/star",
-            "DELETE /gists/abc123/star", "DELETE /gists/abc123"
-        ])
-    }
-
-    @Test func truncatedFilesUseRawContentWithoutForwardingTheToken() async throws {
-        let gistJSON = try JSONSerialization.jsonObject(with: gistData()) as? [String: Any]
-        var object = try #require(gistJSON)
-        object["files"] = ["README.md": [
-            "filename": "README.md", "language": "Markdown", "content": "partial",
-            "truncated": true, "raw_url": "https://gist.githubusercontent.com/test/abc123/raw/README.md"
-        ]]
-        let gist = try decodeGist(JSONSerialization.data(withJSONObject: object))
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            #expect(request.url?.host == "gist.githubusercontent.com")
-            #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+            requests.withLock { $0 += 1 }
             return FakeResponse(data: Data("complete content".utf8))
         }) { "fake" }
-        #expect(try await client.content(gist: gist, filename: "README.md") == "complete content")
+        #expect(try await client.content(gist: rawGist(content: "partial"), filename: "README.md") == "complete content")
+        await #expect(throws: GitHubClientError.incompleteGist) {
+            try await client.content(gist: decodeGist(gistData(truncated: true)), filename: "README.md")
+        }
+        #expect(requests.withLock { $0 } == 1)
     }
 
-    @Test func ordinary404DoesNotInheritAnUnrelatedRateLimitReset() async throws {
-        let session = FakeURLProtocol.session { _ in
-            FakeResponse(status: 404, headers: [
-                "X-RateLimit-Remaining": "4999", "X-RateLimit-Reset": "4102444800"
-            ])
-        }
-        let client = GitHubClient(session: session) { "fake" }
-        await #expect(throws: GitHubClientError.http(status: 404, retryAfter: nil)) {
-            try await client.gist(id: "abc123")
-        }
+    @Test func gistVerbsMatchGitHubAndTheWebsConventions() async throws {
+        let server = FixtureServer()
+        let gist = server.addGist(description: "Note", files: ["README.md": "hello", "old.md": "bye"])
+        let client = GitHubClient(session: server.session) { "fixture-github" }
+
+        let renamed = try await client.updateGist(
+            id: gist.id, files: ["README.md": .rename("Renamed.md"), "old.md": .delete])
+        #expect(server.gists[0].files.mapValues(\.content) == ["Renamed.md": "hello"])
+        let archived = try await client.setArchived(true, gist: renamed)
+        #expect(archived.description == "Note [Archived]")
+        #expect(archived.isArchived)
+        #expect(archived.displayDescription == "Note")
+        let described = try await client.updateDescription("Better", gist: archived)
+        #expect(described.description == "Better [Archived]")
+        #expect(try await client.setArchived(false, gist: described).description == "Better")
+        #expect(try decodeGist(gistData(description: "Note   [Archived]")).displayDescription == "Note")
+
+        try await client.setStarred(true, id: gist.id)
+        #expect(try await client.listStarredGists().map(\.id) == [gist.id])
+        try await client.setStarred(false, id: gist.id)
+        #expect(try await client.listStarredGists().isEmpty)
+        try await client.deleteGist(id: gist.id)
+        #expect(server.gists.isEmpty)
+        #expect(server.requests.filter { !$0.hasPrefix("GET") } == [
+            "PATCH /gists/\(gist.id)", "PATCH /gists/\(gist.id)", "PATCH /gists/\(gist.id)",
+            "PATCH /gists/\(gist.id)", "PUT /gists/\(gist.id)/star", "DELETE /gists/\(gist.id)/star",
+            "DELETE /gists/\(gist.id)",
+        ])
     }
 }
 
-private actor GitHubListReadGate {
-    private var held: CheckedContinuation<Void, Never>?
-    private var observer: CheckedContinuation<Void, Never>?
-
-    func hold() async {
-        await withCheckedContinuation { continuation in
-            held = continuation
-            observer?.resume()
-            observer = nil
-        }
-    }
-
-    func waitUntilHeld() async {
-        if held != nil { return }
-        await withCheckedContinuation { observer = $0 }
-    }
-
-    func release() {
-        held?.resume()
-        held = nil
-    }
+/// A gist whose README lives only behind its raw URL, the way GitHub serves large files.
+private func rawGist(
+    content: String? = nil, url: String = "https://gist.githubusercontent.com/test/abc123/raw/README.md"
+) throws -> Gist {
+    var object = try #require(try JSONSerialization.jsonObject(with: gistData()) as? [String: Any])
+    var file: [String: Any] = ["filename": "README.md", "language": "Markdown", "truncated": true, "raw_url": url]
+    file["content"] = content
+    object["files"] = ["README.md": file]
+    return try decodeGist(JSONSerialization.data(withJSONObject: object))
 }

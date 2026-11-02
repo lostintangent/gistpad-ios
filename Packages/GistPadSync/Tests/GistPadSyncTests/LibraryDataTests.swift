@@ -36,7 +36,7 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
         let before = try #require(try await store.cachedLibrary(accountID: account))
         let missing = LibrarySearch.search(before, query: LibrarySearchQuery(text: "Hidden"))
         #expect(missing.matches.isEmpty)
-        #expect(!missing.hasCompleteCachedContent)
+        #expect(missing.documentsWithCachedContent == 0)
         try await store.cacheGist(full, accountID: account)
         let reopened = try DraftStore.open(url: url)
         let cached = try #require(try await reopened.cachedLibrary(accountID: account))
@@ -45,7 +45,7 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
         #expect(result.matches.count == 1)
         #expect(result.matches.first?.isPinned == true)
         #expect(result.matches.first?.progress?.remaining == 1)
-        #expect(result.hasCompleteCachedContent)
+        #expect(result.documentsWithCachedContent == result.totalDocuments)
         #expect(try await reopened.cachedLibrary(accountID: UUID()) == nil)
     }
 
@@ -94,25 +94,6 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
         }
     }
 
-    @Test func staleCachedContentIsMarkedAndIncompleteFilesDoNotClaimProgress() throws {
-        let old = try decodeGist(gistData(content: "old cached needle"))
-        let data = try gistData(content: "new")
-        let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        var object = try #require(parsed)
-        object["updated_at"] = "2026-10-24T20:00:00Z"
-        object["truncated"] = true
-        let new = try metadataOnly(decodeGist(JSONSerialization.data(withJSONObject: object)))
-        let library = CachedLibrarySnapshot(
-            accountID: UUID(), owned: [new], starred: [], preferences: Preferences(metadata: [:]),
-            details: [old.id: old]
-        )
-        let result = LibrarySearch.search(library, query: LibrarySearchQuery(text: "needle"))
-        #expect(result.matches.count == 1)
-        #expect(result.matches.first?.contentIsCurrent == false)
-        #expect(result.incompleteGistIDs == ["abc123"])
-        #expect(!result.hasCompleteCachedContent)
-    }
-
     @Test func createDraftUsesWebHeadingAndEmptyContentDefaults() async throws {
         let store = try DraftStore.open(inMemory: true)
         let one = try await store.createGistDraft(accountID: UUID(), githubUserID: 42, description: "A title")
@@ -124,44 +105,8 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
         #expect(empty.text == "")
     }
 
-    @Test func cleanDraftsDoNotDisguiseStaleCacheAndNewerInlineContentWins() async throws {
-        let old = try decodeGist(gistData(content: "old source"))
-        let parsed = try JSONSerialization.jsonObject(with: gistData(content: "current source")) as? [String: Any]
-        var object = try #require(parsed)
-        object["updated_at"] = "2026-10-24T20:00:00Z"
-        let current = try decodeGist(JSONSerialization.data(withJSONObject: object))
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let clean = try await store.openDraft(
-            accountID: account, githubUserID: 42, gistID: old.id, filename: "README.md",
-            description: "Note", content: "old source", revision: old.revision
-        )
-        let library = CachedLibrarySnapshot(
-            accountID: account, owned: [current], starred: [], preferences: Preferences(metadata: [:]),
-            details: [old.id: old]
-        )
-        #expect(library.content(gist: current, filename: "README.md") == "current source")
-        let result = LibrarySearch.search(library, drafts: [clean])
-        #expect(result.matches.first?.text == "old source")
-        #expect(result.matches.first?.contentIsCurrent == false)
-    }
-
-    @Test func unpublishedDailyNotesRemainDiscoverableInTheirOwnCollection() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let target = DailyNoteTarget()
-        let daily = try await store.dailyGistDraft(accountID: account, githubUserID: 42, target: target)
-        let library = CachedLibrarySnapshot(
-            accountID: account, owned: [], starred: [], preferences: Preferences(metadata: [:])
-        )
-        let results = LibrarySearch.search(library, collection: .dailyNotes, drafts: [daily])
-        #expect(results.matches.first?.draftID == daily.id)
-        #expect(results.matches.first?.isDailyNote == true)
-        #expect(LibrarySearch.search(library, collection: .gists, drafts: [daily]).matches.isEmpty)
-    }
-
     @Test(arguments: ["template.md", "README.md", "2026.md", "2026-02-30.md"])
-    func dailySearchIncludesOnlyRealDatedFilesWithoutRestrictingOrdinaryNotes(filename: String) async throws {
+    func theDailyNotesSectionHoldsRealDaysIncludingUnpublishedOnes(filename: String) async throws {
         let account = UUID()
         let daily = try decodeGist(gistData(
             id: "daily", description: GistConventions.dailyNotesDescription, filename: filename))
@@ -185,11 +130,15 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
         ])
         #expect(all.totalDocuments == 3)
         #expect(all.documentsWithCachedContent == 3)
-        #expect(all.hasCompleteCachedContent)
         let days = LibrarySearch.search(library, collection: .dailyNotes, drafts: [invalid, local])
         #expect(Set(days.matches.map(\.id)) == ["dated/2024-02-29.md", local.id.uuidString])
-        #expect(days.matches.first { $0.id == local.id.uuidString }?.title == "2026-10-24")
-        #expect(days.matches.first { $0.id == local.id.uuidString }?.progress?.remaining == 0)
+        let unpublished = try #require(days.matches.first { $0.id == local.id.uuidString })
+        #expect(unpublished.draftID == local.id)
+        #expect(unpublished.isDailyNote)
+        #expect(unpublished.title == "2026-10-24")
+        #expect(unpublished.progress?.remaining == 0)
+        #expect(LibrarySearch.search(library, collection: .gists, drafts: [local]).matches.map(\.id)
+            == ["ordinary/\(filename)"])
     }
 
     @Test func missingRemoteGistsRemainSearchableAsAccountScopedRecoveryDrafts() async throws {
@@ -233,17 +182,13 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
         let local = try await store.persist(
             id: draft.id, accountID: account, text: "unpublished", generation: 1
         )
-        let links = try DocumentLinks(gist: gist, filename: filename, draft: local)
+        let links = try DocumentLinks(gist: gist, filename: filename)
         #expect(links.shareURL.absoluteString == "https://gistpad.dev/#/share/abc123/R%C3%A9sum%C3%A9%20%231%3F%20100%25.md")
-        #expect(links.editorURL.absoluteString == "https://gistpad.dev/#/abc123/R%C3%A9sum%C3%A9%20%231%3F%20100%25.md")
+        #expect(links.githubURL.absoluteString == "https://gist.github.com/abc123")
         #expect(links.isSecret)
-        #expect(links.hasUnpublishedChanges)
-        let new = try await store.newDraft(accountID: account, githubUserID: 42)
-        #expect(throws: DocumentLinkError.notPublished) {
-            try DocumentLinks(gist: gist, draft: new)
-        }
+        #expect(try DocumentLinks(gist: gist).shareURL.absoluteString == "https://gistpad.dev/#/share/abc123")
         #expect(throws: DocumentLinkError.invalidFilename) {
-            try DocumentLinks(gist: gist, filename: "not-published.md", draft: local)
+            try DocumentLinks(gist: gist, filename: "not-published.md")
         }
         #expect(try await store.draft(id: local.id, accountID: account).state == .savedLocally)
     }

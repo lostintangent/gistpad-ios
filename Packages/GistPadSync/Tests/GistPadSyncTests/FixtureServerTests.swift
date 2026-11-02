@@ -25,7 +25,7 @@ struct FixtureServerTests {
         try await github.setStarred(true, id: created.id)
         #expect(Set(try await github.listStarredGists().map(\.id)) == [created.id, "theirs"])
 
-        let pinned = try await accounts.apply(.setPinned(gistID: created.id, pinned: true), accountID: account.id)
+        let pinned = try await accounts.apply([.setPinned(gistID: created.id, pinned: true)], accountID: account.id)
         #expect(pinned.preferences.pinnedGists == [created.id])
         try await github.deleteGist(id: created.id)
         #expect(server.gists.map(\.id) == ["theirs"])

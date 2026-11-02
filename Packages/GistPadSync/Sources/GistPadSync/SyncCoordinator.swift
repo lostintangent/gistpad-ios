@@ -19,40 +19,40 @@ public actor SyncCoordinator {
         self.store = store
     }
 
+    /// Publishes the draft. Autosave and lifecycle publishes are checked once before reaching GitHub,
+    /// and typing during the publish hands over to the publish that typing schedules.
     @discardableResult
     public func publish(
-        id: UUID, accountID: UUID, reason: PublishReason = .manual,
-        autosaveEnabled: Bool = true, expectedGeneration: UInt64? = nil,
+        id: UUID, accountID: UUID, reason: PublishReason = .manual, expectedGeneration: UInt64? = nil,
         shouldPublish: @escaping @Sendable () async -> Bool = { true }
     ) async throws -> DraftSnapshot {
-        if reason == .autosave, !autosaveEnabled {
-            return try await store.draft(id: id, accountID: accountID)
-        }
         await acquire()
         defer { release() }
         try Task.checkCancellation()
         var draft = try await store.draft(id: id, accountID: accountID)
         if case .conflict = draft.state, !isCleanDraft(draft) { return draft }
-        try await validatePublication(
-            draft, reason: reason, expectedGeneration: expectedGeneration,
-            shouldPublish: shouldPublish)
-        if reason != .autosave, draft.autosavePaused {
-            draft = try await store.resumeAutosave(id: id, accountID: accountID)
-        }
-        if draft.gistID == nil, draft.attemptedGeneration != nil {
-            try await store.setState(.failed(.creationUncertain), id: id, accountID: accountID)
-            throw DraftError.ambiguousCreation
+        if reason != .manual {
+            guard expectedGeneration == nil || draft.generation == expectedGeneration,
+                  await shouldPublish() else { throw CancellationError() }
         }
         do {
             if Date.now < notBefore { try await Task.sleep(for: .seconds(notBefore.timeIntervalSinceNow)) }
+            if draft.gistID == nil, let attempted = draft.attemptedContent,
+               let generation = draft.attemptedGeneration {
+                if let created = try await createdGist(for: draft, content: attempted) {
+                    draft = try await store.acknowledge(
+                        id: id, accountID: accountID, gistID: created.id, content: attempted,
+                        revision: created.revision, generation: generation, publishedGist: created)
+                    if case .savedToGitHub = draft.state { return draft }
+                } else {
+                    draft = try await store.clearAttempt(id: id, accountID: accountID)
+                }
+            }
             if let gistID = draft.gistID {
                 let fetched = try await client.remoteFile(
                     gistID: gistID, ownerID: draft.githubUserID, filename: draft.filename)
                 let remoteGist = fetched.gist
                 let remote = fetched.content
-                try await validatePublication(
-                    draft, reason: reason, expectedGeneration: expectedGeneration,
-                    shouldPublish: shouldPublish)
                 if let attempted = draft.attemptedContent, let generation = draft.attemptedGeneration {
                     if sourceEqual(remote, attempted) {
                         draft = try await store.acknowledge(
@@ -61,7 +61,7 @@ public actor SyncCoordinator {
                         )
                         if case .savedToGitHub = draft.state { return draft }
                     } else {
-                        try await store.clearAttempt(id: id, accountID: accountID)
+                        draft = try await store.clearAttempt(id: id, accountID: accountID)
                     }
                 }
                 if sourceEqual(remote, draft.text) {
@@ -73,8 +73,7 @@ public actor SyncCoordinator {
                 if isCleanDraft(draft), let remote {
                     return try await store.refreshCleanDraft(
                         id: id, accountID: accountID, expectedGeneration: draft.generation,
-                        content: remote, revision: remoteGist.revision
-                    ).snapshot
+                        content: remote, revision: remoteGist.revision)
                 }
                 guard sourceEqual(remote, draft.baseContent) else {
                     let conflict = DraftConflict(
@@ -85,13 +84,8 @@ public actor SyncCoordinator {
                     return try await store.draft(id: id, accountID: accountID)
                 }
             }
-            try await validatePublication(
-                draft, reason: reason, expectedGeneration: expectedGeneration,
-                shouldPublish: shouldPublish)
             try await store.beginAttempt(
-                id: id, accountID: accountID, content: draft.text,
-                generation: draft.generation
-            )
+                id: id, accountID: accountID, content: draft.text, generation: draft.generation)
             let result: Gist
             if let gistID = draft.gistID {
                 result = try await client.updateGist(
@@ -110,19 +104,15 @@ public actor SyncCoordinator {
                 revision: result.revision, generation: draft.generation, publishedGist: result
             )
         } catch {
-            let latest = try await store.draft(id: id, accountID: accountID)
+            // A publish that was sent stays recorded, and the next publish checks GitHub for it first.
             if error is CancellationError || (error as? URLError)?.code == .cancelled {
-                if latest.attemptedGeneration != nil {
-                    try await store.setState(
-                        .failed(latest.gistID == nil ? .creationUncertain : .publicationUncertain),
-                        id: id, accountID: accountID)
+                if case .savingToGitHub = try await store.draft(id: id, accountID: accountID).state {
+                    try await store.setState(.savedLocally, id: id, accountID: accountID)
                 }
                 throw CancellationError()
             }
             let state: PublishState
-            if latest.gistID == nil, latest.attemptedGeneration != nil {
-                state = .failed(.creationUncertain)
-            } else if let error = error as? GitHubClientError {
+            if let error = error as? GitHubClientError {
                 switch error {
                 case .http(let status, let retryAfter):
                     if let retryAfter { notBefore = max(notBefore, retryAfter) }
@@ -142,59 +132,38 @@ public actor SyncCoordinator {
         }
     }
 
-    private func validatePublication(
-        _ draft: DraftSnapshot, reason: PublishReason, expectedGeneration: UInt64?,
-        shouldPublish: @escaping @Sendable () async -> Bool
-    ) async throws {
-        try Task.checkCancellation()
-        guard reason != .manual else { return }
-        guard reason != .autosave || !draft.autosavePaused,
-              expectedGeneration == nil || draft.generation == expectedGeneration,
-              await shouldPublish() else { throw CancellationError() }
-        let latest = try await store.draft(id: draft.id, accountID: draft.accountID)
-        guard latest.generation == draft.generation,
-              reason != .autosave || !latest.autosavePaused,
-              latest.attemptedGeneration == nil else { throw CancellationError() }
-        if case .conflict = latest.state, !isCleanDraft(latest) { throw CancellationError() }
-    }
-
-    public func adoptRemoteIfClean(id: UUID, accountID: UUID) async throws -> DraftSnapshot {
+    /// Reads GitHub's copy of the file once. A clean draft takes it on, and edits on both sides become
+    /// a conflict that shows the diff.
+    public func inspect(id: UUID, accountID: UUID) async throws -> DraftSnapshot {
         await acquire()
         defer { release() }
         try Task.checkCancellation()
         let draft = try await store.draft(id: id, accountID: accountID)
-        guard isCleanDraft(draft), let gistID = draft.gistID else { return draft }
+        guard let gistID = draft.gistID else { return draft }
+        if case .conflict = draft.state { return draft }
         let remote = try await client.remoteFile(
             gistID: gistID, ownerID: draft.githubUserID, filename: draft.filename)
-        guard let content = remote.content else { return draft }
-        return try await store.refreshCleanDraft(
+        return try await store.inspectRemoteChange(
             id: id, accountID: accountID, expectedGeneration: draft.generation,
-            content: content, revision: remote.gist.revision
-        ).snapshot
+            remote: remote.content, revision: remote.gist.revision)
+    }
+
+    /// The gist a cut-off create made, found by its description and a same-named file with the same
+    /// bytes, so a create is never posted twice.
+    private func createdGist(for draft: DraftSnapshot, content: String) async throws -> Gist? {
+        let size = GistConventions.encodeContent(content).utf8.count
+        for gist in try await client.listGists()
+        where (gist.description ?? "") == draft.description && gist.files[draft.filename]?.size == size {
+            let remote = try await client.remoteFile(
+                gistID: gist.id, ownerID: draft.githubUserID, filename: draft.filename)
+            if sourceEqual(remote.content, content) { return remote.gist }
+        }
+        return nil
     }
 
     private func isCleanDraft(_ draft: DraftSnapshot) -> Bool {
         draft.attemptedContent == nil && draft.attemptedGeneration == nil
             && sourceEqual(draft.text, draft.baseContent)
-    }
-
-    func adoptDailyCreation(id: UUID, accountID: UUID, createdGistID: String) async throws -> DraftSnapshot {
-        await acquire()
-        defer { release() }
-        let draft = try await store.draft(id: id, accountID: accountID)
-        if draft.gistID == createdGistID { return draft }
-        guard draft.gistID == nil else { throw DraftError.ambiguousCreation }
-        let attempted = draft.attemptedContent ?? draft.text
-        let generation = draft.attemptedGeneration ?? draft.generation
-        let remote = try await client.remoteFile(
-            gistID: createdGistID, ownerID: draft.githubUserID, filename: draft.filename)
-        let gist = remote.gist
-        guard let content = remote.content else { throw GitHubClientError.missingFile }
-        guard sourceEqual(content, attempted) else { throw DraftError.remoteDidNotAcknowledge }
-        return try await store.acknowledge(
-            id: id, accountID: accountID, gistID: gist.id,
-            content: content, revision: gist.revision, generation: generation, publishedGist: gist
-        )
     }
 
     private func acquire() async {

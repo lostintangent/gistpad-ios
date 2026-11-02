@@ -41,3 +41,86 @@ func requestBody(_ request: URLRequest) throws -> [String: Any] {
 func requestData(_ request: URLRequest) throws -> Data {
     FixtureServer.body(of: request)
 }
+
+/// The fixture GitHub with a draft store and coordinator, signed in as `FixtureServer.you`.
+struct SyncFixture {
+    static let account = FixtureServer.accountID
+    static let user = FixtureServer.you.id
+    let server: FixtureServer
+    let store: DraftStore
+    let github: GitHubClient
+    let coordinator: SyncCoordinator
+
+    init(store: DraftStore? = nil, server: FixtureServer = FixtureServer()) throws {
+        self.server = server
+        self.store = try store ?? DraftStore.open(inMemory: true)
+        github = GitHubClient(session: server.session) { "fixture-github" }
+        coordinator = SyncCoordinator(client: github, store: self.store)
+    }
+
+    /// Your draft of a gist's file, opened from what GitHub has now.
+    func open(_ gist: Gist, _ filename: String = "README.md") async throws -> DraftSnapshot {
+        let current = try #require(server.gists.first { $0.id == gist.id })
+        return try await store.openDraft(
+            accountID: Self.account, githubUserID: Self.user, gistID: gist.id, filename: filename,
+            description: current.description ?? "", content: current.files[filename]?.content ?? "",
+            revision: current.revision, isNewFile: current.files[filename] == nil)
+    }
+
+    func type(_ text: String, in draft: DraftSnapshot) async throws -> DraftSnapshot {
+        try await store.persist(id: draft.id, accountID: Self.account, text: text, generation: draft.generation + 1)
+    }
+
+    func publish(_ draft: DraftSnapshot) async throws -> DraftSnapshot {
+        try await coordinator.publish(id: draft.id, accountID: Self.account)
+    }
+
+    func reload(_ draft: DraftSnapshot) async throws -> DraftSnapshot {
+        try await store.draft(id: draft.id, accountID: Self.account)
+    }
+
+    /// The file's content on GitHub right now.
+    func remote(_ gistID: String, _ filename: String = "README.md") -> String? {
+        server.gists.first { $0.id == gistID }?.files[filename]?.content
+    }
+
+    func count(_ request: String) -> Int {
+        server.requests.filter { $0 == request }.count
+    }
+
+    var dailyNotes: DailyNotesService {
+        DailyNotesService(
+            accountID: Self.account, githubUserID: Self.user, client: github, store: store, coordinator: coordinator)
+    }
+}
+
+/// Lets a test hold a request at the fixture until it's released.
+actor Gate {
+    private var arrived = false
+    private var open = false
+    private var arrivals: [CheckedContinuation<Void, Never>] = []
+    private var held: [CheckedContinuation<Void, Never>] = []
+
+    func pass() async {
+        arrived = true
+        arrivals.forEach { $0.resume() }
+        arrivals.removeAll()
+        if !open { await withCheckedContinuation { held.append($0) } }
+    }
+
+    func waitForArrival() async {
+        if !arrived { await withCheckedContinuation { arrivals.append($0) } }
+    }
+
+    func release() {
+        open = true
+        held.forEach { $0.resume() }
+        held.removeAll()
+    }
+}
+
+func temporaryStoreURL() throws -> URL {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory.appendingPathComponent("drafts.store")
+}

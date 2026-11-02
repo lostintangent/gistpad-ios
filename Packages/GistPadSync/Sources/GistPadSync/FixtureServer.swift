@@ -102,6 +102,15 @@ public final class FixtureServer: Sendable {
         }
     }
 
+    /// Changes a gist the way the web would, without counting as one of the app's requests. A nil file deletes it.
+    public func edit(_ id: String, description: String? = nil, files: [String: String?] = [:]) {
+        state.withLock { state in
+            _ = state.update(id, with: .init(
+                description: description,
+                files: files.mapValues { $0.map { .init(content: $0, filename: nil) } }, public: nil))
+        }
+    }
+
     public static func body(of request: URLRequest) -> Data {
         if let body = request.httpBody { return body }
         guard let stream = request.httpBodyStream else { return Data() }
@@ -124,25 +133,23 @@ public final class FixtureServer: Sendable {
         let body = Self.body(of: request)
         return try state.withLock { state in
             state.requests.append("\(method) \(url.path)")
-            return url.host == "api.github.com"
-                ? try state.github(method, Array(url.pathComponents.dropFirst()), body)
-                : try state.supabase(method, url.path, body)
+            switch url.host {
+            case "api.github.com": return try state.github(method, Array(url.pathComponents.dropFirst()), body)
+            case "gist.githubusercontent.com": return state.raw(Array(url.pathComponents.dropFirst()))
+            default: return try state.supabase(method, url.path, body)
+            }
         }
     }
 }
 
 extension FixtureServer {
     /// Keychain-free credentials, so fixtures never touch the real sign-in.
-    public final class Credentials: AccountCredentialStorage, Sendable {
+    public final class Credentials: AuthLocalStorage, Sendable {
         private let values = Mutex<[String: Data]>([:])
         public init() {}
         public func store(key: String, value: Data) throws { values.withLock { $0[key] = value } }
         public func retrieve(key: String) throws -> Data? { values.withLock { $0[key] } }
         public func remove(key: String) throws { _ = values.withLock { $0.removeValue(forKey: key) } }
-        public func keys(withPrefix prefix: String) throws -> [String] {
-            values.withLock { $0.keys.filter { $0.hasPrefix(prefix) } }
-        }
-        public func upgradeAccessibility() throws {}
     }
 }
 
@@ -211,14 +218,24 @@ private extension FixtureServer.State {
     func served(_ gist: Gist, listed: Bool = false) -> Gist {
         Gist(
             id: gist.id, description: gist.description,
-            files: listed ? gist.files.mapValues {
+            files: gist.files.mapValues {
                 GistFile(
-                    filename: $0.filename, language: $0.language, content: nil, truncated: nil,
-                    rawURL: $0.rawURL, size: $0.size)
-            } : gist.files,
+                    filename: $0.filename, language: $0.language, content: listed ? nil : $0.content,
+                    truncated: listed ? nil : $0.truncated,
+                    rawURL: URL(string: "https://gist.githubusercontent.com")!
+                        .appending(components: gist.owner?.login ?? "", gist.id, "raw", $0.filename),
+                    size: $0.size)
+            },
             updatedAt: gist.updatedAt, createdAt: gist.createdAt, isPublic: gist.isPublic, owner: gist.owner,
             truncated: gist.truncated, history: listed ? nil : gist.history,
             commentCount: comments[gist.id]?.count ?? 0)
+    }
+
+    /// A file's raw text, which lists link to instead of including.
+    func raw(_ path: [String]) -> FixtureServer.Response {
+        guard path.count == 4, let content = gists.first(where: { $0.id == path[1] })?.files[path[3]]?.content
+        else { return .init(status: 404) }
+        return .init(data: Data(content.utf8))
     }
 
     mutating func supabase(_ method: String, _ path: String, _ body: Data) throws -> FixtureServer.Response {

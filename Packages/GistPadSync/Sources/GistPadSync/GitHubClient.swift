@@ -26,15 +26,6 @@ public actor GitHubClient {
     public typealias TokenProvider = @Sendable () async throws -> String
     private let session: URLSession
     private let token: TokenProvider
-    private var cache: [URL: CachedResponse] = [:]
-    private var cacheToken: String?
-    private var cacheRevision = UUID()
-
-    private struct CachedResponse {
-        let data: Data
-        let etag: String
-        let link: String?
-    }
 
     public init(session: URLSession? = nil, token: @escaping TokenProvider) {
         self.session = session ?? Self.makeSession()
@@ -191,12 +182,6 @@ public actor GitHubClient {
         )
     }
 
-    private func clearCache() {
-        cache.removeAll()
-        cacheToken = nil
-        cacheRevision = UUID()
-    }
-
     private func identifier(_ value: String) throws -> String {
         guard !value.isEmpty,
               value.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0)
@@ -270,8 +255,6 @@ public actor GitHubClient {
     private func request(url: URL, method: String = "GET", body: Data? = nil) async throws -> (Data, String?) {
         try validate(url)
         let accessToken = try await token()
-        if cacheToken != accessToken { clearCache(); cacheToken = accessToken }
-        let revision = cacheRevision
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         request.httpMethod = method
         request.httpBody = body
@@ -280,11 +263,8 @@ public actor GitHubClient {
         request.setValue("2026-03-10", forHTTPHeaderField: "X-GitHub-Api-Version")
         if method == "GET" { request.setValue("no-cache", forHTTPHeaderField: "Cache-Control") }
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
-        let cached = method == "GET" ? cache[url] : nil
-        if let cached { request.setValue(cached.etag, forHTTPHeaderField: "If-None-Match") }
         let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw GitHubClientError.invalidResponse }
-        if response.statusCode == 304, let cached { return (cached.data, cached.link) }
         guard (200..<300).contains(response.statusCode) else {
             var retry = response.retryAfterDate
             if retry == nil, [403, 429].contains(response.statusCode) {
@@ -297,14 +277,7 @@ public actor GitHubClient {
             }
             throw GitHubClientError.http(status: response.statusCode, retryAfter: retry)
         }
-        let link = response.value(forHTTPHeaderField: "Link")
-        if method == "GET", let etag = response.value(forHTTPHeaderField: "ETag"),
-           cacheToken == accessToken, cacheRevision == revision {
-            cache[url] = CachedResponse(data: data, etag: etag, link: link)
-        } else if method != "GET" {
-            clearCache()
-        }
-        return (data, link)
+        return (data, response.value(forHTTPHeaderField: "Link"))
     }
 }
 

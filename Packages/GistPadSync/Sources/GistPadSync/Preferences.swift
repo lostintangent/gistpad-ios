@@ -44,7 +44,6 @@ public struct Preferences: Codable, Equatable, Sendable {
 
     public var isAutoSaveEnabled: Bool { metadata["isAutoSaveEnabled"]?.boolValue ?? true }
     public var accentColor: String? { metadata["accentColor"]?.stringValue }
-    public var hasMalformedAccentColor: Bool { metadata["accentColor"] != nil && accentColor == nil }
     public var pinnedGists: [String] {
         metadata["pinnedGists"]?.arrayValue?.compactMap(\.stringValue) ?? []
     }

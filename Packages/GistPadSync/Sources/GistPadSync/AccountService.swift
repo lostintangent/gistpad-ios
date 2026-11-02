@@ -32,12 +32,7 @@ public struct Account: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-public protocol AccountCredentialStorage: AuthLocalStorage {
-    func keys(withPrefix prefix: String) throws -> [String]
-    func upgradeAccessibility() throws
-}
-
-public struct CredentialStore: AccountCredentialStorage {
+public struct CredentialStore: AuthLocalStorage {
     private let service: String
 
     public init(service: String = "dev.gistpad.GistPad.credentials") {
@@ -85,37 +80,6 @@ public struct CredentialStore: AccountCredentialStorage {
             throw AccountError.keychain(status)
         }
     }
-
-    public func keys(withPrefix prefix: String) throws -> [String] {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrSynchronizable as String: false,
-            kSecReturnAttributes as String: true,
-            kSecMatchLimit as String: kSecMatchLimitAll
-        ]
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return [] }
-        guard status == errSecSuccess else { throw AccountError.keychain(status) }
-        let items = result as? [[String: Any]] ?? []
-        return items
-            .compactMap { $0[kSecAttrAccount as String] as? String }
-            .filter { $0.hasPrefix(prefix) }
-    }
-
-    // Items saved by earlier builds kept the stricter ThisDeviceOnly class, which fails for locked background refreshes.
-    public func upgradeAccessibility() throws {
-        let attributes: [String: Any] = [
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        ]
-        for key in try keys(withPrefix: "") {
-            let status = SecItemUpdate(query(key) as CFDictionary, attributes as CFDictionary)
-            guard status == errSecSuccess || status == errSecItemNotFound else {
-                throw AccountError.keychain(status)
-            }
-        }
-    }
 }
 
 public actor AccountService {
@@ -127,7 +91,7 @@ public actor AccountService {
     private static let providerPrefix = "github-provider-"
     private static let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "account")
     private let auth: AuthClient
-    private let credentials: any AccountCredentialStorage
+    private let credentials: any AuthLocalStorage
     private let authEvents: Task<Void, Never>
     private let publishableKey: String
     private let httpSession: URLSession
@@ -137,7 +101,7 @@ public actor AccountService {
 
     public init(
         publishableKey: String,
-        credentials: any AccountCredentialStorage = CredentialStore(),
+        credentials: any AuthLocalStorage = CredentialStore(),
         session: URLSession? = nil,
         automaticallyRefreshesToken: Bool = true
     ) throws {
@@ -160,11 +124,6 @@ public actor AccountService {
             autoRefreshToken: automaticallyRefreshesToken,
             emitLocalSessionAsInitialSession: true
         )
-        do {
-            try credentials.upgradeAccessibility()
-        } catch {
-            Self.logger.error("Couldn't update keychain accessibility: \(String(describing: error), privacy: .public)")
-        }
         let client = auth
         authEvents = Task {
             for await (event, _) in client.authStateChanges {
@@ -189,17 +148,10 @@ public actor AccountService {
     /// The connected GitHub account for launch. It doesn't need a live Supabase session.
     public func connectedAccount() async throws -> Account? {
         if try persistedSession() != nil { return try await cachedAccount() }
-        guard let id = try connectedAccountID() else { return nil }
-        if let stored = try storedAccount(), stored.id == id { return stored }
-        // Installs from before the snapshot learn their identity once from GitHub. Preferences stay empty until a Supabase session returns, so callers keep their cached preferences.
-        let user = try await githubClient(accountID: id).authenticatedUser()
-        guard try connectedAccountID() == id else { throw AccountError.accountChanged }
-        let account = Account(
-            id: id, login: user.login, githubUserID: user.id,
-            avatarURL: user.avatarURL, preferences: Preferences(metadata: [:])
-        )
-        persistAccount(account)
-        return account
+        guard let id = try connectedAccountID(), let stored = try storedAccount(), stored.id == id else {
+            return nil
+        }
+        return stored
     }
 
     public func refreshAccount() async throws -> Account {
@@ -278,7 +230,8 @@ public actor AccountService {
         return token
     }
 
-    public func apply(_ operation: PreferenceOperation, accountID: UUID) async throws -> Account {
+    /// Folds `operations` over the web's latest metadata and writes the changed keys once, so a batch lands whole or not at all.
+    public func apply(_ operations: [PreferenceOperation], accountID: UUID) async throws -> Account {
         guard !updatingPreferences, !signingIn, !signingOut else { throw PreferenceError.operationInProgress }
         updatingPreferences = true
         defer { updatingPreferences = false }
@@ -289,7 +242,13 @@ public actor AccountService {
         guard user.id == accountID, try persistedSession()?.user.id == accountID else {
             throw AccountError.accountChanged
         }
-        let changes = try operation.changes(in: user.userMetadata)
+        var metadata = user.userMetadata
+        var changes: [String: MetadataValue] = [:]
+        for operation in operations {
+            let change = try operation.changes(in: metadata)
+            metadata.merge(change) { _, new in new }
+            changes.merge(change) { _, new in new }
+        }
         let updated = try await auth.update(user: UserAttributes(data: changes))
         guard updated.id == accountID, try persistedSession()?.user.id == accountID else {
             throw AccountError.accountChanged
@@ -319,22 +278,11 @@ public actor AccountService {
         try removeLocalCredentials(accountID: accountID)
     }
 
-    // The connection survives a failed token removal, so the account stays visibly connected instead of being re-adopted.
     private func removeLocalCredentials(accountID: UUID) throws {
-        let providerRemoval = Result { try credentials.remove(key: providerKey(accountID)) }
-        let connectionRemoval = Result {
-            guard case .success = providerRemoval else { return }
-            try credentials.remove(key: Self.connectionKey)
-        }
-        let accountRemoval = Result {
-            guard case .success = providerRemoval else { return }
-            try credentials.remove(key: Self.accountKey)
-        }
-        let sessionRemoval = Result { try credentials.remove(key: Self.sessionKey) }
-        try providerRemoval.get()
-        try connectionRemoval.get()
-        try accountRemoval.get()
-        try sessionRemoval.get()
+        try credentials.remove(key: providerKey(accountID))
+        try credentials.remove(key: Self.connectionKey)
+        try credentials.remove(key: Self.accountKey)
+        try credentials.remove(key: Self.sessionKey)
     }
 
     /// The GitHub account this device is connected to. It survives Supabase session loss, so GitHub reads don't depend on Supabase.
@@ -350,18 +298,7 @@ public actor AccountService {
             }
             return id
         }
-        return try adoptLegacyConnection()
-    }
-
-    // Builds before the connection record kept only the token. Adopt it only when it's unambiguous.
-    private func adoptLegacyConnection() throws -> UUID? {
-        let legacy = try credentials.keys(withPrefix: Self.providerPrefix)
-        guard legacy.count == 1,
-              let id = UUID(uuidString: String(legacy[0].dropFirst(Self.providerPrefix.count))) else {
-            return nil
-        }
-        try credentials.store(key: Self.connectionKey, value: Data(id.uuidString.utf8))
-        return id
+        return nil
     }
 
     private func retainConnection(_ session: Session) throws {

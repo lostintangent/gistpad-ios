@@ -257,8 +257,7 @@ private func imageDraft(store: DraftStore, account: UUID) async throws -> DraftS
         _ = try await store.acknowledge(
             id: draft.id, accountID: account, gistID: "abc123", content: "", revision: "one", generation: 0
         )
-        let cleanup = try await store.removeDraftsForDeletedGist(gistID: "abc123", accountID: account)
-        #expect(cleanup.removedDraftIDs == [draft.id])
+        try await store.removeDrafts(gistID: "abc123", accountID: account)
         await #expect(throws: ImageUploadError.notFound) {
             try await coordinator.upload(id: queued.id)
         }

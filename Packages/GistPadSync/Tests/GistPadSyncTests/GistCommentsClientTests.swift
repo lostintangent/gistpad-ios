@@ -59,28 +59,6 @@ import Testing
         ])
     }
 
-    @Test func commentMutationsInvalidateCommentAndGistCountETags() async throws {
-        let etags = Mutex<[String?]>([])
-        let session = FakeURLProtocol.session { request in
-            if request.httpMethod == "DELETE" { return FakeResponse(status: 204) }
-            etags.withLock { $0.append(request.value(forHTTPHeaderField: "If-None-Match")) }
-            if request.value(forHTTPHeaderField: "If-None-Match") != nil {
-                return FakeResponse(status: 304)
-            }
-            let data = request.url?.path.hasSuffix("/comments") == true
-                ? try commentsData([1]) : try gistData()
-            return FakeResponse(headers: ["ETag": "\"cached\""], data: data)
-        }
-        let client = GitHubClient(session: session) { "fake" }
-        _ = try await client.gist(id: "abc123")
-        let first = try await client.listComments(gistID: "abc123")
-        #expect(try await client.listComments(gistID: "abc123") == first)
-        try await client.deleteComment(gistID: "abc123", commentID: 1)
-        _ = try await client.listComments(gistID: "abc123")
-        _ = try await client.gist(id: "abc123")
-        #expect(etags.withLock { $0 } == [nil, nil, "\"cached\"", nil, nil])
-    }
-
     @Test func unsafeCommentPaginationNeverForwardsCredentials() async throws {
         let calls = Mutex(0)
         let session = FakeURLProtocol.session { _ in
