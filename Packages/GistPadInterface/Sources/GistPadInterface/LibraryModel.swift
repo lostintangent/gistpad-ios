@@ -36,7 +36,6 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
     public var tagIDs: Set<String>
     public var filename: String?
     public var fileCount: Int?
-    public var excerpt: String?
     public var progress: LibraryTaskProgress?
     public var isOverdue: Bool
     public var dailyDate: Date?
@@ -56,7 +55,7 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
         isOwned: Bool = true, canDeleteFromGitHub: Bool = false, isRecovery: Bool = false,
         isSecret: Bool = true, isPinned: Bool = false,
         isStarred: Bool = false, isArchived: Bool = false, isDailyNote: Bool = false,
-        tagIDs: Set<String> = [], filename: String? = nil, fileCount: Int? = nil, excerpt: String? = nil,
+        tagIDs: Set<String> = [], filename: String? = nil, fileCount: Int? = nil,
         progress: LibraryTaskProgress? = nil, isOverdue: Bool = false, dailyDate: Date? = nil,
         commentCount: Int? = nil
     ) {
@@ -76,7 +75,6 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
         self.tagIDs = tagIDs
         self.filename = filename
         self.fileCount = fileCount
-        self.excerpt = excerpt
         self.progress = progress
         self.isOverdue = isOverdue
         self.dailyDate = dailyDate
@@ -239,6 +237,13 @@ public final class LibraryModel {
         case .inactive: hasFilters && hasKnownGistSnapshot ? Self.gistCount(in: matchingNotes) : nil
         case .searching, .failed: nil
         }
+    }
+
+    /// Gists carrying the tag, counted over the same notes a tag filter searches.
+    public func gistCount(tagged tagID: String) -> Int {
+        Self.gistCount(in: snapshot.notes.filter {
+            $0.tagIDs.contains(tagID) && Self.primaryCollection(for: $0) != nil
+        })
     }
 
     public static func gistCount(in notes: [LibraryNote]) -> Int {

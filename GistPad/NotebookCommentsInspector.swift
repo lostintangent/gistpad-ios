@@ -40,13 +40,6 @@ struct NotebookCommentsInspector: View {
             .disabled(isClosing)
             .accessibilityIdentifier("comments-close")
           }
-          ToolbarItem(placement: .primaryAction) {
-            Button("Refresh Comments", systemImage: "arrow.clockwise") {
-              Task { await conversation.refresh() }
-            }
-            .disabled(conversation.isRefreshing || conversation.mutation == .working)
-            .accessibilityIdentifier("comments-refresh")
-          }
         }
     }
     .interactiveDismissDisabled(

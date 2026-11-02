@@ -22,6 +22,8 @@ You should never have to think about sync. Nothing you type is lost, you always 
 
   A conflict can only happen when GitHub changes while you have unpublished edits.
 
+  If the file was deleted on GitHub, GitHub's side is empty and Keep Mine adds the file back with your text.
+
 ## New gist
 
 - **Create.** A blank note opens immediately and lives on the phone, so it works offline.
@@ -56,7 +58,7 @@ Delete works in any state. It removes the gist from GitHub if it got there, and 
 
 ## When things go wrong
 
-- **Offline.** Edits keep saving on the phone, and they publish at the next publish trigger after you're back online.
+- **Offline.** Edits keep saving on the phone, and they publish at the next publish trigger after you're back online. Left notes with unpublished edits also publish when you return to the app.
 - **GitHub sign-in expired.** Edits stay on the phone. One Reconnect prompt appears, then they publish.
 - **Someone else's gist.** It's read-only.
 

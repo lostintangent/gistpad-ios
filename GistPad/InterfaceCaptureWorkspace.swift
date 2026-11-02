@@ -119,7 +119,7 @@ struct InterfaceCaptureWorkspace: View {
             "status-limited", "tag-filters", "row-anatomy",
             "collection-loading", "no-pins", "three-pins", "today-0", "today-3", "today-99plus",
             "collections-expanded", "collections-collapsed", "collections-empty",
-            "collection-search", "collection-overlap", "long-library", "square-pins"
+            "collection-search", "collection-overlap", "long-library", "square-pins", "compact-rows"
         ].contains(state) || (LaunchArguments.captureMangaFixture && screen == "note"
             && ["markers", "rules", "bullets"].contains(state))
         _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
@@ -149,23 +149,19 @@ struct InterfaceCaptureWorkspace: View {
             snapshot.notes.insert(
                 .init(
                     id: "small", title: "Small observations", updatedAt: InterfaceFixtures.referenceDate, gistID: "small",
-                    isPinned: true, tagIDs: ["ideas"], fileCount: 1,
-                    excerpt: "A notebook can be both quiet and precise."
+                    isPinned: true, tagIDs: ["ideas"], fileCount: 1
                 ),
                 at: 1
             )
             if let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
                 snapshot.notes[index].fileCount = 2
-                snapshot.notes[index].excerpt = "A quiet place to think, with a precise engine beneath the page."
                 snapshot.notes[index].progress = .init(completed: 2, total: 5)
                 snapshot.notes[index].commentCount = 3
             }
             if let index = snapshot.notes.firstIndex(where: { $0.id == "weekend" }) {
-                snapshot.notes[index].excerpt = "Leave a little room for an unplanned afternoon."
                 snapshot.notes[index].fileCount = 1
             }
             if let index = snapshot.notes.firstIndex(where: { $0.id == "words" }) {
-                snapshot.notes[index].excerpt = "A few sentences to return to when a thought needs a starting point."
                 snapshot.notes[index].fileCount = 3
             }
             snapshot.notes.removeAll(where: \.isDailyNote)
@@ -174,7 +170,6 @@ struct InterfaceCaptureWorkspace: View {
                     id: "daily-overdue", title: "2026-10-23",
                     updatedAt: InterfaceFixtures.referenceDate, gistID: "daily",
                     isDailyNote: true, filename: "2026-10-23.md", fileCount: 2,
-                    excerpt: "Set up the iPhone Duo. Keep the useful thoughts close.",
                     progress: .init(completed: 3, total: 4), isOverdue: true,
                     dailyDate: DailyNotesIndex.parseDateFilename("2026-10-23.md")
                 ),
@@ -182,7 +177,7 @@ struct InterfaceCaptureWorkspace: View {
                     id: "today", title: "Today",
                     updatedAt: InterfaceFixtures.referenceDate, gistID: "daily",
                     isDailyNote: true, filename: "2026-10-24.md", fileCount: 2,
-                    excerpt: "Keep the thought, not the interface.", progress: todayProgress,
+                    progress: todayProgress,
                     dailyDate: DailyNotesIndex.parseDateFilename("2026-10-24.md")
                 )
             ]
@@ -205,8 +200,7 @@ struct InterfaceCaptureWorkspace: View {
                 .init(
                     id: "long-\(index)", title: "A useful thought \(index)",
                     updatedAt: InterfaceFixtures.referenceDate.addingTimeInterval(Double(-index * 3600)),
-                    gistID: "long-\(index)", tagIDs: ["ideas"],
-                    excerpt: "Leave room for the thought to grow."
+                    gistID: "long-\(index)", tagIDs: ["ideas"]
                 )
             }
         }
@@ -232,8 +226,21 @@ struct InterfaceCaptureWorkspace: View {
             }
             snapshot.notes.append(.init(
                 id: "local-draft", title: "A first draft", updatedAt: InterfaceFixtures.referenceDate,
-                filename: "README.md", excerpt: "Not published yet."
+                filename: "README.md"
             ))
+        }
+        if state == "compact-rows" {
+            if let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
+                snapshot.notes[index].title = "📚 Manga reading list"
+            }
+            if let index = snapshot.notes.firstIndex(where: { $0.id == "small" }) {
+                snapshot.notes[index].title = "📆 Family memories"
+                snapshot.notes[index].commentCount = 2
+            }
+            if let index = snapshot.notes.firstIndex(where: { $0.id == "weekend" }) {
+                snapshot.notes[index].tagIDs = []
+                snapshot.notes[index].commentCount = 4
+            }
         }
         if state == "tag-audit" {
             snapshot = LibrarySnapshot(
@@ -303,7 +310,7 @@ struct InterfaceCaptureWorkspace: View {
         case "collection-loading":
             model.replaceSnapshot(nil)
             model.loadState = .loading
-        case "daily", "daily-progress": expandedCollections = [.dailyNotes]
+        case "daily", "daily-progress", "compact-rows": expandedCollections = [.dailyNotes]
         case "starred", "collection-overlap": expandedCollections = [.starred]
         case "archive": expandedCollections = [.archive]
         case "collections-expanded", "long-library":

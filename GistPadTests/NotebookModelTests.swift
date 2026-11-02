@@ -194,6 +194,36 @@ struct NotebookModelTests {
     #expect(published?.baseContent == "- [ ] Second")
   }
 
+  @Test func returningToTheAppPublishesEveryLeftNoteWithUnpublishedEdits() async throws {
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-23.md")
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
+    _ = try await provider.stageDailyDraft(filename: "2026-10-24.md", text: "- [ ] One")
+    _ = try await provider.stageDailyDraft(filename: "2026-10-25.md", text: "- [ ] Two")
+    let model = NotebookModel(provider: provider, remoteReadRetryDelays: [])
+    await model.start()
+    await model.publishUnsyncedEdits(accountID: fixtureAccount.id) { _ in nil }
+    #expect(await provider.publicationReasons == [.background, .background])
+    #expect(model.localDrafts.allSatisfy { !$0.hasUnpublishedEdits })
+  }
+
+  @Test func theUnsyncedSweepStopsAtTheFirstOfflineNote() async throws {
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-23.md")
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
+    _ = try await provider.stageDailyDraft(filename: "2026-10-24.md", text: "- [ ] One")
+    _ = try await provider.stageDailyDraft(filename: "2026-10-25.md", text: "- [ ] Two")
+    let model = NotebookModel(provider: provider, remoteReadRetryDelays: [])
+    await model.start()
+    await provider.failWritesOffline()
+    await model.publishUnsyncedEdits(accountID: fixtureAccount.id) { _ in nil }
+    let first = try #require(model.localDrafts.first { $0.filename == "2026-10-24.md" })
+    let second = try #require(model.localDrafts.first { $0.filename == "2026-10-25.md" })
+    #expect(first.state == .offline)
+    #expect(second.state != .offline)
+    #expect(second.hasUnpublishedEdits)
+  }
+
   @Test func aLaterSuccessfulNoteSaveClearsItsAttentionWithoutRetry() async throws {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let model = NotebookModel(provider: provider, remoteReadRetryDelays: [])
@@ -676,7 +706,6 @@ struct NotebookModelTests {
     _ = try await model.persist(
       draftID: draft.id, accountID: draft.accountID, text: "An accepted edit", generation: 1)
     _ = try await model.publish(draftID: draft.id, accountID: draft.accountID)
-    #expect(try await provider.recoveryCount(draftID: draft.id) == 1)
     model.library.query = "accepted edit"
     await model.search()
     #expect(model.library.matchingNotes.count == 1)
@@ -689,9 +718,6 @@ struct NotebookModelTests {
     #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.allSatisfy {
       $0.gistID != "a" && $0.isDiscardableBlank
     })
-    await #expect(throws: DraftError.notFound) {
-      try await provider.recoveryCount(draftID: draft.id)
-    }
     await model.refresh()
     await model.search()
     #expect(model.library.matchingNotes.isEmpty)
@@ -1327,50 +1353,6 @@ struct NotebookModelTests {
     #expect(await provider.readIDs.isEmpty)
   }
 
-  @Test func ordinaryLibraryExcerptsUseTheDefaultFileAndPreferDirtyLocalSourceWithoutFetching() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "Dirty local note", content: "Cached base"),
-        try makeGist(
-          id: "b", title: "Multiple", content: "Wrong alphabetical file", filename: "Apple.md",
-          additionalFiles: ["README.md": "A real cached excerpt\nwith another line"]),
-      ])
-    _ = try await provider.stageExistingDraft(gistID: "a", text: "  The local thought\nwins  ")
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.excerpt == "The local thought wins")
-    #expect(model.library.snapshot.notes.first(where: { $0.id == "b" })?.excerpt == "A real cached excerpt with another line")
-    #expect(await provider.readIDs.isEmpty)
-  }
-
-  @Test func durableEditsRefreshCleanDefaultFileExcerptsWithoutUsingAnotherFile() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(
-          id: "a", title: "A useful note", content: "Cached source",
-          additionalFiles: ["Ideas.md": "Another file"])
-      ])
-    let primary = try await provider.stageExistingDraft(
-      gistID: "a", text: "# A useful note\n\nAn earlier thought.")
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    _ = try await model.persist(
-      draftID: primary.id, accountID: fixtureAccount.id,
-      text: "---\nprivate: metadata\n---\n\n# A useful note\n\n- [x] Keep **this thought**.",
-      generation: primary.generation + 1)
-    #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.excerpt == "Keep this thought.")
-    await model.open(gistID: "a", filename: "Ideas.md")
-    let secondaryDocument = try #require(model.loadedDocument)
-    let secondary = try await provider.openDraft(for: secondaryDocument)
-    _ = try await model.persist(
-      draftID: secondary.id, accountID: fixtureAccount.id,
-      text: "# Ideas\n\nThis is not the default file.", generation: secondary.generation + 1)
-    #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.excerpt == "Keep this thought.")
-    #expect(await provider.readIDs.isEmpty)
-  }
-
   @Test func refreshDoesNotReplaceAnOpenedDocumentOrFilters() async throws {
     let original = try makeGist(id: "a", title: "Original", content: "Original text")
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [original])
@@ -1940,11 +1922,12 @@ struct NotebookModelTests {
     #expect(readOnly.rowID == "daily/2026-10-24.md")
     let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
     #expect(deletion.id == daily.id)
-    #expect(deletion.title == daily.displayName)
-    if case .delete(let gistID) = deletion.action {
+    #expect(deletion.title == GistConventions.fileDisplayName("2026-10-24.md"))
+    if case .deleteFile(let gistID, let filename) = deletion.action {
       #expect(gistID == daily.id)
+      #expect(filename == "2026-10-24.md")
     } else {
-      Issue.record("A Daily row retains the existing whole-gist deletion boundary.")
+      Issue.record("A Daily row deletes only its own file.")
     }
     #expect(await provider.readIDs.isEmpty)
   }
@@ -1993,7 +1976,6 @@ struct NotebookModelTests {
       text: "- [x] A retained task\n- [ ] A new task", generation: 1)
     let row = try #require(model.library.snapshot.notes.first { $0.id == "daily/2026-10-24.md" })
     #expect(row.progress == .init(completed: 1, total: 2))
-    #expect(row.excerpt == "A retained task A new task")
     #expect(row.isOverdue)
     #expect(model.library.dailyNoteCount == 2)
     _ = try await model.publish(draftID: draft.id, accountID: draft.accountID)
@@ -2054,6 +2036,24 @@ struct NotebookModelTests {
     #expect(model.library.snapshot.notes.allSatisfy { $0.gistID != daily.id })
     #expect(model.library.dailyNoteCount == 0)
     #expect(await provider.deletedIDs == [daily.id])
+  }
+
+  @Test func deletingOneDailyNoteRemovesOnlyItsFileAndKeepsTheSibling() async throws {
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription,
+      content: "The alpha day", filename: "2026-10-23.md",
+      additionalFiles: ["2026-10-24.md": "The beta day"])
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
+    await provider.failToday(true)
+    let model = NotebookModel(provider: provider)
+    await model.start()
+    #expect(model.library.dailyNoteCount == 2)
+    let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
+    _ = try await model.perform(deletion.action)
+    #expect(model.library.dailyNoteCount == 1)
+    #expect(model.library.snapshot.notes.map(\.id) == ["daily/2026-10-23.md"])
+    #expect(await provider.deletedFiles == ["daily/2026-10-24.md"])
+    #expect(await provider.deletedIDs.isEmpty)
   }
 }
 
@@ -3102,6 +3102,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
   var shouldFail = false
   var heldID: String?
   var failsWrites = false
+  var failsWritesOffline = false
   var publishFailure: DraftError?
   var failsAccountRefresh = false
   var appliedPreferences: [PreferenceOperation] = []
@@ -3123,6 +3124,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
   private(set) var readIDs: [String] = []
   private(set) var publicationReasons: [PublishReason] = []
   private(set) var deletedIDs: [String] = []
+  private(set) var deletedFiles: [String] = []
   private var failingReadIDs: Set<String> = []
   private var isSignedOut = false
   private var failsSignOutAfterCleanup = false
@@ -3267,6 +3269,10 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
   ) async throws -> DraftSnapshot {
     if reason != .manual, !(await shouldPublish()) { throw CancellationError() }
     if let publishFailure { throw publishFailure }
+    if failsWritesOffline {
+      try await draftStore().setState(.offline, id: draftID, accountID: accountID)
+      throw URLError(.notConnectedToInternet)
+    }
     if failsWrites { throw URLError(.notConnectedToInternet) }
     let store = try draftStore()
     let current = try await store.draft(id: draftID, accountID: accountID)
@@ -3274,7 +3280,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
     publicationReasons.append(reason)
     try await store.beginAttempt(
       id: draftID, accountID: accountID, content: current.text,
-      generation: current.generation, remote: current.baseContent)
+      generation: current.generation)
     if let index = notes.firstIndex(where: { $0.id == current.gistID }) {
       let gist = notes[index]
       var files = gist.files
@@ -3338,14 +3344,40 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
     default:
       break
     }
+    if case .deleteFile(let id, let filename) = action {
+      guard let original = notes.first(where: { $0.id == id }) else {
+        throw URLError(.fileDoesNotExist)
+      }
+      if original.files.count == 1, original.files[filename] != nil {
+        return try await perform(.delete(gistID: id), accountID: accountID)
+      }
+      var files = original.files
+      files[filename] = nil
+      let updated = Gist(
+        id: original.id, description: original.description, files: files,
+        updatedAt: original.updatedAt, createdAt: original.createdAt, isPublic: original.isPublic,
+        owner: original.owner, truncated: original.truncated, history: original.history,
+        commentCount: original.commentCount)
+      deletedFiles.append("\(id)/\(filename)")
+      notes = notes.map { $0.id == id ? updated : $0 }
+      starredNotes = starredNotes.map { $0.id == id ? updated : $0 }
+      if var cached {
+        cached.owned = cached.owned.map { $0.id == id ? updated : $0 }
+        cached.starred = cached.starred.map { $0.id == id ? updated : $0 }
+        if cached.details[id] != nil { cached.details[id] = updated }
+        cached.fileContent[id + "/" + filename] = nil
+        self.cached = cached
+      }
+      _ = try await draftStore().removeDraftsForDeletedFile(
+        gistID: id, filename: filename, updated: updated, accountID: accountID)
+      return .deletedFile(gistID: id, filename: filename, gist: updated)
+    }
     if case .delete(let id) = action {
       deletedIDs.append(id)
       notes.removeAll { $0.id == id }
       starredNotes.removeAll { $0.id == id }
-      return .deleted(
-        gistID: id,
-        drafts: try await draftStore().removeDraftsForDeletedGist(
-          gistID: id, accountID: accountID))
+      let drafts = try await draftStore().removeDraftsForDeletedGist(gistID: id, accountID: accountID)
+      return .deleted(gistID: id, drafts: drafts)
     }
     if case .preference(let operation) = action {
       appliedPreferences.append(operation)
@@ -3367,15 +3399,29 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
       if failsSignOutAfterCleanup { throw URLError(.timedOut) }
       return .signedOut
     }
-    if case .inspectRemote(let id, let generation) = action {
+    if case .fetchRemote(let id) = action {
       inspectionCount += 1
       let store = try draftStore()
       let draft = try await store.draft(id: id, accountID: accountID)
-      let remote = notes.first(where: { $0.id == draft.gistID })?.files[draft.filename]?.content
+      guard let gist = notes.first(where: { $0.id == draft.gistID }) else {
+        return .remoteRead(draft, nil)
+      }
+      return .remoteRead(
+        draft, RemoteFile(gist: gist, content: gist.files[draft.filename]?.content))
+    }
+    if case .recordRemote(let id, let generation, let remote, let revision) = action {
       return .review(
-        try await store.inspectRemoteChange(
+        try await draftStore().inspectRemoteChange(
           id: id, accountID: accountID, expectedGeneration: generation,
-          remote: remote, revision: "synthetic-revision"))
+          remote: remote, revision: revision))
+    }
+    if case .adoptRemote(let id, let generation, let remote, let revision) = action {
+      guard
+        case .refreshed(let adopted) = try await draftStore().refreshCleanDraft(
+          id: id, accountID: accountID, expectedGeneration: generation,
+          content: remote, revision: revision)
+      else { throw NotebookActionError.staleReview }
+      return .review(adopted)
     }
     throw DraftError.notFound
   }
@@ -3453,15 +3499,13 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
       accountID: account.id, githubUserID: 1, gistID: "daily", filename: filename,
       description: GistConventions.dailyNotesDescription, text: text)
   }
-  func recoveryCount(draftID: UUID) async throws -> Int {
-    try await draftStore().recoveries(id: draftID, accountID: account.id).count
-  }
   func setGists(_ gists: [Gist]) { notes = gists }
   func setReadFailure(id: String, fails: Bool) {
     if fails { failingReadIDs.insert(id) } else { failingReadIDs.remove(id) }
   }
   func failRequests(_ fails: Bool = true) { shouldFail = fails }
   func failWrites(_ fails: Bool = true) { failsWrites = fails }
+  func failWritesOffline() { failsWritesOffline = true }
   func failPublishes(with error: DraftError?) { publishFailure = error }
   func failAccountRefresh(_ fails: Bool = true) { failsAccountRefresh = fails }
   func rejectArchiveChanges() { rejectsArchiveChanges = true }

@@ -45,6 +45,16 @@ struct LibraryGistCountTests {
         #expect(model.featuredNotes.isEmpty)
     }
 
+    @Test func eachTagCountsTheGistsItsFilterWouldShow() {
+        let model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
+        model.snapshot.notes.append(note("local", tagIDs: ["ideas"]))
+        for tag in model.snapshot.tags {
+            model.selectedTagIDs = [tag.id]
+            #expect(model.gistCount(tagged: tag.id) == model.resultGistCount)
+        }
+        #expect(model.gistCount(tagged: "missing") == 0)
+    }
+
     @Test func unknownAndConfirmedEmptyCountsStayDistinctThroughRefresh() {
         let model = LibraryModel()
         #expect(model.collectionGistCount == nil)
@@ -128,10 +138,12 @@ struct LibraryGistCountTests {
 
     private func note(
         _ id: String, gistID: String? = nil, isOwned: Bool = true,
-        isPinned: Bool = false, isDailyNote: Bool = false, isStarred: Bool = false
+        isPinned: Bool = false, isDailyNote: Bool = false, isStarred: Bool = false,
+        tagIDs: Set<String> = []
     ) -> LibraryNote {
         .init(
             id: id, title: id, updatedAt: InterfaceFixtures.referenceDate, gistID: gistID,
-            isOwned: isOwned, isPinned: isPinned, isStarred: isStarred, isDailyNote: isDailyNote)
+            isOwned: isOwned, isPinned: isPinned, isStarred: isStarred, isDailyNote: isDailyNote,
+            tagIDs: tagIDs)
     }
 }

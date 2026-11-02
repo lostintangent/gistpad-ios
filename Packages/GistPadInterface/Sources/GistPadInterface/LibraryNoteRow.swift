@@ -9,57 +9,47 @@ struct LibraryNoteRow: View {
     @Environment(\.locale) private var locale
     @Environment(\.calendar) private var calendar
     @Environment(\.timeZone) private var timeZone
-    @ScaledMetric(relativeTo: .body) private var verticalPadding = 21
-    @ScaledMetric(relativeTo: .body) private var titleSpacing = 3
-    @ScaledMetric(relativeTo: .body) private var tagSpacing = 6
+    @ScaledMetric(relativeTo: .body) private var verticalPadding = 14
+    @ScaledMetric(relativeTo: .body) private var lineSpacing = 6
+    @ScaledMetric(relativeTo: .footnote) private var metadataSpacing = 8
 
     var body: some View {
         TimelineView(.everyMinute) { context in
-            VStack(alignment: .leading, spacing: tagSpacing) {
-                VStack(alignment: .leading, spacing: titleSpacing) {
-                    titleRow(relativeTo: context.date)
-                    secondaryLine(relativeTo: context.date)
+            let count = note.visibleCommentCount
+            // Daily notes stay one line, and only tagged notes earn a tag line.
+            let rowTags = note.isDailyNote ? [] : tags
+            // At accessibility sizes the row stacks, so the count joins the date
+            // and the tag line holds only tags.
+            let isStacked = dynamicTypeSize.isAccessibilitySize
+            let countOnTitleLine = isStacked || rowTags.isEmpty
+            VStack(alignment: .leading, spacing: lineSpacing) {
+                if isStacked {
+                    titleContent(relativeTo: context.date)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    metadata(relativeTo: context.date, count: count)
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        titleContent(relativeTo: context.date)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        metadata(relativeTo: context.date, count: countOnTitleLine ? count : nil)
+                    }
                 }
-                if !tags.isEmpty {
-                    TagLabels(tags: tags, limit: 2)
-                        .captureFrame("note-tags-\(note.id)")
+                if !rowTags.isEmpty {
+                    HStack(spacing: 8) {
+                        TagLabels(tags: rowTags, limit: 2)
+                            .captureFrame("note-tags-\(note.id)")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if let count, !countOnTitleLine {
+                            LibraryCommentCount(count: count, noteID: note.id)
+                                .font(.footnote)
+                        }
+                    }
                 }
             }
             .padding(.vertical, verticalPadding)
             .accessibilityElement(children: .combine)
             .accessibilityValue(Text(verbatim: note.accessibilityDetail))
             .captureFrame("note-content-\(note.id)")
-        }
-    }
-
-    @ViewBuilder
-    private func titleRow(relativeTo now: Date) -> some View {
-        if let progress = note.progress, progress.total > 0 {
-            if dynamicTypeSize.isAccessibilitySize {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: 0) {
-                        titleContent(relativeTo: now)
-                            .fixedSize(horizontal: true, vertical: false)
-                        Spacer(minLength: 8)
-                        taskState(progress)
-                    }
-                    VStack(alignment: .leading, spacing: titleSpacing) {
-                        titleContent(relativeTo: now)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        taskState(progress)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
-                }
-            } else {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    titleContent(relativeTo: now)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    taskState(progress)
-                }
-            }
-        } else {
-            titleContent(relativeTo: now)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -79,78 +69,35 @@ struct LibraryNoteRow: View {
         }
     }
 
-    private func taskState(_ progress: LibraryTaskProgress) -> some View {
-        TaskProgressLabel(progress: progress, isOverdue: note.isOverdue)
-            .fixedSize()
-            .captureFrame("note-progress-\(note.id)")
-    }
-
     @ViewBuilder
-    private func secondaryLine(relativeTo now: Date) -> some View {
-        Group {
-            if let count = note.visibleCommentCount {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    metadata(relativeTo: now)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+    private func metadata(relativeTo now: Date, count: Int?) -> some View {
+        let updated = updateLabel(relativeTo: now)
+        if note.isDailyNote {
+            if let progress = note.progress, progress.total > 0 {
+                TaskProgressLabel(progress: progress, isOverdue: note.isOverdue)
+                    .fixedSize()
+                    .captureFrame("note-progress-\(note.id)")
+            }
+        } else if count != nil || updated != nil {
+            HStack(alignment: .firstTextBaseline, spacing: metadataSpacing) {
+                if let count {
                     LibraryCommentCount(count: count, noteID: note.id)
                 }
-            } else {
-                metadata(relativeTo: now)
+                if let updated {
+                    Text(verbatim: updated)
+                        .foregroundStyle(.secondary)
+                        .captureFrame("note-date-\(note.id)")
+                }
             }
-        }
-        .font(.footnote)
-    }
-
-    @ViewBuilder
-    private func metadata(relativeTo now: Date) -> some View {
-        Group {
-            if note.isDailyNote {
-                if let excerpt = note.excerpt, !excerpt.isEmpty {
-                    excerptText(excerpt)
-                        .captureFrame("note-secondary-\(note.id)")
-                }
-            } else {
-                let updated = note.updatedAt.map {
-                    LibraryDatePresentation.updateLabel(
-                        for: $0, relativeTo: now, locale: locale, calendar: displayCalendar)
-                }
-                Group {
-                    if dynamicTypeSize.isAccessibilitySize {
-                        VStack(alignment: .leading, spacing: titleSpacing) {
-                            if let updated {
-                                Text(verbatim: updated)
-                                    .foregroundStyle(.secondary)
-                                    .captureFrame("note-date-\(note.id)")
-                            }
-                            if let excerpt = note.excerpt, !excerpt.isEmpty {
-                                excerptText(excerpt)
-                            }
-                        }
-                    } else {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            if let updated {
-                                Text(verbatim: updated)
-                                    .fixedSize(horizontal: true, vertical: false)
-                                    .foregroundStyle(.secondary)
-                                    .captureFrame("note-date-\(note.id)")
-                            }
-                            if let excerpt = note.excerpt, !excerpt.isEmpty {
-                                excerptText(excerpt)
-                            }
-                        }
-                    }
-                }
-                .captureFrame("note-secondary-\(note.id)")
-            }
+            .font(.footnote)
+            .fixedSize()
         }
     }
 
-    private func excerptText(_ excerpt: String) -> some View {
-        Text(verbatim: excerpt)
-            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-            .fixedSize(horizontal: false, vertical: true)
-            .foregroundStyle(.secondary)
-            .captureFrame("note-excerpt-\(note.id)")
+    private func updateLabel(relativeTo now: Date) -> String? {
+        guard !note.isDailyNote, let updatedAt = note.updatedAt else { return nil }
+        return LibraryDatePresentation.updateLabel(
+            for: updatedAt, relativeTo: now, locale: locale, calendar: displayCalendar)
     }
 
     private func displayTitle(relativeTo now: Date) -> String {

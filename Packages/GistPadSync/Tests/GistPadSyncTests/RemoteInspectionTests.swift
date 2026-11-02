@@ -17,7 +17,7 @@ import Testing
         let text = "# Saved\r\n\r\n日本語 👩🏽‍💻 e\u{301}\r\n"
         _ = try await first.persist(id: draft.id, accountID: account, text: text, generation: 1)
         try await first.beginAttempt(
-            id: draft.id, accountID: account, content: text, generation: 1, remote: "base")
+            id: draft.id, accountID: account, content: text, generation: 1)
         let methods = Mutex<[String]>([])
         let client = GitHubClient(session: FakeURLProtocol.session { request in
             methods.withLock { $0.append(request.httpMethod ?? "") }
@@ -45,7 +45,7 @@ import Testing
         #expect(methods.withLock { $0 } == ["PATCH", "GET"])
         let again = try DraftStore.open(url: url)
         #expect(try await again.draft(id: draft.id, accountID: account).state == .savedToGitHub)
-        let coordinator = SyncCoordinator(client: client, store: again, mutationInterval: .zero)
+        let coordinator = SyncCoordinator(client: client, store: again)
         #expect(try await coordinator.publish(id: draft.id, accountID: account).state == .savedToGitHub)
         #expect(methods.withLock { $0 } == ["PATCH", "GET", "GET"])
     }
@@ -58,7 +58,7 @@ import Testing
             description: "Note", content: "base", revision: "one")
         _ = try await store.persist(id: draft.id, accountID: account, text: "sent", generation: 1)
         try await store.beginAttempt(
-            id: draft.id, accountID: account, content: "sent", generation: 1, remote: "base")
+            id: draft.id, accountID: account, content: "sent", generation: 1)
         _ = try await store.persist(id: draft.id, accountID: account, text: "newer", generation: 2)
         try await store.setState(.failed(.publicationUncertain), id: draft.id, accountID: account)
         let adopted = try await store.inspectRemoteChange(
@@ -80,7 +80,7 @@ import Testing
             description: "Note", content: "base", revision: "one")
         _ = try await store.persist(id: draft.id, accountID: account, text: "\u{e9}", generation: 1)
         try await store.beginAttempt(
-            id: draft.id, accountID: account, content: "\u{e9}", generation: 1, remote: "base")
+            id: draft.id, accountID: account, content: "\u{e9}", generation: 1)
         await #expect(throws: DraftError.publishInProgress) {
             try await store.inspectRemoteChange(
                 id: draft.id, accountID: account, expectedGeneration: 1,
@@ -102,21 +102,22 @@ import Testing
         let draft = try await store.openDraft(
             accountID: account, githubUserID: 42, gistID: "abc123", filename: "README.md",
             description: "Note", content: "base", revision: "one")
+        let edited = try await store.persist(
+            id: draft.id, accountID: account, text: "local", generation: 1)
         let inspected = try await store.inspectRemoteChange(
-            id: draft.id, accountID: account, expectedGeneration: 0,
+            id: draft.id, accountID: account, expectedGeneration: 1,
             remote: "changed remotely", revision: "two")
-        #expect(inspected.text == "base")
-        #expect(inspected.generation == 0)
+        #expect(inspected.text == "local")
+        #expect(inspected.generation == edited.generation)
         guard case .conflict(let conflict) = inspected.state else {
             Issue.record("A retained clean source must disclose a remote change.")
             return
         }
         #expect(conflict.remote == "changed remotely")
         let again = try await store.inspectRemoteChange(
-            id: draft.id, accountID: account, expectedGeneration: 0,
+            id: draft.id, accountID: account, expectedGeneration: 1,
             remote: "changed a second time", revision: "three")
         #expect(again.state == inspected.state)
-        #expect(try await store.recoveries(id: draft.id, accountID: account).isEmpty)
     }
 
     @Test func missingFileAndStaleGenerationCannotBecomeAnEmptyBaseline() async throws {

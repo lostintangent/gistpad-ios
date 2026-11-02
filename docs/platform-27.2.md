@@ -36,9 +36,9 @@ Nothing in 27.2 changes a visible GistPad surface that the Designer needs to app
 
 ## 27.1 and 27.2 behavior changes to check
 
-- **UIKit default layout margins are zero on iOS 27.1+.** This already applies to us because our minimum was 27.1. Check the three `UIViewRepresentable` views (`NotebookSceneAccent`, `MarkerCaptureContrast`, `ScrollEdgeReadiness`) and the `UIHostingConfiguration` with `.margins(.all, 0)` in `PhotoAttachments`. No code change is proposed. The Designer checks the Light and Dark captures for layout shifts.
+- **UIKit default layout margins are zero on iOS 27.1+.** This already applies to us because our minimum was 27.1. Check the three `UIViewRepresentable` views (`NotebookSceneAccent`, `MarkerCaptureContrast`, `ScrollEdgeReadiness`) and the `UIHostingConfiguration` with `.margins(.all, 0)` in `PhotoAttachments`. No code change is proposed. The Designer checks the Dark captures for layout shifts.
 - **Xcode 27.2 requires macOS Tahoe 26.6 or later.** Lead's build machine must meet this.
-- **Deployment target.** Main still sets `IPHONEOS_DEPLOYMENT_TARGET = 27.1` (two build configurations). The 27.2 bump is on `release/build-23`, so it lands with build 23.
+- **Deployment target.** `release/build-23` (`ad39472`) raises `IPHONEOS_DEPLOYMENT_TARGET` and every package platform to 27.2. Nothing else in the project needs the bump.
 - **Shortcuts "Describe a Shortcut" known issue.** Our phrases use `AppShortcutsProvider`, not this feature. Cover Shortcuts in the t12 installed-device pass.
 
 ## Open checks

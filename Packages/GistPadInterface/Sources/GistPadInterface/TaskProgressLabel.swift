@@ -20,9 +20,10 @@ struct TaskProgressLabel: View {
     var showsIndicator = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .footnote) private var ringSize = 14
+    @ScaledMetric(relativeTo: .footnote) private var spacing = 4
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: spacing) {
             if showsIndicator {
                 if progress.remaining == 0 {
                     TaskCompletionMark(size: ringSize)

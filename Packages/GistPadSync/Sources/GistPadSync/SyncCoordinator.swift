@@ -13,12 +13,10 @@ public actor SyncCoordinator {
     private var busy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private var notBefore: Date = .distantPast
-    private let mutationInterval: Duration
 
-    public init(client: GitHubClient, store: DraftStore, mutationInterval: Duration = .seconds(1)) {
+    public init(client: GitHubClient, store: DraftStore) {
         self.client = client
         self.store = store
-        self.mutationInterval = mutationInterval
     }
 
     @discardableResult
@@ -47,13 +45,11 @@ public actor SyncCoordinator {
         }
         do {
             if Date.now < notBefore { try await Task.sleep(for: .seconds(notBefore.timeIntervalSinceNow)) }
-            let remote: String?
             if let gistID = draft.gistID {
-                let remoteGist = try await client.gist(id: gistID)
-                guard remoteGist.owner?.id == draft.githubUserID else { throw DraftError.readOnly }
-                guard remoteGist.truncated != true else { throw GitHubClientError.incompleteGist }
-                if remoteGist.files[draft.filename] == nil { remote = nil }
-                else { remote = try await client.content(gist: remoteGist, filename: draft.filename) }
+                let fetched = try await client.remoteFile(
+                    gistID: gistID, ownerID: draft.githubUserID, filename: draft.filename)
+                let remoteGist = fetched.gist
+                let remote = fetched.content
                 try await validatePublication(
                     draft, reason: reason, expectedGeneration: expectedGeneration,
                     shouldPublish: shouldPublish)
@@ -88,17 +84,14 @@ public actor SyncCoordinator {
                     try await store.setState(.conflict(conflict), id: id, accountID: accountID)
                     return try await store.draft(id: id, accountID: accountID)
                 }
-            } else {
-                remote = nil
             }
             try await validatePublication(
                 draft, reason: reason, expectedGeneration: expectedGeneration,
                 shouldPublish: shouldPublish)
             try await store.beginAttempt(
                 id: id, accountID: accountID, content: draft.text,
-                generation: draft.generation, remote: remote
+                generation: draft.generation
             )
-            notBefore = .now.addingTimeInterval(durationSeconds(mutationInterval))
             let result: Gist
             if let gistID = draft.gistID {
                 result = try await client.updateGist(
@@ -112,7 +105,6 @@ public actor SyncCoordinator {
             }
             let acknowledged = try await client.content(gist: result, filename: draft.filename)
             guard sourceEqual(acknowledged, draft.text) else { throw DraftError.remoteDidNotAcknowledge }
-            notBefore = .now.addingTimeInterval(durationSeconds(mutationInterval))
             return try await store.acknowledge(
                 id: id, accountID: accountID, gistID: draft.gistID ?? result.id, content: acknowledged,
                 revision: result.revision, generation: draft.generation, publishedGist: result
@@ -176,13 +168,12 @@ public actor SyncCoordinator {
         try Task.checkCancellation()
         let draft = try await store.draft(id: id, accountID: accountID)
         guard isCleanDraft(draft), let gistID = draft.gistID else { return draft }
-        let remoteGist = try await client.gist(id: gistID)
-        guard remoteGist.truncated != true else { throw GitHubClientError.incompleteGist }
-        guard remoteGist.files[draft.filename] != nil else { return draft }
-        let remote = try await client.content(gist: remoteGist, filename: draft.filename)
+        let remote = try await client.remoteFile(
+            gistID: gistID, ownerID: draft.githubUserID, filename: draft.filename)
+        guard let content = remote.content else { return draft }
         return try await store.refreshCleanDraft(
             id: id, accountID: accountID, expectedGeneration: draft.generation,
-            content: remote, revision: remoteGist.revision
+            content: content, revision: remote.gist.revision
         ).snapshot
     }
 
@@ -191,32 +182,18 @@ public actor SyncCoordinator {
             && sourceEqual(draft.text, draft.baseContent)
     }
 
-    public func reconcileCreation(
-        id: UUID, accountID: UUID, createdGistID: String
-    ) async throws -> DraftSnapshot {
-        try await attachCreation(id: id, accountID: accountID, createdGistID: createdGistID, requiringAttempt: true)
-    }
-
     func adoptDailyCreation(id: UUID, accountID: UUID, createdGistID: String) async throws -> DraftSnapshot {
-        try await attachCreation(id: id, accountID: accountID, createdGistID: createdGistID, requiringAttempt: false)
-    }
-
-    private func attachCreation(
-        id: UUID, accountID: UUID, createdGistID: String, requiringAttempt: Bool
-    ) async throws -> DraftSnapshot {
         await acquire()
         defer { release() }
         let draft = try await store.draft(id: id, accountID: accountID)
         if draft.gistID == createdGistID { return draft }
-        guard draft.gistID == nil, !requiringAttempt || draft.attemptedGeneration != nil else {
-            throw DraftError.ambiguousCreation
-        }
+        guard draft.gistID == nil else { throw DraftError.ambiguousCreation }
         let attempted = draft.attemptedContent ?? draft.text
         let generation = draft.attemptedGeneration ?? draft.generation
-        let gist = try await client.gist(id: createdGistID)
-        guard gist.owner?.id == draft.githubUserID else { throw DraftError.readOnly }
-        guard gist.truncated != true else { throw GitHubClientError.incompleteGist }
-        let content = try await client.content(gist: gist, filename: draft.filename)
+        let remote = try await client.remoteFile(
+            gistID: createdGistID, ownerID: draft.githubUserID, filename: draft.filename)
+        let gist = remote.gist
+        guard let content = remote.content else { throw GitHubClientError.missingFile }
         guard sourceEqual(content, attempted) else { throw DraftError.remoteDidNotAcknowledge }
         return try await store.acknowledge(
             id: id, accountID: accountID, gistID: gist.id,
@@ -232,10 +209,5 @@ public actor SyncCoordinator {
     private func release() {
         if waiters.isEmpty { busy = false }
         else { waiters.removeFirst().resume() }
-    }
-
-    private func durationSeconds(_ duration: Duration) -> TimeInterval {
-        let parts = duration.components
-        return Double(parts.seconds) + Double(parts.attoseconds) / 1e18
     }
 }

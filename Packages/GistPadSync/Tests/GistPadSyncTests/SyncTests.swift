@@ -40,7 +40,7 @@ private func editedDraft(
             #expect(request.httpMethod == "POST")
             return FakeResponse(data: try gistData(content: "published", description: "New note"))
         }) { "fake" }
-        let saved = try await SyncCoordinator(client: client, store: store, mutationInterval: .zero)
+        let saved = try await SyncCoordinator(client: client, store: store)
             .publish(id: draft.id, accountID: account)
         let cached = try #require(await store.cachedLibrary(accountID: account))
         #expect(saved.gistID == "abc123")
@@ -125,7 +125,6 @@ private func editedDraft(
         #expect(conflict.base == "base")
         #expect(conflict.local == "local")
         #expect(conflict.remote == "remote")
-        #expect(conflict.suggestedMerge == nil)
         #expect(result.text == "local")
         #expect(calls.withLock { $0 } == ["GET"])
     }
@@ -208,42 +207,6 @@ private func editedDraft(
         #expect(calls.withLock { $0 }.isEmpty)
     }
 
-    @Test func disjointMergeIsAProposalUntilAppliedAsANewGeneration() async throws {
-        let base = "one\ntwo\nthree\n"
-        let local = "ONE\ntwo\nthree\n"
-        let remote = "one\ntwo\nTHREE\n"
-        let merged = "ONE\ntwo\nTHREE\n"
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await editedDraft(store: store, account: account, base: base, text: local)
-        let patches = Mutex(0)
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            if request.httpMethod == "PATCH" {
-                patches.withLock { $0 += 1 }
-                let body = try requestBody(request)
-                let files = try #require(body["files"] as? [String: [String: String]])
-                #expect(files["README.md"]?["content"] == merged)
-                return FakeResponse(data: try gistData(content: merged, revision: "revision3"))
-            }
-            return FakeResponse(data: try gistData(content: remote, revision: "revision2"))
-        }) { "fake" }
-        let coordinator = SyncCoordinator(client: client, store: store, mutationInterval: .zero)
-        let proposal = try await coordinator.publish(id: draft.id, accountID: account)
-        guard case .conflict(let conflict) = proposal.state else {
-            Issue.record("Expected a merge proposal")
-            return
-        }
-        #expect(conflict.suggestedMerge == merged)
-        #expect(proposal.text == local)
-        #expect(patches.withLock { $0 } == 0)
-        _ = try await store.resolveConflict(
-            id: draft.id, accountID: account, expectedGeneration: 1, text: merged, generation: 2
-        )
-        let result = try await coordinator.publish(id: draft.id, accountID: account)
-        #expect(result.state == .savedToGitHub)
-        #expect(patches.withLock { $0 } == 1)
-    }
-
     @Test func newerTypingIsNeverClearedByAnOlderAcknowledgement() async throws {
         let account = UUID()
         let store = try DraftStore.open(inMemory: true)
@@ -288,11 +251,6 @@ private func editedDraft(
         #expect(result.baseContent == "web version")
         #expect(result.baseRevision == "revision2")
         #expect(result.state == .savedLocally)
-        let recovery = try #require(try await store.recoveries(id: draft.id, accountID: account).last)
-        #expect(recovery.local == "local")
-        #expect(recovery.base == "base")
-        #expect(recovery.remote == "web version")
-        #expect(recovery.generation == 1)
         await #expect(throws: DraftError.unresolvedConflict) {
             try await store.resolveConflict(
                 id: draft.id, accountID: account, expectedGeneration: 1, text: "local", generation: 1
@@ -309,7 +267,7 @@ private func editedDraft(
         let draft = try await editedDraft(store: store, account: account, text: composed)
         try await store.setState(.conflict(DraftConflict(
             generation: 1, base: "base", local: composed, remote: "remote",
-            remoteRevision: "two", suggestedMerge: nil
+            remoteRevision: "two"
         )), id: draft.id, accountID: account)
         await #expect(throws: DraftError.staleGeneration) {
             try await store.resolveConflict(
@@ -317,7 +275,6 @@ private func editedDraft(
             )
         }
         #expect(try await store.draft(id: draft.id, accountID: account).text.utf8.elementsEqual(composed.utf8))
-        #expect(try await store.recoveries(id: draft.id, accountID: account).isEmpty)
         let accepted = try await store.resolveConflict(
             id: draft.id, accountID: account, expectedGeneration: 1, text: decomposed, generation: 2
         )
@@ -344,7 +301,7 @@ private func editedDraft(
             }
             return FakeResponse(data: try gistData(content: remote.withLock { $0 }))
         }) { "fake" }
-        let coordinator = SyncCoordinator(client: client, store: store, mutationInterval: .zero)
+        let coordinator = SyncCoordinator(client: client, store: store)
         await #expect(throws: (any Error).self) {
             try await coordinator.publish(id: draft.id, accountID: account)
         }
@@ -392,7 +349,7 @@ private func editedDraft(
             return FakeResponse(data: try gistData(
                 content: request.httpMethod == "PATCH" ? "local" : "base"))
         }) { "fake" }
-        let coordinator = SyncCoordinator(client: client, store: store, mutationInterval: .zero)
+        let coordinator = SyncCoordinator(client: client, store: store)
         let result = try await coordinator.publish(
             id: draft.id, accountID: account, reason: .background, autosaveEnabled: false
         )
@@ -437,14 +394,27 @@ private func editedDraft(
         }
     }
 
-    @Test func byteExactMergePreservesCombiningCharactersAndLineEndings() {
-        #expect(ThreeWayMerge.merge(base: "a\r\nb\r\n", local: "A\r\nb\r\n", remote: "a\r\nB\r\n")
-            == "A\r\nB\r\n")
-        let composed = "\u{e9}"
-        let decomposed = "e\u{301}"
-        let merged = ThreeWayMerge.merge(base: composed, local: decomposed, remote: composed)
-        #expect(merged?.utf8.elementsEqual(decomposed.utf8) == true)
-        #expect(ThreeWayMerge.merge(base: "a\n", local: "a\nleft\n", remote: "a\nright\n") == nil)
+    @Test func unresolvedConflictKeepsTheLocalTextAcrossRelaunch() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("drafts.store")
+        let account = UUID()
+        let first = try DraftStore.open(url: url)
+        let draft = try await editedDraft(store: first, account: account)
+        let client = GitHubClient(session: FakeURLProtocol.session { _ in
+            FakeResponse(data: try gistData(content: "remote", revision: "revision2"))
+        }) { "fake" }
+        _ = try await SyncCoordinator(client: client, store: first).publish(id: draft.id, accountID: account)
+        let reopened = try DraftStore.open(url: url)
+        let retained = try await reopened.draft(id: draft.id, accountID: account)
+        #expect(retained.text == "local")
+        guard case .conflict(let conflict) = retained.state else {
+            Issue.record("Expected the conflict to survive relaunch")
+            return
+        }
+        #expect(conflict.local == "local")
+        #expect(conflict.remote == "remote")
     }
 
     @Test func interruptedPublishingRecoversAsUncertainNotStillSaving() async throws {
@@ -456,36 +426,16 @@ private func editedDraft(
         let first = try DraftStore.open(url: url)
         let draft = try await editedDraft(store: first, account: account)
         try await first.beginAttempt(
-            id: draft.id, accountID: account, content: "local", generation: 1, remote: "base"
+            id: draft.id, accountID: account, content: "local", generation: 1
         )
         let reopened = try DraftStore.open(url: url)
         let recovered = try await reopened.draft(id: draft.id, accountID: account)
         #expect(recovered.state == .failed(.publicationUncertain))
         #expect(recovered.attemptedContent == "local")
+        #expect(recovered.text == "local")
         let updated = try await reopened.persist(
             id: draft.id, accountID: account, text: "later text", generation: 2
         )
         #expect(updated.state == .failed(.publicationUncertain))
-        #expect(try await reopened.recoveries(id: draft.id, accountID: account).count == 1)
-    }
-
-    @Test func explicitScratchSelectionCanReconcileAnAmbiguousCreation() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await store.newDraft(accountID: account, githubUserID: 42, text: "new note")
-        try await store.beginAttempt(
-            id: draft.id, accountID: account, content: "new note", generation: 0, remote: nil
-        )
-        try await store.setState(.failed(.creationUncertain), id: draft.id, accountID: account)
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            #expect(request.httpMethod == "GET")
-            return FakeResponse(data: try gistData(content: "new note"))
-        }) { "fake" }
-        let coordinator = SyncCoordinator(client: client, store: store)
-        let result = try await coordinator.reconcileCreation(
-            id: draft.id, accountID: account, createdGistID: "abc123"
-        )
-        #expect(result.gistID == "abc123")
-        #expect(result.state == .savedToGitHub)
     }
 }

@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "GistPadSync",
-    platforms: [.iOS("27.1"), .macOS(.v15)],
+    platforms: [.iOS("27.2"), .macOS(.v15)],
     products: [.library(name: "GistPadSync", targets: ["GistPadSync"])],
     dependencies: [
         .package(path: "../GistPadComments"),

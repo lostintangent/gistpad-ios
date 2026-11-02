@@ -2,58 +2,6 @@ import XCTest
 
 final class LibraryCollectionUITests: XCTestCase {
   @MainActor
-  func testOpenCollectionHeadersHave44PointNativePitch() async throws {
-    try await checkHeaderPitch(wide: true)
-  }
-
-  @MainActor
-  func testClosedCollectionHeadersHave44PointNativePitch() async throws {
-    try await checkHeaderPitch(wide: false)
-  }
-
-  @MainActor
-  private func checkHeaderPitch(wide: Bool) async throws {
-    let app = XCUIApplication(bundleIdentifier: "dev.gistpad.GistPad")
-    app.launchArguments = [
-      "--capture-screen", "library", "--capture-state", "collections-collapsed",
-      "--capture-appearance", "light",
-      "-AppleLocale", "en_US", "-AppleLanguages", "(en)",
-      "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL",
-    ]
-    app.launch()
-    defer { app.terminate() }
-    try await waitUntil("the actual \(wide ? "Open" : "Closed") Duo window") {
-      let frame = app.windows.firstMatch.frame
-      return abs(frame.width - (wide ? 951 : 466)) <= 1
-        && abs(frame.height - (wide ? 669 : 678)) <= 1
-    }
-    var frames: [CGRect] = []
-    for collection in ["dailyNotes", "starred", "archive"] {
-      let cell = app.collectionViews.firstMatch.cells.containing(
-        .button, identifier: "library-collection-\(collection)").firstMatch
-      try await waitUntil("the visible native \(collection) cell") { cell.isHittable }
-      let frame = cell.frame
-      XCTAssertEqual(frame.height, 44, accuracy: 1.0 / 3)
-      if let previous = frames.last {
-        XCTAssertEqual(frame.minY - previous.minY, 44, accuracy: 1.0 / 3)
-      }
-      frames.append(frame)
-    }
-    let content = app.otherElements["capture-frame-library-collection-dailyNotes"].firstMatch
-    let ordinary = app.collectionViews.firstMatch.cells.containing(
-      .button, identifier: "library-note-mixed").firstMatch
-    XCTAssertTrue(content.exists)
-    XCTAssertTrue(ordinary.exists)
-    let gap = content.frame.minY - ordinary.frame.maxY
-    XCTAssertEqual(gap, 28, accuracy: 1)
-    let measurements = XCTAttachment(string: "Native cells: \(frames)\nInclusive entrance: \(gap)")
-    measurements.name = "header-pitch-\(wide ? "Open" : "Closed")-Light-Large"
-    measurements.lifetime = .keepAlways
-    add(measurements)
-    record(app, name: "headers-\(wide ? "open" : "closed")-Light-Large")
-  }
-
-  @MainActor
   func testFoldedCollectionsHideUnknownAndEmptyOptionalScopes() async throws {
     try await checkCollections(wide: false)
   }
@@ -126,7 +74,8 @@ final class LibraryCollectionUITests: XCTestCase {
             (id: "starred", title: "Starred Gists"),
             (id: "archive", title: "Archived Gists")
           ] {
-            let header = app.buttons["library-collection-\(section.id)"].firstMatch
+            let header = app.descendants(matching: .any)
+              .matching(identifier: "library-collection-\(section.id)").firstMatch
             for _ in 0..<8 {
               if header.isHittable { break }
               list.swipeUp()
@@ -135,7 +84,7 @@ final class LibraryCollectionUITests: XCTestCase {
             XCTAssertEqual(header.label, section.title)
           }
         } else {
-          XCTAssertEqual(app.buttons.matching(
+          XCTAssertEqual(app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "library-collection-")).count, 0)
         }
         record(

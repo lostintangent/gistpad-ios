@@ -127,15 +127,30 @@ private actor TodayCaptureProvider: NotebookProviding, NotebookPhotoProviding {
   }
 
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
-    if case .inspectRemote(let id, let generation) = action {
-      let store = try draftStore()
+    let store = try draftStore()
+    switch action {
+    case .fetchRemote(let id):
       let draft = try await store.draft(id: id, accountID: accountID)
-      let gist = try fixtureGists().first { $0.id == draft.gistID }
-      return .review(try await store.inspectRemoteChange(
-        id: id, accountID: accountID, expectedGeneration: generation,
-        remote: gist?.files[draft.filename]?.content, revision: gist?.revision))
+      guard let gist = try fixtureGists().first(where: { $0.id == draft.gistID }) else {
+        return .remoteRead(draft, nil)
+      }
+      return .remoteRead(
+        draft, RemoteFile(gist: gist, content: gist.files[draft.filename]?.content))
+    case .recordRemote(let id, let generation, let remote, let revision):
+      return .review(
+        try await store.inspectRemoteChange(
+          id: id, accountID: accountID, expectedGeneration: generation,
+          remote: remote, revision: revision))
+    case .adoptRemote(let id, let generation, let remote, let revision):
+      guard
+        case .refreshed(let adopted) = try await store.refreshCleanDraft(
+          id: id, accountID: accountID, expectedGeneration: generation,
+          content: remote, revision: revision)
+      else { throw NotebookActionError.staleReview }
+      return .review(adopted)
+    default:
+      throw CaptureError.unsupported
     }
-    throw CaptureError.unsupported
   }
 
   func photoServices(accountID: UUID) throws -> NotebookPhotoServices {

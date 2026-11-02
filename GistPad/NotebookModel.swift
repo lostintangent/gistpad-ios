@@ -515,6 +515,11 @@ final class NotebookModel {
     guard !deletedGistIDs.contains(gistID),
       let gist = cachedLibrary?.owned.first(where: { $0.id == gistID })
     else { return nil }
+    if gist.isDailyNote, let filename = target?.filename {
+      return .init(
+        id: gist.id, accountID: account.id,
+        title: GistConventions.fileDisplayName(filename), filename: filename)
+    }
     return .init(id: gist.id, accountID: account.id, title: gist.displayName)
   }
 
@@ -661,7 +666,6 @@ final class NotebookModel {
   }
 
   private static func updateLibraryContent(_ note: inout LibraryNote, text: String?) {
-    note.excerpt = text.flatMap { Self.libraryExcerpt($0, title: note.title) }
     if note.isDailyNote {
       note.progress = text.map {
         let tasks = TaskProgress(markdown: $0)
@@ -1156,7 +1160,6 @@ final class NotebookModel {
           isSecret: match.isSecret, isPinned: match.isPinned, isStarred: match.isStarred,
           isArchived: match.isArchived, isDailyNote: match.isDailyNote, tagIDs: match.tagIDs,
           filename: match.filename, fileCount: gist?.truncated == true ? nil : gist?.files.count,
-          excerpt: match.text.flatMap { Self.libraryExcerpt($0, title: match.title) },
           progress: match.progress.map { .init(completed: $0.completed, total: $0.total) },
           isOverdue: match.isOverdue,
           dailyDate: match.isDailyNote
@@ -1376,12 +1379,6 @@ final class NotebookModel {
       !deletedGistIDs.contains(String($0.key.prefix(while: { $0 != "/" })))
     }
     return filtered
-  }
-
-  private static func libraryExcerpt(_ text: String, title: String? = nil) -> String? {
-    NotebookExcerpt.text(from: text, title: title).map {
-      String($0.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(160))
-    }
   }
 
   private func updateToday() {
@@ -1764,7 +1761,9 @@ final class NotebookModel {
           owned: cache.owned.filter { $0.id != id }, starred: cache.starred.filter { $0.id != id },
           account: account)
       }
-    case .review:
+    case .deletedFile(let id, let filename, _):
+      clearDeletedFile(gistID: id, filename: filename, accountID: account.id)
+    case .review, .remoteRead:
       break
     case .discardedDraft(let id):
       clearDiscardedDraft(id, accountID: account.id)
@@ -1812,6 +1811,36 @@ final class NotebookModel {
       && loadedDocument?.draft?.id != draft.id
       && loadedDocument?.selection.gistID != draft.gistID
       && openingDocument == nil && !isDraftSelected(draft.id)
+  }
+
+  private func clearDeletedFile(gistID: String, filename: String, accountID: UUID) {
+    func isDeletedFile(_ selection: NotebookSelection?) -> Bool {
+      selection?.gistID == gistID && selection?.filename == filename
+    }
+    if isDeletedFile(loadedDocument?.selection) {
+      loadedDocument = nil
+      library.selectedNoteID = nil
+    }
+    if let opening = openingDocument, isDeletedFile(rowSelection(for: opening.rowID)) {
+      documentRequest = UUID()
+      openingDocument = nil
+      isOpeningDocument = false
+    }
+    if failedOpen?.gistID == gistID, failedOpen?.filename == filename { failedOpen = nil }
+    do {
+      if let selection = try selections.selection(accountID: accountID), isDeletedFile(selection) {
+        selections.clear(accountID: accountID)
+      }
+    } catch {
+      report(error, operation: "clear-deleted-file-selection")
+    }
+    searchRequest = UUID()
+    searchTargets = searchTargets.filter { !isDeletedFile($0.value) }
+    if case .results(let notes, let coverage) = library.searchState {
+      library.searchState = .results(
+        notes: notes.filter { !($0.gistID == gistID && $0.filename == filename) },
+        coverage: coverage)
+    }
   }
 
   private func recordDeletedGist(_ id: String, accountID: UUID) {
@@ -1971,6 +2000,27 @@ final class NotebookModel {
     return saved
   }
 
+  /// Publishes each note with unpublished edits, in order. `openEditorState` publishes a note that
+  /// has a live editor and returns its state, or returns nil for a closed note. The first offline
+  /// result stops the sweep, and the next launch or return to the app retries it.
+  func publishUnsyncedEdits(
+    accountID: UUID, openEditorState: (UUID) async -> SaveState?
+  ) async {
+    let ids = localDrafts.filter { $0.accountID == accountID && $0.hasUnpublishedEdits }.map(\.id)
+    for id in ids {
+      guard !Task.isCancelled else { break }
+      let state: SaveState?
+      if let open = await openEditorState(id) {
+        state = open
+      } else {
+        _ = try? await publish(draftID: id, accountID: accountID, reason: .background)
+        state = (try? await draftSnapshot(id: id, accountID: accountID))?.state
+      }
+      if state == .offline { break }
+    }
+    try? await reloadLocalState(accountID: accountID)
+  }
+
   func publish(
     draftID: UUID, accountID: UUID, reason: PublishReason = .manual,
     expectedGeneration: UInt64? = nil,
@@ -2046,14 +2096,6 @@ final class NotebookModel {
         days = [nil]
       }
       return days.map { day in
-        let filename = day?.filename
-          ?? (gist.isDailyNote ? GistConventions.todayFilename() : gist.defaultMarkdownFilename)
-        let draft = gistDrafts.first { $0.filename == filename }
-        let inline = filename.flatMap { gist.files[$0] }.flatMap {
-          $0.truncated == true ? nil : $0.content
-        }.map(GistConventions.decodeContent)
-        let text = librarySource(
-          draft: draft, cached: filename.flatMap { cached?.content(gist: gist, filename: $0) } ?? inline)
         var note = LibraryNote(
           id: day.map { "\(gist.id)/\($0.filename)" } ?? gist.id,
           title: day.map { GistConventions.fileDisplayName($0.filename) } ?? gist.displayName,
@@ -2068,7 +2110,16 @@ final class NotebookModel {
           dailyDate: day?.date,
           commentCount: gist.isDailyNote ? nil : gist.commentCount
         )
-        updateLibraryContent(&note, text: text)
+        // Only daily rows read note content, for their task progress.
+        if gist.isDailyNote {
+          let filename = day?.filename ?? GistConventions.todayFilename()
+          let inline = gist.files[filename].flatMap {
+            $0.truncated == true ? nil : $0.content
+          }.map(GistConventions.decodeContent)
+          updateLibraryContent(&note, text: librarySource(
+            draft: gistDrafts.first { $0.filename == filename },
+            cached: cached?.content(gist: gist, filename: filename) ?? inline))
+        }
         return note
       }
     }
@@ -2227,6 +2278,11 @@ final class NotebookModel {
         String(
           localized:
             "The note was deleted from GitHub, but couldn't be fully removed from this iPhone. Local cleanup is incomplete."
+        )
+      case .remoteDeletedFileCleanupFailed:
+        String(
+          localized:
+            "The note was deleted from GitHub, but couldn't be fully removed from this iPhone. Delete it again to finish cleanup."
         )
       case .staleReview:
         String(localized: "Your draft changed while this review was open. Review the latest draft.")

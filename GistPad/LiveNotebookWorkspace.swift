@@ -262,7 +262,10 @@ struct LiveNotebookWorkspace: View {
 
   private var workspaceNavigationLifecycle: some View {
     navigation
-    .task { await notebook.start() }
+    .task {
+      await notebook.start()
+      publishUnsyncedEdits()
+    }
     .task(id: notebook.loadedDocument?.activationID) {
       if notebook.loadedDocument == nil { activeID = nil } else { await activateLoadedDocument() }
     }
@@ -302,6 +305,7 @@ struct LiveNotebookWorkspace: View {
     .onChange(of: scenePhase) { _, phase in
       if phase == .background { finishBackgroundSaves() }
       if phase == .active {
+        publishUnsyncedEdits()
         Task {
           await notebook.updateCalendar()
           await active?.inspectRemoteChanges()
@@ -1260,6 +1264,17 @@ struct LiveNotebookWorkspace: View {
     }
   }
 
+  private func publishUnsyncedEdits() {
+    guard let accountID = notebook.account?.id, notebook.pendingAccount == nil else { return }
+    Task {
+      await notebook.publishUnsyncedEdits(accountID: accountID) { id in
+        guard let controller = sessions[id.uuidString] else { return nil }
+        await controller.publish(reason: .background)
+        return controller.draft.state
+      }
+    }
+  }
+
   private func finishLeavingNote(
     _ controller: NotebookSessionController, preservingReview: Bool = false
   ) {
@@ -1435,7 +1450,7 @@ struct LiveNotebookWorkspace: View {
     do {
       for controller in sessions.values {
         let requiresLock: Bool = switch action {
-        case .delete(let gistID):
+        case .delete(let gistID), .deleteFile(let gistID, _):
           controller.draft.gistID == gistID
             || notebook.localDrafts.contains {
               $0.id == controller.draft.id && $0.gistID == gistID
@@ -1447,7 +1462,7 @@ struct LiveNotebookWorkspace: View {
         }
         if requiresLock {
           switch action {
-          case .delete, .discardLocalCopy, .discardUncertainCreation:
+          case .delete, .deleteFile, .discardLocalCopy, .discardUncertainCreation:
             await controller.waitForPublication()
             try Task.checkCancellation()
             guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
@@ -1497,7 +1512,16 @@ struct LiveNotebookWorkspace: View {
         }
       case .deleted(let gistID, _):
         try await discardDeletedGistSessions(gistID: gistID, accountID: accountID)
-      case .review:
+      case .deletedFile(let gistID, let filename, let gist):
+        await closeSessions {
+          $0.draft.accountID == accountID && $0.draft.gistID == gistID
+            && $0.draft.filename == filename
+        }
+        for controller in sessions.values
+        where controller.draft.accountID == accountID && controller.draft.gistID == gistID {
+          try await controller.refreshMetadata(gist: gist)
+        }
+      case .review, .remoteRead:
         break
       case .discardedDraft(let id):
         sessions[id.uuidString]?.clearReview()
@@ -1508,8 +1532,20 @@ struct LiveNotebookWorkspace: View {
       }
       return result
     } catch {
-      if case .delete(let id) = effectiveAction, notebook.deletedGistIDs.contains(id) {
-        try await discardDeletedGistSessions(gistID: id, accountID: accountID)
+      switch effectiveAction {
+      case .delete(let id), .deleteFile(let id, _):
+        if notebook.deletedGistIDs.contains(id) {
+          try await discardDeletedGistSessions(gistID: id, accountID: accountID)
+        }
+      default: break
+      }
+      if let failure = error as? NotebookActionError,
+        case .remoteDeletedFileCleanupFailed(let gistID, let filename) = failure
+      {
+        await closeSessions {
+          $0.draft.accountID == accountID && $0.draft.gistID == gistID
+            && $0.draft.filename == filename
+        }
       }
       Logger(subsystem: "dev.gistpad.GistPad", category: "Notebook")
         .error("Note action failed: \(String(reflecting: type(of: error)), privacy: .public)")
@@ -1517,10 +1553,8 @@ struct LiveNotebookWorkspace: View {
     }
   }
 
-  private func discardDeletedGistSessions(gistID: String, accountID: UUID) async throws {
-    let keys = sessions.filter {
-      $0.value.draft.accountID == accountID && $0.value.draft.gistID == gistID
-    }.map(\.key)
+  private func closeSessions(where matches: (NotebookSessionController) -> Bool) async {
+    let keys = sessions.filter { matches($0.value) }.map(\.key)
     for key in keys {
       sessions[key]?.clearReview()
       sessions[key] = nil
@@ -1530,6 +1564,12 @@ struct LiveNotebookWorkspace: View {
         activeID = nil
         compactColumn = .sidebar
       }
+    }
+  }
+
+  private func discardDeletedGistSessions(gistID: String, accountID: UUID) async throws {
+    await closeSessions {
+      $0.draft.accountID == accountID && $0.draft.gistID == gistID
     }
     if archiveUndo?.gistID == gistID { archiveUndo = nil }
     if sharedPreviewGistID == gistID { sharedPreviewGistID = nil }

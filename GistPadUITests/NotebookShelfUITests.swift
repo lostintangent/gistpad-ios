@@ -146,7 +146,7 @@ final class NotebookShelfUITests: XCTestCase {
           XCTAssertEqual(second.frame.minY - first.frame.maxY, 12, accuracy: 1)
           let draft = row("library-note-local-draft", in: app)
           try await reveal(draft, in: app)
-          XCTAssertTrue(draft.label.contains("Not published yet."))
+          XCTAssertTrue(draft.label.contains("A first draft"))
           XCTAssertTrue((draft.value as? String)?.contains("On this iPhone") == true)
           XCTAssertFalse(draft.label.contains("README.md"))
           record(app, name: "notebook-local-draft-\(name)")

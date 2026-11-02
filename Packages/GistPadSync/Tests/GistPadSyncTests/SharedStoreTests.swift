@@ -162,7 +162,7 @@ import Testing
         await #expect(throws: DecodingError.self) { try await inbox.pending(accountID: account) }
     }
 
-    @Test func schemaExpansionPreservesDraftOnlyStoresAndRecoveryCopies() async throws {
+    @Test func schemaExpansionKeepsDraftsAndDropsRetiredRecoveryRows() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -170,27 +170,31 @@ import Testing
         let account = UUID()
         let id = UUID()
         do {
-            let schema = Schema([StoredDraft.self, StoredRecovery.self])
+            let schema = Schema([Build16Schema.StoredDraft.self, Build16Schema.StoredRecovery.self])
             let configuration = ModelConfiguration("GistPadDrafts", schema: schema, url: url, cloudKitDatabase: .none)
             let container = try ModelContainer(for: schema, configurations: [configuration])
             let context = ModelContext(container)
             context.autosaveEnabled = false
-            let draft = StoredDraft(
+            let draft = Build16Schema.StoredDraft(
                 id: id, accountID: account, githubUserID: 42, gistID: "abc123",
                 filename: "README.md", description: "Note", text: "unsynced source",
                 baseContent: "remote base", baseRevision: "one",
                 stateData: try JSONEncoder().encode(SaveState.savedLocally)
             )
             draft.generation = 7
+            draft.autosavePaused = true
             context.insert(draft)
-            context.insert(StoredRecovery(draft: draft, sent: "older source", generation: 6, remote: "remote base"))
+            context.insert(Build16Schema.StoredRecovery(
+                draft: draft, sent: "older source", generation: 6, remote: "remote base"
+            ))
             try context.save()
         }
         let upgraded = try DraftStore.open(url: url)
         let draft = try await upgraded.draft(id: id, accountID: account)
         #expect(draft.text == "unsynced source")
         #expect(draft.generation == 7)
-        #expect(try await upgraded.recoveries(id: id, accountID: account).first?.sent == "older source")
+        #expect(draft.state == .savedLocally)
+        #expect(draft.baseContent == "remote base")
         try await upgraded.cacheLibrary(
             owned: [], starred: [], preferences: Preferences(metadata: [:]), accountID: account
         )
@@ -200,5 +204,72 @@ import Testing
         )
         #expect(try await upgraded.apply(command).text == "accepted source")
         #expect(try await upgraded.cachedLibrary(accountID: account) != nil)
+    }
+}
+
+// Build 16's persisted schema. It exists only so the test can prove that stores written before the
+// recovery and autosave-pause removal still open with their drafts intact.
+enum Build16Schema {
+    @Model
+    final class StoredDraft {
+        @Attribute(.unique) var id: UUID
+        var accountID: UUID
+        var githubUserID: Int64
+        var gistID: String?
+        var filename: String
+        var gistDescription: String
+        var text: String
+        var generation: UInt64
+        var baseContent: String?
+        var baseRevision: String?
+        var attemptedContent: String?
+        var attemptedGeneration: UInt64?
+        var autosavePaused: Bool = false
+        var stateData: Data
+        var updatedAt: Date? = nil
+
+        init(
+            id: UUID, accountID: UUID, githubUserID: Int64, gistID: String?,
+            filename: String, description: String, text: String, baseContent: String?,
+            baseRevision: String?, stateData: Data
+        ) {
+            self.id = id
+            self.accountID = accountID
+            self.githubUserID = githubUserID
+            self.gistID = gistID
+            self.filename = filename
+            gistDescription = description
+            self.text = text
+            generation = 0
+            self.baseContent = baseContent
+            self.baseRevision = baseRevision
+            self.stateData = stateData
+            updatedAt = .now
+        }
+    }
+
+    @Model
+    final class StoredRecovery {
+        @Attribute(.unique) var id: UUID
+        var accountID: UUID
+        var draftID: UUID
+        var createdAt: Date
+        var base: String?
+        var local: String
+        var remote: String?
+        var sent: String
+        var generation: UInt64
+
+        init(draft: StoredDraft, sent: String, generation: UInt64, remote: String?) {
+            id = UUID()
+            accountID = draft.accountID
+            draftID = draft.id
+            createdAt = .now
+            base = draft.baseContent
+            local = draft.text
+            self.remote = remote
+            self.sent = sent
+            self.generation = generation
+        }
     }
 }
