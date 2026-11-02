@@ -5,7 +5,9 @@
   @testable import GistPadEditor
 
   // Package tests have no connected UIWindowScene, so each test hosts the editor in its own
-  // window and hides it when the test ends.
+  // window and hides it when the test ends. Suites run concurrently and main-actor tests
+  // interleave at every await, so check focus and Find before awaiting, since another suite's
+  // window can take key and first responder during the wait.
 
   @MainActor
   func host(_ session: DocumentSession, focused: Bool = true) -> UIWindow {

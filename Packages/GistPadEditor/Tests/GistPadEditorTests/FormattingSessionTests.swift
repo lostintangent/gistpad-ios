@@ -175,14 +175,13 @@
       #expect(session.textView.undoManager?.canUndo == false)
     }
 
-    @Test func nativeFindAndReplaceKeepsURLReplacementsLiteral() async throws {
+    @Test func nativeFindAndReplaceKeepsURLReplacementsLiteral() throws {
       let session = DocumentSession(documentID: "find", text: "A note and another note")
       let window = hostEditor(session)
       defer { window.isHidden = true }
       let interaction = try #require(session.textView.findInteraction)
       session.presentFind(replacing: true)
       defer { interaction.dismissFindNavigator() }
-      try await Task.sleep(for: .milliseconds(150))
       #expect(interaction.isFindNavigatorVisible)
       let find = try #require(interaction.activeFindSession)
       #expect(find.supportsReplacement)
