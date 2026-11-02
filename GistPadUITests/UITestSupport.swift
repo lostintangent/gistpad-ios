@@ -67,8 +67,11 @@ extension XCUIApplication {
 
   /// Returns to the Library: Back in a stack, or nothing when the sidebar is already showing.
   func showLibrary() {
-    let back = navigationBars.buttons["BackButton"].firstMatch
-    if back.isHittable { back.tap() }
+    guard !isRegularWidth else { return }
+    // The Duo's cover floats Back beside the bar, outside the navigation bar's subtree.
+    let back = buttons["BackButton"].firstMatch
+    XCTAssertTrue(back.wait(for: \.isHittable, toEqual: true, timeout: 10), "Back never became tappable")
+    back.tap()
   }
 }
 
