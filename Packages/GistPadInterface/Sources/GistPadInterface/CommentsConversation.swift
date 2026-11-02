@@ -64,8 +64,8 @@ public struct CommentsConversation: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if comments != nil, failure != nil || isRefreshing {
-                    operationStatus
+                if comments != nil, let failure {
+                    refreshFailure(failure)
                 }
                 ForEach(threads) { thread in
                     CommentThreadContent(
@@ -99,7 +99,7 @@ public struct CommentsConversation: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
-        .scrollEdgeEffectStyle(.hard, for: .bottom)
+        .scrollEdgeEffectStyle(.soft, for: .bottom)
         .refreshable { await actions.refresh() }
         .overlay { emptyState }
         .tint(.primary)
@@ -151,28 +151,14 @@ public struct CommentsConversation: View {
         }
     }
 
-    @ViewBuilder
-    private var operationStatus: some View {
-        if comments != nil {
-            if let failure {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(verbatim: failure)
-                    retry
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
-                .accessibilityIdentifier("comments-load-error")
-            } else if isRefreshing {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Updating comments", bundle: .module)
-                }
-                .font(.footnote)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
-            }
+    private func refreshFailure(_ failure: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(verbatim: failure)
+            retry
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .accessibilityIdentifier("comments-load-error")
     }
 
     private var retry: some View {

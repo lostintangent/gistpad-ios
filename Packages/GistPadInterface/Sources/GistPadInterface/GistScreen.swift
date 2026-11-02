@@ -11,7 +11,6 @@ public struct GistScreen<Source: View, Preview: View>: View {
     private let source: Source
     private let preview: Preview
     private let allowsSplit: Bool
-    private let isSidebarHidden: Bool
     private let areCommentsPresented: Bool
     @State private var confirmingDeletion = false
     // Match the native toolbar's settled segment size on its first layout.
@@ -29,7 +28,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
     public init(
         gist: GistDetails, mode: Binding<FileMode>, saveState: PublishState,
         actions: GistActions = .init(),
-        allowsSplit: Bool = false, isSidebarHidden: Bool = false,
+        allowsSplit: Bool = false,
         areCommentsPresented: Bool = false,
         @ViewBuilder source: () -> Source, @ViewBuilder preview: () -> Preview
     ) {
@@ -38,7 +37,6 @@ public struct GistScreen<Source: View, Preview: View>: View {
         self.saveState = saveState
         self.actions = actions
         self.allowsSplit = allowsSplit
-        self.isSidebarHidden = isSidebarHidden
         self.areCommentsPresented = areCommentsPresented
         self.source = source()
         self.preview = preview()
@@ -203,10 +201,6 @@ public struct GistScreen<Source: View, Preview: View>: View {
                     .accessibilityIdentifier("note-intelligence")
                     if gist.access.canEdit {
                         Button(String(localized: "Find and Replace", bundle: .module), systemImage: "text.magnifyingglass", action: actions.find)
-                        Button(
-                            isSidebarHidden ? String(localized: "Show Library", bundle: .module) : String(localized: "Hide Library", bundle: .module),
-                            systemImage: "sidebar.left", action: actions.focus
-                        )
                     }
                 }
                 if let open = actions.openInGitHub {

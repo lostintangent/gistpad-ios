@@ -20,7 +20,6 @@ struct RootView: View {
   @Environment(\.openURL) private var openURL
   @Environment(\.undoManager) private var undoManager
   @Environment(\.scenePhase) private var scenePhase
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   init(
     library: Library, layout: LayoutPreferences = LayoutPreferences(),
@@ -391,7 +390,6 @@ struct RootView: View {
       gist: details, mode: mode,
       saveState: session.saveState, actions: gistActions(session),
       allowsSplit: !comments.isPresented && LayoutPreferences.allowsSplit(availableWidth: availableWidth),
-      isSidebarHidden: columnVisibility == .detailOnly,
       areCommentsPresented: comments.isPresented && comments.matches(session.file)
     ) {
       EditorView(
@@ -555,14 +553,6 @@ struct RootView: View {
 
   private func gistActions(_ session: FileSession) -> GistActions {
     var actions = GistActions()
-    actions.focus = {
-      let target: NavigationSplitViewVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
-      comments.performAfterClosing {
-        withAnimation(reduceMotion ? nil : .snappy) {
-          columnVisibility = target
-        }
-      }
-    }
     if CommentsPresentation.supports(session.file) {
       actions.comments = {
         if comments.isPresented {

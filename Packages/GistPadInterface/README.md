@@ -41,9 +41,9 @@ autosave is off or a publish that can be retried didn't land, as
 `PublishState.showsPublish` decides. A conflict or lost sign-in shows a button
 that opens the diff or reconnects. Comments is a toggle with a quiet count from
 `ToolbarBadgeLabel`. The More menu holds Pin, Star, Share and Copy Link, then
-Rename, Tags, Files, Intelligence, Find and Replace and Show or Hide Library,
-then Open in GitHub, Archive and Delete. Delete confirms with the gist's title,
-or the day for a daily note, before it calls `delete`.
+Rename, Tags, Files, Intelligence and Find and Replace, then Open in GitHub,
+Archive and Delete. Delete confirms with the gist's title, or the day for a
+daily note, before it calls `delete`.
 
 ## Sheets
 

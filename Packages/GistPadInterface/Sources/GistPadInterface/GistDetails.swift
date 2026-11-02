@@ -90,7 +90,6 @@ public struct GistActions {
     public var save: () -> Void = {}
     public var reconnect: () -> Void = {}
     public var reviewChanges: () -> Void = {}
-    public var focus: () -> Void = {}
     public var find: () -> Void = {}
     public var intelligence: () -> Void = {}
     public var openInGitHub: (() -> Void)?

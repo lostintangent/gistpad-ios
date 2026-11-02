@@ -89,7 +89,7 @@ The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and
 **More**, in native sections:
 
 1. A compact row: Pin, Star, Share and Copy Link, which confirms with "Link copied".
-2. Rename Gist…, Tags, Files, Intelligence…, Find and Replace, Show Library or Hide Library.
+2. Rename Gist…, Tags, Files, Intelligence…, Find and Replace.
 3. Open in GitHub.
 4. Archive or Unarchive.
 5. **Delete Gist…**, or **Delete Daily Note…** on a daily note.

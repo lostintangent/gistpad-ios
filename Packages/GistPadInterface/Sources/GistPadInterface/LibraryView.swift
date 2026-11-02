@@ -580,7 +580,8 @@ public struct LibraryView: View {
         Button(String(localized: "Filter by tags", bundle: .module), systemImage: "tag") {
             showingTags = true
         }
-        .symbolVariant(state.selectedTagIDs.isEmpty ? .none : .fill)
+        // The system blue that confirm buttons use, not the personal accent.
+        .tint(state.selectedTagIDs.isEmpty ? .primary : Color(uiColor: .tintColor))
         .disabled(state.tags.isEmpty)
         .accessibilityValue(Text("\(state.selectedTagIDs.count) selected", bundle: .module))
         .accessibilityIdentifier("library-filter-tags")
