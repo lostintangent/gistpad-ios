@@ -76,7 +76,7 @@ struct AddToTodayControl: ControlWidget {
       }
     }
     .displayName("Add to Today")
-    .description("Capture a thought or task in today's daily note.")
+    .description("Capture a thought or task in today's note.")
   }
 }
 
