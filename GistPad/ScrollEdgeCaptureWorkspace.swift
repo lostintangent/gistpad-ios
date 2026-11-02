@@ -49,11 +49,12 @@ struct ScrollEdgeCaptureWorkspace: View {
         }
         let state = argument("--capture-state") ?? "preview"
         captureState = state
-        supportedState = ["preview", "source", "source-keyboard", "source-find", "source-find-bottom"]
-          .contains(state)
+        supportedState = [
+            "preview", "source", "source-keyboard", "source-find", "source-find-bottom", "source-find-end",
+        ].contains(state)
         wantsFind = state.hasPrefix("source-find")
         wantsKeyboard = state == "source-keyboard" || wantsFind
-        findQuery = state == "source-find-bottom" ? "Room for thought 18" : "Room for thought"
+        findQuery = state == "source-find" ? "Room for thought" : "Room for thought 18"
         _mode = State(initialValue: state == "preview" ? .reading : .source)
         token = argument("--capture-ready-token").flatMap { UUID(uuidString: $0) == nil ? nil : $0 }
     }
@@ -174,6 +175,10 @@ private final class ScrollEdgeProbe: UIView {
     private var keyboardHeight: CGFloat = 0
     private var requestedFocus = false
     private var requestedFind = false
+    private var revealedMatch = false
+    private var scrolledToEnd = false
+    private var matchMode: Bool { captureState == "source-find-bottom" || endMode }
+    private var endMode: Bool { captureState == "source-find-end" }
     private var presentFind: (@MainActor () -> Void)?
     private var failure: (@MainActor (String) -> Void)?
     private var displayLink: CADisplayLink?
@@ -249,6 +254,12 @@ private final class ScrollEdgeProbe: UIView {
                 }
                 guard source.findInteraction?.isFindNavigatorVisible == true, keyboardHeight >= 150
                 else { return }
+                if matchMode, !revealedMatch {
+                    revealedMatch = true
+                    scrollView = source
+                    source.findInteraction?.findNext()
+                    return
+                }
             } else {
                 if !requestedFocus {
                     requestedFocus = true
@@ -262,6 +273,33 @@ private final class ScrollEdgeProbe: UIView {
                 guard source.isFirstResponder, keyboardHeight >= 150,
                       source.inputAccessoryView?.window != nil else { return }
             }
+        }
+        if matchMode, revealedMatch, let source, source.window === window {
+            guard !source.isTracking, !source.isDecelerating else { return }
+            if endMode, !scrolledToEnd {
+                scrolledToEnd = true
+                let maximum = source.contentSize.height - source.bounds.height + source.adjustedContentInset.bottom
+                source.setContentOffset(CGPoint(x: 0, y: maximum), animated: false)
+                return
+            }
+            let sample = Sample(
+                offset: source.contentOffset, size: source.contentSize,
+                frame: source.convert(source.bounds, to: window),
+                insets: source.adjustedContentInset
+            )
+            if sample == lastSample {
+                stableFrames += 1
+            } else {
+                lastSample = sample
+                stableSince = link.timestamp
+                stableFrames = 1
+            }
+            guard stableFrames >= 20, let stableSince, link.timestamp - stableSince >= 0.35,
+                  let range = source.selectedTextRange else { return }
+            headingY = source.firstRect(for: range).minY
+            targetY = sample.offset.y
+            recordReady(sample: sample, window: window, stableDuration: link.timestamp - stableSince)
+            return
         }
         if mode == .source, let source, targetY != nil {
             let range = (source.text as NSString).range(of: "## \(heading)")
@@ -372,7 +410,7 @@ private final class ScrollEdgeProbe: UIView {
         guard abs(window.bounds.width - 466) <= 1,
               sample.frame.minY < navigationFrame.maxY,
               wantsKeyboard || sample.frame.maxY >= window.bounds.maxY - 1,
-              headingWindowY < navigationFrame.maxY,
+              matchMode || headingWindowY < navigationFrame.maxY,
               wantsKeyboard == (sourceIsFocused || wantsFind) else {
             fail("The capture requires a 466-point viewport, real bar underlap and the requested keyboard state.")
             return
@@ -381,6 +419,21 @@ private final class ScrollEdgeProbe: UIView {
             let accessoryFrame = source?.inputAccessoryView.map {
                 NSCoder.string(for: $0.convert($0.bounds, to: window))
             } ?? ""
+            let matchMaxY: CGFloat = {
+                guard matchMode, let source, let range = source.selectedTextRange else { return -1 }
+                return scrollView.convert(source.firstRect(for: range), to: window).maxY
+            }()
+            let lastLineMaxY: CGFloat = {
+                guard let source else { return -1 }
+                let last = (source.text as NSString).range(of: "next.", options: .backwards)
+                guard let start = source.position(from: source.beginningOfDocument, offset: last.location),
+                      let end = source.position(from: start, offset: last.length),
+                      let range = source.textRange(from: start, to: end) else { return -1 }
+                return scrollView.convert(source.firstRect(for: range), to: window).maxY
+            }()
+            let findPanel = (window.windowScene?.windows ?? []).lazy.compactMap { host in
+                self.findNavigator(in: host).map { $0.convert($0.bounds, to: window) }
+            }.first
             let data = try JSONSerialization.data(withJSONObject: [
                 "screen": "scroll-edges", "state": captureState,
                 "fixture": "page-in-motion", "token": token,
@@ -396,6 +449,10 @@ private final class ScrollEdgeProbe: UIView {
                 "keyboardVisible": (sourceIsFocused || wantsFind) && keyboardHeight >= 150,
                 "keyboardHeight": keyboardHeight,
                 "accessoryFrame": accessoryFrame,
+                "matchWindowMaxY": matchMaxY,
+                "lastLineWindowMaxY": lastLineMaxY,
+                "findPanelFrame": findPanel.map { NSCoder.string(for: $0) } ?? "",
+                "visibleBottomWindowY": sample.frame.maxY - sample.insets.bottom,
             ], options: [.sortedKeys])
             try data.write(
                 to: FileManager.default.temporaryDirectory
@@ -414,6 +471,12 @@ private final class ScrollEdgeProbe: UIView {
     private func find<T: UIView>(_ type: T.Type, in view: UIView) -> T? {
         if let match = view as? T, !match.isHidden { return match }
         return view.subviews.lazy.compactMap { self.find(type, in: $0) }.first
+    }
+
+    private func findNavigator(in view: UIView) -> UIView? {
+        if !view.isHidden, view.bounds.height > 0,
+           String(describing: type(of: view)).contains("FindNavigator") { return view }
+        return view.subviews.lazy.compactMap { self.findNavigator(in: $0) }.first
     }
 
     private func fail(_ message: String) {
