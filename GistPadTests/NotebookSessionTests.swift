@@ -53,7 +53,7 @@ struct NotebookSessionTests {
       Issue.record("A first load without cache cannot look like an empty successful notebook.")
       return
     }
-    #expect(model.library.gitHubStatus == .idle)
+    #expect(model.remoteRefreshStatus == .idle)
     await model.refresh()
     #expect(model.library.loadState == .ready)
     #expect(model.remoteRefreshProblem == nil)

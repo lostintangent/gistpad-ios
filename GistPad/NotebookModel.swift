@@ -323,7 +323,6 @@ final class NotebookModel {
   ) {
     self.provider = provider
     self.selections = selections
-    library.gitHubStatus = .idle
   }
 
   var writeAttentionStatus: GitHubStatusState? {
@@ -703,13 +702,9 @@ final class NotebookModel {
     let previousState: LibraryLoadState = library.loadState == .loading ? .ready : library.loadState
     isRefreshingRemote = true
     defer {
-      if request == libraryRequest {
-        isRefreshingRemote = false
-        library.gitHubStatus = remoteRefreshStatus
-      }
+      if request == libraryRequest { isRefreshingRemote = false }
     }
     library.loadState = .loading
-    library.gitHubStatus = remoteRefreshStatus
     do {
       let refreshed = try await refreshedAccount()
       guard refreshed.id == account.id else { throw AccountError.accountChanged }
@@ -1184,13 +1179,11 @@ final class NotebookModel {
     guard let recovery = Self.writeRecovery(for: operation, error) else { return }
     writeFailure = NotebookWriteFailure(
       operation: operation, accountID: accountID, recovery: recovery)
-    library.gitHubStatus = remoteRefreshStatus
   }
 
   private func clearWriteFailure(where matches: (NotebookWriteFailure.Operation) -> Bool) {
     guard let writeFailure, matches(writeFailure.operation) else { return }
     self.writeFailure = nil
-    library.gitHubStatus = remoteRefreshStatus
   }
 
   /// How a failed GitHub write recovers, or nil when the failure isn't one to raise and retry.
@@ -1278,7 +1271,6 @@ final class NotebookModel {
       libraryRequest = UUID()
       isRefreshingRemote = false
       if library.loadState == .loading { library.loadState = .ready }
-      library.gitHubStatus = remoteRefreshStatus
       if let cache = cachedLibrary {
         try await provider.cacheLibrary(
           owned: cache.owned.filter { $0.id != id }, starred: cache.starred.filter { $0.id != id },
@@ -1342,7 +1334,6 @@ final class NotebookModel {
     remoteRefreshProblem = nil
     writeFailure = nil
     isRefreshingRemote = false
-    library.gitHubStatus = .idle
     library.replaceSnapshot(nil)
     library.selectedNoteID = nil
     library.clearFilters()

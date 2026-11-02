@@ -122,7 +122,6 @@ public final class LibraryModel {
     public var snapshot: LibrarySnapshot
     public private(set) var hasKnownGistSnapshot: Bool
     public var loadState: LibraryLoadState
-    public var gitHubStatus: GitHubStatusState?
     public var query = ""
     public var selectedTagIDs: Set<String> = []
     public var selectedNoteID: String?

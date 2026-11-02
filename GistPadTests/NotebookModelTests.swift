@@ -75,7 +75,7 @@ struct NotebookModelTests {
     await provider.failWrites()
     _ = try? await model.perform(.preference(.setPinned(gistID: "gist-1", pinned: true)))
     #expect(model.writeFailure != nil)
-    guard case .problem(let problem) = model.library.gitHubStatus else {
+    guard case .problem(let problem) = model.remoteRefreshStatus else {
       Issue.record("A failed GitHub write should raise the GitHub status control.")
       return
     }
@@ -86,7 +86,7 @@ struct NotebookModelTests {
     await provider.failWrites(false)
     try await model.retryWrite()
     #expect(model.writeFailure == nil)
-    #expect(model.library.gitHubStatus == .idle)
+    #expect(model.remoteRefreshStatus == .idle)
   }
 
   @Test func returningToTheAppPublishesEveryLeftNoteWithUnpublishedEdits() async throws {

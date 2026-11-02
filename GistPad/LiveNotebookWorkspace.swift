@@ -91,6 +91,10 @@ struct LiveNotebookWorkspace: View {
     }
   }
 
+  private var libraryProblem: GitHubStatusProblem? {
+    if case .problem(let problem) = notebook.remoteRefreshStatus { problem } else { nil }
+  }
+
   private var notebookNavigation: some View {
     NavigationSplitView(
       columnVisibility: $columnVisibility, preferredCompactColumn: $compactColumn
@@ -99,6 +103,7 @@ struct LiveNotebookWorkspace: View {
         model: notebook.library, actions: libraryActions,
         isSidebar: horizontalSizeClass == .regular,
         isTodaySelected: notebook.isTodaySelected,
+        problem: libraryProblem,
         expandedCollections: libraryCollections,
         isPinnedExpanded: pinnedExpanded)
         .id(notebook.account?.id)

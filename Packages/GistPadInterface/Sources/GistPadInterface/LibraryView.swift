@@ -103,6 +103,7 @@ public struct LibraryView: View {
     @Bindable private var model: LibraryModel
     private let actions: LibraryActions
     private let isTodaySelected: Bool
+    private let problem: GitHubStatusProblem?
     private let isSidebar: Bool
     @Binding private var expandedCollections: Set<LibraryCollection>
     @Binding private var isPinnedExpanded: Bool
@@ -120,12 +121,14 @@ public struct LibraryView: View {
     /// `isSidebar` comes from the split view's owner, because a sidebar column always reads as compact.
     public init(
         model: LibraryModel, actions: LibraryActions, isSidebar: Bool, isTodaySelected: Bool = false,
+        problem: GitHubStatusProblem? = nil,
         expandedCollections: Binding<Set<LibraryCollection>>, isPinnedExpanded: Binding<Bool>
     ) {
         self.model = model
         self.actions = actions
         self.isSidebar = isSidebar
         self.isTodaySelected = isTodaySelected
+        self.problem = problem
         _expandedCollections = expandedCollections
         _isPinnedExpanded = isPinnedExpanded
     }
@@ -345,9 +348,8 @@ public struct LibraryView: View {
         }
     }
 
-    private var statusProblem: GitHubStatusState? {
-        guard !isSearchPresented, case .problem = model.gitHubStatus else { return nil }
-        return model.gitHubStatus
+    private var statusProblem: GitHubStatusProblem? {
+        isSearchPresented ? nil : problem
     }
 
     private var searchScope: some View {
@@ -533,7 +535,7 @@ public struct LibraryView: View {
                 if let statusProblem {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
                     ToolbarItem(placement: .bottomBar) {
-                        GitHubStatusControl(state: statusProblem, recover: actions.recoverStatus)
+                        GitHubStatusControl(state: .problem(statusProblem), recover: actions.recoverStatus)
                     }
                     .axisBehavior(.verticalPreferred)
                     .sharedBackgroundVisibility(.hidden)
