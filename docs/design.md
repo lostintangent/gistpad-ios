@@ -89,7 +89,7 @@ The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and
 
 **More**, in native sections:
 
-1. A compact row: Pin, Star, Share and Copy Link, which confirms with "Link copied".
+1. A compact row: Pin, Star, Share and Copy Link, which confirms with "Link copied". Share is the system share sheet, headed by the gist's title and the GistPad artwork. While Comments is a sheet on iPhone, Share hides, because the system can't present over it. Copy Link stays.
 2. Rename Gist…, Tags, Files, Intelligence…, Find and Replace.
 3. Open in GitHub.
 4. Archive or Unarchive.
