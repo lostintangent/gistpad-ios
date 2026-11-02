@@ -120,24 +120,27 @@ No page-wide horizontal panning, browser tap flash, hover-only controls or fake 
 
 ## 6. Source syntax theme
 
-Source stays exact Markdown, never lossy rich text. It uses four inks, and everything else is font traits.
+Source stays exact Markdown, never lossy rich text. The editor uses the web's GitHub palette for headings, emphasis, quotes, HTML and links, because the user prefers gistpad.dev's editor colors (user, Nov 2). Everything else uses system inks.
 
-| Ink | Light | Dark | Used for |
-| --- | --- | --- | --- |
-| `label` | system | system | Prose, code and front matter |
-| Heading ink | `label` | `#D2A8FF`, or `#E6CCFF` with Increase Contrast | Whole heading lines including their `#` markers, and bold and italic spans including their delimiters. This is the web's GitHub Dark purple, kept because the user likes it (user, Nov 2) |
-| `secondaryLabel` | system | system | Markup: list bullets and numbers, task brackets, whole quote lines including `>`, code fence lines and HTML tags |
-| `link` | system | system | Link labels, wikilinks and URLs, underlined |
+| Span | Light | Dark | Light Increased | Dark Increased |
+| --- | --- | --- | --- | --- |
+| Heading line including `#`, bold, italic | `label` | `#D2A8FF` | `label` | `#E6CCFF` |
+| Quote line including `>` | `#22863A` | `#7EE787` | `#155D27` | `#B0F5B7` |
+| HTML tag | `#116329` | `#7EE787` | `#0B4B1E` | `#B0F5B7` |
+| URL, underlined | `#032F62` | `#A5D6FF` | `#02234A` | `#D1ECFF` |
+| Link label and wikilink, underlined | URL color | `label` | URL color | `label` |
+| Prose, code, front matter | `label` | `label` | `label` | `label` |
+| List bullets and numbers, task brackets, code fence lines | `secondaryLabel` | `secondaryLabel` | `secondaryLabel` | `secondaryLabel` |
 
-Heading ink is one small dynamic `UIColor` in the editor package. Every other color is a system role, so Light, Dark and Increase Contrast resolve themselves.
+The web colors live in one small palette in the editor package, next to the heading ink. Bold or italic inside a quote stays purple, like the web.
 
 | Source element | Treatment |
 | --- | --- |
-| Heading | Body size, bold, heading ink |
-| Strong / emphasis | Bold or italic traits that compose when nested, heading ink |
+| Heading | Body size, bold |
+| Strong / emphasis | Bold or italic traits that compose when nested |
 | Code / front matter | Body-size monospace in `label`, protected from prose matching. Front matter collapse is explicit only |
 | Strikethrough | Struck through, with its markers intact |
-| Inline delimiters | `**`, `_`, `` ` ``, `~~` and link brackets wear their span's ink and style. Markers that start a line are markup, except a heading's `#`, which wears heading ink like the web |
+| Delimiters and markers | `**`, `_`, `` ` ``, `~~` and link brackets wear their span's ink and style. A heading's `#` and a quote's `>` wear their line's color. Other markers that start a line are `secondaryLabel` |
 | Caret / selection / marked text | Native text-entry blue, independent of the personal accent |
 | Proposed diff | Before/After labels. Added words primary semibold + underline; removed secondary + strikethrough. No new red/green palette |
 
