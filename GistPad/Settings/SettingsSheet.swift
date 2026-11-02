@@ -50,7 +50,7 @@ struct SettingsSheet<Appearance: View>: View {
             Label("Connect GitHub", systemImage: "person.crop.circle")
             Text("Sign in to open your GitHub gists, daily notes and saved tags.")
               .foregroundStyle(.secondary)
-            Button("Sign In with GitHub", action: connect)
+            Button("Sign in with GitHub", action: connect)
               .accessibilityIdentifier("settings-sign-in")
           }
         } header: {

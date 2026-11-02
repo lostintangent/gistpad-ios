@@ -177,7 +177,7 @@ public struct LibraryView: View {
                 if !state.selectedTagIDs.isEmpty {
                     searchScope
                 }
-                if !pinnedNotes.isEmpty {
+                if !pinnedGists.isEmpty {
                     pinnedSection(now: context.date)
                 }
                 ForEach(dateSections(now: context.date)) { dateSection($0, now: context.date) }
@@ -202,7 +202,7 @@ public struct LibraryView: View {
             set: { if let id = $0 { actions.select(id) } })
     }
 
-    private var pinnedNotes: [GistItem] {
+    private var pinnedGists: [GistItem] {
         state.matchingGists(in: .gists).filter(\.isPinned)
     }
 
@@ -214,11 +214,11 @@ public struct LibraryView: View {
 
     private func pinnedSection(now: Date) -> some View {
         disclosureSection(isExpanded: $isPinnedExpanded) {
-            ForEach(pinnedNotes) { gistRow($0, now: now) }
+            ForEach(pinnedGists) { gistRow($0, now: now) }
         } header: {
             sectionHeader(
-                Text("Pinned", bundle: .module), symbol: "pin", count: pinnedNotes.count,
-                countLabel: LibraryState.gistCountLabel(pinnedNotes.count),
+                Text("Pinned", bundle: .module), symbol: "pin", count: pinnedGists.count,
+                countLabel: LibraryState.gistCountLabel(pinnedGists.count),
                 isExpanded: $isPinnedExpanded, id: "library-section-pinned")
         }
     }
@@ -392,12 +392,12 @@ public struct LibraryView: View {
     private var signedOutInvitation: some View {
         ContentUnavailableView {
             GistPadArtwork()
-            Text("Your gists, on GitHub", bundle: .module)
+            Text("Welcome to GistPad", bundle: .module)
                 .font(.title2.weight(.semibold))
         } description: {
-            Text("Markdown and daily notes, kept in your GitHub gists.", bundle: .module)
+            Text("Your knowledge and daily notes, kept in GitHub gists.", bundle: .module)
         } actions: {
-            Button(String(localized: "Continue with GitHub", bundle: .module), action: actions.reconnect)
+            Button(String(localized: "Sign in with GitHub", bundle: .module), action: actions.reconnect)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .accessibilityIdentifier("library-sign-in")
@@ -426,7 +426,7 @@ public struct LibraryView: View {
                 } description: {
                     Text(verbatim: message)
                 } actions: {
-                    Button(String(localized: "Continue with GitHub", bundle: .module), action: actions.reconnect)
+                    Button(String(localized: "Sign in with GitHub", bundle: .module), action: actions.reconnect)
                 }
             default:
                 ContentUnavailableView {
