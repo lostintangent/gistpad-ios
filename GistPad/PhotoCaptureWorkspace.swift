@@ -543,9 +543,9 @@
   private actor PhotoCaptureProvider: NotebookProviding {
     let store: DraftStore
     init(store: DraftStore) { self.store = store }
-    func cachedAccount() -> NotebookAccount? { nil }
-    func signIn() throws -> NotebookAccount { throw AccountError.signedOut }
-    func refreshAccount() throws -> NotebookAccount { throw AccountError.signedOut }
+    func cachedAccount() -> Account? { nil }
+    func signIn() throws -> Account { throw AccountError.signedOut }
+    func refreshAccount() throws -> Account { throw AccountError.signedOut }
     func gists(accountID: UUID) -> [Gist] { [] }
     func starredGists(accountID: UUID) -> [Gist] { [] }
     func gist(id: String, accountID: UUID) throws -> Gist { throw DraftError.notFound }
@@ -569,7 +569,7 @@
     func localState(accountID: UUID) async throws -> NotebookLocalState {
       NotebookLocalState(library: nil, drafts: try await store.drafts(accountID: accountID))
     }
-    func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) {}
+    func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) {}
     func createDraft(accountID: UUID) throws -> DraftSnapshot { throw DraftError.notFound }
     func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
       try await store.discardBlankDraft(

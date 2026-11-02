@@ -1,8 +1,9 @@
 #if os(iOS)
+import GistPadSync
 import SwiftUI
 
 struct LibraryTodayButton: View {
-    let summary: LibraryTodaySummary
+    let summary: DailyNote
     var isSelected = false
     let action: @MainActor () -> Void
 
@@ -11,14 +12,14 @@ struct LibraryTodayButton: View {
             Label(String(localized: "Today", bundle: .module), systemImage: "calendar")
         }
         .toggleStyle(.button)
-        .badge(summary.unfinishedTaskCount ?? 0)
+        .badge(summary.progress?.remaining ?? 0)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier("library-today")
     }
 
     private var accessibilityLabel: Text {
         let title = Text("Today", bundle: .module)
-        if let count = summary.unfinishedTaskCount {
+        if let count = summary.progress?.remaining {
             let status = count == 0
                 ? Text("No unfinished tasks", bundle: .module)
                 : Text("\(count) unfinished tasks", bundle: .module)

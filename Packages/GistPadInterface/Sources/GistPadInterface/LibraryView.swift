@@ -1,4 +1,5 @@
 #if os(iOS)
+import GistPadSync
 import SwiftUI
 
 extension EnvironmentValues {
@@ -45,7 +46,7 @@ extension View {
     }
 
     public func libraryRail(
-        isVisible: Bool, today: LibraryTodaySummary, isTodaySelected: Bool,
+        isVisible: Bool, today: DailyNote, isTodaySelected: Bool,
         create: @escaping @MainActor () -> Void, openToday: @escaping @MainActor () -> Void
     ) -> some View {
         toolbar {

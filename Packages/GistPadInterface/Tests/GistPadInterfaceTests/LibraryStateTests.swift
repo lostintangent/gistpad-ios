@@ -98,15 +98,6 @@ struct LibraryStateTests {
         #expect(model.unfilteredNotes(in: .dailyNotes).map(\.id) == ["local-day"])
     }
 
-    @Test func todaysBadgeShowsOnlyForAnExistingDayWithKnownTasks() {
-        var today = LibraryTodaySummary(progress: .init(completed: 1, total: 4), availability: .existing)
-        #expect(today.unfinishedTaskCount == 3)
-        today.progress = nil
-        #expect(today.unfinishedTaskCount == nil)
-        today = LibraryTodaySummary(progress: .init(completed: 1, total: 4), availability: .missing)
-        #expect(today.unfinishedTaskCount == nil)
-    }
-
     @Test func theOpenGistStaysOpenWhenAFilterHidesItsRow() {
         let model = LibraryModel(snapshot: library, loadState: .ready)
         model.selectedNoteID = "shape"

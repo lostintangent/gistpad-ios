@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct LibraryGistCountTests {
     @Test func productionLibraryProjectionSuppliesPublishedGistIdentity() {
-        let account = NotebookAccount(
+        let account = Account(
             id: UUID(), login: "synthetic-reader", preferences: .init(metadata: [:]))
         let owned = gist("owned")
         let daily = gist("daily", description: GistConventions.dailyNotesDescription)

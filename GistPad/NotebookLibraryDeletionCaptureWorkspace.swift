@@ -36,7 +36,7 @@ private struct PublicationHoldMarker: View {
 }
 
 actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding {
-  private let account: NotebookAccount
+  private let account: Account
   private var cache: CachedLibrarySnapshot?
   private var store: DraftStore?
   private var deleted: Set<String> = []
@@ -52,15 +52,15 @@ actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding 
     metadataDelay: Duration = ProcessInfo.processInfo.arguments.contains("--capture-slow-publication-metadata")
       ? .seconds(30) : .zero
   ) {
-    account = NotebookAccount(
+    account = Account(
       id: UUID(), login: "synthetic-notebook", githubUserID: 1,
       preferences: .init(isAutoSaveEnabled: autosave, accentColor: nil))
     self.metadataDelay = metadataDelay
   }
 
-  func cachedAccount() -> NotebookAccount? { account }
-  func signIn() -> NotebookAccount { account }
-  func refreshAccount() -> NotebookAccount { account }
+  func cachedAccount() -> Account? { account }
+  func signIn() -> Account { account }
+  func refreshAccount() -> Account { account }
   func gists(accountID: UUID) throws -> [Gist] {
     libraryReadCount += 1
     return try fixtureGists(
@@ -139,7 +139,7 @@ actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding 
     return .init(library: cache, drafts: try await store?.drafts(accountID: accountID) ?? [])
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) async throws {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
     try await draftStore().cacheLibrary(
       owned: owned, starred: starred, preferences: account.preferences, accountID: account.id)
     cache = .init(

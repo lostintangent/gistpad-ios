@@ -975,14 +975,14 @@ private actor SessionNotebookProvider: NotebookProviding {
     self.publishedGist = publishedGist
   }
 
-  func cachedAccount() -> NotebookAccount? {
+  func cachedAccount() -> Account? {
     guard let autosave else { return nil }
-    return NotebookAccount(
+    return Account(
       id: accountID, login: "fixture", githubUserID: 1,
       preferences: .init(metadata: ["isAutoSaveEnabled": .bool(autosave)]))
   }
-  func signIn() throws -> NotebookAccount { throw AccountError.signedOut }
-  func refreshAccount() async throws -> NotebookAccount {
+  func signIn() throws -> Account { throw AccountError.signedOut }
+  func refreshAccount() async throws -> Account {
     guard let account = cachedAccount() else { throw AccountError.signedOut }
     return account
   }
@@ -1008,7 +1008,7 @@ private actor SessionNotebookProvider: NotebookProviding {
       library: try await store.cachedLibrary(accountID: accountID),
       drafts: try await store.drafts(accountID: accountID))
   }
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) async throws {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
     try await store.cacheLibrary(
       owned: owned, starred: starred, preferences: account.preferences, accountID: account.id)
   }

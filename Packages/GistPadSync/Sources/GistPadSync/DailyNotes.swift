@@ -10,53 +10,53 @@ public struct DailyNoteTarget: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-public struct TaskProgress: Codable, Equatable, Sendable {
-    public let total: Int
-    public let completed: Int
-    public var remaining: Int { total - completed }
+/// A day's file in the daily notes gist, as the phone knows it: your draft once you've started the day
+/// here, otherwise GitHub's cached copy.
+public struct DailyNote: Codable, Equatable, Sendable {
+    public let day: DailyNoteTarget
+    /// The daily notes gist, once the phone knows it.
+    public let gistID: String?
+    /// Your draft of the day, once you've opened it on the phone.
+    public let draftID: UUID?
+    /// The day's Markdown, or nil when the phone has neither a draft nor a cached copy.
+    public let text: String?
+    /// Your draft's publish state.
+    public let state: PublishState?
 
-    public init(markdown: String) {
-        // Match DailyNotes.tsx exactly, including its lowercase completion marker.
-        let source = markdown as NSString
-        let tasks = source.ranges(of: #"- \[[ x]\]"#)
-        total = tasks.count
-        completed = tasks.filter { source.substring(with: $0) == "- [x]" }.count
+    public var date: Date? {
+        DailyNotesIndex.parseDateFilename(
+            day.filename, timeZone: TimeZone(identifier: day.timeZoneIdentifier) ?? .current)
     }
-}
 
-public struct DailyNoteSummary: Equatable, Identifiable, Sendable {
-    public var id: String { filename }
-    public let filename: String
-    public let date: Date?
-    public let progress: TaskProgress?
-    public let isOverdue: Bool
+    public var tasks: [FileTask] { text.map(FileTask.tasks(in:)) ?? [] }
+    public var progress: TaskProgress? { text.map(TaskProgress.init(markdown:)) }
+
+    public init(
+        day: DailyNoteTarget = DailyNoteTarget(), gistID: String? = nil, draftID: UUID? = nil,
+        text: String? = nil, state: PublishState? = nil
+    ) {
+        self.day = day
+        self.gistID = gistID
+        self.draftID = draftID
+        self.text = text
+        self.state = state
+    }
+
+    /// What the library cache and your drafts say about `day`.
+    public init(day: DailyNoteTarget = DailyNoteTarget(), cache: CachedLibrarySnapshot?, drafts: [DraftSnapshot]) {
+        let gist = cache?.owned.first(where: \.isDailyNote)
+        let draft = drafts.first {
+            $0.filename == day.filename && ($0.gistID == nil
+                ? $0.description == GistConventions.dailyNotesDescription : $0.gistID == gist?.id)
+        }
+        self.init(
+            day: day, gistID: gist?.id, draftID: draft?.id,
+            text: draft?.text ?? gist.flatMap { cache?.content(gist: $0, filename: day.filename) },
+            state: draft?.state)
+    }
 }
 
 public enum DailyNotesIndex {
-    public static func notes(
-        gist: Gist, localContent: [String: String] = [:],
-        date: Date = .now, timeZone: TimeZone = .current
-    ) -> [DailyNoteSummary] {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let today = calendar.startOfDay(for: date)
-        let filenames = Set(gist.files.keys).union(localContent.keys)
-        return filenames.filter { $0 != GistConventions.templateFilename }.map { filename in
-            let day = parseDateFilename(filename, timeZone: timeZone)
-            let file = gist.files[filename]
-            let content = localContent[filename] ?? (file?.truncated == true ? nil : file?.content)
-            let progress = content.map(TaskProgress.init(markdown:))
-            return DailyNoteSummary(
-                filename: filename, date: day, progress: progress,
-                isOverdue: day.map { $0 < today && (progress?.remaining ?? 0) > 0 } ?? false
-            )
-        }.sorted {
-            if $0.isOverdue != $1.isOverdue { return $0.isOverdue }
-            if $0.date != $1.date { return ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
-            return $0.filename < $1.filename
-        }
-    }
-
     public static func parseDateFilename(_ filename: String, timeZone: TimeZone = .current) -> Date? {
         guard filename.range(of: #"^\d{4}-\d{2}-\d{2}\.md$"#, options: .regularExpression) != nil else {
             return nil
@@ -218,14 +218,5 @@ public actor DailyNotesService {
             }
         }
         return TodayNote(target: target, gist: gist, draft: draft)
-    }
-}
-
-private extension NSString {
-    func ranges(of pattern: String) -> [NSRange] {
-        guard let expression = try? NSRegularExpression(pattern: pattern) else {
-            preconditionFailure("Invalid built-in task expression")
-        }
-        return expression.matches(in: self as String, range: NSRange(location: 0, length: length)).map(\.range)
     }
 }

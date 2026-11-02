@@ -41,7 +41,7 @@ struct NotebookTodayCaptureWorkspace: View {
 }
 
 private actor TodayCaptureProvider: NotebookProviding, NotebookPhotoProviding {
-  static let account = NotebookAccount(
+  static let account = Account(
     id: UUID(uuidString: "C62D01E7-A38E-4CD0-855F-B845E8B48809")!,
     login: "synthetic-notebook", githubUserID: 1,
     preferences: .init(isAutoSaveEnabled: true, accentColor: nil))
@@ -51,9 +51,9 @@ private actor TodayCaptureProvider: NotebookProviding, NotebookPhotoProviding {
 
   init(scenario: String) { self.scenario = scenario }
 
-  func cachedAccount() -> NotebookAccount? { scenario == "signed-out" ? nil : Self.account }
-  func signIn() -> NotebookAccount { Self.account }
-  func refreshAccount() -> NotebookAccount { Self.account }
+  func cachedAccount() -> Account? { scenario == "signed-out" ? nil : Self.account }
+  func signIn() -> Account { Self.account }
+  func refreshAccount() -> Account { Self.account }
   func gists(accountID: UUID) throws -> [Gist] { try fixtureGists() }
   func starredGists(accountID: UUID) -> [Gist] { [] }
 
@@ -102,7 +102,7 @@ private actor TodayCaptureProvider: NotebookProviding, NotebookPhotoProviding {
       drafts: try await store.drafts(accountID: accountID))
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) async throws {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
     try await draftStore().cacheLibrary(
       owned: owned, starred: starred, preferences: account.preferences, accountID: account.id)
   }

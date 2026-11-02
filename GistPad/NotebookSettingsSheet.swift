@@ -3,7 +3,7 @@ import GistPadSync
 import SwiftUI
 
 struct NotebookSettingsSheet<Appearance: View>: View {
-  let account: NotebookAccount?
+  let account: Account?
   let savePreference: @MainActor (BooleanPreference, Bool) async throws -> Void
   let connect: @MainActor () -> Void
   let signOut: @MainActor () async throws -> Void

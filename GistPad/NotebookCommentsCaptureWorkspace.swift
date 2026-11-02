@@ -307,7 +307,7 @@ actor NotebookCommentsCaptureRemote: CommentConversationRemote {
 }
 
 actor NotebookCommentsCaptureProvider: NotebookProviding, NotebookCommentProviding, NotebookPhotoProviding {
-  private let account = NotebookAccount(
+  private let account = Account(
     id: UUID(), login: "octavia", githubUserID: 1,
     preferences: .init(isAutoSaveEnabled: false, accentColor: nil))
   private let remote: NotebookCommentsCaptureRemote
@@ -320,9 +320,9 @@ actor NotebookCommentsCaptureProvider: NotebookProviding, NotebookCommentProvidi
     self.scenario = scenario
   }
 
-  func cachedAccount() -> NotebookAccount? { account }
-  func signIn() -> NotebookAccount { account }
-  func refreshAccount() -> NotebookAccount { account }
+  func cachedAccount() -> Account? { account }
+  func signIn() -> Account { account }
+  func refreshAccount() -> Account { account }
   func gists(accountID: UUID) throws -> [Gist] { try fixtureGists().filter { $0.id != "shared" } }
   func starredGists(accountID: UUID) throws -> [Gist] { try fixtureGists().filter { $0.id == "shared" } }
   func gist(id: String, accountID: UUID) throws -> Gist {
@@ -377,7 +377,7 @@ actor NotebookCommentsCaptureProvider: NotebookProviding, NotebookCommentProvidi
     .init(library: cache, drafts: try await store?.drafts(accountID: accountID) ?? [])
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) {
     cache = .init(
       accountID: account.id, owned: owned, starred: starred, preferences: account.preferences)
   }

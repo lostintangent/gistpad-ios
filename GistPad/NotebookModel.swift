@@ -7,33 +7,6 @@ import GistPadSync
 import OSLog
 import Observation
 
-struct NotebookAccount: Equatable, Sendable, Identifiable {
-  let id: UUID
-  let login: String
-  let githubUserID: Int64?
-  let avatarURL: URL?
-  let preferences: Preferences
-  var displayName: String? { preferences.profileDisplayName }
-
-  init(
-    id: UUID, login: String, githubUserID: Int64? = nil, avatarURL: URL? = nil,
-    preferences: Preferences
-  ) {
-    self.id = id
-    self.login = login
-    self.githubUserID = githubUserID
-    self.avatarURL = avatarURL
-    self.preferences = preferences
-  }
-
-  init(_ snapshot: AccountSnapshot) {
-    self.init(
-      id: snapshot.id, login: snapshot.login, githubUserID: snapshot.githubUserID,
-      avatarURL: snapshot.avatarURL,
-      preferences: snapshot.preferences)
-  }
-}
-
 struct NotebookWriteFailure {
   enum Operation {
     case action(NotebookAction)
@@ -52,10 +25,10 @@ struct NotebookWriteFailure {
 }
 
 protocol NotebookProviding: Sendable {
-  func cachedAccount() async throws -> NotebookAccount?
-  func connectedAccount() async throws -> NotebookAccount?
-  func signIn() async throws -> NotebookAccount
-  func refreshAccount() async throws -> NotebookAccount
+  func cachedAccount() async throws -> Account?
+  func connectedAccount() async throws -> Account?
+  func signIn() async throws -> Account
+  func refreshAccount() async throws -> Account
   func gists(accountID: UUID) async throws -> [Gist]
   func starredGists(accountID: UUID) async throws -> [Gist]
   func gist(id: String, accountID: UUID) async throws -> Gist
@@ -68,7 +41,7 @@ protocol NotebookProviding: Sendable {
     expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
   ) async throws -> DraftSnapshot
   func localState(accountID: UUID) async throws -> NotebookLocalState
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) async throws
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws
   func createDraft(accountID: UUID) async throws -> DraftSnapshot
   func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool
   func today(accountID: UUID, target: DailyNoteTarget) async throws -> TodayNote
@@ -76,7 +49,7 @@ protocol NotebookProviding: Sendable {
 }
 
 extension NotebookProviding {
-  func connectedAccount() async throws -> NotebookAccount? {
+  func connectedAccount() async throws -> Account? {
     try await cachedAccount()
   }
 }
@@ -102,29 +75,29 @@ actor LiveNotebookProvider: NotebookProviding {
     return client
   }
 
-  func cachedAccount() async throws -> NotebookAccount? {
-    try await accounts.cachedAccount().map(NotebookAccount.init)
+  func cachedAccount() async throws -> Account? {
+    try await accounts.cachedAccount()
   }
 
-  func connectedAccount() async throws -> NotebookAccount? {
+  func connectedAccount() async throws -> Account? {
     guard let snapshot = try await accounts.connectedAccount() else { return nil }
-    let account = NotebookAccount(snapshot)
+    let account = Account(snapshot)
     guard account.preferences.isEmpty else { return account }
     // Pre-snapshot installs have no preferences until Supabase returns, so keep the library cache's.
     let hasSession = try await accounts.hasSupabaseSession()
     guard !hasSession, let cached = try await drafts.cachedLibrary(accountID: account.id)?.preferences
     else { return account }
-    return NotebookAccount(
+    return Account(
       id: account.id, login: account.login, githubUserID: account.githubUserID,
       avatarURL: account.avatarURL, preferences: cached)
   }
 
-  func signIn() async throws -> NotebookAccount {
-    NotebookAccount(try await accounts.signIn())
+  func signIn() async throws -> Account {
+    Account(try await accounts.signIn())
   }
 
-  func refreshAccount() async throws -> NotebookAccount {
-    NotebookAccount(try await accounts.refreshAccount())
+  func refreshAccount() async throws -> Account {
+    Account(try await accounts.refreshAccount())
   }
 
   func gists(accountID: UUID) async throws -> [Gist] {
@@ -198,7 +171,7 @@ actor LiveNotebookProvider: NotebookProviding {
     return NotebookLocalState(library: library, drafts: localDrafts)
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) async throws {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
     try await drafts.cacheLibrary(
       owned: owned, starred: starred, preferences: account.preferences, accountID: account.id)
   }
@@ -337,8 +310,8 @@ struct NotebookFailedOpen: Equatable {
 @MainActor @Observable
 final class NotebookModel {
   let library = LibraryModel()
-  private(set) var account: NotebookAccount?
-  private(set) var pendingAccount: NotebookAccount?
+  private(set) var account: Account?
+  private(set) var pendingAccount: Account?
   private(set) var loadedDocument: NotebookDocument?
   private(set) var isSigningIn = false
   private(set) var isSigningOut = false
@@ -657,10 +630,7 @@ final class NotebookModel {
 
   private static func updateLibraryContent(_ note: inout LibraryNote, text: String?) {
     if note.isDailyNote {
-      note.progress = text.map {
-        let tasks = TaskProgress(markdown: $0)
-        return .init(completed: tasks.completed, total: tasks.total)
-      }
+      note.progress = text.map(TaskProgress.init(markdown:))
       note.isOverdue = note.dailyDate.map {
         $0 < Calendar.current.startOfDay(for: .now) && (note.progress?.remaining ?? 0) > 0
       } ?? false
@@ -821,7 +791,7 @@ final class NotebookModel {
   }
 
   // Supabase only supplies preferences, so GitHub reads keep going when its refresh fails. A missing GitHub token still needs reconnecting.
-  private func refreshedAccount() async throws -> NotebookAccount {
+  private func refreshedAccount() async throws -> Account {
     do {
       return try await provider.refreshAccount()
     } catch {
@@ -1216,7 +1186,8 @@ final class NotebookModel {
     do {
       let daily = cachedLibrary?.owned.first(where: \.isDailyNote)
       var document: NotebookDocument
-      if let draft = todayDraft(filename: target.filename, daily: daily) {
+      let today = DailyNote(day: target, cache: cachedLibrary, drafts: localDrafts)
+      if let draft = localDrafts.first(where: { $0.id == today.draftID }) {
         document = NotebookDocument(draft: draft, gist: daily)
       } else if let daily,
         let cached = cachedDocument(gistID: daily.id, filename: target.filename)
@@ -1361,34 +1332,12 @@ final class NotebookModel {
   }
 
   private func updateToday() {
-    let filename = GistConventions.todayFilename()
-    let daily = cachedLibrary?.owned.first(where: \.isDailyNote)
-    let local = todayDraft(filename: filename, daily: daily).flatMap {
-      Self.libraryDrafts(
-        [$0], owned: cachedLibrary?.owned ?? [], accountID: $0.accountID).first
+    let drafts = account.map {
+      Self.libraryDrafts(localDrafts, owned: cachedLibrary?.owned ?? [], accountID: $0.id)
     }
-    let text = local?.text ?? daily.flatMap { cachedLibrary?.content(gist: $0, filename: filename) }
-    var summary = LibraryTodaySummary(
-      progress: text.map {
-        let tasks = TaskProgress(markdown: $0)
-        return LibraryTaskProgress(completed: tasks.completed, total: tasks.total)
-      })
-    if local != nil || daily?.files[filename] != nil {
-      summary.availability = .existing
-    } else if cachedLibrary != nil, library.loadState == .ready, daily?.truncated != true {
-      summary.availability = .missing
-    }
-    library.today = summary
+    library.today = DailyNote(cache: cachedLibrary, drafts: drafts ?? [])
   }
 
-  private func todayDraft(filename: String, daily: Gist?) -> DraftSnapshot? {
-    localDrafts.first { draft in
-      draft.filename == filename
-        && (draft.gistID == nil || cachedLibrary?.owned.contains(where: { $0.id == draft.gistID }) == true)
-        && (draft.description == GistConventions.dailyNotesDescription
-          || (daily != nil && draft.gistID == daily?.id))
-    }
-  }
   private static func isMissingRemote(_ error: any Error) -> Bool {
     if case GitHubClientError.http(let status, _) = error { return status == 404 }
     return (error as? GitHubClientError) == .missingFile
@@ -2038,7 +1987,7 @@ final class NotebookModel {
   }
 
   static func librarySnapshot(
-    owned: [Gist], starred: [Gist], account: NotebookAccount, drafts: [DraftSnapshot] = [],
+    owned: [Gist], starred: [Gist], account: Account, drafts: [DraftSnapshot] = [],
     cached: CachedLibrarySnapshot? = nil, excluding deletedIDs: Set<String> = []
   )
     -> LibrarySnapshot

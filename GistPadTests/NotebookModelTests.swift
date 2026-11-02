@@ -719,7 +719,7 @@ struct NotebookModelTests {
     #expect(model.deletedGistIDs.contains(deleted.id))
     #expect(selections.deletedGistIDs(accountID: fixtureAccount.id).contains(deleted.id))
     if daily {
-      #expect(model.library.today.availability == .existing)
+      #expect(model.library.today.text != nil)
       #expect(model.loadedDocument?.draft?.gistID == nil)
       #expect(model.loadedDocument?.draft?.isDiscardableBlank == true)
     }
@@ -794,7 +794,7 @@ struct NotebookModelTests {
     let source = prefix + "# Content\n\nA retained thought."
     var metadata = fixtureAccount.preferences.metadata
     if let shown { metadata["showFrontmatter"] = .bool(shown) }
-    let account = NotebookAccount(
+    let account = Account(
       id: fixtureAccount.id, login: fixtureAccount.login, githubUserID: fixtureAccount.githubUserID,
       preferences: .init(metadata: metadata))
     let provider = StubNotebookProvider(
@@ -1003,7 +1003,7 @@ struct NotebookModelTests {
   }
 
   @Test func accountIdentityOmitsMissingNamesAndUsesTheNativeAvatarURL() throws {
-    let account = NotebookAccount(
+    let account = Account(
       id: UUID(), login: "octavia", avatarURL: URL(string: "https://avatars.githubusercontent.com/u/1"),
       preferences: .init(metadata: ["full_name": .string("  "), "name": .string("Octavia")]))
     #expect(account.displayName == "Octavia")
@@ -1168,9 +1168,9 @@ struct NotebookModelTests {
           content: "", filename: filename)
       ])
     let model = NotebookModel(provider: provider)
-    #expect(model.library.today.availability == .unknown)
+    #expect(model.library.today.text == nil)
     await model.start()
-    #expect(model.library.today.availability == .existing)
+    #expect(model.library.today.text != nil)
     #expect(model.library.today.progress == .init(completed: 0, total: 0))
     let reads = await provider.readIDs
     await model.updateCalendar()
@@ -1181,7 +1181,7 @@ struct NotebookModelTests {
     let missingProvider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let missing = NotebookModel(provider: missingProvider)
     await missing.start()
-    #expect(missing.library.today.availability == .existing)
+    #expect(missing.library.today.text != nil)
     #expect(missing.loadedDocument?.draft?.isDiscardableBlank == true)
     #expect(await missingProvider.readIDs.isEmpty)
     #expect(await missingProvider.creationCount == 0)
@@ -1194,7 +1194,7 @@ struct NotebookModelTests {
     await model.startToday()
     let daily = try #require(model.loadedDocument?.draft)
     #expect(daily.gistID == nil)
-    #expect(model.library.today.availability == .existing)
+    #expect(model.library.today.text != nil)
     await model.createNote()
     #expect(model.loadedDocument?.draft?.id != daily.id)
     await model.startToday()
@@ -1229,7 +1229,7 @@ struct NotebookModelTests {
     await model.start()
     let text = "日本語 e\u{301}\r\n**Private draft**"
     let local = try await provider.stageExistingDraft(gistID: "a", text: text)
-    let replacement = NotebookAccount(
+    let replacement = Account(
       id: UUID(), login: "other-account", preferences: .init(metadata: [:]))
     await provider.setSignInAccount(replacement)
     await model.signIn()
@@ -1454,7 +1454,7 @@ struct NotebookModelTests {
     let model = NotebookModel(provider: provider)
     await model.start()
     await model.open(gistID: "a")
-    let replacement = NotebookAccount(
+    let replacement = Account(
       id: UUID(), login: "another-person", preferences: .init(metadata: [:]))
     await provider.setSignInAccount(replacement)
     await model.signIn()
@@ -1569,7 +1569,7 @@ struct NotebookModelTests {
   }
 
   @Test func anUnrelatedAccountCannotRestoreThePreviousAccountsSelection() async throws {
-    let other = NotebookAccount(id: UUID(), login: "other", preferences: .init(metadata: [:]))
+    let other = Account(id: UUID(), login: "other", preferences: .init(metadata: [:]))
     let provider = StubNotebookProvider(account: other, gists: [])
     let selections = NotebookSelectionStore()
     try selections.save(
@@ -1787,13 +1787,13 @@ struct NotebookModelTests {
     let draft = try await provider.openDraft(for: previous)
     let model = NotebookModel(provider: provider)
     await model.start()
-    #expect(model.library.today.availability == .missing)
+    #expect(model.library.today.text == nil)
     #expect(model.library.today.progress == nil)
     #expect(model.library.dailyNoteCount == 1)
     _ = try await model.persist(
       draftID: draft.id, accountID: draft.accountID,
       text: "- [ ] A new local task", generation: 1)
-    #expect(model.library.today.availability == .existing)
+    #expect(model.library.today.text != nil)
     #expect(model.library.today.progress == .init(completed: 0, total: 1))
     #expect(model.library.dailyNoteCount == 2)
     #expect(model.library.snapshot.notes.contains { $0.id == "daily/\(filename)" })
@@ -2945,7 +2945,7 @@ private struct NavigationHost {
   private enum HostError: Error { case presentationTimedOut }
 }
 
-private let fixtureAccount = NotebookAccount(
+private let fixtureAccount = Account(
   id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
   login: "notebook-owner",
   preferences: .init(metadata: [
@@ -3002,8 +3002,8 @@ private actor NotebookCommentStoreFake: CommentConversationStore {
 }
 
 private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, NotebookCommentProviding {
-  private(set) var account: NotebookAccount
-  var signInAccount: NotebookAccount
+  private(set) var account: Account
+  var signInAccount: Account
   var notes: [Gist]
   var starredNotes: [Gist]
   private var listedOwned: [Gist]?
@@ -3050,7 +3050,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
   private(set) var refreshAccountReads = 0
 
   init(
-    account: NotebookAccount, gists: [Gist], cachesContent: Bool = true, starred: [Gist] = []
+    account: Account, gists: [Gist], cachesContent: Bool = true, starred: [Gist] = []
   ) {
     self.account = account
     self.signInAccount = account
@@ -3059,7 +3059,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
     self.cachesContent = cachesContent
   }
 
-  func cachedAccount() throws -> NotebookAccount? {
+  func cachedAccount() throws -> Account? {
     cachedAccountReads += 1
     if isSigningOut { throw AccountError.signInInProgress }
     return isSignedOut ? nil : account
@@ -3082,7 +3082,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
       remote: GitHubCommentRemote(client: GitHubClient { throw AccountError.accountChanged }),
       userID: 1)
   }
-  func signIn() -> NotebookAccount {
+  func signIn() -> Account {
     signInCount += 1
     needsReconnect = false
     isSignedOut = false
@@ -3102,7 +3102,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
     heldSignOut = nil
     holdsSignOut = false
   }
-  func refreshAccount() throws -> NotebookAccount {
+  func refreshAccount() throws -> Account {
     refreshAccountReads += 1
     if isSigningOut { throw AccountError.signInInProgress }
     if needsReconnect { throw AccountError.reconnectGitHub }
@@ -3343,7 +3343,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
     let drafts = try await store?.drafts(accountID: accountID) ?? []
     return NotebookLocalState(library: cached, drafts: drafts)
   }
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) {
     cached = CachedLibrarySnapshot(
       accountID: account.id, owned: cachesContent ? owned : owned.map(metadataOnly),
       starred: cachesContent ? starred : starred.map(metadataOnly),
@@ -3423,25 +3423,25 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
   func failAccountRefresh(_ fails: Bool = true) { failsAccountRefresh = fails }
   func rejectArchiveChanges() { rejectsArchiveChanges = true }
   func requireReconnect() { needsReconnect = true }
-  func setSignInAccount(_ account: NotebookAccount) { signInAccount = account }
+  func setSignInAccount(_ account: Account) { signInAccount = account }
   func setAutosaveEnabled(_ enabled: Bool) {
     var metadata = account.preferences.metadata
     metadata["isAutoSaveEnabled"] = .bool(enabled)
-    account = NotebookAccount(
+    account = Account(
       id: account.id, login: account.login, githubUserID: account.githubUserID,
       preferences: .init(metadata: metadata))
   }
   func setSpellingEnabled(_ enabled: Bool) {
     var metadata = account.preferences.metadata
     metadata["isSpellcheckEnabled"] = .bool(enabled)
-    account = NotebookAccount(
+    account = Account(
       id: account.id, login: account.login, githubUserID: account.githubUserID,
       preferences: .init(metadata: metadata))
   }
   func setShowsFrontMatter(_ shown: Bool) {
     var metadata = account.preferences.metadata
     metadata["showFrontmatter"] = .bool(shown)
-    account = NotebookAccount(
+    account = Account(
       id: account.id, login: account.login, githubUserID: account.githubUserID,
       preferences: .init(metadata: metadata))
   }

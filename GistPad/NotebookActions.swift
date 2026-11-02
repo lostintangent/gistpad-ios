@@ -27,7 +27,7 @@ enum NotebookAction: Sendable {
 
 enum NotebookActionResult: Sendable {
   case signedOut
-  case account(NotebookAccount)
+  case account(Account)
   case gist(Gist, starred: Bool? = nil)
   case archived(Gist, undo: NotebookArchiveUndo)
   case draft(DraftSnapshot, gist: Gist? = nil)
@@ -106,7 +106,7 @@ extension LiveNotebookProvider {
     }
     switch action {
     case .preference(let operation):
-      return .account(NotebookAccount(try await accounts.apply(operation, accountID: accountID)))
+      return .account(Account(try await accounts.apply(operation, accountID: accountID)))
     case .signOut:
       try await accounts.signOut(accountID: accountID)
       return .signedOut
@@ -306,7 +306,7 @@ extension LiveNotebookProvider {
   }
 
   private func ownedGist(
-    id: String, account: AccountSnapshot
+    id: String, account: Account
   ) async throws -> (GitHubClient, Gist, Int64) {
     let client = await client(accountID: account.id)
     let gist = try await client.gist(id: id)

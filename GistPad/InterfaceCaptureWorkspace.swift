@@ -126,7 +126,7 @@ struct InterfaceCaptureWorkspace: View {
             _modes = State(initialValue: ["README.md": .source])
         }
         var snapshot = state == "empty" ? LibrarySnapshot(notes: []) : InterfaceFixtures.library
-        var todayProgress: LibraryTaskProgress? = state == "empty" ? nil : .init(completed: 0, total: 3)
+        var todayProgress: TaskProgress? = state == "empty" ? nil : .init(completed: 0, total: 3)
         switch state {
         case "today-done", "today-0", "daily-progress":
             todayProgress = .init(completed: 1, total: 1)
@@ -139,9 +139,8 @@ struct InterfaceCaptureWorkspace: View {
         let tasks = (0..<(todayProgress?.total ?? 0)).map { index in
             "- [\(index < (todayProgress?.completed ?? 0) ? "x" : " ")] A useful next step \(index + 1)"
         }
-        _todaySession = State(initialValue: DocumentSession(
-            documentID: "capture-today",
-            text: "# Today\n\nKeep the thought, not the interface.\n\n\(tasks.joined(separator: "\n"))\n"))
+        let todayText = "# Today\n\nKeep the thought, not the interface.\n\n\(tasks.joined(separator: "\n"))\n"
+        _todaySession = State(initialValue: DocumentSession(documentID: "capture-today", text: todayText))
         if state != "empty" {
             snapshot.notes.insert(
                 .init(
@@ -278,7 +277,7 @@ struct InterfaceCaptureWorkspace: View {
             loadState: state == "error"
                 ? .failed(message: "Synthetic connection failure. No account request was made.")
                 : state == "signed-out" ? .signedOut : .ready,
-            today: .init(progress: todayProgress, availability: state == "empty" ? .missing : .existing)
+            today: DailyNote(text: state == "empty" ? nil : todayText)
         )
         if state == "status-busy" {
             model.gitHubStatus = .checking(operation: "Checking GitHub")

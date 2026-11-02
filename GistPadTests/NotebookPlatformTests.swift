@@ -178,7 +178,7 @@ struct NotebookPlatformTests {
 
 @MainActor
 private struct PlatformFixture {
-  let account: NotebookAccount
+  let account: Account
   let provider: PlatformNotebookProvider
   let store: DraftStore
   let model: NotebookModel
@@ -187,7 +187,7 @@ private struct PlatformFixture {
   let directory: URL
 
   static func make() async throws -> Self {
-    let account = NotebookAccount(
+    let account = Account(
       id: UUID(), login: "synthetic", githubUserID: 42, preferences: .init(metadata: [:]))
     let filename = DailyNoteTarget().filename
     let payload: [String: Any] = [
@@ -232,21 +232,21 @@ private struct PlatformFixture {
 }
 
 private actor PlatformNotebookProvider: NotebookProviding {
-  var account: NotebookAccount
+  var account: Account
   let gist: Gist
   let store: DraftStore
   private(set) var publishCount = 0
   private(set) var targets: [DailyNoteTarget] = []
 
-  init(account: NotebookAccount, gist: Gist, store: DraftStore) {
+  init(account: Account, gist: Gist, store: DraftStore) {
     self.account = account
     self.gist = gist
     self.store = store
   }
 
-  func cachedAccount() -> NotebookAccount? { account }
-  func refreshAccount() -> NotebookAccount { account }
-  func signIn() -> NotebookAccount { account }
+  func cachedAccount() -> Account? { account }
+  func refreshAccount() -> Account { account }
+  func signIn() -> Account { account }
   func gists(accountID: UUID) -> [Gist] { [gist] }
   func starredGists(accountID: UUID) -> [Gist] { [] }
   func gist(id: String, accountID: UUID) -> Gist { gist }
@@ -274,7 +274,7 @@ private actor PlatformNotebookProvider: NotebookProviding {
       library: try await store.cachedLibrary(accountID: accountID),
       drafts: try await store.drafts(accountID: accountID))
   }
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: NotebookAccount) async throws {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
     try await store.cacheLibrary(
       owned: owned, starred: starred, preferences: account.preferences, accountID: account.id)
   }
@@ -294,6 +294,6 @@ private actor PlatformNotebookProvider: NotebookProviding {
     throw NotebookPlatformError.serviceUnavailable
   }
   func changeAccount() {
-    account = NotebookAccount(id: UUID(), login: "other", githubUserID: 99, preferences: .init(metadata: [:]))
+    account = Account(id: UUID(), login: "other", githubUserID: 99, preferences: .init(metadata: [:]))
   }
 }

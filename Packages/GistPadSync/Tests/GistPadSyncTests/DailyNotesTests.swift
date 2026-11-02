@@ -342,26 +342,6 @@ private func arrayData(_ data: [Data]) -> Data {
         #expect(result.draft.state == .savedLocally)
     }
 
-    @Test func unknownAndTruncatedDailyContentNeverClaimZeroTasks() throws {
-        let parsed = try JSONSerialization.jsonObject(with: dailyData()) as? [String: Any]
-        var object = try #require(parsed)
-        object["files"] = [
-            "2026-10-20.md": ["filename": "2026-10-20.md", "language": "Markdown"],
-            "2026-10-21.md": [
-                "filename": "2026-10-21.md", "language": "Markdown",
-                "content": "- [ ] Partial", "truncated": true
-            ]
-        ]
-        let gist = try decodeGist(JSONSerialization.data(withJSONObject: object))
-        let unknown = DailyNotesIndex.notes(gist: gist)
-        #expect(unknown.count == 2)
-        #expect(unknown.allSatisfy { $0.progress == nil })
-        let local = DailyNotesIndex.notes(
-            gist: gist, localContent: ["2026-10-22.md": "- [ ] Locally staged"]
-        )
-        #expect(local.first { $0.filename == "2026-10-22.md" }?.progress?.remaining == 1)
-    }
-
     @Test func dayCreatedOnWebDuringTheFreshReadBecomesAConflictNotAnOverwrite() async throws {
         let details = Mutex(0)
         let client = GitHubClient(session: FakeURLProtocol.session { request in
@@ -388,25 +368,39 @@ private func arrayData(_ data: [Data]) -> Data {
         #expect(conflict.remote == "web already wrote tasks")
     }
 
-    @Test func pinnedLocalDateAndTaskOrderingMatchWebSemantics() throws {
+    @Test func todayAndItsTasksFollowTheWeb() throws {
         let instant = try Date.ISO8601FormatStyle().parse("2026-10-24T01:00:00Z")
         let la = try #require(TimeZone(identifier: "America/Los_Angeles"))
+        let utc = try #require(TimeZone(secondsFromGMT: 0))
         #expect(DailyNoteTarget(date: instant, timeZone: la).filename == "2026-10-23.md")
-        #expect(DailyNoteTarget(date: instant, timeZone: TimeZone(secondsFromGMT: 0)!).filename == "2026-10-24.md")
-        let gist = try decodeGist(dailyData(files: [
-            "2026-10-22.md": "- [ ] Old\n- [x] Done",
-            "2026-10-24.md": "- [ ] Today", "2026-10-23.md": "- [x] Done",
-            "template.md": "- [ ] Template", "2026-02-30.md": "- [ ] Invalid date"
-        ]))
-        let notes = DailyNotesIndex.notes(gist: gist, date: instant, timeZone: TimeZone(secondsFromGMT: 0)!)
-        #expect(notes.map(\.filename) == [
-            "2026-10-22.md", "2026-10-24.md", "2026-10-23.md", "2026-02-30.md"
-        ])
-        #expect(notes[0].progress?.remaining == 1)
-        #expect(notes[0].isOverdue)
-        #expect(!notes[1].isOverdue)
+        #expect(DailyNoteTarget(date: instant, timeZone: utc).filename == "2026-10-24.md")
         #expect(DailyNotesIndex.parseDateFilename("2026-02-30.md") == nil)
-        #expect(TaskProgress(markdown: "- [ ] A\n- [x] B\n- [X] C").total == 2)
+
+        let markdown = "🌅 - [ ] Wake up \r\n- [x] Done\n- [X] Shouting\n```\n- [ ] Fenced\n```"
+        let tasks = FileTask.tasks(in: markdown)
+        #expect(tasks.map(\.title) == ["Wake up", "Done", "Fenced"])
+        #expect(tasks.map(\.isChecked) == [false, true, false])
+        #expect(tasks[0].markerRange == NSRange(location: 5, length: 3))
+        #expect((markdown as NSString).substring(with: tasks[0].lineRange) == "🌅 - [ ] Wake up ")
+        #expect((markdown as NSString).substring(with: tasks[1].markerRange) == "[x]")
+        #expect(TaskProgress(markdown: markdown) == TaskProgress(completed: 1, total: 3))
+
+        let day = DailyNoteTarget(date: instant, timeZone: utc)
+        let cache = { (truncated: Bool) in
+            var object = try #require(try JSONSerialization.jsonObject(with: dailyData(
+                files: [day.filename: "- [ ] Partial"])) as? [String: Any])
+            object["files"] = [day.filename: [
+                "filename": day.filename, "language": "Markdown", "content": "- [ ] Partial", "truncated": truncated]]
+            return CachedLibrarySnapshot(
+                accountID: UUID(), owned: [try decodeGist(JSONSerialization.data(withJSONObject: object))],
+                starred: [], preferences: Preferences(metadata: [:]))
+        }
+        #expect(DailyNote(day: day, cache: try cache(true), drafts: []).progress == nil)
+        let today = DailyNote(day: day, cache: try cache(false), drafts: [])
+        #expect(today.gistID == "abc123")
+        #expect(today.progress?.remaining == 1)
+        #expect(today.date == DailyNotesIndex.parseDateFilename(day.filename, timeZone: utc))
+        #expect(DailyNote(day: day, cache: nil, drafts: []).progress == nil)
         #expect(GistConventions.dailyContent(template: nil, dateFilename: "2026-10-24.md")
             == "# 2026-10-24\n\n")
         #expect(GistConventions.dailyContent(

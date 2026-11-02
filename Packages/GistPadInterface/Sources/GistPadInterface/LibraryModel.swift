@@ -1,4 +1,5 @@
 import Foundation
+import GistPadSync
 import Observation
 
 public enum LibraryCollection: String, CaseIterable, Identifiable, Sendable {
@@ -52,7 +53,7 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
     public var isDailyNote: Bool
     public var tagIDs: Set<String>
     public var filename: String?
-    public var progress: LibraryTaskProgress?
+    public var progress: TaskProgress?
     public var isOverdue: Bool
     public var dailyDate: Date?
     public var commentCount: Int?
@@ -70,7 +71,7 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
         isSecret: Bool = true, isPinned: Bool = false,
         isStarred: Bool = false, isArchived: Bool = false, isDailyNote: Bool = false,
         tagIDs: Set<String> = [], filename: String? = nil,
-        progress: LibraryTaskProgress? = nil, isOverdue: Bool = false, dailyDate: Date? = nil,
+        progress: TaskProgress? = nil, isOverdue: Bool = false, dailyDate: Date? = nil,
         commentCount: Int? = nil
     ) {
         self.id = id
@@ -125,12 +126,12 @@ public final class LibraryModel {
     public var query = ""
     public var selectedTagIDs: Set<String> = []
     public var selectedNoteID: String?
-    public var today: LibraryTodaySummary
+    public var today: DailyNote
     public var searchState: LibrarySearchState = .inactive
 
     public init(
         snapshot: LibrarySnapshot? = nil, loadState: LibraryLoadState = .loading,
-        today: LibraryTodaySummary = .init()
+        today: DailyNote = .init()
     ) {
         self.snapshot = snapshot ?? .init(notes: [])
         hasKnownGistSnapshot = snapshot != nil

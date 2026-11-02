@@ -14,12 +14,23 @@ public enum AccountError: Error, Equatable, Sendable {
     case keychain(OSStatus)
 }
 
-public struct AccountSnapshot: Codable, Equatable, Sendable, Identifiable {
+public struct Account: Codable, Equatable, Sendable, Identifiable {
     public let id: UUID
     public let login: String
     public let githubUserID: Int64?
     public let avatarURL: URL?
     public let preferences: Preferences
+    public var displayName: String? { preferences.profileDisplayName }
+
+    public init(
+        id: UUID, login: String, githubUserID: Int64? = nil, avatarURL: URL? = nil, preferences: Preferences
+    ) {
+        self.id = id
+        self.login = login
+        self.githubUserID = githubUserID
+        self.avatarURL = avatarURL
+        self.preferences = preferences
+    }
 }
 
 public protocol AccountCredentialStorage: AuthLocalStorage {
@@ -165,7 +176,7 @@ public actor AccountService {
 
     deinit { authEvents.cancel() }
 
-    public func cachedAccount() async throws -> AccountSnapshot? {
+    public func cachedAccount() async throws -> Account? {
         guard !signingOut else { throw AccountError.signInInProgress }
         guard let session = try persistedSession() else { return nil }
         try retainConnection(session)
@@ -177,14 +188,14 @@ public actor AccountService {
     }
 
     /// The connected GitHub account for launch. It doesn't need a live Supabase session.
-    public func connectedAccount() async throws -> AccountSnapshot? {
+    public func connectedAccount() async throws -> Account? {
         if try persistedSession() != nil { return try await cachedAccount() }
         guard let id = try connectedAccountID() else { return nil }
         if let stored = try storedAccount(), stored.id == id { return stored }
         // Installs from before the snapshot learn their identity once from GitHub. Preferences stay empty until a Supabase session returns, so callers keep their cached preferences.
         let user = try await githubClient(accountID: id, session: httpSession).authenticatedUser()
         guard try connectedAccountID() == id else { throw AccountError.accountChanged }
-        let account = AccountSnapshot(
+        let account = Account(
             id: id, login: user.login, githubUserID: user.id,
             avatarURL: user.avatarURL, preferences: Preferences(metadata: [:])
         )
@@ -192,7 +203,7 @@ public actor AccountService {
         return account
     }
 
-    public func refreshAccount() async throws -> AccountSnapshot {
+    public func refreshAccount() async throws -> Account {
         guard !signingIn, !signingOut else { throw AccountError.signInInProgress }
         _ = try persistedSession()
         let session = try await auth.session
@@ -203,7 +214,7 @@ public actor AccountService {
     }
 
     @discardableResult
-    public func signIn() async throws -> AccountSnapshot {
+    public func signIn() async throws -> Account {
         guard !signingIn, !signingOut, !updatingPreferences else { throw AccountError.signInInProgress }
         signingIn = true
         defer { signingIn = false }
@@ -218,7 +229,7 @@ public actor AccountService {
     @discardableResult
     public func signIn(
         launchFlow: @MainActor @Sendable (URL) async throws -> URL
-    ) async throws -> AccountSnapshot {
+    ) async throws -> Account {
         guard !signingIn, !signingOut, !updatingPreferences else { throw AccountError.signInInProgress }
         signingIn = true
         defer { signingIn = false }
@@ -284,7 +295,7 @@ public actor AccountService {
         return token
     }
 
-    public func apply(_ operation: PreferenceOperation, accountID: UUID) async throws -> AccountSnapshot {
+    public func apply(_ operation: PreferenceOperation, accountID: UUID) async throws -> Account {
         guard !updatingPreferences, !signingIn, !signingOut else { throw PreferenceError.operationInProgress }
         updatingPreferences = true
         defer { updatingPreferences = false }
@@ -386,13 +397,13 @@ public actor AccountService {
 
     private func providerKey(_ id: UUID) -> String { Self.providerPrefix + id.uuidString }
 
-    private func storedAccount() throws -> AccountSnapshot? {
+    private func storedAccount() throws -> Account? {
         guard let data = try credentials.retrieve(key: Self.accountKey) else { return nil }
-        return try? JSONDecoder().decode(AccountSnapshot.self, from: data)
+        return try? JSONDecoder().decode(Account.self, from: data)
     }
 
     // The snapshot is a launch cache. Supabase and GitHub stay authoritative, so a failed write is logged, not surfaced as a failed sign-in or save.
-    private func persistAccount(_ account: AccountSnapshot) {
+    private func persistAccount(_ account: Account) {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
         do {
@@ -416,8 +427,8 @@ public actor AccountService {
               saved.refreshToken == session.refreshToken else { throw AccountError.credentialPersistence }
     }
 
-    private func snapshot(_ user: User) -> AccountSnapshot {
-        AccountSnapshot(
+    private func snapshot(_ user: User) -> Account {
+        Account(
             id: user.id,
             login: user.userMetadata["user_name"]?.stringValue ?? "",
             githubUserID: githubUserID(user),

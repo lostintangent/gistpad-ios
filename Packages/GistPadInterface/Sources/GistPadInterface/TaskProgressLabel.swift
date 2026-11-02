@@ -1,4 +1,5 @@
 #if os(iOS)
+import GistPadSync
 import SwiftUI
 
 private struct TaskCompletionMark: View {
@@ -14,7 +15,7 @@ private struct TaskCompletionMark: View {
 }
 
 struct TaskProgressLabel: View {
-    let progress: LibraryTaskProgress
+    let progress: TaskProgress
     var isOverdue = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .footnote) private var ringSize = 14
