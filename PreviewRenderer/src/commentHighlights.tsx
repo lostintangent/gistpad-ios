@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import type { Element as HASTElement, Root } from "hast";
-import { isUInt64String, type RenderRequest } from "./protocol";
+import type { RenderRequest } from "./protocol";
 import { contrastRatio, type RGB } from "./appearance";
 
-type Identity = Pick<RenderRequest, "version" | "documentID" | "generation">;
+type Identity = Pick<RenderRequest, "documentID" | "generation">;
 export interface CommentThreadActivation extends Identity {
   type: "commentActivate";
   segment: number;
@@ -15,21 +15,15 @@ interface Highlight {
   segment: number;
   start: number;
   end: number;
-  commentIDs: string[];
+  commentIDs: number[];
 }
-interface HighlightState extends Identity {
+export interface HighlightState {
   highlights: Highlight[];
-  selectedCommentID: string | null;
-  revealRevision: string;
+  selectedCommentID: number | null;
+  revealRevision: number;
   showsInlineComments: boolean;
   allowsInteraction: boolean;
   accent: string;
-}
-
-function isCommentID(value: unknown): value is string {
-  return typeof value === "string" && /^(0|-?[1-9]\d{0,18})$/.test(value) &&
-    BigInt(value) >= -9_223_372_036_854_775_808n &&
-    BigInt(value) <= 9_223_372_036_854_775_807n;
 }
 
 export class CommentHighlightController {
@@ -43,16 +37,13 @@ export class CommentHighlightController {
     private readonly activate: (message: CommentThreadActivation) => void,
   ) {
     this.state = {
-      ...this.identity(), highlights: [], selectedCommentID: null, revealRevision: "0",
+      highlights: [], selectedCommentID: null, revealRevision: 0,
       showsInlineComments: true, allowsInteraction: false, accent: "#0EA5E9",
     };
   }
 
   private identity(): Identity {
-    return {
-      version: this.request.version, documentID: this.request.documentID,
-      generation: this.request.generation,
-    };
+    return { documentID: this.request.documentID, generation: this.request.generation };
   }
 
   readonly subscribe = (listener: () => void) => {
@@ -110,52 +101,9 @@ export class CommentHighlightController {
     return { ...this.identity(), quote };
   }
 
-  setHighlights(value: unknown) {
-    if (!value || typeof value !== "object" || !this.segments) {
-      throw new TypeError("Invalid comment highlights");
-    }
-    const data = value as Partial<HighlightState>;
-    const revealRevision = data.revealRevision === undefined ? "0" : data.revealRevision;
-    if (data.version !== this.request.version || data.documentID !== this.request.documentID ||
-        data.generation !== this.request.generation ||
-        !isUInt64String(revealRevision) ||
-        typeof data.showsInlineComments !== "boolean" ||
-        typeof data.allowsInteraction !== "boolean" ||
-        typeof data.accent !== "string" || !/^#[0-9a-f]{6}$/i.test(data.accent) ||
-        (data.selectedCommentID !== null && !isCommentID(data.selectedCommentID)) ||
-        !Array.isArray(data.highlights) || data.highlights.length > 20_000) {
-      throw new TypeError("Invalid comment highlight state");
-    }
-    let previous: Highlight | undefined;
-    for (const highlight of data.highlights) {
-      if (!highlight || !Number.isSafeInteger(highlight.segment) ||
-          !Number.isSafeInteger(highlight.start) || !Number.isSafeInteger(highlight.end) ||
-          highlight.segment < 0 || highlight.segment >= this.segments.length ||
-          highlight.start < 0 || highlight.end <= highlight.start ||
-          highlight.end > this.segments[highlight.segment]!.length ||
-          !Array.isArray(highlight.commentIDs) || highlight.commentIDs.length === 0 ||
-          highlight.commentIDs.length > 20_000 || !highlight.commentIDs.every(isCommentID) ||
-          new Set(highlight.commentIDs).size !== highlight.commentIDs.length ||
-          !isTextBoundary(this.segments[highlight.segment]!, highlight.start) ||
-          !isTextBoundary(this.segments[highlight.segment]!, highlight.end) ||
-          (previous && (highlight.segment < previous.segment ||
-            (highlight.segment === previous.segment && highlight.start < previous.end)))) {
-        throw new TypeError("Invalid comment highlight range");
-      }
-      previous = highlight;
-    }
+  setHighlights(state: HighlightState) {
     const restoreSelection = preserveRenderedSelection();
-    this.state = {
-      ...this.identity(),
-      selectedCommentID: data.selectedCommentID,
-      revealRevision,
-      showsInlineComments: data.showsInlineComments,
-      allowsInteraction: data.allowsInteraction,
-      accent: data.accent,
-      highlights: data.highlights.map((highlight) => ({
-        ...highlight, commentIDs: highlight.commentIDs.slice(),
-      })),
-    };
+    this.state = state;
     if (typeof document === "undefined") {
       this.listeners.forEach((listener) => listener());
     } else {
@@ -173,12 +121,6 @@ export class CommentHighlightController {
   }
 }
 
-function isTextBoundary(text: string, offset: number): boolean {
-  if (offset === 0 || offset === text.length) return true;
-  const previous = text.charCodeAt(offset - 1), next = text.charCodeAt(offset);
-  return !(previous >= 0xD800 && previous <= 0xDBFF && next >= 0xDC00 && next <= 0xDFFF);
-}
-
 export function CommentText({ controller, segment, text }: {
   controller: CommentHighlightController; segment: number; text: string;
 }) {
@@ -191,7 +133,7 @@ export function CommentText({ controller, segment, text }: {
     const before = text.slice(cursor, highlight.start);
     const quote = text.slice(highlight.start, highlight.end);
     cursor = highlight.end;
-    const selected = highlight.commentIDs.includes(state.selectedCommentID ?? "");
+    const selected = state.selectedCommentID !== null && highlight.commentIDs.includes(state.selectedCommentID);
     if (before || !selected) selectedRun = undefined;
     children.push(before);
     const fragment = state.showsInlineComments || selected
@@ -283,7 +225,6 @@ function CommentFragment({ controller, highlight, state, selected, children }: {
       if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
       if (ancestor.classList.contains("spoiler")) ancestor.dispatchEvent(new Event("gistpad-reveal-comment"));
     }
-    if (window.webkit?.messageHandlers?.gistpadComments) return;
     const frame = requestAnimationFrame(() => {
       ref.current?.scrollIntoView({
         block: "center",

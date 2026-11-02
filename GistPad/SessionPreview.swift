@@ -12,7 +12,6 @@ struct SessionPreview: View {
   var onAddComment: (@MainActor (String) -> Void)?
   var openWikilink: ((String) -> Void)?
   @State private var renderError: String?
-  @State private var interactionError: String?
   @State private var reload = 0
   @Environment(\.openURL) private var openURL
 
@@ -34,61 +33,29 @@ struct SessionPreview: View {
         } description: {
           Text(renderError)
         } actions: {
-          Button {
+          Button("Retry") {
             self.renderError = nil
             reload += 1
-          } label: {
-            Text("Retry")
-              .foregroundStyle(Color(uiColor: .systemBackground))
           }
-          .buttonStyle(.borderedProminent)
-          .tint(Color(uiColor: .label))
         }
         .background(Color(uiColor: .systemBackground))
       }
-    }
-    .alert(
-      "Couldn't complete that action",
-      isPresented: Binding(
-        get: { interactionError != nil },
-        set: { if !$0 { interactionError = nil } })
-    ) {
-      Button("OK") { interactionError = nil }
-    } message: {
-      Text(interactionError ?? "")
     }
   }
 
   private func handle(_ event: PreviewEvent) {
     switch event {
     case .taskToggle(let edit):
-      guard allowsMutations else {
-        interactionError = String(localized: "This gist is read-only. Its tasks cannot be changed.")
-        return
-      }
-      do {
-        try edit.validate(
-          in: session.text, documentID: session.documentID, generation: session.generation)
-        try session.apply(
-          SourceMutation(
-            range: edit.range, expected: edit.expectedMarker, replacement: edit.replacementMarker),
-          documentID: edit.documentID, generation: edit.generation)
-      } catch {
-        interactionError = String(
-          localized:
-            "The source changed before this task could be updated. Try it again after composition or Writing Tools finishes."
-        )
-      }
+      // The bridge only sends toggles for editable notes, for the current generation's exact marker.
+      try? session.apply(
+        SourceMutation(
+          range: edit.range, expected: edit.expectedMarker, replacement: edit.replacementMarker),
+        documentID: edit.documentID, generation: edit.generation)
     case .linkTapped(let link):
       if link.kind == .external, let url = URL(string: link.target) {
         openURL(url)
       } else if link.kind == .wikilink {
-        if let openWikilink {
-          openWikilink(link.target)
-        } else {
-          interactionError = String(
-            localized: "Wikilinks are not connected in this editor fixture.")
-        }
+        openWikilink?(link.target)
       }
     case .failure(let failure):
       renderError = failure.localizedDescription

@@ -1,32 +1,19 @@
 import Foundation
 
 struct PreviewDocument: Equatable, Sendable {
-    static let maximumLength = 2 * 1024 * 1024
     let text: String
     let id: String
     let generation: UInt64
+    let allowsTaskEdits: Bool
 
     var arguments: [String: Any] {
-        [
-            "version": 1,
-            "documentID": id,
-            // Decimal strings preserve all UInt64 generations across JavaScript's number boundary.
-            "generation": String(generation),
-            "markdown": text
-        ]
-    }
-
-    func validate() throws {
-        guard !id.isEmpty, id.utf16.count <= 512 else { throw PreviewFailure.invalidMessage }
-        guard text.utf16.count <= Self.maximumLength else { throw PreviewFailure.documentTooLarge }
+        ["documentID": id, "generation": generation, "markdown": text, "allowsTaskEdits": allowsTaskEdits]
     }
 }
 
 enum PreviewBridge {
-    enum Message {
+    enum Message: Equatable {
         case ready
-        case obsolete
-        case taskEditingUnavailable
         case event(PreviewEvent)
     }
 
@@ -37,39 +24,31 @@ enum PreviewBridge {
             let expectedMarker: String
             let replacementMarker: String
         }
-        let version: Int
         let type: String
         let documentID: String?
-        let generation: String?
+        let generation: UInt64?
         let edit: Edit?
         let kind: String?
         let target: String?
         let message: String?
     }
 
-    static func decode<Value: Decodable>(_ body: Any, maximumBytes: Int) throws -> Value {
-        guard JSONSerialization.isValidJSONObject(body) else { throw PreviewFailure.invalidMessage }
-        let data = try JSONSerialization.data(withJSONObject: body)
-        guard data.count <= maximumBytes else { throw PreviewFailure.invalidMessage }
-        do {
-            return try JSONDecoder().decode(Value.self, from: data)
-        } catch {
-            throw PreviewFailure.invalidMessage
-        }
+    static let invalidMessage = PreviewFailure("The preview sent an invalid message.")
+
+    static func decode<Value: Decodable>(_ body: Any?) throws -> Value {
+        guard let body, JSONSerialization.isValidJSONObject(body) else { throw invalidMessage }
+        return try JSONDecoder().decode(Value.self, from: JSONSerialization.data(withJSONObject: body))
     }
 
-    static func decode(_ body: Any, document: PreviewDocument, allowsTaskEdits: Bool = true) throws -> Message {
-        let message: Envelope = try decode(body, maximumBytes: 16_384)
-        guard message.version == 1 else { throw PreviewFailure.invalidMessage }
+    /// Returns nil for messages from an older generation, and for task toggles the document doesn't allow.
+    static func decode(_ body: Any, document: PreviewDocument) throws -> Message? {
+        let message: Envelope = try decode(body)
         if message.type == "ready" { return .ready }
-        guard message.documentID == document.id,
-              message.generation == String(document.generation) else {
-            if ["rendered", "failure"].contains(message.type) { return .obsolete }
-            throw PreviewFailure.staleDocument
-        }
+        guard message.documentID == document.id, message.generation == document.generation else { return nil }
         switch message.type {
         case "taskToggle":
-            guard let edit = message.edit else { throw PreviewFailure.invalidMessage }
+            guard document.allowsTaskEdits else { return nil }
+            guard let edit = message.edit else { throw invalidMessage }
             let task = TaskToggleEdit(
                 documentID: document.id,
                 generation: document.generation,
@@ -77,22 +56,18 @@ enum PreviewBridge {
                 expectedMarker: edit.expectedMarker,
                 replacementMarker: edit.replacementMarker
             )
-            try task.validate(in: document.text, documentID: document.id, generation: document.generation)
-            guard allowsTaskEdits else { return .taskEditingUnavailable }
+            guard task.isValid(in: document.text) else { throw invalidMessage }
             return .event(.taskToggle(task))
         case "link":
-            guard let rawKind = message.kind, let kind = PreviewLink.Kind(rawValue: rawKind),
-                  let target = message.target, !target.isEmpty, target.utf16.count <= 8192,
-                  !target.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
-                throw PreviewFailure.invalidMessage
-            }
+            guard let kind = message.kind.flatMap(PreviewLink.Kind.init), let target = message.target,
+                  !target.isEmpty else { throw invalidMessage }
             if kind == .external {
                 guard let url = URL(string: target),
                       let scheme = url.scheme?.lowercased(),
                       ["https", "http", "mailto"].contains(scheme),
                       url.user == nil, url.password == nil,
                       scheme == "mailto" || url.host != nil else {
-                    throw PreviewFailure.invalidMessage
+                    throw invalidMessage
                 }
             }
             return .event(.linkTapped(PreviewLink(
@@ -101,12 +76,9 @@ enum PreviewBridge {
         case "rendered":
             return .event(.rendered(documentID: document.id, generation: document.generation))
         case "failure":
-            guard let text = message.message, !text.isEmpty, text.utf16.count <= 512 else {
-                throw PreviewFailure.invalidMessage
-            }
-            return .event(.failure(.renderer(text)))
+            return .event(.failure(PreviewFailure(message.message ?? "The preview couldn't be rendered.")))
         default:
-            throw PreviewFailure.invalidMessage
+            throw invalidMessage
         }
     }
 }

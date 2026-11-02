@@ -21,18 +21,13 @@ public struct TaskToggleEdit: Equatable, Sendable {
         self.replacementMarker = replacementMarker
     }
 
-    public func validate(in document: String, documentID: String, generation: UInt64) throws {
-        guard self.documentID == documentID, self.generation == generation else {
-            throw PreviewFailure.staleDocument
-        }
-        guard range.location >= 0, range.length == 3,
-              range.location <= document.utf16.count - range.length,
-              let swiftRange = Range(range, in: document),
-              String(document[swiftRange]) == expectedMarker,
-              ["[ ]", "[x]", "[X]"].contains(expectedMarker),
-              replacementMarker == (expectedMarker == "[ ]" ? "[x]" : "[ ]") else {
-            throw PreviewFailure.invalidTaskEdit
-        }
+    /// The web view is the untrusted side, so a toggle may only flip one task marker in the current text.
+    func isValid(in document: String) -> Bool {
+        guard range.location >= 0, range.length == 3, range.location <= document.utf16.count - range.length,
+              let swiftRange = Range(range, in: document) else { return false }
+        return String(document[swiftRange]) == expectedMarker
+            && ["[ ]", "[x]", "[X]"].contains(expectedMarker)
+            && replacementMarker == (expectedMarker == "[ ]" ? "[x]" : "[ ]")
     }
 }
 
@@ -49,26 +44,16 @@ public struct PreviewLink: Equatable, Sendable {
     public let target: String
 }
 
-public enum PreviewFailure: Error, Equatable, Sendable, LocalizedError {
-    case invalidMessage
-    case staleDocument
-    case invalidTaskEdit
-    case documentTooLarge
-    case renderer(String)
+public struct PreviewFailure: LocalizedError, Equatable, Sendable {
+    public let errorDescription: String?
 
-    static func webKit(_ error: Error) -> Self {
-        let detail = (error as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String
-        return .renderer(String((detail ?? error.localizedDescription).prefix(512)))
+    public init(_ message: String) {
+        errorDescription = message
     }
 
-    public var errorDescription: String? {
-        switch self {
-        case .invalidMessage: "The preview sent an invalid message."
-        case .staleDocument: "The preview is out of date. Try the action again."
-        case .invalidTaskEdit: "The task changed before this action could be applied."
-        case .documentTooLarge: "This document is too large to preview."
-        case .renderer(let message): message
-        }
+    init(_ error: any Error) {
+        let error = error as NSError
+        self.init(error.userInfo["WKJavaScriptExceptionMessage"] as? String ?? error.localizedDescription)
     }
 }
 

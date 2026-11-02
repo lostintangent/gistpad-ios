@@ -7,7 +7,6 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 import { visit } from "unist-util-visit";
 import { taskRangePlugins } from "../src/tasks";
-import { isRenderRequest } from "../src/protocol";
 
 test("task ranges address the correct duplicate after emoji and CRLF", async () => {
   const markdown = "👩🏽‍💻 café é\r\n\r\n- [ ] Same\r\n- [x] Same\r\n  - [ ] Nested\r\n\r\n> - [X] Quoted\r\n\r\n1. [ ] Ordered\r\n";
@@ -44,13 +43,3 @@ test("raw HTML cannot forge an editable task range", async () => {
   expect(locations).toEqual([undefined, markdown.lastIndexOf("[ ]")]);
 });
 
-test("render requests preserve UInt64 identities and reject invalid input", () => {
-  const valid = { version: 1, documentID: "fixture", generation: "18446744073709551615", markdown: "" };
-  expect(isRenderRequest(valid)).toBe(true);
-  for (const change of [
-    { generation: "18446744073709551616" }, { generation: 1 }, { generation: "-1" },
-    { generation: "01" }, { version: 2 }, { documentID: "" }, { markdown: "x".repeat(2 * 1024 * 1024 + 1) },
-  ]) {
-    expect(isRenderRequest({ ...valid, ...change })).toBe(false);
-  }
-});

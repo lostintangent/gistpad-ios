@@ -14,7 +14,6 @@ import { taskRangePlugins } from "./tasks";
 import { toString } from "hast-util-to-string";
 import type { PreviewMessage, RenderRequest, TaskEdit } from "./protocol";
 import { useDiagramTheme } from "./diagramTheme";
-import { isTaskEditingEnabled, useTaskEditingEnabled } from "./taskEditing";
 import { CommentText, type CommentHighlightController } from "./commentHighlights";
 
 const emojis = new Map(
@@ -42,7 +41,6 @@ const schema = {
 
 export function send(message: PreviewMessage) {
   window.webkit?.messageHandlers?.gistpadPreview?.postMessage(message);
-  window.dispatchEvent(new CustomEvent("gistpad-preview-message", { detail: message }));
 }
 
 function Spoiler({ children }: { children: ReactNode }) {
@@ -114,7 +112,7 @@ export class PreviewErrorBoundary extends Component<
 }
 
 export function identity(request: RenderRequest) {
-  return { version: request.version, documentID: request.documentID, generation: request.generation };
+  return { documentID: request.documentID, generation: request.generation };
 }
 
 export function Preview({ request, comments }: { request: RenderRequest; comments: CommentHighlightController }) {
@@ -252,17 +250,12 @@ export function Preview({ request, comments }: { request: RenderRequest; comment
 function TaskCheckbox({ checked, label, edit, request }: {
   checked: boolean; label: string; edit?: TaskEdit; request: RenderRequest;
 }) {
-  const allowsTaskEdits = useTaskEditingEnabled();
-  const editable = allowsTaskEdits && edit !== undefined;
-  const action = !allowsTaskEdits ? "Read-only task" : edit === undefined ? "Unavailable task"
+  const editable = request.allowsTaskEdits ? edit : undefined;
+  const action = !request.allowsTaskEdits ? "Read-only task" : edit === undefined ? "Unavailable task"
     : checked ? "Mark incomplete" : "Mark complete";
   return <label className="task-toggle"><input type="checkbox" checked={checked} disabled={!editable}
     aria-label={`${action}: ${label}`}
-    onChange={() => {
-      if (edit && isTaskEditingEnabled()) {
-        send({ ...identity(request), type: "taskToggle", edit });
-      }
-    }} /></label>;
+    onChange={() => editable && send({ ...identity(request), type: "taskToggle", edit: editable })} /></label>;
 }
 
 function PreviewImage({ src, alt }: { src?: string; alt: string }) {
