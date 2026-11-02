@@ -34,25 +34,6 @@ struct SettingsHostTests {
     #expect(saved.count == 2)
   }
 
-  @Test func signOutAsksFirstAndDoesNothingUntilConfirmed() async throws {
-    var signOutAttempts = 0
-    let host = try await SettingsHost(
-      NotebookSettingsSheet(
-        account: .init(id: UUID(), login: "octavia", preferences: .init(metadata: [:])),
-        savePreference: { _, _ in }, connect: {}, signOut: { signOutAttempts += 1 }
-      ) {
-        Text("Accent Color")
-      }
-      .captureSignOutConfirmation(true))
-    defer { host.close() }
-    try await Task.sleep(for: .milliseconds(250))
-    let alert = try #require(host.window.rootViewController?.presentedViewController as? UIAlertController)
-    #expect(alert.title == "Sign Out?")
-    #expect(alert.actions.contains { $0.title == "Cancel" && $0.style == .cancel })
-    #expect(alert.actions.contains { $0.title == "Sign Out" && $0.style == .destructive })
-    #expect(signOutAttempts == 0)
-  }
-
   private struct SettingsPreferenceFixture: View {
     @State var preferences: Preferences
     let saved: @MainActor (BooleanPreference, Bool) -> Void

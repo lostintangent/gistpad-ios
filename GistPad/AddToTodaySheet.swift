@@ -19,25 +19,6 @@ struct AddToTodaySheet: View {
     self.target = target
   }
 
-  #if DEBUG
-  static func captureFixture() -> Self {
-    let arguments = ProcessInfo.processInfo.arguments
-    let state = arguments.firstIndex(of: "--capture-state").flatMap { index in
-      arguments.indices.contains(index + 1) ? arguments[index + 1] : nil
-    }
-    var sheet = Self()
-    sheet._asTask = State(initialValue: state == "task")
-    if state == "filled" || state == "error" {
-      sheet._text = State(initialValue: "A thought worth keeping.")
-    }
-    if state == "error" {
-      sheet._errorMessage = State(
-        initialValue: Self.message(for: NotebookEditError.localPersistenceFailed))
-    }
-    return sheet
-  }
-  #endif
-
   var body: some View {
     NavigationStack {
       Form {

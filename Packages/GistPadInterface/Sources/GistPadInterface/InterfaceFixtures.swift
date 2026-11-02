@@ -54,7 +54,7 @@ import SwiftUI
     @Previewable @State var model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
     NavigationSplitView {
         LibraryView(
-            model: model, actions: .init(refresh: {}, create: {}, today: {}),
+            model: model, actions: .init(refresh: {}, create: {}, today: {}), isSidebar: true,
             expandedCollections: .constant(Set(LibraryCollection.allCases)), isPinnedExpanded: .constant(true)
         )
     } detail: {

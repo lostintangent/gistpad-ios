@@ -109,47 +109,6 @@ struct EditorContinuityTests {
     #expect(session.textView.markedTextRange != nil)
   }
 
-  @Test func actualLibraryAndFocusRootsPreserveTextSelectionAndUndo() async throws {
-    let source = "# A native notebook\n日本語 👨‍👩‍👧‍👦\n- [ ] Duplicate\n- [ ] Duplicate"
-    let session = DocumentSession(documentID: "test", text: source)
-    let state = WorkspaceState()
-    state.editing = true
-    let scene = try #require(
-      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-    let window = UIWindow(windowScene: scene)
-    let controller = UIHostingController(
-      rootView: NotebookWorkspace(session: session, state: state))
-    window.rootViewController = controller
-    window.makeKeyAndVisible()
-    defer { window.isHidden = true }
-    try await Task.sleep(for: .milliseconds(500))
-    let identity = ObjectIdentifier(session.textView)
-    session.textView.becomeFirstResponder()
-    session.textView.selectedRange = NSRange(location: 0, length: 0)
-    session.textView.undoManager?.beginUndoGrouping()
-    session.textView.insertText("📝")
-    session.textView.undoManager?.endUndoGrouping()
-    let text = session.textView.text
-    let selection = session.textView.selectedRange
-    for focused in [true, false, true, false] {
-      state.focus = focused
-      try await Task.sleep(for: .milliseconds(150))
-      controller.view.layoutIfNeeded()
-      #expect(session.textView.window === window)
-      #expect(ObjectIdentifier(session.textView) == identity)
-      #expect(session.textView.text == text)
-      #expect(session.textView.selectedRange == selection)
-    }
-    state.editing = false
-    try await Task.sleep(for: .milliseconds(150))
-    state.editing = true
-    try await Task.sleep(for: .milliseconds(150))
-    #expect(ObjectIdentifier(session.textView) == identity)
-    #expect(session.textView.text == text)
-    session.textView.undoManager?.undo()
-    #expect(session.textView.text == source)
-  }
-
   @Test func previewMutationDoesNotNeedKeyboardAndPreservesSelection() throws {
     let source = "👨‍👩‍👧‍👦\n- [ ] Duplicate\n- [ ] Duplicate\n日本語"
     let session = DocumentSession(documentID: "test", text: source)

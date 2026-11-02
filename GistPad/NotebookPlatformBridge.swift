@@ -25,10 +25,15 @@ enum NotebookPlatformBootstrap {
     let store = try DraftStore.open()
     let provider = LiveNotebookProvider(
       accounts: try AccountService(publishableKey: publishableKey), drafts: store)
-    let model = NotebookModel(
-      provider: provider, selections: NotebookSelectionStore(defaults: .standard))
-    let bridge = NotebookPlatformBridge(provider: provider, store: store, notebook: model)
-    services = (model, bridge)
+    return connect(provider, store: store, selections: NotebookSelectionStore(defaults: .standard))
+  }
+
+  /// Builds the notebook and connects it to App Intents, widgets and Spotlight.
+  static func connect(
+    _ provider: LiveNotebookProvider, store: DraftStore, selections: NotebookSelectionStore
+  ) -> NotebookModel {
+    let model = NotebookModel(provider: provider, selections: selections)
+    services = (model, NotebookPlatformBridge(provider: provider, store: store, notebook: model))
     return model
   }
 

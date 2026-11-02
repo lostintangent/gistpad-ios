@@ -15,14 +15,6 @@ struct NotebookSettingsSheet<Appearance: View>: View {
   @State private var isSigningOut = false
   @Environment(\.dismiss) private var dismiss
 
-  #if DEBUG
-  func captureSignOutConfirmation(_ presented: Bool) -> Self {
-    var sheet = self
-    sheet._confirmingSignOut = State(initialValue: presented)
-    return sheet
-  }
-  #endif
-
   var body: some View {
     NavigationStack {
       Form {
