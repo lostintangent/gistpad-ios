@@ -42,7 +42,6 @@ struct NotebookOpeningView: View {
             VStack(spacing: 12) {
               ProgressView()
                 .controlSize(.regular)
-                .tint(.secondary)
               Text("Opening note...")
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
@@ -86,13 +85,8 @@ struct NotebookFailedOpeningView: View {
     } description: {
       Text(failure.message)
     } actions: {
-      Button(action: retry) {
-        Text("Try Again")
-          .foregroundStyle(Color(uiColor: .systemBackground))
-      }
-        .frame(minHeight: 44)
+      Button("Try Again", action: retry)
         .buttonStyle(.borderedProminent)
-        .tint(Color(uiColor: .label))
         .accessibilityIdentifier("note-open-retry")
     }
     .navigationTitle(failure.title)

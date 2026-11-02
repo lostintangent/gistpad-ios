@@ -28,7 +28,6 @@ struct NotebookAccountSwitchSheet: View {
           Button("Switch to @\(replacement)") {
             work { try await switchAccount() }
           }
-          .tint(.primary)
           .accessibilityIdentifier("account-switch-confirm")
           Button("Export Current Drafts") {
             work {
@@ -36,7 +35,6 @@ struct NotebookAccountSwitchSheet: View {
               showingExporter = true
             }
           }
-          .tint(.primary)
           .accessibilityIdentifier("account-switch-export")
         } footer: {
           Text(
@@ -56,7 +54,6 @@ struct NotebookAccountSwitchSheet: View {
           Button(role: .cancel, action: keepCurrent) {
             Label("Keep Current Notebook", systemImage: "xmark")
           }
-          .tint(.primary)
         }
       }
       .disabled(isWorking)

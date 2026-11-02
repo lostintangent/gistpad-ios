@@ -104,12 +104,8 @@ struct GistPadApp: App {
           } description: {
             Text(loadError)
           } actions: {
-            Button(action: load) {
-              Text("Retry")
-                .foregroundStyle(Color(uiColor: .systemBackground))
-            }
+            Button("Retry", action: load)
               .buttonStyle(.borderedProminent)
-              .tint(Color(uiColor: .label))
           }
         } else {
           ProgressView("Opening notebook")

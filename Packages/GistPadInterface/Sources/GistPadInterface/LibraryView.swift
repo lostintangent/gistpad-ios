@@ -182,7 +182,6 @@ public struct LibraryView: View {
             }
         }
         .headerProminence(.increased)
-        .tint(.primary)
         .scrollDismissesKeyboard(.immediately)
         .environment(\.defaultMinListRowHeight, 44)
         .accessibilityIdentifier("library-list")

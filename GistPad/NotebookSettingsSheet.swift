@@ -59,7 +59,6 @@ struct NotebookSettingsSheet<Appearance: View>: View {
             Text("Sign in to open your GitHub gists, daily notes and saved tags.")
               .foregroundStyle(.secondary)
             Button("Sign In with GitHub", action: connect)
-              .tint(.primary)
               .accessibilityIdentifier("settings-sign-in")
           }
         } header: {
@@ -79,7 +78,6 @@ struct NotebookSettingsSheet<Appearance: View>: View {
         if account != nil {
           Section {
             Button("Switch GitHub Account", action: connect)
-              .tint(.primary)
               .accessibilityIdentifier("settings-switch-account")
           } footer: {
             Text("Drafts stay on this iPhone with their original account. Switching never publishes them.")
@@ -102,7 +100,6 @@ struct NotebookSettingsSheet<Appearance: View>: View {
         ToolbarItem(placement: .topBarTrailing) {
           Button(role: .close) { dismiss() }
             .accessibilityLabel("Close Settings")
-            .tint(.primary)
             .disabled(isWorking)
         }
       }
