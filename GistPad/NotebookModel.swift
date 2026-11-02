@@ -1904,9 +1904,6 @@ final class NotebookModel {
   }
 
   static func message(for error: any Error) -> String {
-    if let problem = error as? CommentConversationProblem {
-      return problem.interfaceDescription
-    }
     if let error = error as? DraftError {
       switch error {
       case .staleGeneration:

@@ -13,9 +13,7 @@
     {"body":"> [comment:0]\n\nBody","prefix":"> [comment:0]\n\n","parentID":0,"text":"Body"},
     {"body":"> [comment:-1]\n\nBody","prefix":"> [comment:-1]\n\n","quote":"[comment:-1]","text":"Body"},
     {"body":"> [comment:12] trailing\n\nBody","prefix":"> [comment:12] trailing\n\n","quote":"[comment:12] trailing","text":"Body"},
-    {"body":"> first line\nsecond line\n\nFeedback","prefix":"> first line\n","quote":"first line","text":"second line\n\nFeedback"},
-    {"body":"\ufeff> passage\ufeff\n\n\ufeffFeedback\ufeff","prefix":"\ufeff> passage\ufeff\n\n","quote":"passage","text":"Feedback"},
-    {"body":"\u0085> passage\n\nFeedback","prefix":"","text":"\u0085> passage\n\nFeedback"}
+    {"body":"> first line\nsecond line\n\nFeedback","prefix":"> first line\n","quote":"first line","text":"second line\n\nFeedback"}
   ],
   "quotes": [
     {"quote":"word","segments":["A word here."],"matches":[{"segment":0,"start":2,"end":6}]},

@@ -138,13 +138,7 @@ public actor GitHubClient {
     }
 
     public func listComments(gistID: String) async throws -> [GistComment] {
-        let comments: [GistComment] = try await pages(
-            path: "/gists/\(try identifier(gistID))/comments?per_page=100")
-        return GistComment.latestVersions(in: comments)
-    }
-
-    public func comment(gistID: String, commentID: Int64) async throws -> GistComment {
-        try await decoded(path: commentPath(gistID: gistID, commentID: commentID))
+        try await pages(path: "/gists/\(try identifier(gistID))/comments?per_page=100")
     }
 
     public func createComment(gistID: String, body: String) async throws -> GistComment {
@@ -289,3 +283,5 @@ private final class NoRedirects: NSObject, URLSessionTaskDelegate {
         nil
     }
 }
+
+extension GitHubClient: CommentsRemote {}

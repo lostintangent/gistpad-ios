@@ -243,8 +243,6 @@ extension LiveNotebookProvider {
   ) async throws -> NotebookActionResult {
     try await client.deleteGist(id: id)
     do {
-      try await CommentConversationDiskStore.applicationStore().removeDrafts(
-        scope: .init(accountID: accountID, gistID: id))
       try await drafts.removeDrafts(gistID: id, accountID: accountID)
       return .deleted(gistID: id)
     } catch {

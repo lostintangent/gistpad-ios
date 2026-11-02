@@ -477,68 +477,6 @@ struct NotebookModelTests {
     #expect(await provider.readIDs.isEmpty)
   }
 
-  @Test func deletedGistCommentControllersCannotReopenOrRecreateTheirDrafts() async throws {
-    let gist = try makeGist(id: "a", title: "A conversation")
-    let model = NotebookModel(provider: StubNotebookProvider(account: fixtureAccount, gists: [gist]))
-    await model.start()
-    await model.open(gistID: gist.id)
-    let document = try #require(model.loadedDocument)
-    let store = NotebookCommentStoreFake()
-    let provider = NotebookCommentProvider(notebook: model, store: store)
-    let conversation = try await provider.conversation(for: document)
-    conversation.updateText("A comment draft to remove")
-    #expect(await conversation.flushDraft())
-    try await provider.discard(gistID: gist.id, accountID: fixtureAccount.id)
-    #expect(try await store.loadDrafts(scope: conversation.scope) == nil)
-    #expect(!conversation.isPrepared)
-    await #expect(throws: NotebookCommentError.unavailable) {
-      try await provider.conversation(for: document)
-    }
-    #expect(await provider.flushDrafts())
-    #expect(try await store.loadDrafts(scope: conversation.scope) == nil)
-  }
-
-  @Test func unavailableCommentDraftReadsDoNotBlockDepartureButFailedWritesStillDo() async throws {
-    let gist = try makeGist(id: "a", title: "A conversation")
-    let model = NotebookModel(provider: StubNotebookProvider(account: fixtureAccount, gists: [gist]))
-    await model.start()
-    await model.open(gistID: gist.id)
-    let document = try #require(model.loadedDocument)
-    let store = NotebookCommentStoreFake()
-    await store.fail(reads: true, writes: false)
-    let provider = NotebookCommentProvider(notebook: model, store: store)
-    let conversation = try await provider.conversation(for: document)
-    #expect(!conversation.isPrepared)
-    #expect(conversation.composer.problem == .localStorage)
-    #expect(await provider.flushDrafts())
-    #expect(await store.saveCount == 0)
-    await store.fail(reads: false, writes: true)
-    await conversation.prepare()
-    conversation.updateText("Keep my local comment")
-    #expect(conversation.isPrepared)
-    #expect(!(await provider.flushDrafts()))
-    #expect(conversation.draftSaveState == .failed)
-    #expect(conversation.activeDraft.text == "Keep my local comment")
-    #expect(await store.saveCount == 1)
-  }
-
-  @Test func preparingCommentsDoesNotFetchOrRequireEditableNoteSource() async throws {
-    let gist = try makeGist(id: "a", title: "A conversation").withCommentCount(2)
-    let model = NotebookModel(provider: StubNotebookProvider(account: fixtureAccount, gists: [gist]))
-    await model.start()
-    await model.open(gistID: gist.id)
-    var document = try #require(model.loadedDocument)
-    document.chrome.access = .readOnly
-    let provider = NotebookCommentProvider(notebook: model, store: NotebookCommentStoreFake())
-    let conversation = try await provider.conversation(for: document)
-    #expect(conversation.isPrepared)
-    #expect(conversation.composer.canEdit)
-    #expect(conversation.knownTotal == 2)
-    #expect(conversation.comments == nil)
-    #expect(conversation.loadFailure == nil)
-    #expect(try await provider.conversation(for: document) === conversation)
-  }
-
   @Test func commentTotalsUpdateEveryGistProjectionWithoutChangingTheDocument() async throws {
     let gist = try makeGist(id: "a", title: "A conversation").withCommentCount(2)
     let other = try makeGist(id: "b", title: "Another note").withCommentCount(3)
@@ -2640,30 +2578,6 @@ private func makeGist(
   return try decoder.decode(Gist.self, from: JSONSerialization.data(withJSONObject: json))
 }
 
-private actor NotebookCommentStoreFake: CommentConversationStore {
-  private var deletedScopes: Set<CommentConversationScope> = []
-  private var failsReads = false
-  private var failsWrites = false
-  private var archives: [CommentConversationScope: CommentDraftArchive] = [:]
-  private(set) var saveCount = 0
-
-  func fail(reads: Bool, writes: Bool) { failsReads = reads; failsWrites = writes }
-  func loadDrafts(scope: CommentConversationScope) throws -> CommentDraftArchive? {
-    if failsReads { throw CommentStoreFailure.unavailable }
-    return archives[scope]
-  }
-  func saveDrafts(_ archive: CommentDraftArchive) throws {
-    guard !deletedScopes.contains(archive.scope) else { throw CommentStoreFailure.unavailable }
-    saveCount += 1
-    if failsWrites { throw CommentStoreFailure.unavailable }
-    archives[archive.scope] = archive
-  }
-  func removeDrafts(scope: CommentConversationScope) {
-    deletedScopes.insert(scope)
-    archives[scope] = nil
-  }
-}
-
 private actor StubNotebookProvider: NotebookProviding, NotebookCommentProviding {
   private(set) var account: Account
   var signInAccount: Account
@@ -2732,7 +2646,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookCommentProviding 
       throw AccountError.accountChanged
     }
     return NotebookCommentServices(
-      remote: GitHubCommentRemote(client: GitHubClient { throw AccountError.accountChanged }),
+      remote: GitHubClient { throw AccountError.accountChanged },
       userID: 1)
   }
   func signIn() -> Account {

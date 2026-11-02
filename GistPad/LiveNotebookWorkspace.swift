@@ -38,13 +38,12 @@ struct LiveNotebookWorkspace: View {
 
   init(
     notebook: NotebookModel, layout: NotebookLayoutPreferences = NotebookLayoutPreferences(),
-    routes: NotebookRouteInbox = .shared, commentsProvider: NotebookCommentProvider? = nil
+    routes: NotebookRouteInbox = .shared
   ) {
     self.notebook = notebook
     self.routes = routes
     _layout = State(initialValue: layout)
-    _comments = State(initialValue: NotebookCommentsPresentation(
-      notebook: notebook, provider: commentsProvider))
+    _comments = State(initialValue: NotebookCommentsPresentation(notebook: notebook))
   }
 
   private var active: NotebookSessionController? {
@@ -169,12 +168,6 @@ struct LiveNotebookWorkspace: View {
           comments.sidebarBeforeOpening = columnVisibility
         }
         columnVisibility = .detailOnly
-      }
-    }
-    .onChange(of: comments.errorMessage) { _, message in
-      if let message {
-        comments.errorMessage = nil
-        actionMessage = message
       }
     }
     .onChange(of: commentCount, initial: true) { _, count in
@@ -537,7 +530,7 @@ struct LiveNotebookWorkspace: View {
       })
     var chrome = controller.document.chrome
     if comments.matches(controller.document) {
-      chrome.commentCount = comments.conversation?.knownTotal ?? chrome.commentCount
+      chrome.commentCount = comments.conversation?.comments?.count ?? chrome.commentCount
     }
     return NoteScreen(
       document: chrome, mode: mode,
@@ -636,38 +629,23 @@ struct LiveNotebookWorkspace: View {
   @ViewBuilder
   private var commentsPanel: some View {
     Group {
-      if let conversation = comments.conversation, conversation.isPrepared {
+      if let conversation = comments.conversation {
         NotebookCommentsInspector(
           conversation: conversation, selectedRootID: comments.selectedRootID,
           threadRevealRevision: comments.threadRevealRevision,
           linkedRootIDs: comments.documentMode == .source
             ? comments.sourceLinkedIDs : comments.previewLinkedIDs,
-          presentationProblem: comments.preparationFailure,
           focusRequest: $comments.focusRequest,
-          close: {
-            if comments.conversation === conversation { await comments.close() }
-          },
+          close: { comments.hide() },
           revealPassage: { id in
             comments.selectedRootID = id
             comments.revealRevision &+= 1
           },
           didFocus: { comments.detent = .large })
-          .task {
-            await conversation.flushDraft()
-          }
-          .onChange(of: conversation.isPrepared, initial: true) { _, prepared in
-            if prepared { comments.applyPendingContext() }
-          }
-          .onChange(of: conversation.comments, initial: true) { _, _ in
-            comments.applyPendingContext()
-          }
       } else {
         NavigationStack {
           Group {
-            if let failure = comments.preparationFailure
-              ?? (comments.conversation?.draftSaveState == .failed
-                ? String(localized: "Your saved comment drafts couldn’t be read. Try again before writing a new comment.")
-                : nil) {
+            if let failure = comments.preparationFailure {
               VStack(alignment: .leading, spacing: 12) {
                 Text("Comments couldn’t be opened").font(.headline)
                 Text(verbatim: failure)
@@ -684,11 +662,10 @@ struct LiveNotebookWorkspace: View {
           .navigationBarTitleDisplayMode(.inline)
           .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-              Button("Close", systemImage: "xmark") { comments.hide() }
+              Button(role: .close) { comments.hide() }
             }
           }
         }
-        .tint(.primary)
       }
     }
     .onChange(of: dynamicTypeSize, initial: true) { _, size in
@@ -787,13 +764,13 @@ struct LiveNotebookWorkspace: View {
   }
 
   private struct CommentCount: Equatable {
-    let scope: CommentConversationScope
+    let scope: NotebookCommentsPresentation.Scope
     let total: Int
   }
 
   private var commentCount: CommentCount? {
-    guard let conversation = comments.conversation, let total = conversation.knownTotal else { return nil }
-    return .init(scope: conversation.scope, total: total)
+    guard let scope = comments.scope, let total = comments.conversation?.comments?.count else { return nil }
+    return .init(scope: scope, total: total)
   }
 
   private struct AutosaveInput: Equatable {
@@ -820,7 +797,7 @@ struct LiveNotebookWorkspace: View {
     if NotebookCommentsPresentation.supports(controller.document) {
       actions.comments = {
         if comments.isPresented {
-          Task { await comments.close() }
+          comments.hide()
         } else {
           comments.open(for: controller)
         }
@@ -1040,9 +1017,6 @@ struct LiveNotebookWorkspace: View {
 
   private func finishLeavingNote(_ controller: NotebookSessionController) {
     Task {
-      if !(await comments.flushDrafts()) {
-        actionMessage = String(localized: "A comment draft couldn’t be saved. Return to Comments for that note and try saving again.")
-      }
       guard await controller.finishLeavingNote() else { return }
       let id = controller.draft.id.uuidString
       sessions[id] = nil
@@ -1300,13 +1274,7 @@ struct LiveNotebookWorkspace: View {
       $0.draft.accountID == accountID && $0.draft.gistID == gistID
     }
     if archiveUndo?.gistID == gistID { archiveUndo = nil }
-    do {
-      try await comments.discard(gistID: gistID, accountID: accountID)
-    } catch {
-      Logger(subsystem: "dev.gistpad.GistPad", category: "Notebook")
-        .error("Deleted comment cleanup failed: \(String(reflecting: type(of: error)), privacy: .public)")
-      throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: gistID)
-    }
+    comments.discard(gistID: gistID, accountID: accountID)
   }
 
   private func preparePhotos(for controller: NotebookSessionController) {
@@ -1437,9 +1405,6 @@ struct LiveNotebookWorkspace: View {
     let lease = NotebookBackgroundLease()
     let documents = Array(sessions.values)
     let saving = Task {
-      if !(await comments.flushDrafts()) {
-        actionMessage = String(localized: "A comment draft couldn’t be saved. Return to Comments for that note and try saving again.")
-      }
       await NotebookLifecycle.saveOnBackground(documents, shouldContinue: { lease.isActive })
       lease.end()
     }
@@ -1447,7 +1412,6 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func finishAccountPersistence(_ accountID: UUID) async throws {
-    guard await comments.flushDrafts() else { throw CommentConversationProblem.localStorage }
     for controller in sessions.values where controller.draft.accountID == accountID {
       guard !controller.isPublishing, !controller.isApplyingDurableEdit else {
         throw NotebookActionError.publicationInProgress
