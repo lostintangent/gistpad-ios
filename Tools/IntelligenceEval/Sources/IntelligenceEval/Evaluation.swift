@@ -2,7 +2,7 @@ import Foundation
 import FoundationModels
 import GistPadIntelligence
 
-struct NoteEvaluationCase: Codable, Sendable {
+struct EvalCase: Codable, Sendable {
   let id: String
   let action: String
   let source: String
@@ -33,7 +33,7 @@ struct NoteEvaluationCase: Codable, Sendable {
   }
 }
 
-struct NoteEvaluationResult: Codable, Sendable {
+struct EvalResult: Codable, Sendable {
   let caseID: String
   let repeatIndex: Int
   let requestID: UUID
@@ -54,20 +54,20 @@ struct NoteEvaluationResult: Codable, Sendable {
 }
 
 @MainActor
-enum NoteIntelligenceEvaluation {
+enum Evaluator {
   static func run(
-    cases: [NoteEvaluationCase], repeats: Int,
+    cases: [EvalCase], repeats: Int,
     retainPrivateOutput: Bool = false,
-    onResult: @MainActor ([NoteEvaluationResult]) throws -> Void
+    onResult: @MainActor ([EvalResult]) throws -> Void
   ) async throws {
-    guard repeats > 0 else { throw NoteIntelligenceError.invalidResponse }
-    _ = try await AppleNoteModel().modelInfo()
-    var results: [NoteEvaluationResult] = []
+    guard repeats > 0 else { throw IntelligenceError.invalidResponse }
+    _ = try await OnDeviceModel().modelInfo()
+    var results: [EvalResult] = []
     for repeatIndex in 1...repeats {
       for item in cases {
         try Task.checkCancellation()
-        guard let action = NoteIntelligenceAction(rawValue: item.action) else {
-          throw NoteIntelligenceError.invalidResponse
+        guard let action = IntelligenceAction(rawValue: item.action) else {
+          throw IntelligenceError.invalidResponse
         }
         let start = ContinuousClock.now
         func elapsed() -> Double {
@@ -75,13 +75,13 @@ enum NoteIntelligenceEvaluation {
           return Double(duration.seconds) + Double(duration.attoseconds) / 1e18
         }
         let snapshot = snapshot(item.source)
-        let request = NoteIntelligenceRequest(
+        let request = IntelligenceRequest(
           snapshot: snapshot, action: action, instruction: item.prompt)
         let backend = RecordingModel()
-        let engine = NoteIntelligenceEngine(backend: backend)
+        let engine = Intelligence(backend: backend)
         var answerSeconds: Double?
         var preparationSeconds: Double?
-        let result: NoteEvaluationResult
+        let result: EvalResult
         do {
           var answer: String?
           var proposed: String?
@@ -113,13 +113,15 @@ enum NoteIntelligenceEvaluation {
               }
             }
           } else {
-            let proposal = try await engine.propose(request)
-            let application = try proposal.application(to: request.snapshot)
+            let review =
+              request.action == .review
+              ? try await engine.review(request) : try await engine.edit(request)
+            let application = try review.application(to: request.snapshot)
             proposed = application.source
             if let expected = item.expectedSource {
               passed =
                 application.source.utf8.elementsEqual(expected.utf8)
-                && proposal.omittedCount == 0
+                && review.omittedCount == 0
             } else if let addedText = item.addedTaskText {
               passed = addedTaskPasses(
                 application: application, original: snapshot,
@@ -128,7 +130,7 @@ enum NoteIntelligenceEvaluation {
               passed = false
             }
           }
-          result = NoteEvaluationResult(
+          result = EvalResult(
             caseID: item.id, repeatIndex: repeatIndex, requestID: request.id,
             passed: passed, elapsedSeconds: elapsed(),
             answerCompletionSeconds: answerSeconds,
@@ -142,9 +144,9 @@ enum NoteIntelligenceEvaluation {
             editOperations: retainPrivateOutput ? backend.operations : nil,
             modelGrade: modelGrade, modelGradeError: modelGradeError)
         } catch {
-          let code = (error as? NoteIntelligenceError).map { String(describing: $0) } ?? "unexpected"
+          let code = (error as? IntelligenceError).map { String(describing: $0) } ?? "unexpected"
           let type = String(reflecting: type(of: error))
-          result = NoteEvaluationResult(
+          result = EvalResult(
             caseID: item.id, repeatIndex: repeatIndex, requestID: request.id,
             passed: false, elapsedSeconds: elapsed(),
             answerCompletionSeconds: answerSeconds,
@@ -162,16 +164,16 @@ enum NoteIntelligenceEvaluation {
     }
   }
 
-  private static func snapshot(_ source: String) -> NoteSnapshot {
-    NoteSnapshot(
-      parsing: source, documentID: "local-evaluation", sessionID: UUID(), generation: 0)
+  private static func snapshot(_ source: String) -> FileSnapshot {
+    FileSnapshot(
+      parsing: source, fileID: "local-evaluation", sessionID: UUID(), generation: 0)
   }
 
   private static func addedTaskPasses(
-    application: NoteApplication, original: NoteSnapshot, expectedText: String,
+    application: Review.Applied, original: FileSnapshot, expectedText: String,
     expectedList: String?
   ) -> Bool {
-    guard application.proposal.omittedCount == 0, application.applied.count == 1,
+    guard application.review.omittedCount == 0, application.applied.count == 1,
       let change = application.applied.first, change.quote.isEmpty,
       let range = change.range, let replacement = change.replacement
     else { return false }
@@ -209,11 +211,11 @@ enum NoteIntelligenceEvaluation {
     return response.content.passes
   }
 
-  static func answerFailure(_ answer: String, for item: NoteEvaluationCase) -> String? {
+  static func answerFailure(_ answer: String, for item: EvalCase) -> String? {
     guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       return "emptyAnswer"
     }
-    if let issue = NoteAnswerIssue.check(answer, source: item.source, instruction: item.prompt) {
+    if let issue = AnswerIssue.check(answer, source: item.source, instruction: item.prompt) {
       return issue.rawValue
     }
     if let maximum = item.maximumAnswerWords,
@@ -260,7 +262,7 @@ enum NoteIntelligenceEvaluation {
     return nil
   }
 
-  static func table(_ results: [NoteEvaluationResult]) -> String {
+  static func table(_ results: [EvalResult]) -> String {
     var lines = [
       "| Case | Pass rate | Complete p50/p90 | Retried | Failures |",
       "|---|---:|---:|---:|---|",
@@ -305,32 +307,32 @@ private struct FavoriteGrade {
 /// Counts answer generations and records the prose the engine's quality gate rejects and the
 /// model's raw edit operations, so a failing case shows what the model actually proposed.
 @MainActor
-final class RecordingModel: NoteModelBackend {
-  private let model = AppleNoteModel()
+final class RecordingModel: IntelligenceModel {
+  private let model = OnDeviceModel()
   private(set) var answerCalls = 0
   private(set) var rejectedAnswers: [String] = []
   private(set) var operations: [String] = []
 
-  func modelInfo() async throws -> NoteModelInfo { try await model.modelInfo() }
-  func tokenCount(for pass: NoteModelPass) async throws -> Int {
+  func modelInfo() async throws -> ModelInfo { try await model.modelInfo() }
+  func tokenCount(for pass: ModelPass) async throws -> Int {
     try await model.tokenCount(for: pass)
   }
-  func replacements(for pass: NoteModelPass) async throws -> [NoteReplacementCandidate] {
+  func replacements(for pass: ModelPass) async throws -> [ModelReplacement] {
     try await model.replacements(for: pass)
   }
-  func editOperations(for pass: NoteModelPass) async throws -> [NoteEditOperation] {
+  func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
     let operations = try await model.editOperations(for: pass)
     self.operations += operations.map { String(reflecting: $0) }
     return operations
   }
-  func excerpts(for pass: NoteModelPass) async throws -> [String] {
+  func excerpts(for pass: ModelPass) async throws -> [String] {
     try await model.excerpts(for: pass)
   }
-  func answer(for pass: NoteModelPass) async throws -> [ModelAnswerPart] {
+  func answer(for pass: ModelPass) async throws -> [ModelAnswerPart] {
     answerCalls += 1
     let parts = try await model.answer(for: pass)
     let prose = parts.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
-    if NoteAnswerIssue.check(prose, source: pass.source, instruction: pass.instruction) != nil {
+    if AnswerIssue.check(prose, source: pass.source, instruction: pass.instruction) != nil {
       rejectedAnswers.append(prose)
     }
     return parts

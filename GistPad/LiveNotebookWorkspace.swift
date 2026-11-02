@@ -14,7 +14,7 @@ struct LiveNotebookWorkspace: View {
   @State private var sheet: WorkspaceSheet?
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
   @State private var layout = NotebookLayoutPreferences()
-  @State private var intelligence = NotebookIntelligencePresentation()
+  @State private var intelligence = IntelligencePresentation()
   @State private var comments: NotebookCommentsPresentation
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.openURL) private var openURL
@@ -53,7 +53,7 @@ struct LiveNotebookWorkspace: View {
       .sheet(isPresented: accountSwitchPresented) {
         accountSwitchSheet
       }
-      .notebookIntelligence(intelligence)
+      .intelligenceSheet(intelligence)
   }
 
   private var navigation: some View {
@@ -679,12 +679,12 @@ struct LiveNotebookWorkspace: View {
       revealSource: { range in
         guard controller.chrome.access.canEdit else {
           notebook.documentError = String(
-            localized: "This note is read-only. Its source reference can't be opened in the editor.")
+            localized: "This gist is read-only, so the reference can't open in the editor.")
           return
         }
         let generation = controller.session.generation
         guard Range(range, in: controller.session.text) != nil else {
-          notebook.documentError = String(localized: "This reference no longer matches the note.")
+          notebook.documentError = String(localized: "This reference no longer matches the file.")
           return
         }
         layout.select(.source)
@@ -692,7 +692,7 @@ struct LiveNotebookWorkspace: View {
         Task { @MainActor in
           await Task.yield()
           guard controller.session.generation == generation else {
-            notebook.documentError = String(localized: "This reference no longer matches the note.")
+            notebook.documentError = String(localized: "This reference no longer matches the file.")
             return
           }
           let view = controller.session.textView
@@ -700,7 +700,7 @@ struct LiveNotebookWorkspace: View {
           view.layoutIfNeeded()
           view.scrollRangeToVisible(range)
           if !view.becomeFirstResponder() {
-            controller.session.inputError = String(localized: "Tap the note to resume writing.")
+            controller.session.inputError = String(localized: "Tap the file to resume writing.")
           }
         }
       })

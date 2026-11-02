@@ -1,6 +1,6 @@
 import Foundation
 
-struct NoteSourceBlock: Encodable {
+struct SourceBlock: Encodable {
   let id: Int
   let text: String
   let firstOrderedItem: String?
@@ -42,7 +42,7 @@ struct NoteSourceBlock: Encodable {
   static func quotations(ids: [Int], from blocks: [Self]) throws -> [String] {
     guard Set(ids).count == ids.count,
       ids.allSatisfy({ id in blocks.contains { $0.id == id } })
-    else { throw NoteIntelligenceError.unverifiedQuotation }
+    else { throw IntelligenceError.unverifiedQuotation }
     return ids.compactMap { id in blocks.first { $0.id == id }?.text }
   }
 }

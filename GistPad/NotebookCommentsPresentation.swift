@@ -139,7 +139,7 @@ final class NotebookCommentsPresentation {
       !controller.session.textView.isHidden, controller.session.textView.window != nil
     else { return }
     if !controller.session.textView.becomeFirstResponder() {
-      controller.session.inputError = String(localized: "Tap the note to resume writing.")
+      controller.session.inputError = String(localized: "Tap the file to resume writing.")
     }
   }
 

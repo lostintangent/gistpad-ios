@@ -7,7 +7,7 @@ import UIKit
 
 @MainActor
 @Observable
-final class NotebookIntelligencePresentation {
+final class IntelligencePresentation {
   var target: Target?
   private var retainedTarget: Target?
 
@@ -32,7 +32,7 @@ final class NotebookIntelligencePresentation {
     let view = session.textView
     if target.wasEditing, session.canFormat, view.window != nil {
       if !view.becomeFirstResponder() {
-        session.inputError = String(localized: "Tap the note to resume writing.")
+        session.inputError = String(localized: "Tap the file to resume writing.")
       }
     }
   }
@@ -59,19 +59,19 @@ final class NotebookIntelligencePresentation {
 }
 
 extension View {
-  func notebookIntelligence(_ presentation: NotebookIntelligencePresentation) -> some View {
-    modifier(NotebookIntelligenceModifier(presentation: presentation))
+  func intelligenceSheet(_ presentation: IntelligencePresentation) -> some View {
+    modifier(IntelligenceSheetModifier(presentation: presentation))
   }
 }
 
-private struct NotebookIntelligenceModifier: ViewModifier {
-  @Bindable var presentation: NotebookIntelligencePresentation
+private struct IntelligenceSheetModifier: ViewModifier {
+  @Bindable var presentation: IntelligencePresentation
   @Environment(\.accent) private var accent
 
   func body(content: Content) -> some View {
     content
       .sheet(item: $presentation.target, onDismiss: presentation.dismissed) { target in
-        NoteIntelligenceSheet(
+        IntelligenceSheet(
           session: target.session, title: target.title,
           revealSource: { target.reference = $0 }
         )

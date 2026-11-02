@@ -1,18 +1,18 @@
 import Foundation
 
-public struct NoteSnapshot: Sendable, Equatable {
-  public let documentID: String
+public struct FileSnapshot: Sendable, Equatable {
+  public let fileID: String
   public let sessionID: UUID
   public let generation: UInt64
   public let source: String
   public let headingOffsets: [Int]
-  public let tasks: [NoteTask]
+  public let tasks: [ModelTask]
 
   public init(
-    documentID: String, sessionID: UUID, generation: UInt64, source: String,
-    headingOffsets: [Int] = [], tasks: [NoteTask] = []
+    fileID: String, sessionID: UUID, generation: UInt64, source: String,
+    headingOffsets: [Int] = [], tasks: [ModelTask] = []
   ) {
-    self.documentID = documentID
+    self.fileID = fileID
     self.sessionID = sessionID
     self.generation = generation
     self.source = source
@@ -21,23 +21,23 @@ public struct NoteSnapshot: Sendable, Equatable {
   }
 
   public static func == (lhs: Self, rhs: Self) -> Bool {
-    lhs.documentID == rhs.documentID && lhs.sessionID == rhs.sessionID
+    lhs.fileID == rhs.fileID && lhs.sessionID == rhs.sessionID
       && lhs.generation == rhs.generation && lhs.source.utf8.elementsEqual(rhs.source.utf8)
   }
 }
 
-public enum NoteIntelligenceAction: String, CaseIterable, Sendable {
+public enum IntelligenceAction: String, CaseIterable, Sendable {
   case ask, edit, review
 }
 
-public struct NoteIntelligenceRequest: Sendable {
+public struct IntelligenceRequest: Sendable {
   public let id: UUID
-  public let snapshot: NoteSnapshot
-  public let action: NoteIntelligenceAction
+  public let snapshot: FileSnapshot
+  public let action: IntelligenceAction
   public let instruction: String
 
   public init(
-    snapshot: NoteSnapshot, action: NoteIntelligenceAction, instruction: String = "",
+    snapshot: FileSnapshot, action: IntelligenceAction, instruction: String = "",
     id: UUID = UUID()
   ) {
     self.id = id
@@ -47,13 +47,13 @@ public struct NoteIntelligenceRequest: Sendable {
   }
 }
 
-public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
+public enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
   case unavailable(String)
   case emptyInstruction
   case insufficientContext
   case invalidResponse
   case emptyAnswer
-  case invalidAnswer(NoteAnswerIssue)
+  case invalidAnswer(AnswerIssue)
   case invalidEdit
   case unsafeEdit
   case responseTooLarge
@@ -132,7 +132,7 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
   }
 }
 
-public struct NoteModelInfo: Sendable {
+public struct ModelInfo: Sendable {
   public let variant: String
   public let contextSize: Int
 
@@ -142,19 +142,19 @@ public struct NoteModelInfo: Sendable {
   }
 }
 
-public struct NoteModelPass: Sendable {
+public struct ModelPass: Sendable {
   public enum Purpose: String, Sendable { case answer, extract, edit, review }
   public let purpose: Purpose
   public let instruction: String
   public let source: String
   public let responseTokens: Int
   public let requestID: UUID
-  public let tasks: [NoteTask]
+  public let tasks: [ModelTask]
   public let evidenceBlocks: [String]?
 
   public init(
     purpose: Purpose, instruction: String, source: String, responseTokens: Int,
-    requestID: UUID = UUID(), tasks: [NoteTask] = [],
+    requestID: UUID = UUID(), tasks: [ModelTask] = [],
     evidenceBlocks: [String]? = nil
   ) {
     self.purpose = purpose
@@ -167,7 +167,7 @@ public struct NoteModelPass: Sendable {
   }
 }
 
-public struct NoteTask: Sendable {
+public struct ModelTask: Sendable {
   public let id: Int
   public let range: NSRange
   public let text: String
@@ -189,7 +189,7 @@ public struct NoteTask: Sendable {
 
   public static func indexed(
     in source: String, markers: [NSRange], headings: [NSRange]
-  ) -> [NoteTask] {
+  ) -> [ModelTask] {
     let text = source as NSString
     var previousEnd: Int?
     var listID = 0
@@ -198,7 +198,7 @@ public struct NoteTask: Sendable {
       if previousEnd != line.location { listID += 1 }
       previousEnd = NSMaxRange(line)
       let heading = headings.last { NSMaxRange($0) <= line.location }
-      return NoteTask(
+      return ModelTask(
         id: index + 1, range: marker,
         text: text.substring(with: line).trimmingCharacters(in: .newlines),
         isComplete: text.substring(with: marker) != "[ ]",
@@ -207,8 +207,8 @@ public struct NoteTask: Sendable {
   }
 }
 
-public enum NoteEditOperation: Sendable {
-  case replace(NoteReplacementCandidate)
+public enum ModelEdit: Sendable {
+  case replace(ModelReplacement)
   case setTaskStates(ids: [Int]?, isComplete: Bool)
   case insertTask(listID: Int, text: String)
   case deleteTasks(ids: [Int])
@@ -225,21 +225,23 @@ public struct ModelAnswerPart: Sendable, Equatable {
   }
 }
 
-public struct NoteCitation: Sendable, Equatable {
+public struct Citation: Sendable, Equatable {
   public let quote: String
   public let ranges: [NSRange]
 }
 
-public enum NoteAnswerPart: Sendable, Equatable {
-  case prose(String)
-  case quotation(NoteCitation)
+public struct Answer: Sendable {
+  public let parts: [Part]
 }
 
-public struct NoteAnswer: Sendable {
-  public let parts: [NoteAnswerPart]
+extension Answer {
+  public enum Part: Sendable, Equatable {
+    case prose(String)
+    case quotation(Citation)
+  }
 }
 
-public struct NoteIntelligenceProgress: Sendable {
+public struct IntelligenceProgress: Sendable {
   public enum Phase: Sendable { case reading, editing, reviewing, combining, answering }
   public let phase: Phase
   public let current: Int
@@ -247,17 +249,17 @@ public struct NoteIntelligenceProgress: Sendable {
 }
 
 @MainActor
-public protocol NoteModelBackend {
-  func modelInfo() async throws -> NoteModelInfo
-  func tokenCount(for pass: NoteModelPass) async throws -> Int
-  func replacements(for pass: NoteModelPass) async throws -> [NoteReplacementCandidate]
-  func editOperations(for pass: NoteModelPass) async throws -> [NoteEditOperation]
-  func excerpts(for pass: NoteModelPass) async throws -> [String]
-  func answer(for pass: NoteModelPass) async throws -> [ModelAnswerPart]
+public protocol IntelligenceModel {
+  func modelInfo() async throws -> ModelInfo
+  func tokenCount(for pass: ModelPass) async throws -> Int
+  func replacements(for pass: ModelPass) async throws -> [ModelReplacement]
+  func editOperations(for pass: ModelPass) async throws -> [ModelEdit]
+  func excerpts(for pass: ModelPass) async throws -> [String]
+  func answer(for pass: ModelPass) async throws -> [ModelAnswerPart]
 }
 
-extension NoteModelBackend {
-  public func editOperations(for pass: NoteModelPass) async throws -> [NoteEditOperation] {
-    try await replacements(for: pass).map(NoteEditOperation.replace)
+extension IntelligenceModel {
+  public func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
+    try await replacements(for: pass).map(ModelEdit.replace)
   }
 }

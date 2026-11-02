@@ -12,13 +12,13 @@
   struct IntelligenceSurfaceTests {
     @Test func closingIntelligenceRestoresSourceSelectionFocusAndUndo() async throws {
       let source =
-        NoteModelFixture.source + "\n" + (1...120).map { "Stop \($0) on the river path." }.joined(separator: "\n")
+        FixtureModel.source + "\n" + (1...120).map { "Stop \($0) on the river path." }.joined(separator: "\n")
       let session = Editor(fileID: "intelligence-return", text: source)
       let editor = session.textView
       let selection = (source as NSString).range(of: "Stop 60 ")
       var changes = 0
       session.onEdit = { _, _ in changes += 1 }
-      let presentation = NotebookIntelligencePresentation()
+      let presentation = IntelligencePresentation()
       let scene = try #require(
         UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
       let previous = scene.windows.first(where: \.isKeyWindow)
@@ -27,7 +27,7 @@
         rootView: NavigationStack {
           EditorView(session: session).navigationTitle("Saturday walk")
         }
-        .notebookIntelligence(presentation))
+        .intelligenceSheet(presentation))
       window.rootViewController = host
       window.makeKeyAndVisible()
       defer {

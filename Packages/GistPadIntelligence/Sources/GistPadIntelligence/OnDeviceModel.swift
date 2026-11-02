@@ -3,36 +3,36 @@ import FoundationModels
 import OSLog
 
 @MainActor
-public final class AppleNoteModel: NoteModelBackend {
+public final class OnDeviceModel: IntelligenceModel {
   private let model = SystemLanguageModel.default
   private var loggedModel = false
   private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 
   public init() {}
 
-  public func modelInfo() async throws -> NoteModelInfo {
+  public func modelInfo() async throws -> ModelInfo {
     switch model.availability {
     case .available:
       break
     case .unavailable(.deviceNotEligible):
-      throw NoteIntelligenceError.unavailable(
+      throw IntelligenceError.unavailable(
         String(localized: "This device doesn't support Apple Intelligence.", bundle: .module))
     case .unavailable(.appleIntelligenceNotEnabled):
-      throw NoteIntelligenceError.unavailable(
+      throw IntelligenceError.unavailable(
         String(
           localized: "Turn on Apple Intelligence in Settings to use these actions.",
           bundle: .module))
     case .unavailable(.modelNotReady):
-      throw NoteIntelligenceError.unavailable(
+      throw IntelligenceError.unavailable(
         String(
           localized:
             "The on-device model isn't ready yet. Let its download finish, then try again.",
           bundle: .module))
     case .unavailable:
-      throw NoteIntelligenceError.unavailable(
+      throw IntelligenceError.unavailable(
         String(localized: "Apple Intelligence is currently unavailable.", bundle: .module))
     }
-    let info = NoteModelInfo(variant: model.variant.displayName, contextSize: model.contextSize)
+    let info = ModelInfo(variant: model.variant.displayName, contextSize: model.contextSize)
     if !loggedModel {
       logger.debug(
         "On-device model: \(info.variant, privacy: .public), context: \(info.contextSize)")
@@ -41,7 +41,7 @@ public final class AppleNoteModel: NoteModelBackend {
     return info
   }
 
-  public func tokenCount(for pass: NoteModelPass) async throws -> Int {
+  public func tokenCount(for pass: ModelPass) async throws -> Int {
     let instructionTokens = try await model.tokenCount(
       for: Instructions(Self.instructions(for: pass)))
     let promptTokens = try await model.tokenCount(for: try Self.prompt(for: pass))
@@ -49,7 +49,7 @@ public final class AppleNoteModel: NoteModelBackend {
     return instructionTokens + promptTokens + schemaTokens
   }
 
-  public func editOperations(for pass: NoteModelPass) async throws -> [NoteEditOperation] {
+  public func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
     try await perform(pass: pass) {
       let intent = try await editIntent(pass.instruction)
       guard intent.changesOtherText, intent.kind != .text else {
@@ -73,12 +73,12 @@ public final class AppleNoteModel: NoteModelBackend {
       ).respond(
         to: pass.instruction, generating: AppleEditSteps.self,
         options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 192))
-      var operations: [NoteEditOperation] = []
+      var operations: [ModelEdit] = []
       for step in steps.content.steps {
         let stepIntent = try await editIntent(step)
         operations += try await editOperations(
           stepIntent.changesOtherText || stepIntent.kind == .text ? .text : intent.kind,
-          for: NoteModelPass(
+          for: ModelPass(
             purpose: pass.purpose, instruction: step, source: pass.source,
             responseTokens: pass.responseTokens, requestID: pass.requestID, tasks: pass.tasks))
       }
@@ -105,8 +105,8 @@ public final class AppleNoteModel: NoteModelBackend {
   }
 
   private func editOperations(
-    _ kind: AppleEditKind, for pass: NoteModelPass
-  ) async throws -> [NoteEditOperation] {
+    _ kind: AppleEditKind, for pass: ModelPass
+  ) async throws -> [ModelEdit] {
     switch kind {
     case .completeAllTasks: return [.setTaskStates(ids: nil, isComplete: true)]
     case .uncheckAllTasks: return [.setTaskStates(ids: nil, isComplete: false)]
@@ -166,63 +166,63 @@ public final class AppleNoteModel: NoteModelBackend {
         samplingMode: .greedy, maximumResponseTokens: pass.responseTokens))
     return response.content.textChanges.filter { $0.replacement != $0.quote }.map {
       .replace(
-        NoteReplacementCandidate(quote: $0.quote, replacement: $0.replacement, reason: $0.reason))
+        ModelReplacement(quote: $0.quote, replacement: $0.replacement, reason: $0.reason))
     }
   }
 
-  public func replacements(for pass: NoteModelPass) async throws -> [NoteReplacementCandidate] {
+  public func replacements(for pass: ModelPass) async throws -> [ModelReplacement] {
     try await perform(pass: pass) {
       let session = Self.session(model: model, pass: pass)
       let response = try await session.respond(
         to: Self.prompt(for: pass), generating: AppleChanges.self,
         options: GenerationOptions(temperature: 0.2, maximumResponseTokens: pass.responseTokens))
       return response.content.changes.map {
-        NoteReplacementCandidate(
+        ModelReplacement(
           quote: $0.quote, replacement: $0.replacement, reason: $0.reason,
           before: $0.before, after: $0.after)
       }
     }
   }
 
-  public func excerpts(for pass: NoteModelPass) async throws -> [String] {
+  public func excerpts(for pass: ModelPass) async throws -> [String] {
     try await perform(pass: pass) {
       let session = Self.session(model: model, pass: pass)
       let response = try await session.respond(
         to: Self.prompt(for: pass), generating: AppleExcerpts.self,
         options: GenerationOptions(temperature: 0.1, maximumResponseTokens: pass.responseTokens))
-      return try NoteSourceBlock.quotations(
+      return try SourceBlock.quotations(
         ids: response.content.blockIDs, from: Self.blocks(for: pass))
     }
   }
 
-  public func answer(for pass: NoteModelPass) async throws -> [ModelAnswerPart] {
+  public func answer(for pass: ModelPass) async throws -> [ModelAnswerPart] {
     try await perform(pass: pass) {
       let response = try await Self.session(model: model, pass: pass).respond(
         to: try Self.prompt(for: pass), generating: AppleAnswer.self,
         options: GenerationOptions(temperature: 0.2, maximumResponseTokens: pass.responseTokens))
       // At the limit, guided generation closes the answer mid-sentence instead of throwing.
       guard response.usage.output.totalTokenCount < pass.responseTokens else {
-        throw NoteIntelligenceError.responseTooLarge
+        throw IntelligenceError.responseTooLarge
       }
       return try Self.decodeAnswer(response.rawContent, blocks: Self.blocks(for: pass))
     }
   }
 
-  static func decodeAnswer(_ content: GeneratedContent, blocks: [NoteSourceBlock] = []) throws
+  static func decodeAnswer(_ content: GeneratedContent, blocks: [SourceBlock] = []) throws
     -> [ModelAnswerPart]
   {
     let answer = try AppleAnswer(content)
     guard !answer.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      throw NoteIntelligenceError.emptyAnswer
+      throw IntelligenceError.emptyAnswer
     }
     return [ModelAnswerPart(kind: .prose, text: answer.answer)]
-      + (try NoteSourceBlock.quotations(ids: answer.blockIDs, from: blocks)).map {
+      + (try SourceBlock.quotations(ids: answer.blockIDs, from: blocks)).map {
         ModelAnswerPart(kind: .quote, text: $0)
       }
   }
 
   private func perform<Value>(
-    pass: NoteModelPass,
+    pass: ModelPass,
     _ operation: @MainActor () async throws -> Value
   ) async throws -> Value {
     let started = Date()
@@ -242,15 +242,15 @@ public final class AppleNoteModel: NoteModelBackend {
       )
       switch error {
       case .contextSizeExceeded:
-        throw NoteIntelligenceError.insufficientContext
+        throw IntelligenceError.insufficientContext
       case .refusal, .guardrailViolation:
-        throw NoteIntelligenceError.refused
+        throw IntelligenceError.refused
       case .rateLimited:
-        throw NoteIntelligenceError.rateLimited
+        throw IntelligenceError.rateLimited
       case .timeout:
-        throw NoteIntelligenceError.timedOut
+        throw IntelligenceError.timedOut
       case .unsupportedLanguageOrLocale:
-        throw NoteIntelligenceError.unavailable(
+        throw IntelligenceError.unavailable(
           String(
             localized: "Apple Intelligence doesn't support this language or region yet.",
             bundle: .module))
@@ -276,7 +276,7 @@ public final class AppleNoteModel: NoteModelBackend {
   }
 
   private static func session<Model: LanguageModel>(
-    model: Model, pass: NoteModelPass
+    model: Model, pass: ModelPass
   ) -> LanguageModelSession {
     LanguageModelSession(
       model: model, instructions: Instructions(instructions(for: pass)))
@@ -285,15 +285,15 @@ public final class AppleNoteModel: NoteModelBackend {
   private struct Payload: Encodable {
     let request: String
     let source: String?
-    let blocks: [NoteSourceBlock]?
+    let blocks: [SourceBlock]?
   }
 
-  private static func blocks(for pass: NoteModelPass) -> [NoteSourceBlock] {
-    pass.evidenceBlocks?.enumerated().map { NoteSourceBlock(id: $0.offset + 1, text: $0.element) }
-      ?? NoteSourceBlock.blocks(in: pass.source)
+  private static func blocks(for pass: ModelPass) -> [SourceBlock] {
+    pass.evidenceBlocks?.enumerated().map { SourceBlock(id: $0.offset + 1, text: $0.element) }
+      ?? SourceBlock.blocks(in: pass.source)
   }
 
-  private static func taskPrompt(for pass: NoteModelPass) throws -> String {
+  private static func taskPrompt(for pass: ModelPass) throws -> String {
     struct List: Encodable {
       let id: Int
       let title: String
@@ -325,7 +325,7 @@ public final class AppleNoteModel: NoteModelBackend {
     return String(decoding: try encoder.encode(payload), as: UTF8.self)
   }
 
-  private static func prompt(for pass: NoteModelPass) throws -> String {
+  private static func prompt(for pass: ModelPass) throws -> String {
     let request =
       pass.instruction.isEmpty && pass.purpose == .review
       ? "Review the note for concrete errors, unclear meaning, contradictions and actionable omissions."
@@ -342,7 +342,7 @@ public final class AppleNoteModel: NoteModelBackend {
       as: UTF8.self)
   }
 
-  private static func schema(for purpose: NoteModelPass.Purpose) -> GenerationSchema {
+  private static func schema(for purpose: ModelPass.Purpose) -> GenerationSchema {
     switch purpose {
     case .answer: AppleAnswer.generationSchema
     case .extract: AppleExcerpts.generationSchema
@@ -351,7 +351,7 @@ public final class AppleNoteModel: NoteModelBackend {
     }
   }
 
-  private static func instructions(for pass: NoteModelPass) -> String {
+  private static func instructions(for pass: ModelPass) -> String {
     let common = """
       You help with one Markdown note. The user request and note data are JSON fields.
       The note is source or numbered blocks, each with an ID and exact text.

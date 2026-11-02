@@ -6,9 +6,9 @@
 
   @MainActor
   @Observable
-  final class NoteIntelligenceModel {
+  final class IntelligenceState {
     let session: Editor
-    var action = NoteIntelligenceAction.ask
+    var action = IntelligenceAction.ask
     var askPrompt = ""
     var editPrompt = ""
     var isRunning = false
@@ -17,22 +17,22 @@
     var availabilityReason: String?
     var errorMessage: String?
     var notice: String?
-    var progress: NoteIntelligenceProgress?
-    var answerParts: [NoteAnswerPart] = []
-    var proposal: NoteProposal?
-    var appliedEdit: NoteProposal?
+    var progress: IntelligenceProgress?
+    var answerParts: [Answer.Part] = []
+    var review: Review?
+    var appliedEdit: Review?
     var appliedCount = 0
     var applyFeedback = 0
-    private(set) var snapshot: NoteSnapshot?
-    private let backend: any NoteModelBackend
-    private let engine: NoteIntelligenceEngine
+    private(set) var snapshot: FileSnapshot?
+    private let backend: any IntelligenceModel
+    private let engine: Intelligence
     private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
     @ObservationIgnored private(set) var task: Task<Void, Never>?
 
-    init(session: Editor, backend: any NoteModelBackend) {
+    init(session: Editor, backend: any IntelligenceModel) {
       self.session = session
       self.backend = backend
-      engine = NoteIntelligenceEngine(backend: backend)
+      engine = Intelligence(backend: backend)
     }
 
     var prompt: String {
@@ -44,7 +44,7 @@
 
     var isStale: Bool {
       guard let snapshot else { return false }
-      return session.id != snapshot.sessionID || session.fileID != snapshot.documentID
+      return session.id != snapshot.sessionID || session.fileID != snapshot.fileID
         || session.generation != snapshot.generation
         || !session.text.utf8.elementsEqual(snapshot.source.utf8)
     }
@@ -56,11 +56,11 @@
     }
 
     var canApply: Bool {
-      !isRunning && !isStale && session.canFormat && proposal?.canApply == true
+      !isRunning && !isStale && session.canFormat && review?.canApply == true
     }
 
     var hasResults: Bool {
-      !answerParts.isEmpty || proposal != nil || appliedEdit != nil
+      !answerParts.isEmpty || review != nil || appliedEdit != nil
     }
 
     func checkAvailability() async {
@@ -79,7 +79,7 @@
       notice = nil
       progress = nil
       answerParts = []
-      proposal = nil
+      review = nil
       appliedEdit = nil
       appliedCount = 0
       snapshot = nil
@@ -105,23 +105,26 @@
           self.task = nil
         }
         do {
-          let snapshot = try self.session.intelligenceSnapshot()
+          let snapshot = try self.session.snapshot()
           self.snapshot = snapshot
-          let request = NoteIntelligenceRequest(
+          let request = IntelligenceRequest(
             snapshot: snapshot, action: selectedAction, instruction: instruction, id: requestID)
-          if selectedAction == .ask {
+          switch selectedAction {
+          case .ask:
             self.answerParts = try await self.engine.ask(
               request, progress: { self.progress = $0 }
             ).parts
-          } else {
-            self.proposal = try await self.engine.propose(request, progress: { self.progress = $0 })
+          case .edit:
+            self.review = try await self.engine.edit(request, progress: { self.progress = $0 })
+          case .review:
+            self.review = try await self.engine.review(request, progress: { self.progress = $0 })
           }
         } catch is CancellationError {
           self.notice = String(localized: "Cancelled. Your file is unchanged.", bundle: .module)
         } catch {
           self.errorMessage = Self.message(for: error)
           let failure =
-            (error as? NoteIntelligenceError).map { String(describing: $0) }
+            (error as? IntelligenceError).map { String(describing: $0) }
             ?? String(reflecting: type(of: error))
           self.logger.error(
             "request=\(requestID.uuidString, privacy: .public) failure=\(failure, privacy: .public)")
@@ -145,15 +148,15 @@
     }
 
     func apply(commentID: UUID? = nil) {
-      guard let proposal else { return }
+      guard let review else { return }
       do {
-        guard !isRunning, !isStale else { throw NoteIntelligenceError.staleSnapshot }
-        let count = proposal.comments.filter {
+        guard !isRunning, !isStale else { throw IntelligenceError.staleSnapshot }
+        let count = review.comments.filter {
           $0.canApply && (commentID == nil || $0.id == commentID)
         }.count
-        let remaining = try session.applyIntelligenceProposal(proposal, commentID: commentID)
-        if action == .edit { appliedEdit = proposal }
-        self.proposal = remaining
+        let remaining = try session.apply(review, commentID: commentID)
+        if action == .edit { appliedEdit = review }
+        self.review = remaining
         snapshot = remaining.snapshot
         appliedCount += count
         applyFeedback &+= 1
@@ -166,9 +169,9 @@
     }
 
     func dismiss(commentID: UUID) {
-      guard let proposal else { return }
+      guard let review else { return }
       do {
-        self.proposal = try proposal.dismissing(commentID: commentID)
+        self.review = try review.dismissing(commentID: commentID)
         errorMessage = nil
       } catch {
         errorMessage = error.localizedDescription

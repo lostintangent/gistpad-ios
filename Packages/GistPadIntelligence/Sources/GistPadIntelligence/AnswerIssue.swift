@@ -1,6 +1,6 @@
 import Foundation
 
-public enum NoteAnswerIssue: String, Sendable {
+public enum AnswerIssue: String, Sendable {
   case unverifiedProseQuote
   case internalIdentifier
   case thirdPerson
@@ -8,17 +8,17 @@ public enum NoteAnswerIssue: String, Sendable {
 
   public static func check(_ answer: String, source: String, instruction: String = "") -> Self? {
     for match in answer.matches(of: /["“]([^"”\n]+)["”]/) {
-      if NoteAnchors.matches(String(match.output.1), in: source).isEmpty {
+      if Anchors.matches(String(match.output.1), in: source).isEmpty {
         return .unverifiedProseQuote
       }
     }
     for match in answer.matches(of: /(?:^|[\s(\[])['‘]([^\n]+?)['’](?=$|[\s).,!?:;\]])/) {
-      if NoteAnchors.matches(String(match.output.1), in: source).isEmpty {
+      if Anchors.matches(String(match.output.1), in: source).isEmpty {
         return .unverifiedProseQuote
       }
     }
     for match in answer.matches(of: /[「『«]([^」』»\n]+)[」』»]/) {
-      if NoteAnchors.matches(String(match.output.1), in: source).isEmpty {
+      if Anchors.matches(String(match.output.1), in: source).isEmpty {
         return .unverifiedProseQuote
       }
     }

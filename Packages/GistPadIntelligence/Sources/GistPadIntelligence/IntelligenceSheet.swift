@@ -3,10 +3,10 @@
   import SwiftUI
   import UIKit
 
-  public struct NoteIntelligenceSheet: View {
+  public struct IntelligenceSheet: View {
     private let title: String
     private let revealSource: @MainActor (NSRange) -> Void
-    @State private var model: NoteIntelligenceModel
+    @State private var model: IntelligenceState
     @State private var detent = PresentationDetent.medium
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -15,12 +15,12 @@
 
     public init(
       session: Editor, title: String,
-      backend: any NoteModelBackend = AppleNoteModel(),
+      backend: any IntelligenceModel = OnDeviceModel(),
       revealSource: @escaping @MainActor (NSRange) -> Void
     ) {
       self.title = title
       self.revealSource = revealSource
-      _model = State(initialValue: NoteIntelligenceModel(session: session, backend: backend))
+      _model = State(initialValue: IntelligenceState(session: session, backend: backend))
     }
 
     public var body: some View {
@@ -29,10 +29,10 @@
         Form {
           Section {
             Picker(String(localized: "Action", bundle: .module), selection: $model.action) {
-              Text("Ask", bundle: .module).tag(NoteIntelligenceAction.ask)
-              Text("Edit", bundle: .module).tag(NoteIntelligenceAction.edit)
+              Text("Ask", bundle: .module).tag(IntelligenceAction.ask)
+              Text("Edit", bundle: .module).tag(IntelligenceAction.edit)
                 .disabled(!model.session.textView.isEditable)
-              Text("Review", bundle: .module).tag(NoteIntelligenceAction.review)
+              Text("Review", bundle: .module).tag(IntelligenceAction.review)
             }
             .pickerStyle(.segmented)
             .disabled(model.isRunning)
@@ -61,7 +61,7 @@
             }
           }
           answer
-          if let proposal = model.appliedEdit ?? model.proposal { changes(proposal) }
+          if let review = model.appliedEdit ?? model.review { changes(review) }
           if let notice = model.notice {
             Section {
               Label(
@@ -112,7 +112,7 @@
         model.clearResults()
         Task { await model.checkAvailability() }
       }
-      .onChange(of: model.isRunning || model.proposal != nil || dynamicTypeSize.isAccessibilitySize)
+      .onChange(of: model.isRunning || model.review != nil || dynamicTypeSize.isAccessibilitySize)
       { _, expands in
         if expands { detent = .large }
       }
@@ -220,18 +220,18 @@
     }
 
     @ViewBuilder
-    private func changes(_ proposal: NoteProposal) -> some View {
-      if proposal.omittedCount > 0 {
+    private func changes(_ review: Review) -> some View {
+      if review.omittedCount > 0 {
         Section {
           Label(
             String(
               localized:
-                "\(proposal.omittedCount) changes couldn't be found in your file and won't be applied.",
+                "\(review.omittedCount) changes couldn't be found in your file and won't be applied.",
               bundle: .module),
             systemImage: "exclamationmark.circle")
         }
       }
-      if proposal.comments.isEmpty, model.appliedCount == 0 {
+      if review.comments.isEmpty, model.appliedCount == 0 {
         Section {
           Text(
             model.action == .edit
@@ -241,19 +241,19 @@
           .foregroundStyle(.secondary)
         }
       }
-      ForEach(Array(proposal.comments.enumerated()), id: \.element.id) { index, comment in
+      ForEach(Array(review.comments.enumerated()), id: \.element.id) { index, comment in
         Section {
           change(comment)
         } header: {
           if index == 0, model.action == .review {
             Text(
-              proposal.comments.count == 1
+              review.comments.count == 1
                 ? String(localized: "1 comment", bundle: .module)
-                : String(localized: "\(proposal.comments.count) comments", bundle: .module))
+                : String(localized: "\(review.comments.count) comments", bundle: .module))
           }
         }
       }
-      if model.action == .edit, model.appliedEdit == nil, proposal.canApply {
+      if model.action == .edit, model.appliedEdit == nil, review.canApply {
         Section {
           Button(String(localized: "Apply Edit", bundle: .module), systemImage: "checkmark") {
             model.apply()
@@ -265,8 +265,8 @@
     }
 
     @ViewBuilder
-    private func change(_ comment: NoteProposalComment) -> some View {
-      let comparison = comment.replacement.map { NoteTextDiff(before: comment.quote, after: $0) }
+    private func change(_ comment: Review.Comment) -> some View {
+      let comparison = comment.replacement.map { TextDiff(before: comment.quote, after: $0) }
       Text(comment.reason).font(.headline)
       VStack(alignment: .leading, spacing: 6) {
         Text(
@@ -278,7 +278,7 @@
         if comment.quote.isEmpty {
           Text("Empty file", bundle: .module).foregroundStyle(.secondary)
         } else if let comparison {
-          Text(NoteIntelligenceDiffText.attributed(comparison.before)).textSelection(.enabled)
+          Text(DiffText.attributed(comparison.before)).textSelection(.enabled)
         } else {
           Text(comment.quote).textSelection(.enabled)
         }
@@ -289,7 +289,7 @@
           if replacement.isEmpty {
             Text("Remove this text", bundle: .module).foregroundStyle(.secondary)
           } else {
-            Text(NoteIntelligenceDiffText.attributed(comparison.after)).textSelection(.enabled)
+            Text(DiffText.attributed(comparison.after)).textSelection(.enabled)
           }
         }
       }

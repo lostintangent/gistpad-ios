@@ -1,6 +1,6 @@
 import Foundation
 
-public struct NoteReplacementCandidate: Sendable {
+public struct ModelReplacement: Sendable {
   public let quote: String
   public let replacement: String?
   public let reason: String
@@ -29,33 +29,19 @@ public struct NoteReplacementCandidate: Sendable {
   }
 }
 
-public enum NoteAnchorRejection: Sendable, Equatable {
+public enum AnchorRejection: Sendable, Equatable {
   case notFound, ambiguous, overlapping, invalidRange
 }
 
-public struct NoteProposalComment: Identifiable, Sendable {
-  public let id: UUID
-  public let quote: String
-  public let replacement: String?
-  public let reason: String
-  public let range: NSRange?
-  public let rejection: NoteAnchorRejection?
-
-  public var canApply: Bool {
-    range != nil && rejection == nil
-      && replacement.map { !quote.utf8.elementsEqual($0.utf8) } == true
-  }
-}
-
-public struct NoteProposal: Sendable {
-  public let snapshot: NoteSnapshot
-  public let comments: [NoteProposalComment]
+public struct Review: Sendable {
+  public let snapshot: FileSnapshot
+  public let comments: [Comment]
   fileprivate let safetyInstruction: String?
 
   public var omittedCount: Int { comments.filter { $0.rejection != nil }.count }
   public var canApply: Bool { comments.contains { $0.canApply } }
 
-  public init(snapshot: NoteSnapshot, candidates: [NoteReplacementCandidate]) {
+  public init(snapshot: FileSnapshot, candidates: [ModelReplacement]) {
     self.init(
       snapshot: snapshot,
       scopedCandidates: candidates.map {
@@ -64,7 +50,7 @@ public struct NoteProposal: Sendable {
   }
 
   init(
-    snapshot: NoteSnapshot, scopedCandidates: [(NoteReplacementCandidate, NSRange)],
+    snapshot: FileSnapshot, scopedCandidates: [(ModelReplacement, NSRange)],
     safetyInstruction: String? = nil
   ) {
     self.snapshot = snapshot
@@ -73,10 +59,10 @@ public struct NoteProposal: Sendable {
       let matches =
         candidate.isInsertion && scope.length == 0 && Range(scope, in: snapshot.source) != nil
         ? [scope]
-        : NoteAnchors.matches(
+        : Anchors.matches(
           candidate.quote, in: snapshot.source, within: scope,
           before: candidate.before, after: candidate.after, allowEmptyNote: true)
-      let rejection: NoteAnchorRejection?
+      let rejection: AnchorRejection?
       if (candidate.quote.isEmpty && !snapshot.source.isEmpty && !candidate.isInsertion)
         || Range(scope, in: snapshot.source) == nil
       {
@@ -88,7 +74,7 @@ public struct NoteProposal: Sendable {
       } else {
         rejection = nil
       }
-      return NoteProposalComment(
+      return Comment(
         id: UUID(), quote: candidate.quote, replacement: candidate.replacement,
         reason: candidate.reason, range: rejection == nil ? matches.first : nil,
         rejection: rejection)
@@ -111,7 +97,7 @@ public struct NoteProposal: Sendable {
     }
     for index in overlapping {
       let comment = anchored[index]
-      anchored[index] = NoteProposalComment(
+      anchored[index] = Comment(
         id: comment.id, quote: comment.quote, replacement: comment.replacement,
         reason: comment.reason, range: nil, rejection: .overlapping)
     }
@@ -119,43 +105,43 @@ public struct NoteProposal: Sendable {
   }
 
   init(
-    snapshot: NoteSnapshot, comments: [NoteProposalComment], safetyInstruction: String? = nil
+    snapshot: FileSnapshot, comments: [Comment], safetyInstruction: String? = nil
   ) {
     self.snapshot = snapshot
     self.comments = comments
     self.safetyInstruction = safetyInstruction
   }
 
-  public func dismissing(commentID: UUID) throws -> NoteProposal {
+  public func dismissing(commentID: UUID) throws -> Review {
     guard comments.contains(where: { $0.id == commentID }) else {
-      throw NoteIntelligenceError.noApplicableChanges
+      throw IntelligenceError.noApplicableChanges
     }
-    return NoteProposal(
+    return Review(
       snapshot: snapshot, comments: comments.filter { $0.id != commentID },
       safetyInstruction: safetyInstruction)
   }
 
   public func application(
-    to current: NoteSnapshot, commentID: UUID? = nil
-  ) throws -> NoteApplication {
-    guard current == snapshot else { throw NoteIntelligenceError.staleSnapshot }
+    to current: FileSnapshot, commentID: UUID? = nil
+  ) throws -> Applied {
+    guard current == snapshot else { throw IntelligenceError.staleSnapshot }
     let selected = comments.filter { $0.canApply && (commentID == nil || $0.id == commentID) }
-    guard !selected.isEmpty else { throw NoteIntelligenceError.noApplicableChanges }
+    guard !selected.isEmpty else { throw IntelligenceError.noApplicableChanges }
     var source = snapshot.source
     for comment in selected.sorted(by: { ($0.range?.location ?? 0) > ($1.range?.location ?? 0) }) {
       guard let range = comment.range, let replacement = comment.replacement,
         let swiftRange = Range(range, in: source),
         source[swiftRange].utf8.elementsEqual(comment.quote.utf8)
-      else { throw NoteIntelligenceError.staleSnapshot }
+      else { throw IntelligenceError.staleSnapshot }
       source.replaceSubrange(swiftRange, with: replacement)
     }
     try validateApplication(source, changes: selected)
-    return NoteApplication(
-      proposal: self, source: source,
+    return Applied(
+      review: self, source: source,
       applied: selected.sorted { ($0.range?.location ?? 0) < ($1.range?.location ?? 0) })
   }
 
-  private func validateApplication(_ replacement: String, changes: [NoteProposalComment]) throws {
+  private func validateApplication(_ replacement: String, changes: [Comment]) throws {
     let source = snapshot.source
     guard let safetyInstruction, !source.isEmpty else { return }
     let request = Self.normalized(safetyInstruction)
@@ -163,19 +149,19 @@ public struct NoteProposal: Sendable {
       if let replacement = change.replacement, !request.isEmpty,
         Self.normalized(replacement) == request
       {
-        throw NoteIntelligenceError.unsafeEdit
+        throw IntelligenceError.unsafeEdit
       }
     }
     guard !replacement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      throw NoteIntelligenceError.unsafeEdit
+      throw IntelligenceError.unsafeEdit
     }
     let originalCount = source.filter { !$0.isWhitespace }.count
     let replacementCount = replacement.filter { !$0.isWhitespace }.count
     guard replacementCount <= min(12, originalCount / 4) else { return }
-    let retained = NoteTextDiff(before: source, after: replacement).before
+    let retained = TextDiff(before: source, after: replacement).before
       .filter { $0.kind == .unchanged }.reduce(0) { $0 + $1.text.utf8.count }
     if retained * 10 < source.utf8.count {
-      throw NoteIntelligenceError.unsafeEdit
+      throw IntelligenceError.unsafeEdit
     }
   }
 
@@ -185,67 +171,85 @@ public struct NoteProposal: Sendable {
   }
 }
 
-public struct NoteApplication: Sendable {
-  public let proposal: NoteProposal
-  public let source: String
-  public let applied: [NoteProposalComment]
+extension Review {
+  public struct Comment: Identifiable, Sendable {
+    public let id: UUID
+    public let quote: String
+    public let replacement: String?
+    public let reason: String
+    public let range: NSRange?
+    public let rejection: AnchorRejection?
 
-  public func mappedSelection(_ selection: NSRange) throws -> NSRange {
-    guard Range(selection, in: proposal.snapshot.source) != nil else {
-      throw NoteIntelligenceError.invalidSelection
+    public var canApply: Bool {
+      range != nil && rejection == nil
+        && replacement.map { !quote.utf8.elementsEqual($0.utf8) } == true
     }
-    let start = mappedOffset(selection.location, trailing: selection.length == 0)
-    let end = mappedOffset(NSMaxRange(selection), trailing: true)
-    return NSRange(location: start, length: max(0, end - start))
-  }
-
-  public func remainingReview(on snapshot: NoteSnapshot) throws -> NoteProposal {
-    let original = proposal.snapshot
-    guard snapshot.documentID == original.documentID, snapshot.sessionID == original.sessionID,
-      snapshot.generation == original.generation &+ 1,
-      snapshot.source.utf8.elementsEqual(source.utf8)
-    else { throw NoteIntelligenceError.staleSnapshot }
-    let appliedIDs = Set(applied.map(\.id))
-    let remaining = proposal.comments.filter { !appliedIDs.contains($0.id) }.map { comment in
-      let range = comment.range.map {
-        NSRange(location: mappedOffset($0.location, trailing: false), length: $0.length)
-      }
-      let verified =
-        range.flatMap { Range($0, in: source) }.map {
-          source[$0].utf8.elementsEqual(comment.quote.utf8)
-        } ?? false
-      return NoteProposalComment(
-        id: comment.id, quote: comment.quote, replacement: comment.replacement,
-        reason: comment.reason, range: verified ? range : nil,
-        rejection: verified ? nil : (comment.rejection ?? .notFound))
-    }
-    return NoteProposal(
-      snapshot: snapshot, comments: remaining,
-      safetyInstruction: proposal.safetyInstruction)
-  }
-
-  private func mappedOffset(_ position: Int, trailing: Bool) -> Int {
-    var shift = 0
-    var mapped: Int?
-    for change in applied {
-      guard let range = change.range, let replacement = change.replacement else { continue }
-      if position < range.location { break }
-      if position < NSMaxRange(range) {
-        mapped = range.location + shift + (trailing ? replacement.utf16.count : 0)
-        break
-      }
-      shift += replacement.utf16.count - range.length
-    }
-    let text = source as NSString
-    let offset = min(max(0, mapped ?? position + shift), text.length)
-    guard offset > 0, offset < text.length else { return offset }
-    let composed = text.rangeOfComposedCharacterSequence(at: offset)
-    guard composed.location != offset else { return offset }
-    return trailing ? NSMaxRange(composed) : composed.location
   }
 }
 
-enum NoteAnchors {
+extension Review {
+  public struct Applied: Sendable {
+    public let review: Review
+    public let source: String
+    public let applied: [Comment]
+
+    public func mappedSelection(_ selection: NSRange) throws -> NSRange {
+      guard Range(selection, in: review.snapshot.source) != nil else {
+        throw IntelligenceError.invalidSelection
+      }
+      let start = mappedOffset(selection.location, trailing: selection.length == 0)
+      let end = mappedOffset(NSMaxRange(selection), trailing: true)
+      return NSRange(location: start, length: max(0, end - start))
+    }
+
+    public func remainingReview(on snapshot: FileSnapshot) throws -> Review {
+      let original = review.snapshot
+      guard snapshot.fileID == original.fileID, snapshot.sessionID == original.sessionID,
+        snapshot.generation == original.generation &+ 1,
+        snapshot.source.utf8.elementsEqual(source.utf8)
+      else { throw IntelligenceError.staleSnapshot }
+      let appliedIDs = Set(applied.map(\.id))
+      let remaining = review.comments.filter { !appliedIDs.contains($0.id) }.map { comment in
+        let range = comment.range.map {
+          NSRange(location: mappedOffset($0.location, trailing: false), length: $0.length)
+        }
+        let verified =
+          range.flatMap { Range($0, in: source) }.map {
+            source[$0].utf8.elementsEqual(comment.quote.utf8)
+          } ?? false
+        return Comment(
+          id: comment.id, quote: comment.quote, replacement: comment.replacement,
+          reason: comment.reason, range: verified ? range : nil,
+          rejection: verified ? nil : (comment.rejection ?? .notFound))
+      }
+      return Review(
+        snapshot: snapshot, comments: remaining,
+        safetyInstruction: review.safetyInstruction)
+    }
+
+    private func mappedOffset(_ position: Int, trailing: Bool) -> Int {
+      var shift = 0
+      var mapped: Int?
+      for change in applied {
+        guard let range = change.range, let replacement = change.replacement else { continue }
+        if position < range.location { break }
+        if position < NSMaxRange(range) {
+          mapped = range.location + shift + (trailing ? replacement.utf16.count : 0)
+          break
+        }
+        shift += replacement.utf16.count - range.length
+      }
+      let text = source as NSString
+      let offset = min(max(0, mapped ?? position + shift), text.length)
+      guard offset > 0, offset < text.length else { return offset }
+      let composed = text.rangeOfComposedCharacterSequence(at: offset)
+      guard composed.location != offset else { return offset }
+      return trailing ? NSMaxRange(composed) : composed.location
+    }
+  }
+}
+
+enum Anchors {
   static func matches(
     _ quote: String, in source: String, within scope: NSRange? = nil,
     before: String = "", after: String = "", allowEmptyNote: Bool = false

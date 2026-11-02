@@ -19,7 +19,7 @@
     "Your saved comment drafts couldn’t be read. Try again before writing a new comment." : {},
     "A comment draft couldn’t be saved. Return to Comments for that note and try saving again." : {},
     "Finish composition or Writing Tools before opening Comments." : {},
-    "Tap the note to resume writing." : {},
+    "Tap the file to resume writing." : {},
     "Show Front Matter" : {}
   },
   "version" : "1.0"

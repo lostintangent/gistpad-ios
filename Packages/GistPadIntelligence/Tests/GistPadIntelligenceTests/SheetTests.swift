@@ -9,7 +9,7 @@
   @Suite(.serialized)
   @MainActor
   struct SheetTests {
-    private let source = NoteModelFixture.source
+    private let source = FixtureModel.source
 
     @Test func nothingChangesUntilApplyAndApplyIsOneUndo() async throws {
       let session = Editor(fileID: "apply-undo", text: source)
@@ -24,7 +24,7 @@
       let typed = source + "!"
       var changes = 0
       session.onEdit = { _, _ in changes += 1 }
-      let model = NoteIntelligenceModel(session: session, backend: NoteModelFixture())
+      let model = IntelligenceState(session: session, backend: FixtureModel())
       model.action = .edit
       model.editPrompt = "Fix the typo and the time"
       await model.checkAvailability()
@@ -64,7 +64,7 @@
     }
 
     enum AskFailure: Sendable {
-      case unavailable, error(NoteIntelligenceError), answer([ModelAnswerPart])
+      case unavailable, error(IntelligenceError), answer([ModelAnswerPart])
     }
 
     @Test(arguments: [
@@ -78,13 +78,13 @@
       let session = Editor(fileID: "failed-ask", text: source)
       var changes = 0
       session.onEdit = { _, _ in changes += 1 }
-      let fixture = NoteModelFixture()
+      let fixture = FixtureModel()
       switch failure {
       case .unavailable: fixture.unavailableReason = "Apple Intelligence is turned off."
       case .error(let error): fixture.failure = error
       case .answer(let parts): fixture.answer = parts
       }
-      let model = NoteIntelligenceModel(session: session, backend: fixture)
+      let model = IntelligenceState(session: session, backend: fixture)
       model.askPrompt = "When do I leave?"
       await model.checkAvailability()
       model.generate()
@@ -101,9 +101,9 @@
 
     @Test func cancelKeepsTheRequestAndTheFile() async {
       let session = Editor(fileID: "cancel", text: source)
-      let fixture = NoteModelFixture()
+      let fixture = FixtureModel()
       fixture.delay = .seconds(5)
-      let model = NoteIntelligenceModel(session: session, backend: fixture)
+      let model = IntelligenceState(session: session, backend: fixture)
       model.askPrompt = "When do I leave?"
       await model.checkAvailability()
       model.generate()
@@ -127,7 +127,7 @@
     @Test func aReadOnlyFileAllowsAskAndReviewButNotEditOrApply() async {
       let session = Editor(fileID: "read-only", text: source)
       session.textView.isEditable = false
-      let model = NoteIntelligenceModel(session: session, backend: NoteModelFixture())
+      let model = IntelligenceState(session: session, backend: FixtureModel())
       await model.checkAvailability()
       model.askPrompt = "When do I leave?"
       #expect(model.canGenerate)
@@ -138,7 +138,7 @@
       #expect(model.canGenerate)
       model.generate()
       await model.task?.value
-      #expect(model.proposal?.comments.count == 2)
+      #expect(model.review?.comments.count == 2)
       #expect(!model.canApply)
       model.apply()
       #expect(session.text == source)
@@ -151,12 +151,12 @@
       let text = prefix + "# Content\n\nA retained thought."
       let session = Editor(
         fileID: "front-matter", text: text, generation: 8, showsFrontMatter: shown)
-      let fixture = NoteModelFixture()
+      let fixture = FixtureModel()
       fixture.answer = [
         ModelAnswerPart(kind: .prose, text: "Your key is set."),
         ModelAnswerPart(kind: .quote, text: "key: e\u{301} 👩🏽‍💻"),
       ]
-      let model = NoteIntelligenceModel(session: session, backend: fixture)
+      let model = IntelligenceState(session: session, backend: fixture)
       model.askPrompt = "What is my key?"
       await model.checkAvailability()
       model.generate()

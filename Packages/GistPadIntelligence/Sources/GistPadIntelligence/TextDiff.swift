@@ -2,7 +2,7 @@ import Foundation
 import NaturalLanguage
 import SwiftUI
 
-public struct NoteTextDiff: Sendable {
+public struct TextDiff: Sendable {
   public enum Kind: Sendable { case unchanged, removed, added }
 
   public struct Run: Sendable {
@@ -68,8 +68,8 @@ public struct NoteTextDiff: Sendable {
   }
 }
 
-enum NoteIntelligenceDiffText {
-  static func attributed(_ runs: [NoteTextDiff.Run]) -> AttributedString {
+enum DiffText {
+  static func attributed(_ runs: [TextDiff.Run]) -> AttributedString {
     var result = AttributedString()
     for run in runs {
       var text = AttributedString(run.text)

@@ -7,7 +7,7 @@ import Testing
 struct EditTests {
   @Test func aChangeAppliesOnlyWhereItsTextMatchesExactlyOnce() throws {
     let literal = note("same same cafe\u{301}")
-    let rejected = NoteProposal(
+    let rejected = Review(
       snapshot: literal,
       candidates: [change("same", "different"), change("absent", "present"), change("café", "x")])
     #expect(rejected.comments.map(\.rejection) == [.ambiguous, .notFound, .notFound])
@@ -15,16 +15,16 @@ struct EditTests {
     #expect(!rejected.canApply)
 
     let repeated = note("left same\nright same")
-    let disambiguated = NoteProposal(
+    let disambiguated = Review(
       snapshot: repeated,
       candidates: [
-        NoteReplacementCandidate(
+        ModelReplacement(
           quote: "same", replacement: "different", reason: "Clarify", before: "right ")
       ])
     #expect(try disambiguated.application(to: repeated).source == "left same\nright different")
 
     let overlap = note("abcdef safe")
-    let overlapping = NoteProposal(
+    let overlapping = Review(
       snapshot: overlap,
       candidates: [change("abcd", "one"), change("cdef", "two"), change("safe", "kept")])
     #expect(overlapping.comments.prefix(2).allSatisfy { $0.rejection == .overlapping })
@@ -33,7 +33,7 @@ struct EditTests {
 
   @Test func applyingKeepsEveryOtherByte() async throws {
     let mixed = note("👩🏽‍💻 bad\r\nSecond line\r\n")
-    let application = try NoteProposal(
+    let application = try Review(
       snapshot: mixed, candidates: [change("bad", "good"), change("Second line\r\n", "")]
     ).application(to: mixed)
     #expect(application.source == "👩🏽‍💻 good\r\n")
@@ -43,53 +43,53 @@ struct EditTests {
 
     let empty = note("")
     #expect(
-      try NoteProposal(snapshot: empty, candidates: [change("", "A new paragraph")])
+      try Review(snapshot: empty, candidates: [change("", "A new paragraph")])
         .application(to: empty).source == "A new paragraph")
     #expect(
-      !NoteProposal(snapshot: empty, candidates: [change("", "First"), change("", "Second")])
+      !Review(snapshot: empty, candidates: [change("", "First"), change("", "Second")])
         .canApply)
 
-    let fixture = NoteModelFixture()
+    let fixture = FixtureModel()
     fixture.changes = { _ in [.insertTask(listID: 1, text: "Next")] }
     let unterminated = request("# Today\n\n- [ ] First", .edit, "Add Next")
     #expect(
-      try await NoteIntelligenceEngine(backend: fixture).propose(unterminated)
+      try await Intelligence(backend: fixture).edit(unterminated)
         .application(to: unterminated.snapshot).source == "# Today\n\n- [ ] First\n- [ ] Next")
     fixture.changes = { _ in [.insertTask(listID: 0, text: "First")] }
     let blank = request("", .edit, "Add First")
     #expect(
-      try await NoteIntelligenceEngine(backend: fixture).propose(blank)
+      try await Intelligence(backend: fixture).edit(blank)
         .application(to: blank.snapshot).source == "- [ ] First\n")
   }
 
   @Test func aChangedFileRefusesTheApply() throws {
     let snapshot = note("cafe\u{301}")
-    let proposal = NoteProposal(snapshot: snapshot, candidates: [change(snapshot.source, "coffee")])
+    let review = Review(snapshot: snapshot, candidates: [change(snapshot.source, "coffee")])
     for changed in [
       snapshot.edited(to: snapshot.source),
-      NoteSnapshot(
-        documentID: "another", sessionID: snapshot.sessionID, generation: 0,
+      FileSnapshot(
+        fileID: "another", sessionID: snapshot.sessionID, generation: 0,
         source: snapshot.source),
-      NoteSnapshot(
-        documentID: snapshot.documentID, sessionID: UUID(), generation: 0,
+      FileSnapshot(
+        fileID: snapshot.fileID, sessionID: UUID(), generation: 0,
         source: snapshot.source),
-      NoteSnapshot(
-        documentID: snapshot.documentID, sessionID: snapshot.sessionID, generation: 0,
+      FileSnapshot(
+        fileID: snapshot.fileID, sessionID: snapshot.sessionID, generation: 0,
         source: "café"),
     ] {
-      #expect(throws: NoteIntelligenceError.self) { try proposal.application(to: changed) }
+      #expect(throws: IntelligenceError.self) { try review.application(to: changed) }
     }
   }
 
   @Test func aLongFileIsCoveredEndToEndWithoutSplittingATask() async throws {
     let prose = String(repeating: "# Section\nbad 👩🏽‍💻\r\n", count: 180)
-    let editor = NoteModelFixture()
+    let editor = FixtureModel()
     editor.contextSize = 1_536
     editor.changes = { pass in
       [.replace(change(pass.source, pass.source.replacingOccurrences(of: "bad", with: "good")))]
     }
     let fix = request(prose, .edit, "Fix bad")
-    let fixed = try await NoteIntelligenceEngine(backend: editor).propose(fix)
+    let fixed = try await Intelligence(backend: editor).edit(fix)
     #expect(editor.passes.count > 1)
     #expect(editor.passes.map(\.source).joined().utf8.elementsEqual(prose.utf8))
     #expect(
@@ -97,11 +97,11 @@ struct EditTests {
         == prose.replacingOccurrences(of: "bad", with: "good"))
 
     let list = (1...80).map { "- [ ] Task \($0) 👩🏽‍💻\r\n" }.joined()
-    let checker = NoteModelFixture()
+    let checker = FixtureModel()
     checker.contextSize = 512
     checker.changes = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
     let all = request(list, .edit, "Check off everything")
-    let checked = try await NoteIntelligenceEngine(backend: checker).propose(all)
+    let checked = try await Intelligence(backend: checker).edit(all)
     #expect(checker.passes.count > 1)
     #expect(checker.passes.flatMap(\.tasks).map(\.id) == Array(1...80))
     #expect(
@@ -117,36 +117,36 @@ struct EditTests {
         "- [ ] Recycle", "", "Keep  spacing.", ""].joined(separator: newline)
     let input = request(source, .edit, "Add a household task")
     #expect(input.snapshot.tasks.map(\.listID) == [1, 2, 2])
-    let fixture = NoteModelFixture()
-    let engine = NoteIntelligenceEngine(backend: fixture)
+    let fixture = FixtureModel()
+    let engine = Intelligence(backend: fixture)
     fixture.changes = { _ in [.insertTask(listID: 2, text: "Clean the kitchen")] }
     let recycle = "- [ ] Recycle" + newline
     #expect(
-      try await engine.propose(input).application(to: input.snapshot).source.utf8.elementsEqual(
+      try await engine.edit(input).application(to: input.snapshot).source.utf8.elementsEqual(
         source.replacingOccurrences(of: recycle, with: recycle + "- [ ] Clean the kitchen" + newline)
           .utf8))
     fixture.changes = { _ in [.deleteTasks(ids: [3])] }
     #expect(
-      try await engine.propose(input).application(to: input.snapshot).source.utf8.elementsEqual(
+      try await engine.edit(input).application(to: input.snapshot).source.utf8.elementsEqual(
         source.replacingOccurrences(of: recycle, with: "").utf8))
     for operation in [
-      NoteEditOperation.insertTask(listID: 99, text: "Next"),
+      ModelEdit.insertTask(listID: 99, text: "Next"),
       .insertTask(listID: 1, text: "Next\n- [ ] Injected"), .deleteTasks(ids: [99]),
     ] {
       fixture.changes = { _ in [operation] }
-      await #expect(throws: NoteIntelligenceError.invalidEdit) {
-        try await engine.propose(input)
+      await #expect(throws: IntelligenceError.invalidEdit) {
+        try await engine.edit(input)
       }
     }
   }
 
   @Test func editChecksUnchecksAndCompletesTheRightTasks() async throws {
-    let fixture = NoteModelFixture()
-    let engine = NoteIntelligenceEngine(backend: fixture)
+    let fixture = FixtureModel()
+    let engine = Intelligence(backend: fixture)
     fixture.changes = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
     let daily = request("## 📆 2026-10-24\n\n- [ ]", .edit, "mark everything complete")
     #expect(
-      try await engine.propose(daily).application(to: daily.snapshot).source
+      try await engine.edit(daily).application(to: daily.snapshot).source
         == "## 📆 2026-10-24\n\n- [x]")
     let protected =
       "---\r\nexample: '- [ ] protected'\r\n---\r\n# Today\r\n\r\n- [ ] Read café\r\n"
@@ -155,7 +155,7 @@ struct EditTests {
     let everything = request(protected, .edit, "すべてのタスクを完了にして")
     #expect(everything.snapshot.tasks.map(\.isComplete) == [false, true, false, false])
     #expect(
-      try await engine.propose(everything).application(to: everything.snapshot).source
+      try await engine.edit(everything).application(to: everything.snapshot).source
         .utf8.elementsEqual(
           protected.replacingOccurrences(of: "- [ ] Read", with: "- [x] Read")
             .replacingOccurrences(of: "> - [ ] A", with: "> - [x] A")
@@ -165,17 +165,17 @@ struct EditTests {
     fixture.changes = { _ in [.setTaskStates(ids: [1, 2], isComplete: true)] }
     let subset = request(source, .edit, "mark the first two done")
     #expect(
-      try await engine.propose(subset).application(to: subset.snapshot).source
+      try await engine.edit(subset).application(to: subset.snapshot).source
         == source.replacingOccurrences(of: "[ ] Read", with: "[x] Read"))
     fixture.changes = { _ in [.setTaskStates(ids: nil, isComplete: false)] }
     let uncheck = request(source, .edit, "uncheck all")
     #expect(
-      try await engine.propose(uncheck).application(to: uncheck.snapshot).source
+      try await engine.edit(uncheck).application(to: uncheck.snapshot).source
         == source.replacingOccurrences(of: "[X]", with: "[ ]"))
     for ids in [[99], [1, 1], []] {
       fixture.changes = { _ in [.setTaskStates(ids: ids, isComplete: true)] }
-      await #expect(throws: NoteIntelligenceError.invalidResponse) {
-        try await engine.propose(request(source, .edit, "Complete it"))
+      await #expect(throws: IntelligenceError.invalidResponse) {
+        try await engine.edit(request(source, .edit, "Complete it"))
       }
     }
   }
@@ -195,7 +195,7 @@ struct EditTests {
   func theDiffMarksOnlyTheChangedWordsAndKeepsLiteralBytes(
     before: String, after: String, removed: String?, added: String?
   ) {
-    let diff = NoteTextDiff(before: before, after: after)
+    let diff = TextDiff(before: before, after: after)
     if let removed {
       #expect(
         diff.before.filter { $0.kind == .removed }.map(\.text).joined().utf8
@@ -211,7 +211,7 @@ struct EditTests {
     for (source, runs) in [(before, diff.before), (after, diff.after)] {
       #expect(runs.map(\.text).joined().utf8.elementsEqual(source.utf8))
       #expect(
-        String(NoteIntelligenceDiffText.attributed(runs).characters).utf8
+        String(DiffText.attributed(runs).characters).utf8
           .elementsEqual(source.utf8))
       var boundaries: Set<Int> = [0]
       var offset = 0
