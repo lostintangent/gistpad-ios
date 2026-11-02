@@ -96,18 +96,18 @@ extension DraftStore {
     }
 
     /// Saves GitHub's fresh lists, which are the authority on what exists. A clean phone copy of a gist
-    /// that's no longer listed goes with it, unless it's open in `keeping`, while one holding unpublished
-    /// text stays as a recovery copy.
+    /// that's no longer listed goes with it, unless its gist is open (`keeping` holds gist IDs), while one
+    /// holding unpublished text stays as a recovery copy.
     public func cacheLibrary(
         owned: [Gist], starred: [Gist], preferences: Preferences,
-        accountID: UUID, cachedAt: Date = .now, keeping: Set<UUID> = []
+        accountID: UUID, cachedAt: Date = .now, keeping: Set<String> = []
     ) throws {
         let previous = try cachedLibrary(accountID: accountID)
         let ids = Set(owned.map(\.id) + starred.map(\.id))
         let gone = try modelContext.fetch(FetchDescriptor<StoredDraft>(
             predicate: #Predicate { $0.accountID == accountID }
         )).filter {
-            guard let gistID = $0.gistID, !keeping.contains($0.id) else { return false }
+            guard let gistID = $0.gistID, !keeping.contains(gistID) else { return false }
             return !ids.contains(gistID) && $0.attemptedGeneration == nil && sourceEqual($0.text, $0.baseContent)
         }
         try delete(gone)

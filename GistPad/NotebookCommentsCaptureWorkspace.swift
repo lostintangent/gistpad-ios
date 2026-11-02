@@ -377,7 +377,7 @@ actor NotebookCommentsCaptureProvider: NotebookProviding, NotebookCommentProvidi
     .init(library: cache, drafts: try await store?.drafts(accountID: accountID) ?? [])
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>) {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<String>) {
     cache = .init(
       accountID: account.id, owned: owned, starred: starred, preferences: account.preferences)
   }

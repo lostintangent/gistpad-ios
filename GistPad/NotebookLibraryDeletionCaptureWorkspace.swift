@@ -139,7 +139,7 @@ actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding 
     return .init(library: cache, drafts: try await store?.drafts(accountID: accountID) ?? [])
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>) async throws {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<String>) async throws {
     try await draftStore().cacheLibrary(
       owned: owned, starred: starred, preferences: account.preferences, accountID: account.id,
       keeping: keeping)

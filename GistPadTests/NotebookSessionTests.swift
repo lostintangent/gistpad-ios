@@ -443,7 +443,7 @@ struct NotebookSessionTests {
     let (controller, provider) = try await makeController()
     edit(controller, to: "A local edit")
     #expect(await controller.waitForLocalSave())
-    await provider.rejectPublication()
+    await provider.failPublication(with: .failed(.readOnly))
     await controller.publish()
     guard case .publicationBlocked = controller.saveState else {
       Issue.record("Lost ownership must not become a retryable network failure.")
@@ -560,8 +560,7 @@ struct NotebookSessionTests {
   }
 
   @Test func keepingMyReviewedDraftDoesNotCreateAFakeGenerationOrUndo() async throws {
-    let (controller, provider) = try await makeController(generation: 1, autosave: true)
-    #expect(controller.document.chrome.isAutoSaveEnabled)
+    let (controller, provider) = try await makeController(generation: 1)
     _ = try await provider.introduceConflict(remote: "From GitHub")
     try await controller.refreshMetadata()
     let window = try EditorContinuityTests().host(controller.session)
@@ -582,14 +581,12 @@ struct NotebookSessionTests {
     #expect(controller.session.generation == 1)
     #expect(!undo.canUndo)
     #expect(controller.saveState == .savedLocally)
-    #expect(!controller.document.chrome.isAutoSaveEnabled)
     #expect(controller.saveState.canPublish)
     #expect(await provider.publishCount == 0)
   }
 
   @Test func adoptingAReviewedVersionIsOneRecoverableLocalUndo() async throws {
-    let (controller, provider) = try await makeController(generation: 1, autosave: true)
-    #expect(controller.document.chrome.isAutoSaveEnabled)
+    let (controller, provider) = try await makeController(generation: 1)
     _ = try await provider.introduceConflict(remote: "From GitHub 日本語")
     try await controller.refreshMetadata()
     let window = try EditorContinuityTests().host(controller.session)
@@ -607,7 +604,6 @@ struct NotebookSessionTests {
     }
     #expect(controller.session.text == "From GitHub 日本語")
     #expect(controller.saveState == .savedLocally)
-    #expect(!controller.document.chrome.isAutoSaveEnabled)
     #expect(controller.saveState.canPublish)
     #expect(await provider.publishCount == 0)
     controller.session.textView.undoManager?.undo()
@@ -744,7 +740,6 @@ private actor SessionNotebookProvider: NotebookProviding {
   private(set) var publishCount = 0
   private(set) var publicationReasons: [PublishReason] = []
   private var persistenceFails = false
-  private var publicationRejected = false
   private var publicationFailure: PublishState?
   private var remoteContent: String? = "Base"
   private var publishing: CheckedContinuation<Void, Never>?
@@ -801,7 +796,7 @@ private actor SessionNotebookProvider: NotebookProviding {
       library: try await store.cachedLibrary(accountID: accountID),
       drafts: try await store.drafts(accountID: accountID))
   }
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>) async throws {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<String>) async throws {
     try await store.cacheLibrary(
       owned: owned, starred: starred, preferences: account.preferences, accountID: account.id,
       keeping: keeping)
@@ -877,7 +872,6 @@ private actor SessionNotebookProvider: NotebookProviding {
     if reason != .manual, !(await shouldPublish()) { throw CancellationError() }
     publishCount += 1
     publicationReasons.append(reason)
-    if publicationRejected { throw DraftError.readOnly }
     if let publicationFailure {
       try await store.setState(publicationFailure, id: draftID, accountID: accountID)
       throw URLError(.timedOut)
@@ -919,7 +913,6 @@ private actor SessionNotebookProvider: NotebookProviding {
   }
 
   func failPersistence() { persistenceFails = true }
-  func rejectPublication() { publicationRejected = true }
   func failPublication(with state: PublishState) { publicationFailure = state }
   func introduceConflict(remote: String?) async throws -> DraftSnapshot {
     let current = try await snapshot()

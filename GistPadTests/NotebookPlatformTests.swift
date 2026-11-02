@@ -274,7 +274,7 @@ private actor PlatformNotebookProvider: NotebookProviding {
       library: try await store.cachedLibrary(accountID: accountID),
       drafts: try await store.drafts(accountID: accountID))
   }
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>) async throws {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<String>) async throws {
     try await store.cacheLibrary(
       owned: owned, starred: starred, preferences: account.preferences, accountID: account.id,
       keeping: keeping)

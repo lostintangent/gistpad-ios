@@ -402,7 +402,7 @@ struct NotebookModelTests {
     #expect(model.library.snapshot.notes.allSatisfy { $0.id != draft.id.uuidString })
   }
 
-  @Test func cleanOrphansAreRemovedOnlyAfterAConfirmedRemoteAbsence() async throws {
+  @Test func aRefreshRemovesCleanCopiesOfGistsGitHubNoLongerListsButKeepsEdits() async throws {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     await provider.failToday(true)
     let clean = try await provider.stageExistingDraft(gistID: "gone", text: "Base")
@@ -416,15 +416,6 @@ struct NotebookModelTests {
     #expect(model.localDrafts.contains { $0.id == dirty.id })
     #expect(await provider.deletedIDs.isEmpty)
     #expect(try selections.selection(accountID: fixtureAccount.id) == nil)
-
-    let online = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "existing", title: "Still on GitHub")])
-    await online.failToday(true)
-    let unlisted = try await online.stageExistingDraft(gistID: "existing", text: "Base")
-    await online.setListResponses(owned: [], starred: [])
-    let unlistedModel = NotebookModel(provider: online)
-    await unlistedModel.start()
-    #expect(unlistedModel.localDrafts.contains { $0.id == unlisted.id })
 
     let offline = StubNotebookProvider(account: fixtureAccount, gists: [])
     await offline.failToday(true)
@@ -451,17 +442,17 @@ struct NotebookModelTests {
     #expect(model.loadedDocument?.id == document.id)
   }
 
-  @Test func openingALocalCopyWhileItsMissingGistReadIsPendingCancelsAutomaticDiscard() async throws {
+  @Test func openingALocalCopyWhileTheLibraryLoadsKeepsIt() async throws {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     await provider.failToday(true)
     let model = NotebookModel(provider: provider)
     await model.start()
     let draft = try await provider.stageExistingDraft(gistID: "gone", text: "Base")
-    await provider.holdRead(id: "gone")
+    await provider.holdLibraryRead()
     let refresh = Task { await model.refresh() }
-    await provider.waitForHeldRead()
+    await provider.waitForHeldLibraryRead()
     await model.openLocalDraft(id: draft.id)
-    await provider.releaseRead()
+    await provider.releaseLibraryRead()
     await refresh.value
     #expect(model.loadedDocument?.draft?.id == draft.id)
     #expect(model.localDrafts.contains { $0.id == draft.id })
@@ -3248,7 +3239,12 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
     let drafts = try await store?.drafts(accountID: accountID) ?? []
     return NotebookLocalState(library: cached, drafts: drafts)
   }
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>) {
+  func cacheLibrary(
+    owned: [Gist], starred: [Gist], account: Account, keeping: Set<String>
+  ) async throws {
+    try await store?.cacheLibrary(
+      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id,
+      keeping: keeping)
     cached = CachedLibrarySnapshot(
       accountID: account.id, owned: cachesContent ? owned : owned.map(metadataOnly),
       starred: cachesContent ? starred : starred.map(metadataOnly),

@@ -41,7 +41,7 @@ protocol NotebookProviding: Sendable {
     expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
   ) async throws -> DraftSnapshot
   func localState(accountID: UUID) async throws -> NotebookLocalState
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>)
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<String>)
     async throws
   func createDraft(accountID: UUID) async throws -> DraftSnapshot
   func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool
@@ -175,7 +175,7 @@ actor LiveNotebookProvider: NotebookProviding {
     return NotebookLocalState(library: library, drafts: localDrafts)
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<UUID>)
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<String>)
     async throws
   {
     try await drafts.cacheLibrary(
@@ -825,7 +825,7 @@ final class NotebookModel {
       let (owned, starred) = try await (ownedGists, starredGists)
       guard request == libraryRequest, self.account?.id == account.id else { return }
       try await provider.cacheLibrary(
-        owned: owned, starred: starred, account: refreshed, keeping: presentedDraftIDs)
+        owned: owned, starred: starred, account: refreshed, keeping: openGistIDs)
       guard request == libraryRequest, self.account?.id == account.id else { return }
       self.account = refreshed
       library.loadState = .ready
@@ -848,10 +848,9 @@ final class NotebookModel {
   }
 
   /// Drafts a refresh keeps even when GitHub no longer lists their gist, because they're on screen.
-  private var presentedDraftIDs: Set<UUID> {
-    let gistID = loadedDocument?.selection.gistID
-    let shown: Set<UUID?> = [loadedDocument?.draft?.id, presentedDocument?.draft?.id]
-    return Set(localDrafts.filter { shown.contains($0.id) || (gistID != nil && $0.gistID == gistID) }.map(\.id))
+  /// An open editor may hold a copy `localDrafts` hasn't seen yet, so a refresh keeps by gist.
+  private var openGistIDs: Set<String> {
+    Set([loadedDocument?.selection.gistID, presentedDocument?.selection.gistID].compactMap { $0 })
   }
 
   func open(gistID: String, filename: String? = nil, rowID: String? = nil) async {
@@ -1234,7 +1233,16 @@ final class NotebookModel {
       if try await discardBlankDraft(draft) { removed.insert(draft.id) }
     }
     guard account?.id == accountID, pendingAccount == nil else { return }
-    localDrafts = local.drafts.filter { $0.accountID == accountID && !removed.contains($0.id) }
+    let drafts = local.drafts.filter { $0.accountID == accountID && !removed.contains($0.id) }
+    // A refresh drops clean copies of gists GitHub no longer lists, so don't reopen them at launch.
+    let vanished = localDrafts.filter { old in !drafts.contains { $0.id == old.id } }
+    if let selection = try? selections.selection(accountID: accountID), vanished.contains(where: {
+      $0.id == selection.draftID
+        || ($0.gistID != nil && $0.gistID == selection.gistID && $0.filename == selection.filename)
+    }) {
+      selections.clear(accountID: accountID)
+    }
+    localDrafts = drafts
     pruneNoteFailures()
     cachedLibrary = local.library
     projectLibrary()
