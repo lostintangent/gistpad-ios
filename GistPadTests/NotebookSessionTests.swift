@@ -171,72 +171,9 @@ struct NotebookSessionTests {
     #expect(await provider.publishCount == 0)
   }
 
-  @Test func cachedHomeRefreshRetriesAConnectionBlipWithoutAnAttentionState() async throws {
-    let (model, provider) = try makeRefreshModel()
-    await model.start()
-    #expect(model.cachedLibrary != nil)
-    let initialRequests = await provider.refreshCount
-    await provider.failNextRefresh(with: URLError(.networkConnectionLost))
-    await model.refresh()
-    #expect(await provider.refreshCount == initialRequests + 2)
-    #expect(model.library.loadState == .ready)
-    #expect(model.library.gitHubStatus == .idle)
-    #expect(model.remoteRefreshProblem == nil)
-  }
-
-  @Test func homeKeepsItsProblemDuringRetryAndClearsOnlyAfterRecovery() async throws {
-    let (model, provider) = try makeRefreshModel()
-    await model.start()
-    for _ in 0..<3 { await provider.failNextRefresh(with: URLError(.notConnectedToInternet)) }
-    await model.refresh()
-    let problem = try #require(model.remoteRefreshProblem)
-    guard case .problem(let status) = model.library.gitHubStatus else {
-      Issue.record("A persistent cached refresh problem needs the shared attention control.")
-      return
-    }
-    #expect(status.message == problem.message)
-    #expect(!status.isRecovering)
-    await provider.holdNextRefresh()
-    let retry = Task { await model.refresh() }
-    await provider.waitForRefresh()
-    #expect(model.isRefreshingRemote)
-    #expect(model.remoteRefreshProblem == problem)
-    guard case .problem(let recovering) = model.library.gitHubStatus else {
-      await provider.releaseRefresh()
-      await retry.value
-      Issue.record("Retry must not replace the unresolved problem with a spinner.")
-      return
-    }
-    #expect(recovering.isRecovering)
-    await provider.releaseRefresh()
-    await retry.value
-    #expect(model.library.loadState == .ready)
-    #expect(model.library.gitHubStatus == .idle)
-    #expect(model.remoteRefreshProblem == nil)
-  }
-
-  @Test func cancellingAHomeRefreshRestoresItsCachedStateWithoutWarning() async throws {
-    let (model, provider) = try makeRefreshModel()
-    await model.start()
-    let initialRequests = await provider.refreshCount
-    await provider.holdNextRefresh()
-    await provider.failNextRefresh(
-      with: ProviderReadFailure(underlying: URLError(.cancelled)))
-    let refresh = Task { await model.refresh() }
-    await provider.waitForRefresh()
-    refresh.cancel()
-    await provider.releaseRefresh()
-    await refresh.value
-    #expect(await provider.refreshCount == initialRequests + 1)
-    #expect(model.library.loadState == .ready)
-    #expect(model.library.gitHubStatus == .idle)
-    #expect(model.remoteRefreshProblem == nil)
-    #expect(!model.isRefreshingRemote)
-  }
-
   @Test func firstLoadWithoutCacheKeepsItsExplicitFailureSurface() async throws {
     let (model, provider) = try makeRefreshModel()
-    for _ in 0..<3 { await provider.failNextRefresh(with: URLError(.notConnectedToInternet)) }
+    for _ in 0..<3 { await provider.failNextGists(with: URLError(.notConnectedToInternet)) }
     await model.start()
     #expect(model.cachedLibrary == nil)
     guard case .failed = model.library.loadState else {
@@ -831,10 +768,6 @@ struct NotebookSessionTests {
     #expect(controller.saveState == .savedLocally)
     #expect(!controller.document.chrome.isAutoSaveEnabled)
     #expect(controller.saveState.canPublish)
-    #expect(
-      try await provider.store.recoveries(
-        id: controller.draft.id, accountID: controller.draft.accountID
-      ).count == 1)
     #expect(await provider.publishCount == 0)
   }
 
@@ -876,7 +809,7 @@ struct NotebookSessionTests {
     #expect(await controller.waitForLocalSave())
     #expect(!old.matches(controller.draft))
     await #expect(throws: NotebookActionError.staleReview) {
-      try await controller.applyReview(old, text: "From GitHub")
+      try await controller.applyReview(old, text: "From GitHub", publishes: false)
     }
     #expect(controller.session.text == "A newer local choice")
     #expect(controller.draft.state != .savedToGitHub)
@@ -954,7 +887,7 @@ struct NotebookSessionTests {
     if uncertainPublication || uncertainCreation {
       try await store.beginAttempt(
         id: draft.id, accountID: accountID, content: draft.text,
-        generation: draft.generation, remote: draft.baseContent)
+        generation: draft.generation)
       try await store.setState(
         .failed(uncertainCreation ? .creationUncertain : .publicationUncertain),
         id: draft.id, accountID: accountID)
@@ -1029,11 +962,7 @@ private actor SessionNotebookProvider: NotebookProviding {
   private var inspectionObserver: CheckedContinuation<Void, Never>?
   private var pausesInspection = false
   private var returnsDraftInsteadOfReview = false
-  private var refreshFailures: [any Error] = []
-  private(set) var refreshCount = 0
-  private var refreshGate: CheckedContinuation<Void, Never>?
-  private var refreshObserver: CheckedContinuation<Void, Never>?
-  private var pausesRefresh = false
+  private var gistFailures: [any Error] = []
 
   init(
     store: DraftStore, id: UUID, accountID: UUID, autosave: Bool? = nil,
@@ -1054,20 +983,11 @@ private actor SessionNotebookProvider: NotebookProviding {
   }
   func signIn() throws -> NotebookAccount { throw AccountError.signedOut }
   func refreshAccount() async throws -> NotebookAccount {
-    refreshCount += 1
-    if pausesRefresh {
-      pausesRefresh = false
-      await withCheckedContinuation {
-        refreshGate = $0
-        refreshObserver?.resume()
-        refreshObserver = nil
-      }
-    }
-    if !refreshFailures.isEmpty { throw refreshFailures.removeFirst() }
     guard let account = cachedAccount() else { throw AccountError.signedOut }
     return account
   }
-  func gists(accountID: UUID) -> [Gist] {
+  func gists(accountID: UUID) throws -> [Gist] {
+    if !gistFailures.isEmpty { throw gistFailures.removeFirst() }
     guard let publishedGist, publishedGist.owner?.id == 1 else { return [] }
     return [publishedGist]
   }
@@ -1111,8 +1031,9 @@ private actor SessionNotebookProvider: NotebookProviding {
         id: id, accountID: accountID, expectedGeneration: generation)
       return .discardedDraft(id)
     }
-    if case .inspectRemote(let id, let generation) = action {
-      inspectionGenerations.append(generation)
+    if case .fetchRemote(let id) = action {
+      let draft = try await store.draft(id: id, accountID: accountID)
+      inspectionGenerations.append(draft.generation)
       if pausesInspection {
         pausesInspection = false
         await withCheckedContinuation {
@@ -1122,11 +1043,22 @@ private actor SessionNotebookProvider: NotebookProviding {
         }
       }
       if !inspectionFailures.isEmpty { throw inspectionFailures.removeFirst() }
+      return .remoteRead(draft, try fixtureRemoteFile(content: remoteContent))
+    }
+    if case .recordRemote(let id, let generation, let remote, let revision) = action {
       if returnsDraftInsteadOfReview { return .draft(try await snapshot()) }
       return .review(
         try await store.inspectRemoteChange(
           id: id, accountID: accountID, expectedGeneration: generation,
-          remote: remoteContent, revision: "remote"))
+          remote: remote, revision: revision))
+    }
+    if case .adoptRemote(let id, let generation, let remote, let revision) = action {
+      guard
+        case .refreshed(let adopted) = try await store.refreshCleanDraft(
+          id: id, accountID: accountID, expectedGeneration: generation,
+          content: remote, revision: revision)
+      else { throw NotebookActionError.staleReview }
+      return .review(adopted)
     }
     throw DraftError.notFound
   }
@@ -1142,16 +1074,7 @@ private actor SessionNotebookProvider: NotebookProviding {
     inspectionGate?.resume()
     inspectionGate = nil
   }
-  func failNextRefresh(with error: any Error) { refreshFailures.append(error) }
-  func holdNextRefresh() { pausesRefresh = true }
-  func waitForRefresh() async {
-    if refreshGate != nil { return }
-    await withCheckedContinuation { refreshObserver = $0 }
-  }
-  func releaseRefresh() {
-    refreshGate?.resume()
-    refreshGate = nil
-  }
+  func failNextGists(with error: any Error) { gistFailures.append(error) }
   func setRemoteContent(_ content: String?) { remoteContent = content }
 
   func persist(
@@ -1182,7 +1105,7 @@ private actor SessionNotebookProvider: NotebookProviding {
     let sent = try await snapshot()
     try await store.beginAttempt(
       id: draftID, accountID: accountID, content: sent.text,
-      generation: sent.generation, remote: sent.baseContent)
+      generation: sent.generation)
     if reason == .manual {
       await pausePublication()
     }
@@ -1224,9 +1147,25 @@ private actor SessionNotebookProvider: NotebookProviding {
       .conflict(
         .init(
           generation: current.generation, base: current.baseContent, local: current.text,
-          remote: remote, remoteRevision: "2", suggestedMerge: nil)), id: id, accountID: accountID)
+          remote: remote, remoteRevision: "2")), id: id, accountID: accountID)
     return try await snapshot()
   }
+}
+
+private func fixtureRemoteFile(content: String?) throws -> RemoteFile {
+  let decoder = JSONDecoder()
+  decoder.dateDecodingStrategy = .iso8601
+  let gist = try decoder.decode(
+    Gist.self,
+    from: Data(
+      """
+      {"id":"synthetic","description":"Session fixture","public":false,
+      "created_at":"2026-10-23T00:00:00Z","updated_at":"2026-10-23T00:00:00Z",
+      "owner":{"id":1,"login":"fixture"},
+      "files":{"README.md":{"filename":"README.md","content":"Base"}},
+      "history":[{"version":"remote"}]}
+      """.utf8))
+  return RemoteFile(gist: gist, content: content)
 }
 
 private struct ProviderReadFailure: CustomNSError {

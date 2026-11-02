@@ -18,7 +18,6 @@ struct NotebookConflictReview: View {
   @State private var remoteChanged = false
   @State private var localChanges: [NotebookDiffLine] = []
   @State private var remoteChanges: [NotebookDiffLine] = []
-  @State private var combinedChanges: [NotebookDiffLine] = []
   @State private var isComparing = true
   @Environment(\.dismiss) private var dismiss
 
@@ -36,7 +35,7 @@ struct NotebookConflictReview: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
           Text(verbatim: review.draft.filename).font(.headline)
-          Text("Your draft is saved on this iPhone. Nothing will be published from this review.")
+          Text("Your draft is saved on this iPhone.")
           if isStale {
             Label(
               "Your draft changed while this review was open. Review the latest draft.",
@@ -67,22 +66,12 @@ struct NotebookConflictReview: View {
               ProgressView("Comparing source")
             } else {
               changes(title: String(localized: "On this iPhone"), lines: localChanges)
-              if review.conflict.remote != nil {
-                changes(title: String(localized: "On GitHub"), lines: remoteChanges)
-              } else {
-                Label(
-                  "This file is missing from the inspected GitHub gist.",
-                  systemImage: "doc.badge.ellipsis")
-              }
+              changes(title: String(localized: "On GitHub"), lines: remoteChanges)
             }
           case .local:
             source(review.conflict.local)
           case .remote:
-            if let remote = review.conflict.remote {
-              source(remote)
-            } else {
-              Text("This file is missing from the inspected GitHub gist. It is not an empty file.")
-            }
+            source(review.conflict.remote ?? "")
           }
           DisclosureGroup("Show original") {
             if let base = review.conflict.base {
@@ -92,60 +81,23 @@ struct NotebookConflictReview: View {
             }
           }
           .tint(.primary)
-          if let combined = review.conflict.suggestedMerge {
-            DisclosureGroup("Review combined version") {
-              VStack(alignment: .leading, spacing: 16) {
-                Text(
-                  "This is a deterministic combination of nonoverlapping edits, not an AI rewrite. Review it before applying."
-                )
-                source(combined)
-                changes(title: String(localized: "Changes to My Draft"), lines: combinedChanges)
-                Button {
-                  apply(combined)
-                } label: {
-                  Text("Use combined draft")
-                    .foregroundStyle(Color(uiColor: .systemBackground))
-                }
-                  .buttonStyle(.borderedProminent)
-                  .tint(Color(uiColor: .label))
-                  .disabled(isStale || !controller.canMutate)
-              }
-            }
-            .tint(.primary)
-          } else if review.conflict.remote != nil {
+          if review.conflict.remote != nil {
             Text(
               "Both versions changed the same passage. Choose a version, or return to your draft to combine the changes yourself."
             )
           }
           VStack(alignment: .leading, spacing: 12) {
-            if review.conflict.remote != nil {
-              Button {
-                apply(review.conflict.local)
-              } label: {
-                Text("Use My Draft")
-                  .foregroundStyle(Color(uiColor: .systemBackground))
-              }
-                .buttonStyle(.borderedProminent)
-                .tint(Color(uiColor: .label))
-              Text("A later Save to GitHub replaces the inspected remote file with this draft.")
-                .font(.subheadline)
-              Button("Use GitHub Version") { isConfirmingRemote = true }
-                .buttonStyle(.bordered)
-                .tint(.primary)
-            } else {
-              Button {
-                dismiss()
-              } label: {
-                Text("Keep Local Draft")
-                  .foregroundStyle(Color(uiColor: .systemBackground))
-              }
-                .buttonStyle(.borderedProminent)
-                .tint(Color(uiColor: .label))
-              Text(
-                "The conflict stays unresolved. Nothing will recreate the missing file automatically."
-              )
-              .font(.subheadline)
+            Button {
+              apply(review.conflict.local, publishes: true)
+            } label: {
+              Text("Keep Mine")
+                .foregroundStyle(Color(uiColor: .systemBackground))
             }
+            .buttonStyle(.borderedProminent)
+            .tint(Color(uiColor: .label))
+            Button("Use GitHub's") { isConfirmingRemote = true }
+              .buttonStyle(.bordered)
+              .tint(.primary)
           }
           .disabled(isStale || !controller.canMutate)
           if !controller.canMutate {
@@ -176,13 +128,13 @@ struct NotebookConflictReview: View {
         "Replace your local draft with the GitHub version?",
         isPresented: $isConfirmingRemote, titleVisibility: .visible
       ) {
-        if let remote = review.conflict.remote {
-          Button("Use GitHub Version", role: .destructive) { apply(remote) }
+        Button("Use GitHub's", role: .destructive) {
+          apply(review.conflict.remote ?? "", publishes: false)
         }
         Button("Cancel", role: .cancel) {}
       } message: {
         Text(
-          "A recovery copy is saved on this iPhone. The replacement is one undoable local edit and does not publish."
+          "Replace your text with GitHub's version. You can undo this."
         )
       }
       .task(id: review) {
@@ -191,15 +143,12 @@ struct NotebookConflictReview: View {
         let diffs = await Task.detached(priority: .userInitiated) {
           (
             NotebookDiffLine.changes(from: conflict.base, to: conflict.local),
-            conflict.remote.map { NotebookDiffLine.changes(from: conflict.base, to: $0) } ?? [],
-            conflict.suggestedMerge.map { NotebookDiffLine.changes(from: conflict.local, to: $0) }
-              ?? []
+            NotebookDiffLine.changes(from: conflict.base, to: conflict.remote ?? "")
           )
         }.value
         guard !Task.isCancelled else { return }
         localChanges = diffs.0
         remoteChanges = diffs.1
-        combinedChanges = diffs.2
         isComparing = false
       }
     }
@@ -239,13 +188,13 @@ struct NotebookConflictReview: View {
     }
   }
 
-  private func apply(_ text: String) {
+  private func apply(_ text: String, publishes: Bool) {
     guard !isApplying else { return }
     isApplying = true
     Task {
       defer { isApplying = false }
       do {
-        try await controller.applyReview(review, text: text)
+        try await controller.applyReview(review, text: text, publishes: publishes)
         dismiss()
       } catch {
         self.error = NotebookModel.message(for: error)
@@ -287,13 +236,8 @@ struct NotebookDiffLine: Identifiable, Sendable {
   let text: String
 
   static func changes(from base: String?, to text: String) -> [NotebookDiffLine] {
-    let original =
-      base.map {
-        $0.split(separator: "\n", omittingEmptySubsequences: false).map { Data($0.utf8) }
-      } ?? []
-    let updated = text.split(separator: "\n", omittingEmptySubsequences: false).map {
-      Data($0.utf8)
-    }
+    let original = lines(in: base ?? "")
+    let updated = lines(in: text)
     return updated.difference(from: original).map { change in
       switch change {
       case .insert(let offset, let element, _):
@@ -307,5 +251,10 @@ struct NotebookDiffLine: Identifiable, Sendable {
       if $0.isAddition != $1.isAddition { return !$0.isAddition }
       return $0.offset < $1.offset
     }
+  }
+
+  private static func lines(in text: String) -> [Data] {
+    guard !text.isEmpty else { return [] }
+    return text.split(separator: "\n", omittingEmptySubsequences: false).map { Data($0.utf8) }
   }
 }

@@ -16,18 +16,6 @@ public struct DraftConflict: Codable, Equatable, Sendable {
     public let local: String
     public let remote: String?
     public let remoteRevision: String?
-    public let suggestedMerge: String?
-}
-
-extension DraftConflict {
-    init(generation: UInt64, base: String?, local: String, remote: String?, remoteRevision: String?) {
-        self.init(
-            generation: generation, base: base, local: local, remote: remote,
-            remoteRevision: remoteRevision,
-            suggestedMerge: base.flatMap { base in
-                remote.flatMap { ThreeWayMerge.merge(base: base, local: local, remote: $0) }
-            })
-    }
 }
 
 public enum SaveState: Codable, Equatable, Sendable {
@@ -66,16 +54,19 @@ public struct DraftSnapshot: Equatable, Sendable, Identifiable {
         }
         return gistID == nil && description.isEmpty && text.allSatisfy(\.isWhitespace)
     }
-}
 
-public struct RecoverySnapshot: Equatable, Sendable, Identifiable {
-    public let id: UUID
-    public let createdAt: Date
-    public let base: String?
-    public let local: String
-    public let remote: String?
-    public let sent: String
-    public let generation: UInt64
+    /// Whether this note has text that GitHub doesn't have yet, including a new note that was never created.
+    public var hasUnpublishedEdits: Bool {
+        guard !isDiscardableBlank else { return false }
+        return baseContent == nil || !sourceEqual(text, baseContent)
+    }
+
+    /// Whether a clean, published note silently takes on `remote` instead of raising a conflict.
+    /// The store and the editor both use this, so they always agree on the outcome.
+    public func adoptsRemote(_ remote: String) -> Bool {
+        gistID != nil && attemptedGeneration == nil
+            && sourceEqual(text, baseContent) && !sourceEqual(baseContent, remote)
+    }
 }
 
 public enum DraftError: Error, Equatable, Sendable {
@@ -151,31 +142,6 @@ final class StoredDraft {
 }
 
 @Model
-final class StoredRecovery {
-    @Attribute(.unique) var id: UUID
-    var accountID: UUID
-    var draftID: UUID
-    var createdAt: Date
-    var base: String?
-    var local: String
-    var remote: String?
-    var sent: String
-    var generation: UInt64
-
-    init(draft: StoredDraft, sent: String, generation: UInt64, remote: String?) {
-        id = UUID()
-        accountID = draft.accountID
-        draftID = draft.id
-        createdAt = .now
-        base = draft.baseContent
-        local = draft.text
-        self.remote = remote
-        self.sent = sent
-        self.generation = generation
-    }
-}
-
-@Model
 final class StoredCommandReceipt {
     @Attribute(.unique) var id: UUID
     var payload: Data
@@ -209,7 +175,7 @@ public actor DraftStore {
 
     public static func open(url: URL? = nil, inMemory: Bool = false) throws -> DraftStore {
         let schema = Schema([
-            StoredDraft.self, StoredRecovery.self, StoredLibrary.self, StoredCommandReceipt.self, StoredImageUpload.self
+            StoredDraft.self, StoredLibrary.self, StoredCommandReceipt.self, StoredImageUpload.self
         ])
         let configuration: ModelConfiguration
         if let url {
@@ -272,13 +238,10 @@ public actor DraftStore {
         guard draft.generation == expectedGeneration, try snapshot(draft).isDiscardableBlank else {
             return false
         }
-        let hasRecovery = try modelContext.fetchCount(FetchDescriptor<StoredRecovery>(
-            predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }
-        )) > 0
         let hasImage = try modelContext.fetchCount(FetchDescriptor<StoredImageUpload>(
             predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }
         )) > 0
-        guard !hasRecovery, !hasImage else { return false }
+        guard !hasImage else { return false }
         modelContext.delete(draft)
         try commit()
         return true
@@ -319,9 +282,6 @@ public actor DraftStore {
             predicate: #Predicate { $0.accountID == accountID && $0.gistID == gistID }
         ))
         let removed = Set(candidates.map(\.id))
-        let recoveries = try modelContext.fetch(FetchDescriptor<StoredRecovery>(
-            predicate: #Predicate { $0.accountID == accountID }
-        )).filter { removed.contains($0.draftID) }
         let images = try modelContext.fetch(FetchDescriptor<StoredImageUpload>(
             predicate: #Predicate { $0.accountID == accountID }
         )).filter { $0.gistID == gistID || removed.contains($0.draftID) }
@@ -343,7 +303,6 @@ public actor DraftStore {
         } else {
             libraryPayload = nil
         }
-        for recovery in recoveries { modelContext.delete(recovery) }
         for image in images { modelContext.delete(image) }
         for receipt in receipts { modelContext.delete(receipt) }
         for draft in candidates { modelContext.delete(draft) }
@@ -361,9 +320,6 @@ public actor DraftStore {
             }
         ))
         let removed = Set(candidates.map(\.id))
-        let recoveries = try modelContext.fetch(FetchDescriptor<StoredRecovery>(
-            predicate: #Predicate { $0.accountID == accountID }
-        )).filter { removed.contains($0.draftID) }
         let images = try modelContext.fetch(FetchDescriptor<StoredImageUpload>(
             predicate: #Predicate { $0.accountID == accountID }
         )).filter { removed.contains($0.draftID) }
@@ -385,26 +341,12 @@ public actor DraftStore {
         } else {
             libraryPayload = nil
         }
-        for recovery in recoveries { modelContext.delete(recovery) }
         for image in images { modelContext.delete(image) }
         for receipt in receipts { modelContext.delete(receipt) }
         for draft in candidates { modelContext.delete(draft) }
         if let libraryPayload { library?.payload = libraryPayload }
         try commit()
         return DeletedGistDrafts(removedDraftIDs: removed)
-    }
-
-    public func recoveries(id: UUID, accountID: UUID) throws -> [RecoverySnapshot] {
-        _ = try find(id, accountID: accountID)
-        return try modelContext.fetch(FetchDescriptor<StoredRecovery>(
-            predicate: #Predicate { $0.accountID == accountID && $0.draftID == id },
-            sortBy: [SortDescriptor(\.createdAt)]
-        )).map {
-            RecoverySnapshot(
-                id: $0.id, createdAt: $0.createdAt, base: $0.base, local: $0.local,
-                remote: $0.remote, sent: $0.sent, generation: $0.generation
-            )
-        }
     }
 
     @discardableResult
@@ -428,14 +370,11 @@ public actor DraftStore {
                       return false
                   }) else { return false }
         }
-        let recoveries = try modelContext.fetch(FetchDescriptor<StoredRecovery>(
-            predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }))
         let receipts = try modelContext.fetch(FetchDescriptor<StoredCommandReceipt>()).filter {
             let command = try JSONDecoder().decode(SharedDraftCommand.self, from: $0.payload)
             return command.accountID == accountID && command.draftID == id
         }
         for image in images { modelContext.delete(image) }
-        for recovery in recoveries { modelContext.delete(recovery) }
         for receipt in receipts { modelContext.delete(receipt) }
         modelContext.delete(draft)
         try commit()
@@ -469,10 +408,17 @@ public actor DraftStore {
     ) throws -> DraftRefreshResult {
         let draft = try find(id, accountID: accountID)
         guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
-        guard draft.gistID != nil, draft.attemptedGeneration == nil,
-              sourceEqual(draft.text, draft.baseContent) else {
-            return .preservedLocalChanges(try snapshot(draft))
+        let current = try snapshot(draft)
+        guard current.gistID != nil, current.attemptedGeneration == nil,
+              sourceEqual(current.text, current.baseContent) else {
+            return .preservedLocalChanges(current)
         }
+        return try refreshClean(draft, content: content, revision: revision)
+    }
+
+    private func refreshClean(
+        _ draft: StoredDraft, content: String, revision: String?
+    ) throws -> DraftRefreshResult {
         let fresh = GistConventions.decodeContent(content)
         let changed = !sourceEqual(draft.text, fresh)
         if changed {
@@ -614,13 +560,10 @@ public actor DraftStore {
     }
 
     func beginAttempt(
-        id: UUID, accountID: UUID, content: String, generation: UInt64, remote: String?
+        id: UUID, accountID: UUID, content: String, generation: UInt64
     ) throws {
         let draft = try find(id, accountID: accountID)
         guard draft.attemptedGeneration == nil else { throw DraftError.publishInProgress }
-        modelContext.insert(StoredRecovery(
-            draft: draft, sent: content, generation: generation, remote: remote
-        ))
         draft.attemptedContent = content
         draft.attemptedGeneration = generation
         draft.stateData = try encode(.savingToGitHub(generation: generation))
@@ -675,8 +618,6 @@ public actor DraftStore {
     ) throws {
         let draft = try uncertainCreation(
             id: id, accountID: accountID, expectedGeneration: expectedGeneration)
-        let recoveries = try modelContext.fetch(FetchDescriptor<StoredRecovery>(
-            predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }))
         let images = try modelContext.fetch(FetchDescriptor<StoredImageUpload>(
             predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }))
         for image in images {
@@ -688,7 +629,6 @@ public actor DraftStore {
             let command = try JSONDecoder().decode(SharedDraftCommand.self, from: $0.payload)
             return command.accountID == accountID && command.draftID == id
         }
-        for recovery in recoveries { modelContext.delete(recovery) }
         for image in images { modelContext.delete(image) }
         for receipt in receipts { modelContext.delete(receipt) }
         modelContext.delete(draft)
@@ -725,8 +665,7 @@ public actor DraftStore {
               sourceEqual(conflict.base, expectedConflict.base),
               sourceEqual(conflict.local, expectedConflict.local),
               sourceEqual(conflict.remote, expectedConflict.remote),
-              sourceEqual(conflict.remoteRevision, expectedConflict.remoteRevision),
-              sourceEqual(conflict.suggestedMerge, expectedConflict.suggestedMerge) else {
+              sourceEqual(conflict.remoteRevision, expectedConflict.remoteRevision) else {
             throw DraftError.unresolvedConflict
         }
         draft.stateData = try encode(.conflict(DraftConflict(
@@ -754,6 +693,9 @@ public actor DraftStore {
                 revision: revision, generation: generation)
         }
         guard !sourceEqual(draft.baseContent, remote) else { return try snapshot(draft) }
+        if let remote, try snapshot(draft).adoptsRemote(remote) {
+            return try refreshClean(draft, content: remote, revision: revision).snapshot
+        }
         draft.stateData = try encode(.conflict(DraftConflict(
             generation: draft.generation, base: draft.baseContent, local: draft.text,
             remote: remote, remoteRevision: revision)))
@@ -773,9 +715,6 @@ public actor DraftStore {
         }
         guard case .conflict(let conflict) = try decode(draft.stateData),
               conflict.generation == expectedGeneration else { throw DraftError.unresolvedConflict }
-        modelContext.insert(StoredRecovery(
-            draft: draft, sent: text, generation: generation, remote: conflict.remote
-        ))
         draft.baseContent = conflict.remote
         draft.baseRevision = conflict.remoteRevision
         if !sourceEqual(draft.text, text) { draft.updatedAt = .now }
@@ -796,11 +735,6 @@ public actor DraftStore {
         return try snapshot(draft)
     }
 
-    public func hasUnsyncedWork(accountID: UUID) throws -> Bool {
-        try drafts(accountID: accountID).contains {
-            $0.gistID == nil || !sourceEqual($0.text, $0.baseContent) || $0.attemptedGeneration != nil
-        } || imageUploads(accountID: accountID).contains { !$0.isInserted }
-    }
 
     private func find(_ id: UUID, accountID: UUID) throws -> StoredDraft {
         guard let draft = try modelContext.fetch(FetchDescriptor<StoredDraft>(

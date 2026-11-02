@@ -112,7 +112,7 @@ actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding 
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [LibraryPublicationCaptureProtocol.self]
     let client = GitHubClient(session: URLSession(configuration: configuration)) { "synthetic" }
-    let saved = try await SyncCoordinator(client: client, store: store, mutationInterval: .zero)
+    let saved = try await SyncCoordinator(client: client, store: store)
       .publish(
         id: draftID, accountID: accountID, reason: reason,
         expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
@@ -182,10 +182,9 @@ actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding 
       try fixtureGists().contains(where: { $0.id == id })
     else { throw CaptureError.unsupported }
     deleted.insert(id)
-    return .deleted(
-      gistID: id,
-      drafts: try await draftStore().removeDraftsForDeletedGist(
-        gistID: id, accountID: accountID))
+    let drafts = try await draftStore().removeDraftsForDeletedGist(
+      gistID: id, accountID: accountID)
+    return .deleted(gistID: id, drafts: drafts)
   }
 
   func photoServices(accountID: UUID) async throws -> NotebookPhotoServices {

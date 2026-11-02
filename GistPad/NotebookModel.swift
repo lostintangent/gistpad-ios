@@ -1771,7 +1771,7 @@ final class NotebookModel {
       }
     case .deletedFile(let id, let filename, _):
       clearDeletedFile(gistID: id, filename: filename, accountID: account.id)
-    case .review:
+    case .review, .remoteRead:
       break
     case .discardedDraft(let id):
       clearDiscardedDraft(id, accountID: account.id)
@@ -2006,6 +2006,27 @@ final class NotebookModel {
       await search()
     }
     return saved
+  }
+
+  /// Publishes each note with unpublished edits, in order. `openEditorState` publishes a note that
+  /// has a live editor and returns its state, or returns nil for a closed note. The first offline
+  /// result stops the sweep, and the next launch or return to the app retries it.
+  func publishUnsyncedEdits(
+    accountID: UUID, openEditorState: (UUID) async -> SaveState?
+  ) async {
+    let ids = localDrafts.filter { $0.accountID == accountID && $0.hasUnpublishedEdits }.map(\.id)
+    for id in ids {
+      guard !Task.isCancelled else { break }
+      let state: SaveState?
+      if let open = await openEditorState(id) {
+        state = open
+      } else {
+        _ = try? await publish(draftID: id, accountID: accountID, reason: .background)
+        state = (try? await draftSnapshot(id: id, accountID: accountID))?.state
+      }
+      if state == .offline { break }
+    }
+    try? await reloadLocalState(accountID: accountID)
   }
 
   func publish(
