@@ -41,10 +41,14 @@
             view.traitOverrides.userInterfaceStyle = appearance
             view.traitOverrides.accessibilityContrast = contrast
             view.traitOverrides.legibilityWeight = .regular
+            view.updateTraitsIfNeeded()
             let selection = NSRange(location: 4, length: 3)
             view.selectedRange = selection
             session.highlight()
             let traits = view.traitCollection
+            #expect(traits.preferredContentSizeCategory == size)
+            #expect(traits.userInterfaceStyle == appearance)
+            #expect(traits.accessibilityContrast == contrast)
             let bodySize = UIFont.preferredFont(
               forTextStyle: .body, compatibleWith: traits
             ).pointSize
