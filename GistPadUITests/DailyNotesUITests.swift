@@ -7,7 +7,9 @@ final class DailyNotesUITests: XCTestCase {
   func testTodayOpensReadyToWrite() throws {
     let app = launchGistPad()
     let today = app.element("library-today")
-    try waitUntil("Today") { today.isHittable }
+    try waitUntil("Today with its unfinished tasks") {
+      today.isHittable && today.label == "Today, 2 unfinished tasks"
+    }
     today.tap()
     let editor = app.textViews["source-editor"]
     try waitUntil("today's note, ready to write") {

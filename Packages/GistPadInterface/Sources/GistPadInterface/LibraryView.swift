@@ -45,14 +45,14 @@ extension View {
     }
 
     public func libraryRail(
-        isVisible: Bool, today: DailyNote, isTodaySelected: Bool,
+        isVisible: Bool, today: DailyNote,
         create: @escaping @MainActor () -> Void, openToday: @escaping @MainActor () -> Void
     ) -> some View {
         toolbar {
             if isVisible {
                 ToolbarItemGroup(placement: .primaryAction) {
                     LibraryCreateButton(action: create)
-                    TodayButton(summary: today, isSelected: isTodaySelected, action: openToday)
+                    TodayButton(summary: today, action: openToday)
                 }
             }
         }
@@ -102,7 +102,6 @@ public struct LibraryActions {
 public struct LibraryView: View {
     @Bindable private var state: LibraryState
     private let actions: LibraryActions
-    private let isTodaySelected: Bool
     private let problem: GitHubStatusProblem?
     private let isSidebar: Bool
     @Binding private var expandedSections: Set<LibrarySection>
@@ -120,14 +119,13 @@ public struct LibraryView: View {
 
     /// `isSidebar` comes from the split view's owner, because a sidebar column always reads as compact.
     public init(
-        state: LibraryState, actions: LibraryActions, isSidebar: Bool, isTodaySelected: Bool = false,
+        state: LibraryState, actions: LibraryActions, isSidebar: Bool,
         problem: GitHubStatusProblem? = nil,
         expandedSections: Binding<Set<LibrarySection>>, isPinnedExpanded: Binding<Bool>
     ) {
         self.state = state
         self.actions = actions
         self.isSidebar = isSidebar
-        self.isTodaySelected = isTodaySelected
         self.problem = problem
         _expandedSections = expandedSections
         _isPinnedExpanded = isPinnedExpanded
@@ -550,8 +548,7 @@ public struct LibraryView: View {
             if !isSidebar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     LibraryCreateButton(action: actions.create)
-                    TodayButton(
-                        summary: state.today, isSelected: isTodaySelected, action: actions.today)
+                    TodayButton(summary: state.today, action: actions.today)
                     settingsButton
                 }
             }

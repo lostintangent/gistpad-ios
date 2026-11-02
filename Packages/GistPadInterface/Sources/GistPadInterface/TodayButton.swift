@@ -4,15 +4,17 @@ import SwiftUI
 
 struct TodayButton: View {
     let summary: DailyNote
-    var isSelected = false
     let action: @MainActor () -> Void
 
     var body: some View {
-        Toggle(isOn: Binding(get: { isSelected }, set: { _ in action() })) {
-            Label(String(localized: "Today", bundle: .module), systemImage: "calendar")
+        // The toggle's native fill shows that today has a page.
+        Toggle(isOn: Binding(get: { summary.text != nil }, set: { _ in action() })) {
+            ToolbarBadgeLabel(
+                title: String(localized: "Today", bundle: .module), systemImage: "calendar",
+                count: summary.progress?.remaining, isFilled: summary.text != nil)
         }
         .toggleStyle(.button)
-        .badge(summary.progress?.remaining ?? 0)
+        .tint(.primary)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier("library-today")
     }

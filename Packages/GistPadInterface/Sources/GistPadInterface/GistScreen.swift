@@ -141,10 +141,14 @@ public struct GistScreen<Source: View, Preview: View>: View {
                         get: { areCommentsPresented },
                         set: { _ in comments() })
                 ) {
-                    Label(String(localized: "Comments", bundle: .module), systemImage: "text.bubble")
+                    ToolbarBadgeLabel(
+                        title: String(localized: "Comments", bundle: .module), systemImage: "text.bubble",
+                        count: gist.commentCount, isFilled: areCommentsPresented)
                 }
                 .toggleStyle(.button)
+                .labelStyle(.iconOnly)
                 .symbolVariant(.none)
+                .tint(.primary)
                 .accessibilityLabel(commentsLabel)
                 .accessibilityAddTraits(areCommentsPresented ? .isSelected : [])
                 .accessibilityIdentifier("note-comments")

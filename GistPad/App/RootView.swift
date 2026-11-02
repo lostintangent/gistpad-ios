@@ -81,7 +81,6 @@ struct RootView: View {
       LibraryView(
         state: library.state, actions: libraryActions,
         isSidebar: horizontalSizeClass == .regular,
-        isTodaySelected: library.isTodaySelected,
         problem: libraryProblem,
         expandedSections: librarySections,
         isPinnedExpanded: pinnedExpanded)
@@ -107,7 +106,7 @@ struct RootView: View {
         }
         .libraryRail(
           isVisible: horizontalSizeClass == .regular && library.state.loadState != .signedOut,
-          today: library.state.today, isTodaySelected: library.isTodaySelected,
+          today: library.state.today,
           create: libraryActions.create, openToday: libraryActions.today)
       }
       .frame(minWidth: comments.isPresented && horizontalSizeClass == .regular ? 320 : 0)
