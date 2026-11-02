@@ -14,6 +14,7 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 
 - A **gist** is the whole thing on GitHub. A **file** is one file in it. A **daily note** is one day's file, and **today's note** is today's. Never call a gist a "note" or "source" on screen.
 - **Publish** means sending to GitHub. Saving on the phone is never announced.
+- Inserted pictures are **images**, never "photos", because they can be screenshots or anything else.
 - Recovery buttons say **Try Again**.
 - `ContentUnavailableView` titles and alert titles are title case. Messages are sentence case and end with a period.
 - Failures use `exclamationmark.circle`.
@@ -102,12 +103,12 @@ The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and
 
 - **Aa:** Bold, Italic, Body, Heading 1 to 6.
 - **Lists:** Bulleted, Numbered, Checklist, Increase Indent, Decrease Indent.
-- **Insert:** Link…, Inline Code, Code Block, Quote, Photo.
+- **Insert:** Link…, Inline Code, Code Block, Quote, Image…
 - **Intelligence** and **Hide Keyboard**.
 
 Find is the system find bar, from More or Command-F.
 
-**Photos.** Insert → Photo, subtitled "Public, even in a secret gist." The first time, an alert: **Photos Are Public** / "Photos you choose are uploaded to GistPad's public image storage. Anyone with the link can view them, even in a secret gist. Location data is removed." / Cancel, Continue. Then the system picker. A toolbar `ProgressView` labeled "Uploading Photo" shows during upload. Failure is **Couldn't Add Photo** with Try Again and Cancel.
+**Images.** Insert → Image… opens the system picker, with no notice first. A toolbar `ProgressView` labeled "Uploading Image" shows during upload. Failure is **Couldn't Add Image** with Try Again and Cancel.
 
 ## Tags and Settings
 
