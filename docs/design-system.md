@@ -120,34 +120,26 @@ No page-wide horizontal panning, browser tap flash, hover-only controls or fake 
 
 ## 6. Source syntax theme
 
-Source remains exact Markdown, not lossy rich text. The semantic reference is the web's `src/features/editor/extensions/theme.ts` and GitHub theme. Color helps structure; native input and readable body typography remain authoritative.
+Source stays exact Markdown, never lossy rich text. It uses four inks, and everything else is font traits.
 
-| Token | Light | Dark | Light Increased | Dark Increased |
-| --- | --- | --- | --- | --- |
-| Heading / strong / emphasis | `#1E293B` | `#D2A8FF` | `#0F172A` | `#E6CCFF` |
-| Quote | `#22863A` | `#7EE787` | `#155D27` | `#B0F5B7` |
-| HTML tag | `#116329` | `#7EE787` | `#0B4B1E` | `#B0F5B7` |
-| URL destination | `#032F62` | `#A5D6FF` | `#02234A` | `#D1ECFF` |
+| Ink | Light | Dark | Used for |
+| --- | --- | --- | --- |
+| `label` | system | system | Prose, code and front matter |
+| Heading ink | `label` | `#D2A8FF`, or `#E6CCFF` with Increase Contrast | Whole heading lines including their `#` markers, and bold and italic spans including their delimiters. This is the web's GitHub Dark purple, kept because the user likes it (user, Nov 2) |
+| `secondaryLabel` | system | system | Markup: list bullets and numbers, task brackets, whole quote lines including `>`, code fence lines and HTML tags |
+| `link` | system | system | Link labels, wikilinks and URLs, underlined |
 
-Light quote green measures 4.63:1 on white but only 4.15:1 on the reference secondary gray; use `#1E7A34` if displayed on that surface. Always verify final resolved pairs.
+Heading ink is one small dynamic `UIColor` in the editor package. Every other color is a system role, so Light, Dark and Increase Contrast resolve themselves.
 
 | Source element | Treatment |
 | --- | --- |
-| Prose | Body regular, shared ink |
-| Heading | Whole heading including markers, Body bold and heading token |
-| Strong / emphasis | Token color plus bold/italic, composing nested traits |
-| Blockquote | Whole line including `>`, with valid nested roles retained |
-| Punctuation | Same readable size/color as owning element, not independently faded |
-| Code / frontmatter | Scaled Body monospace and ink; protected from prose matching. Frontmatter collapse is explicit only |
-| Link label / wikilink | Underlined, URL color in Light and inherited ink in Dark; all source delimiters visible |
-| URL | URL token and underline |
-| HTML | HTML token without misclassifying code/autolinks |
-| Strikethrough | Valid content span struck through, source markers intact |
-| Task delimiters | `secondaryLabel`, preserving checked bytes and full-opacity task text |
-| Caret / selection / marked text | Native text-entry blue/behavior, independent of chrome/personal accent |
+| Heading | Body size, bold, heading ink |
+| Strong / emphasis | Bold or italic traits that compose when nested, heading ink |
+| Code / front matter | Body-size monospace in `label`, protected from prose matching. Front matter collapse is explicit only |
+| Strikethrough | Struck through, with its markers intact |
+| Inline delimiters | `**`, `_`, `` ` ``, `~~` and link brackets wear their span's ink and style. Markers that start a line are markup, except a heading's `#`, which wears heading ink like the web |
+| Caret / selection / marked text | Native text-entry blue, independent of the personal accent |
 | Proposed diff | Before/After labels. Added words primary semibold + underline; removed secondary + strikethrough. No new red/green palette |
-
-Edit and Preview share the exact normal-contrast list marker grays: bullets `#D4D4D4` Light / `#525252` Dark, numbers `#737373` Light / `#A1A1A1` Dark. The deliberately soft decorative bullet is an explicit exception, not permission to fade item text or controls. Increased Contrast strengthens markers toward 7:1. Keep bullet/number/task roles separate from secondary captions and personal accent.
 
 Styling is attributes only: no smart-quote rewriting, hidden delimiters, automatic formatting or source mutation. Preserve task targets/state, ordering/nesting, wrapping and native caret. Code/fences/frontmatter resist inline decorations. System Writing Tools excludes code/frontmatter through supported integration; highlighting/replacement never interrupts IME or Writing Tools.
 
