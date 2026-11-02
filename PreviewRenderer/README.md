@@ -1,6 +1,6 @@
 # Offline Markdown preview
 
-`Packages/GistPadPreview` ships a local WebKit document renderer, not the GistPad website. `PreviewRenderer` builds it from the sibling `../../gistpad.dev` repository.
+`GistPadPreview` ships a local WebKit document renderer, not the GistPad website. `PreviewRenderer` builds it from the sibling `../../gistpad.dev` repository.
 
 The native host supports iOS 27.2 and later. Its resource scheme, bridge and rendering do not require Duo-only APIs.
 
@@ -82,7 +82,7 @@ Calculation results retain the original exact values and selection/copy exclusio
 ```sh
 (cd PreviewRenderer && bun test && npm run typecheck && npm run build)
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-  swift test --package-path Packages/GistPadPreview
+  swift test --filter GistPadPreviewTests
 ```
 
 `bun test` covers task source ranges (including duplicate labels and raw HTML that tries to forge a task), comment overlap runs and the comment text catalog. The iOS package test loads the all-syntax fixture through the actual resource scheme. It checks that read-only checkboxes never emit edits, that an editable rerender toggles the exact `[x]` range of the clicked task, that Mermaid renders an SVG and that wikilinks reach native. A second test checks reading character and the top inset across viewport resizes.

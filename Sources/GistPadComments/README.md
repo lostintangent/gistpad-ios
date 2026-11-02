@@ -17,4 +17,4 @@ let highlights = CommentQuoteMatcher.highlights(quotes: quotes, segments: [sourc
 
 The app's `CommentsPresentation` creates one `CommentsModel` per signed-in account and published gist. Daily notes and recovery files have no comments.
 
-`Tests/GistPadCommentsTests/Fixtures/WebCompatibility.json` pins body parsing and quote matching to `gistpad.dev/src/features/comments/threads.ts`. Run `swift test --package-path Packages/GistPadComments`.
+`Tests/GistPadCommentsTests/Fixtures/WebCompatibility.json` pins body parsing and quote matching to `gistpad.dev/src/features/comments/threads.ts`. Run `swift test --filter GistPadCommentsTests`.

@@ -1,6 +1,6 @@
 # Engineering rules
 
-These rules aren't obvious from reading the code. The toolchain, the iOS 27.2 floor and the test frameworks are in [AGENTS.md](../AGENTS.md). Sync behavior is in [sync.md](sync.md), and how the package keeps it is in the [GistPadSync README](../Packages/GistPadSync/README.md). Visual and interaction rules are in [design.md](design.md). The module map is in [AGENTS.md](../AGENTS.md#module-map).
+These rules aren't obvious from reading the code. The toolchain, the iOS 27.2 floor and the test frameworks are in [AGENTS.md](../AGENTS.md). Sync behavior is in [sync.md](sync.md), and how the package keeps it is in the [GistPadSync README](../Sources/GistPadSync/README.md). Visual and interaction rules are in [design.md](design.md). The module map is in [AGENTS.md](../AGENTS.md#module-map).
 
 | Rule | What and why |
 |---|---|

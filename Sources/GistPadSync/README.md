@@ -134,5 +134,5 @@ touch the real GitHub or Supabase.
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-  swift test --package-path Packages/GistPadSync
+  swift test --filter GistPadSyncTests
 ```

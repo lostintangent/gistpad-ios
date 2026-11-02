@@ -5,11 +5,11 @@ let package = Package(
   name: "IntelligenceEval",
   platforms: [.macOS("27.0")],
   dependencies: [
-    .package(path: "../../Packages/GistPadIntelligence"),
+    .package(name: "GistPad", path: "../.."),
   ],
   targets: [
     .executableTarget(
       name: "IntelligenceEval",
-      dependencies: [.product(name: "GistPadIntelligence", package: "GistPadIntelligence")])
+      dependencies: [.product(name: "GistPadIntelligence", package: "GistPad")])
   ]
 )

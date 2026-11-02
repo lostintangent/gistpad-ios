@@ -180,7 +180,7 @@
 			knownRegions = (en, Base,);
 			mainGroup = A00000000000000000000011;
 			minimizedProjectReferenceProxies = 1;
-			packageReferences = (A00000000000000000000050 /* GistPadEditor */, A00000000000000000000053 /* GistPadPreview */, A00000000000000000000055 /* GistPadInterface */, A00000000000000000000057 /* GistPadSync */, B40000000000000000000050 /* GistPadPlatform */, C50000000000000000000050 /* GistPadAccent */, B40000000000000000000054 /* GistPadIntelligence */, E70000000000000000000050 /* supabase-swift */, D96000000000000000000050 /* GistPadComments */,);
+			packageReferences = (A00000000000000000000050 /* GistPad */, E70000000000000000000050 /* supabase-swift */,);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A00000000000000000000012;
 			projectDirPath = "";
@@ -368,14 +368,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		D96000000000000000000050 /* GistPadComments */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/GistPadComments; };
-		A00000000000000000000050 /* GistPadEditor */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/GistPadEditor; };
-		A00000000000000000000053 /* GistPadPreview */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/GistPadPreview; };
-		A00000000000000000000055 /* GistPadInterface */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/GistPadInterface; };
-		A00000000000000000000057 /* GistPadSync */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/GistPadSync; };
-		B40000000000000000000050 /* GistPadPlatform */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/GistPadPlatform; };
-		C50000000000000000000050 /* GistPadAccent */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/GistPadAccent; };
-		B40000000000000000000054 /* GistPadIntelligence */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/GistPadIntelligence; };
+		A00000000000000000000050 /* GistPad */ = {isa = XCLocalSwiftPackageReference; relativePath = .; };
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -387,25 +380,25 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		D96000000000000000000051 /* GistPadComments */ = {isa = XCSwiftPackageProductDependency; package = D96000000000000000000050; productName = GistPadComments; };
-		D96000000000000000000052 /* GistPadComments */ = {isa = XCSwiftPackageProductDependency; package = D96000000000000000000050; productName = GistPadComments; };
-		A00000000000000000000051 /* GistPadEditor */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050; productName = GistPadEditor; };
-		A00000000000000000000052 /* GistPadEditor */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050; productName = GistPadEditor; };
-		A00000000000000000000054 /* GistPadPreview */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000053; productName = GistPadPreview; };
-		A00000000000000000000056 /* GistPadInterface */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000055; productName = GistPadInterface; };
-		A00000000000000000000058 /* GistPadSync */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000057; productName = GistPadSync; };
-		A00000000000000000000059 /* GistPadInterface */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000055; productName = GistPadInterface; };
-		B40000000000000000000051 /* GistPadPlatform */ = {isa = XCSwiftPackageProductDependency; package = B40000000000000000000050; productName = GistPadPlatform; };
-		B40000000000000000000052 /* GistPadPlatform */ = {isa = XCSwiftPackageProductDependency; package = B40000000000000000000050; productName = GistPadPlatform; };
-		B40000000000000000000057 /* GistPadSync */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000057 /* GistPadSync */; productName = GistPadSync; };
-		B40000000000000000000053 /* GistPadPlatform */ = {isa = XCSwiftPackageProductDependency; package = B40000000000000000000050; productName = GistPadPlatform; };
-		C50000000000000000000051 /* GistPadAccent */ = {isa = XCSwiftPackageProductDependency; package = C50000000000000000000050; productName = GistPadAccent; };
-		C50000000000000000000052 /* GistPadPreview */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000053; productName = GistPadPreview; };
-		C50000000000000000000053 /* GistPadSync */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000057; productName = GistPadSync; };
-		C50000000000000000000054 /* GistPadAccent */ = {isa = XCSwiftPackageProductDependency; package = C50000000000000000000050; productName = GistPadAccent; };
+		D96000000000000000000051 /* GistPadComments */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadComments; };
+		D96000000000000000000052 /* GistPadComments */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadComments; };
+		A00000000000000000000051 /* GistPadEditor */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadEditor; };
+		A00000000000000000000052 /* GistPadEditor */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadEditor; };
+		A00000000000000000000054 /* GistPadPreview */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadPreview; };
+		A00000000000000000000056 /* GistPadInterface */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadInterface; };
+		A00000000000000000000058 /* GistPadSync */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadSync; };
+		A00000000000000000000059 /* GistPadInterface */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadInterface; };
+		B40000000000000000000051 /* GistPadPlatform */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadPlatform; };
+		B40000000000000000000052 /* GistPadPlatform */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadPlatform; };
+		B40000000000000000000057 /* GistPadSync */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadSync; };
+		B40000000000000000000053 /* GistPadPlatform */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadPlatform; };
+		C50000000000000000000051 /* GistPadAccent */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadAccent; };
+		C50000000000000000000052 /* GistPadPreview */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadPreview; };
+		C50000000000000000000053 /* GistPadSync */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadSync; };
+		C50000000000000000000054 /* GistPadAccent */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadAccent; };
 		E70000000000000000000051 /* Auth */ = {isa = XCSwiftPackageProductDependency; package = E70000000000000000000050; productName = Auth; };
-		B40000000000000000000055 /* GistPadIntelligence */ = {isa = XCSwiftPackageProductDependency; package = B40000000000000000000054; productName = GistPadIntelligence; };
-		B40000000000000000000056 /* GistPadIntelligence */ = {isa = XCSwiftPackageProductDependency; package = B40000000000000000000054; productName = GistPadIntelligence; };
+		B40000000000000000000055 /* GistPadIntelligence */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadIntelligence; };
+		B40000000000000000000056 /* GistPadIntelligence */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = GistPadIntelligence; };
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A00000000000000000000010 /* Project object */;

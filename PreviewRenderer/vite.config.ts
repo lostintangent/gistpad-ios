@@ -70,7 +70,7 @@ export default defineConfig({
   },
   build: {
     target: "safari18",
-    outDir: "../Packages/GistPadPreview/Sources/GistPadPreview/Resources/Web",
+    outDir: "../Sources/GistPadPreview/Resources/Web",
     emptyOutDir: true,
     cssCodeSplit: false,
     sourcemap: false,

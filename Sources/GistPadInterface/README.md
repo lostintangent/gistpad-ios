@@ -65,5 +65,5 @@ and `scripts/capture-matrix.sh` captures them for Designer's review.
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-  swift test --package-path Packages/GistPadInterface
+  swift test --filter GistPadInterfaceTests
 ```

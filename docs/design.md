@@ -1,6 +1,6 @@
 # GistPad Native design
 
-Owner: Designer. This is how GistPad looks, reads and moves. Behavior lives elsewhere: [sync.md](sync.md) for saving, publishing and status, the [Comments README](../Packages/GistPadComments/README.md) for quotes and threads, [engineering.md](engineering.md) for structure, [capture-matrix.md](capture-matrix.md) for captures and [AGENTS.md](../AGENTS.md) for how a change ships.
+Owner: Designer. This is how GistPad looks, reads and moves. Behavior lives elsewhere: [sync.md](sync.md) for saving, publishing and status, the [Comments README](../Sources/GistPadComments/README.md) for quotes and threads, [engineering.md](engineering.md) for structure, [capture-matrix.md](capture-matrix.md) for captures and [AGENTS.md](../AGENTS.md) for how a change ships.
 
 ## Direction
 
