@@ -50,10 +50,11 @@ struct ScrollEdgeCaptureWorkspace: View {
         let state = argument("--capture-state") ?? "preview"
         captureState = state
         supportedState = [
-            "preview", "source", "source-keyboard", "source-find", "source-find-bottom", "source-find-end",
+            "preview", "source", "source-keyboard", "source-keyboard-end",
+            "source-find", "source-find-bottom", "source-find-end",
         ].contains(state)
         wantsFind = state.hasPrefix("source-find")
-        wantsKeyboard = state == "source-keyboard" || wantsFind
+        wantsKeyboard = state.hasPrefix("source-keyboard") || wantsFind
         findQuery = state == "source-find" ? "Room for thought" : "Room for thought 18"
         _mode = State(initialValue: state == "preview" ? .reading : .source)
         token = argument("--capture-ready-token").flatMap { UUID(uuidString: $0) == nil ? nil : $0 }
@@ -179,6 +180,8 @@ private final class ScrollEdgeProbe: UIView {
     private var scrolledToEnd = false
     private var matchMode: Bool { captureState == "source-find-bottom" || endMode }
     private var endMode: Bool { captureState == "source-find-end" }
+    private var typingMode: Bool { captureState == "source-keyboard-end" }
+    private var typed = false
     private var presentFind: (@MainActor () -> Void)?
     private var failure: (@MainActor (String) -> Void)?
     private var displayLink: CADisplayLink?
@@ -263,8 +266,12 @@ private final class ScrollEdgeProbe: UIView {
             } else {
                 if !requestedFocus {
                     requestedFocus = true
-                    let range = (source.text as NSString).range(of: "## \(heading)")
-                    if range.location != NSNotFound { source.selectedRange = NSRange(location: range.location, length: 0) }
+                    if typingMode {
+                        source.selectedRange = NSRange(location: (source.text as NSString).length, length: 0)
+                    } else {
+                        let range = (source.text as NSString).range(of: "## \(heading)")
+                        if range.location != NSNotFound { source.selectedRange = NSRange(location: range.location, length: 0) }
+                    }
                     guard source.becomeFirstResponder() else {
                         fail("The source editor could not receive keyboard focus.")
                         return
@@ -272,9 +279,15 @@ private final class ScrollEdgeProbe: UIView {
                 }
                 guard source.isFirstResponder, keyboardHeight >= 150,
                       source.inputAccessoryView?.window != nil else { return }
+                if typingMode, !typed {
+                    typed = true
+                    scrollView = source
+                    for input in ["\n", "One more thought", " stays in view", "."] { source.insertText(input) }
+                    return
+                }
             }
         }
-        if matchMode, revealedMatch, let source, source.window === window {
+        if (matchMode && revealedMatch) || (typingMode && typed), let source, source.window === window {
             guard !source.isTracking, !source.isDecelerating else { return }
             if endMode, !scrolledToEnd {
                 scrolledToEnd = true
@@ -296,7 +309,8 @@ private final class ScrollEdgeProbe: UIView {
             }
             guard stableFrames >= 20, let stableSince, link.timestamp - stableSince >= 0.35,
                   let range = source.selectedTextRange else { return }
-            headingY = source.firstRect(for: range).minY
+            headingY = range.isEmpty
+                ? source.caretRect(for: range.end).minY : source.firstRect(for: range).minY
             targetY = sample.offset.y
             recordReady(sample: sample, window: window, stableDuration: link.timestamp - stableSince)
             return
@@ -410,7 +424,7 @@ private final class ScrollEdgeProbe: UIView {
         guard abs(window.bounds.width - 466) <= 1,
               sample.frame.minY < navigationFrame.maxY,
               wantsKeyboard || sample.frame.maxY >= window.bounds.maxY - 1,
-              matchMode || headingWindowY < navigationFrame.maxY,
+              matchMode || typingMode || headingWindowY < navigationFrame.maxY,
               wantsKeyboard == (sourceIsFocused || wantsFind) else {
             fail("The capture requires a 466-point viewport, real bar underlap and the requested keyboard state.")
             return
@@ -422,6 +436,10 @@ private final class ScrollEdgeProbe: UIView {
             let matchMaxY: CGFloat = {
                 guard matchMode, let source, let range = source.selectedTextRange else { return -1 }
                 return scrollView.convert(source.firstRect(for: range), to: window).maxY
+            }()
+            let caretMaxY: CGFloat = {
+                guard let source, let range = source.selectedTextRange else { return -1 }
+                return scrollView.convert(source.caretRect(for: range.end), to: window).maxY
             }()
             let lastLineMaxY: CGFloat = {
                 guard let source else { return -1 }
@@ -450,6 +468,7 @@ private final class ScrollEdgeProbe: UIView {
                 "keyboardHeight": keyboardHeight,
                 "accessoryFrame": accessoryFrame,
                 "matchWindowMaxY": matchMaxY,
+                "caretWindowMaxY": caretMaxY,
                 "lastLineWindowMaxY": lastLineMaxY,
                 "findPanelFrame": findPanel.map { NSCoder.string(for: $0) } ?? "",
                 "visibleBottomWindowY": sample.frame.maxY - sample.insets.bottom,
