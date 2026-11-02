@@ -46,7 +46,8 @@ struct FilePreview: View {
   private func handle(_ event: PreviewEvent) {
     switch event {
     case .taskToggle(let edit):
-      // The bridge only sends toggles for editable files, for the current generation's exact marker.
+      // A refused toggle (typing in progress, or a newer generation) needs no message: the
+      // checkbox is controlled, so it springs back and the preview keeps showing the file.
       try? editor.apply(
         Edit(
           range: edit.range, expected: edit.expectedMarker, replacement: edit.replacementMarker),
