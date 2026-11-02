@@ -23,6 +23,6 @@ Debug builds accept these arguments. Every fixture is in memory and never touche
 | `--sheet` | `tags`, `settings`, `today`, `intelligence`, `comments` |
 | `--accent` | `#RRGGBB` |
 
-`standard` seeds `GistPad/Fixtures/FixtureLibrary.swift`: pinned, tagged, daily, starred and archived gists, a multi-file gist (`shape`) and a gist with comment threads (`highlights`). `offline` caches the same library and then fails every request. UI tests use the same flags through `GistPadUITests/UITestSupport.swift`.
+`standard` seeds `GistPad/Captures/FixtureLibrary.swift`: pinned, tagged, daily, starred and archived gists, a multi-file gist (`shape`) and a gist with comment threads (`highlights`). `offline` caches the same library and then fails every request. UI tests use the same flags through `GistPadUITests/UITestSupport.swift`.
 
 Inspect each image for the right posture, screen and keyboard before asking for Designer sign-off. Captures don't certify accessibility, physical fold behavior or design approval.

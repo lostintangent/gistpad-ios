@@ -121,7 +121,7 @@ Live Focus hides the Library and arranges the retained source session beside pre
 
 ## Module ownership
 
-- `GistPad/` and `GistPad.xcodeproj`: native shell, signing, navigation and integration
+- `GistPad/` and `GistPad.xcodeproj`: native shell, signing, navigation and integration, in folders named for the product (`App`, `Library`, `Gist`, `DailyNotes`, `Comments`, `Photos`, `Intelligence`, `Settings`, `System` and the DEBUG `Captures`). `GistPadTests/` mirrors them.
 - `Packages/GistPadEditor`: canonical source session, persistent `UITextView`, highlighting and editor fixtures/tests
 - `Packages/GistPadPreview`: independent offline WebKit renderer and typed bridge
 - `Packages/GistPadInterface`: Library, note chrome, save states and reviewed theme assets

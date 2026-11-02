@@ -6,7 +6,7 @@ final class GistUITests: XCTestCase {
 
   func testModesSwitchWhileTheChromeStays() throws {
     let app = launchGistPad(open: "shape/README.md", mode: "edit")
-    let title = app.navigationBars["The shape of a notebook"]
+    let title = app.navigationBars["The shape of a gist"]
     let modes = app.segmentedControls["note-toggle-mode"]
     try waitUntil("Edit") { title.exists && modes.buttons["Edit"].isSelected }
 

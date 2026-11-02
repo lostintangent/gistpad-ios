@@ -63,7 +63,7 @@ final class CommentsUITests: XCTestCase {
   /// Drags the Preview until `passage` sits on the first line under the navigation bar.
   /// The Preview anchors its top line through reflow, so that's the line that must hold still.
   private func alignToTop(_ passage: XCUIElement, in app: XCUIApplication) throws {
-    let top = app.navigationBars["A notebook with comments"].frame.maxY
+    let top = app.navigationBars["A gist with comments"].frame.maxY
     let firstLine = top...(top + 16)
     for _ in 0..<6 where !firstLine.contains(passage.frame.minY) {
       // The scroll view spends a drag's first points on touch slop before the page moves.

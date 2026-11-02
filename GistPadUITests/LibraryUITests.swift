@@ -10,7 +10,7 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("the Library") { pinned.exists }
     XCTAssertEqual(pinned.label, "Pinned")
     XCTAssertEqual(pinned.countValue, "2 gists")
-    for (collection, count) in [("dailyNotes", "4 notes"), ("starred", "1 gist"), ("archive", "1 gist")] {
+    for (collection, count) in [("dailyNotes", "4 daily notes"), ("starred", "1 gist"), ("archive", "1 gist")] {
       let header = app.element("library-collection-\(collection)")
       header.scrollIntoView(in: app)
       XCTAssertEqual(header.countValue, count, collection)
@@ -25,7 +25,7 @@ final class LibraryUITests: XCTestCase {
 
   func testSidebarShowsTheOpenGistAndOneNewButton() throws {
     let app = launchGistPad(open: "shape/README.md")
-    try waitUntil("the open gist") { app.navigationBars["The shape of a notebook"].exists }
+    try waitUntil("the open gist") { app.navigationBars["The shape of a gist"].exists }
     guard app.isRegularWidth else { throw XCTSkip("The sidebar only shows when the Duo is open.") }
     let row = app.element("library-note-shape")
     try waitUntil("the sidebar to select the open gist") {
