@@ -236,9 +236,7 @@
         try apply(edit, generation: generation)
         return false
       } catch {
-        inputError = String(
-          localized: "The source changed before this edit could be applied. Select the text again.",
-          bundle: .module)
+        inputError = String(localized: "The file changed. Select the text again.", bundle: .module)
         return false
       }
     }

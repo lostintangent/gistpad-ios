@@ -107,9 +107,7 @@
             "The source couldn't be formatted. Try again after composition or Writing Tools finishes.",
           bundle: .module)
       } catch {
-        actionError = String(
-          localized: "The source changed. Select the text again before formatting.", bundle: .module
-        )
+        actionError = String(localized: "The file changed. Select the text again.", bundle: .module)
       }
     }
 
