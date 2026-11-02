@@ -156,6 +156,13 @@
         #expect(photo.attributes.contains(.disabled))
       }
 
+      @Test func voiceOverNamesTheTextViewByTheScreensTitle() {
+        let editor = Editor(fileID: "label", text: "A note")
+        let window = hostEditor(editor, title: "Saturday walk")
+        defer { window.isHidden = true }
+        #expect(editor.textView.accessibilityLabel == "Saturday walk")
+      }
+
       @Test func intelligenceAccessoryInvokesItsCallbackWithoutChangingSource() throws {
         let editor = Editor(fileID: "intelligence-button", text: "A note")
         var requests = 0

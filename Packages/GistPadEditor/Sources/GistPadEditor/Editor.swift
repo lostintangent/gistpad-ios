@@ -53,7 +53,6 @@
       textView.bottomEdgeEffect.style = .soft
       textView.isFindInteractionEnabled = true
       textView.accessibilityIdentifier = "source-editor"
-      textView.accessibilityLabel = "Markdown source"
       textView.smartQuotesType = .no
       textView.smartDashesType = .no
       textView.writingToolsBehavior = .complete

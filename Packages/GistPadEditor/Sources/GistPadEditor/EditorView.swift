@@ -6,6 +6,8 @@
 
   public struct EditorView: View {
     public let editor: Editor
+    /// What VoiceOver calls the text view: the title the screen shows.
+    private let title: String?
     private let insertPhoto: (@MainActor () -> Void)?
     private let canInsertPhoto: Bool
     private let intelligence: (@MainActor () -> Void)?
@@ -18,6 +20,7 @@
 
     public init(
       editor: Editor,
+      title: String? = nil,
       insertPhoto: (@MainActor () -> Void)? = nil,
       canInsertPhoto: Bool = false,
       intelligence: (@MainActor () -> Void)? = nil,
@@ -27,6 +30,7 @@
       onAddComment: (@MainActor (String) -> Void)? = nil
     ) {
       self.editor = editor
+      self.title = title
       self.insertPhoto = insertPhoto
       self.canInsertPhoto = canInsertPhoto
       self.intelligence = intelligence
@@ -39,7 +43,7 @@
     public var body: some View {
       GeometryReader { _ in
         TextViewRepresentable(
-          editor: editor,
+          editor: editor, title: title,
           comments: comments, onOpenCommentThreads: onOpenCommentThreads,
           onLinkedCommentIDsChange: onLinkedCommentIDsChange,
           onAddComment: onAddComment,
@@ -103,9 +107,7 @@
         }
       } catch Edit.MutationError.compositionActive {
         actionError = String(
-          localized:
-            "The source couldn't be formatted. Try again after composition or Writing Tools finishes.",
-          bundle: .module)
+          localized: "Finish typing or wait for Writing Tools, then try again.", bundle: .module)
       } catch {
         actionError = String(localized: "The file changed. Select the text again.", bundle: .module)
       }
@@ -137,6 +139,7 @@
 
   private struct TextViewRepresentable: UIViewRepresentable {
     let editor: Editor
+    let title: String?
     let comments: CommentHighlightConfiguration
     let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
     let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
@@ -162,6 +165,7 @@
         view.isHidden = !isPaneVisible
         view.isAccessibilityElement = isPaneVisible
         view.accessibilityElementsHidden = !isPaneVisible
+        view.accessibilityLabel = title
         accessory.update(actions: actions, configuration: configuration)
         accessory.textView = view
         if view.inputAccessoryView !== accessory {
@@ -376,9 +380,7 @@
           localized: "Enter a complete web, email or phone link.", bundle: .module)
       } catch {
         self.error = String(
-          localized:
-            "The source changed while this sheet was open. Cancel and select the text again.",
-          bundle: .module)
+          localized: "The file changed. Cancel and select the text again.", bundle: .module)
       }
     }
   }

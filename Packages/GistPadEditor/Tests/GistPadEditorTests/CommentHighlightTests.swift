@@ -266,7 +266,6 @@
         #expect(content.label == "Selected Comment")
         #expect(content.value == "native")
         #expect(content.importance == .high)
-        #expect(editor.textView.accessibilityLabel == "Markdown source")
         editor.setCommentHighlights(.init())
         #expect(provider.accessibilityCustomContent.isEmpty)
       }
