@@ -8,17 +8,14 @@ let package = Package(
   dependencies: [
     .package(path: "../GistPadAppearance"),
     .package(path: "../GistPadComments"),
-    .package(path: "../GistPadInterface"),
   ],
   targets: [
     .target(
       name: "GistPadEditor",
-      dependencies: ["GistPadAppearance", "GistPadComments", "GistPadInterface"],
+      dependencies: ["GistPadAppearance", "GistPadComments"],
       resources: [.process("Resources")]),
     .testTarget(
       name: "GistPadEditorTests",
-      dependencies: [
-        "GistPadEditor", "GistPadComments", "GistPadInterface", "GistPadAppearance",
-      ]),
+      dependencies: ["GistPadEditor", "GistPadComments"]),
   ]
 )
