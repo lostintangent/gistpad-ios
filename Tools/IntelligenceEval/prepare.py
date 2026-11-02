@@ -65,6 +65,71 @@ for name, prompt, expected in [
     )
 
 
+def unique(source, text):
+    assert source.count(text) == 1, text
+    return source.index(text)
+
+
+def rewriting(source, passage, **checks):
+    start = unique(source, passage)
+    return dict(prefix=source[:start], suffix=source[start + len(passage):], **checks)
+
+
+def inserting(source, after, before=None, **checks):
+    end = unique(source, after) + len(after)
+    suffix = source[unique(source, before):] if before else source[len(source.rstrip("\n")):]
+    return dict(prefix=source[:end], suffix=suffix, **checks)
+
+
+draft = fixture("draft.md")
+meeting = fixture("meeting.md")
+readme = fixture("readme.md")
+first_loaves = ("The first loaves were dense and flat. I followed recipes exactly, but I "
+                "didn't understand why each step mattered, so every mistake felt random.")
+notebook = next(p for p in draft.split("\n\n") if p.startswith("Things changed"))
+saturday = next(p for p in draft.split("\n\n") if p.startswith("Now I bake")).rstrip("\n")
+debate = next(p for p in meeting.split("\n\n") if p.startswith("Marco wants"))
+next_steps = meeting[unique(meeting, "## Next steps"):].rstrip("\n")
+for name, source, prompt, region in [
+    ("draft-add-paragraph", draft, "add a paragraph about choosing flour after the intro",
+     inserting(draft, "a weekly habit.", "The first loaves", shape="paragraph",
+               language="en", mustContain=["flour"])),
+    ("draft-shorter", draft, "rewrite the paragraph about the first loaves to be shorter",
+     rewriting(draft, first_loaves, shape="paragraph", language="en",
+               shorterThan=len(first_loaves))),
+    ("draft-grammar", draft, "fix the grammar",
+     rewriting(draft, notebook, shape="paragraph", language="en",
+               mustNotContain=["patterns was", "loafs", "they was"])),
+    ("draft-tone", draft, "make the last paragraph sound more formal",
+     rewriting(draft, saturday, shape="paragraph", language="en")),
+    ("meeting-summary", meeting, "add a one-sentence summary under the title",
+     inserting(meeting, "# Launch sync", "Attendees:", shape="paragraph", language="en")),
+    ("meeting-list", meeting, "turn the paragraph about delaying the launch into a list",
+     rewriting(meeting, debate, shape="list")),
+    ("meeting-translate", meeting, "translate the Next steps section into Spanish",
+     rewriting(meeting, next_steps, language="es",
+               mustContain=["- [ ] ", "- [x] ", "Priya", "Marco", "Dana"])),
+    ("meeting-section", meeting, "add a Risks section at the end",
+     inserting(meeting, "launch review", shape="section", mustContain=["## Risks"])),
+    ("readme-intro", readme, "write an intro",
+     inserting(readme, "# tidy", "## Install", shape="paragraph", language="en")),
+    ("readme-section", readme, "add a section about uninstalling after Install",
+     inserting(readme, "brew install tidy\n```", "## Options", shape="section",
+               mustContain=["## ", "uninstall"])),
+    ("readme-table-row", readme, 
+     "add a row to the end of the table for a -n option that numbers each line",
+     inserting(readme, "| Ignore case when comparing |", "\n\n## Usage", shape="tableRow",
+               mustContain=["-n"])),
+    ("readme-japanese", readme, "最後にライセンスについての短い段落を追加してください",
+     inserting(readme, "standard input instead.", shape="paragraph", language="ja")),
+]:
+    cases.append(dict(id=name, action="edit", source=source, prompt=prompt,
+                      editedRegion=region))
+cases.append(dict(id="draft-delete", action="edit", source=draft,
+                  prompt="delete the paragraph about the first loaves",
+                  expectedSource=fixture("draft-delete.md")))
+
+
 def gist(gist_id):
     result = subprocess.run(
         ["gh", "api", f"gists/{gist_id}"],

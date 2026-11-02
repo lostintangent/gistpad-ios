@@ -13,12 +13,13 @@ struct EvalCase: Codable, Sendable {
   let addedTaskText: String?
   let addedTaskListTitle: String?
   let maximumAnswerWords: Int?
+  let editedRegion: EditedRegion?
 
   init(
     id: String, action: String, source: String, prompt: String, favorite: String? = nil,
     expectedSource: String? = nil, addedTaskText: String? = nil,
     addedTaskListTitle: String? = nil, alternativeFavorites: [String]? = nil,
-    maximumAnswerWords: Int? = nil
+    maximumAnswerWords: Int? = nil, editedRegion: EditedRegion? = nil
   ) {
     self.id = id
     self.action = action
@@ -30,6 +31,7 @@ struct EvalCase: Codable, Sendable {
     self.addedTaskText = addedTaskText
     self.addedTaskListTitle = addedTaskListTitle
     self.maximumAnswerWords = maximumAnswerWords
+    self.editedRegion = editedRegion
   }
 }
 
@@ -116,12 +118,27 @@ enum Evaluator {
             let review =
               request.action == .review
               ? try await engine.review(request) : try await engine.edit(request)
+            answerSeconds = elapsed()
             let application = try review.application(to: request.snapshot)
             proposed = application.source
             if let expected = item.expectedSource {
               passed =
                 application.source.utf8.elementsEqual(expected.utf8)
                 && review.omittedCount == 0
+            } else if let region = item.editedRegion {
+              expectationFailure =
+                review.omittedCount > 0
+                ? "omittedChanges" : region.failure(application.source, editing: item.source)
+              passed = expectationFailure == nil
+              if let written = region.written(in: application.source) {
+                do {
+                  modelGrade = try await region.meaningGrade(
+                    request: item.prompt, original: region.written(in: item.source) ?? "",
+                    written: written)
+                } catch {
+                  modelGradeError = String(reflecting: type(of: error))
+                }
+              }
             } else if let addedText = item.addedTaskText {
               passed = addedTaskPasses(
                 application: application, original: snapshot,
@@ -264,16 +281,18 @@ enum Evaluator {
 
   static func table(_ results: [EvalResult]) -> String {
     var lines = [
-      "| Case | Pass rate | Complete p50/p90 | Retried | Failures |",
-      "|---|---:|---:|---:|---|",
+      "| Case | Pass rate | Meaning | Complete p50/p90 | Retried | Failures |",
+      "|---|---:|---:|---:|---:|---|",
     ]
     for id in Set(results.map(\.caseID)).sorted() {
       let group = results.filter { $0.caseID == id }
       let failures = Set(group.compactMap(\.errorCode)).sorted().joined(separator: ", ")
       let complete = latencyText(group.compactMap(\.answerCompletionSeconds))
       let retried = group.filter { ($0.qualityRetryCount ?? 0) > 0 }.count
+      let grades = group.compactMap(\.modelGrade)
+      let meaning = grades.isEmpty ? "-" : "\(grades.filter { $0 }.count)/\(grades.count)"
       lines.append(
-        "| \(id) | \(group.filter(\.passed).count)/\(group.count) | \(complete) | \(retried) | \(failures.isEmpty ? "None" : failures) |"
+        "| \(id) | \(group.filter(\.passed).count)/\(group.count) | \(meaning) | \(complete) | \(retried) | \(failures.isEmpty ? "None" : failures) |"
       )
     }
     return lines.joined(separator: "\n")

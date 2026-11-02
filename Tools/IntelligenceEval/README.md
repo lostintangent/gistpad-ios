@@ -25,6 +25,19 @@ to "that heading" while renaming it require byte-exact expected source. Addition
 matching the requested task text case-insensitively. Removing only the inserted
 bytes must recover the entire original source exactly.
 
+General Edit cases run on a prose draft, meeting notes and a README with code and
+a table. Deleting a paragraph requires byte-exact expected source. Edits that
+write new text are graded on their region instead. Each case pins the exact bytes
+before and after the edited region, and both must survive unchanged. The written
+text must be nonempty, differ from what it replaced, have the requested shape
+(paragraph, list, section or table row) without a code fence, be separated from
+its neighbors as Markdown requires and be in the requested language. Some cases
+also require or forbid words, or a shorter result. A greedy on-device meaning
+grade fills the Meaning column as an extra signal, not the pass decision. It is
+lenient and has accepted a shortened paragraph that changed a detail. Keep a
+separate held-out set of general cases outside the repository, write it before
+measuring and never tune on it.
+
 Favorite answers are graded on generated prose, not cited text or exact sentence
 equality. Deterministic checks require the expected work's name, a preference
 assertion and no alternative series in a favorite assertion. A separate greedy
