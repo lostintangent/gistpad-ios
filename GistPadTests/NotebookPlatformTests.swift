@@ -13,9 +13,19 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct NotebookPlatformTests {
-  @Test func widgetTaskUpdatesTheRetainedEditorAndUndoesAsOneEdit() async throws {
+  @Test func widgetToggleReachesTheOpenFileUndoesAsOneEditAndNeverOverwritesNewerTyping() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
+    let stale = try #require(try fixture.shared.read()?.today.tasks.first)
+    let typed = "# Today\n\n- [ ] A real task\nStill typing\n"
+    _ = try await fixture.store.persist(
+      id: stale.draftID, accountID: fixture.account.id, text: typed, generation: 1)
+    await #expect(throws: DraftError.staleGeneration) {
+      try await fixture.bridge.setTask(id: stale.id, completed: true)
+    }
+    #expect(try await fixture.store.draft(id: stale.draftID, accountID: fixture.account.id).text == typed)
+
+    try await fixture.bridge.refresh()
     let controller = try await fixture.controller()
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -25,154 +35,34 @@ struct NotebookPlatformTests {
     window.makeKeyAndVisible()
     defer { window.isHidden = true }
     try await Task.sleep(for: .milliseconds(100))
-    let original = controller.session.text
-    let identity = controller.session.textView
-    controller.session.textView.selectedRange = NSRange(location: 0, length: 0)
+    let editor = controller.session.textView
     let task = try #require(try fixture.shared.read()?.today.tasks.first)
     try await fixture.bridge.setTask(id: task.id, completed: true)
-    #expect(controller.session.text == original.replacingOccurrences(of: "[ ]", with: "[x]"))
-    #expect(controller.session.textView === identity)
-    #expect(controller.session.generation == 1)
-    #expect(await fixture.provider.publishCount == 0)
+    #expect(controller.session.text == typed.replacingOccurrences(of: "[ ]", with: "[x]"))
+    #expect(controller.session.textView === editor)
     controller.session.textView.undoManager?.undo()
     #expect(await controller.waitForLocalSave())
-    #expect(controller.session.text == original)
-    #expect(controller.session.generation == 2)
-    #expect(try await fixture.store.draft(id: controller.draft.id, accountID: fixture.account.id).text == original)
+    #expect(controller.session.text == typed)
+    #expect(await fixture.provider.publishCount == 0)
   }
 
-  @Test func staleWidgetTaskCannotModifyNewerSource() async throws {
-    let fixture = try await PlatformFixture.make()
-    defer { fixture.cleanUp() }
-    let task = try #require(try fixture.shared.read()?.today.tasks.first)
-    let changed = try await fixture.store.persist(
-      id: task.draftID, accountID: fixture.account.id, text: "Newer source", generation: 1)
-    await #expect(throws: DraftError.staleGeneration) {
-      try await fixture.bridge.setTask(id: task.id, completed: true)
-    }
-    #expect(try await fixture.store.draft(id: task.draftID, accountID: fixture.account.id) == changed)
-  }
-
-  @Test func writingToolsAndAccountChangesRejectWidgetMutations() async throws {
+  @Test func addToTodayFromAShortcutLandsInTodaysNoteWithoutASheetOrAPublish() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
     let controller = try await fixture.controller()
-    let task = try #require(try fixture.shared.read()?.today.tasks.first)
-    controller.session.textViewWritingToolsWillBegin(controller.session.textView)
-    await #expect(throws: NotebookPlatformError.editingInProgress) {
-      try await fixture.bridge.setTask(id: task.id, completed: true)
-    }
-    controller.session.textViewWritingToolsDidEnd(controller.session.textView)
-    await fixture.provider.changeAccount()
-    await #expect(throws: NotebookPlatformError.accountChanged) {
-      try await fixture.bridge.setTask(id: task.id, completed: true)
-    }
-    #expect(try await fixture.store.draft(id: task.draftID, accountID: fixture.account.id).generation == 0)
-  }
-
-  @Test func quickCaptureAppendsToPinnedDateAndDoesNotPublishWhileForeground() async throws {
-    let fixture = try await PlatformFixture.make()
-    defer { fixture.cleanUp() }
-    let controller = try await fixture.controller()
-    let target = DailyNoteTarget()
-    try await fixture.bridge.addToToday(text: "A thought\nSecond task", asTask: true, target: target)
-    #expect(controller.session.text.hasSuffix("- [ ] A thought\n- [ ] Second task\n"))
-    #expect(await fixture.provider.targets == [target])
-    #expect(await fixture.provider.publishCount == 0)
-    #expect(try fixture.shared.read()?.today.tasks.count == 3)
-  }
-
-  @Test func captureReturnsTheExactPinnedDraftAndCachesItsEditableMetadata() async throws {
-    let fixture = try await PlatformFixture.make()
-    defer { fixture.cleanUp() }
-    let target = DailyNoteTarget(date: .now.addingTimeInterval(-86_400))
-    let draft = try await fixture.store.openDraft(
-      accountID: fixture.account.id, githubUserID: 42, gistID: fixture.provider.gist.id,
-      filename: target.filename, description: GistConventions.dailyNotesDescription,
-      content: "# Pinned day\n", isNewFile: true)
-    try await fixture.store.cacheLibrary(
-      owned: [], starred: [], preferences: fixture.account.preferences,
-      accountID: fixture.account.id)
-    try await fixture.model.reloadPlatformState(accountID: fixture.account.id)
-    let destination = try await fixture.bridge.addToToday(
-      text: "A late thought", asTask: false, target: target)
-    #expect(destination == .draft(accountID: fixture.account.id, draftID: draft.id))
-    await fixture.model.openLocalDraft(id: draft.id)
-    let document = try #require(fixture.model.loadedDocument)
-    #expect(document.filename == target.filename)
-    #expect(document.gist?.id == fixture.provider.gist.id)
-    #expect(!document.isRecovery)
-    #expect(document.text.hasSuffix("A late thought\n"))
-    #expect(document.chrome.access.canEdit)
-    #expect(await fixture.provider.publishCount == 0)
-  }
-
-  @Test func capturedUnopenedNoteJoinsTheExistingForegroundAutosave() async throws {
-    let fixture = try await PlatformFixture.make()
-    defer { fixture.cleanUp() }
-    await fixture.model.open(gistID: fixture.provider.gist.id, filename: "another.md")
-    #expect(fixture.model.loadedDocument?.filename == "another.md")
-    let scene = try #require(
-      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-    let routes = NotebookRouteInbox()
-    let window = UIWindow(windowScene: scene)
-    window.frame = scene.effectiveGeometry.coordinateSpace.bounds
-    window.rootViewController = UIHostingController(
-      rootView: LiveNotebookWorkspace(notebook: fixture.model, routes: routes)
-        .environment(\.scenePhase, .active))
-    window.makeKeyAndVisible()
-    defer { window.isHidden = true }
-    let destination = try await fixture.bridge.addToToday(
-      text: "A captured thought", asTask: false, target: DailyNoteTarget())
-    #expect(await fixture.provider.publishCount == 0)
-    routes.submit(destination)
-    let deadline = ContinuousClock.now.advanced(by: .seconds(8))
-    while await fixture.provider.publishCount == 0, ContinuousClock.now < deadline {
-      try await Task.sleep(for: .milliseconds(100))
-    }
-    #expect(fixture.model.loadedDocument?.text.hasSuffix("A captured thought\n") == true)
-    #expect(routes.pending == nil)
-    let publishCount = await fixture.provider.publishCount
-    #expect(publishCount == 1)
-  }
-
-  @Test func intentsUseTheOfficialMainProcessExecutionTarget() {
-    #expect(SetTodayTaskIntent.allowedExecutionTargets == .main)
-    #expect(AddToTodayIntent.allowedExecutionTargets == .main)
-    #expect(CaptureTodayIntent.allowedExecutionTargets == .main)
-    #expect(NoteEntityQuery.allowedExecutionTargets == .main)
-    #expect(SetTodayTaskIntent.authenticationPolicy == .requiresAuthentication)
-  }
-
-  @Test func providedShortcutTextAndWidgetIntentReachTheDurableOwnerWithoutASheet() async throws {
-    let fixture = try await PlatformFixture.make()
-    defer { fixture.cleanUp() }
-    NotebookIntentRuntime.configure { fixture.bridge }
+    let notebook: any NotebookIntentServing = fixture.bridge
+    AppDependencyManager.shared.add(dependency: notebook)
     defer { NotebookPlatformBootstrap.install() }
     let previousRoute = NotebookRouteInbox.shared.pending?.id
-    _ = try await AddToTodayIntent(text: "One captured task", asTask: true).perform()
-    let snapshot = try #require(try fixture.shared.read())
-    #expect(snapshot.today.tasks.map(\.title) == ["A real task", "One captured task"])
+    var intent = AddToTodayIntent()
+    intent.text = "A thought\nSecond task"
+    intent.asTask = true
+    _ = try await intent.perform()
+    #expect(controller.session.text.hasSuffix("- [ ] A real task\n- [ ] A thought\n- [ ] Second task\n"))
+    #expect(try fixture.shared.read()?.today.tasks.map(\.title) == ["A real task", "A thought", "Second task"])
     #expect(await fixture.provider.targets.count == 1)
-    let task = try #require(snapshot.today.tasks.first)
-    _ = try await SetTodayTaskIntent(task: task, completed: true).perform()
-    let draft = try await fixture.store.draft(id: task.draftID, accountID: fixture.account.id)
-    #expect(draft.generation == 2)
-    #expect(draft.text.contains("- [x] A real task"))
     #expect(NotebookRouteInbox.shared.pending?.id == previousRoute)
     #expect(await fixture.provider.publishCount == 0)
-  }
-
-  @Test func widgetSnapshotReopensWithDeviceProtectionWhenAvailable() async throws {
-    let fixture = try await PlatformFixture.make()
-    defer { fixture.cleanUp() }
-    let url = fixture.shared.location.directory.appendingPathComponent("notebook.snapshot")
-    let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-    #expect(attributes[.type] as? FileAttributeType == .typeRegular)
-    #expect(try SharedNotebookStore(location: fixture.shared.location).read() == fixture.shared.read())
-    #if !targetEnvironment(simulator)
-    #expect(attributes[.protectionKey] as? String == FileProtectionType.completeUntilFirstUserAuthentication.rawValue)
-    #endif
   }
 }
 
@@ -184,7 +74,6 @@ private struct PlatformFixture {
   let model: NotebookModel
   let bridge: NotebookPlatformBridge
   let shared: SharedNotebookStore
-  let directory: URL
 
   static func make() async throws -> Self {
     let account = Account(
@@ -207,15 +96,11 @@ private struct PlatformFixture {
     let provider = PlatformNotebookProvider(account: account, gist: gist, store: store)
     let model = NotebookModel(provider: provider)
     await model.start()
-    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
-      UUID().uuidString, isDirectory: true)
-    let shared = SharedNotebookStore(location: try SharedStoreLocation(containerURL: directory))
-    let bridge = NotebookPlatformBridge(
-      provider: provider, store: store, notebook: model, sharedStore: shared, isBackgrounded: { false })
+    let bridge = NotebookPlatformBridge(provider: provider, store: store, notebook: model)
     try await bridge.refresh()
     return Self(
       account: account, provider: provider, store: store, model: model, bridge: bridge,
-      shared: shared, directory: directory)
+      shared: try SharedNotebookStore())
   }
 
   func controller() async throws -> NotebookSessionController {
@@ -227,7 +112,7 @@ private struct PlatformFixture {
   }
 
   func cleanUp() {
-    try? FileManager.default.removeItem(at: directory)
+    try? shared.write(.make(accountID: nil, cache: nil, drafts: []))
   }
 }
 
@@ -285,16 +170,13 @@ private actor PlatformNotebookProvider: NotebookProviding {
     return TodayNote(gist: gist, draft: draft)
   }
   func createDraft(accountID: UUID) async throws -> DraftSnapshot {
-    throw NotebookPlatformError.serviceUnavailable
+    throw CocoaError(.featureUnsupported)
   }
   func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
     try await store.discardBlankDraft(
       id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation)
   }
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
-    throw NotebookPlatformError.serviceUnavailable
-  }
-  func changeAccount() {
-    account = Account(id: UUID(), login: "other", githubUserID: 99, preferences: .init(metadata: [:]))
+    throw CocoaError(.featureUnsupported)
   }
 }

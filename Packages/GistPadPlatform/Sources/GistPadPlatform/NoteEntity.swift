@@ -32,6 +32,7 @@ public struct NoteEntity: IndexedEntity {
 
 public struct NoteEntityQuery: EntityStringQuery, IndexedEntityQuery {
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
+    @Dependency private var notebook: any NotebookIntentServing
     public init() {}
 
     public func entities(for identifiers: [String]) async throws -> [NoteEntity] {
@@ -66,7 +67,7 @@ public struct NoteEntityQuery: EntityStringQuery, IndexedEntityQuery {
     private func currentSnapshot() async throws -> NotebookSystemSnapshot? {
         let snapshot = try SharedNotebookStore().read()
         if let accountID = snapshot?.accountID {
-            try await NotebookIntentRuntime.service().validateAccount(accountID)
+            try await notebook.validateAccount(accountID)
         }
         return snapshot
     }
@@ -119,14 +120,6 @@ public struct OpenNoteIntent: OpenIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult {
-        try await NotebookIntentRuntime.service().validateAccount(target.note.accountID)
-        let snapshot = try SharedNotebookStore().read()
-        guard snapshot?.accountID == target.note.accountID else {
-            throw NotebookPlatformError.accountChanged
-        }
-        guard snapshot?.notes.contains(where: { $0.id == target.id }) == true else {
-            throw NotebookPlatformError.noteUnavailable
-        }
         NotebookRouteInbox.shared.submit(target.note.route)
         return .result()
     }

@@ -130,9 +130,11 @@ struct AddToTodaySheet: View {
     errorMessage = nil
     Task {
       do {
-        let destination = try await NotebookIntentRuntime.service().addToToday(
+        if let destination = try await NotebookPlatformBootstrap.bridge?.addToToday(
           text: text, asTask: asTask, target: target)
-        NotebookRouteInbox.shared.submit(destination)
+        {
+          NotebookRouteInbox.shared.submit(destination)
+        }
         dismiss()
       } catch {
         errorMessage = Self.message(for: error)

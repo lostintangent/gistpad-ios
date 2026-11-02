@@ -62,10 +62,8 @@ struct TodayProvider: TimelineProvider {
 }
 
 struct TodayWidget: Widget {
-  let kind = "GistPadToday"
-
   var body: some WidgetConfiguration {
-    StaticConfiguration(kind: kind, provider: TodayProvider()) { entry in
+    StaticConfiguration(kind: TodayWidgetView.kind, provider: TodayProvider()) { entry in
       TodayWidgetView(snapshot: entry.snapshot, date: entry.date, state: entry.state)
         .containerBackground(.background, for: .widget)
     }
@@ -87,4 +85,24 @@ struct AddToTodayControl: ControlWidget {
     .displayName("Add to Today")
     .description("Capture a thought or task in today's note.")
   }
+}
+
+#Preview("Tasks", as: .systemSmall) {
+  TodayWidget()
+} timeline: {
+  TodayEntry(date: .now, snapshot: .preview(), state: .available)
+  TodayEntry(date: .now, snapshot: nil, state: .signedOut)
+}
+
+#Preview("Tasks", as: .systemMedium) {
+  TodayWidget()
+} timeline: {
+  TodayEntry(date: .now, snapshot: .preview(), state: .available)
+  TodayEntry(date: .now, snapshot: nil, state: .signedOut)
+}
+
+#Preview("Lock Screen", as: .accessoryRectangular) {
+  TodayWidget()
+} timeline: {
+  TodayEntry(date: .now, snapshot: .preview(), state: .available)
 }

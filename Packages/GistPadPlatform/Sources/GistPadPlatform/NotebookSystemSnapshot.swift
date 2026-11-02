@@ -3,27 +3,18 @@ import GistPadSync
 
 public enum NotebookPlatformError: LocalizedError, Equatable, Sendable {
     case accountChanged
-    case invalidSnapshot
-    case noteUnavailable
     case staleTask
     case editingInProgress
-    case serviceUnavailable
     case emptyText
 
     public var errorDescription: String? {
         switch self {
         case .accountChanged:
             String(localized: "Open GistPad and sign in to the notebook used by this action.")
-        case .invalidSnapshot:
-            String(localized: "The shared notebook couldn't be read. Open GistPad to refresh it.")
-        case .noteUnavailable:
-            String(localized: "This note is no longer in the notebook. Open GistPad to find it.")
         case .staleTask:
             String(localized: "The note changed. Refresh the widget before changing this task.")
         case .editingInProgress:
             String(localized: "Finish the current edit in GistPad before changing this task.")
-        case .serviceUnavailable:
-            String(localized: "Open GistPad once to make notebook actions available.")
         case .emptyText:
             String(localized: "Enter some text to add to Today.")
         }
@@ -65,12 +56,11 @@ public struct SystemToday: Codable, Equatable, Sendable {
     public let tasks: [TodayTask]
     let route: NotebookRoute
     let isAvailable: Bool
-    let issue: String?
+    let needsAttention: Bool
 }
 
 public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
     public let accountID: UUID?
-    let createdAt: Date
     let accentHex: String?
     let notes: [SystemNote]
     public let today: SystemToday
@@ -78,11 +68,7 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
     public static func make(
         accountID: UUID?, cache: CachedLibrarySnapshot?, drafts: [DraftSnapshot],
         date: Date = .now, timeZone: TimeZone = .current
-    ) throws -> Self {
-        guard cache == nil || cache?.accountID == accountID,
-              drafts.allSatisfy({ $0.accountID == accountID }) else {
-            throw NotebookPlatformError.accountChanged
-        }
+    ) -> Self {
         let target = DailyNoteTarget(date: date, timeZone: timeZone)
         var notes: [SystemNote] = []
         if let accountID, let cache {
@@ -133,16 +119,12 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
         } else {
             route = .today
         }
-        let issue: String?
-        switch draft?.state {
-        case .failed(.network): issue = String(localized: "Offline. Changes are on this iPhone.")
-        case .reconnect: issue = String(localized: "Open GistPad to reconnect GitHub.")
-        case .failed: issue = String(localized: "Open GistPad to finish saving.")
-        case .conflict: issue = String(localized: "Open GistPad to review changes.")
-        default: issue = nil
+        let needsAttention = switch draft?.state {
+        case .reconnect, .failed, .conflict: true
+        default: false
         }
         return Self(
-            accountID: accountID, createdAt: date,
+            accountID: accountID,
             accentHex: cache?.preferences.accentColor,
             notes: notes.sorted {
                 $0.updatedAt == $1.updatedAt
@@ -151,7 +133,7 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
             today: SystemToday(
                 filename: target.filename, timeZoneIdentifier: target.timeZoneIdentifier,
                 excerpt: excerpt(text), tasks: draft.map { tasks(in: $0) } ?? [],
-                route: route, isAvailable: text != nil, issue: issue))
+                route: route, isAvailable: text != nil, needsAttention: needsAttention))
     }
 
     public static func preview(date: Date = .now) -> Self {
@@ -159,7 +141,7 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
         let draftID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
         let target = DailyNoteTarget(date: date)
         return Self(
-            accountID: accountID, createdAt: date, accentHex: nil, notes: [],
+            accountID: accountID, accentHex: nil, notes: [],
             today: SystemToday(
                 filename: target.filename, timeZoneIdentifier: target.timeZoneIdentifier,
                 excerpt: "A little room for what matters today.",
@@ -171,7 +153,7 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
                         draftID: draftID, generation: 0, markerLocation: 37,
                         title: "Take the long way home", isCompleted: true)
                 ],
-                route: .today, isAvailable: true, issue: nil))
+                route: .today, isAvailable: true, needsAttention: false))
     }
 
     private static func excerpt(_ source: String?) -> String? {

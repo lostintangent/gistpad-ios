@@ -1,3 +1,4 @@
+import AppIntents
 import Foundation
 import GistPadPlatform
 import GistPadSync
@@ -8,15 +9,17 @@ import WidgetKit
 @MainActor
 enum NotebookPlatformBootstrap {
   private static var services: (model: NotebookModel, bridge: NotebookPlatformBridge)?
+  static var bridge: NotebookPlatformBridge? { services?.bridge }
 
   static func install() {
-    NotebookIntentRuntime.configure {
-      guard let key = Bundle.main.object(forInfoDictionaryKey: "SupabasePublishableKey") as? String,
-        !key.isEmpty, !key.contains("$(")
-      else { throw AccountError.invalidConfiguration }
-      _ = try notebook(publishableKey: key)
-      guard let bridge = services?.bridge else { throw NotebookPlatformError.serviceUnavailable }
-      return bridge
+    AppDependencyManager.shared.add { () async throws -> any NotebookIntentServing in
+      try await MainActor.run {
+        guard let key = Bundle.main.object(forInfoDictionaryKey: "SupabasePublishableKey") as? String,
+          !key.isEmpty, !key.contains("$(")
+        else { throw AccountError.invalidConfiguration }
+        _ = try notebook(publishableKey: key)
+        return services!.bridge
+      }
     }
   }
 
@@ -53,27 +56,16 @@ final class NotebookPlatformBridge: NotebookIntentServing {
 
   private let provider: any NotebookProviding
   private let store: DraftStore
-  private let suppliedSharedStore: SharedNotebookStore?
-  private let isBackgrounded: @MainActor () -> Bool
   private weak var notebook: NotebookModel?
   private var sessions: [UUID: WeakSession] = [:]
   private var refreshTask: Task<Void, Never>?
-  private var operation: Task<Void, any Error>?
-  private var operationID: UUID?
+  private var operation: Task<Void, Never>?
   private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "SystemIntegration")
 
-  init(
-    provider: any NotebookProviding, store: DraftStore, notebook: NotebookModel,
-    sharedStore: SharedNotebookStore? = nil,
-    isBackgrounded: @escaping @MainActor () -> Bool = {
-      UIApplication.shared.applicationState != .active
-    }
-  ) {
+  init(provider: any NotebookProviding, store: DraftStore, notebook: NotebookModel) {
     self.provider = provider
     self.store = store
     self.notebook = notebook
-    suppliedSharedStore = sharedStore
-    self.isBackgrounded = isBackgrounded
   }
 
   func register(_ controller: NotebookSessionController) {
@@ -97,7 +89,7 @@ final class NotebookPlatformBridge: NotebookIntentServing {
   }
 
   func refresh(date: Date = .now) async throws {
-    let shared = try sharedStore()
+    let shared = try SharedNotebookStore()
     let account = try await provider.cachedAccount()
     let accountID =
       notebook?.pendingAccount == nil
@@ -121,19 +113,19 @@ final class NotebookPlatformBridge: NotebookIntentServing {
         description: daily.description ?? "", content: text, revision: daily.revision)
       drafts.append(draft)
     }
-    let snapshot = try NotebookSystemSnapshot.make(
+    let snapshot = NotebookSystemSnapshot.make(
       accountID: accountID, cache: local?.library, drafts: drafts, date: date)
     try Task.checkCancellation()
     let current = try await provider.cachedAccount()
     guard current?.id == account?.id else { throw NotebookPlatformError.accountChanged }
     try shared.write(snapshot)
-    WidgetCenter.shared.reloadTimelines(ofKind: "GistPadToday")
+    WidgetCenter.shared.reloadTimelines(ofKind: TodayWidgetView.kind)
     try await NotebookEntityIndex.shared.update(snapshot)
   }
 
   func setTask(id: String, completed: Bool) async throws {
     try await serially {
-      let snapshot = try self.sharedStore().read()
+      let snapshot = try SharedNotebookStore().read()
       guard let accountID = snapshot?.accountID,
         let today = snapshot?.today,
         today.filename == GistConventions.todayFilename(),
@@ -150,16 +142,12 @@ final class NotebookPlatformBridge: NotebookIntentServing {
   func addToToday(
     text: String, asTask: Bool, target: DailyNoteTarget
   ) async throws -> NotebookRoute {
-    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      throw NotebookPlatformError.emptyText
-    }
-    return try await serially {
+    try await serially {
       guard let account = try await self.provider.cachedAccount() else {
         throw NotebookPlatformError.accountChanged
       }
       try await self.validateAccount(account.id)
       let today = try await self.provider.today(accountID: account.id, target: target)
-      try await self.validateAccount(account.id)
       if let gist = today.gist {
         guard gist.owner?.id == today.draft.githubUserID else { throw DraftError.readOnly }
         let cache = try await self.store.cachedLibrary(accountID: account.id)
@@ -192,7 +180,6 @@ final class NotebookPlatformBridge: NotebookIntentServing {
   }
 
   private func apply(_ command: SharedDraftCommand) async throws {
-    try await validateAccount(command.accountID)
     let draft = try await store.draft(id: command.draftID, accountID: command.accountID)
     guard draft.attemptedGeneration == nil else { throw NotebookPlatformError.editingInProgress }
     if case .conflict = draft.state { throw NotebookPlatformError.editingInProgress }
@@ -218,7 +205,7 @@ final class NotebookPlatformBridge: NotebookIntentServing {
         "Accepted system edit needs presentation refresh: \(String(reflecting: type(of: error)), privacy: .public)")
       scheduleRefresh()
     }
-    if isBackgrounded() {
+    if UIApplication.shared.applicationState != .active {
       let lease = NotebookBackgroundLease()
       defer { lease.end() }
       guard lease.isActive else {
@@ -228,13 +215,8 @@ final class NotebookPlatformBridge: NotebookIntentServing {
       do {
         if let controller {
           await controller.publish(reason: .background, shouldContinue: { lease.isActive })
-        } else if let notebook {
-          _ = try await notebook.publish(
-            draftID: command.draftID, accountID: command.accountID, reason: .background,
-            expectedGeneration: command.expectedGeneration + 1,
-            shouldPublish: { await MainActor.run { lease.isActive } })
         } else {
-          _ = try await provider.publish(
+          _ = try await notebook?.publish(
             draftID: command.draftID, accountID: command.accountID, reason: .background,
             expectedGeneration: command.expectedGeneration + 1,
             shouldPublish: { await MainActor.run { lease.isActive } })
@@ -252,29 +234,11 @@ final class NotebookPlatformBridge: NotebookIntentServing {
     _ action: @escaping @MainActor () async throws -> Value
   ) async throws -> Value {
     let previous = operation
-    let id = UUID()
     let task = Task {
-      if let previous { _ = await previous.result }
-      try Task.checkCancellation()
+      await previous?.value
       return try await action()
     }
-    operation = Task { _ = try await task.value }
-    operationID = id
-    defer {
-      if operationID == id {
-        operation = nil
-        operationID = nil
-      }
-    }
-    return try await withTaskCancellationHandler {
-      try await task.value
-    } onCancel: {
-      task.cancel()
-    }
-  }
-
-  private func sharedStore() throws -> SharedNotebookStore {
-    if let suppliedSharedStore { return suppliedSharedStore }
-    return try SharedNotebookStore()
+    operation = Task { _ = try? await task.value }
+    return try await task.value
   }
 }

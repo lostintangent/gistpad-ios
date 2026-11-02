@@ -1,5 +1,6 @@
 #if os(iOS)
 import GistPadAppearance
+import GistPadSync
 import SwiftUI
 import WidgetKit
 
@@ -8,13 +9,11 @@ public enum TodayWidgetState: Equatable, Sendable {
 }
 
 public struct TodayWidgetView: View {
+    public static let kind = "GistPadToday"
     private let snapshot: NotebookSystemSnapshot?
     private let date: Date
     private let state: TodayWidgetState
-    private var familyOverride: WidgetFamily?
-    private var taskGeometry: (@MainActor (String, CGSize) -> Void)?
-    private var layoutGeometry: (@MainActor (String, CGRect) -> Void)?
-    @Environment(\.widgetFamily) private var widgetFamily
+    @Environment(\.widgetFamily) private var family
     @Environment(\.widgetRenderingMode) private var renderingMode
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .largeTitle) private var dateSize = 38.0
@@ -27,31 +26,13 @@ public struct TodayWidgetView: View {
         self.state = state
     }
 
-    @_spi(Testing)
-    public init(
-        snapshot: NotebookSystemSnapshot?, date: Date, state: TodayWidgetState,
-        family: WidgetFamily, taskGeometry: @escaping @MainActor (String, CGSize) -> Void,
-        layoutGeometry: (@MainActor (String, CGRect) -> Void)? = nil
-    ) {
-        self.init(snapshot: snapshot, date: date, state: state)
-        familyOverride = family
-        self.taskGeometry = taskGeometry
-        self.layoutGeometry = layoutGeometry
-    }
-
-    private var family: WidgetFamily { familyOverride ?? widgetFamily }
     private var accent: Color {
         renderingMode == .fullColor ? Color(uiColor: AccentRole.text.uiColor) : .primary
     }
     private var today: SystemToday? {
         guard let today = snapshot?.today else { return nil }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: today.timeZoneIdentifier) ?? .current
-        let components = calendar.dateComponents([.year, .month, .day], from: date)
-        let filename = String(
-            format: "%04d-%02d-%02d.md",
-            components.year ?? 0, components.month ?? 0, components.day ?? 0)
-        return today.filename == filename ? today : nil
+        let timeZone = TimeZone(identifier: today.timeZoneIdentifier) ?? .current
+        return today.filename == DailyNoteTarget(date: date, timeZone: timeZone).filename ? today : nil
     }
     private var destination: URL {
         state == .available ? today?.route.url ?? NotebookRoute.today.url : NotebookRoute.today.url
@@ -132,13 +113,7 @@ public struct TodayWidgetView: View {
                                 }
                             }
                         }
-                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-                            layoutGeometry?("small-calendar", frame)
-                        }
                         content(limit: 1)
-                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
-                                layoutGeometry?("small-content", frame)
-                            }
                         Spacer(minLength: 0)
                     }
                 }
@@ -210,7 +185,7 @@ public struct TodayWidgetView: View {
             ForEach(tasks.prefix(limit)) { task in
                 taskButton(task, compact: false)
             }
-            if today?.issue != nil {
+            if today?.needsAttention == true {
                 Label("Open GistPad", systemImage: "exclamationmark.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -251,9 +226,6 @@ public struct TodayWidgetView: View {
             }
             .frame(minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
-            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
-                taskGeometry?(task.id, size)
-            }
         }
         .buttonStyle(.plain)
         .privacySensitive()

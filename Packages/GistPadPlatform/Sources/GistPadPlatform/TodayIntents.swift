@@ -2,7 +2,6 @@
 import AppIntents
 import Foundation
 import GistPadSync
-import WidgetKit
 
 public struct SetTodayTaskIntent: AppIntent {
     public static let title: LocalizedStringResource = "Set Today Task"
@@ -13,6 +12,7 @@ public struct SetTodayTaskIntent: AppIntent {
 
     @Parameter(title: "Task") public var taskID: String
     @Parameter(title: "Completed") public var completed: Bool
+    @Dependency private var notebook: any NotebookIntentServing
 
     public init() {}
     public init(task: TodayTask, completed: Bool) {
@@ -22,8 +22,7 @@ public struct SetTodayTaskIntent: AppIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult {
-        try await NotebookIntentRuntime.service().setTask(id: taskID, completed: completed)
-        WidgetCenter.shared.reloadTimelines(ofKind: "GistPadToday")
+        try await notebook.setTask(id: taskID, completed: completed)
         return .result()
     }
 }
@@ -39,23 +38,17 @@ public struct AddToTodayIntent: AppIntent {
     @Parameter(title: "Text", requestValueDialog: "What would you like to add to Today?")
     public var text: String
     @Parameter(title: "As Task", default: false) public var asTask: Bool
+    @Dependency private var notebook: any NotebookIntentServing
 
     public static var parameterSummary: some ParameterSummary {
         Summary("Add \(\.$text) to Today") { \.$asTask }
     }
 
     public init() {}
-    public init(text: String, asTask: Bool = false) {
-        self.text = text
-        self.asTask = asTask
-    }
 
     @MainActor
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        let target = DailyNoteTarget()
-        try await NotebookIntentRuntime.service().addToToday(
-            text: text, asTask: asTask, target: target)
-        WidgetCenter.shared.reloadTimelines(ofKind: "GistPadToday")
+        try await notebook.addToToday(text: text, asTask: asTask, target: DailyNoteTarget())
         return .result(dialog: "Added to Today.")
     }
 }

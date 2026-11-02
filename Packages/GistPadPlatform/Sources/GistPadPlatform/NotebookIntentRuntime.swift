@@ -9,22 +9,6 @@ public protocol NotebookIntentServing: AnyObject, Sendable {
     func addToToday(text: String, asTask: Bool, target: DailyNoteTarget) async throws -> NotebookRoute
 }
 
-@MainActor
-public enum NotebookIntentRuntime {
-    private static var factory: (@MainActor () throws -> any NotebookIntentServing)?
-
-    public static func configure(
-        _ factory: @escaping @MainActor () throws -> any NotebookIntentServing
-    ) {
-        self.factory = factory
-    }
-
-    public static func service() throws -> any NotebookIntentServing {
-        guard let factory else { throw NotebookPlatformError.serviceUnavailable }
-        return try factory()
-    }
-}
-
 public enum TodayAppend {
     public static func command(
         draft: DraftSnapshot, text: String, asTask: Bool

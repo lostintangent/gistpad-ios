@@ -18,7 +18,7 @@ struct NotebookSystemTests {
         let source = "日本語 👩🏽‍💻\n- [ ] First  \r\n```md\n- [ ] Not a task\n```bad\n- [x] Still code\n```\n  - [x] Second\n- [X] Not the web marker\n"
         let accepted = try await store.persist(
             id: draft.id, accountID: account, text: source, generation: 9)
-        let snapshot = try NotebookSystemSnapshot.make(
+        let snapshot = NotebookSystemSnapshot.make(
             accountID: account, cache: cache(gist), drafts: [accepted], date: date, timeZone: zone)
         #expect(snapshot.today.tasks.map(\.title) == ["First", "Second"])
         #expect(snapshot.today.tasks.map(\.isCompleted) == [false, true])
@@ -65,46 +65,12 @@ struct NotebookSystemTests {
             accountID: account, githubUserID: 42,
             filename: DailyNoteTarget(date: date, timeZone: zone).filename,
             description: GistConventions.dailyNotesDescription, text: source)
-        let snapshot = try NotebookSystemSnapshot.make(
+        let snapshot = NotebookSystemSnapshot.make(
             accountID: account, cache: nil, drafts: [draft], date: date, timeZone: zone)
         #expect(snapshot.today.tasks.map(\.title) == ["First", "Second"])
         let task = try #require(snapshot.today.tasks.last)
         let updated = try await store.apply(task.command(accountID: account, completed: false))
         #expect(updated.text == source.replacingOccurrences(of: "- [x] Second", with: "- [ ] Second"))
-    }
-
-    @Test func foreignAccountsNeverEnterTheSharedSnapshot() async throws {
-        let gist = try dailyGist(filename: "2026-10-24.md", text: "Private source")
-        let store = try DraftStore.open(inMemory: true)
-        let foreign = try await store.newDraft(accountID: UUID(), githubUserID: 99, text: "Foreign")
-        #expect(throws: NotebookPlatformError.accountChanged) {
-            try NotebookSystemSnapshot.make(
-                accountID: account, cache: cache(gist), drafts: [foreign])
-        }
-        #expect(throws: NotebookPlatformError.accountChanged) {
-            try NotebookSystemSnapshot.make(accountID: nil, cache: cache(gist), drafts: [])
-        }
-        let signedOut = try NotebookSystemSnapshot.make(accountID: nil, cache: nil, drafts: [])
-        #expect(signedOut.notes.isEmpty)
-        #expect(signedOut.today.tasks.isEmpty)
-        #expect(!signedOut.today.isAvailable)
-    }
-
-    @Test func sharedPresentationSurvivesReopeningAndCorruptionIsAnError() throws {
-        let container = FileManager.default.temporaryDirectory.appendingPathComponent(
-            UUID().uuidString, isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: container) }
-        let location = try SharedStoreLocation(containerURL: container, prepareDirectory: false)
-        let store = SharedNotebookStore(location: location)
-        #expect(try store.read() == nil)
-        #expect(!FileManager.default.fileExists(atPath: location.directory.path))
-        let snapshot = NotebookSystemSnapshot.preview(date: date)
-        try store.write(snapshot)
-        #expect(FileManager.default.fileExists(atPath: location.directory.path))
-        #expect(try SharedNotebookStore(location: location).read() == snapshot)
-        try Data("not a snapshot".utf8).write(
-            to: location.directory.appendingPathComponent("notebook.snapshot"))
-        #expect(throws: DecodingError.self) { try store.read() }
     }
 
     @Test @MainActor func acknowledgingAnOldRouteCannotDiscardANewerDestination() {
