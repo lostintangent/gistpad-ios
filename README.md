@@ -93,7 +93,7 @@ Feature code lives in local packages, so parallel work doesn't churn `project.pb
 | `GistPad/Settings` | Settings, account switching and layout preferences. |
 | `GistPad/System` | `PlatformBridge` and App Shortcuts, which connect the library to intents, widgets and Spotlight. |
 | `GistPad/Captures` | DEBUG fixture launch arguments and the fixture library. |
-| `GistPadWidgets` | The Today widget and the Add to Today control. |
+| `GistPadWidgets` | The Today widget and the Add to Today and Open Today controls. |
 | `GistPadTests` | App-hosted tests, in folders that mirror `GistPad`. |
 | `GistPadUITests` | UI tests for the Library, a gist, daily notes and comments. |
 | `PreviewRenderer` | Builds Preview's web bundle from `../gistpad.dev` into `GistPadPreview`. |

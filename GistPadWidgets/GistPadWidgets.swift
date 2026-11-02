@@ -8,6 +8,7 @@ struct GistPadWidgetBundle: WidgetBundle {
   var body: some Widget {
     TodayWidget()
     AddToTodayControl()
+    OpenTodayControl()
   }
 }
 
@@ -77,6 +78,18 @@ struct AddToTodayControl: ControlWidget {
     }
     .displayName("Add to Today")
     .description("Capture a thought or task in today's note.")
+  }
+}
+
+struct OpenTodayControl: ControlWidget {
+  var body: some ControlWidgetConfiguration {
+    StaticControlConfiguration(kind: "GistPadOpenToday") {
+      ControlWidgetButton(action: OpenTodayIntent()) {
+        Label("Open Today", systemImage: "calendar")
+      }
+    }
+    .displayName("Open Today")
+    .description("Open today's note.")
   }
 }
 

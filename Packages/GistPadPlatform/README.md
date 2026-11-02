@@ -16,8 +16,9 @@ snippet, indexed with complete file protection. Opening one opens the gist the
 way the Library does. `GistEntityQuery` resolves identifiers and strings for the
 signed-in account and answers the system's reindex requests.
 
-Open Gist, Open Today and Add to Today are App Shortcuts. The Add to Today control
-opens the capture sheet, and shortcut-provided text skips it. Captures start
+Open Gist, Open Today and Add to Today are App Shortcuts. The Open Today control
+opens today's note. The Add to Today control opens the capture sheet, and
+shortcut-provided text skips it. Captures start
 today the way the app does, append Sync's `addToToday` edit through the same
 `DraftEdit` path as the editor, then leave publishing to autosave.
 
