@@ -29,12 +29,12 @@
   @MainActor
   func hostEditor(
     _ editor: Editor, title: String? = nil, intelligence: (@MainActor () -> Void)? = nil,
-    insertPhoto: (@MainActor () -> Void)? = nil, canInsertPhoto: Bool = false
+    insertImage: (@MainActor () -> Void)? = nil, canInsertImage: Bool = false
   ) -> UIWindow {
     let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
     window.rootViewController = UIHostingController(
       rootView: EditorView(
-        editor: editor, title: title, insertPhoto: insertPhoto, canInsertPhoto: canInsertPhoto,
+        editor: editor, title: title, insertImage: insertImage, canInsertImage: canInsertImage,
         intelligence: intelligence))
     window.makeKeyAndVisible()
     window.layoutIfNeeded()

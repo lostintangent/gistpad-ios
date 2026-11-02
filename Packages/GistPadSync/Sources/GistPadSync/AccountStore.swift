@@ -229,8 +229,8 @@ public actor AccountStore {
         GitHubClient(session: httpSession) { [self] in try await githubToken(accountID: accountID) }
     }
 
-    public func photoStorage(accountID: UUID) throws -> PhotoStorage {
-        try PhotoStorage(publishableKey: publishableKey, session: httpSession) { [self] in
+    public func imageStorage(accountID: UUID) throws -> ImageStorage {
+        try ImageStorage(publishableKey: publishableKey, session: httpSession) { [self] in
             try await storageToken(accountID: accountID)
         }
     }

@@ -24,12 +24,12 @@ func testPNG() throws -> Data {
     return data as Data
 }
 
-@Suite struct PhotoStorageTests {
+@Suite struct ImageStorageTests {
     @Test func requestAndMarkdownExactlyMatchWebStorageContract() async throws {
         let bytes = try testPNG()
         let asset = try #require(UUID(uuidString: "12345678-ABCD-4000-8000-123456789ABC"))
         let requests = Mutex<[String]>([])
-        let storage = try PhotoStorage(
+        let storage = try ImageStorage(
             publishableKey: "sb_publishable_fake",
             session: FakeURLProtocol.session { request in
                 requests.withLock { $0.append(request.httpMethod ?? "") }
@@ -48,17 +48,17 @@ func testPNG() throws -> Data {
         let url = try await storage.upload(bytes, gistID: "abc123", assetID: asset)
         #expect(url.absoluteString == "https://upnfachynwuwialgybvf.supabase.co/storage/v1/object/public/assets/abc123/12345678-abcd-4000-8000-123456789abc.png")
         #expect(requests.withLock { $0 } == ["POST"])
-        #expect(PhotoStorage.markdown(url) == "![Image](\(url.absoluteString))")
+        #expect(ImageStorage.markdown(url) == "![Image](\(url.absoluteString))")
     }
 
-    @Test func photoNormalizationProducesUprightPNGWithoutLocationMetadata() throws {
-        let normalized = try PhotoStorage.png(from: testPNG())
+    @Test func imageNormalizationProducesUprightPNGWithoutLocationMetadata() throws {
+        let normalized = try ImageStorage.png(from: testPNG())
         let source = try #require(CGImageSourceCreateWithData(normalized as CFData, nil))
         #expect(CGImageSourceGetType(source) as String? == UTType.png.identifier)
         let properties = try #require(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
         #expect(properties[kCGImagePropertyPixelWidth] as? Int == 1)
         #expect(properties[kCGImagePropertyPixelHeight] as? Int == 2)
         #expect(properties[kCGImagePropertyGPSDictionary] == nil)
-        #expect(throws: PhotoStorage.Failure.invalidImage) { try PhotoStorage.png(from: Data("not an image".utf8)) }
+        #expect(throws: ImageStorage.Failure.invalidImage) { try ImageStorage.png(from: Data("not an image".utf8)) }
     }
 }

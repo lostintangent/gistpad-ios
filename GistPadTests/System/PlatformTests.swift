@@ -90,7 +90,7 @@ struct PlatformTests {
     #expect(session.saveState == .savedToGitHub)
   }
 
-  @Test func aPickedPhotoUploadsThenInsertsItsMarkdownAtTheCursorAsOneUndo() async throws {
+  @Test func aPickedImageUploadsThenInsertsItsMarkdownAtTheCursorAsOneUndo() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
     let session = try await fixture.session()
@@ -103,22 +103,18 @@ struct PlatformTests {
     defer { window.isHidden = true }
     try await Task.sleep(for: .milliseconds(100))
     let original = session.editor.text
-    let url = try #require(URL(string: "https://example.com/assets/daily123/photo.png"))
+    let url = try #require(URL(string: "https://example.com/assets/daily123/image.png"))
     var uploadedGistIDs: [String] = []
-    let photos = PhotoUpload(
-      session: session, defaults: try #require(UserDefaults(suiteName: UUID().uuidString))
-    ) { _, gistID in
+    let images = ImageUpload(session: session) { _, gistID in
       uploadedGistIDs.append(gistID)
       return url
     }
-    photos.choosePhoto()
-    #expect(photos.isShowingNotice && !photos.isShowingPicker)
-    photos.acceptNotice()
-    #expect(photos.isShowingPicker)
+    images.chooseImage()
+    #expect(images.isShowingPicker)
     session.editor.textView.selectedRange = NSRange(
       location: (original as NSString).length, length: 0)
-    await photos.add(png: Data("png".utf8))
-    #expect(photos.failure == nil && !photos.isUploading)
+    await images.add(png: Data("png".utf8))
+    #expect(images.failure == nil && !images.isUploading)
     #expect(uploadedGistIDs == ["daily123"])
     #expect(session.editor.text == original + "![Image](\(url.absoluteString))")
     session.editor.textView.undoManager?.undo()

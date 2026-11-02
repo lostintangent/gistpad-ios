@@ -352,12 +352,12 @@ struct RootView: View {
   private func fileScreen(
     _ session: FileSession, availableWidth: CGFloat
   ) -> some View {
-    gistScreen(session, photos: session.photos, availableWidth: availableWidth)
-      .photoPicker(session.photos)
+    gistScreen(session, images: session.images, availableWidth: availableWidth)
+      .imagePicker(session.images)
   }
 
   private func gistScreen(
-    _ session: FileSession, photos: PhotoUpload,
+    _ session: FileSession, images: ImageUpload,
     availableWidth: CGFloat
   ) -> some View {
     let mode = Binding(
@@ -396,8 +396,8 @@ struct RootView: View {
     ) {
       EditorView(
         editor: session.editor, title: details.title,
-        insertPhoto: { comments.performAfterClosing { photos.choosePhoto() } },
-        canInsertPhoto: photos.canChoosePhoto,
+        insertImage: { comments.performAfterClosing { images.chooseImage() } },
+        canInsertImage: images.canChooseImage,
         intelligence: { comments.performAfterClosing { presentIntelligence(session) } },
         comments: commentConfiguration(session),
         onOpenCommentThreads: commentOpener(session, origin: .edit),

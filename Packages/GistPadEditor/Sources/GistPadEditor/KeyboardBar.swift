@@ -6,14 +6,14 @@
     let format: @MainActor (Format) -> Void
     let link: @MainActor () -> Void
     let indent: @MainActor (Bool) -> Void
-    let photo: (@MainActor () -> Void)?
+    let image: (@MainActor () -> Void)?
     let intelligence: (@MainActor () -> Void)?
     let dismiss: @MainActor () -> Void
   }
 
   struct KeyboardBarConfiguration: Equatable {
     let canFormat: Bool
-    let canInsertPhoto: Bool
+    let canInsertImage: Bool
     let canUseIntelligence: Bool
   }
 
@@ -140,12 +140,11 @@
           $0.actions.format(.quote)
         },
       ]
-      let photo = action(String(localized: "Photo", bundle: .module), image: "photo") {
-        $0.actions.photo?()
+      let image = action(String(localized: "Image…", bundle: .module), image: "photo") {
+        $0.actions.image?()
       }
-      photo.subtitle = String(localized: "Public, even in a secret gist", bundle: .module)
-      photo.attributes = configuration.canInsertPhoto ? [] : .disabled
-      insert.append(UIMenu(options: .displayInline, children: [photo]))
+      image.attributes = configuration.canInsertImage ? [] : .disabled
+      insert.append(UIMenu(options: .displayInline, children: [image]))
       let emphasis = [
         action(String(localized: "Bold", bundle: .module), image: "bold") {
           $0.actions.format(.bold)

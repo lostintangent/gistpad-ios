@@ -5,57 +5,45 @@ import Observation
 import PhotosUI
 import SwiftUI
 
-/// Adds a photo the way gistpad.dev does: upload it to public storage, then insert its Markdown at the cursor.
+/// Adds an image the way gistpad.dev does: upload it to public storage, then insert its Markdown at the cursor.
 @MainActor
 @Observable
-final class PhotoUpload {
+final class ImageUpload {
   struct Failure {
     let message: String
     let png: Data?
   }
 
-  static let noticeKey = "public-image-storage"
-  var isShowingNotice = false
   var isShowingPicker = false
   var failure: Failure?
   private(set) var isUploading = false
   @ObservationIgnored private weak var session: FileSession?
   @ObservationIgnored private let upload: @MainActor (Data, String) async throws -> URL
-  @ObservationIgnored private let defaults: UserDefaults
 
-  init(
-    session: FileSession, defaults: UserDefaults = .standard,
-    upload: @escaping @MainActor (Data, String) async throws -> URL
-  ) {
+  init(session: FileSession, upload: @escaping @MainActor (Data, String) async throws -> URL) {
     self.session = session
-    self.defaults = defaults
     self.upload = upload
   }
 
-  var canChoosePhoto: Bool {
+  var canChooseImage: Bool {
     guard let session else { return false }
     return !isUploading && session.canMutate && !session.file.isRecovery
   }
 
-  func choosePhoto() {
-    guard canChoosePhoto else { return }
+  func chooseImage() {
+    guard canChooseImage else { return }
     session?.editor.textView.resignFirstResponder()
-    if defaults.bool(forKey: Self.noticeKey) { isShowingPicker = true } else { isShowingNotice = true }
-  }
-
-  func acceptNotice() {
-    defaults.set(true, forKey: Self.noticeKey)
     isShowingPicker = true
   }
 
-  func add(_ photo: PhotosPickerItem) async {
+  func add(_ item: PhotosPickerItem) async {
     isUploading = true
     defer { isUploading = false }
     do {
-      guard let data = try await photo.loadTransferable(type: Data.self) else {
-        throw PhotoStorage.Failure.invalidImage
+      guard let data = try await item.loadTransferable(type: Data.self) else {
+        throw ImageStorage.Failure.invalidImage
       }
-      await add(png: try await Task.detached { try PhotoStorage.png(from: data) }.value)
+      await add(png: try await Task.detached { try ImageStorage.png(from: data) }.value)
     } catch {
       failure = Failure(message: Self.message(for: error), png: nil)
     }
@@ -67,11 +55,11 @@ final class PhotoUpload {
     defer { isUploading = false }
     if session.draft.gistID == nil { await session.publish() }
     guard let gistID = session.draft.gistID else {
-      failure = Failure(message: String(localized: "Publish this gist to upload the photo."), png: png)
+      failure = Failure(message: String(localized: "Publish this gist to upload the image."), png: png)
       return
     }
     do {
-      let markdown = PhotoStorage.markdown(try await upload(png, gistID))
+      let markdown = ImageStorage.markdown(try await upload(png, gistID))
       let editor = session.editor
       try editor.apply(
         Edit(
@@ -85,17 +73,17 @@ final class PhotoUpload {
 
   private static func message(for error: any Error) -> String {
     switch error {
-    case PhotoStorage.Failure.imageTooLarge: String(localized: "Choose a photo under 50 MB and 100 megapixels.")
-    case PhotoStorage.Failure.http: String(localized: "GistPad's image storage didn't accept the photo.")
-    case is PhotoStorage.Failure: String(localized: "This item couldn't be read as an image. Choose another photo.")
+    case ImageStorage.Failure.imageTooLarge: String(localized: "Choose an image under 50 MB and 100 megapixels.")
+    case ImageStorage.Failure.http: String(localized: "GistPad's image storage didn't accept this image.")
+    case is ImageStorage.Failure: String(localized: "This item couldn't be read as an image. Choose another one.")
     default: error.localizedDescription
     }
   }
 }
 
 extension GitHubSync {
-  func uploadPhoto(_ png: Data, gistID: String, accountID: UUID) async throws -> URL {
-    let storage = try await accounts.photoStorage(accountID: accountID)
+  func uploadImage(_ png: Data, gistID: String, accountID: UUID) async throws -> URL {
+    let storage = try await accounts.imageStorage(accountID: accountID)
     return try await storage.upload(png, gistID: gistID)
   }
 }

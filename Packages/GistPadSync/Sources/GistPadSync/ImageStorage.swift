@@ -2,8 +2,8 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Uploads a photo the way gistpad.dev does: one POST to `assets/<gist>/<uuid>.png`, then its public URL.
-public struct PhotoStorage: Sendable {
+/// Uploads an image the way gistpad.dev does: one POST to `assets/<gist>/<uuid>.png`, then its public URL.
+public struct ImageStorage: Sendable {
     public enum Failure: Error, Equatable, Sendable {
         case invalidImage
         case imageTooLarge
@@ -45,11 +45,11 @@ public struct PhotoStorage: Sendable {
     public static func markdown(_ url: URL) -> String { "![Image](\(url.absoluteString))" }
 }
 
-extension PhotoStorage {
+extension ImageStorage {
     private static let maximumByteCount = 50_000_000
     private static let maximumPixelCount = 100_000_000
 
-    /// The photo as an upright PNG without its Photos location and EXIF metadata, ready to upload.
+    /// The image as an upright PNG without its location and EXIF metadata, ready to upload.
     public static func png(from data: Data) throws -> Data {
         guard data.count <= maximumByteCount else { throw Failure.imageTooLarge }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -75,7 +75,7 @@ extension PhotoStorage {
         guard let destination = CGImageDestinationCreateWithData(result, UTType.png.identifier as CFString, 1, nil) else {
             throw Failure.encodingFailed
         }
-        // Re-encoding the upright pixels avoids carrying Photos location/EXIF metadata into public storage.
+        // Re-encoding the upright pixels avoids carrying location/EXIF metadata into public storage.
         CGImageDestinationAddImage(destination, image, nil)
         guard CGImageDestinationFinalize(destination) else { throw Failure.encodingFailed }
         guard result.length <= maximumByteCount else { throw Failure.imageTooLarge }

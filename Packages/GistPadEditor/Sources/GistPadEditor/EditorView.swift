@@ -8,8 +8,8 @@
     public let editor: Editor
     /// What VoiceOver calls the text view: the title the screen shows.
     private let title: String?
-    private let insertPhoto: (@MainActor () -> Void)?
-    private let canInsertPhoto: Bool
+    private let insertImage: (@MainActor () -> Void)?
+    private let canInsertImage: Bool
     private let intelligence: (@MainActor () -> Void)?
     private let comments: CommentHighlightConfiguration
     private let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
@@ -21,8 +21,8 @@
     public init(
       editor: Editor,
       title: String? = nil,
-      insertPhoto: (@MainActor () -> Void)? = nil,
-      canInsertPhoto: Bool = false,
+      insertImage: (@MainActor () -> Void)? = nil,
+      canInsertImage: Bool = false,
       intelligence: (@MainActor () -> Void)? = nil,
       comments: CommentHighlightConfiguration = .init(),
       onOpenCommentThreads: (@MainActor ([Int64]) -> Void)? = nil,
@@ -31,8 +31,8 @@
     ) {
       self.editor = editor
       self.title = title
-      self.insertPhoto = insertPhoto
-      self.canInsertPhoto = canInsertPhoto
+      self.insertImage = insertImage
+      self.canInsertImage = canInsertImage
       self.intelligence = intelligence
       self.comments = comments
       self.onOpenCommentThreads = onOpenCommentThreads
@@ -49,12 +49,12 @@
           onAddComment: onAddComment,
           actions: KeyboardBarActions(
             format: format, link: beginLink, indent: indent,
-            photo: insertPhoto,
+            image: insertImage,
             intelligence: intelligence,
             dismiss: { editor.textView.resignFirstResponder() }),
           configuration: KeyboardBarConfiguration(
             canFormat: editor.canFormat,
-            canInsertPhoto: canInsertPhoto && insertPhoto != nil,
+            canInsertImage: canInsertImage && insertImage != nil,
             canUseIntelligence: editor.isSettled && intelligence != nil)
         )
         .id(editor.id)

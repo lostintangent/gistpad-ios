@@ -71,10 +71,10 @@ final class FileSession {
     observeAutosave()
   }
 
-  /// Adds photos at the caret, uploading them to the library's account.
-  @ObservationIgnored private(set) lazy var photos = PhotoUpload(session: self) {
+  /// Adds images at the caret, uploading them to the library's account.
+  @ObservationIgnored private(set) lazy var images = ImageUpload(session: self) {
     [library = self.library, accountID = self.draft.accountID] png, gistID in
-    try await library.uploadPhoto(png, gistID: gistID, accountID: accountID)
+    try await library.uploadImage(png, gistID: gistID, accountID: accountID)
   }
 
   /// The gist's header and actions, always current with the library.

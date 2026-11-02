@@ -131,9 +131,9 @@
         #expect(editor.textView.undoManager?.canUndo == false)
       }
 
-      @Test func keyboardBarBoldEditsTheSessionAndPhotoNeedsTheCapability() throws {
+      @Test func keyboardBarBoldEditsTheSessionAndImageNeedsTheCapability() throws {
         let editor = Editor(fileID: "accessory", text: "A note")
-        let window = hostEditor(editor, insertPhoto: {}, canInsertPhoto: false)
+        let window = hostEditor(editor, insertImage: {}, canInsertImage: false)
         defer { window.isHidden = true }
         let toolbar = try #require(editor.textView.inputAccessoryView as? KeyboardBar)
         let items = toolbar.buttons.arrangedSubviews.compactMap { $0 as? UIButton }
@@ -152,8 +152,9 @@
         #expect(editor.textView.undoManager?.canUndo == false)
         let insert = try #require(
           items.first { $0.accessibilityIdentifier == "editor-insert-menu" }?.menu)
-        let photo = try #require(menuActions(insert.children).first { $0.title == "Photo" })
-        #expect(photo.attributes.contains(.disabled))
+        let image = try #require(menuActions(insert.children).first { $0.title == "Image…" })
+        #expect(image.attributes.contains(.disabled))
+        #expect(image.subtitle == nil)
       }
 
       @Test func voiceOverNamesTheTextViewByTheScreensTitle() {
