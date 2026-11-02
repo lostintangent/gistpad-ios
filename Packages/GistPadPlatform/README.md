@@ -32,9 +32,10 @@ account, file, generation and exact task marker, and reaches an open editor as
 one Undo step. A checked task means the edit is saved on the phone. Publishing
 follows the app's usual autosave and leave-app paths.
 
-The Today widget supports small, medium, the Lock Screen accessory families and
-StandBy. Timelines never create a note. Before first unlock it shows an
-invitation instead of tasks.
+The Today widget comes in small, medium, and the inline and rectangular Lock
+Screen families, and small works in StandBy. Timelines never create a note.
+When the snapshot can't be read, such as before first unlock, it asks you to
+open GistPad.
 
 ## Validation
 

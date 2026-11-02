@@ -1,6 +1,5 @@
 import AppIntents
 import GistPadPlatform
-import OSLog
 import SwiftUI
 import WidgetKit
 
@@ -51,11 +50,7 @@ struct TodayProvider: TimelineProvider {
       return TodayEntry(
         date: .now, snapshot: snapshot,
         state: snapshot?.accountID == nil ? .signedOut : .available)
-    } catch let error as CocoaError where error.code == .fileReadNoPermission {
-      return TodayEntry(date: .now, snapshot: nil, state: .locked)
     } catch {
-      Logger(subsystem: "dev.gistpad.GistPad", category: "Widget")
-        .error("Widget snapshot failed: \(String(reflecting: type(of: error)), privacy: .public)")
       return TodayEntry(date: .now, snapshot: nil, state: .unavailable)
     }
   }
@@ -69,9 +64,7 @@ struct TodayWidget: Widget {
     }
     .configurationDisplayName("Today")
     .description("Keep your daily note close, and check off what matters.")
-    .supportedFamilies([
-      .systemSmall, .systemMedium, .accessoryInline, .accessoryCircular, .accessoryRectangular
-    ])
+    .supportedFamilies([.systemSmall, .systemMedium, .accessoryInline, .accessoryRectangular])
   }
 }
 

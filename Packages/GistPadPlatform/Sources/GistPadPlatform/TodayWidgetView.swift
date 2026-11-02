@@ -5,7 +5,7 @@ import SwiftUI
 import WidgetKit
 
 public enum TodayWidgetState: Equatable, Sendable {
-    case available, signedOut, locked, unavailable, placeholder
+    case available, signedOut, unavailable, placeholder
 }
 
 public struct TodayWidgetView: View {
@@ -16,7 +16,6 @@ public struct TodayWidgetView: View {
     @Environment(\.widgetFamily) private var family
     @Environment(\.widgetRenderingMode) private var renderingMode
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .largeTitle) private var dateSize = 38.0
 
     public init(
         snapshot: NotebookSystemSnapshot?, date: Date, state: TodayWidgetState
@@ -52,70 +51,23 @@ public struct TodayWidgetView: View {
                     Image(systemName: "calendar")
                 }
                 .privacySensitive()
-            case .accessoryCircular:
-                VStack(spacing: 0) {
-                    Image(systemName: "calendar")
-                        .font(.caption)
-                    Text(date, format: .dateTime.day())
-                        .font(.system(.title2, design: .rounded, weight: .semibold))
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(Text(date, format: .dateTime.weekday().month().day()))
             case .accessoryRectangular:
                 rectangular
-            case .systemMedium:
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(alignment: .leading, spacing: 8) {
-                        compactDate
-                        content(limit: 1)
-                    }
-                } else {
-                    HStack(alignment: .top, spacing: 16) {
-                        dateColumn
-                            .frame(maxWidth: 88, alignment: .leading)
-                        VStack(alignment: .leading, spacing: 4) {
-                            content(limit: 2)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
             default:
                 VStack(alignment: .leading, spacing: dynamicTypeSize.isAccessibilitySize ? 8 : 12) {
-                    if dynamicTypeSize.isAccessibilitySize {
-                        Text(date, format: .dateTime.month(.abbreviated).day())
-                            .font(.system(.caption, design: .rounded, weight: .semibold))
-                            .foregroundStyle(accent)
-                        Text(accessibleSummary)
-                            .font(.subheadline)
-                            .lineLimit(3)
-                            .privacySensitive()
-                        Spacer(minLength: 0)
-                    } else {
-                        Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 1) {
-                            GridRow {
-                                Text(date, format: .dateTime.month(.abbreviated))
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(accent)
+                    if family == .systemMedium, !dynamicTypeSize.isAccessibilitySize {
+                        HStack(alignment: .top, spacing: 16) {
+                            dateBlock
+                            VStack(alignment: .leading, spacing: 4) {
+                                content(limit: 2)
                             }
-                            GridRow(alignment: .top) {
-                                Text(date, format: .dateTime.day())
-                                    .font(.system(size: dateSize, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(accent)
-                                    .contentTransition(.numericText())
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text("Today").font(.headline)
-                                    if state == .available, !tasks.isEmpty {
-                                        Text("\(remaining) remaining")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .privacySensitive()
-                                    }
-                                }
-                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                    } else {
+                        dateBlock
                         content(limit: 1)
-                        Spacer(minLength: 0)
                     }
+                    Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -128,40 +80,39 @@ public struct TodayWidgetView: View {
         .redacted(reason: state == .placeholder ? .placeholder : [])
     }
 
-    private var compactDate: some View {
-        Text(date, format: .dateTime.month(.abbreviated).day())
-            .font(.system(.headline, design: .rounded))
-            .foregroundStyle(accent)
-            .accessibilityLabel(Text("Today, \(date, format: .dateTime.month().day())"))
-    }
-
-    private var dateColumn: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(date, format: .dateTime.month(.abbreviated))
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(accent)
-            Text(date, format: .dateTime.day())
-                .font(.system(size: dateSize, weight: .semibold, design: .rounded))
-                .foregroundStyle(accent)
-                .contentTransition(.numericText())
-            Text("Today").font(.headline)
-            if state == .available, !tasks.isEmpty {
-                Text("\(remaining) remaining")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .privacySensitive()
+    private var dateBlock: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                Text(date, format: .dateTime.month(.abbreviated).day())
+                    .font(.system(.headline, design: .rounded))
+                    .foregroundStyle(accent)
+            } else {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(date, format: .dateTime.month(.abbreviated))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(accent)
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(date, format: .dateTime.day())
+                            .font(.system(.largeTitle, design: .rounded, weight: .semibold))
+                            .foregroundStyle(accent)
+                            .contentTransition(.numericText())
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Today").font(.headline)
+                            if state == .available, !tasks.isEmpty {
+                                Text("\(remaining) remaining")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .privacySensitive()
+                            }
+                        }
+                    }
+                }
             }
         }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var accessibleSummary: String {
-        if state == .signedOut { return String(localized: "Sign in to GistPad") }
-        guard state == .available else { return invitation }
-        guard !tasks.isEmpty else { return today?.excerpt ?? invitation }
-        return remaining == 1
-            ? String(localized: "1 task remaining")
-            : String(localized: "\(remaining) tasks remaining")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(state == .available && !tasks.isEmpty
+            ? Text("Today, \(date, format: .dateTime.month().day()), \(remaining) remaining")
+            : Text("Today, \(date, format: .dateTime.month().day())"))
     }
 
     private var rectangular: some View {
@@ -201,8 +152,7 @@ public struct TodayWidgetView: View {
 
     private var invitation: String {
         switch state {
-        case .signedOut: String(localized: "Sign in to your notebook")
-        case .locked: String(localized: "Unlock to see Today")
+        case .signedOut: String(localized: "Sign in to GistPad")
         case .unavailable: String(localized: "Open GistPad to refresh")
         case .available, .placeholder:
             today?.isAvailable == true ? String(localized: "Open Today") : String(localized: "Start Today")
