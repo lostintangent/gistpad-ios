@@ -236,7 +236,6 @@ struct LibraryTests {
     await library.start()
     let today = try #require(library.loadedFile?.draft)
     #expect(library.isTodaySelected)
-    #expect(today.isDiscardableBlank)
     #expect(Set(library.localDrafts.map(\.id)) == [kept.id, today.id])
     #expect(
       Set(library.state.gists.map(\.id)) == [kept.id.uuidString, today.id.uuidString])
@@ -256,7 +255,8 @@ struct LibraryTests {
     await fixture.library.publishUnsyncedEdits()
     #expect(fixture.remote("a", "README.md") == "One, edited")
     #expect(fixture.remote("b", "README.md") == "Two, edited")
-    #expect(fixture.publishes.sorted() == ["PATCH /gists/a", "PATCH /gists/b"])
+    // Launch opened today, and opening today creates it.
+    #expect(fixture.publishes.sorted() == ["PATCH /gists/a", "PATCH /gists/b", "POST /gists"])
   }
 
   @Test func orphanedEditedCopiesHaveStableDatesAndLocalDeletionTargets() async throws {
@@ -432,7 +432,7 @@ struct LibraryTests {
 
   // MARK: Daily notes
 
-  @Test func coldStartEnsuresTodayQuietlyWithoutPublishingAnUntouchedTemplate() async throws {
+  @Test func coldStartOpensTodayQuietlyAndAutosaveCreatesItUntouched() async throws {
     let fixture = try await LibraryFixture()
     let library = fixture.library
     await library.start()
@@ -441,13 +441,15 @@ struct LibraryTests {
     #expect(file.filename == DailyNote.Day().filename)
     #expect(file.editingRequestID == nil)
     #expect(library.isTodaySelected)
-    #expect(draft.isDiscardableBlank)
+    #expect(fixture.publishes.isEmpty, "Opening today saves it on this iPhone first.")
     let session = FileSession(
       file: file, draft: draft, library: library, autosaveDelay: .milliseconds(1))
-    #expect(!session.hasUnpublishedChanges)
-    #expect(session.autosave(foreground: true) == nil)
-    await session.publish(reason: .background)
-    #expect(fixture.publishes.isEmpty)
+    #expect(session.hasUnpublishedChanges)
+    let autosave = try #require(session.autosave(foreground: true))
+    await autosave.value
+    #expect(fixture.publishes == ["POST /gists"])
+    let gist = try #require(fixture.server.gists.first)
+    #expect(fixture.remote(gist.id, file.filename) == draft.text)
     await library.open(.today())
     #expect(library.loadedFile?.draft?.id == draft.id)
     #expect(library.loadedFile?.editingRequestID != nil)
@@ -724,6 +726,10 @@ struct RootViewTests {
   @Test func leavingANewBlankNoteDiscardsItsDraftWithoutPublishing() async throws {
     let fixture = try await LibraryFixture {
       $0.addGist(id: "kept", description: "Kept", files: ["README.md": "A real note"])
+      // Today already exists, so opening it at launch has nothing to create.
+      $0.addGist(
+        id: "daily", description: DailyNote.gistDescription,
+        files: [DailyNote.Day().filename: "# Today"])
     }
     let host = try await NavigationHost(fixture: fixture, sizeClass: .compact)
     defer { await host.close() }
@@ -759,7 +765,9 @@ struct RootViewTests {
 
   @Test(arguments: [true, false])
   func returningToLibraryPublishesTheOutgoingNoteAndKeepsItsEditor(autosave: Bool) async throws {
-    let fixture = try await LibraryFixture(autosave: autosave) {
+    let fixture = try await LibraryFixture(
+      autosave: autosave, selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+    ) {
       $0.addGist(id: "a", description: "Current", files: ["README.md": "Current source"])
     }
     let host = try await NavigationHost(fixture: fixture, sizeClass: .compact)
@@ -792,7 +800,9 @@ struct RootViewTests {
   }
 
   @Test func switchingNotesMidCompositionKeepsAndPublishesTheComposedText() async throws {
-    let fixture = try await LibraryFixture(autosave: false) {
+    let fixture = try await LibraryFixture(
+      autosave: false, selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+    ) {
       $0.addGist(id: "a", description: "First note", files: ["README.md": "First note source"])
       $0.addGist(id: "b", description: "Second note", files: ["README.md": "Second note source"])
     }
@@ -823,7 +833,6 @@ struct RootViewTests {
     try await host.waitUntil { host.editor(text: draft.text)?.isFirstResponder == true }
     let editor = try #require(host.editor(text: draft.text))
     #expect(editor.selectedRange == NSRange(location: draft.text.utf16.count, length: 0))
-    #expect(fixture.publishes.isEmpty)
   }
 
   @Test func aColdLinkWaitsForRestorationAndOpensTheExactFile() async throws {
@@ -870,7 +879,9 @@ struct RootViewTests {
   }
 
   @Test func sourceIntelligenceOpensTheLiveSheetForTheRetainedEditor() async throws {
-    let fixture = try await LibraryFixture(autosave: false) {
+    let fixture = try await LibraryFixture(
+      autosave: false, selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+    ) {
       $0.addGist(
         id: "a", description: "A retained thought", files: ["README.md": "A little room to think."])
     }

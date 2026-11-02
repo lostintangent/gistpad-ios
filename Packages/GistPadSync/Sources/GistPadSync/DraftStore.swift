@@ -41,13 +41,11 @@ public struct Draft: Equatable, Sendable, Identifiable {
     public let state: PublishState
     public let updatedAt: Date?
 
+    /// A new gist that's still untitled and blank, which leaving discards. Today's note is never one,
+    /// because opening it creates it.
     public var isDiscardableBlank: Bool {
         guard baseContent == nil, baseRevision == nil, attemptedContent == nil,
               attemptedGeneration == nil, state == .savedLocally else { return false }
-        if description == DailyNote.gistDescription,
-           DailyNote.date(filename: filename) != nil, generation == 0 {
-            return text == DailyNote.content(template: nil, filename: filename)
-        }
         return gistID == nil && description.isEmpty && text.allSatisfy(\.isWhitespace)
     }
 

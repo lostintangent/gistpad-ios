@@ -154,6 +154,8 @@ struct FileSessionTests {
   @Test func recoveryEditsStayLocalAndCannotRecreateADeletedGist() async throws {
     let fixture = try await LibraryFixture()
     let staged = try await fixture.stageEdit(gistID: "gone", filename: "README.md", text: "Kept")
+    fixture.lastOpened.save(
+      .init(gistID: "gone", filename: "README.md", draftID: staged.id), accountID: fixture.account.id)
     let session = try await fixture.open(.draft(id: staged.id))
     #expect(session.file.isRecovery)
     edit(session, to: "A recoverable local edit")

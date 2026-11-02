@@ -2,39 +2,9 @@ import Foundation
 import Testing
 @testable import GistPadSync
 
-/// A new note you never typed in disappears when you leave it. Anything you touched stays.
+/// A new gist you never titled or typed in disappears when you leave it. Anything you touched stays.
 @Suite struct BlankDraftTests {
     private let account = SyncFixture.account
-
-    @Test(arguments: [false, true])
-    func anUntouchedDailyTemplateIsDiscardedButItsGistStays(gistExists: Bool) async throws {
-        let sync = try SyncFixture()
-        let daily = gistExists ? sync.server.addGist(
-            description: DailyNote.gistDescription, files: ["2026-10-01.md": "Keep yesterday."]) : nil
-        let today = DailyNote.Day(date: try Date.ISO8601FormatStyle().parse("2026-10-24T12:00:00Z"), timeZone: .gmt)
-
-        let untouched = try await sync.dailyNotes.stageToday(target: today).draft
-        #expect(untouched.isDiscardableBlank)
-        #expect(try await sync.store.discardBlankDraft(
-            id: untouched.id, accountID: account, expectedGeneration: untouched.generation))
-        #expect(try await sync.store.drafts(accountID: account).isEmpty)
-        #expect(sync.server.gists.map(\.id) == [daily?.id].compactMap { $0 })
-        #expect(sync.remote(daily?.id ?? "", "2026-10-01.md") == daily.map { _ in "Keep yesterday." })
-
-        // Typing, even the same text, keeps the day, and so does publishing it or a custom template.
-        let staged = try await sync.dailyNotes.stageToday(target: today).draft
-        let touched = try await sync.type(staged.text, in: staged)
-        let published = try await sync.publish(touched)
-        let custom = try await sync.store.newGistDraft(
-            accountID: account, githubUserID: SyncFixture.user, filename: "2026-10-25.md",
-            description: DailyNote.gistDescription, content: "- [ ] A custom template")
-        for kept in [touched, published, custom] {
-            #expect(!kept.isDiscardableBlank)
-            #expect(try await !sync.store.discardBlankDraft(
-                id: kept.id, accountID: account, expectedGeneration: kept.generation))
-        }
-        #expect(sync.server.gists.count == 1)
-    }
 
     @Test func onlyAStillBlankNewFileIsDiscarded() async throws {
         let url = try temporaryStoreURL()

@@ -12,7 +12,7 @@ private func day(_ iso: String) throws -> DailyNote.Day {
 
 /// Today's note, staged on the phone and published like any other file.
 @Suite struct DailyNotesTests {
-    @Test func openingTodayNeverPublishesAndKeepsYourTyping() async throws {
+    @Test func openingTodayOnlyReadsAndKeepsYourTyping() async throws {
         let sync = try SyncFixture()
         let gist = sync.server.addGist(description: DailyNote.gistDescription, files: [
             "2026-10-23.md": "- [ ] Yesterday", "template.md": "# {{date}}\n\n- [ ] Plan {{date}}\n",
@@ -23,6 +23,7 @@ private func day(_ iso: String) throws -> DailyNote.Day {
         #expect(staged.gist?.id == gist.id)
         #expect(staged.draft.gistID == gist.id)
         #expect(staged.draft.text == "# 2026-10-24\n\n- [ ] Plan 2026-10-24\n")
+        #expect(staged.draft.hasUnpublishedEdits, "Opening today creates it, typed in or not.")
         let typed = try await sync.type("- [x] Plan", in: staged.draft)
         let again = try await sync.dailyNotes.stageToday(target: today)
         #expect(again.draft.id == typed.id)
@@ -44,8 +45,8 @@ private func day(_ iso: String) throws -> DailyNote.Day {
         #expect(staged.draft.gistID == nil)
         #expect(staged.draft.description == DailyNote.gistDescription)
         #expect(staged.draft.text == "# 2026-10-24\n\n")
+        #expect(staged.draft.hasUnpublishedEdits, "Opening today creates it, typed in or not.")
         #expect(try await sync.dailyNotes.stageToday(target: first).draft.id == staged.draft.id)
-        _ = try await sync.type("# 2026-10-24\n\n- [ ] Ship", in: staged.draft)
         #expect(sync.server.gists.isEmpty)
 
         // The next day publishes the unpublished one first, which creates the gist the new day joins.
@@ -53,7 +54,7 @@ private func day(_ iso: String) throws -> DailyNote.Day {
         let gist = try #require(sync.server.gists.first)
         #expect(gist.isDailyNote)
         #expect(gist.isPublic == false)
-        #expect(sync.remote(gist.id, first.filename) == "# 2026-10-24\n\n- [ ] Ship")
+        #expect(sync.remote(gist.id, first.filename) == "# 2026-10-24\n\n")
         #expect(next.gist?.id == gist.id)
         #expect(next.draft.gistID == gist.id)
         #expect(next.draft.text == "# 2026-10-25\n\n")
