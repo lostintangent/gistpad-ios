@@ -1,35 +1,8 @@
 import Foundation
 
 public enum SharedStoreError: Error, Equatable, Sendable {
-    case unavailableAppGroup
-    case invalidContainer
     case duplicateCommand
     case invalidCommand
-}
-
-public struct SharedStoreLocation: Sendable {
-    public let directory: URL
-
-    public init(appGroupIdentifier: String, prepareDirectory: Bool = true) throws {
-        guard appGroupIdentifier.hasPrefix("group."),
-              let container = FileManager.default.containerURL(
-                forSecurityApplicationGroupIdentifier: appGroupIdentifier
-              ) else { throw SharedStoreError.unavailableAppGroup }
-        try self.init(containerURL: container, prepareDirectory: prepareDirectory)
-    }
-
-    public init(containerURL: URL, prepareDirectory: Bool = true) throws {
-        guard containerURL.isFileURL, containerURL.hasDirectoryPath else {
-            throw SharedStoreError.invalidContainer
-        }
-        directory = containerURL.appendingPathComponent("Library/Application Support/GistPad", isDirectory: true)
-        guard prepareDirectory else { return }
-        try FileManager.default.createDirectory(
-            at: directory, withIntermediateDirectories: true,
-            attributes: [.protectionKey: FileProtectionType.complete]
-        )
-        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: directory.path)
-    }
 }
 
 public struct DraftSourceEdit: Codable, Equatable, Sendable {
