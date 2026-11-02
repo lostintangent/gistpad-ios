@@ -108,6 +108,20 @@ xcrun simctl io "$DEVICE" enumerate > "$OUTPUT/displays.txt"
 grep -q 'Device Name: primary-1' "$OUTPUT/displays.txt" || fail "The selected simulator does not expose both Duo displays"
 xcrun simctl install "$DEVICE" "$APP"
 
+# Device types disagree on which framebuffer is the cover, so map by size.
+display_width() {
+    xcrun simctl io "$DEVICE" screenshot --display="$1" "$OUTPUT/probe-$1.png" >/dev/null 2>&1 \
+        || fail "Could not read the $1 display"
+    /usr/bin/sips -g pixelWidth "$OUTPUT/probe-$1.png" | awk '/pixelWidth/ { print $2 }'
+    rm "$OUTPUT/probe-$1.png"
+}
+if [ "$(display_width primary)" -gt "$(display_width primary-1)" ]; then
+    OPEN_DISPLAY=primary COVER_DISPLAY=primary-1
+else
+    OPEN_DISPLAY=primary-1 COVER_DISPLAY=primary
+fi
+printf 'cover_display=%s\nopen_display=%s\n' "$COVER_DISPLAY" "$OPEN_DISPLAY" >> "$OUTPUT/displays.txt"
+
 OLD_APPEARANCE="$(xcrun simctl ui "$DEVICE" appearance)"
 OLD_CONTRAST="$(xcrun simctl ui "$DEVICE" increase_contrast)"
 OLD_SIZE="$(xcrun simctl ui "$DEVICE" content_size)"
@@ -158,7 +172,7 @@ for pose in "${POSES[@]}"; do
         /^Port:/ { integrated = 0 }
         integrated { print }
     ' "$OUTPUT/displays-$pose.txt"
-    if [ "$pose" = cover ]; then display=primary; else display=primary-1; fi
+    if [ "$pose" = cover ]; then display="$COVER_DISPLAY"; else display="$OPEN_DISPLAY"; fi
     for increased in "${CONTRASTS[@]}"; do
         xcrun simctl ui "$DEVICE" increase_contrast "$increased"
         for appearance in "${APPEARANCES[@]}"; do
