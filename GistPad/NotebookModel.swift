@@ -1014,7 +1014,7 @@ final class NotebookModel {
     return try await provider.uploadPhoto(png, gistID: gistID, accountID: accountID)
   }
 
-  func commentServices(accountID: UUID) async throws -> NotebookCommentServices {
+  func commentServices(accountID: UUID) async throws -> CommentServices {
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
     return try await provider.commentServices(accountID: accountID)
   }

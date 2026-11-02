@@ -2,13 +2,13 @@ import Foundation
 import GistPadComments
 import GistPadSync
 
-struct NotebookCommentServices: Sendable {
+struct CommentServices: Sendable {
   let remote: any CommentsRemote
   let userID: Int64
 }
 
 extension LiveNotebookProvider {
-  func commentServices(accountID: UUID) async throws -> NotebookCommentServices {
+  func commentServices(accountID: UUID) async throws -> CommentServices {
     guard let account = try await accounts.cachedAccount(), account.id == accountID else {
       throw AccountError.accountChanged
     }
@@ -19,6 +19,6 @@ extension LiveNotebookProvider {
     } else {
       userID = try await client.authenticatedUser().id
     }
-    return NotebookCommentServices(remote: client, userID: userID)
+    return CommentServices(remote: client, userID: userID)
   }
 }

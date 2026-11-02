@@ -1,20 +1,20 @@
 import Foundation
 
 public struct TaskToggleEdit: Equatable, Sendable {
-    public let documentID: String
+    public let fileID: String
     public let generation: UInt64
     public let range: NSRange
     public let expectedMarker: String
     public let replacementMarker: String
 
     public init(
-        documentID: String,
+        fileID: String,
         generation: UInt64,
         range: NSRange,
         expectedMarker: String,
         replacementMarker: String
     ) {
-        self.documentID = documentID
+        self.fileID = fileID
         self.generation = generation
         self.range = range
         self.expectedMarker = expectedMarker
@@ -22,10 +22,10 @@ public struct TaskToggleEdit: Equatable, Sendable {
     }
 
     /// The web view is the untrusted side, so a toggle may only flip one task marker in the current text.
-    func isValid(in document: String) -> Bool {
-        guard range.location >= 0, range.length == 3, range.location <= document.utf16.count - range.length,
-              let swiftRange = Range(range, in: document) else { return false }
-        return String(document[swiftRange]) == expectedMarker
+    func isValid(in text: String) -> Bool {
+        guard range.location >= 0, range.length == 3, range.location <= text.utf16.count - range.length,
+              let swiftRange = Range(range, in: text) else { return false }
+        return String(text[swiftRange]) == expectedMarker
             && ["[ ]", "[x]", "[X]"].contains(expectedMarker)
             && replacementMarker == (expectedMarker == "[ ]" ? "[x]" : "[ ]")
     }
@@ -38,7 +38,7 @@ public struct PreviewLink: Equatable, Sendable {
         case anchor
     }
 
-    public let documentID: String
+    public let fileID: String
     public let generation: UInt64
     public let kind: Kind
     public let target: String
@@ -60,6 +60,6 @@ public struct PreviewFailure: LocalizedError, Equatable, Sendable {
 public enum PreviewEvent: Equatable, Sendable {
     case taskToggle(TaskToggleEdit)
     case linkTapped(PreviewLink)
-    case rendered(documentID: String, generation: UInt64)
+    case rendered(fileID: String, generation: UInt64)
     case failure(PreviewFailure)
 }

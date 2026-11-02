@@ -8,7 +8,7 @@ import SwiftUI
 /// Comments for the open gist: one in-memory `CommentsModel`, dropped when another gist opens.
 @MainActor
 @Observable
-final class NotebookCommentsPresentation {
+final class CommentsPresentation {
   struct Scope: Hashable {
     let accountID: UUID
     let gistID: String

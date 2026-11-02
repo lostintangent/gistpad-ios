@@ -23,7 +23,7 @@ HTML is sanitized before slug/TOC generation and task annotation. Scripts, forms
 ## Native API
 
 ```swift
-MarkdownPreviewView(document: markdown, documentID: fileID, generation: generation,
+MarkdownPreviewView(markdown: markdown, fileID: fileID, generation: generation,
                     allowsTaskEdits: access.canEdit) { event in
     // Route links natively. Apply tasks through the document session and its undo manager.
 }

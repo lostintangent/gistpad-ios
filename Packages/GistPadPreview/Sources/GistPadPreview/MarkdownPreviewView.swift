@@ -6,7 +6,7 @@ import GistPadAccent
 import GistPadComments
 
 public struct MarkdownPreviewView: View {
-    private let document: PreviewDocument
+    private let file: PreviewFile
     private let comments: CommentHighlightConfiguration
     private let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
     private let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
@@ -15,8 +15,8 @@ public struct MarkdownPreviewView: View {
     @State private var viewportView = PreviewViewportView()
 
     public init(
-        document: String,
-        documentID: String,
+        markdown: String,
+        fileID: String,
         generation: UInt64,
         allowsTaskEdits: Bool = true,
         comments: CommentHighlightConfiguration = .init(),
@@ -25,8 +25,8 @@ public struct MarkdownPreviewView: View {
         onAddComment: (@MainActor (String) -> Void)? = nil,
         onEvent: @escaping @MainActor (PreviewEvent) -> Void
     ) {
-        self.document = PreviewDocument(
-            text: document, id: documentID, generation: generation, allowsTaskEdits: allowsTaskEdits)
+        self.file = PreviewFile(
+            text: markdown, id: fileID, generation: generation, allowsTaskEdits: allowsTaskEdits)
         self.comments = comments
         self.onOpenCommentThreads = onOpenCommentThreads
         self.onLinkedCommentIDsChange = onLinkedCommentIDsChange
@@ -37,7 +37,7 @@ public struct MarkdownPreviewView: View {
     public var body: some View {
         GeometryReader { _ in
             NativeMarkdownPreview(
-                document: document, viewportView: viewportView, comments: comments,
+                file: file, viewportView: viewportView, comments: comments,
                 onOpenCommentThreads: onOpenCommentThreads,
                 onLinkedCommentIDsChange: onLinkedCommentIDsChange,
                 onAddComment: onAddComment, onEvent: onEvent
@@ -51,7 +51,7 @@ public struct MarkdownPreviewView: View {
 }
 
 private struct NativeMarkdownPreview: UIViewRepresentable {
-    let document: PreviewDocument
+    let file: PreviewFile
     let viewportView: PreviewViewportView
     let comments: CommentHighlightConfiguration
     let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
@@ -66,7 +66,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     @Environment(\.isPaneVisible) private var isPaneVisible
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(document: document, onEvent: onEvent)
+        Coordinator(file: file, onEvent: onEvent)
     }
 
     func makeUIView(context: Context) -> InsetAwareWebView {
@@ -109,14 +109,14 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         let traits = webView.traitCollection.modifyingTraits {
             $0.userInterfaceStyle = colorScheme == .dark ? .dark : .light
             $0.accessibilityContrast = contrast == .increased ? .high : .normal
-            $0.preferredContentSizeCategory = dynamicTypeSize.contentSizeCategory
+            $0.preferredContentSizeCategory = UIContentSizeCategory(dynamicTypeSize)
             $0[AccentTrait.self] = accent
         }
         context.coordinator.appearance = PreviewAppearance(traits: traits, boldText: legibilityWeight == .bold)
         context.coordinator.commentHighlights.update(
-            document: document, configuration: comments, accent: accent.color.hex,
+            file: file, configuration: comments, accent: accent.color.hex,
             onOpen: onOpenCommentThreads, onLinkedIDs: onLinkedCommentIDsChange, onAdd: onAddComment)
-        context.coordinator.update(document)
+        context.coordinator.update(file)
     }
 
     static func dismantleUIView(_ uiView: InsetAwareWebView, coordinator: Coordinator) {
@@ -137,16 +137,16 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         fileprivate var onEvent: @MainActor (PreviewEvent) -> Void
         fileprivate var appearance: PreviewAppearance?
         fileprivate let commentHighlights = PreviewCommentHighlights()
-        private var document: PreviewDocument
-        private var lastSent: PreviewDocument?
+        private var file: PreviewFile
+        private var lastSent: PreviewFile?
         private var lastAppearance: PreviewAppearance?
         private var viewportInsets = UIEdgeInsets.zero
         private var lastViewportInsets: UIEdgeInsets?
         private var ready = false
         private var needsInitialScroll = true
 
-        fileprivate init(document: PreviewDocument, onEvent: @escaping @MainActor (PreviewEvent) -> Void) {
-            self.document = document
+        fileprivate init(file: PreviewFile, onEvent: @escaping @MainActor (PreviewEvent) -> Void) {
+            self.file = file
             self.onEvent = onEvent
         }
 
@@ -168,20 +168,20 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                  ["payload": ["top": insets.top, "bottom": insets.bottom]])
         }
 
-        fileprivate func update(_ document: PreviewDocument) {
-            if self.document.id != document.id {
+        fileprivate func update(_ file: PreviewFile) {
+            if self.file.id != file.id {
                 needsInitialScroll = true
             }
-            self.document = document
+            self.file = file
             guard ready else { return }
             updateViewport(viewportInsets)
             if let appearance, appearance != lastAppearance {
                 lastAppearance = appearance
                 call("window.gistpadPreview.setAppearance(payload);", ["payload": appearance.arguments])
             }
-            guard lastSent != document else { return }
-            lastSent = document
-            call("window.gistpadPreview.render(payload);", ["payload": document.arguments])
+            guard lastSent != file else { return }
+            lastSent = file
+            call("window.gistpadPreview.render(payload);", ["payload": file.arguments])
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -196,20 +196,20 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                     try commentHighlights.activate(message.body)
                     return
                 }
-                switch try PreviewBridge.decode(message.body, document: document) {
+                switch try PreviewBridge.decode(message.body, file: file) {
                 case .ready:
                     ready = true
-                    update(document)
+                    update(file)
                 case .event(let event):
                     guard case .rendered = event, needsInitialScroll else {
-                        if case .rendered = event { commentHighlights.rendered(document) }
+                        if case .rendered = event { commentHighlights.rendered(file) }
                         onEvent(event)
                         return
                     }
-                    let rendered = document
+                    let rendered = file
                     // Initial CSS metrics can still reset WebKit's scroll origin, so wait for layout to settle.
                     call("await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));") { [weak self] in
-                        guard let self, let webView = self.webView, self.document == rendered else { return }
+                        guard let self, let webView = self.webView, self.file == rendered else { return }
                         if self.needsInitialScroll {
                             webView.layoutIfNeeded()
                             if !webView.scrollView.isTracking, !webView.scrollView.isDecelerating {
@@ -363,26 +363,6 @@ private final class InsetAwareWebView: WKWebView {
             }
         }
         onViewportChange?(scrollView.adjustedContentInset)
-    }
-}
-
-private extension DynamicTypeSize {
-    var contentSizeCategory: UIContentSizeCategory {
-        switch self {
-        case .xSmall: .extraSmall
-        case .small: .small
-        case .medium: .medium
-        case .large: .large
-        case .xLarge: .extraLarge
-        case .xxLarge: .extraExtraLarge
-        case .xxxLarge: .extraExtraExtraLarge
-        case .accessibility1: .accessibilityMedium
-        case .accessibility2: .accessibilityLarge
-        case .accessibility3: .accessibilityExtraLarge
-        case .accessibility4: .accessibilityExtraExtraLarge
-        case .accessibility5: .accessibilityExtraExtraExtraLarge
-        @unknown default: .large
-        }
     }
 }
 

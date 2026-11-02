@@ -13,8 +13,8 @@ struct PreviewWebKitTests {
     func offlineRendering() async throws {
         let markdown = try PreviewFixtures.allSyntax
             .replacingOccurrences(of: "![Remote image](https://example.com/gistpad-fixture.png)", with: "")
-        let readOnly = PreviewDocument(text: markdown, id: "web-kit-fixture", generation: 1, allowsTaskEdits: false)
-        let editable = PreviewDocument(text: markdown, id: "web-kit-fixture", generation: 1, allowsTaskEdits: true)
+        let readOnly = PreviewFile(text: markdown, id: "web-kit-fixture", generation: 1, allowsTaskEdits: false)
+        let editable = PreviewFile(text: markdown, id: "web-kit-fixture", generation: 1, allowsTaskEdits: true)
         let receiver = MessageReceiver()
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -46,11 +46,11 @@ struct PreviewWebKitTests {
         func evaluate(_ script: String) async throws -> Any? {
             try await webView.callAsyncJavaScript(script, arguments: [:], in: nil, contentWorld: .page)
         }
-        func render(_ document: PreviewDocument) async throws {
+        func render(_ file: PreviewFile) async throws {
             receiver.bodies.removeAll()
             _ = try await webView.callAsyncJavaScript(
                 "window.gistpadPreview.render(payload);",
-                arguments: ["payload": document.arguments], in: nil, contentWorld: .page
+                arguments: ["payload": file.arguments], in: nil, contentWorld: .page
             )
             try await waitFor("rendered message") { receiver.bodies.contains { $0["type"] as? String == "rendered" } }
         }
@@ -85,7 +85,7 @@ struct PreviewWebKitTests {
         _ = try await evaluate("document.querySelectorAll('input[type=checkbox]')[1].click();")
         try await waitFor("task toggle") { receiver.bodies.contains { $0["type"] as? String == "taskToggle" } }
         let toggle = try #require(receiver.bodies.last { $0["type"] as? String == "taskToggle" })
-        guard case .event(.taskToggle(let edit)) = try PreviewBridge.decode(toggle, document: editable) else {
+        guard case .event(.taskToggle(let edit)) = try PreviewBridge.decode(toggle, file: editable) else {
             Issue.record("Expected a validated source edit")
             return
         }
@@ -103,8 +103,8 @@ struct PreviewWebKitTests {
         _ = try await evaluate("document.querySelector('button.wikilink').click();")
         try await waitFor("wikilink message") { receiver.bodies.contains { $0["kind"] as? String == "wikilink" } }
         let wikilink = try #require(receiver.bodies.last { $0["kind"] as? String == "wikilink" })
-        #expect(try PreviewBridge.decode(wikilink, document: editable) == .event(.linkTapped(PreviewLink(
-            documentID: editable.id, generation: editable.generation, kind: .wikilink, target: "Ideas"))))
+        #expect(try PreviewBridge.decode(wikilink, file: editable) == .event(.linkTapped(PreviewLink(
+            fileID: editable.id, generation: editable.generation, kind: .wikilink, target: "Ideas"))))
         #expect(!receiver.bodies.contains { $0["type"] as? String == "failure" })
     }
 
@@ -119,7 +119,7 @@ struct PreviewWebKitTests {
         }.joined(separator: "\n\n")
         var events: [PreviewEvent] = []
         func preview(top: CGFloat) -> some View {
-            MarkdownPreviewView(document: markdown, documentID: "reading-resize", generation: 0) {
+            MarkdownPreviewView(markdown: markdown, fileID: "reading-resize", generation: 0) {
                 events.append($0)
             }
             .safeAreaInset(edge: .top, spacing: 0) { Color.clear.frame(height: top) }
@@ -145,7 +145,7 @@ struct PreviewWebKitTests {
         }
         try await waitFor("long native reading document") {
             events.contains {
-                if case .rendered(documentID: "reading-resize", generation: 0) = $0 { return true }
+                if case .rendered(fileID: "reading-resize", generation: 0) = $0 { return true }
                 return false
             }
         }

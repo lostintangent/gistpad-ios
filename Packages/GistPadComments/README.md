@@ -28,6 +28,6 @@ An edit that reports `commentChanged` keeps its authored text and old snapshot. 
 
 After a user-confirmed gist deletion succeeds on GitHub, call `discardAfterGistDeletion()`. It disables the obsolete controller, cancels draft saving and removes its scoped composer archive. It cannot prepare or autosave that deleted gist's draft again. This is not the policy for an unsuccessful delete or an ordinary comment deletion.
 
-Release 1.1 does not persist thread caches or present an uncertain-post chooser. Network and protected atomic draft-journal adapters live in GistPadSync. The app's `NotebookCommentProvider` scopes controllers to the authenticated account and published gist.
+Release 1.1 does not persist thread caches or present an uncertain-post chooser. Network and protected atomic draft-journal adapters live in GistPadSync. The app's `CommentServices` scope each `CommentsModel` to the authenticated account and published gist.
 
 The checked-in compatibility fixtures are grounded in `gistpad.dev/src/features/comments/threads.ts`, including JavaScript's punctuation, Unicode and nonoverlapping-match behavior. Run the normal package gate with `swift test --package-path Packages/GistPadComments`. Network endpoints live in `GistPadSync`, not here.

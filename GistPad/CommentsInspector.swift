@@ -2,7 +2,7 @@ import GistPadComments
 import GistPadInterface
 import SwiftUI
 
-struct NotebookCommentsInspector: View {
+struct CommentsInspector: View {
   @Bindable var conversation: CommentsModel
   let selectedRootID: Int64?
   var threadRevealRevision: UInt64 = 0
@@ -105,7 +105,7 @@ struct NotebookCommentsInspector: View {
 extension View {
   /// Comments for the open gist: an inspector beside the note on a wide display, a sheet on iPhone.
   func commentsInspector(
-    _ comments: NotebookCommentsPresentation, active: NotebookSessionController?,
+    _ comments: CommentsPresentation, active: NotebookSessionController?,
     columnVisibility: Binding<NavigationSplitViewVisibility>
   ) -> some View {
     modifier(CommentsInspectorHost(
@@ -114,14 +114,14 @@ extension View {
 }
 
 private struct CommentsInspectorHost: ViewModifier {
-  @Bindable var comments: NotebookCommentsPresentation
+  @Bindable var comments: CommentsPresentation
   let active: NotebookSessionController?
   @Binding var columnVisibility: NavigationSplitViewVisibility
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   private struct CommentCount: Equatable {
-    let scope: NotebookCommentsPresentation.Scope
+    let scope: CommentsPresentation.Scope
     let total: Int
   }
 
@@ -189,7 +189,7 @@ private struct CommentsInspectorHost: ViewModifier {
   private var panel: some View {
     Group {
       if let conversation = comments.conversation {
-        NotebookCommentsInspector(
+        CommentsInspector(
           conversation: conversation, selectedRootID: comments.selectedRootID,
           threadRevealRevision: comments.threadRevealRevision,
           linkedRootIDs: comments.documentMode == .source

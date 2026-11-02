@@ -15,7 +15,7 @@ struct LiveNotebookWorkspace: View {
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
   @State private var layout = NotebookLayoutPreferences()
   @State private var intelligence = IntelligencePresentation()
-  @State private var comments: NotebookCommentsPresentation
+  @State private var comments: CommentsPresentation
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.openURL) private var openURL
   @Environment(\.undoManager) private var undoManager
@@ -29,7 +29,7 @@ struct LiveNotebookWorkspace: View {
     self.notebook = notebook
     self.routes = routes
     _layout = State(initialValue: layout)
-    _comments = State(initialValue: NotebookCommentsPresentation(notebook: notebook))
+    _comments = State(initialValue: CommentsPresentation(notebook: notebook))
   }
 
   private var active: NotebookSessionController? { notebook.activeFile }
@@ -446,7 +446,7 @@ struct LiveNotebookWorkspace: View {
       knownTotal: controller.document.gist?.commentCount,
       isReady: notebook.account?.id == controller.draft.accountID
         && notebook.pendingAccount == nil && !notebook.isSigningIn && !notebook.isSigningOut,
-      allowsComments: NotebookCommentsPresentation.supports(controller.document),
+      allowsComments: CommentsPresentation.supports(controller.document),
       showsInline: notebook.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true)
     ) {
       guard notebook.account?.id == controller.draft.accountID, notebook.pendingAccount == nil,
@@ -464,7 +464,7 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func preview(_ controller: NotebookSessionController) -> some View {
-    SessionPreview(
+    FilePreview(
       session: controller.session, allowsMutations: controller.chrome.access.canEdit,
       comments: commentConfiguration(controller),
       onOpenCommentThreads: commentOpener(controller, origin: .reading),
@@ -488,7 +488,7 @@ struct LiveNotebookWorkspace: View {
   private func commentConfiguration(
     _ controller: NotebookSessionController
   ) -> CommentHighlightConfiguration {
-    guard NotebookCommentsPresentation.supports(controller.document),
+    guard CommentsPresentation.supports(controller.document),
       comments.matches(controller.document), let conversation = comments.conversation
     else { return .init() }
     return .init(
@@ -502,7 +502,7 @@ struct LiveNotebookWorkspace: View {
   private func commentOpener(
     _ controller: NotebookSessionController, origin: NoteMode
   ) -> (@MainActor ([Int64]) -> Void)? {
-    guard NotebookCommentsPresentation.supports(controller.document) else { return nil }
+    guard CommentsPresentation.supports(controller.document) else { return nil }
     return { ids in
       guard comments.sessionID == controller.session.id else { return }
       if ids.count == 1, let id = ids.first {
@@ -520,7 +520,7 @@ struct LiveNotebookWorkspace: View {
   private func commentComposer(
     _ controller: NotebookSessionController, origin: NoteMode
   ) -> (@MainActor (String) -> Void)? {
-    guard NotebookCommentsPresentation.supports(controller.document) else { return nil }
+    guard CommentsPresentation.supports(controller.document) else { return nil }
     return { selection in
       guard comments.sessionID == controller.session.id else { return }
       comments.open(for: controller, origin: origin, quote: selection)
@@ -554,7 +554,7 @@ struct LiveNotebookWorkspace: View {
         }
       }
     }
-    if NotebookCommentsPresentation.supports(controller.document) {
+    if CommentsPresentation.supports(controller.document) {
       actions.comments = {
         if comments.isPresented {
           comments.hide()

@@ -3,7 +3,7 @@ import GistPadEditor
 import GistPadPreview
 import SwiftUI
 
-struct SessionPreview: View {
+struct FilePreview: View {
   let session: Editor
   var allowsMutations = true
   var comments = CommentHighlightConfiguration()
@@ -18,7 +18,7 @@ struct SessionPreview: View {
   var body: some View {
     ZStack {
       MarkdownPreviewView(
-        document: session.text, documentID: session.fileID,
+        markdown: session.text, fileID: session.fileID,
         generation: session.generation, allowsTaskEdits: allowsMutations,
         comments: comments, onOpenCommentThreads: onOpenCommentThreads,
         onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment,

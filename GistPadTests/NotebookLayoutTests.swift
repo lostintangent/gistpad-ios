@@ -219,7 +219,7 @@ private struct LayoutNoteFixture: View {
         ) {
           EditorView(session: session)
         } preview: {
-          SessionPreview(session: session)
+          FilePreview(session: session)
         }
       }
       .frame(width: width)

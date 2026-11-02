@@ -27,7 +27,7 @@ struct NotebookOpeningView: View {
           }
         } else {
           MarkdownPreviewView(
-            document: document.text, documentID: document.id,
+            markdown: document.text, fileID: document.id,
             generation: document.draft?.generation ?? 0, allowsTaskEdits: false
           ) { event in
             if case .failure(let failure) = event { renderError = failure.localizedDescription }

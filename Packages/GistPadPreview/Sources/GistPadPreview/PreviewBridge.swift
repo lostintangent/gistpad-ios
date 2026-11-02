@@ -1,11 +1,12 @@
 import Foundation
 
-struct PreviewDocument: Equatable, Sendable {
+struct PreviewFile: Equatable, Sendable {
     let text: String
     let id: String
     let generation: UInt64
     let allowsTaskEdits: Bool
 
+    /// The renderer's protocol names the file's ID `documentID`.
     var arguments: [String: Any] {
         ["documentID": id, "generation": generation, "markdown": text, "allowsTaskEdits": allowsTaskEdits]
     }
@@ -40,23 +41,23 @@ enum PreviewBridge {
         return try JSONDecoder().decode(Value.self, from: JSONSerialization.data(withJSONObject: body))
     }
 
-    /// Returns nil for messages from an older generation, and for task toggles the document doesn't allow.
-    static func decode(_ body: Any, document: PreviewDocument) throws -> Message? {
+    /// Returns nil for messages from an older generation, and for task toggles the file doesn't allow.
+    static func decode(_ body: Any, file: PreviewFile) throws -> Message? {
         let message: Envelope = try decode(body)
         if message.type == "ready" { return .ready }
-        guard message.documentID == document.id, message.generation == document.generation else { return nil }
+        guard message.documentID == file.id, message.generation == file.generation else { return nil }
         switch message.type {
         case "taskToggle":
-            guard document.allowsTaskEdits else { return nil }
+            guard file.allowsTaskEdits else { return nil }
             guard let edit = message.edit else { throw invalidMessage }
             let task = TaskToggleEdit(
-                documentID: document.id,
-                generation: document.generation,
+                fileID: file.id,
+                generation: file.generation,
                 range: NSRange(location: edit.location, length: edit.length),
                 expectedMarker: edit.expectedMarker,
                 replacementMarker: edit.replacementMarker
             )
-            guard task.isValid(in: document.text) else { throw invalidMessage }
+            guard task.isValid(in: file.text) else { throw invalidMessage }
             return .event(.taskToggle(task))
         case "link":
             guard let kind = message.kind.flatMap(PreviewLink.Kind.init), let target = message.target,
@@ -71,10 +72,10 @@ enum PreviewBridge {
                 }
             }
             return .event(.linkTapped(PreviewLink(
-                documentID: document.id, generation: document.generation, kind: kind, target: target
+                fileID: file.id, generation: file.generation, kind: kind, target: target
             )))
         case "rendered":
-            return .event(.rendered(documentID: document.id, generation: document.generation))
+            return .event(.rendered(fileID: file.id, generation: file.generation))
         case "failure":
             return .event(.failure(PreviewFailure(message.message ?? "The preview couldn't be rendered.")))
         default:

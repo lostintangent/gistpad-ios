@@ -19,10 +19,10 @@ enum PreviewCommentActivation {
     }
 
     static func decode(
-        _ value: Any, document: PreviewDocument, highlights: [CommentQuoteHighlight]
+        _ value: Any, file: PreviewFile, highlights: [CommentQuoteHighlight]
     ) throws -> [Int64] {
         let message: Envelope = try PreviewBridge.decode(value)
-        guard message.documentID == document.id, message.generation == document.generation,
+        guard message.documentID == file.id, message.generation == file.generation,
               let highlight = highlights.first(where: {
                   $0.segment == message.segment && $0.start == message.start && $0.end == message.end
               }) else { throw PreviewBridge.invalidMessage }
@@ -41,8 +41,8 @@ final class PreviewCommentHighlights {
     private var onOpen: (@MainActor ([Int64]) -> Void)?
     private var onLinkedIDs: (@MainActor (Set<Int64>) -> Void)?
     private var onAdd: (@MainActor (String) -> Void)?
-    private var document: PreviewDocument?
-    private var renderedDocument: PreviewDocument?
+    private var file: PreviewFile?
+    private var renderedFile: PreviewFile?
     private var configuration = CommentHighlightConfiguration()
     private var accent = "#0EA5E9"
     private var segments: [String]?
@@ -52,7 +52,7 @@ final class PreviewCommentHighlights {
     private var task: Task<Void, Never>?
 
     func update(
-        document: PreviewDocument, configuration: CommentHighlightConfiguration, accent: String,
+        file: PreviewFile, configuration: CommentHighlightConfiguration, accent: String,
         onOpen: (@MainActor ([Int64]) -> Void)?,
         onLinkedIDs: (@MainActor (Set<Int64>) -> Void)?,
         onAdd: (@MainActor (String) -> Void)?
@@ -62,31 +62,31 @@ final class PreviewCommentHighlights {
         self.onOpen = onOpen
         self.onLinkedIDs = onLinkedIDs
         self.onAdd = onAdd
-        let changed = changesInteraction || self.document != document || self.configuration != configuration ||
+        let changed = changesInteraction || self.file != file || self.configuration != configuration ||
             self.accent != accent
-        if self.document != document {
+        if self.file != file {
             reset()
-            self.document = document
+            self.file = file
         }
         self.configuration = configuration
         self.accent = accent
         if needsInitialReport, let linkedIDs { publish(linkedIDs, force: true) }
-        if changed, renderedDocument == document { refresh() }
+        if changed, renderedFile == file { refresh() }
     }
 
-    func rendered(_ document: PreviewDocument) {
-        guard self.document == document else { return }
-        renderedDocument = document
+    func rendered(_ file: PreviewFile) {
+        guard self.file == file else { return }
+        renderedFile = file
         refresh()
     }
 
     func activate(_ body: Any) throws {
-        guard let document, renderedDocument == document else { return }
-        onOpen?(try PreviewCommentActivation.decode(body, document: document, highlights: highlights))
+        guard let file, renderedFile == file else { return }
+        onOpen?(try PreviewCommentActivation.decode(body, file: file, highlights: highlights))
     }
 
     func addCommentMenu() -> UIDeferredMenuElement? {
-        guard onAdd != nil, let document, renderedDocument == document else { return nil }
+        guard onAdd != nil, let file, renderedFile == file else { return nil }
         return .uncached { [weak self] completion in
             Task { @MainActor in
                 guard let self, let webView = self.webView else { return completion([]) }
@@ -95,13 +95,13 @@ final class PreviewCommentHighlights {
                         "return window.gistpadPreview.commentSelection();",
                         arguments: [:], in: nil, contentWorld: .page)
                     let selection: PreviewCommentSelection = try PreviewBridge.decode(value)
-                    guard self.renderedDocument == document, let quote = selection.quote,
+                    guard self.renderedFile == file, let quote = selection.quote,
                           CommentQuoteMatcher.isEligibleSelection(quote) else { return completion([]) }
                     let action = UIAction(
                         title: String(localized: "Add Comment", bundle: .module),
                         image: UIImage(systemName: "text.bubble")
                     ) { [weak self] _ in
-                        guard let self, self.renderedDocument == document else { return }
+                        guard let self, self.renderedFile == file else { return }
                         self.onAdd?(quote)
                     }
                     completion([action])
@@ -116,7 +116,7 @@ final class PreviewCommentHighlights {
     func reset() {
         task?.cancel()
         task = nil
-        renderedDocument = nil
+        renderedFile = nil
         segments = nil
         matchedQuotes = nil
         highlights = []
@@ -125,7 +125,7 @@ final class PreviewCommentHighlights {
 
     private func refresh() {
         task?.cancel()
-        guard let document, renderedDocument == document, let webView else { return }
+        guard let file, renderedFile == file, let webView else { return }
         let configuration = configuration
         let accent = accent
         let allowsInteraction = onOpen != nil
@@ -184,9 +184,9 @@ final class PreviewCommentHighlights {
     private func publish(_ ids: Set<Int64>, force: Bool = false) {
         guard force || linkedIDs != ids else { return }
         linkedIDs = ids
-        let document = document
+        let file = file
         Task { @MainActor [weak self] in
-            guard let self, self.document == document, self.linkedIDs == ids else { return }
+            guard let self, self.file == file, self.linkedIDs == ids else { return }
             self.onLinkedIDs?(ids)
         }
     }
