@@ -2,12 +2,11 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Uploads an image the way gistpad.dev does: one POST to `assets/<gist>/<uuid>.png`, then its public URL.
+/// Uploads an image the way gistpad.dev does: one POST to `assets/<gist>/<uuid>.<extension>`, then its public URL.
 public struct ImageStorage: Sendable {
     public enum Failure: Error, Equatable, Sendable {
         case invalidImage
         case imageTooLarge
-        case encodingFailed
         case http(status: Int)
     }
 
@@ -26,15 +25,17 @@ public struct ImageStorage: Sendable {
         self.token = token
     }
 
-    public func upload(_ png: Data, gistID: String, assetID: UUID = UUID()) async throws -> URL {
-        let path = "assets/\(gistID)/\(assetID.uuidString.lowercased()).png"
+    public func upload(_ image: Data, gistID: String, assetID: UUID = UUID()) async throws -> URL {
+        let type = try Self.check(image)
+        let fileExtension = type == .jpeg ? "jpg" : type.preferredFilenameExtension ?? ""
+        let path = "assets/\(gistID)/\(assetID.uuidString.lowercased()).\(fileExtension)"
         let credential = try await token()
         var request = URLRequest(url: AccountStore.projectURL.appending(path: "storage/v1/object/\(path)"))
         request.httpMethod = "POST"
-        request.httpBody = png
+        request.httpBody = image
         request.setValue(publishableKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(credential ?? publishableKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("image/png", forHTTPHeaderField: "Content-Type")
+        request.setValue(type.preferredMIMEType, forHTTPHeaderField: "Content-Type")
         request.setValue("max-age=3600", forHTTPHeaderField: "Cache-Control")
         let (_, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -47,38 +48,15 @@ public struct ImageStorage: Sendable {
 
 extension ImageStorage {
     private static let maximumByteCount = 50_000_000
-    private static let maximumPixelCount = 100_000_000
 
-    /// The image as an upright PNG without its location and EXIF metadata, ready to upload.
-    public static func png(from data: Data) throws -> Data {
-        guard data.count <= maximumByteCount else { throw Failure.imageTooLarge }
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              width > 0, height > 0 else { throw Failure.invalidImage }
-        guard width <= maximumPixelCount / height else { throw Failure.imageTooLarge }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: max(width, height),
-            kCGImageSourceShouldCacheImmediately: true
-        ]
-        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-            throw Failure.invalidImage
-        }
-        return try encodePNG(image)
-    }
-
-    private static func encodePNG(_ image: CGImage) throws -> Data {
-        let result = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(result, UTType.png.identifier as CFString, 1, nil) else {
-            throw Failure.encodingFailed
-        }
-        // Re-encoding the upright pixels avoids carrying location/EXIF metadata into public storage.
-        CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else { throw Failure.encodingFailed }
-        guard result.length <= maximumByteCount else { throw Failure.imageTooLarge }
-        return result as Data
+    /// The type of an image storage takes as it is: under 50 MB, with a type its own bytes name.
+    @discardableResult
+    public static func check(_ image: Data) throws -> UTType {
+        guard image.count <= maximumByteCount else { throw Failure.imageTooLarge }
+        guard let source = CGImageSourceCreateWithData(image as CFData, nil),
+              let type = CGImageSourceGetType(source).flatMap({ UTType($0 as String) }),
+              type.preferredMIMEType != nil, type.preferredFilenameExtension != nil
+        else { throw Failure.invalidImage }
+        return type
     }
 }

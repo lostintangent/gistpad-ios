@@ -16,8 +16,9 @@ struct ImagePicker: ViewModifier {
     content
       .photosPicker(
         isPresented: $images.isShowingPicker, selection: $selection,
-        matching: .images, preferredItemEncoding: .current
+        matching: .images, preferredItemEncoding: .compatible
       )
+      .photosPickerMetadataOptions(.removeLocation)
       .onChange(of: selection) { _, item in
         guard let item else { return }
         selection = nil
@@ -28,8 +29,8 @@ struct ImagePicker: ViewModifier {
         isPresented: Binding(get: { images.failure != nil }, set: { if !$0 { images.failure = nil } }),
         presenting: images.failure
       ) { failure in
-        if let png = failure.png {
-          Button("Try Again") { Task { await images.add(png: png) } }
+        if let image = failure.image {
+          Button("Try Again") { Task { await images.add(image: image) } }
         }
         Button("Cancel", role: .cancel) {}
       } message: { failure in

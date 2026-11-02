@@ -747,9 +747,9 @@ final class Library {
     return true
   }
 
-  func uploadImage(_ png: Data, gistID: String, accountID: UUID) async throws -> URL {
+  func uploadImage(_ image: Data, gistID: String, accountID: UUID) async throws -> URL {
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
-    return try await sync.uploadImage(png, gistID: gistID, accountID: accountID)
+    return try await sync.uploadImage(image, gistID: gistID, accountID: accountID)
   }
 
   func comments(accountID: UUID) async throws -> CommentServices {

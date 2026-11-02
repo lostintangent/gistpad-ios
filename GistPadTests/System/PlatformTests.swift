@@ -113,7 +113,7 @@ struct PlatformTests {
     #expect(images.isShowingPicker)
     session.editor.textView.selectedRange = NSRange(
       location: (original as NSString).length, length: 0)
-    await images.add(png: Data("png".utf8))
+    await images.add(image: Data("image".utf8))
     #expect(images.failure == nil && !images.isUploading)
     #expect(uploadedGistIDs == ["daily123"])
     #expect(session.editor.text == original + "![Image](\(url.absoluteString))")

@@ -11,7 +11,7 @@ import SwiftUI
 final class ImageUpload {
   struct Failure {
     let message: String
-    let png: Data?
+    let image: Data?
   }
 
   var isShowingPicker = false
@@ -40,26 +40,27 @@ final class ImageUpload {
     isUploading = true
     defer { isUploading = false }
     do {
-      guard let data = try await item.loadTransferable(type: Data.self) else {
+      guard let image = try await item.loadTransferable(type: Data.self) else {
         throw ImageStorage.Failure.invalidImage
       }
-      await add(png: try await Task.detached { try ImageStorage.png(from: data) }.value)
+      try ImageStorage.check(image)
+      await add(image: image)
     } catch {
-      failure = Failure(message: Self.message(for: error), png: nil)
+      failure = Failure(message: Self.message(for: error), image: nil)
     }
   }
 
-  func add(png: Data) async {
+  func add(image: Data) async {
     guard let session else { return }
     isUploading = true
     defer { isUploading = false }
     if session.draft.gistID == nil { await session.publish() }
     guard let gistID = session.draft.gistID else {
-      failure = Failure(message: String(localized: "Publish this gist to upload the image."), png: png)
+      failure = Failure(message: String(localized: "Publish this gist to upload the image."), image: image)
       return
     }
     do {
-      let markdown = ImageStorage.markdown(try await upload(png, gistID))
+      let markdown = ImageStorage.markdown(try await upload(image, gistID))
       let editor = session.editor
       try editor.apply(
         Edit(
@@ -67,13 +68,13 @@ final class ImageUpload {
           replacement: markdown),
         generation: editor.generation)
     } catch {
-      failure = Failure(message: Self.message(for: error), png: png)
+      failure = Failure(message: Self.message(for: error), image: image)
     }
   }
 
   private static func message(for error: any Error) -> String {
     switch error {
-    case ImageStorage.Failure.imageTooLarge: String(localized: "Choose an image under 50 MB and 100 megapixels.")
+    case ImageStorage.Failure.imageTooLarge: String(localized: "Choose an image under 50 MB.")
     case ImageStorage.Failure.http: String(localized: "GistPad's image storage didn't accept this image.")
     case is ImageStorage.Failure: String(localized: "This item couldn't be read as an image. Choose another one.")
     default: error.localizedDescription
@@ -82,8 +83,8 @@ final class ImageUpload {
 }
 
 extension GitHubSync {
-  func uploadImage(_ png: Data, gistID: String, accountID: UUID) async throws -> URL {
+  func uploadImage(_ image: Data, gistID: String, accountID: UUID) async throws -> URL {
     let storage = try await accounts.imageStorage(accountID: accountID)
-    return try await storage.upload(png, gistID: gistID)
+    return try await storage.upload(image, gistID: gistID)
   }
 }
