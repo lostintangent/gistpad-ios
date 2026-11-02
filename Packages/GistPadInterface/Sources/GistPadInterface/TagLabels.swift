@@ -99,6 +99,7 @@ struct TagLabels: View {
     private let limit: Int?
     private let isSelected: Bool
     @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(tags: [LibraryTag], limit: Int? = nil, isSelected: Bool = false) {
         precondition(limit.map { $0 > 0 } ?? true)
@@ -108,10 +109,22 @@ struct TagLabels: View {
     }
 
     var body: some View {
-        MetadataFlowLayout(layoutDirection: layoutDirection) {
-            ForEach(visibleTags) { TagLabel(tag: $0, isSelected: isSelected) }
-            if overflow > 0 {
-                TagOverflowLabel(count: overflow)
+        Group {
+            if let limit, !dynamicTypeSize.isAccessibilitySize {
+                // Below accessibility sizes a limited line stays on one line:
+                // as many tags as fit, else the first one truncated, plus a count.
+                ViewThatFits(in: .horizontal) {
+                    line(showing: limit)
+                    line(showing: 1)
+                    line(showing: 1).lineLimit(1)
+                }
+            } else {
+                MetadataFlowLayout(layoutDirection: layoutDirection) {
+                    ForEach(visibleTags) { TagLabel(tag: $0, isSelected: isSelected) }
+                    if overflow > 0 {
+                        TagOverflowLabel(count: overflow)
+                    }
+                }
             }
         }
         .accessibilityElement(children: .ignore)
@@ -129,6 +142,16 @@ struct TagLabels: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(Color(uiColor: .secondarySystemBackground), in: .rect(cornerRadius: 8))
+        }
+    }
+
+    private func line(showing count: Int) -> some View {
+        HStack(spacing: 6) {
+            ForEach(tags.prefix(count)) { TagLabel(tag: $0, isSelected: isSelected) }
+            if tags.count > count {
+                TagOverflowLabel(count: tags.count - count)
+                    .fixedSize()
+            }
         }
     }
 

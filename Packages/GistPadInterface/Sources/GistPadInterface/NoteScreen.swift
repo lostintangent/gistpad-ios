@@ -145,7 +145,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 }
                 .toggleStyle(.button)
                 .symbolVariant(.none)
-                .badge(document.commentCount ?? 0)
                 .accessibilityLabel(commentsLabel)
                 .accessibilityAddTraits(areCommentsPresented ? .isSelected : [])
                 .accessibilityIdentifier("note-comments")
