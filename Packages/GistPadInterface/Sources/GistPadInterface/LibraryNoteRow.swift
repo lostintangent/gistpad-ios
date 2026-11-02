@@ -11,6 +11,7 @@ struct LibraryNoteRow: View {
     @Environment(\.timeZone) private var timeZone
     @ScaledMetric(relativeTo: .body) private var verticalPadding = 14
     @ScaledMetric(relativeTo: .body) private var lineSpacing = 6
+    @ScaledMetric(relativeTo: .footnote) private var metadataSpacing = 8
 
     var body: some View {
         TimelineView(.everyMinute) { context in
@@ -78,7 +79,7 @@ struct LibraryNoteRow: View {
                     .captureFrame("note-progress-\(note.id)")
             }
         } else if count != nil || updated != nil {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: metadataSpacing) {
                 if let count {
                     LibraryCommentCount(count: count, noteID: note.id)
                 }
