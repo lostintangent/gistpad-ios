@@ -3,7 +3,7 @@ set -euo pipefail
 
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DEVICE="${CAPTURE_DEVICE:-D121BF28-CFCF-4020-802D-2C81D38F12E2}"
+DEVICE="${CAPTURE_DEVICE:-9D572007-6DFF-4AE9-8EF8-742F1B5891D1}"
 APP="$ROOT/DerivedData/Build/Products/Debug-iphonesimulator/GistPad.app"
 SCREEN=""
 STATE="populated"

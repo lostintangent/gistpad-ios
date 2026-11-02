@@ -1,6 +1,6 @@
 # GistPadInterface
 
-Native Library and note-screen chrome for iOS 27.1 and later. Screen inputs are Sendable value types. The app owns navigation, authentication, editor sessions, rendering and persistence. This package never initiates a network write. Visual rules and review requirements belong to [the design system](../../docs/design-system.md) and [design direction](../../docs/design-direction.md).
+Native Library and note-screen chrome for iOS 27.2 and later. Screen inputs are Sendable value types. The app owns navigation, authentication, editor sessions, rendering and persistence. This package never initiates a network write. Visual rules and review requirements belong to [the design system](../../docs/design-system.md) and [design direction](../../docs/design-direction.md).
 
 `PersonalAccentColorRow(savedHex:hasInvalidStoredValue:save:)` uses an opaque native color picker and an explicit async Save action. Supply an account-scoped callback so a pending selection cannot save to a switched account. Failures stay visible and retain the chosen color. Invalid saved metadata shows a warning rather than silently claiming it was valid. Apply `.personalAccent(savedHex:)` above the workspace and its sheets to share the same contrast-derived accent through SwiftUI, UIKit and preview content.
 

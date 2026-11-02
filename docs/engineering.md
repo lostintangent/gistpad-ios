@@ -50,7 +50,7 @@ The 13 editor package tests pass. Lifecycle-driven iOS checks verify final-choic
 
 The earlier combined frozen run exposed reading-anchor drift after Writing Tools and subsequent reflow. The corrected attribute transaction and retained reflow anchor now pass the complete 13-invocation native continuity suite three consecutive times. Both immediate reflow and reflow after deferred decoration remain within one actual visual line at display-pixel precision, with unchanged source bytes, generation, selection and text-view identity. The separately observed cross-suite initial-keyboard caret failure is not cleared by that reading-only gate.
 
-On the iOS 27.1 Duo simulator, `UIWritingToolsCoordinator.isWritingToolsAvailable` reports `false`. A real-device accept/reject/rewrite demonstration and system-managed rewrite undo remain hardware gates. The actual-posture probe is a separate check from these programmatic replacements.
+On the iOS 27.1 Duo simulator (not yet rechecked on 27.2), `UIWritingToolsCoordinator.isWritingToolsAvailable` reports `false`. A real-device accept/reject/rewrite demonstration and system-managed rewrite undo remain hardware gates. The actual-posture probe is a separate check from these programmatic replacements.
 
 ## Whole-note on-device intelligence
 

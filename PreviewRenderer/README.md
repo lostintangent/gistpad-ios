@@ -2,7 +2,7 @@
 
 `Packages/GistPadPreview` ships a local WebKit document renderer, not the GistPad website. `PreviewRenderer` builds it from the sibling `../../gistpad.dev` repository.
 
-The native host supports iOS 27.1 and later. Its resource scheme, bridge and rendering do not require Duo-only APIs.
+The native host supports iOS 27.2 and later. Its resource scheme, bridge and rendering do not require Duo-only APIs.
 
 ## Build
 
