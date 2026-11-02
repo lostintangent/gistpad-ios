@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import { adaptCalculations } from "./src/calculatorAdapter";
-import { adaptMermaid } from "./src/mermaidAdapter";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const web = realpathSync(resolve(root, "../../gistpad.dev"));
@@ -27,13 +26,9 @@ function webSourceAdapter(): Plugin {
         adapted.add("calculations");
         return { code: adaptCalculations(code, resolve(root, "src/arithmetic.ts")), map: null };
       }
-      if (id === resolve(web, "src/features/markdown/Mermaid.tsx")) {
-        adapted.add("mermaid");
-        return { code: adaptMermaid(code, resolve(root, "src/diagramTheme.ts")), map: null };
-      }
     },
     generateBundle() {
-      if (!adapted.has("calculations") || !adapted.has("mermaid")) {
+      if (!adapted.has("calculations")) {
         throw new Error("Required offline web-source adapters did not run. Check resolved source paths.");
       }
       this.emitFile({
@@ -45,7 +40,6 @@ function webSourceAdapter(): Plugin {
             adapters: [
               "Function arithmetic evaluation replaced with a non-executable parser",
               "Mermaid media-query hook bound to the native appearance payload",
-              "Mermaid default theme/cache key use resolved native colors without changing authored styles",
             ],
             files: Object.fromEntries(
               sourceFiles.map((file) => [

@@ -1,4 +1,5 @@
 #if os(iOS)
+import GistPadAccent
 import GistPadComments
 import SwiftUI
 
@@ -27,9 +28,7 @@ public struct CommentsConversation: View {
     private let failure: String?
     private let actions: CommentsConversationActions
     @State private var deletionTarget: GistComment?
-    @State private var position = ScrollPosition(edge: .top)
-    @State private var interruptedReveal: RevealedRoot?
-    @State private var selectedLayout: RevealLayout?
+    @State private var position = ScrollPosition(idType: Int64.self, edge: .top)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var threadSpacing = 16
 
@@ -55,18 +54,18 @@ public struct CommentsConversation: View {
         comments.map(GistCommentThread.build(from:)) ?? []
     }
 
-    private var revealedRoot: RevealedRoot {
+    /// A new selection, or its thread arriving, scrolls the thread to the top once.
+    private var reveal: Reveal {
         .init(
             id: selectedRootID, revision: selectedRootRevision,
             exists: threads.contains { $0.id == selectedRootID })
     }
 
     public var body: some View {
-        let root = revealedRoot
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if comments != nil, failure != nil || isRefreshing {
-                    operationStatus
+                if comments != nil, let failure {
+                    refreshFailure(failure)
                 }
                 ForEach(threads) { thread in
                     CommentThreadContent(
@@ -80,19 +79,8 @@ public struct CommentsConversation: View {
                         .background {
                             if thread.id == selectedRootID {
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(InterfaceTheme.neutralSelection)
+                                    .fill(Color(.tertiarySystemFill))
                                     .padding(.horizontal, 8)
-                                    .onGeometryChange(for: RevealLayout.self) { geometry in
-                                        RevealLayout(
-                                            root: root,
-                                            minY: geometry.frame(in: .named(LayoutSpace.content)).minY,
-                                            width: geometry.size.width)
-                                    } action: { layout in
-                                        let isNewReveal = selectedLayout?.root != layout.root
-                                        selectedLayout = layout
-                                        reveal(layout, animated: isNewReveal)
-                                    }
-                                    .id(root)
                             }
                         }
                         .accessibilityElement(children: .contain)
@@ -101,16 +89,14 @@ public struct CommentsConversation: View {
                         .accessibilityIdentifier("comment-thread-\(thread.id)")
                 }
             }
-            .coordinateSpace(name: LayoutSpace.content)
+            .scrollTargetLayout()
         }
         .scrollPosition($position)
-        .onGeometryChange(for: RevealViewport.self) { geometry in
-            RevealViewport(frame: geometry.frame(in: .global), topInset: geometry.safeAreaInsets.top)
-        } action: { _ in
-            if let selectedLayout { reveal(selectedLayout, animated: false) }
-        }
-        .onScrollPhaseChange { _, phase in
-            if phase == .interacting { interruptedReveal = revealedRoot }
+        .onChange(of: reveal, initial: true) { previous, reveal in
+            guard reveal.exists, let id = reveal.id else { return }
+            withAnimation(previous == reveal || reduceMotion ? nil : .snappy) {
+                position.scrollTo(id: id, anchor: .top)
+            }
         }
         .scrollDismissesKeyboard(.interactively)
         .scrollEdgeEffectStyle(.soft, for: .bottom)
@@ -165,28 +151,14 @@ public struct CommentsConversation: View {
         }
     }
 
-    @ViewBuilder
-    private var operationStatus: some View {
-        if comments != nil {
-            if let failure {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(verbatim: failure)
-                    retry
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
-                .accessibilityIdentifier("comments-load-error")
-            } else if isRefreshing {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Updating comments", bundle: .module)
-                }
-                .font(.footnote)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
-            }
+    private func refreshFailure(_ failure: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(verbatim: failure)
+            retry
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .accessibilityIdentifier("comments-load-error")
     }
 
     private var retry: some View {
@@ -198,31 +170,10 @@ public struct CommentsConversation: View {
         .accessibilityIdentifier("comments-retry")
     }
 
-    private func reveal(_ layout: RevealLayout, animated: Bool) {
-        guard layout.width > 0, layout.root == revealedRoot, layout.root.exists,
-              layout.root != interruptedReveal else { return }
-        withAnimation(animated && !reduceMotion ? .snappy : nil) {
-            position.scrollTo(y: layout.minY)
-        }
-    }
-
-    private enum LayoutSpace: Hashable { case content }
-
-    private struct RevealedRoot: Hashable, Sendable {
+    private struct Reveal: Equatable {
         let id: Int64?
         let revision: UInt64
         let exists: Bool
-    }
-
-    private struct RevealLayout: Equatable, Sendable {
-        let root: RevealedRoot
-        let minY: CGFloat
-        let width: CGFloat
-    }
-
-    private struct RevealViewport: Equatable, Sendable {
-        let frame: CGRect
-        let topInset: CGFloat
     }
 }
 
@@ -360,7 +311,7 @@ private struct CommentThreadContent: View {
     private func quotedPassage(_ quote: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(InterfaceTheme.accent)
+                .fill(Color(uiColor: AccentRole.text.uiColor))
                 .frame(width: 3)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: contentSpacing) {

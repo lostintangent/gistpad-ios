@@ -7,10 +7,10 @@ let package = Package(
     products: [.library(name: "GistPadPlatform", targets: ["GistPadPlatform"])],
     dependencies: [
         .package(path: "../GistPadSync"),
-        .package(path: "../GistPadAppearance")
+        .package(path: "../GistPadAccent")
     ],
     targets: [
-        .target(name: "GistPadPlatform", dependencies: ["GistPadSync", "GistPadAppearance"]),
+        .target(name: "GistPadPlatform", dependencies: ["GistPadSync", "GistPadAccent"]),
         .testTarget(name: "GistPadPlatformTests", dependencies: ["GistPadPlatform", "GistPadSync"])
     ]
 )

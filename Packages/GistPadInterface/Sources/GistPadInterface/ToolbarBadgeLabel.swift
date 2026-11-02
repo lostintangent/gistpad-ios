@@ -2,23 +2,24 @@
 import SwiftUI
 import UIKit
 
+/// A quiet toolbar glyph with a monochrome count, because SwiftUI's toolbar badge is always red.
 struct ToolbarBadgeLabel: View {
-    let title: LocalizedStringKey
+    let title: String
     let systemImage: String
     let count: Int?
-    let isSelected: Bool
+    let isFilled: Bool
     @ScaledMetric(relativeTo: .caption2) private var countSize = 11
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
-        // A single image preserves the native adaptive toolbar item instead of a custom-view item.
+        // A single image keeps the native adaptive toolbar item instead of a custom-view item.
         Label {
-            Text(title, bundle: .module)
+            Text(verbatim: title)
         } icon: {
             Image(uiImage: ToolbarBadgeIcon.image(
                 systemImage: systemImage, count: count, fontSize: min(countSize, 13),
-                dark: colorScheme == .dark, scale: displayScale, isSelected: isSelected))
+                dark: colorScheme == .dark, scale: displayScale, isFilled: isFilled))
                 .renderingMode(.original)
         }
     }
@@ -27,7 +28,7 @@ struct ToolbarBadgeLabel: View {
 enum ToolbarBadgeIcon {
     static func image(
         systemImage: String, count: Int?, fontSize: CGFloat,
-        dark: Bool, scale: CGFloat, isSelected: Bool
+        dark: Bool, scale: CGFloat, isFilled: Bool
     ) -> UIImage {
         let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
         let ink = UIColor.label.resolvedColor(with: traits)
@@ -37,7 +38,7 @@ enum ToolbarBadgeIcon {
         return UIGraphicsImageRenderer(size: CGSize(width: 36, height: 36), format: format).image { _ in
             UIImage(systemName: systemImage, withConfiguration: UIImage.SymbolConfiguration(
                 pointSize: 21, weight: .regular))?
-                .withTintColor(isSelected ? inverse : ink, renderingMode: .alwaysOriginal)
+                .withTintColor(isFilled ? inverse : ink, renderingMode: .alwaysOriginal)
                 .draw(in: CGRect(x: 3, y: 9, width: 24, height: 24))
             guard let count, count > 0 else { return }
             let attributes: [NSAttributedString.Key: Any] = [

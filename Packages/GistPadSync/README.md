@@ -1,173 +1,138 @@
 # GistPadSync
 
-Swift 6 actors and Sendable values for the native app's account, Gists, preferences and durable drafts. No UI or editor ownership lives here. The only external product is Supabase's `Auth`, pinned in `Package.swift` and `Package.resolved`.
+GistPad's data layer: GitHub sign-in through Supabase, the Gists client, account
+preferences, drafts on the phone, publishing, conflicts, daily notes, the library
+cache, photo uploads, and the fixture GitHub that tests run against. It has no UI.
+[docs/sync.md](../../docs/sync.md) is the promise to the user, and this package
+keeps it. The only outside dependency is Supabase's `Auth`, pinned in
+`Package.swift`.
 
-## Account and reads
+Everything follows gistpad.dev's conventions exactly, so the web keeps working
+with whatever the phone writes.
 
-```swift
-let accounts = try AccountService(publishableKey: configuredPublicKey)
-let account = try await accounts.signIn()
-let client = await accounts.githubClient(accountID: account.id)
-let library = try await client.listGists()
-let gist = try await client.gist(id: selectedGistID)
-let text = try await client.content(gist: gist, filename: selectedFilename)
-```
+## Account
 
-`cachedAccount()` restores without requiring the network. `refreshAccount()` fetches current Supabase metadata. `signIn()` uses the SDK's `ASWebAuthenticationSession` with PKCE, GitHub's `gist` scope and `gistpad://auth-callback`. The launch-flow overload supports injected presentation and fake exchanges. The same callback must be allowed in the Supabase dashboard.
+`AccountStore` signs in with GitHub through Supabase, using PKCE, the `gist`
+scope and `gistpad://auth-callback`. `Keychain` holds the Supabase session and
+each account's GitHub token, available after first unlock and never synced off
+this device. `connectedAccount()` restores at launch without the network, and
+`refreshAccount()` fetches the latest metadata. Pass only a publishable or anon
+key.
 
-Supabase session/PKCE data and the separately retained, account-scoped GitHub provider token use Keychain, accessible only while unlocked on this device. Supabase refresh responses can omit the provider token. Storage failures propagate instead of being mistaken for sign-out. SDK logging is disabled because callback URLs and HTTP details may contain credentials. Pass only a publishable/legacy anon project key, never a service-role key.
-
-Create a new client for each account. Its credential provider rejects an account switch or sign-out. Clear app-visible document and library references when switching accounts. `AccountSnapshot.githubUserID` is available when Supabase supplies GitHub identity metadata. If absent, fetch `client.authenticatedUser().id` before creating an editable draft. **Never use a selected foreign gist's owner ID as the current account's GitHub ID.**
-
-The client paginates, applies the web's different owned/starred Markdown filters, and retains ETags in memory only. It preserves archive/daily-note markers, exact source bytes and the U+2064 empty-file sentinel. Secret gists are the create default. Updates are targeted file dictionaries, including rename and deletion. Truncated file content uses an unauthenticated HTTPS raw URL on `gist.githubusercontent.com`. A truncated overall file list is explicitly unsupported, never treated as complete. Production sessions reject redirects and never persist note responses to the URL cache.
-
-## Gist comments
-
-`GitHubClient.listComments(gistID:)` fetches every page without applying the Library's Markdown-gist filter. `comment(gistID:commentID:)`, `createComment(gistID:body:)`, `updateComment(gistID:commentID:body:)` and `deleteComment(gistID:commentID:)` use the [GitHub gist-comments API](https://docs.github.com/en/rest/gists/comments?apiVersion=2026-03-10), the same active-account credentials and the existing typed error/cache rules. A mutation invalidates comment and gist-count ETags. A failed read throws instead of becoming an empty conversation. POST is never automatically retried after an uncertain outcome.
-
-Bodies remain exact Markdown, including hidden quote/reply prefixes. Use the Foundation-only `GistPadComments` models and `GistCommentBody.replacingText(with:)` to edit only the visible body. Authors can edit, while authors and the gist owner can delete. Do not infer commenting permission from source editability, automatically publish on autosave, or silently turn a reply to a missing parent into a new root.
-
-`Gist.commentCount` decodes GitHub's `comments` total, including replies. Missing counts remain `nil`, distinct from a known zero and compatible with older durable caches. `withCommentCount(_:)` copies only that total, preserving all other metadata and source bytes. Hosts omit GitHub comments on Daily Notes and before a gist is published.
-
-`GitHubCommentRemote` adapts these raw methods to the conversation controller's typed failures, preserving server retry deadlines and distinguishing definite rejections from uncertain write outcomes. `CommentConversationDiskStore.applicationStore()` provides an account/gist-scoped atomic draft and pending-attempt journal. Files and containing directories use complete file protection on iOS. Corrupt records, older writes and equal-generation byte changes throw instead of replacing a draft. Use one conversation provider for the workspace and await draft flushing on departure. Release 1.1 has no disk thread cache. The Foundation controller refreshes after an uncertain mutation before another explicit post can proceed.
+`githubClient(accountID:)` and `photoStorage(accountID:)` are bound to one
+account. They throw `accountChanged` after a switch or sign-out, and a missing
+GitHub token is `reconnectGitHub`. Signing out keeps that account's drafts on
+the phone.
 
 ## Preferences
 
-```swift
-let updated = try await accounts.apply(
-    .setTag(gistID: gist.id, tagID: existingTagID, included: true),
-    accountID: account.id
-)
-```
+Tags, pins and settings live in the account's Supabase metadata, the same place
+the web keeps them. `update(_:accountID:)` folds `Preferences.Change` values
+over the latest metadata and writes only the top-level keys that changed, in one
+request, so a batch lands whole or not at all. Keys and fields GistPad doesn't
+know pass through untouched, and a malformed shape throws instead of being
+replaced. Supabase has no compare-and-swap, so a simultaneous web write can
+still race.
 
-Operations include `setPinned`, `setTag`, `upsertTag`, `deleteTag` and `setBoolean`. They fetch current metadata before applying, send only changed top-level fields, and preserve unknown nested tag fields. Malformed existing shapes throw rather than being replaced. Account-changing actions and preference mutations cannot overlap. This minimizes web/native collisions, but Supabase user metadata does not provide atomic compare-and-swap.
+## GitHub
 
-## Durable editing and publication
+`GitHubClient` lists owned and starred gists with the web's Markdown filters,
+reads files, creates secret gists, and sends targeted file changes: content,
+rename and delete. Stars use GitHub's star API, and archiving adds the web's
+` [Archived]` suffix to the description. It also reads and writes gist comments
+for the Comments sheet. Source bytes stay exact, including the U+2064 marker the
+web uses for an empty file (`GistFile.emptyContent`). Its session has no URL
+cache or cookies and refuses redirects.
 
-```swift
-let store = try DraftStore.open()
-let draft = try await store.openDraft(
-    accountID: account.id, githubUserID: verifiedGitHubUserID,
-    gistID: gist.id, filename: selectedFilename,
-    description: gist.displayDescription, content: text, revision: gist.revision
-)
-// Restore draft.text and draft.generation before starting this document session.
-let durable = try await store.persist(
-    id: draft.id, accountID: account.id, text: sessionText, generation: sessionGeneration
-)
-let sync = SyncCoordinator(client: client, store: store)
-let result = try await sync.publish(id: durable.id, accountID: account.id)
-```
+## Drafts
 
-Use one store for the app and one coordinator for the active account, shared across scenes. Replace the coordinator when switching accounts. `openDraft` returns an existing account/file draft instead of overwriting it with a network response. Generation must increase for every content edit, including undo. SwiftData's automatic saving and CloudKit are disabled. Every successful persistence operation explicitly commits before returning. Never display "Saved on this iPhone" before `persist` succeeds.
+`DraftStore` is a SwiftData store on the phone, with complete file protection
+and no CloudKit. It holds one `Draft` per account and file. Every write commits
+before it returns, so the editor may say a change is saved on this iPhone as
+soon as `persist` does.
 
-On reopen, capture the stored generation **before** requesting fresh remote content, then call `refreshCleanDraft(id:accountID:expectedGeneration:content:revision:)`. It updates only an unchanged clean baseline with no uncertain write. Its result explicitly reports refreshed, unchanged or preserved local changes. A newer generation rejects a stale response. Restore that snapshot into an inactive/new document session, never an actively composing editor.
+A draft's `generation` increases with every edit, and `persist` rejects an
+older one. `apply(_:)` takes a `DraftEdit` from outside the editor, such as a
+widget's task toggle or Add to Today, and lands it only if the text it expects
+is still there.
 
-The coordinator serializes publication, freshly reads the remote file, validates ownership/completeness, and persists the attempted content and generation before sending. Acknowledging one generation never clears newer local typing. The draft keeps the user's text until GitHub acknowledges that generation. On restart, an interrupted operation becomes uncertain rather than remaining labelled "Saving".
+`baseContent` is GitHub's text the draft started from. `hasUnpublishedEdits`
+compares against it, and a new gist or file has no base until it publishes.
+`isDiscardableBlank` is true for a new gist that's untitled and
+whitespace-only, and for a day that was never typed in (generation 0), whatever
+it started from. Neither has reached GitHub, and `discardBlankDraft` removes
+either when you leave it.
 
-`SaveState` distinguishes local durability, an in-flight generation, GitHub acknowledgement, offline, reconnect, typed failures and conflicts. A failure is persisted and thrown. The UI should reload the snapshot to show its state. A `404` retains the draft. A `403` is not sign-out. Rate-limit reset and `Retry-After` deadlines are honored.
+`inspectRemoteChange` and `refreshCleanDraft` take on GitHub's newer text when
+you have no edits, and record a `DraftConflict` when both sides changed.
+`resolveConflict` makes GitHub's text the new base after the editor applies the
+chosen text as one undoable edit. `updateDraftMetadata` follows a rename,
+`removeDrafts` forgets a gist or file that GitHub deleted, and
+`discardLocalCopy` deletes a gist that's only on the phone.
 
-The document session owns the web's five-second autosave delay and account/input eligibility. The coordinator only publishes accepted durable generations. Disabling autosave or changing accounts cancels the session's pending request. Leaving a note publishes when autosave is enabled. Leaving the app always attempts publication. Folding itself never requests publication. Pending AI proposals, marked text and temporary Writing Tools edits are not accepted draft generations.
+## Publishing
 
-## Conflicts and uncertain writes
+`DraftPublisher` sends one draft at a time for the account. It reads GitHub's
+copy first. A match is acknowledged, a clean draft takes GitHub's text, and a
+changed base becomes a conflict. Before sending, it records the attempted text
+and generation, so a publish cut off by a dropped connection or a quit checks
+GitHub before sending again. An edit that landed is acknowledged, and a create
+looks for its gist by description and file bytes, so it never posts twice.
+Typing during a publish stays unpublished for the next one. Typing after a
+cut-off publish is `.savedLocally` again, even back to the base text, because
+GitHub may hold the attempt.
 
-`SaveState.conflict` stores the base, local text, remote text, expected generation and remote revision. The sync layer does **not** change active editor text. The document session applies the chosen text as one undoable edit, then calls `resolveConflict(id:accountID:expectedGeneration:text:generation:)`. Keeping byte-identical current source may retain its generation, updating only the baseline without manufacturing an edit or Undo entry. Any byte change still requires a newer generation. A missing remote file also stays a conflict until the user resolves it. There is no automatic or suggested merge. Stale resolutions are rejected.
+Failures persist as `PublishState`. Network and HTTP failures can be retried, a
+401 is `.reconnect`, and `Retry-After` is honored. An acknowledged publish
+updates the library cache in the same commit as the draft.
 
-Typing and Undo retain the inspected remote conflict while updating its local generation. For an explicit refresh of the review, supply freshly verified complete remote content to `refreshConflict(id:accountID:expectedGeneration:expectedConflict:remote:revision:)`. It checks the inspected snapshot byte-for-byte and replaces only the remote review values. It neither resolves nor publishes, and nil remote means a verified missing file, not an unsuccessful read.
+When to publish belongs to the app: five seconds after typing stops, leaving a
+file, leaving the app, and the sweep at launch and return. GitHub has no
+conditional write, so the fresh read narrows a race with the web but can't
+close it.
 
-After a timed-out PATCH, the next publication reads remote content before any repeat write. If it matches the attempted generation, that generation is acknowledged without another PATCH. A timed-out POST is never automatically retried, including after relaunch. The draft stays `creationUncertain`, and publishing it again never creates another gist. The user keeps, exports or discards it rather than the app guessing that creation failed.
+## Daily notes
 
-GitHub Gist PATCH has no documented conditional-write precondition. A fresh read before publishing reduces risk but cannot close the race with simultaneous web writes. Do not describe this as atomic collaborative editing.
+`DailyNotes.stageToday(target:)` returns today's file, ready to edit. That's
+your draft if you've started the day, else a new file in the `📆 Daily notes`
+gist from `template.md` with `{{date}}` filled in, else the first day of a new
+daily gist with a `# YYYY-MM-DD` heading. It finds the daily gist in the
+library cache, else on GitHub, and offline the cache's answer stands. Staging
+only reads, and the new day publishes once you type in it. An earlier day that
+never reached GitHub publishes first, so it creates the gist today joins.
 
-Drafts remain account-isolated across sign-out. The account service does not delete local drafts.
+`DailyNote.Day` pins the date and time zone when an action starts. `DailyNote`
+reads a day from the cache and drafts for the widget, and `FileTask` and
+`TaskProgress` read tasks with the web's markers. `DraftEdit.addToToday`
+appends a paragraph or one task per line.
 
-After an acknowledged remote rename, `updateDraftMetadata(id:accountID:expectedFilename:filename:description:)` retargets the same draft without changing source, generation, baseline or state. Filename collisions, stale metadata and unresolved publication attempts are explicit errors. Serialize remote metadata mutations with publication and flush the active session first. This operation does not rename anything on GitHub.
+## Library cache
 
-After the user confirms deletion and GitHub acknowledges it, `removeDraftsForDeletedGist(gistID:accountID:)` permanently removes every draft for that account/gist, including unsynced text, publication attempts, image-upload bytes and command receipts. It also removes the gist and its content from the durable library cache. Other accounts and gists remain unchanged. No copy of the deleted text is retained after this explicit deletion.
+`cacheLibrary`, `cacheGist` and `cacheContent` keep the last complete list, gist
+details and file text for each account, and `cachedLibrary(accountID:)` reads
+them back, so the library and its files open instantly and offline. Cache only a
+successful, complete refresh.
 
-`discardLocalCopy` removes one explicitly confirmed local draft, either a recovery draft or a never-published draft (no gist ID and no attempted publication), together with its linked history, images and command receipts, without a GitHub mutation. Its generation/account checks reject stale confirmations. A draft whose creation was attempted (`attemptedGeneration` set) throws `ambiguousCreation`; once it is `.failed(.creationUncertain)`, resolve it with `discardUncertainCreation` or `confirmNewCreation`. The `onlyIfClean` form additionally requires byte-identical text/base, no unresolved publication attempt and no uninserted image. The host uses it only after a successful full list and an authoritative gist 404. Draft edit timestamps change only with actual local text or metadata edits, not reads, publishing or refreshes. The optional stored timestamp migrates existing drafts without fabricating a historical date.
+## Links and photos
 
-An acknowledged publication updates the cached owned gist, details and file content in the same store commit as its draft baseline. This makes newly created gists immediately available to Library actions even when a subsequent metadata GET is offline.
+`GistLinks(gist:filename:)` gives the gistpad.dev share link and the GitHub
+link, and whether the gist is secret. A gist that isn't published has no link.
 
-The app adopts that acknowledged metadata without another GET. A confirmed Library deletion waits for an in-flight publication on the same retained document before taking its destructive lock, including the brief handoff where the durable draft knows the new gist ID before the session does. Autosave and departure publication use the same path as an explicit Save.
+`PhotoStorage.png(from:)` makes an upright PNG without location or EXIF data,
+up to 50 MB and 100 megapixels. `upload(_:gistID:)` posts it to
+`assets/<gist>/<uuid>.png` the way the web does and returns its public URL, and
+`markdown(_:)` gives `![Image](url)`. Assets are public even when the gist is
+secret, and there's no upload queue.
 
-`discardBlankDraft(id:accountID:expectedGeneration:)` quietly removes an unbound, locally saved draft with an empty description and whitespace-only source. It also accepts an untouched, generation-zero default daily date heading with no remote-file baseline, including a new day bound to an existing daily gist. Typed daily content, custom templates and published files are not blank. Neither case may have publication attempts or photo records. The store rechecks the generation and commits only the local draft deletion before returning `true`. The host must finish pending local edits and exclude its current note before requesting cleanup. It must not automatically publish a discardable blank.
+## Testing
 
-## Validation
+`FixtureServer`, in debug builds, answers GitHub and Supabase from memory
+through a `URLProtocol` session, so tests, previews and fixture launches run the
+real clients. `accounts()` returns an `AccountStore` that signs in to it,
+`requests` records every call, and `intercept` injects failures. Tests never
+touch the real GitHub or Supabase.
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   swift test --package-path Packages/GistPadSync
 ```
-
-Tests use URLProtocol fakes and temporary SwiftData stores. They never read or mutate the user's GitHub/Supabase accounts. Live browser sign-in, account list verification and a user-approved scratch-gist round trip remain app/device integration gates.
-
-API choices were checked against [Supabase OAuth](https://supabase.com/docs/reference/swift/auth-signinwithoauth), the pinned SDK source, [GitHub Gists](https://docs.github.com/en/rest/gists/gists), [Keychain services](https://developer.apple.com/documentation/security/keychain-services) and [SwiftData ModelActor](https://developer.apple.com/documentation/swiftdata/modelactor).
-
-## Daily-driver operations
-
-The package supports iOS 27.2 and later. It has no Duo-only UI dependency.
-
-`DailyNotesService(accountID:githubUserID:client:store:coordinator:)` shares the active account's existing coordinator. Create a `DailyNoteTarget(date:timeZone:)` at the start of an action, then call `openToday(target:)`. The target pins the local Gregorian date even if midnight or the time zone changes while the request runs. It freshly lists owned gists and selects the first exact `📆 Daily notes` match in the same stable updated-date order as the web.
-
-If today's file exists, opening it is read-only and preserves dirty drafts. If missing, it stages a durable new-file draft, expands every `{{date}}` in `template.md`, and publishes a targeted file change through the ordinary conflict protocol. Missing/empty templates use `# YYYY-MM-DD\n\n`. No old daily files are deleted, carried over or rewritten. `publishIfMissing: false` stages locally instead.
-
-If no daily gist exists, the service stages one secret gist with today's file and publishes it through the uncertain-create path. The durable daily-creation intent is reused across requests and relaunches. A timeout cannot lead to another POST. If the created gist appears in a later fresh list with matching source, the original draft is reconciled rather than abandoned. A pending first creation from an earlier date requires resolution before creating another daily gist. GitHub still offers no atomic cross-client create-if-absent guarantee, so simultaneous first creation on the web can race.
-
-`DailyNotesIndex.notes(gist:localContent:date:timeZone:)` gives task progress and overdue-first, newest-first ordering using the web's exact task-marker convention. Uncached/truncated file contents have unknown progress, not a misleading zero. `DraftStore.createGistDraft(...)` stages a new ordinary note with the web's `README.md`, description-heading and empty-content defaults. Publication remains secret by default.
-
-Cache a complete list refresh with `cacheLibrary(owned:starred:preferences:accountID:)`, detail reads with `cacheGist(_:accountID:)`, and resolved raw content with `cacheContent(_:gist:filename:accountID:)`. The persisted `cachedLibrary(accountID:)` is account-isolated and survives relaunch. An unsuccessful network refresh must not replace it with an empty library.
-
-`LibrarySearch.search(_:query:collection:drafts:date:timeZone:)` searches cached titles, filenames and available Markdown. This intentionally improves on the web's description-only filter. It overlays accepted local drafts, including unpublished files and new notes, without mixing accounts. `LibrarySearchQuery(query:preferences:tagIDs:)` accepts free words, quoted phrases, `tag:ID`, `tag:"Tag name"` and `#TagName`. All text terms and tags are conjunctive. Unknown/ambiguous typed tags and malformed quoting are explicit errors. Deleted selected tag IDs are ignored to match the web. Results report cached-content coverage, incomplete gists and stale content rather than implying a complete server-side search.
-
-The app uses one `.all` query across the Library. Daily rows represent real Gregorian `yyyy-MM-dd.md` files and eligible local drafts, never `template.md`, unrelated Markdown or the backing gist itself. Their stable published row identity is `gistID/filename`. A known complete file list supplies the unfiltered day count. A missing or truncated list leaves that count unknown. Clean saved files absent from a complete daily list stay excluded, while dirty or uncertain local work remains visible. Searching or displaying membership never fetches or creates a note.
-
-Retained drafts whose gist has disappeared from the cache remain searchable by body and tags with `isRecovery == true`. They preserve their real draft ID and original gist ID, without fabricating a remote Gist value. Open their local draft directly. Absence from a cache is not proof of remote deletion, and their remote privacy/access cannot be inferred from local-only presentation defaults.
-
-`DocumentLinks(gist:filename:draft:)` returns a read-only `/#/share/` URL, an explicit editor URL, and a GitHub URL, with correct UTF-8 filename escaping. It reports `isSecret` and `hasUnpublishedChanges`. It never publishes. A new, unpublished gist/file cannot yield a saved-file share URL. The UI must explain that secret gists are unlisted and links expose the saved revision.
-
-## App Group boundary
-
-`SharedStoreLocation(appGroupIdentifier:)` resolves the entitled container using FileManager. There is no fallback to an unrelated container if entitlement/configuration is wrong. The store directory and command files request complete file protection by default. `prepareDirectory: false` only resolves the location without creating or modifying it, for read-only extension access. `DraftStore.open(location:)` uses an explicit SwiftData URL with no CloudKit. For tests, `SharedStoreLocation(containerURL:)` accepts a temporary directory. The app and widget use `group.dev.gistpad.GistPad`, but canonical drafts remain in the app's private store. Adding an entitlement does not migrate existing drafts.
-
-**The app remains the single SwiftData writer.** Opening a second SwiftData actor in a widget while the app owns an active document is not cross-process synchronization. Current widget/Shortcut mutations use iOS 27's main-app intent execution target, the app's existing store and the retained editor's durable Undo path. Widgets read an atomic presentation snapshot from `GistPadPlatform`, with after-first-unlock protection and privacy-sensitive content. Canonical drafts, credentials and command files retain their existing protection.
-
-`SharedDraftInbox` remains available for deferred command producers. It enqueues immutable `SharedDraftCommand` values and must show Pending, never Completed, until import. A fully written command is atomically published under its UUID without overwriting another process's command. Account-specific inbox directories avoid loading another account's command content.
-
-The main app flushes accepted editor changes and imports commands only when the affected session can accept an external edit. `DraftStore.apply(_:)` validates account, expected generation, UTF-16 scalar boundaries and exact expected source. The new source and deduplication receipt are committed in one SwiftData save. The host must then update the active document session through its undoable edit path, or reload an inactive session. Delete the inbox envelope with `acknowledge(_:)` only after that successful import. A crash before acknowledgement is safe to replay. Stale or invalid commands remain actionable errors, never silently discarded.
-
-An accepted main-app intent means the local source committed, not that GitHub acknowledged it. An enqueued command alone proves neither. Publication follows the existing app lifecycle and is best-effort after locking. Keychain credentials are not shared with extensions.
-
-## Photos and durable image uploads
-
-```swift
-let png = try PhotoImage.pngData(from: pickedData)
-let pending = try await store.enqueueImage(
-    pngData: png, draftID: draft.id, accountID: account.id,
-    expectedGeneration: draft.generation, insertionLocation: selectedUTF16Offset
-)
-let storage = try await accounts.imageStorageClient(accountID: account.id)
-let images = ImageUploadCoordinator(accountID: account.id, store: store, storage: storage)
-let uploaded = try await images.upload(id: pending.id)
-let proposal = try await store.imageInsertion(id: uploaded.id, accountID: account.id)
-```
-
-Use PhotosPicker in the app and load its transferable image data without requesting broad library access. Normalize off the main actor. `PhotoImage` converts the first image to upright PNG without carrying location/EXIF metadata. It explicitly rejects invalid images, inputs/outputs over 50 MB and decoded images over 100 megapixels. These are native safety limits, not claims about the server's configured bucket limit.
-
-The upload contract matches the web: `POST /storage/v1/object/assets/{gistId}/{lowercase-uuid}.png`, the project `apikey`, a Bearer Supabase access token (never the GitHub provider token), `Content-Type: image/png`, and `Cache-Control: max-age=3600`. There is no upsert. The public URL is `/storage/v1/object/public/assets/{gistId}/{uuid}.png`. The low-level client supports the web's publishable-key fallback. Native account-bound clients instead reject signed-out/wrong-account use and refresh the Supabase session when needed.
-
-The app must offer insertion only for an editable, current-account document. The storage service does not determine GitHub ownership from an asset path. Storage conflict/error semantics follow [Supabase's current error codes](https://supabase.com/docs/guides/storage/debugging/error-codes).
-
-**Assets are public even when the gist is secret.** Explain that before the first upload. No test uploads to the live bucket. The native Photos action, its permission/privacy presentation and its undo/session integration remain app-owned.
-
-Enqueue commits PNG bytes and the original insertion generation/location to the same local SwiftData store as drafts before returning. A captured older generation is accepted so typing during Photos loading does not discard the chosen image, but its stale anchor cannot auto-insert. Future generations are rejected. On iOS, persistent store directories and existing SQLite/journal files request complete file protection. No background or locked-device transfer is promised. Pending images count as unsynced work and prevent deletion of an otherwise clean draft.
-
-`ImageUploadCoordinator` coalesces concurrent requests for one image. A stable UUID/path survives offline errors and relaunch. Interrupted requests reopen as uncertain. A retry first checks that exact public path with no credentials, comparing both byte count and SHA-256. The same verification follows successful POST and duplicate responses. A missing or mismatched asset never exposes a ready URL or inserts Markdown. Retry-After is durable and honored. Failures persist and throw, rather than dropping the image.
-
-Call `resumePending()` after account restoration, explicit foreground recovery or a connectivity change. It returns an explicit Result for each attempted transfer. Waiting unpublished notes remain visible without an HTTP request until their gist ID is acknowledged. Reconnect, permanent failure, queued, uploading, offline, uncertain, uploaded and inserted states are inspectable with `imageUploads(accountID:)`. Cancel active transfers on account change with `cancelUploads()`. This is foreground resumption, not an iOS background-transfer entitlement.
-
-Pending placeholders stay out of canonical Markdown and Undo, as on the web. A verified upload proposes exactly `![Image](URL)`, or `<img src="URL" />` for explicit HTML format. If the document generation changed, the original proposal is rejected. Let the user select a current insertion point and request `imageInsertion(id:accountID:expectedGeneration:insertionLocation:)` instead of guessing where to insert.
-
-Flush accepted session edits and wait for composition/Writing Tools to end before applying a proposal. `applyImageInsertion(id:accountID:command:)` commits the source edit, deduplication receipt and inserted state together. Reflect that exact edit in the active session as one undoable edit at the same generation, or reload an inactive session. Do not independently insert the text twice. An interrupted acknowledgement can safely replay the same command. Image insertion only saves locally. Ordinary autosave-off publication rules still apply.
-
-`discardImageUpload(id:accountID:)` removes local queued bytes/state only after the app's explicit discard action. It cannot cancel an in-flight transfer or delete a remote asset. After an inserted upload, discarding its local cache does not remove the note's Markdown. A public orphan from a canceled insertion is possible and is never silently deleted from the user's storage.

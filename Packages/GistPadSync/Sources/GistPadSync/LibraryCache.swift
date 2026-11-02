@@ -1,25 +1,25 @@
 import Foundation
 import SwiftData
 
-public struct CachedFileContent: Codable, Equatable, Sendable {
+public struct CachedFile: Codable, Equatable, Sendable {
     public let text: String
     public let revision: String?
     public let updatedAt: Date
 }
 
-public struct CachedLibrarySnapshot: Codable, Equatable, Sendable {
+public struct CachedLibrary: Codable, Equatable, Sendable {
     public let accountID: UUID
     public var owned: [Gist]
     public var starred: [Gist]
     public var preferences: Preferences
     public var cachedAt: Date
     public var details: [String: Gist]
-    public var fileContent: [String: CachedFileContent]
+    public var fileContent: [String: CachedFile]
 
     public init(
         accountID: UUID, owned: [Gist], starred: [Gist],
         preferences: Preferences, cachedAt: Date = .now,
-        details: [String: Gist] = [:], fileContent: [String: CachedFileContent] = [:]
+        details: [String: Gist] = [:], fileContent: [String: CachedFile] = [:]
     ) {
         self.accountID = accountID
         self.owned = owned
@@ -49,13 +49,13 @@ public struct CachedLibrarySnapshot: Codable, Equatable, Sendable {
             guard let file = candidate.files[filename] else { continue }
             let current = candidate.updatedAt >= gist.updatedAt
             if file.truncated != true, let text = file.content {
-                return (GistConventions.decodeContent(text), current)
+                return (GistFile.decodeContent(text), current)
             }
             if let saved = fileContent["\(gist.id)/\(filename)"] {
                 let sameRevision = saved.revision != nil && saved.revision == candidate.revision
                 let sameDate = candidate.revision == nil && saved.updatedAt == candidate.updatedAt
                 if sameRevision || sameDate {
-                    return (GistConventions.decodeContent(saved.text), current)
+                    return (GistFile.decodeContent(saved.text), current)
                 }
             }
         }
@@ -75,34 +75,43 @@ final class StoredLibrary {
 }
 
 extension DraftStore {
-    func publicationCache(
-        gist: Gist, accountID: UUID, githubUserID: Int64, filename: String, content: String
-    ) throws -> (StoredLibrary, Data)? {
-        guard let record = try libraryRecord(accountID) else { return nil }
-        var cached = try JSONDecoder().decode(CachedLibrarySnapshot.self, from: record.payload)
-        if gist.owner?.id == githubUserID {
-            cached.owned.removeAll { $0.id == gist.id }
-            cached.owned.insert(gist, at: 0)
+    func cachePublication(
+        _ gist: Gist, accountID: UUID, githubUserID: Int64, filename: String, content: String
+    ) throws {
+        try updateLibrary(accountID) { cached in
+            if gist.owner?.id == githubUserID {
+                cached.owned.removeAll { $0.id == gist.id }
+                cached.owned.insert(gist, at: 0)
+            }
+            cached.starred = cached.starred.map { $0.id == gist.id ? gist : $0 }
+            cached.details[gist.id] = gist
+            cached.fileContent["\(gist.id)/\(filename)"] = .init(
+                text: content, revision: gist.revision, updatedAt: gist.updatedAt)
         }
-        cached.starred = cached.starred.map { $0.id == gist.id ? gist : $0 }
-        cached.details[gist.id] = gist
-        cached.fileContent["\(gist.id)/\(filename)"] = .init(
-            text: content, revision: gist.revision, updatedAt: gist.updatedAt)
-        return (record, try JSONEncoder().encode(cached))
     }
 
-    public func cachedLibrary(accountID: UUID) throws -> CachedLibrarySnapshot? {
+    public func cachedLibrary(accountID: UUID) throws -> CachedLibrary? {
         guard let stored = try libraryRecord(accountID) else { return nil }
-        return try JSONDecoder().decode(CachedLibrarySnapshot.self, from: stored.payload)
+        return try JSONDecoder().decode(CachedLibrary.self, from: stored.payload)
     }
 
+    /// Saves GitHub's fresh lists, which are the authority on what exists. A clean phone copy of a gist
+    /// that's no longer listed goes with it, unless its gist is open (`keeping` holds gist IDs), while one
+    /// holding unpublished text stays as a recovery copy.
     public func cacheLibrary(
         owned: [Gist], starred: [Gist], preferences: Preferences,
-        accountID: UUID, cachedAt: Date = .now
+        accountID: UUID, cachedAt: Date = .now, keeping: Set<String> = []
     ) throws {
         let previous = try cachedLibrary(accountID: accountID)
         let ids = Set(owned.map(\.id) + starred.map(\.id))
-        let snapshot = CachedLibrarySnapshot(
+        let gone = try modelContext.fetch(FetchDescriptor<StoredDraft>(
+            predicate: #Predicate { $0.accountID == accountID }
+        )).filter {
+            guard let gistID = $0.gistID, !keeping.contains(gistID) else { return false }
+            return !ids.contains(gistID) && $0.attemptedGeneration == nil && sourceEqual($0.text, $0.baseContent)
+        }
+        for draft in gone { modelContext.delete(draft) }
+        let snapshot = CachedLibrary(
             accountID: accountID, owned: owned, starred: starred,
             preferences: preferences, cachedAt: cachedAt,
             details: previous?.details.filter { ids.contains($0.key) } ?? [:],
@@ -110,32 +119,41 @@ extension DraftStore {
                 ids.contains(String($0.key.prefix(while: { $0 != "/" })))
             } ?? [:]
         )
-        try saveLibrary(snapshot)
+        let payload = try JSONEncoder().encode(snapshot)
+        if let existing = try libraryRecord(accountID) { existing.payload = payload }
+        else { modelContext.insert(StoredLibrary(accountID: accountID, payload: payload)) }
+        try commit()
     }
 
     public func cacheGist(_ gist: Gist, accountID: UUID) throws {
-        guard var library = try cachedLibrary(accountID: accountID) else {
-            throw LibraryCacheError.missingLibrary
+        try updateLibrary(accountID) { library in
+            if let existing = library.details[gist.id], existing.updatedAt > gist.updatedAt { return }
+            library.details[gist.id] = gist
+            library.owned = library.owned.map { $0.id == gist.id ? gist : $0 }
+            library.starred = library.starred.map { $0.id == gist.id ? gist : $0 }
         }
-        if let existing = library.details[gist.id], existing.updatedAt > gist.updatedAt { return }
-        library.details[gist.id] = gist
-        library.owned = library.owned.map { $0.id == gist.id ? gist : $0 }
-        library.starred = library.starred.map { $0.id == gist.id ? gist : $0 }
-        try saveLibrary(library)
+        try commit()
     }
 
     public func cacheContent(
         _ text: String, gist: Gist, filename: String, accountID: UUID
     ) throws {
         guard gist.files[filename] != nil else { throw GitHubClientError.missingFile }
-        guard var library = try cachedLibrary(accountID: accountID) else {
-            throw LibraryCacheError.missingLibrary
+        try updateLibrary(accountID) { library in
+            let key = "\(gist.id)/\(filename)"
+            let value = CachedFile(text: text, revision: gist.revision, updatedAt: gist.updatedAt)
+            if let previous = library.fileContent[key], previous.updatedAt > value.updatedAt { return }
+            library.fileContent[key] = value
         }
-        let key = "\(gist.id)/\(filename)"
-        let value = CachedFileContent(text: text, revision: gist.revision, updatedAt: gist.updatedAt)
-        if let previous = library.fileContent[key], previous.updatedAt > value.updatedAt { return }
-        library.fileContent[key] = value
-        try saveLibrary(library)
+        try commit()
+    }
+
+    /// Changes the cached library in place, if there is one. The caller commits.
+    func updateLibrary(_ accountID: UUID, _ change: (inout CachedLibrary) -> Void) throws {
+        guard let record = try libraryRecord(accountID) else { return }
+        var cached = try JSONDecoder().decode(CachedLibrary.self, from: record.payload)
+        change(&cached)
+        record.payload = try JSONEncoder().encode(cached)
     }
 
     private func libraryRecord(_ id: UUID) throws -> StoredLibrary? {
@@ -143,15 +161,4 @@ extension DraftStore {
             predicate: #Predicate { $0.accountID == id }
         )).first
     }
-
-    private func saveLibrary(_ snapshot: CachedLibrarySnapshot) throws {
-        let payload = try JSONEncoder().encode(snapshot)
-        if let existing = try libraryRecord(snapshot.accountID) { existing.payload = payload }
-        else { modelContext.insert(StoredLibrary(accountID: snapshot.accountID, payload: payload)) }
-        try commit()
-    }
-}
-
-public enum LibraryCacheError: Error, Equatable, Sendable {
-    case missingLibrary
 }

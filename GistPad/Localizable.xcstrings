@@ -1,50 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "%lld changes didn't reach GitHub." : {
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld change didn't reach GitHub."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld changes didn't reach GitHub."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "Comments" : {},
     "All files in this gist" : {},
-    "Comments actions" : {},
-    "Refresh Comments" : {},
     "Only web links can be opened from a comment." : {},
     "Couldn’t Open Link" : {},
-    "Refresh comments to check the previous change." : {},
-    "Saved on GitHub. Finish saving its local record." : {},
-    "Finish Saving" : {},
-    "Keep your text and use the latest version as the edit’s starting point." : {},
-    "Use Latest Version" : {},
     "Choose Comment" : {},
     "Unknown author" : {},
     "Comments couldn’t be opened" : {},
     "Opening comments" : {},
-    "Your saved comment drafts couldn’t be read. Try again before writing a new comment." : {},
-    "A comment draft couldn’t be saved. Return to Comments for that note and try saving again." : {},
-    "Finish composition or Writing Tools before opening Comments." : {},
-    "Tap the note to resume writing." : {},
-    "Show Front Matter" : {
-
-    }
+    "Tap the file to resume writing." : {},
+    "Show Front Matter" : {}
   },
   "version" : "1.0"
 }

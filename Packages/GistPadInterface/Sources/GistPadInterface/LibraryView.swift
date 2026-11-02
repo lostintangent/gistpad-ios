@@ -1,53 +1,30 @@
 #if os(iOS)
+import GistPadSync
 import SwiftUI
-import UIKit
-
-private struct LibrarySearchOwnerKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-private struct LibrarySearchPresentationKey: EnvironmentKey {
-    static var defaultValue: Binding<Bool>? { nil }
-}
 
 extension EnvironmentValues {
-    fileprivate var librarySearchManagedByContainer: Bool {
-        get { self[LibrarySearchOwnerKey.self] }
-        set { self[LibrarySearchOwnerKey.self] = newValue }
-    }
-
-    fileprivate var librarySearchPresentation: Binding<Bool>? {
-        get { self[LibrarySearchPresentationKey.self] }
-        set { self[LibrarySearchPresentationKey.self] = newValue }
-    }
+    @Entry var isLibrarySearchPresented = false
 }
 
 private struct LibrarySearchModifier: ViewModifier {
-    @Bindable var model: LibraryModel
-    var isPresented: Binding<Bool>?
-    var sidebarOverride: Bool?
-    @State private var presented = false
+    @Bindable var state: LibraryState
+    @State private var isPresented = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-
-    private var presentation: Binding<Bool> { isPresented ?? $presented }
-    private var isSidebar: Bool { sidebarOverride ?? (horizontalSizeClass == .regular) }
 
     func body(content: Content) -> some View {
         searchableContent(content)
             .searchToolbarBehavior(.minimize)
-            .environment(\.librarySearchManagedByContainer, true)
-            .environment(\.librarySearchPresentation, presentation)
+            .environment(\.isLibrarySearchPresented, isPresented)
     }
 
     @ViewBuilder
     private func searchableContent(_ content: Content) -> some View {
-        if model.loadState == .signedOut {
+        if state.loadState == .signedOut {
             content
         } else {
             content.searchable(
-                text: $model.query, isPresented: presentation,
-                placement: isSidebar ? .sidebar : .automatic,
-                prompt: Text("Search notes", bundle: .module)
+                text: $state.query, isPresented: $isPresented,
+                placement: horizontalSizeClass == .regular ? .sidebar : .automatic
             )
         }
     }
@@ -57,116 +34,68 @@ private struct LibraryCreateButton: View {
     let action: @MainActor () -> Void
 
     var body: some View {
-        Button(String(localized: "New note", bundle: .module), systemImage: "square.and.pencil", action: action)
-            .tint(.primary)
+        Button(String(localized: "New Gist", bundle: .module), systemImage: "square.and.pencil", action: action)
             .accessibilityIdentifier("library-create")
     }
 }
 
 extension View {
-    public func librarySearch(
-        model: LibraryModel, isPresented: Binding<Bool>? = nil, isSidebar: Bool? = nil
-    ) -> some View {
-        modifier(LibrarySearchModifier(
-            model: model, isPresented: isPresented, sidebarOverride: isSidebar))
+    public func librarySearch(state: LibraryState) -> some View {
+        modifier(LibrarySearchModifier(state: state))
     }
 
     public func libraryRail(
-        isVisible: Bool, today: LibraryTodaySummary, isTodaySelected: Bool,
+        isVisible: Bool, today: DailyNote,
         create: @escaping @MainActor () -> Void, openToday: @escaping @MainActor () -> Void
     ) -> some View {
         toolbar {
             if isVisible {
                 ToolbarItemGroup(placement: .primaryAction) {
                     LibraryCreateButton(action: create)
-                    LibraryTodayButton(summary: today, isSelected: isTodaySelected, action: openToday)
+                    TodayButton(summary: today, action: openToday)
                 }
             }
         }
     }
-}
 
-@MainActor
-public struct LibraryDeletionConfirmation {
-    public let rowID: String
-    public let title: String
-    public let isUncertainCreation: Bool
-    let confirm: () -> Void
-    let dismiss: () -> Void
-
-    public init(
-        rowID: String, title: String, isUncertainCreation: Bool = false,
-        confirm: @escaping () -> Void, dismiss: @escaping () -> Void
-    ) {
-        self.rowID = rowID
-        self.title = title
-        self.isUncertainCreation = isUncertainCreation
-        self.confirm = confirm
-        self.dismiss = dismiss
-    }
-}
-
-private struct LibraryRowDeletionConfirmation: ViewModifier {
-    let rowID: String
-    let target: LibraryDeletionConfirmation?
-
-    func body(content: Content) -> some View {
-        content.confirmationDialog(
-            String(localized: "Delete “\(target?.title ?? "")”?", bundle: .module),
-            isPresented: Binding(
-                get: { target?.rowID == rowID },
-                set: { if !$0, target?.rowID == rowID { target?.dismiss() } }),
-            titleVisibility: .visible
+    func deletionConfirmation(
+        title: String, isDailyNote: Bool, isPresented: Binding<Bool>, delete: @escaping () -> Void
+    ) -> some View {
+        confirmationDialog(
+            String(localized: "Delete “\(title)”?", bundle: .module),
+            isPresented: isPresented, titleVisibility: .visible
         ) {
-            Button(String(localized: "Delete", bundle: .module), role: .destructive) {
-                target?.confirm()
-            }
-            Button(String(localized: "Cancel", bundle: .module), role: .cancel) {}
+            Button(String(localized: "Delete", bundle: .module), role: .destructive, action: delete)
         } message: {
-            Text(
-                "This removes the note from this iPhone and from GitHub if it was saved there, including unsynced changes. This can’t be undone.",
-                bundle: .module)
-            if target?.isUncertainCreation == true {
+            if isDailyNote {
                 Text(
-                    "GitHub may already have received this note. Check your GitHub Gists page and delete any copy there.",
+                    "This deletes the daily note from this iPhone and GitHub, including changes that haven’t been published. This can’t be undone.",
+                    bundle: .module)
+            } else {
+                Text(
+                    "This deletes the gist from this iPhone and GitHub, including changes that haven’t been published. This can’t be undone.",
                     bundle: .module)
             }
         }
     }
 }
 
-private struct LibraryCommentsAccessibilityAction: ViewModifier {
-    let note: LibraryNote
-    let action: (@MainActor (String) -> Void)?
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if note.supportsComments, let action {
-            content.accessibilityAction(
-                named: Text("Open Comments", bundle: .module)
-            ) { action(note.id) }
-        } else {
-            content
-        }
-    }
-}
-
+@MainActor
 public struct LibraryActions {
-    public var refresh: @MainActor () async -> Void
+    public var refresh: () async -> Void
     public var create: @MainActor () -> Void
     public var today: @MainActor () -> Void
-    public var select: (@MainActor (String) -> Void)?
-    public var reconnect: (@MainActor () -> Void)?
-    public var recoverStatus: (@MainActor () -> Void)?
-    public var account: (@MainActor () -> Void)?
-    public var togglePin: (@MainActor (String) -> Void)?
-    public var toggleArchive: (@MainActor (String) -> Void)?
-    public var openComments: (@MainActor (String) -> Void)?
-    public var delete: (@MainActor (String) -> Void)?
-    public var deletionConfirmation: LibraryDeletionConfirmation?
+    public var select: (String) -> Void = { _ in }
+    public var reconnect: () -> Void = {}
+    public var recoverStatus: () -> Void = {}
+    public var account: () -> Void = {}
+    public var togglePin: (String) -> Void = { _ in }
+    public var toggleArchive: (String) -> Void = { _ in }
+    public var openComments: (String) -> Void = { _ in }
+    public var delete: (String) -> Void = { _ in }
 
     public init(
-        refresh: @escaping @MainActor () async -> Void,
+        refresh: @escaping () async -> Void,
         create: @escaping @MainActor () -> Void,
         today: @escaping @MainActor () -> Void
     ) {
@@ -174,84 +103,39 @@ public struct LibraryActions {
         self.create = create
         self.today = today
     }
-
-    @MainActor
-    func deletionAction(for note: LibraryNote) -> (@MainActor () -> Void)? {
-        guard note.isOwned, note.canDeleteFromGitHub || note.isLocalOnly, let delete else { return nil }
-        return { delete(note.id) }
-    }
-}
-
-public struct NotebookArtwork: View {
-    public init() {}
-
-    public var body: some View {
-        Image("Notebook", bundle: .module)
-            .resizable()
-            .scaledToFit()
-            .frame(width: 64, height: 64)
-            .accessibilityHidden(true)
-    }
 }
 
 public struct LibraryView: View {
-    private struct Selection: Hashable {
-        let collection: LibraryCollection
-        let noteID: String
-    }
-
-    @Bindable private var model: LibraryModel
+    @Bindable private var state: LibraryState
     private let actions: LibraryActions
-    private let footer: Text?
-    private let isTodaySelected: Bool
-    private let sidebarOverride: Bool?
-    private let savedCollections: Binding<Set<LibraryCollection>>?
-    @State private var localCollections: Set<LibraryCollection> = []
-    @State private var collapsedSearchCollections: Set<LibraryCollection> = []
-    private let savedPinnedExpanded: Binding<Bool>?
-    @State private var localPinnedExpanded = true
-    @State private var collapsedSearchPinned = false
-    @State private var collapsedDateGroups: Set<LibraryDateGroup> = []
-    @State private var collapsedSearchDateGroups: Set<LibraryDateGroup> = []
-    @State private var now = Date.now
-    @Environment(\.calendar) private var calendar
-    @Environment(\.locale) private var locale
-    @State private var selectedCollection: LibraryCollection = .gists
-    @State private var deletionSelection: Selection?
+    private let problem: GitHubStatusProblem?
+    private let isSidebar: Bool
+    @Binding private var expandedSections: Set<LibrarySection>
+    @Binding private var isPinnedExpanded: Bool
+    @State private var collapsedDateGroups: Set<DateGroup> = []
+    @State private var pendingDeletion: String?
     @State private var showingTags = false
     @State private var tagQuery = ""
-    @State private var isPullRefreshing = false
-    @State private var searchPresented = false
     @ScaledMetric(relativeTo: .body) private var compactRowInset: CGFloat = 16
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.calendar) private var calendar
+    @Environment(\.locale) private var locale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.librarySearchManagedByContainer) private var searchManagedByContainer
-    @Environment(\.librarySearchPresentation) private var containerSearchPresentation
-    @Environment(\.isGitHubStatusVisible) private var isGitHubStatusVisible
+    @Environment(\.isLibrarySearchPresented) private var isSearchPresented
 
+    /// `isSidebar` comes from the split view's owner, because a sidebar column always reads as compact.
     public init(
-        model: LibraryModel, actions: LibraryActions, footer: Text? = nil,
-        isTodaySelected: Bool = false, isSidebar: Bool? = nil,
-        expandedCollections: Binding<Set<LibraryCollection>>? = nil,
-        pinnedExpanded: Binding<Bool>? = nil
+        state: LibraryState, actions: LibraryActions, isSidebar: Bool,
+        problem: GitHubStatusProblem? = nil,
+        expandedSections: Binding<Set<LibrarySection>>, isPinnedExpanded: Binding<Bool>
     ) {
-        self.model = model
+        self.state = state
         self.actions = actions
-        self.footer = footer
-        self.isTodaySelected = isTodaySelected
-        sidebarOverride = isSidebar
-        savedCollections = expandedCollections
-        savedPinnedExpanded = pinnedExpanded
+        self.isSidebar = isSidebar
+        self.problem = problem
+        _expandedSections = expandedSections
+        _isPinnedExpanded = isPinnedExpanded
     }
-
-    #if DEBUG
-    public func captureTagFilters(_ value: Bool) -> Self {
-        var library = self
-        library._showingTags = State(initialValue: value)
-        return library
-    }
-    #endif
 
     public var body: some View {
         navigationList
@@ -259,110 +143,95 @@ public struct LibraryView: View {
             .navigationSubtitle(navigationSubtitle)
             .toolbarTitleDisplayMode(.large)
             .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 400)
-            .refreshable {
-                isPullRefreshing = true
-                defer { isPullRefreshing = false }
-                await actions.refresh()
-            }
+            .refreshable { await actions.refresh() }
             .toolbar { libraryToolbar }
             .sheet(isPresented: $showingTags) { tagFilters }
             .scrollEdgeEffectStyle(.soft, for: .all)
-            .onChange(of: model.query) { resetSearchDisclosures() }
-            .onChange(of: model.selectedTagIDs) { resetSearchDisclosures() }
-            .onChange(of: actions.deletionConfirmation?.rowID) { _, rowID in
-                if rowID == nil { deletionSelection = nil }
-            }
-            .onReceive(NotificationCenter.default.publisher(
-                for: UIApplication.significantTimeChangeNotification)
-            ) { _ in
-                now = .now
-            }
     }
 
     @ViewBuilder
     private var navigationList: some View {
-        if model.loadState == .signedOut {
+        if state.loadState == .signedOut {
             signedOutInvitation
-        } else if searchManagedByContainer {
-            adaptiveList
-        } else {
-            adaptiveList
-                .searchable(
-                    text: $model.query, isPresented: $searchPresented,
-                    placement: isSidebar ? .sidebar : .automatic,
-                    prompt: Text("Search notes", bundle: .module))
-                .searchToolbarBehavior(.minimize)
-        }
-    }
-
-    @ViewBuilder
-    private var adaptiveList: some View {
-        if isSidebar {
+        } else if isSidebar {
             libraryList.listStyle(.sidebar)
         } else {
             libraryList.listStyle(.insetGrouped)
         }
     }
 
-    private var isSidebar: Bool { sidebarOverride ?? (horizontalSizeClass == .regular) }
-
     private var navigationTitle: String {
-        if model.loadState == .signedOut { return "" }
+        if state.loadState == .signedOut { return "" }
         return String(localized: "GistPad", bundle: .module)
     }
 
     private var navigationSubtitle: String {
-        guard model.loadState != .signedOut else { return "" }
-        return model.mainGistCount.map(LibraryModel.gistCountLabel) ?? ""
+        guard state.loadState != .signedOut else { return "" }
+        return state.mainGistCount.map(LibraryState.gistCountLabel) ?? ""
     }
 
     private var libraryList: some View {
-        List(selection: librarySelection) {
-            status
-            if model.loadState != .signedOut {
-                if !model.selectedTagIDs.isEmpty {
+        // One clock moves rows between date sections and refreshes their relative dates.
+        TimelineView(.everyMinute) { context in
+            List(selection: selection) {
+                if !state.selectedTagIDs.isEmpty {
                     searchScope
                 }
-                searchStatus
-                if !pinnedNotes.isEmpty {
-                    pinnedSection
+                if !pinnedGists.isEmpty {
+                    pinnedSection(now: context.date)
                 }
-                ForEach(dateSections) { dateSection($0) }
-                ForEach(displayedCollections) { collectionSection($0) }
-                if !hasVisibleNotes && model.loadState != .loading && canShowEmptyState {
+                ForEach(dateSections(now: context.date)) { dateSection($0, now: context.date) }
+                ForEach(displayedSections) { librarySection($0, now: context.date) }
+                if state.loadState != .loading && (state.hasFilters ? !state.hasMatches : !hasVisibleGists) {
                     emptyState
-                }
-                if let footer {
-                    Section {} footer: { footer }
                 }
             }
         }
         .headerProminence(.increased)
-        .tint(.primary)
         .scrollDismissesKeyboard(.immediately)
         .environment(\.defaultMinListRowHeight, 44)
         .accessibilityIdentifier("library-list")
-        .animation(reduceMotion ? nil : .default, value: model.matchingNotes.map(\.id))
+        .animation(reduceMotion ? nil : .default, value: state.matchingGists.map(\.id))
     }
 
-    private var pinnedNotes: [LibraryNote] {
-        model.matchingNotes(in: .gists).filter(\.isPinned)
+    /// The sidebar highlights the open gist. Compact lists push it instead, and losing a
+    /// visible row is not leaving the open gist.
+    private var selection: Binding<String?> {
+        Binding(
+            get: { isSidebar ? state.selectedID : nil },
+            set: { if let id = $0 { actions.select(id) } })
     }
 
-    private var dateSections: [LibraryDateSection] {
-        LibraryDateSection.sections(
-            for: model.matchingNotes(in: .gists).filter { !$0.isPinned },
+    private var pinnedGists: [GistItem] {
+        state.matchingGists(in: .gists).filter(\.isPinned)
+    }
+
+    private func dateSections(now: Date) -> [DateSection] {
+        DateSection.sections(
+            for: state.matchingGists(in: .gists).filter { !$0.isPinned },
             relativeTo: now, calendar: calendar)
     }
 
-    private var pinnedSection: some View {
-        Section(isExpanded: pinnedExpansion) {
-            ForEach(pinnedNotes) { noteRow($0) }
+    private func pinnedSection(now: Date) -> some View {
+        disclosureSection(isExpanded: $isPinnedExpanded) {
+            ForEach(pinnedGists) { gistRow($0, now: now) }
         } header: {
             sectionHeader(
-                Text("Pinned", bundle: .module), symbol: "pin", count: pinnedNotes.count,
-                countLabel: LibraryModel.gistCountLabel(pinnedNotes.count),
-                expansion: pinnedExpansion, id: "library-section-pinned")
+                Text("Pinned", bundle: .module), symbol: "pin", count: pinnedGists.count,
+                countLabel: LibraryState.gistCountLabel(pinnedGists.count),
+                isExpanded: $isPinnedExpanded, id: "library-section-pinned")
+        }
+    }
+
+    /// Search results are plain sections, like Notes. Otherwise sections collapse.
+    @ViewBuilder
+    private func disclosureSection<Rows: View, Header: View>(
+        isExpanded: Binding<Bool>, @ViewBuilder rows: () -> Rows, @ViewBuilder header: () -> Header
+    ) -> some View {
+        if state.hasFilters {
+            Section { rows() } header: { header() }
+        } else {
+            Section(isExpanded: isExpanded) { rows() } header: { header() }
         }
     }
 
@@ -371,51 +240,47 @@ public struct LibraryView: View {
     @ViewBuilder
     private func sectionHeader(
         _ title: Text, symbol: String? = nil, count: Int?, countLabel: String?,
-        expansion: Binding<Bool>, id: String
+        isExpanded: Binding<Bool>, id: String
     ) -> some View {
-        let isExpanded = expansion.wrappedValue
+        let isCollapsible = !state.hasFilters
         // At accessibility sizes the sidebar header keeps only its title, so it wraps between
         // words. VoiceOver still reads the count from the header's value.
         let titleOnly = isSidebar && dynamicTypeSize.isAccessibilitySize
         let label = HStack(alignment: .firstTextBaseline) {
-            Group {
-                if let symbol, !titleOnly {
-                    Label { title } icon: { Image(systemName: symbol) }
-                } else {
-                    title
-                }
+            if let symbol, !titleOnly {
+                Label { title } icon: { Image(systemName: symbol) }
+            } else {
+                title
             }
-            .captureFrame("\(id)-title")
             Spacer(minLength: 8)
             if let count, !titleOnly {
                 let number = Text(count, format: .number).monospacedDigit()
                 // The sidebar already draws its headers in secondary ink, so the count shares it.
                 (isSidebar ? number : number.foregroundStyle(.secondary))
                     .fixedSize()
-                    .captureFrame("\(id)-count")
             }
-            if !isSidebar {
+            if !isSidebar && isCollapsible {
                 // UIKit's secondary label, which is what Notes' disc uses (SwiftUI's
                 // hierarchical `.secondary` renders a flatter, different gray).
                 Image(
-                    systemName: isExpanded
+                    systemName: isExpanded.wrappedValue
                         ? "chevron.down.circle.fill" : "chevron.forward.circle.fill"
                 )
                 .foregroundStyle(Color(uiColor: .secondaryLabel))
                 .contentTransition(.symbolEffect(.replace))
             }
         }
-        let state = isExpanded
+        let expansion = !isCollapsible ? nil : isExpanded.wrappedValue
             ? String(localized: "Expanded", bundle: .module)
             : String(localized: "Collapsed", bundle: .module)
-        let value = [countLabel, state].compactMap { $0 }.joined(separator: ", ")
+        let value = [countLabel, expansion].compactMap { $0 }.joined(separator: ", ")
         Group {
-            if isSidebar {
+            if isSidebar || !isCollapsible {
                 label
             } else {
                 Button {
                     withAnimation(reduceMotion ? nil : .default) {
-                        expansion.wrappedValue.toggle()
+                        isExpanded.wrappedValue.toggle()
                     }
                 } label: {
                     label
@@ -423,7 +288,6 @@ public struct LibraryView: View {
                 .buttonStyle(.plain)
             }
         }
-        .captureFrame(id)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(Text(verbatim: value))
@@ -431,182 +295,76 @@ public struct LibraryView: View {
         .accessibilityIdentifier(id)
     }
 
-    private var pinnedRowsVisible: Bool { pinnedExpansion.wrappedValue }
+    private var hasVisibleGists: Bool {
+        !state.matchingGists(in: .gists).isEmpty || !displayedSections.isEmpty
+    }
 
-    private var pinnedExpansion: Binding<Bool> {
+    private var displayedSections: [LibrarySection] {
+        state.secondarySections.filter {
+            !state.hasFilters || !state.matchingGists(in: $0).isEmpty
+        }
+    }
+
+    private func isExpanded(_ section: LibrarySection) -> Binding<Bool> {
         Binding(
-            get: { model.hasFilters ? !collapsedSearchPinned : pinnedPreference.wrappedValue },
-            set: { expanded in
-                if model.hasFilters { collapsedSearchPinned = !expanded }
-                else { pinnedPreference.wrappedValue = expanded }
-            })
+            get: { expandedSections.contains(section) },
+            set: { if $0 { expandedSections.insert(section) } else { expandedSections.remove(section) } })
     }
 
-    private var pinnedPreference: Binding<Bool> {
-        savedPinnedExpanded ?? $localPinnedExpanded
-    }
-
-    private var hasVisibleNotes: Bool {
-        !model.matchingNotes(in: .gists).isEmpty || !displayedCollections.isEmpty
-    }
-
-    private var librarySelection: Binding<Selection?> {
+    private func isExpanded(_ group: DateGroup) -> Binding<Bool> {
         Binding(
-            get: {
-                guard isSidebar, let id = model.selectedNoteID else { return nil }
-                return visibleSelection(for: id)
-            },
-            set: { selection in
-                // Losing a visible row is not leaving the open document.
-                guard let selection else { return }
-                select(selection)
-            }
-        )
+            get: { !collapsedDateGroups.contains(group) },
+            set: { if $0 { collapsedDateGroups.remove(group) } else { collapsedDateGroups.insert(group) } })
     }
 
-    private func select(_ selection: Selection) {
-        selectedCollection = selection.collection
-        if let select = actions.select {
-            select(selection.noteID)
-        } else {
-            model.selectedNoteID = selection.noteID
-        }
-    }
-
-    private func visibleSelection(for id: String) -> Selection? {
-        let candidates = [selectedCollection] + LibraryCollection.allCases.filter {
-            $0 != selectedCollection
-        }
-        return candidates.first { isVisible(id, in: $0) }.map {
-            Selection(collection: $0, noteID: id)
-        }
-    }
-
-    private func isVisible(_ id: String, in collection: LibraryCollection) -> Bool {
-        if collection == .gists {
-            return (pinnedRowsVisible && pinnedNotes.contains { $0.id == id })
-                || dateSections.contains { section in
-                    dateExpansion(for: section.group).wrappedValue
-                        && section.notes.contains { $0.id == id }
-                }
-        }
-        return displayedCollections.contains(collection) && expansion(for: collection).wrappedValue
-            && model.matchingNotes(in: collection).contains { $0.id == id }
-    }
-
-    private var collections: Binding<Set<LibraryCollection>> {
-        savedCollections ?? $localCollections
-    }
-
-    private var displayedCollections: [LibraryCollection] {
-        model.secondaryCollections.filter {
-            !model.hasFilters || !model.matchingNotes(in: $0).isEmpty
-        }
-    }
-
-    private func expansion(for collection: LibraryCollection) -> Binding<Bool> {
-        Binding(
-            get: {
-                model.hasFilters
-                    ? !collapsedSearchCollections.contains(collection)
-                    : collections.wrappedValue.contains(collection)
-            },
-            set: { expanded in
-                if model.hasFilters {
-                    if expanded { collapsedSearchCollections.remove(collection) }
-                    else { collapsedSearchCollections.insert(collection) }
-                } else {
-                    if expanded { collections.wrappedValue.insert(collection) }
-                    else { collections.wrappedValue.remove(collection) }
-                }
-            })
-    }
-
-    private func dateExpansion(for group: LibraryDateGroup) -> Binding<Bool> {
-        Binding(
-            get: {
-                !(model.hasFilters ? collapsedSearchDateGroups : collapsedDateGroups).contains(group)
-            },
-            set: { expanded in
-                if model.hasFilters {
-                    if expanded { collapsedSearchDateGroups.remove(group) }
-                    else { collapsedSearchDateGroups.insert(group) }
-                } else {
-                    if expanded { collapsedDateGroups.remove(group) }
-                    else { collapsedDateGroups.insert(group) }
-                }
-            })
-    }
-
-    private func resetSearchDisclosures() {
-        collapsedSearchCollections.removeAll()
-        collapsedSearchPinned = false
-        collapsedSearchDateGroups.removeAll()
-    }
-
-    private func collectionSection(_ collection: LibraryCollection) -> some View {
-        let expansion = expansion(for: collection)
-        let count = model.count(in: collection)
-        return Section(isExpanded: expansion) {
-            ForEach(model.matchingNotes(in: collection)) { noteRow($0, collection: collection) }
+    private func librarySection(_ section: LibrarySection, now: Date) -> some View {
+        let count = state.count(in: section)
+        return disclosureSection(isExpanded: isExpanded(section)) {
+            ForEach(state.matchingGists(in: section)) { gistRow($0, now: now, section: section) }
         } header: {
             sectionHeader(
-                Text(verbatim: collection.title), symbol: collection.symbol, count: count,
+                Text(verbatim: section.title), symbol: section.symbol, count: count,
                 countLabel: count.map {
-                    collection == .dailyNotes
-                        ? LibraryModel.noteCountLabel($0) : LibraryModel.gistCountLabel($0)
+                    section == .dailyNotes
+                        ? LibraryState.dailyNoteCountLabel($0) : LibraryState.gistCountLabel($0)
                 },
-                expansion: expansion,
-                id: "library-collection-\(collection.rawValue)")
+                isExpanded: isExpanded(section),
+                id: "library-collection-\(section.rawValue)")
         }
     }
 
     @ViewBuilder
-    private func dateSection(_ section: LibraryDateSection) -> some View {
+    private func dateSection(_ section: DateSection, now: Date) -> some View {
         if section.group == .undated {
             Section {
-                ForEach(section.notes) { noteRow($0) }
+                ForEach(section.gists) { gistRow($0, now: now) }
             }
         } else {
-            let expansion = dateExpansion(for: section.group)
             let title = section.group.title(locale: locale, calendar: calendar)
-            Section(isExpanded: expansion) {
-                ForEach(section.notes) { noteRow($0) }
+            disclosureSection(isExpanded: isExpanded(section.group)) {
+                ForEach(section.gists) { gistRow($0, now: now) }
             } header: {
                 sectionHeader(
-                    Text(verbatim: title), count: section.notes.count,
-                    countLabel: LibraryModel.gistCountLabel(section.notes.count),
-                    expansion: expansion, id: "library-section-\(title)")
+                    Text(verbatim: title), count: section.gists.count,
+                    countLabel: LibraryState.gistCountLabel(section.gists.count),
+                    isExpanded: isExpanded(section.group), id: "library-section-\(title)")
             }
         }
     }
 
-    private var remoteStatus: GitHubStatusState {
-        let state = model.gitHubStatus
-            ?? (model.loadState == .loading
-                ? .checking(operation: String(localized: "Updating from GitHub", bundle: .module))
-                : .idle)
-        if isPullRefreshing, case .checking = state { return .idle }
-        return state
-    }
-
-    private var showsGitHubStatusControl: Bool {
-        guard isGitHubStatusVisible, !(containerSearchPresentation?.wrappedValue ?? searchPresented) else {
-            return false
-        }
-        if case .problem = remoteStatus { return true }
-        return false
+    private var statusProblem: GitHubStatusProblem? {
+        isSearchPresented ? nil : problem
     }
 
     private var searchScope: some View {
         Section {
             HStack(alignment: .center, spacing: 12) {
                 TagLabels(
-                    tags: model.snapshot.tags.filter { model.selectedTagIDs.contains($0.id) },
+                    tags: state.tags.filter { state.selectedTagIDs.contains($0.id) },
                     isSelected: true
                 )
-                if let count = model.resultGistCount {
-                    Text(verbatim: LibraryModel.gistCountLabel(count))
+                if let count = state.resultGistCount {
+                    Text(verbatim: LibraryState.gistCountLabel(count))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -614,7 +372,7 @@ public struct LibraryView: View {
                         .accessibilityIdentifier("library-filter-count")
                 }
                 Button {
-                    model.clearFilters()
+                    state.clearFilters()
                 } label: {
                     Label {
                         Text("Clear Tag Filter", bundle: .module)
@@ -631,166 +389,70 @@ public struct LibraryView: View {
         }
     }
 
-    private var canShowEmptyState: Bool {
-        switch model.loadState {
-        case .ready: break
-        case .offline:
-            guard !model.snapshot.notes.isEmpty else { return false }
-        case .loading, .failed, .reconnectRequired, .signedOut: return false
-        }
-        return switch model.searchState {
-        case .inactive, .results: true
-        case .searching, .failed: false
-        }
-    }
-
-    @ViewBuilder
-    private var searchStatus: some View {
-        switch model.searchState {
-        case .inactive, .results:
-            EmptyView()
-        case .searching:
-            Section {
-                ProgressView(String(localized: "Searching notes", bundle: .module))
-            }
-        case .failed(let message):
-            Section {
-                Label(String(localized: "Search needs attention", bundle: .module), systemImage: "exclamationmark.circle")
-                Text(verbatim: message).foregroundStyle(.primary)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var status: some View {
-        if !model.snapshot.notes.isEmpty, case .problem = remoteStatus {
-            EmptyView()
-        } else {
-        switch model.loadState {
-        case .loading:
-            EmptyView()
-        case .offline:
-            Section {
-                Label {
-                    Text("Offline. Showing notes on this iPhone.", bundle: .module)
-                } icon: { Image(systemName: "wifi.slash") }
-                .font(.subheadline)
-                if model.snapshot.notes.isEmpty {
-                    Text("No notes are available offline yet. Connect to GitHub to load your notebook.", bundle: .module)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        case .failed(let message):
-            Section {
-                Label(String(localized: "Couldn't update from GitHub.", bundle: .module), systemImage: "exclamationmark.circle")
-                Text(verbatim: message)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                Button(String(localized: "Retry", bundle: .module)) {
-                    Task { await actions.refresh() }
-                }
-                .tint(.primary)
-            }
-        case .reconnectRequired(let message) where !showsGitHubStatusControl:
-            Section {
-                Label(String(localized: "Reconnect GitHub", bundle: .module), systemImage: "person.crop.circle.badge.exclamationmark")
-                Text(verbatim: message)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    if let reconnect = actions.reconnect {
-                        Button(String(localized: "Continue with GitHub", bundle: .module), action: reconnect)
-                            .tint(.primary)
-                }
-            }
-        case .reconnectRequired:
-            EmptyView()
-        case .signedOut, .ready:
-            EmptyView()
-        }
-        }
-    }
-
     private var signedOutInvitation: some View {
         ContentUnavailableView {
-            NotebookArtwork()
-            Text("Your notebook, on GitHub", bundle: .module)
+            GistPadArtwork()
+            Text("Welcome to GistPad", bundle: .module)
                 .font(.title2.weight(.semibold))
         } description: {
-            Text("Markdown notes, backed by your GitHub gists.", bundle: .module)
+            Text("Your knowledge and daily notes, kept in GitHub gists.", bundle: .module)
         } actions: {
-            if let reconnect = actions.reconnect {
-                Button(action: reconnect) {
-                    Text("Continue with GitHub", bundle: .module)
-                        .foregroundStyle(Color(uiColor: .systemBackground))
-                }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .frame(minHeight: 44)
-                    .tint(Color(uiColor: .label))
-                    .accessibilityIdentifier("library-sign-in")
-            }
+            Button(String(localized: "Sign in with GitHub", bundle: .module), action: actions.reconnect)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .accessibilityIdentifier("library-sign-in")
         }
     }
 
+    /// With no gists to show, the empty state is also where a failed first load explains itself.
     private var emptyState: some View {
         Section {
-            ContentUnavailableView {
-                if !model.hasFilters {
-                    NotebookArtwork()
-                    Text("A notebook of your own", bundle: .module)
-                        .font(.title2.weight(.semibold))
-                } else {
-                    Label(
-                        String(localized: "No matching notes", bundle: .module),
-                        systemImage: "magnifyingglass"
-                    )
-                }
-            } description: {
-                if model.hasFilters {
-                    Text("Try another search or clear your filters.", bundle: .module)
-                } else {
-                    Text("A thought, a list, a little thing worth keeping. Start with your first note.", bundle: .module)
-                }
-            } actions: {
-                if model.hasFilters {
-                    Button(String(localized: "Clear filters", bundle: .module)) { model.clearFilters() }
-                        .tint(.primary)
-                } else {
-                    Button(action: actions.create) {
-                        Text("Create a note", bundle: .module)
-                            .foregroundStyle(Color(uiColor: .systemBackground))
+            switch state.loadState {
+            case _ where state.hasFilters:
+                ContentUnavailableView.search(text: state.query)
+            case .failed(let message):
+                ContentUnavailableView {
+                    Label(String(localized: "Couldn't Load Your Gists", bundle: .module), systemImage: "exclamationmark.circle")
+                } description: {
+                    Text(verbatim: message)
+                } actions: {
+                    Button(String(localized: "Try Again", bundle: .module)) {
+                        Task { await actions.refresh() }
                     }
+                }
+            case .reconnectRequired(let message):
+                ContentUnavailableView {
+                    Label(String(localized: "Reconnect GitHub", bundle: .module), systemImage: "person.crop.circle.badge.exclamationmark")
+                } description: {
+                    Text(verbatim: message)
+                } actions: {
+                    Button(String(localized: "Sign in with GitHub", bundle: .module), action: actions.reconnect)
+                }
+            default:
+                ContentUnavailableView {
+                    GistPadArtwork()
+                    Text("No Gists Yet", bundle: .module)
+                        .font(.title2.weight(.semibold))
+                } description: {
+                    Text("A thought, a list, a little thing worth keeping. Start your first gist.", bundle: .module)
+                } actions: {
+                    Button(String(localized: "New Gist", bundle: .module), action: actions.create)
                         .buttonStyle(.borderedProminent)
-                        .tint(Color(uiColor: .label))
                 }
             }
         }
         .listRowBackground(Color.clear)
     }
 
-    private func noteRow(
-        _ note: LibraryNote, collection: LibraryCollection = .gists
+    private func gistRow(
+        _ gist: GistItem, now: Date, section: LibrarySection = .gists
     ) -> some View {
-        let selection = Selection(collection: collection, noteID: note.id)
-        let openComments: (@MainActor (String) -> Void)? = actions.openComments.map { action in
-            { @MainActor (id: String) in
-                selectedCollection = collection
-                action(id)
-            }
+        NavigationLink(value: gist.id) {
+            GistRow(
+                gist: gist, tags: state.tags(for: gist), now: now,
+                showsStar: section != .starred)
         }
-        let delete: (@MainActor () -> Void)? = actions.deletionAction(for: note).map { action in
-            { @MainActor in
-                deletionSelection = selection
-                action()
-            }
-        }
-        return NavigationLink(value: selection) {
-            LibraryNoteRow(
-                note: note, tags: model.tags(for: note),
-                showsStar: collection != .starred)
-        }
-        .accessibilityIdentifier("library-note-\(note.id)")
+        .accessibilityIdentifier("library-note-\(gist.id)")
         .navigationLinkIndicatorVisibility(.hidden)
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
@@ -798,98 +460,86 @@ public struct LibraryView: View {
         .listRowInsets(.vertical, 0)
         // Compact rows sit 16 pt inside the card. The sidebar keeps the system inset.
         .listRowInsets(.horizontal, isSidebar ? nil : compactRowInset)
-        .contextMenu { rowActions(note, openComments: openComments, delete: delete) }
-        .modifier(LibraryCommentsAccessibilityAction(note: note, action: openComments))
-        .modifier(LibraryRowDeletionConfirmation(
-            rowID: note.id, target: deletionConfirmation(for: selection)))
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if let delete {
-                // The confirmation owns the destructive role, not this pending swipe.
-                Button(String(localized: "Delete", bundle: .module), systemImage: "trash", action: delete)
-                    .tint(.red)
+        .contextMenu { rowActions(gist) }
+        .accessibilityActions {
+            if gist.supportsComments {
+                Button(String(localized: "Open Comments", bundle: .module)) { actions.openComments(gist.id) }
             }
-            if note.isOwned, !note.isRecovery, let archive = actions.toggleArchive {
+        }
+        .deletionConfirmation(
+            title: gist.title, isDailyNote: gist.isDailyNote,
+            isPresented: Binding(
+                get: { pendingDeletion == gist.id },
+                set: { if !$0 { pendingDeletion = nil } }),
+            delete: { actions.delete(gist.id) })
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if gist.isOwned {
+                // The confirmation owns the destructive role, not this pending swipe.
+                Button(String(localized: "Delete", bundle: .module), systemImage: "trash") {
+                    pendingDeletion = gist.id
+                }
+                .tint(.red)
+            }
+            if gist.isOwned, !gist.isRecovery {
                 Button {
-                    archive(note.id)
+                    actions.toggleArchive(gist.id)
                 } label: {
                     Label(
-                        note.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
+                        gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
                         systemImage: "archivebox"
                     )
                 }
-                .tint(Color(uiColor: .darkGray))
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            if note.isOwned, !note.isRecovery, let pin = actions.togglePin {
+            if gist.isOwned, !gist.isRecovery {
                 Button {
-                    pin(note.id)
+                    actions.togglePin(gist.id)
                 } label: {
                     Label(
-                        note.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
-                        systemImage: note.isPinned ? "pin.slash" : "pin"
+                        gist.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
+                        systemImage: gist.isPinned ? "pin.slash" : "pin"
                     )
                 }
-                .tint(Color(uiColor: .darkGray))
             }
         }
     }
 
-    private func deletionConfirmation(for selection: Selection) -> LibraryDeletionConfirmation? {
-        guard let target = actions.deletionConfirmation else { return nil }
-        let source = deletionSelection.flatMap { $0.noteID == target.rowID ? $0 : nil }
-            ?? visibleSelection(for: target.rowID)
-        return source == selection ? target : nil
-    }
-
     @ViewBuilder
-    private func rowActions(
-        _ note: LibraryNote, openComments: (@MainActor (String) -> Void)?,
-        delete: (@MainActor () -> Void)?
-    ) -> some View {
-        if note.supportsComments, let openComments {
+    private func rowActions(_ gist: GistItem) -> some View {
+        if gist.supportsComments {
             Button(
                 String(localized: "Open Comments", bundle: .module), systemImage: "text.bubble"
-            ) { openComments(note.id) }
+            ) { actions.openComments(gist.id) }
         }
-        if note.isOwned, !note.isRecovery, let pin = actions.togglePin {
+        if gist.isOwned, !gist.isRecovery {
             Button(
-                note.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
-                systemImage: note.isPinned ? "pin.slash" : "pin"
-            ) { pin(note.id) }
-        }
-        if note.isOwned, !note.isRecovery, let archive = actions.toggleArchive {
+                gist.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
+                systemImage: gist.isPinned ? "pin.slash" : "pin"
+            ) { actions.togglePin(gist.id) }
             Button(
-                note.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
+                gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
                 systemImage: "archivebox"
-            ) { archive(note.id) }
+            ) { actions.toggleArchive(gist.id) }
         }
-        if let delete {
+        if gist.isOwned {
             Divider()
             Button(
                 String(localized: "Delete", bundle: .module), systemImage: "trash",
-                role: .destructive, action: delete)
+                role: .destructive
+            ) { pendingDeletion = gist.id }
         }
     }
 
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
-        if model.loadState != .signedOut {
+        if state.loadState != .signedOut {
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
-            if !(containerSearchPresentation?.wrappedValue ?? searchPresented) {
-                if showsGitHubStatusControl {
+            if !isSearchPresented {
+                if let statusProblem {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
                     ToolbarItem(placement: .bottomBar) {
-                        GitHubStatusControl(state: remoteStatus) {
-                            if let recover = actions.recoverStatus {
-                                recover()
-                            } else if case .reconnectRequired = model.loadState,
-                                      let reconnect = actions.reconnect {
-                                reconnect()
-                            } else {
-                                Task { await actions.refresh() }
-                            }
-                        }
+                        GitHubStatusControl(state: .problem(statusProblem), recover: actions.recoverStatus)
                     }
                     .axisBehavior(.verticalPreferred)
                     .sharedBackgroundVisibility(.hidden)
@@ -898,18 +548,14 @@ public struct LibraryView: View {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
                     ToolbarItem(placement: .bottomBar) {
                         tagFilterButton
-                            .labelStyle(.iconOnly)
                     }
                 }
             }
             if !isSidebar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     LibraryCreateButton(action: actions.create)
-                    LibraryTodayButton(
-                        summary: model.today, isSelected: isTodaySelected, action: actions.today)
-                    if let account = actions.account {
-                        settingsButton(account)
-                    }
+                    TodayButton(summary: state.today, action: actions.today)
+                    settingsButton
                 }
             }
             if isSidebar {
@@ -918,39 +564,26 @@ public struct LibraryView: View {
                 }
             }
         }
-        if isSidebar || model.loadState == .signedOut, let account = actions.account {
+        if isSidebar || state.loadState == .signedOut {
             ToolbarItem(placement: .secondaryAction) {
-                settingsButton(account)
+                settingsButton
             }
         }
     }
 
-    private func settingsButton(_ action: @escaping @MainActor () -> Void) -> some View {
-        Button(String(localized: "Settings", bundle: .module), systemImage: "gearshape", action: action)
-            .tint(.primary)
+    private var settingsButton: some View {
+        Button(String(localized: "Settings", bundle: .module), systemImage: "gearshape", action: actions.account)
             .accessibilityIdentifier("library-settings")
     }
 
     private var tagFilterButton: some View {
-        let isFiltered = !model.selectedTagIDs.isEmpty
-        return Button {
+        Button(String(localized: "Filter by tags", bundle: .module), systemImage: "tag") {
             showingTags = true
-        } label: {
-            Label {
-                if isSidebar {
-                    Text("Filter by tags", bundle: .module)
-                } else {
-                    Text("Filter by tags, \(model.selectedTagIDs.count) selected", bundle: .module)
-                }
-            } icon: {
-                Image(systemName: "tag")
-            }
-            .frame(minWidth: isSidebar ? nil : 44, minHeight: isSidebar ? nil : 44)
-            .contentShape(.rect)
         }
-        .disabled(model.snapshot.tags.isEmpty)
-        .tint(isFiltered ? Color(uiColor: .tintColor) : .primary)
-        .accessibilityValue(Text("\(model.selectedTagIDs.count) selected", bundle: .module))
+        // The system blue that confirm buttons use, not the personal accent.
+        .tint(state.selectedTagIDs.isEmpty ? .primary : Color(uiColor: .tintColor))
+        .disabled(state.tags.isEmpty)
+        .accessibilityValue(Text("\(state.selectedTagIDs.count) selected", bundle: .module))
         .accessibilityIdentifier("library-filter-tags")
     }
 
@@ -960,10 +593,10 @@ public struct LibraryView: View {
                 Section {
                     ForEach(matchingTags) { tag in
                         Button {
-                            if model.selectedTagIDs.contains(tag.id) {
-                                model.selectedTagIDs.remove(tag.id)
+                            if state.selectedTagIDs.contains(tag.id) {
+                                state.selectedTagIDs.remove(tag.id)
                             } else {
-                                model.selectedTagIDs.insert(tag.id)
+                                state.selectedTagIDs.insert(tag.id)
                             }
                         } label: {
                             HStack(spacing: 12) {
@@ -971,33 +604,31 @@ public struct LibraryView: View {
                                 Text(verbatim: tag.name)
                                     .foregroundStyle(.primary)
                                 Spacer()
-                                Text(model.gistCount(tagged: tag.id), format: .number)
+                                Text(state.gistCount(tagged: tag.id), format: .number)
                                     .monospacedDigit()
                                     .foregroundStyle(.secondary)
                                     .accessibilityHidden(true)
                                 // Reserves its width so the count never shifts when a tag is selected.
                                 Image(systemName: "checkmark")
-                                    .foregroundStyle(.primary)
-                                    .opacity(model.selectedTagIDs.contains(tag.id) ? 1 : 0)
+                                    .foregroundStyle(.tint)
+                                    .opacity(state.selectedTagIDs.contains(tag.id) ? 1 : 0)
                                     .accessibilityHidden(true)
                             }
                             .frame(minHeight: 44)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityValue(Text(verbatim: LibraryModel.gistCountLabel(model.gistCount(tagged: tag.id))))
-                        .accessibilityAddTraits(model.selectedTagIDs.contains(tag.id) ? .isSelected : [])
+                        .accessibilityValue(Text(verbatim: LibraryState.gistCountLabel(state.gistCount(tagged: tag.id))))
+                        .accessibilityAddTraits(state.selectedTagIDs.contains(tag.id) ? .isSelected : [])
                         .accessibilityIdentifier("library-tag-filter-\(tag.id)")
-                        .captureFrame("library-tag-filter-\(tag.id)")
                         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: model.selectedTagIDs.contains(tag.id))
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: state.selectedTagIDs.contains(tag.id))
                     }
                 }
-                if !model.selectedTagIDs.isEmpty {
+                if !state.selectedTagIDs.isEmpty {
                     Button(String(localized: "Clear tag filters", bundle: .module)) {
-                        model.selectedTagIDs = []
+                        state.selectedTagIDs = []
                     }
-                    .tint(.primary)
                 }
             }
             .navigationTitle(Text("Filter by tags", bundle: .module))
@@ -1013,7 +644,6 @@ public struct LibraryView: View {
                     Button(role: .close) { showingTags = false }
                         .accessibilityLabel(Text("Close", bundle: .module))
                         .accessibilityIdentifier("library-tag-filter-close")
-                        .captureFrame("library-tag-filter-close")
                 }
             }
         }
@@ -1021,9 +651,9 @@ public struct LibraryView: View {
         .presentationDragIndicator(.visible)
     }
 
-    private var matchingTags: [LibraryTag] {
+    private var matchingTags: [Tag] {
         let query = tagQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        return model.snapshot.tags.filter { query.isEmpty || $0.name.localizedStandardContains(query) }
+        return state.tags.filter { query.isEmpty || $0.name.localizedStandardContains(query) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 }

@@ -2,12 +2,11 @@
 import SwiftUI
 import WebKit
 import OSLog
-import GistPadAppearance
+import GistPadAccent
 import GistPadComments
 
 public struct MarkdownPreviewView: View {
-    private let document: PreviewDocument
-    private let allowsTaskEdits: Bool
+    private let file: PreviewFile
     private let comments: CommentHighlightConfiguration
     private let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
     private let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
@@ -16,8 +15,8 @@ public struct MarkdownPreviewView: View {
     @State private var viewportView = PreviewViewportView()
 
     public init(
-        document: String,
-        documentID: String,
+        markdown: String,
+        fileID: String,
         generation: UInt64,
         allowsTaskEdits: Bool = true,
         comments: CommentHighlightConfiguration = .init(),
@@ -26,8 +25,8 @@ public struct MarkdownPreviewView: View {
         onAddComment: (@MainActor (String) -> Void)? = nil,
         onEvent: @escaping @MainActor (PreviewEvent) -> Void
     ) {
-        self.document = PreviewDocument(text: document, id: documentID, generation: generation)
-        self.allowsTaskEdits = allowsTaskEdits
+        self.file = PreviewFile(
+            text: markdown, id: fileID, generation: generation, allowsTaskEdits: allowsTaskEdits)
         self.comments = comments
         self.onOpenCommentThreads = onOpenCommentThreads
         self.onLinkedCommentIDsChange = onLinkedCommentIDsChange
@@ -38,8 +37,7 @@ public struct MarkdownPreviewView: View {
     public var body: some View {
         GeometryReader { _ in
             NativeMarkdownPreview(
-                document: document, allowsTaskEdits: allowsTaskEdits,
-                viewportView: viewportView, comments: comments,
+                file: file, viewportView: viewportView, comments: comments,
                 onOpenCommentThreads: onOpenCommentThreads,
                 onLinkedCommentIDsChange: onLinkedCommentIDsChange,
                 onAddComment: onAddComment, onEvent: onEvent
@@ -53,8 +51,7 @@ public struct MarkdownPreviewView: View {
 }
 
 private struct NativeMarkdownPreview: UIViewRepresentable {
-    let document: PreviewDocument
-    let allowsTaskEdits: Bool
+    let file: PreviewFile
     let viewportView: PreviewViewportView
     let comments: CommentHighlightConfiguration
     let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
@@ -65,11 +62,11 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.legibilityWeight) private var legibilityWeight
-    @Environment(\.personalAccent) private var personalAccent
-    @Environment(\.isNotebookPaneVisible) private var isPaneVisible
+    @Environment(\.accent) private var accent
+    @Environment(\.isPaneVisible) private var isPaneVisible
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(document: document, allowsTaskEdits: allowsTaskEdits, onEvent: onEvent)
+        Coordinator(file: file, onEvent: onEvent)
     }
 
     func makeUIView(context: Context) -> InsetAwareWebView {
@@ -112,14 +109,14 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         let traits = webView.traitCollection.modifyingTraits {
             $0.userInterfaceStyle = colorScheme == .dark ? .dark : .light
             $0.accessibilityContrast = contrast == .increased ? .high : .normal
-            $0.preferredContentSizeCategory = dynamicTypeSize.contentSizeCategory
-            $0[PersonalAccentTrait.self] = personalAccent
+            $0.preferredContentSizeCategory = UIContentSizeCategory(dynamicTypeSize)
+            $0[AccentTrait.self] = accent
         }
         context.coordinator.appearance = PreviewAppearance(traits: traits, boldText: legibilityWeight == .bold)
         context.coordinator.commentHighlights.update(
-            document: document, configuration: comments, accent: personalAccent.color.hex,
+            file: file, configuration: comments, accent: accent.color.hex,
             onOpen: onOpenCommentThreads, onLinkedIDs: onLinkedCommentIDsChange, onAdd: onAddComment)
-        context.coordinator.update(document, allowsTaskEdits: allowsTaskEdits)
+        context.coordinator.update(file)
     }
 
     static func dismantleUIView(_ uiView: InsetAwareWebView, coordinator: Coordinator) {
@@ -139,116 +136,59 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         fileprivate weak var webView: WKWebView?
         fileprivate var onEvent: @MainActor (PreviewEvent) -> Void
         fileprivate var appearance: PreviewAppearance?
-        fileprivate lazy var commentHighlights = PreviewCommentHighlights { [weak self] failure in
-            self?.onEvent(.failure(failure))
-        }
-        private var document: PreviewDocument
-        private var allowsTaskEdits: Bool
-        private var lastSent: PreviewDocument?
-        private var lastTaskEditing: Bool?
+        fileprivate let commentHighlights = PreviewCommentHighlights()
+        private var file: PreviewFile
+        private var lastSent: PreviewFile?
         private var lastAppearance: PreviewAppearance?
         private var viewportInsets = UIEdgeInsets.zero
         private var lastViewportInsets: UIEdgeInsets?
         private var ready = false
         private var needsInitialScroll = true
 
-        fileprivate init(document: PreviewDocument, allowsTaskEdits: Bool, onEvent: @escaping @MainActor (PreviewEvent) -> Void) {
-            self.document = document
-            self.allowsTaskEdits = allowsTaskEdits
+        fileprivate init(file: PreviewFile, onEvent: @escaping @MainActor (PreviewEvent) -> Void) {
+            self.file = file
             self.onEvent = onEvent
+        }
+
+        /// The completion-handler form submits calls in order, so a later render never races an earlier one.
+        private func call(_ script: String, _ arguments: [String: Any] = [:], then: (@MainActor () -> Void)? = nil) {
+            webView?.callAsyncJavaScript(script, arguments: arguments, in: nil, in: .page) { [weak self] result in
+                switch result {
+                case .success: then?()
+                case .failure(let error): self?.onEvent(.failure(PreviewFailure(error)))
+                }
+            }
         }
 
         fileprivate func updateViewport(_ insets: UIEdgeInsets) {
             viewportInsets = insets
-            guard ready, let webView, lastViewportInsets != insets else { return }
+            guard ready, lastViewportInsets != insets else { return }
             lastViewportInsets = insets
-            Task { @MainActor [weak self, weak webView] in
-                guard let webView, self?.viewportInsets == insets else { return }
-                do {
-                    _ = try await webView.callAsyncJavaScript(
-                        "window.gistpadPreview.setViewportInsets(payload);",
-                        arguments: ["payload": ["top": insets.top, "bottom": insets.bottom]],
-                        in: nil, contentWorld: .page
-                    )
-                } catch {
-                    self?.lastViewportInsets = nil
-                    self?.onEvent(.failure(.webKit(error)))
-                }
-            }
+            call("window.gistpadPreview.setViewportInsets(payload);",
+                 ["payload": ["top": insets.top, "bottom": insets.bottom]])
         }
 
-        fileprivate func update(_ document: PreviewDocument, allowsTaskEdits: Bool) {
-            if self.document.id != document.id {
+        fileprivate func update(_ file: PreviewFile) {
+            if self.file.id != file.id {
                 needsInitialScroll = true
             }
-            self.document = document
-            self.allowsTaskEdits = allowsTaskEdits
-            guard ready, let webView else { return }
+            self.file = file
+            guard ready else { return }
             updateViewport(viewportInsets)
-            do {
-                try document.validate()
-            } catch let failure as PreviewFailure {
-                onEvent(.failure(failure))
-                return
-            } catch {
-                onEvent(.failure(.renderer(error.localizedDescription)))
-                return
-            }
-            if lastTaskEditing != allowsTaskEdits {
-                lastTaskEditing = allowsTaskEdits
-                Task { @MainActor [weak self, weak webView] in
-                    guard let webView, self?.allowsTaskEdits == allowsTaskEdits else { return }
-                    do {
-                        _ = try await webView.callAsyncJavaScript(
-                            "window.gistpadPreview.setTaskEditingEnabled(enabled);",
-                            arguments: ["enabled": allowsTaskEdits],
-                            in: nil, contentWorld: .page
-                        )
-                    } catch {
-                        self?.lastTaskEditing = nil
-                        self?.onEvent(.failure(.webKit(error)))
-                    }
-                }
-            }
             if let appearance, appearance != lastAppearance {
                 lastAppearance = appearance
-                Task { @MainActor [weak self, weak webView] in
-                    guard let webView else { return }
-                    do {
-                        // Initial CSS metrics can still reset WebKit's native scroll origin.
-                        _ = try await webView.callAsyncJavaScript(
-                            "window.gistpadPreview.setAppearance(payload);",
-                            arguments: ["payload": appearance.arguments],
-                            in: nil, contentWorld: .page
-                        )
-                    } catch {
-                        self?.lastAppearance = nil
-                        self?.onEvent(.failure(.webKit(error)))
-                    }
-                }
+                call("window.gistpadPreview.setAppearance(payload);", ["payload": appearance.arguments])
             }
-            guard lastSent != document else { return }
-            lastSent = document
-            Task { @MainActor [weak self, weak webView] in
-                guard let webView, self?.document == document else { return }
-                do {
-                    _ = try await webView.callAsyncJavaScript(
-                        "window.gistpadPreview.render(payload);",
-                        arguments: ["payload": document.arguments],
-                        in: nil, contentWorld: .page
-                    )
-                } catch {
-                    self?.lastSent = nil
-                    self?.onEvent(.failure(.webKit(error)))
-                }
-            }
+            guard lastSent != file else { return }
+            lastSent = file
+            call("window.gistpadPreview.render(payload);", ["payload": file.arguments])
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.frameInfo.isMainFrame,
                   message.frameInfo.securityOrigin.protocol == "gistpad-preview",
                   message.frameInfo.securityOrigin.host == "bundle" else {
-                onEvent(.failure(.invalidMessage))
+                Logger.preview.error("Ignored a message from outside the preview bundle.")
                 return
             }
             do {
@@ -256,51 +196,38 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                     try commentHighlights.activate(message.body)
                     return
                 }
-                switch try PreviewBridge.decode(message.body, document: document, allowsTaskEdits: allowsTaskEdits) {
+                switch try PreviewBridge.decode(message.body, file: file) {
                 case .ready:
                     ready = true
-                    update(document, allowsTaskEdits: allowsTaskEdits)
-                case .obsolete:
-                    Logger(subsystem: "dev.gistpad.GistPad", category: "MarkdownPreview")
-                        .debug("Discarded a passive preview event from an obsolete document generation.")
-                case .taskEditingUnavailable:
-                    Logger(subsystem: "dev.gistpad.GistPad", category: "MarkdownPreview")
-                        .debug("Discarded a task edit after preview editing became unavailable.")
+                    update(file)
                 case .event(let event):
-                    if case .rendered(let id, let generation) = event, needsInitialScroll, let webView {
-                        Task { @MainActor [weak self, weak webView] in
-                            guard let webView else { return }
-                            do {
-                                _ = try await webView.callAsyncJavaScript(
-                                    "await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));",
-                                    arguments: [:], in: nil, contentWorld: .page
-                                )
-                                guard let self, self.document.id == id, self.document.generation == generation else { return }
-                                if self.needsInitialScroll {
-                                    webView.layoutIfNeeded()
-                                    if !webView.scrollView.isTracking, !webView.scrollView.isDecelerating {
-                                        let insets = webView.scrollView.adjustedContentInset
-                                        webView.scrollView.setContentOffset(
-                                            CGPoint(x: -insets.left, y: -insets.top), animated: false
-                                        )
-                                    }
-                                    self.needsInitialScroll = false
-                                }
-                                self.commentHighlights.rendered(self.document)
-                                self.onEvent(event)
-                            } catch {
-                                self?.onEvent(.failure(.webKit(error)))
-                            }
-                        }
-                    } else {
-                        if case .rendered = event { commentHighlights.rendered(document) }
+                    guard case .rendered = event, needsInitialScroll else {
+                        if case .rendered = event { commentHighlights.rendered(file) }
                         onEvent(event)
+                        return
                     }
+                    let rendered = file
+                    // Initial CSS metrics can still reset WebKit's scroll origin, so wait for layout to settle.
+                    call("await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));") { [weak self] in
+                        guard let self, let webView = self.webView, self.file == rendered else { return }
+                        if self.needsInitialScroll {
+                            webView.layoutIfNeeded()
+                            if !webView.scrollView.isTracking, !webView.scrollView.isDecelerating {
+                                let insets = webView.scrollView.adjustedContentInset
+                                webView.scrollView.setContentOffset(
+                                    CGPoint(x: -insets.left, y: -insets.top), animated: false
+                                )
+                            }
+                            self.needsInitialScroll = false
+                        }
+                        self.commentHighlights.rendered(rendered)
+                        self.onEvent(event)
+                    }
+                case nil:
+                    Logger.preview.debug("Dropped a preview message for an older generation.")
                 }
-            } catch let failure as PreviewFailure {
-                onEvent(.failure(failure))
             } catch {
-                onEvent(.failure(.renderer(error.localizedDescription)))
+                Logger.preview.error("Ignored an invalid preview message: \(error.localizedDescription)")
             }
         }
 
@@ -312,25 +239,27 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-            onEvent(.failure(.renderer(error.localizedDescription)))
+            onEvent(.failure(PreviewFailure(error)))
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-            onEvent(.failure(.renderer(error.localizedDescription)))
+            onEvent(.failure(PreviewFailure(error)))
         }
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             ready = false
             lastSent = nil
-            lastTaskEditing = nil
             lastAppearance = nil
             lastViewportInsets = nil
             commentHighlights.reset()
             needsInitialScroll = true
-            onEvent(.failure(.renderer("The preview stopped unexpectedly. Reload the document to recover.")))
             webView.reload()
         }
     }
+}
+
+extension Logger {
+    static let preview = Logger(subsystem: "dev.gistpad.GistPad", category: "MarkdownPreview")
 }
 
 @MainActor
@@ -437,26 +366,6 @@ private final class InsetAwareWebView: WKWebView {
     }
 }
 
-private extension DynamicTypeSize {
-    var contentSizeCategory: UIContentSizeCategory {
-        switch self {
-        case .xSmall: .extraSmall
-        case .small: .small
-        case .medium: .medium
-        case .large: .large
-        case .xLarge: .extraLarge
-        case .xxLarge: .extraExtraLarge
-        case .xxxLarge: .extraExtraExtraLarge
-        case .accessibility1: .accessibilityMedium
-        case .accessibility2: .accessibilityLarge
-        case .accessibility3: .accessibilityExtraLarge
-        case .accessibility4: .accessibilityExtraExtraLarge
-        case .accessibility5: .accessibilityExtraExtraExtraLarge
-        @unknown default: .large
-        }
-    }
-}
-
 @MainActor
 final class PreviewResourceHandler: NSObject, WKURLSchemeHandler {
     func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
@@ -466,11 +375,11 @@ final class PreviewResourceHandler: NSObject, WKURLSchemeHandler {
                   let base = Bundle.module.url(forResource: "Web", withExtension: nil),
                   !url.path.contains("\\"),
                   !url.pathComponents.contains("..") else {
-                throw PreviewFailure.renderer("Invalid preview resource URL.")
+                throw PreviewFailure("Invalid preview resource URL.")
             }
             let file = base.appendingPathComponent(url.path.dropFirst().description).standardizedFileURL
             guard file.path.hasPrefix(base.standardizedFileURL.path + "/") else {
-                throw PreviewFailure.renderer("The preview resource is outside its bundle.")
+                throw PreviewFailure("The preview resource is outside its bundle.")
             }
             let data = try Data(contentsOf: file, options: .mappedIfSafe)
             let mimeTypes = ["html": "text/html", "js": "application/javascript", "css": "text/css",

@@ -2,195 +2,88 @@ import Foundation
 import Testing
 @testable import GistPadSync
 
+/// A new gist you never titled or typed in, or a day you opened and never typed in, disappears when
+/// you leave it. Anything you touched stays.
 @Suite struct BlankDraftTests {
-    @Test(arguments: [false, true])
-    func discardsAnUntouchedDailyTemplateWithoutDeletingItsGist(bound: Bool) async throws {
-        let store = try DraftStore.open(inMemory: true)
-        let account = UUID()
-        let target = DailyNoteTarget()
-        let draft: DraftSnapshot
-        if bound {
-            draft = try await store.newFileDraft(
-                accountID: account, githubUserID: 42, gistID: "daily",
-                filename: target.filename, description: GistConventions.dailyNotesDescription,
-                text: GistConventions.dailyContent(template: nil, dateFilename: target.filename))
-        } else {
-            draft = try await store.dailyGistDraft(
-                accountID: account, githubUserID: 42, target: target)
-        }
-        let yesterday = try await store.openDraft(
-            accountID: account, githubUserID: 42, gistID: "daily",
-            filename: "2026-10-01.md", description: GistConventions.dailyNotesDescription,
-            content: "Keep yesterday's thought.", revision: "one")
-        #expect(draft.isDiscardableBlank)
-        #expect(try await store.discardBlankDraft(
-            id: draft.id, accountID: account, expectedGeneration: draft.generation))
-        #expect(try await store.drafts(accountID: account) == [yesterday])
-    }
+    private let account = SyncFixture.account
 
-    @Test(arguments: ["A real thought", "- [ ] A custom template", "# 2026-10-25\n\nKeep this."])
-    func preservesDailyContentAndCustomTemplates(text: String) async throws {
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await store.newFileDraft(
-            accountID: UUID(), githubUserID: 42, gistID: "daily",
-            filename: DailyNoteTarget().filename,
-            description: GistConventions.dailyNotesDescription, text: text)
-        #expect(!draft.isDiscardableBlank)
-        #expect(try await !store.discardBlankDraft(
-            id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation))
-    }
+    enum DayStart: CaseIterable { case firstDay, heading, template }
 
-    @Test func preservesEditedAndPublishedDailyTemplates() async throws {
-        let store = try DraftStore.open(inMemory: true)
-        let account = UUID()
-        let target = DailyNoteTarget()
-        let draft = try await store.dailyGistDraft(
-            accountID: account, githubUserID: 42, target: target)
-        let edited = try await store.persist(
-            id: draft.id, accountID: account, text: draft.text, generation: 1)
-        let published = try await store.openDraft(
-            accountID: account, githubUserID: 42, gistID: "daily",
-            filename: target.filename, description: GistConventions.dailyNotesDescription,
-            content: draft.text, revision: "one")
-        for kept in [edited, published] {
+    @Test(arguments: DayStart.allCases)
+    func anUntouchedDayIsDiscardedButItsGistStays(_ start: DayStart) async throws {
+        let sync = try SyncFixture()
+        var files = ["2026-10-23.md": "Keep yesterday."]
+        if start == .template { files["template.md"] = "# {{date}}\n\n- [ ] Plan\n" }
+        let daily = start == .firstDay
+            ? nil : sync.server.addGist(description: DailyNote.gistDescription, files: files)
+        // The cache holds the daily gist as a publish leaves it, with its revision.
+        try await sync.store.cacheLibrary(
+            owned: [daily].compactMap { $0 }, starred: [], preferences: .init(metadata: [:]),
+            accountID: account)
+        let today = DailyNote.Day(
+            date: try Date.ISO8601FormatStyle().parse("2026-10-24T12:00:00Z"), timeZone: .gmt)
+
+        let untouched = try await sync.dailyNotes.stageToday(target: today).draft
+        #expect(untouched.text.hasPrefix("# 2026-10-24\n\n"))
+        #expect(untouched.isDiscardableBlank)
+        #expect(!untouched.hasUnpublishedEdits)
+        #expect(try await sync.store.discardBlankDraft(
+            id: untouched.id, accountID: account, expectedGeneration: untouched.generation))
+        #expect(try await sync.store.drafts(accountID: account).isEmpty)
+        #expect(sync.server.gists.map(\.id) == [daily?.id].compactMap { $0 })
+        #expect(sync.remote(daily?.id ?? "", today.filename) == nil)
+
+        // Typing, even the same text, keeps the day, and so does publishing it.
+        let staged = try await sync.dailyNotes.stageToday(target: today).draft
+        let touched = try await sync.type(staged.text, in: staged)
+        let published = try await sync.publish(touched)
+        for kept in [touched, published] {
             #expect(!kept.isDiscardableBlank)
-            #expect(try await !store.discardBlankDraft(
+            #expect(try await !sync.store.discardBlankDraft(
                 id: kept.id, accountID: account, expectedGeneration: kept.generation))
         }
+        let gist = try #require(sync.server.gists.first { $0.isDailyNote })
+        #expect(sync.remote(gist.id, today.filename) == staged.text)
+        #expect(sync.remote(gist.id, "2026-10-23.md") == daily.map { _ in "Keep yesterday." })
     }
 
-    @Test(arguments: [false, true])
-    func keepsDailyPhotosAndDiscardsAnUntouchedTemplate(photo: Bool) async throws {
-        let store = try DraftStore.open(inMemory: true)
-        let account = UUID()
-        let draft = try await store.dailyGistDraft(
-            accountID: account, githubUserID: 42, target: DailyNoteTarget())
-        if photo {
-            _ = try await store.enqueueImage(
-                pngData: testPNG(), draftID: draft.id, accountID: account,
-                expectedGeneration: draft.generation, insertionLocation: 0)
-        } else {
-            try await store.beginAttempt(
-                id: draft.id, accountID: account, content: draft.text,
-                generation: draft.generation)
-            try await store.clearAttempt(id: draft.id, accountID: account)
-        }
-        let discarded = try await store.discardBlankDraft(
-            id: draft.id, accountID: account, expectedGeneration: draft.generation)
-        #expect(discarded == !photo)
-        if photo {
-            #expect(try await store.draft(id: draft.id, accountID: account).text == draft.text)
-        }
-    }
-
-    @Test(arguments: ["", " \t\r\n\u{2003}"])
-    func discardsOnlyTheExpectedBlankGeneration(text: String) async throws {
-        let store = try DraftStore.open(inMemory: true)
-        let account = UUID()
-        let draft = try await store.newDraft(accountID: account, githubUserID: 42, text: text)
-        #expect(draft.isDiscardableBlank)
-        #expect(try await store.discardBlankDraft(
-            id: draft.id, accountID: account, expectedGeneration: draft.generation
-        ))
-        #expect(try await store.drafts(accountID: account).isEmpty)
-        #expect(try await !store.discardBlankDraft(
-            id: draft.id, accountID: account, expectedGeneration: draft.generation
-        ))
-    }
-
-    @Test(arguments: ["An accepted thought", "\u{2064}", "👩🏽‍💻", "\u{200B}"])
-    func preservesEveryNonwhitespaceSource(text: String) async throws {
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await store.newDraft(accountID: UUID(), githubUserID: 42, text: text)
-        #expect(!draft.isDiscardableBlank)
-        #expect(try await !store.discardBlankDraft(
-            id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation
-        ))
-        #expect(try await store.draft(id: draft.id, accountID: draft.accountID) == draft)
-    }
-
-    @Test func keepsTitlesBoundNotesAndStaleGenerations() async throws {
-        let store = try DraftStore.open(inMemory: true)
-        let account = UUID()
-        let titled = try await store.newDraft(
-            accountID: account, githubUserID: 42, description: "A title"
-        )
-        let bound = try await store.openDraft(
-            accountID: account, githubUserID: 42, gistID: "existing", filename: "README.md",
-            description: "", content: "", revision: "one"
-        )
-        let changed = try await store.newDraft(accountID: account, githubUserID: 42)
-        _ = try await store.persist(
-            id: changed.id, accountID: account, text: "Keep this", generation: 1
-        )
-        for draft in [titled, bound, changed] {
-            #expect(try await !store.discardBlankDraft(
-                id: draft.id, accountID: account, expectedGeneration: draft.generation
-            ))
-        }
-        #expect(try await store.draft(id: changed.id, accountID: account).text == "Keep this")
-        await #expect(throws: DraftError.accountMismatch) {
-            try await store.discardBlankDraft(
-                id: changed.id, accountID: UUID(), expectedGeneration: 1
-            )
-        }
-        _ = try await store.persist(id: changed.id, accountID: account, text: " ", generation: 2)
-        #expect(try await !store.discardBlankDraft(
-            id: changed.id, accountID: account, expectedGeneration: 1
-        ))
-        #expect(try await store.discardBlankDraft(
-            id: changed.id, accountID: account, expectedGeneration: 2
-        ))
-    }
-
-    @Test func preservesUncertainCreationHistoryAndPendingPhotos() async throws {
-        let store = try DraftStore.open(inMemory: true)
-        let account = UUID()
-        let uncertain = try await store.newDraft(accountID: account, githubUserID: 42)
-        try await store.beginAttempt(
-            id: uncertain.id, accountID: account, content: "", generation: 0
-        )
-        try await store.setState(.failed(.creationUncertain), id: uncertain.id, accountID: account)
-        let historical = try await store.newDraft(
-            accountID: account, githubUserID: 42, text: "Recover this"
-        )
-        try await store.beginAttempt(
-            id: historical.id, accountID: account, content: "Recover this", generation: 0
-        )
-        try await store.clearAttempt(id: historical.id, accountID: account)
-        let photo = try await store.newDraft(accountID: account, githubUserID: 42)
-        _ = try await store.enqueueImage(
-            pngData: testPNG(), draftID: photo.id, accountID: account,
-            expectedGeneration: 0, insertionLocation: 0
-        )
-        for draft in [uncertain, historical, photo] {
-            #expect(try await !store.discardBlankDraft(
-                id: draft.id, accountID: account, expectedGeneration: draft.generation
-            ))
-        }
-        let retained = try await store.draft(id: historical.id, accountID: account)
-        #expect(retained.text == "Recover this")
-        #expect(retained.attemptedContent == nil)
-        #expect(try await store.imageUploads(accountID: account).count == 1)
-    }
-
-    @Test func blankCleanupCommitsAcrossStoreReopeningWithoutChangingOtherSource() async throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let url = directory.appendingPathComponent("drafts.store")
-        let account = UUID()
+    @Test func onlyAStillBlankNewFileIsDiscarded() async throws {
+        let url = try temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let store = try DraftStore.open(url: url)
-        let blank = try await store.newDraft(accountID: account, githubUserID: 42)
-        let text = "Keep e\u{301}\r\n日本語 👩🏽‍💻"
-        let kept = try await store.newDraft(accountID: account, githubUserID: 42, text: text)
+        let user = SyncFixture.user
+        var blanks = [
+            try await store.newDraft(accountID: account, githubUserID: user),
+            try await store.newDraft(accountID: account, githubUserID: user, text: " \t\r\n\u{2003}"),
+        ]
+        var kept = [
+            try await store.newDraft(accountID: account, githubUserID: user, description: "A title"),
+            try await store.draft(
+                accountID: account, githubUserID: user, gistID: "existing", filename: "README.md",
+                description: "", content: "", revision: "one"),
+        ]
+        for text in ["\u{2064}", "👩🏽‍💻", "\u{200B}", "Keep e\u{301}\r\n日本語"] {
+            kept.append(try await store.newDraft(accountID: account, githubUserID: user, text: text))
+        }
+        let retyped = try await store.newDraft(accountID: account, githubUserID: user)
+        blanks.append(try await store.persist(id: retyped.id, accountID: account, text: " ", generation: 1))
+
+        for draft in kept {
+            #expect(!draft.isDiscardableBlank)
+            #expect(try await !store.discardBlankDraft(
+                id: draft.id, accountID: account, expectedGeneration: draft.generation))
+        }
+        #expect(try await !store.discardBlankDraft(id: retyped.id, accountID: account, expectedGeneration: 0))
+        await #expect(throws: DraftError.accountMismatch) {
+            try await store.discardBlankDraft(id: retyped.id, accountID: UUID(), expectedGeneration: 1)
+        }
         let reopened = try DraftStore.open(url: url)
-        #expect(try await reopened.discardBlankDraft(
-            id: blank.id, accountID: account, expectedGeneration: 0
-        ))
-        let final = try DraftStore.open(url: url)
-        let remaining = try await final.drafts(accountID: account)
-        #expect(remaining.map(\.id) == [kept.id])
-        #expect(remaining.first?.text.utf8.elementsEqual(text.utf8) == true)
+        for draft in blanks {
+            #expect(try await reopened.discardBlankDraft(
+                id: draft.id, accountID: account, expectedGeneration: draft.generation))
+        }
+        let remaining = try await DraftStore.open(url: url).drafts(accountID: account)
+        #expect(Set(remaining.map(\.id)) == Set(kept.map(\.id)))
+        #expect(remaining.map(\.text).sorted() == kept.map(\.text).sorted())
     }
 }

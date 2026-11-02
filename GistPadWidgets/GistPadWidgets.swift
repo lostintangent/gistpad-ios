@@ -1,6 +1,5 @@
 import AppIntents
 import GistPadPlatform
-import OSLog
 import SwiftUI
 import WidgetKit
 
@@ -18,7 +17,7 @@ struct GistPadWidgetIntentPackages: AppIntentsPackage {
 
 struct TodayEntry: TimelineEntry {
   let date: Date
-  let snapshot: NotebookSystemSnapshot?
+  let snapshot: LibrarySnapshot?
   let state: TodayWidgetState
 }
 
@@ -35,7 +34,7 @@ struct TodayProvider: TimelineProvider {
   func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
     let current = entry()
     var calendar = Calendar(identifier: .gregorian)
-    if let zone = current.snapshot?.today.timeZoneIdentifier,
+    if let zone = current.snapshot?.today.day.timeZoneIdentifier,
       let timeZone = TimeZone(identifier: zone)
     {
       calendar.timeZone = timeZone
@@ -47,44 +46,56 @@ struct TodayProvider: TimelineProvider {
 
   private func entry() -> TodayEntry {
     do {
-      let snapshot = try SharedNotebookStore().read()
+      let snapshot = try LibrarySnapshot.read()
       return TodayEntry(
         date: .now, snapshot: snapshot,
         state: snapshot?.accountID == nil ? .signedOut : .available)
-    } catch let error as CocoaError where error.code == .fileReadNoPermission {
-      return TodayEntry(date: .now, snapshot: nil, state: .locked)
     } catch {
-      Logger(subsystem: "dev.gistpad.GistPad", category: "Widget")
-        .error("Widget snapshot failed: \(String(reflecting: type(of: error)), privacy: .public)")
       return TodayEntry(date: .now, snapshot: nil, state: .unavailable)
     }
   }
 }
 
 struct TodayWidget: Widget {
-  let kind = "GistPadToday"
-
   var body: some WidgetConfiguration {
-    StaticConfiguration(kind: kind, provider: TodayProvider()) { entry in
+    StaticConfiguration(kind: TodayWidgetView.kind, provider: TodayProvider()) { entry in
       TodayWidgetView(snapshot: entry.snapshot, date: entry.date, state: entry.state)
         .containerBackground(.background, for: .widget)
     }
     .configurationDisplayName("Today")
     .description("Keep your daily note close, and check off what matters.")
-    .supportedFamilies([
-      .systemSmall, .systemMedium, .accessoryInline, .accessoryCircular, .accessoryRectangular
-    ])
+    .supportedFamilies([.systemSmall, .systemMedium, .accessoryInline, .accessoryRectangular])
   }
 }
 
 struct AddToTodayControl: ControlWidget {
   var body: some ControlWidgetConfiguration {
     StaticControlConfiguration(kind: "GistPadAddToToday") {
-      ControlWidgetButton(action: CaptureTodayIntent()) {
+      ControlWidgetButton(action: ShowAddToTodayIntent()) {
         Label("Add to Today", systemImage: "square.and.pencil")
       }
     }
     .displayName("Add to Today")
     .description("Capture a thought or task in today's note.")
   }
+}
+
+#Preview("Tasks", as: .systemSmall) {
+  TodayWidget()
+} timeline: {
+  TodayEntry(date: .now, snapshot: .preview(), state: .available)
+  TodayEntry(date: .now, snapshot: nil, state: .signedOut)
+}
+
+#Preview("Tasks", as: .systemMedium) {
+  TodayWidget()
+} timeline: {
+  TodayEntry(date: .now, snapshot: .preview(), state: .available)
+  TodayEntry(date: .now, snapshot: nil, state: .signedOut)
+}
+
+#Preview("Lock Screen", as: .accessoryRectangular) {
+  TodayWidget()
+} timeline: {
+  TodayEntry(date: .now, snapshot: .preview(), state: .available)
 }

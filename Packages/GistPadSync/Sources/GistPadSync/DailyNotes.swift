@@ -1,231 +1,184 @@
 import Foundation
 
-public struct DailyNoteTarget: Codable, Equatable, Hashable, Sendable {
-    public let filename: String
-    public let timeZoneIdentifier: String
+/// A day's file in the daily notes gist, as the phone knows it: your draft once you've started the day
+/// here, otherwise GitHub's cached copy.
+public struct DailyNote: Codable, Equatable, Sendable {
+    public let day: DailyNote.Day
+    /// The daily notes gist, once the phone knows it.
+    public let gistID: String?
+    /// Your draft of the day, once you've opened it on the phone.
+    public let draftID: UUID?
+    /// The day's Markdown, or nil when the phone has neither a draft nor a cached copy.
+    public let text: String?
+    /// Your draft's publish state.
+    public let state: PublishState?
 
-    public init(date: Date = .now, timeZone: TimeZone = .current) {
-        filename = GistConventions.todayFilename(date: date, timeZone: timeZone)
-        timeZoneIdentifier = timeZone.identifier
+    public var date: Date? {
+        Self.date(filename: day.filename, timeZone: TimeZone(identifier: day.timeZoneIdentifier) ?? .current)
+    }
+
+    public var tasks: [FileTask] { text.map(FileTask.tasks(in:)) ?? [] }
+    public var progress: TaskProgress? { text.map(TaskProgress.init(markdown:)) }
+
+    public init(
+        day: DailyNote.Day = DailyNote.Day(), gistID: String? = nil, draftID: UUID? = nil,
+        text: String? = nil, state: PublishState? = nil
+    ) {
+        self.day = day
+        self.gistID = gistID
+        self.draftID = draftID
+        self.text = text
+        self.state = state
+    }
+
+    /// What the library cache and your drafts say about `day`.
+    public init(day: DailyNote.Day = DailyNote.Day(), cache: CachedLibrary?, drafts: [Draft]) {
+        let gist = cache?.owned.first(where: \.isDailyNote)
+        let draft = drafts.first {
+            $0.filename == day.filename && ($0.gistID == nil
+                ? $0.description == DailyNote.gistDescription : $0.gistID == gist?.id)
+        }
+        self.init(
+            day: day, gistID: gist?.id, draftID: draft?.id,
+            text: draft?.text ?? gist.flatMap { cache?.content(gist: $0, filename: day.filename) },
+            state: draft?.state)
     }
 }
 
-public struct TaskProgress: Codable, Equatable, Sendable {
-    public let total: Int
-    public let completed: Int
-    public var remaining: Int { total - completed }
+extension DailyNote {
+    /// A day in the daily notes gist, named by its `YYYY-MM-DD.md` file in the time zone you were in.
+    public struct Day: Codable, Equatable, Hashable, Sendable {
+        public let filename: String
+        public let timeZoneIdentifier: String
 
-    public init(markdown: String) {
-        // Match DailyNotes.tsx exactly, including its lowercase completion marker.
-        let source = markdown as NSString
-        let tasks = source.ranges(of: #"- \[[ x]\]"#)
-        total = tasks.count
-        completed = tasks.filter { source.substring(with: $0) == "- [x]" }.count
-    }
-}
-
-public struct DailyNoteSummary: Equatable, Identifiable, Sendable {
-    public var id: String { filename }
-    public let filename: String
-    public let date: Date?
-    public let progress: TaskProgress?
-    public let isOverdue: Bool
-}
-
-public enum DailyNotesIndex {
-    public static func notes(
-        gist: Gist, localContent: [String: String] = [:],
-        date: Date = .now, timeZone: TimeZone = .current
-    ) -> [DailyNoteSummary] {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let today = calendar.startOfDay(for: date)
-        let filenames = Set(gist.files.keys).union(localContent.keys)
-        return filenames.filter { $0 != GistConventions.templateFilename }.map { filename in
-            let day = parseDateFilename(filename, timeZone: timeZone)
-            let file = gist.files[filename]
-            let content = localContent[filename] ?? (file?.truncated == true ? nil : file?.content)
-            let progress = content.map(TaskProgress.init(markdown:))
-            return DailyNoteSummary(
-                filename: filename, date: day, progress: progress,
-                isOverdue: day.map { $0 < today && (progress?.remaining ?? 0) > 0 } ?? false
-            )
-        }.sorted {
-            if $0.isOverdue != $1.isOverdue { return $0.isOverdue }
-            if $0.date != $1.date { return ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
-            return $0.filename < $1.filename
+        public init(date: Date = .now, timeZone: TimeZone = .current) {
+            filename = DailyNote.filename(date: date, timeZone: timeZone)
+            timeZoneIdentifier = timeZone.identifier
         }
     }
 
-    public static func parseDateFilename(_ filename: String, timeZone: TimeZone = .current) -> Date? {
-        guard filename.range(of: #"^\d{4}-\d{2}-\d{2}\.md$"#, options: .regularExpression) != nil else {
-            return nil
-        }
-        let components = filename.dropLast(3).split(separator: "-").compactMap { Int($0) }
-        guard components.count == 3 else { return nil }
+    /// The description the web gives the daily notes gist.
+    public static let gistDescription = "\u{1F4C6} Daily notes"
+    /// The daily notes gist's file that starts each day.
+    public static let templateFilename = "template.md"
+
+    /// The day's `YYYY-MM-DD.md` filename in `timeZone`.
+    public static func filename(date: Date = .now, timeZone: TimeZone = .current) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        let requested = DateComponents(year: components[0], month: components[1], day: components[2])
-        guard let result = calendar.date(from: requested) else { return nil }
-        let actual = calendar.dateComponents([.year, .month, .day], from: result)
-        return actual == requested ? result : nil
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d.md", parts.year!, parts.month!, parts.day!)
+    }
+
+    /// The day a daily note's `YYYY-MM-DD.md` filename names, in `timeZone`.
+    public static func date(filename: String, timeZone: TimeZone = .current) -> Date? {
+        filename.hasSuffix(".md") ? FilenameDateFormat.isoDay.date(filename: filename, timeZone: timeZone) : nil
+    }
+
+    /// A new day's Markdown: the template with `{{date}}` filled in, or a heading for the day.
+    public static func content(template: String?, filename: String) -> String {
+        guard let template, !template.isEmpty else { return "# \(GistFile.displayName(filename))\n\n" }
+        return GistFile.decodeContent(template).replacingOccurrences(
+            of: "{{date}}", with: GistFile.displayName(filename)
+        )
     }
 }
 
-public enum DailyNotesError: Error, Equatable, Sendable {
-    case pendingCreation(draftID: UUID)
+extension DraftEdit {
+    /// Adds `text` to the end of the day's draft: a paragraph, or with `asTask`, one task per line.
+    public static func addToToday(_ text: String, asTask: Bool, to draft: Draft) -> Self {
+        let source = draft.text
+        let content = asTask
+            ? text.split(whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+                .map { "- [ ] " + $0 }
+                .joined(separator: "\n")
+            : text.trimmingCharacters(in: .newlines)
+        let separator = source.isEmpty || source.hasSuffix(asTask ? "\n" : "\n\n") ? ""
+            : asTask || source.hasSuffix("\n") ? "\n" : "\n\n"
+        return Self(
+            draftID: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation,
+            range: NSRange(location: source.utf16.count, length: 0), expectedText: "",
+            replacement: separator + content + "\n")
+    }
 }
 
-public struct TodayNote: Equatable, Sendable {
-    public let target: DailyNoteTarget
-    public let gist: Gist?
-    public let draft: DraftSnapshot
-}
-
-public actor DailyNotesService {
+public actor DailyNotes {
     private let accountID: UUID
     private let githubUserID: Int64
     private let client: GitHubClient
     private let store: DraftStore
-    private let coordinator: SyncCoordinator
-    private var pending: [String: Task<TodayNote, any Error>] = [:]
+    private let publisher: DraftPublisher
 
     public init(
         accountID: UUID, githubUserID: Int64,
-        client: GitHubClient, store: DraftStore, coordinator: SyncCoordinator
+        client: GitHubClient, store: DraftStore, publisher: DraftPublisher
     ) {
         self.accountID = accountID
         self.githubUserID = githubUserID
         self.client = client
         self.store = store
-        self.coordinator = coordinator
+        self.publisher = publisher
     }
 
-    public func openToday(
-        target: DailyNoteTarget = DailyNoteTarget(), publishIfMissing: Bool = true
-    ) async throws -> TodayNote {
-        let key = "\(target.filename)/\(publishIfMissing)"
-        if let task = pending[key] { return try await task.value }
-        let task = Task { try await load(target: target, publishIfMissing: publishIfMissing) }
-        pending[key] = task
-        defer { pending[key] = nil }
-        return try await task.value
-    }
-
-    public func stageToday(target: DailyNoteTarget = DailyNoteTarget()) async throws -> TodayNote {
-        let cache = try await store.cachedLibrary(accountID: accountID)
-        guard let gist = cache?.owned.first(where: \.isDailyNote) else {
-            return try await openToday(target: target, publishIfMissing: false)
+    /// Today's file, ready to edit: your draft once you've started the day, else a draft from the daily
+    /// notes gist, else the first day of a new daily notes gist. Autosave publishes it like any other file.
+    public func stageToday(target: DailyNote.Day = .init()) async throws -> (gist: Gist?, draft: Draft) {
+        let drafts = try await store.drafts(accountID: accountID)
+        if let pending = drafts.first(where: {
+            $0.gistID == nil && $0.description == DailyNote.gistDescription
+        }) {
+            if pending.filename == target.filename { return (gist: nil, draft: pending) }
+            // An earlier day never reached GitHub, so it creates the gist that today joins.
+            try await publisher.publish(id: pending.id, accountID: accountID)
+        }
+        guard let gist = try await dailyGist() else {
+            return (gist: nil, draft: try await store.newGistDraft(
+                accountID: accountID, githubUserID: githubUserID, filename: target.filename,
+                description: DailyNote.gistDescription,
+                content: DailyNote.content(template: nil, filename: target.filename)))
         }
         guard gist.owner?.id == githubUserID else { throw DraftError.readOnly }
-        let local = try await store.drafts(accountID: accountID)
-        if let existing = local.first(where: { $0.gistID == gist.id && $0.filename == target.filename }) {
-            return TodayNote(target: target, gist: gist, draft: existing)
+        if let existing = try await store.drafts(accountID: accountID).first(where: {
+            $0.gistID == gist.id && $0.filename == target.filename
+        }) {
+            return (gist: gist, draft: existing)
         }
-        guard gist.truncated != true else {
-            return try await openToday(target: target, publishIfMissing: false)
+        let content: String
+        if let text = try await text(of: target.filename, in: gist) {
+            content = text
+        } else {
+            let template = try await text(of: DailyNote.templateFilename, in: gist)
+            content = DailyNote.content(template: template, filename: target.filename)
         }
-        if gist.files[target.filename] != nil {
-            guard let content = cache?.cachedContent(gist: gist, filename: target.filename),
-                  content.isCurrent else {
-                return try await openToday(target: target, publishIfMissing: false)
-            }
-            let draft = try await store.openDraft(
-                accountID: accountID, githubUserID: githubUserID, gistID: gist.id,
-                filename: target.filename, description: gist.description ?? "",
-                content: content.text, revision: gist.revision)
-            return TodayNote(target: target, gist: gist, draft: draft)
-        }
-        var template: String?
-        if gist.files[GistConventions.templateFilename] != nil {
-            guard let cached = cache?.cachedContent(gist: gist, filename: GistConventions.templateFilename),
-                  cached.isCurrent else {
-                return try await openToday(target: target, publishIfMissing: false)
-            }
-            template = cached.text
-        }
-        let draft = try await store.newFileDraft(
+        let draft = try await store.draft(
             accountID: accountID, githubUserID: githubUserID, gistID: gist.id,
-            filename: target.filename, description: gist.description ?? "",
-            text: GistConventions.dailyContent(template: template, dateFilename: target.filename))
-        return TodayNote(target: target, gist: gist, draft: draft)
+            filename: target.filename, description: gist.description ?? "", content: content,
+            revision: gist.revision, isNewFile: gist.files[target.filename] == nil)
+        return (gist: gist, draft: draft)
     }
 
-    private func load(target: DailyNoteTarget, publishIfMissing: Bool) async throws -> TodayNote {
-        let matches = try await client.listGists().filter(\.isDailyNote)
-        guard let first = matches.first else {
-            var draft = try await store.dailyGistDraft(
-                accountID: accountID, githubUserID: githubUserID, target: target
-            )
-            if publishIfMissing { draft = try await coordinator.publish(id: draft.id, accountID: accountID) }
-            let gist: Gist?
-            if let id = draft.gistID { gist = try await client.gist(id: id) }
-            else { gist = nil }
-            return TodayNote(target: target, gist: gist, draft: draft)
+    private func dailyGist() async throws -> Gist? {
+        let cached = try await store.cachedLibrary(accountID: accountID)
+        if let daily = cached?.owned.first(where: \.isDailyNote) { return daily }
+        do {
+            return try await client.listGists().first(where: \.isDailyNote)
+        } catch let error as URLError where cached != nil && error.code != .cancelled {
+            // Offline, the library on this iPhone has no daily notes gist, so today starts one.
+            return nil
         }
-        let id = first.id
-        let localDrafts = try await store.drafts(accountID: accountID)
-        var existing = localDrafts.first {
-            $0.gistID == id && $0.filename == target.filename
-        }
-        let pendingCreation = localDrafts.first {
-            $0.gistID == nil && $0.description == GistConventions.dailyNotesDescription
-        }
-        let gist = try await client.gist(id: id)
-        guard gist.owner?.id == githubUserID else { throw DraftError.readOnly }
-        guard gist.truncated != true else { throw GitHubClientError.incompleteGist }
-        if let pendingCreation, gist.files[pendingCreation.filename] != nil {
-            let content = try await client.content(gist: gist, filename: pendingCreation.filename)
-            if sourceEqual(content, pendingCreation.attemptedContent ?? pendingCreation.text) {
-                let recovered = try await coordinator.adoptDailyCreation(
-                    id: pendingCreation.id, accountID: accountID, createdGistID: gist.id
-                )
-                if recovered.filename == target.filename, existing == nil { existing = recovered }
-            }
-        }
-        if gist.files[target.filename] != nil {
-            let content = try await client.content(gist: gist, filename: target.filename)
-            let draft: DraftSnapshot
-            if let existing {
-                draft = try await store.refreshCleanDraft(
-                    id: existing.id, accountID: accountID, expectedGeneration: existing.generation,
-                    content: content, revision: gist.revision
-                ).snapshot
-            } else {
-                draft = try await store.openDraft(
-                    accountID: accountID, githubUserID: githubUserID, gistID: id,
-                    filename: target.filename, description: gist.description ?? "",
-                    content: content, revision: gist.revision
-                )
-            }
-            return TodayNote(target: target, gist: gist, draft: draft)
-        }
-        let template: String?
-        if let file = gist.files[GistConventions.templateFilename] {
-            if file.truncated != true, let content = file.content { template = content }
-            else { template = try await client.content(gist: gist, filename: GistConventions.templateFilename) }
-        } else { template = nil }
-        var draft = try await store.newFileDraft(
-            accountID: accountID, githubUserID: githubUserID, gistID: id,
-            filename: target.filename, description: gist.description ?? "",
-            text: GistConventions.dailyContent(template: template, dateFilename: target.filename)
-        )
-        if publishIfMissing {
-            draft = try await coordinator.publish(id: draft.id, accountID: accountID)
-            if draft.state == .savedToGitHub {
-                let publishedGist = try await client.gist(id: id)
-                return TodayNote(target: target, gist: publishedGist, draft: draft)
-            }
-        }
-        return TodayNote(target: target, gist: gist, draft: draft)
     }
-}
 
-private extension NSString {
-    func ranges(of pattern: String) -> [NSRange] {
-        guard let expression = try? NSRegularExpression(pattern: pattern) else {
-            preconditionFailure("Invalid built-in task expression")
+    /// A file's text from the cache when it's current, otherwise from GitHub, which then caches it.
+    private func text(of filename: String, in gist: Gist) async throws -> String? {
+        guard gist.files[filename] != nil else { return nil }
+        if let cached = try await store.cachedLibrary(accountID: accountID)?
+            .cachedContent(gist: gist, filename: filename), cached.isCurrent {
+            return cached.text
         }
-        return expression.matches(in: self as String, range: NSRange(location: 0, length: length)).map(\.range)
+        let text = try await client.content(gist: gist, filename: filename)
+        try await store.cacheContent(text, gist: gist, filename: filename, accountID: accountID)
+        return text
     }
 }

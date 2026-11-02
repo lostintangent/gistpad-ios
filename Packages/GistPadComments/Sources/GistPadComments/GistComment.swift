@@ -42,20 +42,6 @@ public struct GistComment: Codable, Equatable, Identifiable, Sendable {
 
     public var parsedBody: GistCommentBody { GistCommentBody(body) }
 
-    public static func latestVersions(in comments: [GistComment]) -> [GistComment] {
-        var latest: [Int64: GistComment] = [:]
-        var order: [Int64] = []
-        for comment in comments {
-            if let previous = latest[comment.id] {
-                if comment.updatedAt > previous.updatedAt { latest[comment.id] = comment }
-            } else {
-                latest[comment.id] = comment
-                order.append(comment.id)
-            }
-        }
-        return order.map { latest[$0]! }
-    }
-
     public func canEdit(as userID: Int64?) -> Bool {
         guard let userID else { return false }
         return user?.id == userID
@@ -67,55 +53,33 @@ public struct GistComment: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-public enum GistCommentBodyError: Error, Equatable, Sendable {
-    case invalidParentID
-}
-
+/// A comment that quotes the file or replies to another comment starts with a blockquote line
+/// (`> quoted text` or `> [comment:123]`). That line and the blank lines after it are its prefix,
+/// which stays hidden while the comment is displayed or edited.
 public struct GistCommentBody: Equatable, Sendable {
     public let prefix: String
     public let quote: String?
     public let parentID: Int64?
     public let text: String
-    public var isReply: Bool { quote == nil && !prefix.isEmpty }
 
     public init(_ body: String) {
-        let units = Array(body.utf16)
-        let lineEnd = units.firstIndex(of: 10) ?? units.count
-        let firstLine = Self.trim(String(decoding: units[..<lineEnd], as: UTF16.self))
-        guard firstLine.hasPrefix(">") else {
-            prefix = ""
-            quote = nil
-            parentID = nil
-            text = body
+        let firstLine = String(String.UnicodeScalarView(body.unicodeScalars.prefix { $0 != "\n" }))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard firstLine.hasPrefix(">"),
+              let match = body.prefixMatch(
+                of: #/[^\n]*(?:\n[^\S\n]*(?=\n|$))*\n?/#.matchingSemantics(.unicodeScalar))
+        else {
+            (prefix, quote, parentID, text) = ("", nil, nil, body)
             return
         }
-
-        var end = lineEnd
-        while end < units.count, units[end] == 10 {
-            var next = end + 1
-            while next < units.count, units[next] != 10, Self.isWebWhitespace(units[next]) {
-                next += 1
-            }
-            if next == units.count || units[next] == 10 {
-                end = next
-            } else {
-                end += 1
-                break
-            }
+        prefix = String(match.output)
+        text = body[match.range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        if let marker = firstLine.wholeMatch(of: #/>\s*\[comment:(\d+)\]\s*/#),
+           let parentID = Int64(marker.output.1) {
+            (self.parentID, quote) = (parentID, nil)
+        } else {
+            (parentID, quote) = (nil, firstLine.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        prefix = String(decoding: units[..<end], as: UTF16.self)
-        text = Self.trim(String(decoding: units[end...], as: UTF16.self))
-        let quoted = Self.trim(String(firstLine.dropFirst()))
-        if quoted.hasPrefix("[comment:"), quoted.hasSuffix("]") {
-            let value = quoted.dropFirst(9).dropLast()
-            if !value.isEmpty, value.utf8.allSatisfy({ (48...57).contains($0) }) {
-                parentID = Int64(value)
-                quote = nil
-                return
-            }
-        }
-        parentID = nil
-        quote = quoted
     }
 
     public func replacingText(with text: String) -> String { prefix + text }
@@ -124,22 +88,7 @@ public struct GistCommentBody: Equatable, Sendable {
         "> \(quote)\n\n\(text)"
     }
 
-    public static func replying(to parentID: Int64, text: String) throws -> String {
-        guard parentID > 0 else { throw GistCommentBodyError.invalidParentID }
-        return "> [comment:\(parentID)]\n\n\(text)"
-    }
-
-    static func trim(_ value: String) -> String {
-        let units = Array(value.utf16)
-        let start = units.firstIndex(where: { !isWebWhitespace($0) }) ?? units.count
-        let end = units.lastIndex(where: { !isWebWhitespace($0) }).map { $0 + 1 } ?? start
-        return String(decoding: units[start..<end], as: UTF16.self)
-    }
-
-    private static func isWebWhitespace(_ unit: UInt16) -> Bool {
-        // ECMAScript trim/\s includes BOM, but not ICU's extra U+0085 whitespace.
-        (9...13).contains(unit) || unit == 32 || unit == 160 || unit == 5760
-            || (8192...8202).contains(unit) || unit == 8232 || unit == 8233
-            || unit == 8239 || unit == 8287 || unit == 12288 || unit == 65279
+    public static func replying(to parentID: Int64, text: String) -> String {
+        "> [comment:\(parentID)]\n\n\(text)"
     }
 }

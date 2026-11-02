@@ -6,20 +6,16 @@ let package = Package(
   platforms: [.iOS("27.2"), .macOS(.v15)],
   products: [.library(name: "GistPadEditor", targets: ["GistPadEditor"])],
   dependencies: [
-    .package(path: "../GistPadAppearance"),
+    .package(path: "../GistPadAccent"),
     .package(path: "../GistPadComments"),
-    .package(path: "../GistPadInterface"),
-    .package(path: "../GistPadIntelligence"),
   ],
   targets: [
     .target(
       name: "GistPadEditor",
-      dependencies: ["GistPadAppearance", "GistPadComments", "GistPadInterface", "GistPadIntelligence"],
+      dependencies: ["GistPadAccent", "GistPadComments"],
       resources: [.process("Resources")]),
     .testTarget(
       name: "GistPadEditorTests",
-      dependencies: [
-        "GistPadEditor", "GistPadComments", "GistPadIntelligence", "GistPadInterface", "GistPadAppearance",
-      ]),
+      dependencies: ["GistPadEditor", "GistPadComments"]),
   ]
 )

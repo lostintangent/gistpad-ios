@@ -12,6 +12,23 @@ public enum GitHubClientError: Error, Equatable, Sendable {
     case invalidUTF8
 }
 
+extension GitHubClientError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .http(401, _): String(localized: "Reconnect GitHub to continue. Your gists on this iPhone are unchanged.")
+        case .http(403, _), .http(429, _):
+            String(localized: "GitHub declined the request. Try again later or reconnect GitHub.")
+        case .http(404, _): String(localized: "This gist is no longer available to this account.")
+        case .incompleteGist:
+            String(localized: "GitHub returned an incomplete gist. It can't be edited safely.")
+        case .missingFile: String(localized: "This file is no longer in the gist.")
+        case .fileTooLarge: String(localized: "This file is too large to open.")
+        case .invalidIdentifier, .invalidResponse, .unsafeURL, .invalidUTF8, .http:
+            String(localized: "GitHub couldn't complete the request. Try again.")
+        }
+    }
+}
+
 public struct RemoteFile: Sendable {
     public let gist: Gist
     public let content: String?
@@ -26,15 +43,6 @@ public actor GitHubClient {
     public typealias TokenProvider = @Sendable () async throws -> String
     private let session: URLSession
     private let token: TokenProvider
-    private var cache: [URL: CachedResponse] = [:]
-    private var cacheToken: String?
-    private var cacheRevision = UUID()
-
-    private struct CachedResponse {
-        let data: Data
-        let etag: String
-        let link: String?
-    }
 
     public init(session: URLSession? = nil, token: @escaping TokenProvider) {
         self.session = session ?? Self.makeSession()
@@ -69,7 +77,7 @@ public actor GitHubClient {
         guard gist.truncated != true else { throw GitHubClientError.incompleteGist }
         guard let file = gist.files[filename] else { throw GitHubClientError.missingFile }
         if file.truncated != true, let content = file.content {
-            return GistConventions.decodeContent(content)
+            return GistFile.decodeContent(content)
         }
         guard let url = file.rawURL, url.scheme == "https",
               url.host == "gist.githubusercontent.com", url.user == nil, url.password == nil,
@@ -83,7 +91,7 @@ public actor GitHubClient {
         }
         guard data.count <= 10_000_000 else { throw GitHubClientError.fileTooLarge }
         guard let content = String(data: data, encoding: .utf8) else { throw GitHubClientError.invalidUTF8 }
-        return GistConventions.decodeContent(content)
+        return GistFile.decodeContent(content)
     }
 
     /// Fetches a gist and one file, enforcing ownership and completeness. `content` is nil when the file is gone.
@@ -104,7 +112,7 @@ public actor GitHubClient {
             let files: [String: FileChange]
             let `public`: Bool
         }
-        let initial = GistConventions.initialContent(description: description, content: content)
+        let initial = GistFile.initialContent(description: description, content: content)
         return try await decoded(
             path: "/gists", method: "POST",
             body: JSONEncoder().encode(Create(
@@ -147,13 +155,7 @@ public actor GitHubClient {
     }
 
     public func listComments(gistID: String) async throws -> [GistComment] {
-        let comments: [GistComment] = try await pages(
-            path: "/gists/\(try identifier(gistID))/comments?per_page=100")
-        return GistComment.latestVersions(in: comments)
-    }
-
-    public func comment(gistID: String, commentID: Int64) async throws -> GistComment {
-        try await decoded(path: commentPath(gistID: gistID, commentID: commentID))
+        try await pages(path: "/gists/\(try identifier(gistID))/comments?per_page=100")
     }
 
     public func createComment(gistID: String, body: String) async throws -> GistComment {
@@ -189,12 +191,6 @@ public actor GitHubClient {
         _ = try await request(
             path: "/gists/\(try identifier(id))/star", method: starred ? "PUT" : "DELETE"
         )
-    }
-
-    private func clearCache() {
-        cache.removeAll()
-        cacheToken = nil
-        cacheRevision = UUID()
     }
 
     private func identifier(_ value: String) throws -> String {
@@ -270,8 +266,6 @@ public actor GitHubClient {
     private func request(url: URL, method: String = "GET", body: Data? = nil) async throws -> (Data, String?) {
         try validate(url)
         let accessToken = try await token()
-        if cacheToken != accessToken { clearCache(); cacheToken = accessToken }
-        let revision = cacheRevision
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         request.httpMethod = method
         request.httpBody = body
@@ -280,11 +274,8 @@ public actor GitHubClient {
         request.setValue("2026-03-10", forHTTPHeaderField: "X-GitHub-Api-Version")
         if method == "GET" { request.setValue("no-cache", forHTTPHeaderField: "Cache-Control") }
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
-        let cached = method == "GET" ? cache[url] : nil
-        if let cached { request.setValue(cached.etag, forHTTPHeaderField: "If-None-Match") }
         let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw GitHubClientError.invalidResponse }
-        if response.statusCode == 304, let cached { return (cached.data, cached.link) }
         guard (200..<300).contains(response.statusCode) else {
             var retry = response.retryAfterDate
             if retry == nil, [403, 429].contains(response.statusCode) {
@@ -297,14 +288,7 @@ public actor GitHubClient {
             }
             throw GitHubClientError.http(status: response.statusCode, retryAfter: retry)
         }
-        let link = response.value(forHTTPHeaderField: "Link")
-        if method == "GET", let etag = response.value(forHTTPHeaderField: "ETag"),
-           cacheToken == accessToken, cacheRevision == revision {
-            cache[url] = CachedResponse(data: data, etag: etag, link: link)
-        } else if method != "GET" {
-            clearCache()
-        }
-        return (data, link)
+        return (data, response.value(forHTTPHeaderField: "Link"))
     }
 }
 
@@ -314,5 +298,19 @@ private final class NoRedirects: NSObject, URLSessionTaskDelegate {
         willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest
     ) async -> URLRequest? {
         nil
+    }
+}
+
+extension GitHubClient: CommentsRemote {}
+
+extension HTTPURLResponse {
+    var retryAfterDate: Date? {
+        guard let value = value(forHTTPHeaderField: "Retry-After") else { return nil }
+        if let seconds = TimeInterval(value) { return .now.addingTimeInterval(max(0, seconds)) }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter.date(from: value)
     }
 }

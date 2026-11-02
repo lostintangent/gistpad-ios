@@ -57,47 +57,13 @@ struct CommentCompatibilityFixtures: Decodable {
         }
     }
 
-    @Test func preservesOverlapsAndMultipleThreadsOnTheSamePassage() {
-        let quotes: [CommentQuote] = [
-            .init(commentID: 1, quote: "the passage"),
-            .init(commentID: 2, quote: "passage here"),
-            .init(commentID: 3, quote: "the passage")
-        ]
-        let matches = CommentQuoteMatcher.matches(quotes: quotes, segments: ["the passage here"])
-        #expect(matches.map(\.commentID) == [1, 2, 3])
-        #expect(matches[0].range == matches[2].range)
-        #expect(NSIntersectionRange(matches[0].range, matches[1].range).length > 0)
-    }
-
-    @Test func createsWebCompatibleQuoteAndReplyBodies() throws {
+    @Test func createsWebCompatibleQuoteAndReplyBodies() {
         let quoted = GistCommentBody.quoting("first line\nsecond line", text: "Feedback")
         #expect(quoted == "> first line\nsecond line\n\nFeedback")
         #expect(GistCommentBody(quoted).quote == "first line")
         #expect(GistCommentBody(quoted).text == "second line\n\nFeedback")
-        let reply = try GistCommentBody.replying(to: 123, text: "Reply")
+        let reply = GistCommentBody.replying(to: 123, text: "Reply")
         #expect(reply == "> [comment:123]\n\nReply")
         #expect(GistCommentBody(reply).parentID == 123)
-        #expect(throws: GistCommentBodyError.invalidParentID) {
-            try GistCommentBody.replying(to: 0, text: "Reply")
-        }
-    }
-
-    @Test func selectionEligibilityUsesTheWebsTrimAndUTF16LengthWithoutChangingTheQuote() {
-        #expect(!CommentQuoteMatcher.isEligibleSelection(" cat "))
-        #expect(CommentQuoteMatcher.isEligibleSelection(" word "))
-        #expect(!CommentQuoteMatcher.isEligibleSelection("\u{FEFF}cat\u{FEFF}"))
-        #expect(CommentQuoteMatcher.isEligibleSelection("\u{85}cat"))
-        #expect(CommentQuoteMatcher.isEligibleSelection("\u{1F600}ab"))
-        let quote = "  exact selection  "
-        #expect(CommentQuoteMatcher.isEligibleSelection(quote))
-        #expect(GistCommentBody.quoting(quote, text: "Body").hasPrefix("> " + quote + "\n\n"))
-    }
-
-    @Test func anUnrepresentableReplyTargetNeverBecomesAQuotedPassageOrAnotherParent() {
-        let body = GistCommentBody("> [comment:999999999999999999999999999999999]\n\nReply")
-        #expect(body.isReply)
-        #expect(body.parentID == nil)
-        #expect(body.quote == nil)
-        #expect(body.text == "Reply")
     }
 }

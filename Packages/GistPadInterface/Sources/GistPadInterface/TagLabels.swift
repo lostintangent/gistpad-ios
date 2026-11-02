@@ -1,17 +1,18 @@
 #if os(iOS)
+import GistPadAccent
 import SwiftUI
 
-public struct TagLabel: View {
-    private let tag: LibraryTag
+struct TagLabel: View {
+    private let tag: Tag
     private let isSelected: Bool
     @Environment(\.colorSchemeContrast) private var contrast
 
-    public init(tag: LibraryTag, isSelected: Bool = false) {
+    init(tag: Tag, isSelected: Bool = false) {
         self.tag = tag
         self.isSelected = isSelected
     }
 
-    public var body: some View {
+    var body: some View {
         let style = TagLabelStyle(hex: tag.colorHex)
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(verbatim: tag.name)
@@ -52,56 +53,78 @@ struct TagLabelStyle {
     let edge: Color?
 
     init(hex: String?) {
-        guard let rgb = TagSwatch.rgb(hex: hex) else {
+        guard let rgb = RGBColor(tagHex: hex) else {
             fill = Color(uiColor: .tertiarySystemFill)
             ink = .primary
             edge = nil
             return
         }
-        let luminance = TagContrast.relativeLuminance(rgb)
-        fill = TagSwatch.color(hex: hex)
-        ink = TagContrast.prefersBlackInk(luminance: luminance) ? .black : .white
-        // Near-white and near-black fills need an edge against the surface.
-        edge = luminance >= 0.8 || luminance <= 0.05 ? Color(uiColor: .separator) : nil
+        fill = rgb.color
+        ink = rgb.contrast(with: .black) >= rgb.contrast(with: .white) ? .black : .white
+        edge = rgb.needsEdge ? Color(uiColor: .separator) : nil
     }
 }
 
-enum TagContrast {
-    static func relativeLuminance(_ rgb: UInt32) -> Double {
-        func linear(_ shift: UInt32) -> Double {
-            let value = Double((rgb >> shift) & 255) / 255
-            return value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
-        }
-        return 0.2126 * linear(16) + 0.7152 * linear(8) + 0.0722 * linear(0)
-    }
+struct TagSwatch: View {
+    let hex: String?
+    var size: CGFloat = 12
 
-    static func prefersBlackInk(luminance: Double) -> Bool {
-        contrastRatio(luminance, 0) >= contrastRatio(luminance, 1)
-    }
-
-    static func contrastRatio(_ first: Double, _ second: Double) -> Double {
-        (max(first, second) + 0.05) / (min(first, second) + 0.05)
+    var body: some View {
+        let rgb = RGBColor(tagHex: hex)
+        Circle()
+            .fill(rgb?.color ?? .secondary)
+            .frame(width: size, height: size)
+            .overlay {
+                if rgb?.needsEdge == true {
+                    Circle().strokeBorder(Color(uiColor: .separator), lineWidth: 0.5)
+                }
+            }
+            .accessibilityHidden(true)
     }
 }
 
-public struct TagLabels: View {
-    private let tags: [LibraryTag]
+extension RGBColor {
+    /// Tag colors arrive with or without a leading "#".
+    init?(tagHex: String?) {
+        guard let tagHex else { return nil }
+        self.init(hex: tagHex.hasPrefix("#") ? tagHex : "#" + tagHex)
+    }
+
+    /// Near-white and near-black fills need an edge against the surface.
+    var needsEdge: Bool { luminance >= 0.8 || luminance <= 0.05 }
+}
+
+struct TagLabels: View {
+    private let tags: [Tag]
     private let limit: Int?
     private let isSelected: Bool
     @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    public init(tags: [LibraryTag], limit: Int? = nil, isSelected: Bool = false) {
+    init(tags: [Tag], limit: Int? = nil, isSelected: Bool = false) {
         precondition(limit.map { $0 > 0 } ?? true)
         self.tags = tags
         self.limit = limit
         self.isSelected = isSelected
     }
 
-    public var body: some View {
-        MetadataFlowLayout(layoutDirection: layoutDirection) {
-            ForEach(visibleTags) { TagLabel(tag: $0, isSelected: isSelected) }
-            if overflow > 0 {
-                TagOverflowLabel(count: overflow)
+    var body: some View {
+        Group {
+            if let limit, !dynamicTypeSize.isAccessibilitySize {
+                // Below accessibility sizes a limited line stays on one line:
+                // as many tags as fit, else the first one truncated, plus a count.
+                ViewThatFits(in: .horizontal) {
+                    line(showing: limit)
+                    line(showing: 1)
+                    line(showing: 1).lineLimit(1)
+                }
+            } else {
+                TagFlowLayout(layoutDirection: layoutDirection) {
+                    ForEach(visibleTags) { TagLabel(tag: $0, isSelected: isSelected) }
+                    if overflow > 0 {
+                        TagOverflowLabel(count: overflow)
+                    }
+                }
             }
         }
         .accessibilityElement(children: .ignore)
@@ -115,18 +138,25 @@ public struct TagLabels: View {
         var body: some View {
             Text("+\(count)", bundle: .module)
                 .font(.footnote.weight(.medium))
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color(uiColor: .secondarySystemBackground), in: .rect(cornerRadius: 8))
+                .foregroundStyle(.secondary)
         }
     }
 
-    private var visibleTags: [LibraryTag] { Array(tags.prefix(limit ?? tags.count)) }
+    private func line(showing count: Int) -> some View {
+        HStack(spacing: 6) {
+            ForEach(tags.prefix(count)) { TagLabel(tag: $0, isSelected: isSelected) }
+            if tags.count > count {
+                TagOverflowLabel(count: tags.count - count)
+                    .fixedSize()
+            }
+        }
+    }
+
+    private var visibleTags: [Tag] { Array(tags.prefix(limit ?? tags.count)) }
     private var overflow: Int { tags.count - visibleTags.count }
 }
 
-struct MetadataFlowLayout: Layout {
+struct TagFlowLayout: Layout {
     var layoutDirection: LayoutDirection
     private let spacing: CGFloat = 6
 

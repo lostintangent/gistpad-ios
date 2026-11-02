@@ -4,64 +4,13 @@ import Synchronization
 import Testing
 @testable import GistPadSync
 
-struct FakeResponse: Sendable {
-    var status: Int = 200
-    var headers: [String: String] = [:]
-    var data: Data = Data()
-}
+typealias FakeResponse = FixtureServer.Response
+typealias MemoryCredentials = FixtureServer.Credentials
 
-final class FakeURLProtocol: URLProtocol, @unchecked Sendable {
-    typealias Handler = @Sendable (URLRequest) async throws -> FakeResponse
-    static let handlers = Mutex<[String: Handler]>([:])
-    private let operationTask = Mutex<Task<Void, Never>?>(nil)
-
-    static func session(handler: @escaping Handler) -> URLSession {
-        let id = UUID().uuidString
-        handlers.withLock { $0[id] = handler }
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [FakeURLProtocol.self]
-        configuration.httpAdditionalHeaders = ["X-Test-ID": id]
-        return URLSession(configuration: configuration)
+enum FakeURLProtocol {
+    static func session(handler: @escaping @Sendable (URLRequest) async throws -> FakeResponse) -> URLSession {
+        FixtureServer { try await handler($0) }.session
     }
-
-    override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        let operation = Task {
-            do {
-                let id = request.value(forHTTPHeaderField: "X-Test-ID") ?? ""
-                guard let handler = Self.handlers.withLock({ $0[id] }) else {
-                    throw URLError(.resourceUnavailable)
-                }
-                let result = try await handler(request)
-                guard !Task.isCancelled else { return }
-                let response = HTTPURLResponse(
-                    url: request.url!, statusCode: result.status,
-                    httpVersion: "HTTP/1.1", headerFields: result.headers
-                )!
-                client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-                client?.urlProtocol(self, didLoad: result.data)
-                client?.urlProtocolDidFinishLoading(self)
-            } catch {
-                client?.urlProtocol(self, didFailWithError: error)
-            }
-        }
-        operationTask.withLock { $0 = operation }
-    }
-
-    override func stopLoading() { operationTask.withLock { $0?.cancel(); $0 = nil } }
-}
-
-final class MemoryCredentials: AccountCredentialStorage, Sendable {
-    private let values = Mutex<[String: Data]>([:])
-    func store(key: String, value: Data) throws { values.withLock { $0[key] = value } }
-    func retrieve(key: String) throws -> Data? { values.withLock { $0[key] } }
-    func remove(key: String) throws { _ = values.withLock { $0.removeValue(forKey: key) } }
-    func keys(withPrefix prefix: String) throws -> [String] {
-        values.withLock { $0.keys.filter { $0.hasPrefix(prefix) } }
-    }
-    func upgradeAccessibility() throws {}
 }
 
 func gistData(
@@ -90,24 +39,88 @@ func requestBody(_ request: URLRequest) throws -> [String: Any] {
 }
 
 func requestData(_ request: URLRequest) throws -> Data {
-    let data: Data
-    if let body = request.httpBody {
-        data = body
-    } else if let stream = request.httpBodyStream {
-        stream.open()
-        defer { stream.close() }
-        var result = Data()
-        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4096)
-        defer { buffer.deallocate() }
-        while stream.hasBytesAvailable {
-            let count = stream.read(buffer, maxLength: 4096)
-            guard count >= 0 else { throw URLError(.cannotDecodeContentData) }
-            if count == 0 { break }
-            result.append(buffer, count: count)
-        }
-        data = result
-    } else {
-        throw URLError(.zeroByteResource)
+    FixtureServer.body(of: request)
+}
+
+/// The fixture GitHub with a draft store and publisher, signed in as `FixtureServer.you`.
+struct SyncFixture {
+    static let account = FixtureServer.accountID
+    static let user = FixtureServer.you.id
+    let server: FixtureServer
+    let store: DraftStore
+    let github: GitHubClient
+    let publisher: DraftPublisher
+
+    init(store: DraftStore? = nil, server: FixtureServer = FixtureServer()) throws {
+        self.server = server
+        self.store = try store ?? DraftStore.open(inMemory: true)
+        github = GitHubClient(session: server.session) { "fixture-github" }
+        publisher = DraftPublisher(client: github, store: self.store)
     }
-    return data
+
+    /// Your draft of a gist's file, opened from what GitHub has now.
+    func open(_ gist: Gist, _ filename: String = "README.md") async throws -> Draft {
+        let current = try #require(server.gists.first { $0.id == gist.id })
+        return try await store.draft(
+            accountID: Self.account, githubUserID: Self.user, gistID: gist.id, filename: filename,
+            description: current.description ?? "", content: current.files[filename]?.content ?? "",
+            revision: current.revision, isNewFile: current.files[filename] == nil)
+    }
+
+    func type(_ text: String, in draft: Draft) async throws -> Draft {
+        try await store.persist(id: draft.id, accountID: Self.account, text: text, generation: draft.generation + 1)
+    }
+
+    func publish(_ draft: Draft) async throws -> Draft {
+        try await publisher.publish(id: draft.id, accountID: Self.account)
+    }
+
+    func reload(_ draft: Draft) async throws -> Draft {
+        try await store.draft(id: draft.id, accountID: Self.account)
+    }
+
+    /// The file's content on GitHub right now.
+    func remote(_ gistID: String, _ filename: String = "README.md") -> String? {
+        server.gists.first { $0.id == gistID }?.files[filename]?.content
+    }
+
+    func count(_ request: String) -> Int {
+        server.requests.filter { $0 == request }.count
+    }
+
+    var dailyNotes: DailyNotes {
+        DailyNotes(
+            accountID: Self.account, githubUserID: Self.user, client: github, store: store, publisher: publisher)
+    }
+}
+
+/// Lets a test hold a request at the fixture until it's released.
+actor Gate {
+    private var arrived = false
+    private var open = false
+    private var arrivals: [CheckedContinuation<Void, Never>] = []
+    private var held: [CheckedContinuation<Void, Never>] = []
+
+    func pass() async {
+        arrived = true
+        arrivals.forEach { $0.resume() }
+        arrivals.removeAll()
+        if !open { await withCheckedContinuation { held.append($0) } }
+    }
+
+    func waitForArrival() async {
+        if !arrived { await withCheckedContinuation { arrivals.append($0) } }
+    }
+
+    func release() {
+        open = true
+        held.forEach { $0.resume() }
+        held.removeAll()
+    }
+}
+
+func temporaryStoreURL() throws -> URL {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory.appendingPathComponent("drafts.store")
 }

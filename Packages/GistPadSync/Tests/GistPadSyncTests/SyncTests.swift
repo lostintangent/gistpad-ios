@@ -3,64 +3,20 @@ import Synchronization
 import Testing
 @testable import GistPadSync
 
-private actor Signal {
-    private var signalled = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-    func wait() async {
-        if signalled { return }
-        await withCheckedContinuation { waiters.append($0) }
-    }
-    func signal() {
-        signalled = true
-        for waiter in waiters { waiter.resume() }
-        waiters.removeAll()
-    }
-}
-
-private func editedDraft(
-    store: DraftStore, account: UUID, base: String = "base", text: String = "local"
-) async throws -> DraftSnapshot {
-    let draft = try await store.openDraft(
-        accountID: account, githubUserID: 42, gistID: "abc123", filename: "README.md",
-        description: "Note", content: base, revision: "revision1"
-    )
-    return try await store.persist(id: draft.id, accountID: account, text: text, generation: 1)
-}
-
+/// The publish rules: every keystroke is saved on the phone, publishing reaches GitHub once, and edits on
+/// both sides become a conflict that shows the diff.
 @Suite struct SyncTests {
-    @Test func creationAcknowledgementImmediatelyPromotesItsCachedLibraryRowWithoutAnotherGet() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        try await store.cacheLibrary(owned: [], starred: [], preferences: .init(metadata: [:]), accountID: account)
-        let draft = try await store.newDraft(
-            accountID: account, githubUserID: 42, description: "New note", text: "published")
-        let methods = Mutex<[String]>([])
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            methods.withLock { $0.append(request.httpMethod ?? "") }
-            #expect(request.httpMethod == "POST")
-            return FakeResponse(data: try gistData(content: "published", description: "New note"))
-        }) { "fake" }
-        let saved = try await SyncCoordinator(client: client, store: store)
-            .publish(id: draft.id, accountID: account)
-        let cached = try #require(await store.cachedLibrary(accountID: account))
-        #expect(saved.gistID == "abc123")
-        #expect(cached.owned.map(\.id) == ["abc123"])
-        #expect(cached.details["abc123"]?.owner?.id == 42)
-        #expect(cached.fileContent["abc123/README.md"]?.text == "published")
-        #expect(methods.withLock { $0 } == ["POST"])
-    }
-
     @Test func durableDraftSurvivesContainerReopenAndIsAccountIsolated() async throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let url = directory.appendingPathComponent("drafts.store")
-        let account = UUID()
-        let store = try DraftStore.open(url: url)
-        let draft = try await editedDraft(store: store, account: account, text: "Emoji \u{1F9D1}\u{200D}\u{1F4BB}\n日本語\nمرحبا")
+        let url = try temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let fixture = try SyncFixture(store: DraftStore.open(url: url))
+        let gist = fixture.server.addGist(description: "Note", files: ["README.md": "base"])
+        let text = "Emoji \u{1F9D1}\u{200D}\u{1F4BB}\n日本語\nمرحبا"
+        let draft = try await fixture.type(text, in: fixture.open(gist))
+
         let reopened = try DraftStore.open(url: url)
-        let restored = try await reopened.draft(id: draft.id, accountID: account)
-        #expect(restored.text == draft.text)
+        let restored = try await reopened.draft(id: draft.id, accountID: SyncFixture.account)
+        #expect(restored.text.utf8.elementsEqual(text.utf8))
         #expect(restored.generation == 1)
         #expect(restored.state == .savedLocally)
         #expect(try await reopened.drafts(accountID: UUID()).isEmpty)
@@ -69,373 +25,241 @@ private func editedDraft(
         }
     }
 
-    @Test func freshReadUpdatesOnlyAnUnchangedCleanDraft() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await store.openDraft(
-            accountID: account, githubUserID: 42, gistID: "abc123", filename: "README.md",
-            description: "Note", content: "base", revision: "revision1"
-        )
-        let refreshed = try await store.refreshCleanDraft(
-            id: draft.id, accountID: account, expectedGeneration: 0,
-            content: "web change", revision: "revision2"
-        )
-        guard case .refreshed(let clean) = refreshed else {
-            Issue.record("Expected a clean baseline refresh")
-            return
-        }
-        #expect(clean.text == "web change")
-        #expect(clean.baseContent == "web change")
-        #expect(clean.generation == 1)
-        #expect(clean.state == .savedToGitHub)
-        _ = try await store.persist(id: draft.id, accountID: account, text: "local change", generation: 2)
-        let preserved = try await store.refreshCleanDraft(
-            id: draft.id, accountID: account, expectedGeneration: 2,
-            content: "another web change", revision: "revision3"
-        )
-        guard case .preservedLocalChanges(let dirty) = preserved else {
-            Issue.record("Expected the dirty draft to win locally")
-            return
-        }
-        #expect(dirty.text == "local change")
-        #expect(dirty.baseContent == "web change")
-        await #expect(throws: DraftError.staleGeneration) {
-            try await store.refreshCleanDraft(
-                id: draft.id, accountID: account, expectedGeneration: 1,
-                content: "stale response", revision: "revision2"
-            )
-        }
-    }
+    @Test func openAdoptsCleanRemoteTextAndLeavesEditedFilesAlone() async throws {
+        let fixture = try SyncFixture()
+        let gist = fixture.server.addGist(description: "Note", files: ["README.md": "one"])
+        let draft = try await fixture.open(gist)
+        fixture.server.edit(gist.id, files: ["README.md": "two"])
 
-    @Test func overlappingRemoteChangesNeverIssuePatch() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await editedDraft(store: store, account: account)
-        let calls = Mutex<[String]>([])
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            calls.withLock { $0.append(request.httpMethod ?? "") }
-            return FakeResponse(data: try gistData(content: "remote", revision: "revision2"))
-        }) { "fake" }
-        let coordinator = SyncCoordinator(client: client, store: store)
-        let result = try await coordinator.publish(id: draft.id, accountID: account)
-        guard case .conflict(let conflict) = result.state else {
-            Issue.record("Expected an explicit conflict")
-            return
-        }
-        #expect(conflict.base == "base")
-        #expect(conflict.local == "local")
-        #expect(conflict.remote == "remote")
-        #expect(result.text == "local")
-        #expect(calls.withLock { $0 } == ["GET"])
-    }
-
-    @Test func cleanDraftAdoptsAChangedRemoteWithoutAConflictOrWrite() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await store.openDraft(
-            accountID: account, githubUserID: 42, gistID: "abc123", filename: "README.md",
-            description: "Note", content: "base", revision: "revision1"
-        )
-        let calls = Mutex<[String]>([])
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            calls.withLock { $0.append(request.httpMethod ?? "") }
-            return FakeResponse(data: try gistData(content: "remote", revision: "revision2"))
-        }) { "fake" }
-        let adopted = try await SyncCoordinator(client: client, store: store)
-            .publish(id: draft.id, accountID: account, reason: .leaving)
-        #expect(adopted.state == .savedToGitHub)
-        #expect(adopted.text == "remote")
-        #expect(adopted.baseContent == "remote")
+        let adopted = try await fixture.publisher.inspect(id: draft.id, accountID: SyncFixture.account)
+        #expect(adopted.text == "two")
+        #expect(adopted.baseContent == "two")
         #expect(adopted.generation == 1)
-        #expect(calls.withLock { $0 } == ["GET"])
-    }
-
-    @Test func aStuckCleanConflictClearsOnTheNextPublish() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await store.openDraft(
-            accountID: account, githubUserID: 42, gistID: "abc123", filename: "README.md",
-            description: "Note", content: "base", revision: "revision1"
-        )
-        try await store.setState(.conflict(DraftConflict(
-            generation: draft.generation, base: "base", local: "base",
-            remote: "remote", remoteRevision: "revision2"
-        )), id: draft.id, accountID: account)
-        let client = GitHubClient(session: FakeURLProtocol.session { _ in
-            FakeResponse(data: try gistData(content: "remote", revision: "revision2"))
-        }) { "fake" }
-        let adopted = try await SyncCoordinator(client: client, store: store)
-            .publish(id: draft.id, accountID: account, reason: .background)
         #expect(adopted.state == .savedToGitHub)
-        #expect(adopted.text == "remote")
-        #expect(adopted.baseContent == "remote")
+
+        let edited = try await fixture.type("mine", in: adopted)
+        let kept = try await fixture.store.refreshCleanDraft(
+            id: draft.id, accountID: SyncFixture.account, expectedGeneration: edited.generation,
+            content: "three", revision: "later")
+        #expect(kept.text == "mine")
+        #expect(kept.baseContent == "two")
+        #expect(fixture.count("PATCH /gists/\(gist.id)") == 0)
     }
 
-    @Test func openAdoptsAChangedRemoteForACleanNote() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await store.openDraft(
-            accountID: account, githubUserID: 42, gistID: "abc123", filename: "README.md",
-            description: "Note", content: "base", revision: "revision1"
-        )
-        let calls = Mutex<[String]>([])
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            calls.withLock { $0.append(request.httpMethod ?? "") }
-            return FakeResponse(data: try gistData(content: "remote", revision: "revision2"))
-        }) { "fake" }
-        let opened = try await SyncCoordinator(client: client, store: store)
-            .adoptRemoteIfClean(id: draft.id, accountID: account)
-        #expect(opened.state == .savedToGitHub)
-        #expect(opened.text == "remote")
-        #expect(opened.baseContent == "remote")
-        #expect(calls.withLock { $0 } == ["GET"])
-    }
+    enum RemoteChange: CaseIterable { case edited, addedOnTheWeb, deleted }
 
-    @Test func openLeavesAnEditedNoteAloneWithoutFetching() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let edited = try await editedDraft(store: store, account: account)
-        let calls = Mutex<[String]>([])
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            calls.withLock { $0.append(request.httpMethod ?? "") }
-            return FakeResponse(data: try gistData(content: "remote", revision: "revision2"))
-        }) { "fake" }
-        let opened = try await SyncCoordinator(client: client, store: store)
-            .adoptRemoteIfClean(id: edited.id, accountID: account)
-        #expect(opened.text == "local")
-        #expect(opened.baseContent == "base")
-        #expect(calls.withLock { $0 }.isEmpty)
-    }
-
-    @Test func newerTypingIsNeverClearedByAnOlderAcknowledgement() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await editedDraft(store: store, account: account)
-        let patchStarted = Signal()
-        let allowResponse = Signal()
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            if request.httpMethod == "PATCH" {
-                await patchStarted.signal()
-                await allowResponse.wait()
-                return FakeResponse(data: try gistData(content: "local", revision: "revision2"))
-            }
-            return FakeResponse(data: try gistData())
-        }) { "fake" }
-        let coordinator = SyncCoordinator(client: client, store: store)
-        let publishing = Task { try await coordinator.publish(id: draft.id, accountID: account) }
-        await patchStarted.wait()
-        _ = try await store.persist(id: draft.id, accountID: account, text: "newer typing", generation: 2)
-        await allowResponse.signal()
-        let result = try await publishing.value
-        #expect(result.text == "newer typing")
-        #expect(result.generation == 2)
-        #expect(result.baseContent == "local")
-        #expect(result.state == .savedLocally)
-    }
-
-    @Test func keepingIdenticalDraftResolvesOnlyTheBaselineWithoutInventingAnEdit() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await editedDraft(store: store, account: account)
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            #expect(request.httpMethod == "GET")
-            return FakeResponse(data: try gistData(content: "web version", revision: "revision2"))
-        }) { "fake" }
-        let coordinator = SyncCoordinator(client: client, store: store)
-        _ = try await coordinator.publish(id: draft.id, accountID: account)
-        let result = try await store.resolveConflict(
-            id: draft.id, accountID: account, expectedGeneration: 1, text: "local", generation: 1
-        )
-        #expect(result.text == "local")
-        #expect(result.generation == 1)
-        #expect(result.baseContent == "web version")
-        #expect(result.baseRevision == "revision2")
-        #expect(result.state == .savedLocally)
-        await #expect(throws: DraftError.unresolvedConflict) {
-            try await store.resolveConflict(
-                id: draft.id, accountID: account, expectedGeneration: 1, text: "local", generation: 1
-            )
+    @Test(arguments: RemoteChange.allCases)
+    func aRemoteChangeUnderLocalEditsBecomesAConflictThatSurvivesRelaunch(_ change: RemoteChange) async throws {
+        let url = try temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let fixture = try SyncFixture(store: DraftStore.open(url: url))
+        let gist = fixture.server.addGist(
+            description: "Note", files: ["README.md": "base", "2026-10-23.md": "# Other day"])
+        let filename = change == .addedOnTheWeb ? "2026-10-24.md" : "README.md"
+        let draft = try await fixture.type("local", in: fixture.open(gist, filename))
+        let remote: String? = switch change {
+        case .edited: "remote"
+        case .addedOnTheWeb: "# Written on the web"
+        case .deleted: nil
         }
-    }
+        fixture.server.edit(gist.id, files: [filename: remote])
 
-    @Test func equalConflictGenerationRequiresExactBytesNotCanonicalUnicodeEquality() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let composed = "\u{e9}"
-        let decomposed = "e\u{301}"
-        #expect(composed == decomposed)
-        let draft = try await editedDraft(store: store, account: account, text: composed)
-        try await store.setState(.conflict(DraftConflict(
-            generation: 1, base: "base", local: composed, remote: "remote",
-            remoteRevision: "two"
-        )), id: draft.id, accountID: account)
-        await #expect(throws: DraftError.staleGeneration) {
-            try await store.resolveConflict(
-                id: draft.id, accountID: account, expectedGeneration: 1, text: decomposed, generation: 1
-            )
-        }
-        #expect(try await store.draft(id: draft.id, accountID: account).text.utf8.elementsEqual(composed.utf8))
-        let accepted = try await store.resolveConflict(
-            id: draft.id, accountID: account, expectedGeneration: 1, text: decomposed, generation: 2
-        )
-        #expect(accepted.text.utf8.elementsEqual(decomposed.utf8))
-        #expect(accepted.generation == 2)
-        await #expect(throws: DraftError.staleGeneration) {
-            try await store.resolveConflict(
-                id: draft.id, accountID: account, expectedGeneration: 1, text: decomposed, generation: 1
-            )
-        }
-    }
-
-    @Test func ambiguousPatchReconcilesWithoutRepeatingTheWrite() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await editedDraft(store: store, account: account)
-        let remote = Mutex("base")
-        let patches = Mutex(0)
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            if request.httpMethod == "PATCH" {
-                patches.withLock { $0 += 1 }
-                remote.withLock { $0 = "local" }
-                throw URLError(.timedOut)
-            }
-            return FakeResponse(data: try gistData(content: remote.withLock { $0 }))
-        }) { "fake" }
-        let coordinator = SyncCoordinator(client: client, store: store)
-        await #expect(throws: (any Error).self) {
-            try await coordinator.publish(id: draft.id, accountID: account)
-        }
-        let offline = try await store.draft(id: draft.id, accountID: account)
-        #expect(offline.state == .offline)
-        #expect(offline.text == "local")
-        #expect(offline.attemptedContent == "local")
-        let result = try await coordinator.publish(id: draft.id, accountID: account)
-        #expect(result.state == .savedToGitHub)
-        #expect(result.attemptedGeneration == nil)
-        #expect(patches.withLock { $0 } == 1)
-    }
-
-    @Test func ambiguousCreateCannotBeBlindlyRetriedEvenWithANewCoordinator() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await store.newDraft(accountID: account, githubUserID: 42, text: "new note")
-        let creates = Mutex(0)
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            #expect(request.httpMethod == "POST")
-            creates.withLock { $0 += 1 }
-            throw URLError(.timedOut)
-        }) { "fake" }
-        let first = SyncCoordinator(client: client, store: store)
-        await #expect(throws: (any Error).self) {
-            try await first.publish(id: draft.id, accountID: account)
-        }
-        let restored = try await store.draft(id: draft.id, accountID: account)
-        #expect(restored.state == .failed(.creationUncertain))
-        let next = SyncCoordinator(client: client, store: store)
-        await #expect(throws: DraftError.ambiguousCreation) {
-            try await next.publish(id: draft.id, accountID: account)
-        }
-        #expect(creates.withLock { $0 } == 1)
-        #expect(restored.text == "new note")
-    }
-
-    @Test func backgroundSavePublishesEvenWithAutosaveDisabled() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await editedDraft(store: store, account: account)
-        let calls = Mutex<[String]>([])
-        let client = GitHubClient(session: FakeURLProtocol.session { request in
-            calls.withLock { $0.append(request.httpMethod ?? "") }
-            return FakeResponse(data: try gistData(
-                content: request.httpMethod == "PATCH" ? "local" : "base"))
-        }) { "fake" }
-        let coordinator = SyncCoordinator(client: client, store: store)
-        let result = try await coordinator.publish(
-            id: draft.id, accountID: account, reason: .background, autosaveEnabled: false
-        )
-        #expect(result.state == .savedToGitHub)
-        #expect(result.text == "local")
-        #expect(result.baseContent == "local")
-        #expect(calls.withLock { $0 } == ["GET", "PATCH"])
-    }
-
-    @Test func disabledAutosaveStillSkipsTimedPublication() async throws {
-        let account = UUID()
-        let store = try DraftStore.open(inMemory: true)
-        let draft = try await editedDraft(store: store, account: account)
-        let client = GitHubClient(session: FakeURLProtocol.session { _ in
-            Issue.record("Disabled timed autosave must not make a network request.")
-            return FakeResponse(status: 500)
-        }) { "fake" }
-        let coordinator = SyncCoordinator(client: client, store: store)
-        let result = try await coordinator.publish(
-            id: draft.id, accountID: account, reason: .autosave, autosaveEnabled: false)
-        #expect(result.state == .savedLocally)
-        #expect(result.text == "local")
-    }
-
-    @Test func inaccessibleAndForeignGistsRetainTheDraft() async throws {
-        for status in [404, 200] {
-            let account = UUID()
-            let store = try DraftStore.open(inMemory: true)
-            let draft = try await editedDraft(store: store, account: account)
-            let client = GitHubClient(session: FakeURLProtocol.session { request in
-                #expect(request.httpMethod == "GET")
-                return FakeResponse(status: status, data: try gistData(owner: 99))
-            }) { "fake" }
-            let coordinator = SyncCoordinator(client: client, store: store)
-            await #expect(throws: (any Error).self) {
-                try await coordinator.publish(id: draft.id, accountID: account)
-            }
-            let retained = try await store.draft(id: draft.id, accountID: account)
-            #expect(retained.text == "local")
-            #expect(retained.state == (status == 404
-                ? .failed(.http(status: 404, retryAfter: nil)) : .failed(.readOnly)))
-        }
-    }
-
-    @Test func unresolvedConflictKeepsTheLocalTextAcrossRelaunch() async throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let url = directory.appendingPathComponent("drafts.store")
-        let account = UUID()
-        let first = try DraftStore.open(url: url)
-        let draft = try await editedDraft(store: first, account: account)
-        let client = GitHubClient(session: FakeURLProtocol.session { _ in
-            FakeResponse(data: try gistData(content: "remote", revision: "revision2"))
-        }) { "fake" }
-        _ = try await SyncCoordinator(client: client, store: first).publish(id: draft.id, accountID: account)
-        let reopened = try DraftStore.open(url: url)
-        let retained = try await reopened.draft(id: draft.id, accountID: account)
-        #expect(retained.text == "local")
-        guard case .conflict(let conflict) = retained.state else {
-            Issue.record("Expected the conflict to survive relaunch")
+        let published = try await fixture.publish(draft)
+        guard case .conflict(let conflict) = published.state else {
+            Issue.record("Expected a conflict, got \(published.state)")
             return
         }
+        #expect(conflict.base == (change == .addedOnTheWeb ? nil : "base"))
         #expect(conflict.local == "local")
-        #expect(conflict.remote == "remote")
+        #expect(conflict.remote == remote)
+        #expect(fixture.count("PATCH /gists/\(gist.id)") == 0)
+
+        let relaunched = try await DraftStore.open(url: url).draft(id: draft.id, accountID: SyncFixture.account)
+        #expect(relaunched.text == "local")
+        #expect(relaunched.state == published.state)
     }
 
-    @Test func interruptedPublishingRecoversAsUncertainNotStillSaving() async throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let url = directory.appendingPathComponent("drafts.store")
-        let account = UUID()
-        let first = try DraftStore.open(url: url)
-        let draft = try await editedDraft(store: first, account: account)
-        try await first.beginAttempt(
-            id: draft.id, accountID: account, content: "local", generation: 1
-        )
-        let reopened = try DraftStore.open(url: url)
-        let recovered = try await reopened.draft(id: draft.id, accountID: account)
-        #expect(recovered.state == .failed(.publicationUncertain))
-        #expect(recovered.attemptedContent == "local")
-        #expect(recovered.text == "local")
-        let updated = try await reopened.persist(
-            id: draft.id, accountID: account, text: "later text", generation: 2
-        )
-        #expect(updated.state == .failed(.publicationUncertain))
+    @Test(arguments: [true, false])
+    func resolvingAConflictPublishesTheChosenText(keepingMine: Bool) async throws {
+        let fixture = try SyncFixture()
+        let gist = fixture.server.addGist(description: "Note", files: ["README.md": "base"])
+        let draft = try await fixture.type("mine", in: fixture.open(gist))
+        fixture.server.edit(gist.id, files: ["README.md": "theirs"])
+        let conflicted = try await fixture.publish(draft)
+
+        let resolved = try await fixture.store.resolveConflict(
+            id: draft.id, accountID: SyncFixture.account, expectedGeneration: conflicted.generation,
+            text: keepingMine ? "mine" : "theirs",
+            generation: keepingMine ? conflicted.generation : conflicted.generation + 1)
+        #expect(resolved.baseContent == "theirs")
+        #expect(resolved.state == .savedLocally)
+        #expect(resolved.generation == (keepingMine ? 1 : 2))
+
+        let published = try await fixture.publish(resolved)
+        #expect(published.state == .savedToGitHub)
+        #expect(fixture.remote(gist.id) == (keepingMine ? "mine" : "theirs"))
+        #expect(fixture.count("PATCH /gists/\(gist.id)") == (keepingMine ? 1 : 0))
+    }
+
+    @Test func typingDuringAPublishIsNeverLost() async throws {
+        let fixture = try SyncFixture()
+        let gist = fixture.server.addGist(description: "Note", files: ["README.md": "base"])
+        let gate = Gate()
+        fixture.server.intercept { request in
+            if request.httpMethod == "PATCH" { await gate.pass() }
+            return nil
+        }
+        let first = try await fixture.type("first", in: fixture.open(gist))
+        let publishing = Task { try await fixture.publish(first) }
+        await gate.waitForArrival()
+        let newer = try await fixture.type("first and newer", in: first)
+        let staleAutosave = Task {
+            try await fixture.publisher.publish(
+                id: first.id, accountID: SyncFixture.account, reason: .autosave,
+                expectedGeneration: first.generation)
+        }
+        await gate.release()
+        await #expect(throws: CancellationError.self) { try await staleAutosave.value }
+
+        let acknowledged = try await publishing.value
+        #expect(acknowledged.text == "first and newer")
+        #expect(acknowledged.generation == newer.generation)
+        #expect(acknowledged.baseContent == "first")
+        #expect(acknowledged.state == .savedLocally)
+        #expect(fixture.remote(gist.id) == "first")
+
+        #expect(try await fixture.publish(acknowledged).state == .savedToGitHub)
+        #expect(fixture.remote(gist.id) == "first and newer")
+        #expect(fixture.count("PATCH /gists/\(gist.id)") == 2)
+    }
+
+    @Test(arguments: [true, false])
+    func aCutOffPublishFinishesWithoutWritingTwice(landed: Bool) async throws {
+        let url = try temporaryStoreURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let fixture = try SyncFixture(store: DraftStore.open(url: url))
+        let gist = fixture.server.addGist(description: "Note", files: ["README.md": "base"])
+        let cutOff = Mutex(true)
+        let session = fixture.server.session
+        fixture.server.intercept { request in
+            guard request.httpMethod == "PATCH", cutOff.withLock({ first in
+                defer { first = false }
+                return first
+            }) else { return nil }
+            if landed { _ = try await session.data(for: request) }
+            throw URLError(.networkConnectionLost)
+        }
+        let draft = try await fixture.type("local", in: fixture.open(gist))
+        await #expect(throws: URLError.self) { try await fixture.publish(draft) }
+        let interrupted = try await fixture.reload(draft)
+        #expect(interrupted.state == .failed(.network))
+        #expect(interrupted.attemptedContent == "local")
+
+        let relaunched = try SyncFixture(store: DraftStore.open(url: url), server: fixture.server)
+        let finished = try await relaunched.publish(draft)
+        #expect(finished.state == .savedToGitHub)
+        #expect(finished.attemptedContent == nil)
+        #expect(finished.baseContent == "local")
+        #expect(fixture.remote(gist.id) == "local")
+        #expect(fixture.count("PATCH /gists/\(gist.id)") == 1)
+    }
+
+    @Test func typingAfterACutOffPublishIsSavedOnThisIPhoneUntilThePublishLands() async throws {
+        let fixture = try SyncFixture()
+        let gist = fixture.server.addGist(description: "Note", files: ["README.md": "base"])
+        let session = fixture.server.session
+        let cutOff = Mutex(true)
+        fixture.server.intercept { request in
+            guard request.httpMethod == "PATCH", cutOff.withLock({ first in
+                defer { first = false }
+                return first
+            }) else { return nil }
+            _ = try await session.data(for: request)
+            throw URLError(.networkConnectionLost)
+        }
+        let sent = try await fixture.type("local", in: fixture.open(gist))
+        await #expect(throws: URLError.self) { try await fixture.publish(sent) }
+        #expect(try await fixture.reload(sent).state == .failed(.network))
+
+        // GitHub has "local" now, so going back to the old text isn't saved there.
+        let undone = try await fixture.type("base", in: fixture.reload(sent))
+        #expect(undone.state == .savedLocally, "Typing lets autosave publish again.")
+        #expect(undone.attemptedContent == "local")
+
+        let published = try await fixture.publish(undone)
+        #expect(published.state == .savedToGitHub)
+        #expect(fixture.remote(gist.id) == "base")
+    }
+
+    @Test(arguments: [true, false], [false, true])
+    func aCutOffCreateFindsItsGistInsteadOfPostingTwice(landed: Bool, daily: Bool) async throws {
+        let fixture = try SyncFixture()
+        try await fixture.store.cacheLibrary(
+            owned: [], starred: [], preferences: .init(metadata: [:]), accountID: SyncFixture.account)
+        if !daily {
+            // Same title, file and size, but other text, so only the bytes tell them apart.
+            fixture.server.addGist(description: "Ideas", files: ["README.md": "# Ideas\n\nOlder"])
+        }
+        let cutOff = Mutex(true)
+        let session = fixture.server.session
+        fixture.server.intercept { request in
+            guard request.httpMethod == "POST", cutOff.withLock({ first in
+                defer { first = false }
+                return first
+            }) else { return nil }
+            if landed { _ = try await session.data(for: request) }
+            throw URLError(.timedOut)
+        }
+        let draft = if daily {
+            try await DailyNotes(
+                accountID: SyncFixture.account, githubUserID: SyncFixture.user, client: fixture.github,
+                store: fixture.store, publisher: fixture.publisher
+            ).stageToday(target: DailyNote.Day(date: .now, timeZone: .gmt)).draft
+        } else {
+            try await fixture.store.newDraft(
+                accountID: SyncFixture.account, githubUserID: SyncFixture.user, description: "Ideas",
+                text: "# Ideas\n\nFirst")
+        }
+        await #expect(throws: URLError.self) { try await fixture.publish(draft) }
+
+        let published = try await fixture.publish(draft)
+        let copies = fixture.server.gists.filter { $0.files[draft.filename]?.content == draft.text }
+        #expect(copies.count == 1)
+        let created = try #require(copies.first)
+        #expect(published.gistID == created.id)
+        #expect(published.state == .savedToGitHub)
+        #expect(fixture.remote(created.id, draft.filename) == draft.text)
+        #expect(fixture.count("POST /gists") == 1)
+        let cached = try #require(await fixture.store.cachedLibrary(accountID: SyncFixture.account))
+        #expect(cached.owned.map(\.id) == [created.id])
+        #expect(cached.content(gist: created, filename: draft.filename) == draft.text)
+    }
+
+    @Test(arguments: [false, true])
+    func publishComparesExactSourceBytes(edited: Bool) async throws {
+        let composed = "caf\u{E9}", decomposed = "cafe\u{301}"
+        #expect(composed == decomposed)
+        let fixture = try SyncFixture()
+        let gist = fixture.server.addGist(description: "Note", files: ["README.md": composed])
+        var draft = try await fixture.open(gist)
+        if edited { draft = try await fixture.type("mine", in: draft) }
+        fixture.server.edit(gist.id, files: ["README.md": decomposed])
+
+        let inspected = try await fixture.publisher.inspect(id: draft.id, accountID: SyncFixture.account)
+        if edited {
+            guard case .conflict(let conflict) = inspected.state else {
+                Issue.record("A byte-different remote is a change, got \(inspected.state)")
+                return
+            }
+            #expect(conflict.remote?.utf8.elementsEqual(decomposed.utf8) == true)
+            #expect(inspected.text == "mine")
+        } else {
+            #expect(inspected.text.utf8.elementsEqual(decomposed.utf8))
+            #expect(inspected.generation == 1)
+            let typed = try await fixture.type(composed, in: inspected)
+            #expect(try await fixture.publish(typed).state == .savedToGitHub)
+            #expect(fixture.remote(gist.id)?.utf8.elementsEqual(composed.utf8) == true)
+            #expect(fixture.count("PATCH /gists/\(gist.id)") == 1)
+        }
     }
 }

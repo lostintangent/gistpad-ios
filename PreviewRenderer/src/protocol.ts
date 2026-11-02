@@ -1,11 +1,8 @@
-export const protocolVersion = 1;
-export const maximumDocumentLength = 2 * 1024 * 1024;
-
 export interface RenderRequest {
-  version: 1;
   documentID: string;
-  generation: string;
+  generation: number;
   markdown: string;
+  allowsTaskEdits: boolean;
 }
 
 export interface TaskEdit {
@@ -16,8 +13,8 @@ export interface TaskEdit {
 }
 
 export type PreviewMessage =
-  | { type: "ready"; version: 1 }
-  | (Pick<RenderRequest, "documentID" | "generation" | "version"> &
+  | { type: "ready" }
+  | (Pick<RenderRequest, "documentID" | "generation"> &
       (
         | { type: "taskToggle"; edit: TaskEdit }
         | { type: "link"; kind: "external" | "wikilink" | "anchor"; target: string }
@@ -25,42 +22,21 @@ export type PreviewMessage =
         | { type: "failure"; message: string }
       ));
 
-export function isUInt64String(value: unknown): value is string {
-  return typeof value === "string" && /^(0|[1-9]\d{0,19})$/.test(value) &&
-    BigInt(value) <= 18_446_744_073_709_551_615n;
-}
-
-export function isRenderRequest(value: unknown): value is RenderRequest {
-  if (!value || typeof value !== "object") return false;
-  const data = value as Partial<RenderRequest>;
-  return (
-    data.version === protocolVersion &&
-    typeof data.documentID === "string" &&
-    data.documentID.length > 0 &&
-    data.documentID.length <= 512 &&
-    isUInt64String(data.generation) &&
-    typeof data.markdown === "string" &&
-    data.markdown.length <= maximumDocumentLength
-  );
-}
-
 declare global {
   interface Window {
     gistpadPreview: {
-      render: (request: unknown) => void;
-      setAppearance: (appearance: unknown) => void;
-      setTaskEditingEnabled: (enabled: unknown) => void;
-      setViewportInsets: (insets: unknown) => void;
+      render: (request: RenderRequest) => void;
+      setAppearance: (appearance: import("./appearance").Appearance) => void;
+      setViewportInsets: (insets: import("./viewport").ViewportInsets) => void;
       commentSegments: () => unknown;
       commentSelection: () => unknown;
-      setCommentHighlights: (value: unknown) => void;
+      setCommentHighlights: (value: import("./commentHighlights").HighlightState) => void;
     };
     webkit?: {
       messageHandlers?: {
         gistpadPreview?: { postMessage: (message: PreviewMessage) => void };
-        gistpadComments?: { postMessage: (message: CommentThreadActivation) => void };
+        gistpadComments?: { postMessage: (message: import("./commentHighlights").CommentThreadActivation) => void };
       };
     };
   }
 }
-import type { CommentThreadActivation } from "./commentHighlights";

@@ -1,4 +1,5 @@
 import Foundation
+import RegexBuilder
 
 public struct CommentQuote: Equatable, Sendable {
     public let commentID: Int64
@@ -8,10 +9,6 @@ public struct CommentQuote: Equatable, Sendable {
         self.commentID = commentID
         self.quote = quote
     }
-
-    public static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.commentID == rhs.commentID && lhs.quote.utf16.elementsEqual(rhs.quote.utf16)
-    }
 }
 
 public enum CommentQuoteMatcher {
@@ -20,47 +17,25 @@ public enum CommentQuoteMatcher {
     private static let minimumSelectionLength = 4
 
     public static func isEligibleSelection(_ selection: String) -> Bool {
-        GistCommentBody.trim(selection).utf16.count >= minimumSelectionLength
+        selection.trimmingCharacters(in: .whitespacesAndNewlines).utf16.count >= minimumSelectionLength
     }
 
-    static func matches(
-        quotes: [CommentQuote], segments: [String]
-    ) -> [Match] {
-        let texts = segments.map { $0 as NSString }
-        return quotes.compactMap { quote in
-            let length = quote.quote.utf16.count
-            guard length >= minimumQuoteLength else { return nil }
-            var match: Match?
-            for (segment, text) in texts.enumerated() {
-                var location = 0
-                while location <= text.length - length {
-                    let range = text.range(
-                        of: quote.quote, options: .literal,
-                        range: NSRange(location: location, length: text.length - location))
-                    guard range.location != NSNotFound else { break }
-                    let end = NSMaxRange(range)
-                    if isWordBoundary(range.location, in: text), isWordBoundary(end, in: text) {
-                        guard match == nil else { return nil }
-                        match = (commentID: quote.commentID, segment: segment, range: range)
-                        location = end
-                    } else {
-                        location = range.location + 1
-                    }
+    /// Like the web's `\bquote\b`, a quote links only when it appears exactly once as whole words.
+    static func matches(quotes: [CommentQuote], segments: [String]) -> [Match] {
+        quotes.compactMap { quote in
+            guard quote.quote.utf16.count >= minimumQuoteLength else { return nil }
+            let pattern = Regex {
+                Anchor.wordBoundary
+                quote.quote
+                Anchor.wordBoundary
+            }
+            .wordBoundaryKind(.simple).asciiOnlyWordCharacters().matchingSemantics(.unicodeScalar)
+            let found = segments.enumerated().flatMap { segment, text in
+                text.matches(of: pattern).map {
+                    (commentID: quote.commentID, segment: segment, range: NSRange($0.range, in: text))
                 }
             }
-            return match
+            return found.count == 1 ? found[0] : nil
         }
-    }
-
-    private static func isWordBoundary(_ index: Int, in text: NSString) -> Bool {
-        let before = index > 0 && isWord(text.character(at: index - 1))
-        let after = index < text.length && isWord(text.character(at: index))
-        return before != after
-    }
-
-    private static func isWord(_ unit: UInt16) -> Bool {
-        // JavaScript's non-Unicode \b uses ASCII \w, not ICU's Unicode word boundaries.
-        (48...57).contains(unit) || (65...90).contains(unit)
-            || (97...122).contains(unit) || unit == 95
     }
 }

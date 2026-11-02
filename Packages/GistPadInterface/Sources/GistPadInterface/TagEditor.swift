@@ -1,56 +1,40 @@
 #if os(iOS)
-import GistPadAppearance
+import GistPadAccent
 import SwiftUI
 
 public struct TagEditor: View {
     private let save: (@MainActor ([TagEdit]) async throws -> Void)?
     @State private var draft: TagEditorDraft
     @State private var query = ""
-    @State private var editingTag: LibraryTag?
+    @State private var editingTag: Tag?
     @State private var isSaving = false
     @State private var saveError: String?
     @State private var confirmingDiscard = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.personalAccent) private var personalAccent
+    @Environment(\.accent) private var accent
     @ScaledMetric(relativeTo: .body) private var swatchSize: CGFloat = 12
 
     public init(
-        tags: [LibraryTag], selectedTagIDs: Set<String>,
+        tags: [Tag], selectedTagIDs: Set<String>,
         save: (@MainActor ([TagEdit]) async throws -> Void)? = nil
     ) {
         self.save = save
         _draft = State(initialValue: TagEditorDraft(tags: tags, selectedTagIDs: selectedTagIDs))
     }
 
-    #if DEBUG
-    public func captureQuery(_ value: String) -> Self {
-        var editor = self
-        editor._query = State(initialValue: value)
-        return editor
-    }
-
-    public func captureEditingTag(_ tag: LibraryTag?) -> Self {
-        var editor = self
-        editor._editingTag = State(initialValue: tag)
-        return editor
-    }
-    #endif
-
     public var body: some View {
         NavigationStack {
             List {
                 if let saveError {
                     Section {
-                        Label(String(localized: "Couldn't finish saving tags.", bundle: .module), systemImage: "exclamationmark.circle")
-                        Text(verbatim: saveError).font(.subheadline)
-                        Text("Some changes may already be saved. Retry to finish applying your choices.", bundle: .module)
-                            .font(.footnote)
-                        Button(String(localized: "Retry", bundle: .module), action: commit)
-                            .tint(.primary)
+                        Label(String(localized: "Couldn't save your tags.", bundle: .module), systemImage: "exclamationmark.circle")
+                            .foregroundStyle(.primary)
+                        Button(String(localized: "Try Again", bundle: .module), action: commit)
+                    } footer: {
+                        Text(verbatim: saveError)
                     }
-                    .foregroundStyle(.primary)
                 }
                 Section {
                     ForEach(save == nil ? selectedTags : matchingTags) { tag in
@@ -67,25 +51,6 @@ public struct TagEditor: View {
                                 : String(localized: "No matching tags.", bundle: .module))
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("tag-empty")
-                            .captureFrame("tag-empty")
-                    }
-                    if save != nil {
-                        Button {
-                            editingTag = LibraryTag(id: UUID().uuidString, name: "")
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "plus")
-                                    .foregroundStyle(.primary)
-                                    .frame(width: min(swatchSize, 24))
-                                Text("New Tag", bundle: .module)
-                                    .foregroundStyle(.primary)
-                            }
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        }
-                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
-                        .accessibilityIdentifier("tag-create")
-                        .captureFrame("tag-create")
                     }
                 }
                 .listSectionSeparator(.hidden)
@@ -103,32 +68,21 @@ public struct TagEditor: View {
                     update: { try draft.upsert($0) },
                     delete: { draft.delete(tag) }
                 )
-                .personalAccent(savedHex: personalAccent.savedHex)
+                .accent(savedHex: accent.savedHex)
             }
             .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
             .presentationDragIndicator(.visible)
             .confirmationDialog(
-                draft.hasAttemptedChanges
-                    ? String(localized: "Close without retrying?", bundle: .module)
-                    : String(localized: "Discard tag changes?", bundle: .module),
+                String(localized: "Discard tag changes?", bundle: .module),
                 isPresented: $confirmingDiscard, titleVisibility: .visible
             ) {
-                Button(
-                    draft.hasAttemptedChanges
-                        ? String(localized: "Close", bundle: .module)
-                        : String(localized: "Discard Changes", bundle: .module),
-                    role: .destructive
-                ) { dismiss() }
+                Button(String(localized: "Discard Changes", bundle: .module), role: .destructive) { dismiss() }
                 Button(String(localized: "Keep Editing", bundle: .module), role: .cancel) {}
-            } message: {
-                if draft.hasAttemptedChanges {
-                    Text("Some changes may already be saved. Closing does not undo saved changes.", bundle: .module)
-                }
             }
         }
     }
 
-    private var selectedTags: [LibraryTag] {
+    private var selectedTags: [Tag] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return draft.tags.filter {
             draft.selectedTagIDs.contains($0.id)
@@ -137,13 +91,13 @@ public struct TagEditor: View {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    private var matchingTags: [LibraryTag] {
+    private var matchingTags: [Tag] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return draft.tags.filter { query.isEmpty || $0.name.localizedStandardContains(query) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    private func editableRow(_ tag: LibraryTag) -> some View {
+    private func editableRow(_ tag: Tag) -> some View {
         Button {
             if draft.selectedTagIDs.contains(tag.id) {
                 draft.selectedTagIDs.remove(tag.id)
@@ -155,7 +109,6 @@ public struct TagEditor: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("tag-choice-\(tag.id)")
-        .captureFrame("tag-choice-\(tag.id)")
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
         .accessibilityAddTraits(draft.selectedTagIDs.contains(tag.id) ? .isSelected : [])
         .accessibilityAction(named: Text("Edit Tag \(tag.name)", bundle: .module)) { editingTag = tag }
@@ -165,11 +118,10 @@ public struct TagEditor: View {
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(String(localized: "Edit Tag…", bundle: .module), systemImage: "pencil") { editingTag = tag }
-                .tint(Color(uiColor: .darkGray))
         }
     }
 
-    private func tagRow(_ tag: LibraryTag) -> some View {
+    private func tagRow(_ tag: Tag) -> some View {
         HStack(spacing: 12) {
             TagSwatch(hex: tag.colorHex, size: min(swatchSize, 24))
                 .accessibilityHidden(true)
@@ -179,7 +131,7 @@ public struct TagEditor: View {
             Spacer(minLength: 8)
             if draft.selectedTagIDs.contains(tag.id) {
                 Image(systemName: "checkmark")
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.tint)
                     .accessibilityHidden(true)
                     .transition(.opacity)
             }
@@ -204,6 +156,15 @@ public struct TagEditor: View {
             }
         }
         DefaultToolbarItem(kind: .search, placement: .bottomBar)
+        if save != nil {
+            ToolbarSpacer(.flexible, placement: .bottomBar)
+            ToolbarItem(placement: .bottomBar) {
+                Button(String(localized: "New Tag", bundle: .module), systemImage: "plus") {
+                    editingTag = Tag(id: UUID().uuidString, name: "")
+                }
+                .accessibilityIdentifier("tag-create")
+            }
+        }
         ToolbarItem(placement: .confirmationAction) {
             if isSaving {
                 ProgressView(String(localized: "Saving tags", bundle: .module))
@@ -219,7 +180,6 @@ public struct TagEditor: View {
         guard let save, !draft.edits.isEmpty else { dismiss(); return }
         guard !isSaving else { return }
         let edits = draft.edits
-        draft.recordAttempt(edits)
         isSaving = true
         saveError = nil
         Task {
@@ -236,9 +196,9 @@ public struct TagEditor: View {
 }
 
 private struct TagEditForm: View {
-    let tag: LibraryTag
+    let tag: Tag
     let isNew: Bool
-    let update: (LibraryTag) throws -> Void
+    let update: (Tag) throws -> Void
     let delete: () -> Void
     @State private var name: String
     @State private var colorHex: String?
@@ -246,9 +206,10 @@ private struct TagEditForm: View {
     @State private var confirmingDelete = false
     @FocusState private var nameFocused: Bool
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.self) private var environment
 
     init(
-        tag: LibraryTag, isNew: Bool, update: @escaping (LibraryTag) throws -> Void,
+        tag: Tag, isNew: Bool, update: @escaping (Tag) throws -> Void,
         delete: @escaping () -> Void
     ) {
         self.tag = tag
@@ -270,7 +231,6 @@ private struct TagEditForm: View {
                     ColorPicker(String(localized: "Color", bundle: .module), selection: color, supportsOpacity: false)
                     if colorHex != nil {
                         Button(String(localized: "Use Default Color", bundle: .module)) { colorHex = nil }
-                            .tint(.primary)
                     }
                     if let error {
                         Label(error, systemImage: "exclamationmark.circle")
@@ -279,9 +239,9 @@ private struct TagEditForm: View {
                 }
                 if !name.isEmpty {
                     Section {
-                        TagLabel(tag: LibraryTag(id: tag.id, name: name, colorHex: colorHex))
+                        TagLabel(tag: Tag(id: tag.id, name: name, colorHex: colorHex))
                     } header: {
-                        Text("Preview", bundle: .module).foregroundStyle(InterfaceTheme.text)
+                        Text("Preview", bundle: .module)
                     }
                 }
                 if !isNew {
@@ -290,8 +250,7 @@ private struct TagEditForm: View {
                             confirmingDelete = true
                         }
                     } footer: {
-                        Text("Deleting a tag removes it from every note. Note content is unchanged.", bundle: .module)
-                            .foregroundStyle(InterfaceTheme.text)
+                        Text("Deleting a tag removes it from every gist. Files are unchanged.", bundle: .module)
                     }
                 }
             }
@@ -305,7 +264,7 @@ private struct TagEditForm: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {
                         do {
-                            try update(LibraryTag(id: tag.id, name: name, colorHex: colorHex))
+                            try update(Tag(id: tag.id, name: name, colorHex: colorHex))
                             dismiss()
                         } catch {
                             self.error = error.localizedDescription
@@ -316,7 +275,7 @@ private struct TagEditForm: View {
                 }
             }
             .confirmationDialog(
-                String(localized: "Delete this tag from every note?", bundle: .module),
+                String(localized: "Delete this tag from every gist?", bundle: .module),
                 isPresented: $confirmingDelete, titleVisibility: .visible
             ) {
                 Button(String(localized: "Delete Tag", bundle: .module), role: .destructive) {
@@ -331,22 +290,8 @@ private struct TagEditForm: View {
 
     private var color: Binding<Color> {
         Binding(
-            get: { TagSwatch.color(hex: colorHex) },
-            set: { value in
-                var red: CGFloat = 0
-                var green: CGFloat = 0
-                var blue: CGFloat = 0
-                var alpha: CGFloat = 0
-                guard UIColor(value).getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
-                    error = String(localized: "This color couldn't be read. Choose another color.", bundle: .module)
-                    return
-                }
-                colorHex = String(
-                    format: "#%02X%02X%02X", Int((min(1, max(0, red)) * 255).rounded()),
-                    Int((min(1, max(0, green)) * 255).rounded()), Int((min(1, max(0, blue)) * 255).rounded())
-                )
-            }
-        )
+            get: { RGBColor(tagHex: colorHex)?.color ?? .secondary },
+            set: { colorHex = RGBColor($0.resolve(in: environment)).hex })
     }
 }
 #endif

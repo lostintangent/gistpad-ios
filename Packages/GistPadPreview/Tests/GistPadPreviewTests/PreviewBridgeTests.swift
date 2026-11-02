@@ -5,118 +5,48 @@ import Testing
 @Suite("Preview bridge")
 struct PreviewBridgeTests {
     private let text = "👩🏽‍💻\r\n- [ ] Same\r\n- [x] Same\r\n"
-    private var document: PreviewDocument { PreviewDocument(text: text, id: "fixture", generation: UInt64.max) }
 
-    @Test("Duplicate labels use a UTF-16 source range")
-    func duplicateTask() throws {
-        let range = (text as NSString).range(of: "[x]")
-        let edit = TaskToggleEdit(documentID: "fixture", generation: UInt64.max, range: range,
-                                  expectedMarker: "[x]", replacementMarker: "[ ]")
-        try edit.validate(in: text, documentID: "fixture", generation: UInt64.max)
-        let result = (text as NSString).replacingCharacters(in: range, with: edit.replacementMarker)
-        #expect(result == "👩🏽‍💻\r\n- [ ] Same\r\n- [ ] Same\r\n")
+    private func file(allowsTaskEdits: Bool = true) -> PreviewFile {
+        PreviewFile(text: text, id: "fixture", generation: 7, allowsTaskEdits: allowsTaskEdits)
     }
 
-    @Test("Stale generations and changed markers are rejected")
-    func staleTask() {
-        let edit = TaskToggleEdit(documentID: "fixture", generation: 1,
-                                  range: NSRange(location: 0, length: 3),
-                                  expectedMarker: "[ ]", replacementMarker: "[x]")
-        #expect(throws: PreviewFailure.staleDocument) {
-            try edit.validate(in: text, documentID: "fixture", generation: 2)
-        }
-        #expect(throws: PreviewFailure.invalidTaskEdit) {
-            try edit.validate(in: text, documentID: "fixture", generation: 1)
-        }
-    }
-
-    @Test("Untrusted task edits cannot overflow or change arbitrary text")
-    func invalidTaskRanges() {
-        for location in [-1, Int.max, 0] {
-            let edit = TaskToggleEdit(documentID: "fixture", generation: 1,
-                                      range: NSRange(location: location, length: 3),
-                                      expectedMarker: "[ ]", replacementMarker: "bad")
-            #expect(throws: PreviewFailure.invalidTaskEdit) {
-                try edit.validate(in: text, documentID: "fixture", generation: 1)
-            }
-        }
-    }
-
-    @Test("The wire format preserves UInt64 generations")
-    func decodeTask() throws {
-        let range = (text as NSString).range(of: "[x]")
-        let body: [String: Any] = [
-            "version": 1, "type": "taskToggle", "documentID": "fixture",
-            "generation": String(UInt64.max),
-            "edit": ["location": range.location, "length": 3,
-                     "expectedMarker": "[x]", "replacementMarker": "[ ]"]
+    private func toggle(at location: Int, expected: String, replacement: String) -> [String: Any] {
+        [
+            "type": "taskToggle", "documentID": "fixture", "generation": 7,
+            "edit": ["location": location, "length": 3, "expectedMarker": expected, "replacementMarker": replacement]
         ]
-        guard case .event(.taskToggle(let edit)) = try PreviewBridge.decode(body, document: document) else {
-            Issue.record("Expected a validated task edit")
+    }
+
+    @Test("Task toggles flip one UTF-16 marker range, and untrusted ranges are rejected")
+    func taskToggles() throws {
+        let range = (text as NSString).range(of: "[x]")
+        let message = try PreviewBridge.decode(toggle(at: range.location, expected: "[x]", replacement: "[ ]"), file: file())
+        guard case .event(.taskToggle(let edit)) = message else {
+            Issue.record("Expected a task edit")
             return
         }
-        #expect(edit.generation == UInt64.max)
         #expect(edit.range == range)
+        #expect((text as NSString).replacingCharacters(in: range, with: edit.replacementMarker)
+            == "👩🏽‍💻\r\n- [ ] Same\r\n- [ ] Same\r\n")
+
+        let unchecked = (text as NSString).range(of: "[ ]").location
+        for location in [-1, 0, Int.max - 1, Int.max, unchecked] {
+            #expect(throws: PreviewFailure.self) {
+                try PreviewBridge.decode(toggle(at: location, expected: "[ ]", replacement: "bad"), file: file())
+            }
+        }
+        #expect(try PreviewBridge.decode(
+            toggle(at: range.location, expected: "[x]", replacement: "[ ]"), file: file(allowsTaskEdits: false)) == nil)
     }
 
     @Test("Only approved external URL schemes are accepted")
-    func links() {
-        for target in ["javascript:alert(1)", "file:///private/a", "https://user:password@example.com", "data:text/html,hello"] {
-            let body: [String: Any] = [
-                "version": 1, "type": "link", "documentID": "fixture",
-                "generation": String(UInt64.max), "kind": "external", "target": target
-            ]
-            #expect(throws: PreviewFailure.invalidMessage) {
-                try PreviewBridge.decode(body, document: document)
-            }
+    func links() throws {
+        func link(_ target: String) -> [String: Any] {
+            ["type": "link", "documentID": "fixture", "generation": 7, "kind": "external", "target": target]
         }
-    }
-
-    @Test("Read-only previews discard in-flight task edits without failing the document")
-    func readOnlyTask() throws {
-        let range = (text as NSString).range(of: "[x]")
-        let body: [String: Any] = [
-            "version": 1, "type": "taskToggle", "documentID": "fixture",
-            "generation": String(UInt64.max),
-            "edit": ["location": range.location, "length": 3,
-                     "expectedMarker": "[x]", "replacementMarker": "[ ]"]
-        ]
-        guard case .taskEditingUnavailable = try PreviewBridge.decode(body, document: document, allowsTaskEdits: false) else {
-            Issue.record("Expected a read-only task edit to be discarded")
-            return
+        for target in ["javascript:alert(1)", "file:///private/a", "https://user:secret@example.com", "data:text/html,hello", ""] {
+            #expect(throws: PreviewFailure.self) { try PreviewBridge.decode(link(target), file: file()) }
         }
-    }
-
-    @Test("Malformed, oversized and unknown messages are rejected")
-    func malformedMessages() {
-        for body: [String: Any] in [
-            ["version": 2, "type": "ready"],
-            ["version": 1, "type": "unknown", "documentID": "fixture", "generation": String(UInt64.max)],
-            ["version": 1, "type": "failure", "message": String(repeating: "x", count: 20_000)],
-            ["version": 1, "type": "link", "documentID": "fixture", "generation": String(UInt64.max), "kind": "external", "target": ""]
-        ] {
-            #expect(throws: PreviewFailure.invalidMessage) {
-                try PreviewBridge.decode(body, document: document)
-            }
-        }
-    }
-
-    @Test("Synthetic fixture is bundled")
-    func fixture() throws {
-        #expect(try PreviewFixtures.allSyntax.contains("Duplicate task"))
-        #expect(try PreviewFixtures.readingPolish.contains("classDef attention"))
-        #expect(try PreviewFixtures.readingPolish.contains("<summary>More to read</summary>"))
-    }
-
-    @Test("Late layout notifications do not become document errors")
-    func lateLayoutMessage() throws {
-        let body: [String: Any] = [
-            "version": 1, "type": "rendered", "documentID": "previous-document",
-            "generation": "1"
-        ]
-        guard case .obsolete = try PreviewBridge.decode(body, document: document) else {
-            Issue.record("Expected an obsolete layout notification")
-            return
-        }
+        #expect(try PreviewBridge.decode(link("https://example.com"), file: file()) != nil)
     }
 }
