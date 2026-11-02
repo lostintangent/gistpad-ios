@@ -19,7 +19,6 @@ public struct LauncherWidgetView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.locale) private var locale
     @Environment(\.calendar) private var calendar
-    @ScaledMetric(relativeTo: .title3) private var newGistSize = 26
 
     public init(snapshot: LibrarySnapshot?, date: Date, state: LauncherWidgetState) {
         self.snapshot = snapshot
@@ -49,7 +48,7 @@ public struct LauncherWidgetView: View {
                 dateBlock
                 Spacer(minLength: 0)
                 // The pencil sits optically on the margins, past its larger tap area.
-                newGist.offset(x: 4 + newGistInset, y: -4 - newGistInset)
+                newGist.offset(x: newGistPad + 3, y: -newGistPad - 3)
             }
             Spacer(minLength: 0)
             if let gist = recents.first {
@@ -83,7 +82,7 @@ public struct LauncherWidgetView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .overlay(alignment: Alignment(horizontal: .leading, vertical: .lastRowBaseline)) {
-            newGist.offset(x: -3 - newGistInset)
+            newGist.offset(x: -newGistPad - 2)
         }
     }
 
@@ -128,7 +127,8 @@ public struct LauncherWidgetView: View {
         .accessibilityLabel(Text("Today, \(date, format: .dateTime.weekday(.wide).month(.wide).day())"))
     }
 
-    private var newGistInset: CGFloat { max((44 - newGistSize) / 2, 0) }
+    /// A fixed pad, not a scaled frame, since widgets stop growing text before Dynamic Type does.
+    private let newGistPad: CGFloat = 10
 
     @ViewBuilder
     private var newGist: some View {
@@ -140,8 +140,7 @@ public struct LauncherWidgetView: View {
                     .widgetAccentable()
                     // The square's bottom edge hangs just under halfway from the symbol's baseline to its bounds.
                     .alignmentGuide(.lastRowBaseline) { $0[.lastTextBaseline] + ($0[.bottom] - $0[.lastTextBaseline]) * 0.45 }
-                    .frame(width: newGistSize, height: newGistSize)
-                    .padding(newGistInset)
+                    .padding(newGistPad)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
