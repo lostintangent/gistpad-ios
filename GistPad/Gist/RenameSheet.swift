@@ -94,22 +94,3 @@ struct TagTarget: Identifiable {
   let selected: Set<String>
   let canEdit: Bool
 }
-
-struct DeleteTarget: Identifiable {
-  let id: String
-  let accountID: UUID
-  let title: String
-  var localDraft: Draft? = nil
-  // Daily notes delete one day's file; nil deletes the whole gist.
-  var filename: String? = nil
-
-  var action: Change {
-    if let localDraft {
-      .discardLocalCopy(draftID: localDraft.id, generation: localDraft.generation)
-    } else if let filename {
-      .deleteFile(gistID: id, filename: filename)
-    } else {
-      .delete(gistID: id)
-    }
-  }
-}

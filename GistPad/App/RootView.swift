@@ -342,8 +342,9 @@ struct RootView: View {
       setArchived(!gist.isArchived, gistID: id, accountID: account.id)
     }
     actions.delete = { rowID in
-      guard let target = library.libraryDeletionTarget(for: rowID) else { return }
-      library.run(target.action, accountID: target.accountID)
+      guard let accountID = library.account?.id, let change = library.deletion(forRow: rowID)
+      else { return }
+      library.run(change, accountID: accountID)
     }
     return actions
   }
@@ -541,21 +542,15 @@ struct RootView: View {
 
   /// What Delete on a file's screen removes, the same as its Library row: a copy that's only on
   /// this iPhone, one day of the daily notes gist, or the whole gist.
-  private func deletionTarget(_ session: FileSession) -> DeleteTarget? {
-    let accountID = session.draft.accountID
-    let title = session.details.title
+  private func deletion(_ session: FileSession) -> Change? {
     if session.file.isRecovery || session.draft.gistID == nil {
-      return .init(
-        id: session.draft.id.uuidString, accountID: accountID, title: title,
-        localDraft: session.draft)
+      return .discardLocalCopy(draftID: session.draft.id, generation: session.draft.generation)
     }
     guard let gist = session.file.gist, session.details.access.canEdit else { return nil }
     if gist.isDailyNote {
-      return .init(
-        id: gist.id, accountID: accountID, title: GistFile.displayName(session.file.filename),
-        filename: session.file.filename)
+      return .deleteFile(gistID: gist.id, filename: session.file.filename)
     }
-    return .init(id: gist.id, accountID: accountID, title: title)
+    return .delete(gistID: gist.id)
   }
 
   private func gistActions(_ session: FileSession) -> GistActions {
@@ -630,11 +625,11 @@ struct RootView: View {
     if session.details.access.canEdit, !session.file.isRecovery {
       actions.rename = { rename(.title, session: session) }
     }
-    if deletionTarget(session) != nil {
+    if deletion(session) != nil {
       actions.delete = {
         // Read at confirmation, so a file that published meanwhile deletes from GitHub.
-        guard let target = deletionTarget(session) else { return }
-        library.run(target.action, accountID: target.accountID)
+        guard let change = deletion(session) else { return }
+        library.run(change, accountID: session.draft.accountID)
       }
     }
     actions.find = {

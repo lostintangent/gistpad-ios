@@ -291,17 +291,16 @@ struct LibraryTests {
     let shareURL = try #require(library.loadedFile.map(library.details(for:))?.shareURL)
     #expect(shareURL.absoluteString.hasPrefix("https://gistpad.dev/#/share/\(gistID)/"))
     #expect(library.state.selectedID == gistID)
-    #expect(library.libraryDeletionTarget(for: created.id.uuidString)?.id == gistID)
+    #expect(library.deletion(forRow: created.id.uuidString) == .delete(gistID: gistID))
     for id in ["gone", "unknown", "shared"] {
-      #expect(library.libraryDeletionTarget(for: id) == nil)
+      #expect(library.deletion(forRow: id) == nil)
     }
 
     await library.open(.draft(id: orphan.id))
     #expect(library.loadedFile?.isRecovery == true)
     let owned = [orphanRow.id, local.id.uuidString, "a", gistID]
     for rowID in owned {
-      let target = try #require(library.libraryDeletionTarget(for: rowID))
-      _ = try await library.perform(target.action)
+      _ = try await library.perform(try #require(library.deletion(forRow: rowID)))
     }
     #expect(library.state.selectedID != orphanRow.id)
     await library.refresh()
@@ -326,14 +325,14 @@ struct LibraryTests {
     _ = try await library.persist(
       draftID: draft.id, accountID: draft.accountID, text: "An accepted edit", generation: 1)
     _ = try await library.publish(draftID: draft.id, accountID: draft.accountID)
-    let target = try #require(library.libraryDeletionTarget(for: "a"))
-    _ = try await library.perform(.delete(gistID: target.id))
+    #expect(library.deletion(forRow: "a") == .delete(gistID: "a"))
+    _ = try await library.perform(.delete(gistID: "a"))
     #expect(fixture.server.requests.filter { $0.hasPrefix("DELETE") } == ["DELETE /gists/a"])
     #expect(fixture.server.gists.isEmpty)
     #expect(library.visibleFile?.filename == DailyNote.filename())
     #expect(library.loadedFile?.editingRequestID == nil)
     #expect(library.state.selectedID == library.loadedFile?.rowID)
-    #expect(library.libraryDeletionTarget(for: "a") == nil)
+    #expect(library.deletion(forRow: "a") == nil)
     #expect(library.state.gists.allSatisfy { $0.isDailyNote })
     #expect(try await fixture.store.drafts(accountID: fixture.account.id).allSatisfy {
       $0.gistID != "a"
@@ -560,15 +559,10 @@ struct LibraryTests {
     await library.open(.gist(id: "daily", filename: "2026-10-24.md"))
     #expect(library.state.selectedID == "daily/2026-10-24.md")
     #expect(library.loadedFile?.rowID == "daily/2026-10-24.md")
-    let deletion = try #require(library.libraryDeletionTarget(for: "daily/2026-10-24.md"))
-    #expect(deletion.id == "daily")
-    #expect(deletion.title == GistFile.displayName("2026-10-24.md"))
-    if case .deleteFile(let gistID, let filename) = deletion.action {
-      #expect(gistID == "daily")
-      #expect(filename == "2026-10-24.md")
-    } else {
-      Issue.record("A Daily row deletes only its own file.")
-    }
+    #expect(
+      library.deletion(forRow: "daily/2026-10-24.md")
+        == .deleteFile(gistID: "daily", filename: "2026-10-24.md"),
+      "A Daily row deletes only its own file.")
   }
 
   @Test func deletingADailyNoteRemovesOnlyItsFileOrTheGistWithItsLastFile() async throws {
@@ -582,14 +576,12 @@ struct LibraryTests {
     let library = fixture.library
     await library.start()
     #expect(library.state.dailyNoteCount == 2)
-    let beta = try #require(library.libraryDeletionTarget(for: "daily/2026-10-24.md"))
-    _ = try await library.perform(beta.action)
+    _ = try await library.perform(try #require(library.deletion(forRow: "daily/2026-10-24.md")))
     #expect(library.state.dailyNoteCount == 1)
     #expect(library.state.gists.map(\.id) == ["daily/2026-10-23.md"])
     #expect(fixture.remote("daily", "2026-10-24.md") == nil)
     #expect(fixture.remote("daily", "2026-10-23.md") == "The alpha day")
-    let alpha = try #require(library.libraryDeletionTarget(for: "daily/2026-10-23.md"))
-    _ = try await library.perform(alpha.action)
+    _ = try await library.perform(try #require(library.deletion(forRow: "daily/2026-10-23.md")))
     #expect(fixture.server.gists.isEmpty)
     #expect(!library.state.gists.contains { $0.gistID == "daily" })
   }
@@ -621,10 +613,9 @@ struct LibraryTests {
     let settled = try await library.settledDeletionAction(
       .discardLocalCopy(draftID: earlier.id, generation: earlier.generation),
       confirmedWithoutGist: true, accountID: accountID)
-    guard case .deleteFile(gistID, "2026-10-23.md") = settled else {
-      Issue.record("A day that reached GitHub after its deletion was confirmed deletes only its file.")
-      return
-    }
+    try #require(
+      settled == .deleteFile(gistID: gistID, filename: "2026-10-23.md"),
+      "A day that reached GitHub after its deletion was confirmed deletes only its file.")
     _ = try await library.perform(settled)
     #expect(fixture.remote(gistID, "2026-10-23.md") == nil)
     #expect(fixture.remote(gistID, today.filename) == "- [ ] Today's task")

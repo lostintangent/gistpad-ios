@@ -2,7 +2,7 @@ import Foundation
 import GistPadSync
 
 /// A change to the library, applied in order on GitHub and this iPhone.
-enum Change: Sendable {
+enum Change: Equatable, Sendable {
   case signOut
   case preference(Preferences.Change)
   case saveTags([Preferences.Change])

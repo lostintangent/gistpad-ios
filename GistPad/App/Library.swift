@@ -143,27 +143,23 @@ final class Library {
     }
   }
 
-  func libraryDeletionTarget(for rowID: String) -> DeleteTarget? {
-    guard let account, pendingAccount == nil else { return nil }
+  /// What deleting a row removes: a copy that's only on this iPhone, one day of the daily notes
+  /// gist, or the whole gist. Rows the account doesn't own can't be deleted.
+  func deletion(forRow rowID: String) -> Change? {
+    guard account != nil, pendingAccount == nil else { return nil }
     let target = rowSelection(for: rowID)
-    let draftID = target?.draftID
-    let draft = draftID.flatMap { id in localDrafts.first { $0.id == id } }
+    let draft = target?.draftID.flatMap { id in localDrafts.first { $0.id == id } }
     if let draft,
       draft.gistID.flatMap({ gistID in cachedLibrary?.gists.contains(where: { $0.id == gistID }) }) != true
     {
-      return .init(
-        id: draft.id.uuidString, accountID: account.id,
-        title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
-        localDraft: draft)
+      return .discardLocalCopy(draftID: draft.id, generation: draft.generation)
     }
     let gistID = target?.gistID ?? draft?.gistID ?? rowID
     guard let gist = cachedLibrary?.owned.first(where: { $0.id == gistID }) else { return nil }
     if gist.isDailyNote, let filename = target?.filename {
-      return .init(
-        id: gist.id, accountID: account.id,
-        title: GistFile.displayName(filename), filename: filename)
+      return .deleteFile(gistID: gist.id, filename: filename)
     }
-    return .init(id: gist.id, accountID: account.id, title: gist.displayName)
+    return .delete(gistID: gist.id)
   }
 
   func gistID(forRow rowID: String) -> String? {
