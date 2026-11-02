@@ -1303,7 +1303,6 @@ struct NotebookModelTests {
     #expect(model.loadedDocument?.text == "Original text")
     #expect(model.library.query == "Original")
     #expect(model.library.selectedTagIDs == ["ideas"])
-    #expect(model.library.visibleSelectedNoteID == nil)
     #expect(model.library.selectedNoteID == "a")
   }
 
@@ -1600,14 +1599,6 @@ struct NotebookModelTests {
     model.library.query = "\"needle phrase\" tag:Ideas"
     await model.search()
     #expect(model.library.matchingNotes.map(\.id) == ["a"])
-    guard case .results(_, let coverage) = model.library.searchState else {
-      Issue.record("Full-text results must carry honest cache coverage.")
-      return
-    }
-    #expect(
-      coverage.totalDocuments == 3,
-      "All-collection coverage includes the day staged during startup.")
-    #expect(coverage.documentsWithCachedContent == 3)
     model.library.query = "tag:Missing"
     await model.search()
     guard case .failed(let message) = model.library.searchState else {
@@ -1629,8 +1620,7 @@ struct NotebookModelTests {
       ])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.search()
-    let row = try #require(model.library.matchingNotes.first)
+    let row = try #require(model.library.unfilteredNotes(in: .dailyNotes).first)
     #expect(row.id == "daily/\(filename)")
     #expect(row.dailyDate == DailyNotesIndex.parseDateFilename(filename))
     #expect(model.library.dailyNoteCount == 1)
@@ -1706,13 +1696,6 @@ struct NotebookModelTests {
       ? ["a", "archive", "starred", "daily/2026-10-23.md", "daily/2026-10-24.md"]
       : ["a", "archive", "starred"]))
     #expect(model.library.matchingNotes.first?.id == "a")
-    guard case .results(_, let coverage) = model.library.searchState else {
-      Issue.record("The unified search must report its actual cache coverage.")
-      return
-    }
-    #expect(coverage.totalDocuments == 5)
-    #expect(coverage.documentsWithCachedContent == (cachedContent ? 5 : 0))
-    #expect(coverage.isComplete == cachedContent)
     model.library.query = "does not match anything"
     await model.search()
     #expect(model.library.matchingNotes.isEmpty)
@@ -2043,6 +2026,9 @@ struct NotebookNavigationHostTests {
         }, named: "initial-source-\(id).png", as: .png)
       if !checkedWidthChange {
         let compactWidth = host.window.frame.width
+        // The Duo's inner display is wide enough for Split even at a compact size class.
+        let compactSegments = try #require(
+          host.descendants.compactMap { $0 as? UISegmentedControl }.last).numberOfSegments
         host.window.traitOverrides.horizontalSizeClass = .regular
         host.window.frame.size.width = 1180
         try await host.waitUntil {
@@ -2054,18 +2040,17 @@ struct NotebookNavigationHostTests {
         host.window.traitOverrides.horizontalSizeClass = .compact
         host.window.frame.size.width = compactWidth
         try await host.waitUntil {
-          host.descendants.compactMap { $0 as? UISegmentedControl }.last?.numberOfSegments == 2
+          host.descendants.compactMap { $0 as? UISegmentedControl }.last?.numberOfSegments == compactSegments
         }
         host.layout.select(startsInPreview ? .reading : .source)
         checkedWidthChange = true
       }
-      for mode in [1, 0, 1, 0] {
+      for showsPreview in [true, false, true, false] {
         let picker = try #require(host.descendants.compactMap { $0 as? UISegmentedControl }.last)
-        try #require(picker.numberOfSegments == 2)
-        picker.selectedSegmentIndex = mode
+        picker.selectedSegmentIndex = showsPreview ? picker.numberOfSegments - 1 : 0
         picker.sendActions(for: .valueChanged)
         try await Task.sleep(for: .milliseconds(450))
-        if mode == 1 {
+        if showsPreview {
           let preview = try #require(host.descendants.compactMap { $0 as? WKWebView }.first)
           let deadline = ContinuousClock.now.advanced(by: .seconds(5))
           var rendered = false
@@ -2132,9 +2117,11 @@ struct NotebookNavigationHostTests {
     let blank = try #require(host.model.loadedDocument?.draft)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     try await host.waitForKeyboard(visible: true)
-    #expect(host.model.localDrafts.filter {
-      $0.description != GistConventions.dailyNotesDescription
-    }.map(\.id) == [blank.id])
+    try await host.waitUntil {
+      host.model.localDrafts.filter {
+        $0.description != GistConventions.dailyNotesDescription
+      }.map(\.id) == [blank.id]
+    }
     host.routes.submit(.library)
     try await host.waitUntil {
       host.routes.pending == nil && host.isLibraryVisible
@@ -2274,7 +2261,7 @@ struct NotebookNavigationHostTests {
         && host.model.localDrafts.first(where: { $0.gistID == "a" })?.state == .savedToGitHub
     }
     try await host.waitUntil { host.isLibraryVisible }
-    #expect(await provider.publicationReasons == [.autosave])
+    #expect(await provider.publicationReasons == [.leaving])
     #expect(host.model.loadedDocument?.gist?.id == "a")
     #expect(host.model.library.selectedNoteID == nil)
     #expect(!editor.isFirstResponder)
@@ -2291,7 +2278,7 @@ struct NotebookNavigationHostTests {
     #expect(editor.selectedRange == selection)
   }
 
-  @Test func returningToLibraryWithAutosaveOffKeepsLocalChangesAndTheRetainedEditor() async throws {
+  @Test func returningToLibraryWithAutosaveOffStillPublishesAndKeepsTheRetainedEditor() async throws {
     let provider = StubNotebookProvider(
       account: fixtureAccount,
       gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
@@ -2305,11 +2292,13 @@ struct NotebookNavigationHostTests {
     editor.insertText("Local ")
     try await host.waitUntil { host.model.localDrafts.first(where: { $0.gistID == "a" })?.generation == 1 }
     host.routes.submit(.library)
-    try await host.waitUntil { host.routes.pending == nil && host.isLibraryVisible }
+    try await host.waitUntil {
+      host.routes.pending == nil && host.isLibraryVisible
+        && host.model.localDrafts.first(where: { $0.gistID == "a" })?.state == .savedToGitHub
+    }
     #expect(host.model.library.selectedNoteID == nil)
     #expect(host.model.localDrafts.first(where: { $0.gistID == "a" })?.text == "Local Current source")
-    #expect(host.model.localDrafts.first(where: { $0.gistID == "a" })?.state == .savedLocally)
-    #expect(await provider.publicationReasons.isEmpty)
+    #expect(await provider.publicationReasons == [.leaving])
     #expect(!editor.isFirstResponder)
     let selection = editor.selectedRange
     host.routes.submit(.note(gistID: "a", filename: nil, shared: false))
@@ -2318,7 +2307,7 @@ struct NotebookNavigationHostTests {
         && !host.isLibraryVisible
     }
     #expect(editor.selectedRange == selection)
-    #expect(await provider.publicationReasons.isEmpty)
+    #expect(await provider.publicationReasons == [.leaving])
   }
 
   @Test(arguments: [false, true])
@@ -2590,7 +2579,7 @@ struct NotebookNavigationHostTests {
     try await host.waitUntil(timeout: .seconds(1)) {
       host.model.localDrafts.first(where: { $0.gistID == "a" })?.state == .savedToGitHub
     }
-    #expect(await provider.publicationReasons == [.autosave])
+    #expect(await provider.publicationReasons == [.leaving])
     #expect(host.model.library.selectedNoteID == "b")
     #expect(host.model.openingTitle == "Second note")
     #expect(host.model.presentedDocument == nil)

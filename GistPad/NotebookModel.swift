@@ -598,7 +598,7 @@ final class NotebookModel {
   private func opening(gistID: String, rowID: String?) -> NotebookOpeningDocument {
     let id = rowID ?? gistID
     let results: [LibraryNote]
-    if case .results(let notes, _) = library.searchState { results = notes } else { results = [] }
+    if case .results(let notes) = library.searchState { results = notes } else { results = [] }
     return .init(
       rowID: id,
       title: (results + library.snapshot.notes).first(where: { $0.id == id })?.title

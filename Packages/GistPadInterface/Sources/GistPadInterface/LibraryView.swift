@@ -77,8 +77,8 @@ extension View {
 @MainActor
 public struct LibraryActions {
     public var refresh: () async -> Void
-    public var create: () -> Void
-    public var today: () -> Void
+    public var create: @MainActor () -> Void
+    public var today: @MainActor () -> Void
     public var select: (String) -> Void = { _ in }
     public var reconnect: () -> Void = {}
     public var recoverStatus: () -> Void = {}
@@ -90,8 +90,8 @@ public struct LibraryActions {
 
     public init(
         refresh: @escaping () async -> Void,
-        create: @escaping () -> Void,
-        today: @escaping () -> Void
+        create: @escaping @MainActor () -> Void,
+        today: @escaping @MainActor () -> Void
     ) {
         self.refresh = refresh
         self.create = create
