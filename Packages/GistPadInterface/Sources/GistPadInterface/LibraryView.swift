@@ -642,7 +642,6 @@ public struct LibraryView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .close) { showingTags = false }
-                        .accessibilityLabel(Text("Close", bundle: .module))
                         .accessibilityIdentifier("library-tag-filter-close")
                 }
             }

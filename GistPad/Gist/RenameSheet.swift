@@ -48,11 +48,15 @@ struct RenameSheet: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }.disabled(isSaving)
+          Button(role: .cancel) { dismiss() }.disabled(isSaving)
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Save", action: commit)
-            .disabled(isSaving || value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          if isSaving {
+            ProgressView()
+          } else {
+            Button(role: .confirm, action: commit)
+              .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          }
         }
       }
       .disabled(isSaving)

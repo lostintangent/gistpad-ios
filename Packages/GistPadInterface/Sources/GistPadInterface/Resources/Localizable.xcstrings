@@ -288,9 +288,6 @@
     "Clear tag filters" : {
 
     },
-    "Close" : {
-
-    },
     "Collapsed" : {
 
     },
@@ -385,9 +382,6 @@
 
     },
     "Reconnect GitHub" : {
-
-    },
-    "Save Tag" : {
 
     },
     "Saving tags" : {
@@ -493,9 +487,6 @@
 
     },
     "%lld selected" : {
-
-    },
-    "Save" : {
 
     }
   },

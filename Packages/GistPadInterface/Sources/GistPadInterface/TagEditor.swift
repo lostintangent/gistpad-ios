@@ -149,10 +149,8 @@ public struct TagEditor: View {
                 Button(role: .cancel) {
                     if draft.edits.isEmpty { dismiss() } else { confirmingDiscard = true }
                 }
-                .accessibilityLabel(Text("Close", bundle: .module))
             } else {
                 Button(role: .close) { dismiss() }
-                    .accessibilityLabel(Text("Close", bundle: .module))
             }
         }
         DefaultToolbarItem(kind: .search, placement: .bottomBar)
@@ -170,7 +168,6 @@ public struct TagEditor: View {
                 ProgressView(String(localized: "Saving tags", bundle: .module))
             } else if save != nil {
                 Button(role: .confirm, action: commit)
-                    .accessibilityLabel(Text("Save", bundle: .module))
                     .accessibilityIdentifier("tag-save")
             }
         }
@@ -259,7 +256,6 @@ private struct TagEditForm: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .cancel) { dismiss() }
-                        .accessibilityLabel(Text("Cancel", bundle: .module))
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {
@@ -270,7 +266,7 @@ private struct TagEditForm: View {
                             self.error = error.localizedDescription
                         }
                     }
-                    .accessibilityLabel(Text("Save Tag", bundle: .module))
+                    .accessibilityIdentifier("tag-form-save")
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }

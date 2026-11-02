@@ -128,7 +128,7 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("the tag form") { name.isHittable }
     name.tap()
     name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 8) + "Big Ideas")
-    app.buttons["Save Tag"].tap()
+    app.buttons["tag-form-save"].tap()
     try waitUntil("the renamed tag") { ideas.label.contains("Big Ideas") }
 
     let design = app.buttons["tag-choice-design"]

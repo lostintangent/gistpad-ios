@@ -60,7 +60,6 @@ struct AddToTodaySheet: View {
               .accessibilityLabel("Adding to Today")
           } else {
             Button(role: .confirm, action: add)
-              .accessibilityLabel("Add")
               .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
               .accessibilityIdentifier("today-capture-add")
           }
