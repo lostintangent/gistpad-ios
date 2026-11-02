@@ -72,6 +72,17 @@ public enum PreferenceError: Error, Equatable, Sendable {
     case operationInProgress
 }
 
+extension PreferenceError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .unknownTag: String(localized: "This tag no longer exists.")
+        case .operationInProgress: String(localized: "Another change is still saving. Try again in a moment.")
+        case .invalidShape: String(localized: "GistPad can't safely make this change. Make it on gistpad.dev.")
+        case .invalidIdentifier: String(localized: "This change couldn't be saved. Try again.")
+        }
+    }
+}
+
 public enum BooleanPreference: String, Sendable {
     case isAutoSaveEnabled, showDiffs, showFrontmatter, showLineNumbers, isSpellcheckEnabled
     case pasteImagesAsHtml, showArchivedGists, showStarredGists, showInlineComments

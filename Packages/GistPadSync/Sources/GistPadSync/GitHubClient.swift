@@ -12,6 +12,23 @@ public enum GitHubClientError: Error, Equatable, Sendable {
     case invalidUTF8
 }
 
+extension GitHubClientError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .http(401, _): String(localized: "Reconnect GitHub to continue. Your gists on this iPhone are unchanged.")
+        case .http(403, _), .http(429, _):
+            String(localized: "GitHub declined the request. Try again later or reconnect GitHub.")
+        case .http(404, _): String(localized: "This gist is no longer available to this account.")
+        case .incompleteGist:
+            String(localized: "GitHub returned an incomplete gist. It can't be edited safely.")
+        case .missingFile: String(localized: "This file is no longer in the gist.")
+        case .fileTooLarge: String(localized: "This file is too large to open.")
+        case .invalidIdentifier, .invalidResponse, .unsafeURL, .invalidUTF8, .http:
+            String(localized: "GitHub couldn't complete the request. Try again.")
+        }
+    }
+}
+
 public struct RemoteFile: Sendable {
     public let gist: Gist
     public let content: String?

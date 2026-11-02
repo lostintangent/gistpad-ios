@@ -6,6 +6,12 @@ public enum DocumentLinkError: Error, Equatable, Sendable {
     case notPublished
 }
 
+extension DocumentLinkError: LocalizedError {
+    public var errorDescription: String? {
+        String(localized: "Publish this gist to get a link.")
+    }
+}
+
 public struct DocumentLinks: Equatable, Sendable {
     public let shareURL: URL
     public let githubURL: URL

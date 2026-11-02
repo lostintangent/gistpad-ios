@@ -13,6 +13,21 @@ public enum AccountError: Error, Equatable, Sendable {
     case keychain(OSStatus)
 }
 
+extension AccountError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .invalidConfiguration:
+            String(localized: "GitHub sign-in isn't configured correctly in this build.")
+        case .signInInProgress: String(localized: "Sign-in is already in progress.")
+        case .signedOut, .accountChanged, .reconnectGitHub:
+            String(localized: "Reconnect GitHub to continue. Your gists on this iPhone are unchanged.")
+        case .credentialPersistence:
+            String(localized: "Your sign-in couldn't be saved on this iPhone. Sign in again.")
+        case .keychain: String(localized: "GistPad couldn't use your sign-in on this iPhone. Sign in again.")
+        }
+    }
+}
+
 public struct Account: Codable, Equatable, Sendable, Identifiable {
     public let id: UUID
     public let login: String

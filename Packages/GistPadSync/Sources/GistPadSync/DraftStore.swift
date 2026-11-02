@@ -76,6 +76,22 @@ public enum DraftError: Error, Equatable, Sendable {
     case remoteDidNotAcknowledge
 }
 
+extension DraftError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .notFound: String(localized: "This file is no longer on this iPhone.")
+        case .accountMismatch: String(localized: "This gist belongs to another GitHub account.")
+        case .staleGeneration, .invalidEdit:
+            String(localized: "This file changed. Review the latest version first.")
+        case .publishInProgress: String(localized: "Wait for this gist to finish publishing.")
+        case .unresolvedConflict:
+            String(localized: "This file also changed on GitHub. Review both versions first.")
+        case .readOnly: String(localized: "Only its owner can edit this gist.")
+        case .remoteDidNotAcknowledge: String(localized: "GitHub didn't confirm the change. Try again.")
+        }
+    }
+}
+
 /// One replacement in a draft's text from outside the editor, like a widget's task check or Add to
 /// Today. It lands only while the draft is still at `expectedGeneration` and `range` still holds
 /// `expectedText`, so a stale or repeated edit can't change newer text.
@@ -122,6 +138,17 @@ public enum DraftMetadataError: Error, Equatable, Sendable {
     case filenameInUse
     case staleMetadata
     case publicationPending
+}
+
+extension DraftMetadataError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .invalidFilename: String(localized: "Enter a filename without slashes.")
+        case .filenameInUse: String(localized: "This gist already has a file with that name.")
+        case .staleMetadata: String(localized: "This file changed. Review the latest version first.")
+        case .publicationPending: String(localized: "You can change this after the gist publishes.")
+        }
+    }
 }
 
 @Model
