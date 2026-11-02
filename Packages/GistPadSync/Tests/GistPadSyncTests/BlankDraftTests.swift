@@ -2,9 +2,50 @@ import Foundation
 import Testing
 @testable import GistPadSync
 
-/// A new gist you never titled or typed in disappears when you leave it. Anything you touched stays.
+/// A new gist you never titled or typed in, or a day you opened and never typed in, disappears when
+/// you leave it. Anything you touched stays.
 @Suite struct BlankDraftTests {
     private let account = SyncFixture.account
+
+    enum DayStart: CaseIterable { case firstDay, heading, template }
+
+    @Test(arguments: DayStart.allCases)
+    func anUntouchedDayIsDiscardedButItsGistStays(_ start: DayStart) async throws {
+        let sync = try SyncFixture()
+        var files = ["2026-10-23.md": "Keep yesterday."]
+        if start == .template { files["template.md"] = "# {{date}}\n\n- [ ] Plan\n" }
+        let daily = start == .firstDay
+            ? nil : sync.server.addGist(description: DailyNote.gistDescription, files: files)
+        // The cache holds the daily gist as a publish leaves it, with its revision.
+        try await sync.store.cacheLibrary(
+            owned: [daily].compactMap { $0 }, starred: [], preferences: .init(metadata: [:]),
+            accountID: account)
+        let today = DailyNote.Day(
+            date: try Date.ISO8601FormatStyle().parse("2026-10-24T12:00:00Z"), timeZone: .gmt)
+
+        let untouched = try await sync.dailyNotes.stageToday(target: today).draft
+        #expect(untouched.text.hasPrefix("# 2026-10-24\n\n"))
+        #expect(untouched.isDiscardableBlank)
+        #expect(!untouched.hasUnpublishedEdits)
+        #expect(try await sync.store.discardBlankDraft(
+            id: untouched.id, accountID: account, expectedGeneration: untouched.generation))
+        #expect(try await sync.store.drafts(accountID: account).isEmpty)
+        #expect(sync.server.gists.map(\.id) == [daily?.id].compactMap { $0 })
+        #expect(sync.remote(daily?.id ?? "", today.filename) == nil)
+
+        // Typing, even the same text, keeps the day, and so does publishing it.
+        let staged = try await sync.dailyNotes.stageToday(target: today).draft
+        let touched = try await sync.type(staged.text, in: staged)
+        let published = try await sync.publish(touched)
+        for kept in [touched, published] {
+            #expect(!kept.isDiscardableBlank)
+            #expect(try await !sync.store.discardBlankDraft(
+                id: kept.id, accountID: account, expectedGeneration: kept.generation))
+        }
+        let gist = try #require(sync.server.gists.first { $0.isDailyNote })
+        #expect(sync.remote(gist.id, today.filename) == staged.text)
+        #expect(sync.remote(gist.id, "2026-10-23.md") == daily.map { _ in "Keep yesterday." })
+    }
 
     @Test func onlyAStillBlankNewFileIsDiscarded() async throws {
         let url = try temporaryStoreURL()

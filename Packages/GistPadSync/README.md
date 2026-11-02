@@ -58,9 +58,10 @@ is still there.
 
 `baseContent` is GitHub's text the draft started from. `hasUnpublishedEdits`
 compares against it, and a new gist or file has no base until it publishes.
-`isDiscardableBlank` is true only for a new gist that's untitled and
-whitespace-only, which `discardBlankDraft` removes when you leave it. Today's
-note is never discardable, because opening it creates it.
+`isDiscardableBlank` is true for a new gist that's untitled and
+whitespace-only, and for a day that was never typed in (generation 0), whatever
+it started from. Neither has reached GitHub, and `discardBlankDraft` removes
+either when you leave it.
 
 `inspectRemoteChange` and `refreshCleanDraft` take on GitHub's newer text when
 you have no edits, and record a `DraftConflict` when both sides changed.
@@ -97,9 +98,8 @@ your draft if you've started the day, else a new file in the `📆 Daily notes`
 gist from `template.md` with `{{date}}` filled in, else the first day of a new
 daily gist with a `# YYYY-MM-DD` heading. It finds the daily gist in the
 library cache, else on GitHub, and offline the cache's answer stands. Staging
-only reads, but the new day has no base, so the app publishes it whether or not
-you type. An earlier day that never reached GitHub publishes first, so it
-creates the gist today joins.
+only reads, and the new day publishes once you type in it. An earlier day that
+never reached GitHub publishes first, so it creates the gist today joins.
 
 `DailyNote.Day` pins the date and time zone when an action starts. `DailyNote`
 reads a day from the cache and drafts for the widget, and `FileTask` and

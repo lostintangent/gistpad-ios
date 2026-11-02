@@ -82,15 +82,17 @@ struct FileSessionTests {
     let today = try #require(library.loadedFile?.draft)
     #expect(today.filename == DailyNote.Day().filename)
     let session = try #require(library.sessions[today.id])
+    edit(session, to: today.text + "- [ ] Walk")
+    #expect(await session.waitForLocalSave())
     // Today's create goes out and is cut off, so GitHub may or may not have it.
     await library.publishUnsyncedEdits()
     #expect(session.saveState == .failed(.network))
-    #expect(try await fixture.saved(session).attemptedContent == today.text)
+    #expect(try await fixture.saved(session).attemptedContent == session.editor.text)
 
     fixture.restore()
     switch moment {
     case .typing:
-      edit(session, to: today.text + "- [ ] Walk")
+      edit(session, to: session.editor.text + " the dog")
       #expect(await session.waitForLocalSave())
       #expect(session.saveState == .savedLocally)
       library.isForeground = true
@@ -194,8 +196,6 @@ struct FileSessionTests {
   @Test func recoveryEditsStayLocalAndCannotRecreateADeletedGist() async throws {
     let fixture = try await LibraryFixture()
     let staged = try await fixture.stageEdit(gistID: "gone", filename: "README.md", text: "Kept")
-    fixture.lastOpened.save(
-      .init(gistID: "gone", filename: "README.md", draftID: staged.id), accountID: fixture.account.id)
     let session = try await fixture.open(.draft(id: staged.id))
     #expect(session.file.isRecovery)
     edit(session, to: "A recoverable local edit")
