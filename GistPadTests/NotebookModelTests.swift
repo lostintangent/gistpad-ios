@@ -2171,11 +2171,12 @@ private struct NavigationHost {
     return view.convert(view.keyboardLayoutGuide.layoutFrame, to: window)
   }
 
-  func waitForKeyboard(visible: Bool) async throws {
+  func waitForKeyboard(visible: Bool, resigning: Bool = false) async throws {
     let deadline = ContinuousClock.now.advanced(by: .seconds(5))
     var previous: CGRect?
     var stableSince = ContinuousClock.now
     while ContinuousClock.now < deadline {
+      if resigning { window.endEditing(true) }
       window.rootViewController?.view.layoutIfNeeded()
       let frame = keyboardFrame
       let matches = visible
@@ -2241,10 +2242,10 @@ private struct NavigationHost {
   }
 
   func close() async {
-    window.endEditing(true)
     window.rootViewController?.dismiss(animated: false)
+    // A closing sheet hands focus back to the note it came from, a beat after it's gone.
     do {
-      try await waitForKeyboard(visible: false)
+      try await waitForKeyboard(visible: false, resigning: true)
     } catch {
       Issue.record(error, "Navigation host teardown did not finish dismissing its keyboard.")
     }
