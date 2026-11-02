@@ -27,6 +27,9 @@
         + Another bullet
         - [ ] Open
         - [x] Done
+        ```toc
+        fenced line
+        ```
         """
       for size in [UIContentSizeCategory.large, .accessibilityExtraLarge] {
         for appearance in [UIUserInterfaceStyle.light, .dark] {
@@ -45,9 +48,12 @@
             let bodySize = UIFont.preferredFont(
               forTextStyle: .body, compatibleWith: traits
             ).pointSize
-            func attributes(_ text: String) -> [NSAttributedString.Key: Any] {
+            func attributes(
+              _ text: String, options: NSString.CompareOptions = []
+            ) -> [NSAttributedString.Key: Any] {
               view.textStorage.attributes(
-                at: (source as NSString).range(of: text).location, effectiveRange: nil)
+                at: (source as NSString).range(of: text, options: options).location,
+                effectiveRange: nil)
             }
             let heading = try #require(attributes("Heading")[.font] as? UIFont)
             let code = try #require(attributes("code")[.font] as? UIFont)
@@ -61,13 +67,17 @@
             #expect(metadata.pointSize == bodySize)
             #expect(code.fontDescriptor.symbolicTraits.contains(.traitMonoSpace))
             #expect(metadata.fontDescriptor.symbolicTraits.contains(.traitMonoSpace))
+            // Markers that start a line are markup, and the text they introduce is content.
             let inks: [(UIColor, [String])] = [
-              (.label, ["# Heading", "Plain", "**outer", "Bullet", "Numbered", "code", "title"]),
+              (
+                .label,
+                ["Heading", "Plain", "**outer", "Bullet", "Numbered", "code", "title", "fenced line"]
+              ),
               (
                 .secondaryLabel,
                 [
-                  "> Quoted", "2)", "14.", "- Bullet", "* Nested", "+ Another", "<span>", "</span>",
-                  "[ ]", "[x]",
+                  "# Heading", "> Quoted", "2)", "14.", "- Bullet", "* Nested", "+ Another",
+                  "<span>", "</span>", "[ ]", "[x]", "```toc",
                 ]
               ),
               (.link, ["[link]", "https://example.com"]),
@@ -77,6 +87,17 @@
                 let actual = try #require(attributes(text)[.foregroundColor] as? UIColor)
                 #expect(actual.resolvedColor(with: traits).isEqual(ink.resolvedColor(with: traits)))
               }
+            }
+            let closingFence = try #require(
+              attributes("```", options: .backwards)[.foregroundColor] as? UIColor)
+            #expect(
+              closingFence.resolvedColor(with: traits).isEqual(
+                UIColor.secondaryLabel.resolvedColor(with: traits)))
+            let headingMarker = try #require(attributes("# Heading")[.font] as? UIFont)
+            #expect(headingMarker.fontDescriptor.symbolicTraits.contains(.traitBold))
+            for text in ["```toc", "fenced line"] {
+              let font = try #require(attributes(text)[.font] as? UIFont)
+              #expect(font.fontDescriptor.symbolicTraits.contains(.traitMonoSpace))
             }
             for text in ["strong", "outer", "inner", "both"] {
               let font = try #require(attributes(text)[.font] as? UIFont)

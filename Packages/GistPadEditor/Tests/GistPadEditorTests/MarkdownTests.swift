@@ -125,6 +125,7 @@ func writingToolsProtectsFencesUntilTheirActualClosingDelimiter(source: String, 
     spans.filter { $0.kind == kind }.map { (source as NSString).substring(with: $0.range) }
   }
   #expect(strings(.heading) == ["## A heading ##"])
+  #expect(strings(.punctuation) == ["##", "##", "-", "-"])
   #expect(strings(.task) == ["[ ]"])
   #expect(strings(.checkedTask) == ["[X]"])
   #expect(strings(.link) == ["[Link label](https://example.com)", "[[Wiki note]]"])
@@ -141,6 +142,9 @@ func writingToolsProtectsFencesUntilTheirActualClosingDelimiter(source: String, 
   let tick = NSRange(location: 0, length: 1)
   #expect(spans.last { NSLocationInRange(tick.location, $0.range) }?.kind == .code)
   #expect(spans.filter { $0.kind == .code }.count == 4)
+  #expect(
+    spans.filter { $0.kind == .punctuation }.map { (source as NSString).substring(with: $0.range) }
+      == ["```swift\n", "```\n"])
 }
 
 @Test func syntaxThemeRecognizesQuotesNestedEmphasisHTMLStrikesAndOrderedMarkers() {

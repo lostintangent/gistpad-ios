@@ -15,8 +15,8 @@ public enum MarkdownSyntax {
     let patterns: [(String, [(Int, Kind)])] = [
       ("^ {0,3}(?:>[ \\t]*)+.*$", [(0, .blockquote)]),
       (
-        "^ {0,3}#{1,6}(?:[ \\t]+.*?)?(?:[ \\t]+#+)?[ \\t]*$",
-        [(0, .heading)]
+        "^ {0,3}(#{1,6})(?:[ \\t]+.*?)?(?:[ \\t]+(#+))?[ \\t]*$",
+        [(0, .heading), (1, .punctuation), (2, .punctuation)]
       ),
       (
         #"(?<!\\)(\*{3})(?=\S)(.+?\S|\S)\1"#,
@@ -100,6 +100,7 @@ public enum MarkdownSyntax {
       let candidate = fencePatterns.opening.firstMatch(
         in: line, range: NSRange(location: 0, length: (line as NSString).length))
       var protectedKind: Kind?
+      var isFenceLine = false
       if offset == 0 && line == "---" {
         frontmatter = true
         protectedKind = .frontmatter
@@ -116,6 +117,7 @@ public enum MarkdownSyntax {
             delimiter.length >= currentFence.length
           {
             fence = nil
+            isFenceLine = true
           }
         }
       } else if let candidate {
@@ -124,6 +126,7 @@ public enum MarkdownSyntax {
         if delimiter.character(at: 0) != 0x60 || !suffix.contains("`") {
           fence = (delimiter.character(at: 0), delimiter.length)
           protectedKind = .code
+          isFenceLine = true
         }
       }
       if protectedKind != nil || line.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -136,6 +139,8 @@ public enum MarkdownSyntax {
       }
       if let protectedKind {
         result.append(Span(range: range, kind: protectedKind))
+        // A fence line is markup, so it paints like other line-leading markers.
+        if isFenceLine { result.append(Span(range: range, kind: .punctuation)) }
       } else {
         for (expression, captures) in inlinePatterns {
           for match in expression.matches(
