@@ -1,4 +1,3 @@
-import GistPadInterface
 import PhotosUI
 import SwiftUI
 
@@ -9,8 +8,13 @@ struct NotebookPhotoHost<Content: View>: View {
 
   var body: some View {
     content()
-      .sheet(isPresented: $photos.isShowingNotice, onDismiss: { photos.noticeDidDismiss() }) {
-        PhotoPrivacyNotice(proceed: { photos.acceptNotice() }, cancel: { photos.isShowingNotice = false })
+      .alert("Photos Are Public", isPresented: $photos.isShowingNotice) {
+        Button(role: .cancel) {}
+        Button("Continue") { photos.acceptNotice() }
+      } message: {
+        Text(
+          "Photos you choose are uploaded to GistPad's public image storage. Anyone with the link can view them, even in a secret gist. Location data is removed."
+        )
       }
       .photosPicker(
         isPresented: $photos.isShowingPicker, selection: $selection,

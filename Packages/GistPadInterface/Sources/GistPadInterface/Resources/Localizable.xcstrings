@@ -364,9 +364,6 @@
         }
       }
     },
-    "Continue" : {
-
-    },
     "Continue with GitHub" : {
 
     },
@@ -500,21 +497,6 @@
 
     },
     "Photo" : {
-
-    },
-    "Photo options" : {
-
-    },
-    "Photo ready" : {
-
-    },
-    "Photo saved on this iPhone" : {
-
-    },
-    "Photos are public" : {
-
-    },
-    "Photos you choose are uploaded to GistPad's public image storage. Anyone with an image link can view them, even in a secret gist. Location metadata is removed, but visible details remain." : {
 
     },
     "Pin" : {

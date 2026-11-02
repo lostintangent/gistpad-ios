@@ -52,8 +52,6 @@ Problem notices use the system `safeAreaBar`, extending the native scroll-edge e
 
 Save labels are assertions about real persistence. In-memory and unsaved states do not claim a local write. Only a confirmed matching remote version is `.savedToGitHub`. Failure messages must be useful, non-sensitive user-facing explanations. Supply retry/review callbacks for recoverable failures. Share callbacks own the unsaved-version choice and secret-link disclosure before presenting the native share sheet.
 
-`PhotoPrivacyNotice(proceed:cancel:)` explains public image storage before the first pick, including for secret gists. The app owns the once-per-device acknowledgement, PhotosPicker (without broad library access), the upload and the insertion.
-
 `InterfaceFixtures` and SwiftUI previews use synthetic data. The Debug app's fixture launches (`--fixture`, `--open`, `--sheet`, `--accent`) run these screens against the in-memory fixture GitHub. The native String Catalog and four-appearance color assets live in the package resource bundle. `scripts/capture-matrix.sh` and `docs/capture-matrix.md` define the shared review workflow. No screen is production-approved until Designer reviews the required Duo evidence.
 
 App-hosted tests cover native geometry and document-state preservation, not virtual accessibility handles. `GistPadUITests` drives the real controls through a real accessibility client against the fixture library.

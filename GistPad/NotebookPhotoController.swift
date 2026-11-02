@@ -42,11 +42,7 @@ final class NotebookPhotoController {
 
   func acceptNotice() {
     defaults.set(true, forKey: Self.noticeKey)
-    isShowingNotice = false
-  }
-
-  func noticeDidDismiss() {
-    if defaults.bool(forKey: Self.noticeKey) { isShowingPicker = true }
+    isShowingPicker = true
   }
 
   func add(_ photo: PhotosPickerItem) async {
@@ -87,7 +83,7 @@ final class NotebookPhotoController {
     switch error {
     case PhotoImageError.imageTooLarge: String(localized: "Choose a photo under 50 MB and 100 megapixels.")
     case is PhotoImageError: String(localized: "This item couldn't be read as an image. Choose another photo.")
-    case ImageStorageError.http(let status): String(localized: "The image service returned error \(status).")
+    case ImageStorageError.http: String(localized: "GistPad's image storage didn't accept the photo.")
     default: NotebookModel.message(for: error)
     }
   }

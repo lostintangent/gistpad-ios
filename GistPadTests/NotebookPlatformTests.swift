@@ -87,7 +87,6 @@ struct NotebookPlatformTests {
     photos.choosePhoto()
     #expect(photos.isShowingNotice && !photos.isShowingPicker)
     photos.acceptNotice()
-    photos.noticeDidDismiss()
     #expect(photos.isShowingPicker)
     controller.session.textView.selectedRange = NSRange(location: (original as NSString).length, length: 0)
     await photos.add(png: Data("png".utf8))
