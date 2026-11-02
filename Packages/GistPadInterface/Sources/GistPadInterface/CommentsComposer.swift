@@ -60,7 +60,6 @@ public struct CommentsComposer: View {
                 .lineLimit(1...maximumLines)
                 .textFieldStyle(.plain)
                 .focused($focus)
-                .tint(Color(uiColor: .systemBlue))
                 .disabled(!isEditable || isPosting)
                 .accessibilityIdentifier("comment-composer-text")
             }
@@ -75,6 +74,7 @@ public struct CommentsComposer: View {
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.circle)
             .controlSize(.large)
+            // In a full-height sheet the default accent resolves gray (t172), so Post names the system tint.
             .tint(Color(uiColor: .tintColor))
             .disabled(!canPost || isPosting)
             .keyboardShortcut(.return, modifiers: .command)
