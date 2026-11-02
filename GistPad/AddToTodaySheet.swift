@@ -11,7 +11,6 @@ struct AddToTodaySheet: View {
   @State private var isAdding = false
   @State private var errorMessage: String?
   @FocusState private var isFocused: Bool
-  @ScaledMetric(relativeTo: .body) private var writingLineHeight = 22.0
   @Environment(\.dismiss) private var dismiss
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -37,31 +36,15 @@ struct AddToTodaySheet: View {
           }
         }
         Section {
-          TextEditor(text: $text)
-            .font(.body)
-            .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? writingLineHeight * 2 + 16 : 140)
-            .focused($isFocused)
-            .overlay(alignment: .topLeading) {
-              if text.isEmpty {
-                Text(asTask ? "Add a task…" : "Write a thought…")
-                  .foregroundStyle(.secondary)
-                  .padding(.horizontal, 5)
-                  .padding(.vertical, 8)
-                  .allowsHitTesting(false)
-                  .accessibilityHidden(true)
-              }
-            }
-            .accessibilityLabel(asTask ? Text("Task to add to Today") : Text("Text to add to Today"))
-            .accessibilityIdentifier("today-capture-input")
-          if dynamicTypeSize.isAccessibilitySize {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-              Text("Add as").accessibilityHidden(true)
-              Spacer(minLength: 0)
-              kindPicker.labelsHidden().pickerStyle(.menu)
-            }
-          } else {
-            kindPicker.pickerStyle(.segmented)
+          TextField(
+            text: $text, prompt: Text(asTask ? "Add a task…" : "Write a thought…"), axis: .vertical
+          ) {
+            asTask ? Text("Task to add to Today") : Text("Text to add to Today")
           }
+          .lineLimit(5...)
+          .focused($isFocused)
+          .accessibilityIdentifier("today-capture-input")
+          kindPicker
         } header: {
           destinationDate
         }
@@ -105,6 +88,7 @@ struct AddToTodaySheet: View {
       Text("Text").tag(false)
       Text("Task").tag(true)
     }
+    .pickerStyle(.segmented)
     .tint(.primary)
     .accessibilityIdentifier("today-capture-kind")
   }
