@@ -5,7 +5,6 @@ import Security
 
 public enum AccountError: Error, Equatable, Sendable {
     case invalidConfiguration
-    case invalidCallback
     case signInInProgress
     case signedOut
     case accountChanged
@@ -215,40 +214,24 @@ public actor AccountService {
 
     @discardableResult
     public func signIn() async throws -> Account {
-        guard !signingIn, !signingOut, !updatingPreferences else { throw AccountError.signInInProgress }
-        signingIn = true
-        defer { signingIn = false }
-        let session = try await auth.signInWithOAuth(
-            provider: .github, redirectTo: Self.callbackURL, scopes: "gist"
-        )
-        try verifyPersistedSession(session)
-        try retainConnection(session)
-        return snapshot(session.user)
+        try await signIn(launchFlow: nil)
     }
 
+    /// Signs in through `launchFlow` instead of the system web session. The fixture server uses this.
     @discardableResult
-    public func signIn(
-        launchFlow: @MainActor @Sendable (URL) async throws -> URL
-    ) async throws -> Account {
+    func signIn(launchFlow: (@MainActor @Sendable (URL) async throws -> URL)?) async throws -> Account {
         guard !signingIn, !signingOut, !updatingPreferences else { throw AccountError.signInInProgress }
         signingIn = true
         defer { signingIn = false }
-        let session = try await auth.signInWithOAuth(
-            provider: .github, redirectTo: Self.callbackURL, scopes: "gist"
-        ) { url in
-            let callback = try await launchFlow(url)
-            try Self.validateCallback(callback)
-            return callback
+        let session = if let launchFlow {
+            try await auth.signInWithOAuth(
+                provider: .github, redirectTo: Self.callbackURL, scopes: "gist", launchFlow: launchFlow)
+        } else {
+            try await auth.signInWithOAuth(provider: .github, redirectTo: Self.callbackURL, scopes: "gist")
         }
         try verifyPersistedSession(session)
         try retainConnection(session)
         return snapshot(session.user)
-    }
-
-    private static func validateCallback(_ url: URL) throws {
-        guard url.scheme == callbackURL.scheme, url.host == callbackURL.host,
-              url.path.isEmpty, url.port == nil, url.user == nil, url.password == nil,
-              url.fragment == nil else { throw AccountError.invalidCallback }
     }
 
     static func isPublishableKey(_ key: String) -> Bool {

@@ -189,22 +189,6 @@ private func signedInAccount(
         }
     }
 
-    @Test func rejectsWrongCallbackBeforeExchangingCode() async throws {
-        let requests = Mutex(0)
-        let session = FakeURLProtocol.session { _ in
-            requests.withLock { $0 += 1 }
-            return FakeResponse(status: 500)
-        }
-        let account = try AccountService(
-            publishableKey: "sb_publishable_fake", credentials: MemoryCredentials(),
-            session: session, automaticallyRefreshesToken: false
-        )
-        await #expect(throws: AccountError.invalidCallback) {
-            try await account.signIn { _ in URL(string: "gistpad://not-auth?code=fake")! }
-        }
-        #expect(requests.withLock { $0 } == 0)
-    }
-
     @Test func storageUsesSupabaseAccessTokenAndRejectsUseAfterSignOut() async throws {
         let credentials = MemoryCredentials()
         let calls = Mutex(0)

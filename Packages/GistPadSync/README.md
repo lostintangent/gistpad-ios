@@ -128,15 +128,7 @@ Retained drafts whose gist has disappeared from the cache remain searchable by b
 
 ## App Group boundary
 
-`SharedStoreLocation(appGroupIdentifier:)` resolves the entitled container using FileManager. There is no fallback to an unrelated container if entitlement/configuration is wrong. The store directory and command files request complete file protection by default. `prepareDirectory: false` only resolves the location without creating or modifying it, for read-only extension access. `DraftStore.open(location:)` uses an explicit SwiftData URL with no CloudKit. For tests, `SharedStoreLocation(containerURL:)` accepts a temporary directory. The app and widget use `group.dev.gistpad.GistPad`, but canonical drafts remain in the app's private store. Adding an entitlement does not migrate existing drafts.
-
-**The app remains the single SwiftData writer.** Opening a second SwiftData actor in a widget while the app owns an active document is not cross-process synchronization. Current widget/Shortcut mutations use iOS 27's main-app intent execution target, the app's existing store and the retained editor's durable Undo path. Widgets read an atomic presentation snapshot from `GistPadPlatform`, with after-first-unlock protection and privacy-sensitive content. Canonical drafts, credentials and command files retain their existing protection.
-
-`SharedDraftInbox` remains available for deferred command producers. It enqueues immutable `SharedDraftCommand` values and must show Pending, never Completed, until import. A fully written command is atomically published under its UUID without overwriting another process's command. Account-specific inbox directories avoid loading another account's command content.
-
-The main app flushes accepted editor changes and imports commands only when the affected session can accept an external edit. `DraftStore.apply(_:)` validates account, expected generation, UTF-16 scalar boundaries and exact expected source. The new source and deduplication receipt are committed in one SwiftData save. The host must then update the active document session through its undoable edit path, or reload an inactive session. Delete the inbox envelope with `acknowledge(_:)` only after that successful import. A crash before acknowledgement is safe to replay. Stale or invalid commands remain actionable errors, never silently discarded.
-
-An accepted main-app intent means the local source committed, not that GitHub acknowledged it. An enqueued command alone proves neither. Publication follows the existing app lifecycle and is best-effort after locking. Keychain credentials are not shared with extensions.
+`SharedStoreLocation` resolves the entitled App Group container that the widget snapshot uses. Canonical drafts stay in the app's private store, and the app is the only SwiftData writer. Widgets and Shortcuts run their edits in the main app through iOS 27's intent execution target.
 
 ## Photos and durable image uploads
 
