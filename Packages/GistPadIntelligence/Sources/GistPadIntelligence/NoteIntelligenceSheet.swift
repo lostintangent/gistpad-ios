@@ -42,12 +42,7 @@
           .listRowInsets(EdgeInsets())
           request
           if let reason = model.availabilityReason {
-            Section {
-              Label(reason, systemImage: "apple.intelligence")
-              Button(String(localized: "Check Again", bundle: .module)) {
-                Task { await model.checkAvailability() }
-              }
-            }
+            Section { Label(reason, systemImage: "apple.intelligence") }
           }
           if let error = model.errorMessage {
             Section { Label(error, systemImage: "exclamationmark.circle") }
@@ -61,10 +56,7 @@
           if model.isStale, model.snapshot != nil {
             Section {
               Label(
-                String(
-                  localized:
-                    "This note changed. Generate a fresh result before applying or opening a reference.",
-                  bundle: .module),
+                String(localized: "This file has changed since this result.", bundle: .module),
                 systemImage: "arrow.clockwise")
             }
           }
@@ -149,7 +141,7 @@
         case .ask, .edit:
           TextField(
             model.action == .ask
-              ? String(localized: "Ask about this note", bundle: .module)
+              ? String(localized: "Ask about this file", bundle: .module)
               : String(localized: "What would you like to change?", bundle: .module),
             text: $model.prompt, axis: .vertical
           )
@@ -161,8 +153,8 @@
       } footer: {
         if !model.session.textView.isEditable {
           Text(
-            "Read-only note. You can ask and review, but changes can't be applied.", bundle: .module
-          )
+            "This gist is read-only. You can ask and review, but not apply changes.",
+            bundle: .module)
         }
       }
     }
