@@ -280,8 +280,8 @@ import Testing
         try await store.cacheContent("untouched", gist: otherGist, filename: "README.md", accountID: account)
         try await store.cacheLibrary(
             owned: [gist], starred: [gist], preferences: .init(metadata: [:]), accountID: foreign.accountID)
-        try await store.removeDraftsForDeletedGist(gistID: "abc123", accountID: account)
-        #expect(try await store.drafts(accountID: account).map(\.id) == [kept.id])
+        let cleanup = try await store.removeDraftsForDeletedGist(gistID: "abc123", accountID: account)
+        #expect(cleanup.removedDraftIDs == [clean.id, dirty.id, historical.id])
         #expect(try await store.draft(id: foreign.id, accountID: foreign.accountID).text == "base")
         #expect(try await store.imageUploads(accountID: account).map(\.id) == [keptImage.id])
         #expect(try await store.apply(keptCommand).generation == 1)
@@ -301,5 +301,32 @@ import Testing
         await #expect(throws: DraftError.notFound) {
             try await store.draft(id: clean.id, accountID: account)
         }
+    }
+
+    @Test func deletedFileDropsOnlyItsOwnDraftsAndKeepsTheRestOfTheGist() async throws {
+        let account = UUID()
+        let store = try DraftStore.open(inMemory: true)
+        let deleted = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "abc123", filename: "2026-10-24.md",
+            description: "Daily", content: "base", revision: "one")
+        let sibling = try await store.openDraft(
+            accountID: account, githubUserID: 42, gistID: "abc123", filename: "2026-10-23.md",
+            description: "Daily", content: "base", revision: "one")
+        _ = try await store.persist(id: deleted.id, accountID: account, text: "unsynced", generation: 1)
+        let gist = try decodeGist(gistData(filename: "2026-10-23.md"))
+        try await store.cacheLibrary(
+            owned: [gist], starred: [], preferences: .init(metadata: [:]), accountID: account)
+        try await store.cacheGist(gist, accountID: account)
+        let beforeDelete = try decodeGist(gistData(filename: "2026-10-24.md"))
+        try await store.cacheContent(
+            "deleted source", gist: beforeDelete, filename: "2026-10-24.md", accountID: account)
+        let result = try await store.removeDraftsForDeletedFile(
+            gistID: "abc123", filename: "2026-10-24.md", updated: gist, accountID: account)
+        #expect(result.removedDraftIDs == [deleted.id])
+        #expect(try await store.drafts(accountID: account).map(\.id) == [sibling.id])
+        let cached = try #require(await store.cachedLibrary(accountID: account))
+        #expect(cached.owned.map(\.id) == ["abc123"])
+        #expect(cached.details["abc123"] != nil)
+        #expect(cached.fileContent["abc123/2026-10-24.md"] == nil)
     }
 }

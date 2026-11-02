@@ -515,6 +515,11 @@ final class NotebookModel {
     guard !deletedGistIDs.contains(gistID),
       let gist = cachedLibrary?.owned.first(where: { $0.id == gistID })
     else { return nil }
+    if gist.isDailyNote, let filename = target?.filename {
+      return .init(
+        id: gist.id, accountID: account.id,
+        title: GistConventions.fileDisplayName(filename), filename: filename)
+    }
     return .init(id: gist.id, accountID: account.id, title: gist.displayName)
   }
 
@@ -1753,7 +1758,7 @@ final class NotebookModel {
       loadedDocument = document
       library.selectedNoteID = document.rowID
       try selections.save(document.selection, accountID: account.id)
-    case .deleted(let id):
+    case .deleted(let id, _):
       recordDeletedGist(id, accountID: account.id)
       if loadedDocument?.selection.gistID == id {
         loadedDocument = nil
@@ -1764,6 +1769,8 @@ final class NotebookModel {
           owned: cache.owned.filter { $0.id != id }, starred: cache.starred.filter { $0.id != id },
           account: account)
       }
+    case .deletedFile(let id, let filename, _):
+      clearDeletedFile(gistID: id, filename: filename, accountID: account.id)
     case .review, .remoteRead:
       break
     case .discardedDraft(let id):
@@ -1812,6 +1819,36 @@ final class NotebookModel {
       && loadedDocument?.draft?.id != draft.id
       && loadedDocument?.selection.gistID != draft.gistID
       && openingDocument == nil && !isDraftSelected(draft.id)
+  }
+
+  private func clearDeletedFile(gistID: String, filename: String, accountID: UUID) {
+    func isDeletedFile(_ selection: NotebookSelection?) -> Bool {
+      selection?.gistID == gistID && selection?.filename == filename
+    }
+    if isDeletedFile(loadedDocument?.selection) {
+      loadedDocument = nil
+      library.selectedNoteID = nil
+    }
+    if let opening = openingDocument, isDeletedFile(rowSelection(for: opening.rowID)) {
+      documentRequest = UUID()
+      openingDocument = nil
+      isOpeningDocument = false
+    }
+    if failedOpen?.gistID == gistID, failedOpen?.filename == filename { failedOpen = nil }
+    do {
+      if let selection = try selections.selection(accountID: accountID), isDeletedFile(selection) {
+        selections.clear(accountID: accountID)
+      }
+    } catch {
+      report(error, operation: "clear-deleted-file-selection")
+    }
+    searchRequest = UUID()
+    searchTargets = searchTargets.filter { !isDeletedFile($0.value) }
+    if case .results(let notes, let coverage) = library.searchState {
+      library.searchState = .results(
+        notes: notes.filter { !($0.gistID == gistID && $0.filename == filename) },
+        coverage: coverage)
+    }
   }
 
   private func recordDeletedGist(_ id: String, accountID: UUID) {
@@ -1979,7 +2016,7 @@ final class NotebookModel {
   ) async {
     let ids = localDrafts.filter { $0.accountID == accountID && $0.hasUnpublishedEdits }.map(\.id)
     for id in ids {
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled else { break }
       let state: SaveState?
       if let open = await openEditorState(id) {
         state = open
@@ -1987,8 +2024,9 @@ final class NotebookModel {
         _ = try? await publish(draftID: id, accountID: accountID, reason: .background)
         state = (try? await draftSnapshot(id: id, accountID: accountID))?.state
       }
-      if state == .offline { return }
+      if state == .offline { break }
     }
+    try? await reloadLocalState(accountID: accountID)
   }
 
   func publish(
@@ -2247,6 +2285,11 @@ final class NotebookModel {
         String(
           localized:
             "The note was deleted from GitHub, but couldn't be fully removed from this iPhone. Local cleanup is incomplete."
+        )
+      case .remoteDeletedFileCleanupFailed:
+        String(
+          localized:
+            "The note was deleted from GitHub, but couldn't be fully removed from this iPhone. Delete it again to finish cleanup."
         )
       case .staleReview:
         String(localized: "Your draft changed while this review was open. Review the latest draft.")

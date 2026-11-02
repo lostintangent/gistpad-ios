@@ -98,6 +98,7 @@ final class LibraryToolbarUITests: XCTestCase {
     design.tap()
     app.buttons["library-tag-filter-close"].tap()
     try await waitUntil { tags.isHittable && tags.label.contains("2 selected") }
+    XCTAssertTrue(app.staticTexts["library-filter-count"].exists)
     XCTAssertFalse(app.otherElements["library-search-coverage"].exists)
     record(app, name: "home-search-multi-tag-scope")
     let field = app.searchFields.firstMatch

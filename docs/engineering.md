@@ -4,7 +4,7 @@ Checked against current Apple documentation on October 23, 2026. The editor/rend
 
 | Choice | Reason and primary reference |
 |---|---|
-| Xcode 27.1 SDK, iOS 27.1 minimum | The user confirmed 27.1+ as the product floor. No 27.0 compatibility layout or acceptance gate is required. Standard iPhones remain in scope when running a supported OS. [Duo preparation](https://developer.apple.com/iphone-duo/prepare/) |
+| Xcode 27.2 SDK, iOS 27.2 minimum | The user confirmed 27.2+ as the product floor, since 27.2 is a security update every device gets. No 27.0 or 27.1 compatibility layout or acceptance gate is required. Standard iPhones remain in scope when running a supported OS. [Duo preparation](https://developer.apple.com/iphone-duo/prepare/) |
 | Swift 6 language mode | Strict concurrency is enabled by the language mode. UI state and input stay `@MainActor`. Cross-module edit payloads are value types and `Sendable`. No unchecked concurrency bypasses. [Swift 6 adoption](https://developer.apple.com/documentation/swift/adoptingswift6) |
 | `@Observable` document sessions | SwiftUI observes only the state it reads. A session, not a transient view, owns canonical Markdown, generation and the source text view. [Observation in SwiftUI](https://developer.apple.com/documentation/swiftui/managing-model-data-in-your-app) |
 | SwiftUI app/navigation/toolbars | Prefer system components and their automatic Liquid Glass, accessibility and Duo behavior. Glass belongs to controls/navigation, not a translucent writing canvas. [Liquid Glass adoption](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass) |
@@ -50,7 +50,7 @@ The 13 editor package tests pass. Lifecycle-driven iOS checks verify final-choic
 
 The earlier combined frozen run exposed reading-anchor drift after Writing Tools and subsequent reflow. The corrected attribute transaction and retained reflow anchor now pass the complete 13-invocation native continuity suite three consecutive times. Both immediate reflow and reflow after deferred decoration remain within one actual visual line at display-pixel precision, with unchanged source bytes, generation, selection and text-view identity. The separately observed cross-suite initial-keyboard caret failure is not cleared by that reading-only gate.
 
-On the iOS 27.1 Duo simulator, `UIWritingToolsCoordinator.isWritingToolsAvailable` reports `false`. A real-device accept/reject/rewrite demonstration and system-managed rewrite undo remain hardware gates. The actual-posture probe is a separate check from these programmatic replacements.
+On the iOS 27.1 Duo simulator (not yet rechecked on 27.2), `UIWritingToolsCoordinator.isWritingToolsAvailable` reports `false`. A real-device accept/reject/rewrite demonstration and system-managed rewrite undo remain hardware gates. The actual-posture probe is a separate check from these programmatic replacements.
 
 ## Whole-note on-device intelligence
 

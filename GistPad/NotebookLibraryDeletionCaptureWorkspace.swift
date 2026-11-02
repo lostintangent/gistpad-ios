@@ -182,8 +182,9 @@ actor LibraryDeletionCaptureProvider: NotebookProviding, NotebookPhotoProviding 
       try fixtureGists().contains(where: { $0.id == id })
     else { throw CaptureError.unsupported }
     deleted.insert(id)
-    try await draftStore().removeDraftsForDeletedGist(gistID: id, accountID: accountID)
-    return .deleted(gistID: id)
+    let drafts = try await draftStore().removeDraftsForDeletedGist(
+      gistID: id, accountID: accountID)
+    return .deleted(gistID: id, drafts: drafts)
   }
 
   func photoServices(accountID: UUID) async throws -> NotebookPhotoServices {
@@ -282,7 +283,7 @@ final class LibraryPublicationHold: @unchecked Sendable {
   /// publication before it performs a destructive action, so the request is the first point it can be released.
   func releaseForDeletion(_ action: NotebookAction) {
     switch action {
-    case .delete, .discardLocalCopy, .discardUncertainCreation:
+    case .delete, .deleteFile, .discardLocalCopy, .discardUncertainCreation:
       guard isParked else { return }
       release()
     default: break

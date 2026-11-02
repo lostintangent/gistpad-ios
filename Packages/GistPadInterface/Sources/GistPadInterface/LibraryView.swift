@@ -211,6 +211,8 @@ public struct LibraryView: View {
     private let savedPinnedExpanded: Binding<Bool>?
     @State private var localPinnedExpanded = true
     @State private var collapsedSearchPinned = false
+    @State private var collapsedDateGroups: Set<LibraryDateGroup> = []
+    @State private var collapsedSearchDateGroups: Set<LibraryDateGroup> = []
     @State private var now = Date.now
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
@@ -220,7 +222,6 @@ public struct LibraryView: View {
     @State private var tagQuery = ""
     @State private var isPullRefreshing = false
     @State private var searchPresented = false
-    @ScaledMetric(relativeTo: .body) private var headingCountSpacing = 4
     @ScaledMetric(relativeTo: .body) private var compactRowInset: CGFloat = 16
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -336,6 +337,7 @@ public struct LibraryView: View {
                 }
             }
         }
+        .headerProminence(.increased)
         .tint(.primary)
         .scrollDismissesKeyboard(.immediately)
         .environment(\.defaultMinListRowHeight, 44)
@@ -353,33 +355,80 @@ public struct LibraryView: View {
             relativeTo: now, calendar: calendar)
     }
 
-    @ViewBuilder
     private var pinnedSection: some View {
-        // Compact `.insetGrouped` draws no disclosure chevron, so Pinned stays open there.
-        if isSidebar {
-            Section(isExpanded: pinnedExpansion) {
-                pinnedRows
-            } header: {
-                pinnedHeader
-            }
-        } else {
-            Section {
-                pinnedRows
-            } header: {
-                pinnedHeader
-            }
+        Section(isExpanded: pinnedExpansion) {
+            ForEach(pinnedNotes) { noteRow($0) }
+        } header: {
+            sectionHeader(
+                Text("Pinned", bundle: .module), symbol: "pin", count: pinnedNotes.count,
+                countLabel: LibraryModel.gistCountLabel(pinnedNotes.count),
+                expansion: pinnedExpansion, id: "library-section-pinned")
         }
     }
 
-    private var pinnedRows: some View {
-        ForEach(pinnedNotes) { noteRow($0) }
+    /// Compact `.insetGrouped` draws no disclosure, so there the whole header is one disclosure
+    /// button ending in Notes' circled chevron. The sidebar draws and handles its own.
+    @ViewBuilder
+    private func sectionHeader(
+        _ title: Text, symbol: String? = nil, count: Int?, countLabel: String?,
+        expansion: Binding<Bool>, id: String
+    ) -> some View {
+        let isExpanded = expansion.wrappedValue
+        let label = HStack(alignment: .firstTextBaseline) {
+            Group {
+                if let symbol {
+                    Label { title } icon: { Image(systemName: symbol) }
+                } else {
+                    title
+                }
+            }
+            .captureFrame("\(id)-title")
+            Spacer(minLength: 8)
+            if let count {
+                Text(count, format: .number)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+                    .captureFrame("\(id)-count")
+            }
+            if !isSidebar {
+                // UIKit's secondary label, which is what Notes' disc uses (SwiftUI's
+                // hierarchical `.secondary` renders a flatter, different gray).
+                Image(
+                    systemName: isExpanded
+                        ? "chevron.down.circle.fill" : "chevron.forward.circle.fill"
+                )
+                .foregroundStyle(Color(uiColor: .secondaryLabel))
+                .contentTransition(.symbolEffect(.replace))
+            }
+        }
+        let state = isExpanded
+            ? String(localized: "Expanded", bundle: .module)
+            : String(localized: "Collapsed", bundle: .module)
+        let value = [countLabel, state].compactMap { $0 }.joined(separator: ", ")
+        Group {
+            if isSidebar {
+                label
+            } else {
+                Button {
+                    withAnimation(reduceMotion ? nil : .default) {
+                        expansion.wrappedValue.toggle()
+                    }
+                } label: {
+                    label
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .captureFrame(id)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(Text(verbatim: value))
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier(id)
     }
 
-    private var pinnedHeader: some View {
-        Text("Pinned", bundle: .module)
-    }
-
-    private var pinnedRowsVisible: Bool { !isSidebar || pinnedExpansion.wrappedValue }
+    private var pinnedRowsVisible: Bool { pinnedExpansion.wrappedValue }
 
     private var pinnedExpansion: Binding<Bool> {
         Binding(
@@ -433,7 +482,10 @@ public struct LibraryView: View {
     private func isVisible(_ id: String, in collection: LibraryCollection) -> Bool {
         if collection == .gists {
             return (pinnedRowsVisible && pinnedNotes.contains { $0.id == id })
-                || dateSections.contains { section in section.notes.contains { $0.id == id } }
+                || dateSections.contains { section in
+                    dateExpansion(for: section.group).wrappedValue
+                        && section.notes.contains { $0.id == id }
+                }
         }
         return displayedCollections.contains(collection) && expansion(for: collection).wrappedValue
             && model.matchingNotes(in: collection).contains { $0.id == id }
@@ -467,17 +519,42 @@ public struct LibraryView: View {
             })
     }
 
+    private func dateExpansion(for group: LibraryDateGroup) -> Binding<Bool> {
+        Binding(
+            get: {
+                !(model.hasFilters ? collapsedSearchDateGroups : collapsedDateGroups).contains(group)
+            },
+            set: { expanded in
+                if model.hasFilters {
+                    if expanded { collapsedSearchDateGroups.remove(group) }
+                    else { collapsedSearchDateGroups.insert(group) }
+                } else {
+                    if expanded { collapsedDateGroups.remove(group) }
+                    else { collapsedDateGroups.insert(group) }
+                }
+            })
+    }
+
     private func resetSearchDisclosures() {
         collapsedSearchCollections.removeAll()
         collapsedSearchPinned = false
+        collapsedSearchDateGroups.removeAll()
     }
 
     private func collectionSection(_ collection: LibraryCollection) -> some View {
-        Section(isExpanded: expansion(for: collection)) {
+        let expansion = expansion(for: collection)
+        let count = model.count(in: collection)
+        return Section(isExpanded: expansion) {
             ForEach(model.matchingNotes(in: collection)) { noteRow($0, collection: collection) }
         } header: {
-            collectionLabel(collection)
-                .accessibilityIdentifier("library-collection-\(collection.rawValue)")
+            sectionHeader(
+                Text(verbatim: collection.title), symbol: collection.symbol, count: count,
+                countLabel: count.map {
+                    collection == .dailyNotes
+                        ? LibraryModel.noteCountLabel($0) : LibraryModel.gistCountLabel($0)
+                },
+                expansion: expansion,
+                id: "library-collection-\(collection.rawValue)")
         }
     }
 
@@ -488,58 +565,17 @@ public struct LibraryView: View {
                 ForEach(section.notes) { noteRow($0) }
             }
         } else {
-            Section {
+            let expansion = dateExpansion(for: section.group)
+            let title = section.group.title(locale: locale, calendar: calendar)
+            Section(isExpanded: expansion) {
                 ForEach(section.notes) { noteRow($0) }
             } header: {
-                Text(verbatim: section.group.title(locale: locale, calendar: calendar))
+                sectionHeader(
+                    Text(verbatim: title), count: section.notes.count,
+                    countLabel: LibraryModel.gistCountLabel(section.notes.count),
+                    expansion: expansion, id: "library-section-\(title)")
             }
         }
-    }
-
-    private func collectionLabel(_ collection: LibraryCollection) -> some View {
-        let count = model.count(in: collection)
-        let countLabel = count.map {
-            collection == .dailyNotes ? LibraryModel.noteCountLabel($0) : LibraryModel.gistCountLabel($0)
-        }
-        let countText = count.map {
-            Text($0, format: .number)
-                .font(.subheadline).monospacedDigit().foregroundStyle(.primary)
-                .fixedSize()
-                .captureFrame("library-collection-count-\(collection.rawValue)")
-        }
-        let title = Text(verbatim: collection.title)
-            .fixedSize(horizontal: false, vertical: true)
-            .captureFrame("library-collection-title-\(collection.rawValue)")
-        return Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    title
-                    Spacer(minLength: 0)
-                    countText
-                }
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        title.fixedSize(horizontal: true, vertical: true)
-                        Spacer(minLength: 0)
-                        countText
-                    }
-                    VStack(alignment: .leading, spacing: headingCountSpacing) {
-                        title
-                        countText
-                    }
-                }
-            }
-        }
-        .font(.headline)
-        .foregroundStyle(.primary)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .textCase(nil)
-        .captureFrame("library-collection-\(collection.rawValue)")
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(verbatim: collection.title))
-        .accessibilityValue(Text(verbatim: countLabel ?? ""))
-        .accessibilityAddTraits(.isHeader)
     }
 
     private var remoteStatus: GitHubStatusState {
@@ -566,6 +602,14 @@ public struct LibraryView: View {
                     tags: model.snapshot.tags.filter { model.selectedTagIDs.contains($0.id) },
                     isSelected: true
                 )
+                if let count = model.resultGistCount {
+                    Text(verbatim: LibraryModel.gistCountLabel(count))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                        .accessibilityIdentifier("library-filter-count")
+                }
                 Button {
                     model.clearFilters()
                 } label: {
@@ -924,16 +968,21 @@ public struct LibraryView: View {
                                 Text(verbatim: tag.name)
                                     .foregroundStyle(.primary)
                                 Spacer()
-                                if model.selectedTagIDs.contains(tag.id) {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(.primary)
-                                        .transition(.opacity)
-                                }
+                                Text(model.gistCount(tagged: tag.id), format: .number)
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityHidden(true)
+                                // Reserves its width so the count never shifts when a tag is selected.
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.primary)
+                                    .opacity(model.selectedTagIDs.contains(tag.id) ? 1 : 0)
+                                    .accessibilityHidden(true)
                             }
                             .frame(minHeight: 44)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityValue(Text(verbatim: LibraryModel.gistCountLabel(model.gistCount(tagged: tag.id))))
                         .accessibilityAddTraits(model.selectedTagIDs.contains(tag.id) ? .isSelected : [])
                         .accessibilityIdentifier("library-tag-filter-\(tag.id)")
                         .captureFrame("library-tag-filter-\(tag.id)")

@@ -4,9 +4,9 @@ A personal, native iPhone notebook backed by GitHub Gists. **M3 integration in p
 
 ## Requirements
 
-- Xcode 27.1 and its iOS SDK
-- iPhone running iOS 27.1+, or its matching simulator runtime
-- Duo posture testing uses the iOS 27.1 runtime. iOS 27.0 and earlier are outside the product scope.
+- Xcode 27.2 and its iOS SDK
+- iPhone running iOS 27.2+, or its matching simulator runtime
+- Duo posture testing uses the iOS 27.2 runtime. iOS 27.1 and earlier are outside the product scope.
 - For hardware, Apple Developer team `RHFNBL7EG4`, automatic signing and Developer Mode
 
 Use the full Xcode path without changing the machine's `xcode-select` setting:
@@ -24,10 +24,10 @@ xcodebuild -project GistPad.xcodeproj -scheme GistPad \
 
 # Find an existing Duo simulator first.
 xcrun simctl list devices available
-# If none exists, create one after installing the iOS 27.1 runtime.
+# If none exists, create one after installing the iOS 27.2 runtime.
 xcrun simctl create 'GistPad Duo' \
   com.apple.CoreSimulator.SimDeviceType.iPhone-Duo \
-  com.apple.CoreSimulator.SimRuntime.iOS-27-1
+  com.apple.CoreSimulator.SimRuntime.iOS-27-2-iPhone19-4
 
 # Substitute the returned UUID for DEVICE_ID.
 xcrun simctl boot DEVICE_ID

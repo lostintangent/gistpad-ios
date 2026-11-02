@@ -345,6 +345,9 @@
     "Close without retrying?" : {
 
     },
+    "Collapsed" : {
+
+    },
     "Collection" : {
 
     },
@@ -425,6 +428,9 @@
 
     },
     "Edit Tag…" : {
+
+    },
+    "Expanded" : {
 
     },
     "Files in this gist" : {

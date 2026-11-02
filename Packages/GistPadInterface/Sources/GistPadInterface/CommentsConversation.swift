@@ -117,7 +117,6 @@ public struct CommentsConversation: View {
         .refreshable { await actions.refresh() }
         .overlay { emptyState }
         .tint(.primary)
-        .background(Color(uiColor: .systemBackground))
         .accessibilityIdentifier("comments-conversation")
         .confirmationDialog(
             String(

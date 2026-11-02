@@ -809,7 +809,7 @@ struct NotebookSessionTests {
     #expect(await controller.waitForLocalSave())
     #expect(!old.matches(controller.draft))
     await #expect(throws: NotebookActionError.staleReview) {
-      try await controller.applyReview(old, text: "From GitHub")
+      try await controller.applyReview(old, text: "From GitHub", publishes: false)
     }
     #expect(controller.session.text == "A newer local choice")
     #expect(controller.draft.state != .savedToGitHub)

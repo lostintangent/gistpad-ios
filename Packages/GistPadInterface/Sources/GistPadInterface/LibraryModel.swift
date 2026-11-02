@@ -241,6 +241,13 @@ public final class LibraryModel {
         }
     }
 
+    /// Gists carrying the tag, counted over the same notes a tag filter searches.
+    public func gistCount(tagged tagID: String) -> Int {
+        Self.gistCount(in: snapshot.notes.filter {
+            $0.tagIDs.contains(tagID) && Self.primaryCollection(for: $0) != nil
+        })
+    }
+
     public static func gistCount(in notes: [LibraryNote]) -> Int {
         Set(notes.compactMap(\.gistID)).count
     }
