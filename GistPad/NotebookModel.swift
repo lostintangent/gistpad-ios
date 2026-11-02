@@ -666,7 +666,6 @@ final class NotebookModel {
   }
 
   private static func updateLibraryContent(_ note: inout LibraryNote, text: String?) {
-    note.excerpt = text.flatMap { Self.libraryExcerpt($0, title: note.title) }
     if note.isDailyNote {
       note.progress = text.map {
         let tasks = TaskProgress(markdown: $0)
@@ -1161,7 +1160,6 @@ final class NotebookModel {
           isSecret: match.isSecret, isPinned: match.isPinned, isStarred: match.isStarred,
           isArchived: match.isArchived, isDailyNote: match.isDailyNote, tagIDs: match.tagIDs,
           filename: match.filename, fileCount: gist?.truncated == true ? nil : gist?.files.count,
-          excerpt: match.text.flatMap { Self.libraryExcerpt($0, title: match.title) },
           progress: match.progress.map { .init(completed: $0.completed, total: $0.total) },
           isOverdue: match.isOverdue,
           dailyDate: match.isDailyNote
@@ -1381,12 +1379,6 @@ final class NotebookModel {
       !deletedGistIDs.contains(String($0.key.prefix(while: { $0 != "/" })))
     }
     return filtered
-  }
-
-  private static func libraryExcerpt(_ text: String, title: String? = nil) -> String? {
-    NotebookExcerpt.text(from: text, title: title).map {
-      String($0.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(160))
-    }
   }
 
   private func updateToday() {
@@ -2104,14 +2096,6 @@ final class NotebookModel {
         days = [nil]
       }
       return days.map { day in
-        let filename = day?.filename
-          ?? (gist.isDailyNote ? GistConventions.todayFilename() : gist.defaultMarkdownFilename)
-        let draft = gistDrafts.first { $0.filename == filename }
-        let inline = filename.flatMap { gist.files[$0] }.flatMap {
-          $0.truncated == true ? nil : $0.content
-        }.map(GistConventions.decodeContent)
-        let text = librarySource(
-          draft: draft, cached: filename.flatMap { cached?.content(gist: gist, filename: $0) } ?? inline)
         var note = LibraryNote(
           id: day.map { "\(gist.id)/\($0.filename)" } ?? gist.id,
           title: day.map { GistConventions.fileDisplayName($0.filename) } ?? gist.displayName,
@@ -2126,7 +2110,16 @@ final class NotebookModel {
           dailyDate: day?.date,
           commentCount: gist.isDailyNote ? nil : gist.commentCount
         )
-        updateLibraryContent(&note, text: text)
+        // Only daily rows read note content, for their task progress.
+        if gist.isDailyNote {
+          let filename = day?.filename ?? GistConventions.todayFilename()
+          let inline = gist.files[filename].flatMap {
+            $0.truncated == true ? nil : $0.content
+          }.map(GistConventions.decodeContent)
+          updateLibraryContent(&note, text: librarySource(
+            draft: gistDrafts.first { $0.filename == filename },
+            cached: cached?.content(gist: gist, filename: filename) ?? inline))
+        }
         return note
       }
     }

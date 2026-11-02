@@ -23,9 +23,7 @@ struct LibraryRowHostTests {
     window.traitOverrides.preferredContentSizeCategory = .large
     let model = LibraryModel(
       snapshot: .init(notes: ["selected", "unselected"].map { id in
-        LibraryNote(
-          id: id, title: id, updatedAt: .now, gistID: id,
-          excerpt: "Thoughts worth keeping close.")
+        LibraryNote(id: id, title: id, updatedAt: .now, gistID: id)
       }),
       loadState: .ready)
     model.selectedNoteID = "selected"
@@ -53,7 +51,7 @@ struct LibraryRowHostTests {
     while ContinuousClock.now < deadline {
       window.layoutIfNeeded()
       if descendants(window).contains(where: {
-        $0.accessibilityIdentifier == "capture-frame-note-excerpt-unselected"
+        $0.accessibilityIdentifier == "capture-frame-note-date-unselected"
           && !$0.bounds.isEmpty
       }) { break }
       try await Task.sleep(for: .milliseconds(50))
@@ -67,7 +65,7 @@ struct LibraryRowHostTests {
     try await Task.sleep(for: .milliseconds(300))
     window.layoutIfNeeded()
     let increased = try renderedSecondaryInk(in: window)
-    #expect(normal.inks.count == 4)
+    #expect(normal.inks.count == 2)
     for key in normal.inks.keys.sorted() {
       let base = try #require(normal.inks[key])
       let high = try #require(increased.inks[key])
@@ -94,7 +92,7 @@ struct LibraryRowHostTests {
   }
 
   @Test(arguments: [280, 350], [DynamicTypeSize.large, .accessibility3])
-  func adaptiveRowsKeepTheirTitleProgressAndSpacing(
+  func dailyRowsStayOneLineWithTrailingProgress(
     width: Int, size: DynamicTypeSize
   ) async throws {
     let scene = try #require(
@@ -108,7 +106,7 @@ struct LibraryRowHostTests {
     let note = LibraryNote(
       id: "shelf-progress", title: "2026-10-23", updatedAt: .now,
       isDailyNote: true, filename: "2026-10-23.md", fileCount: 3,
-      excerpt: "Keep the useful thoughts close.", progress: .init(completed: 3, total: 4),
+      tagIDs: ["ideas"], progress: .init(completed: 3, total: 4),
       isOverdue: true, dailyDate: day)
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = .gmt
@@ -142,22 +140,18 @@ struct LibraryRowHostTests {
     let content = try frame("content")
     let title = try frame("title")
     let progress = try frame("progress")
-    let secondary = try frame("secondary")
-    let tags = try frame("tags")
-    let metrics = UIFontMetrics(forTextStyle: .body)
-    let gap = metrics.scaledValue(for: 3, compatibleWith: traits)
-    let tagGap = metrics.scaledValue(for: 6, compatibleWith: traits)
-    let padding = metrics.scaledValue(for: 21, compatibleWith: traits)
+    let padding = UIFontMetrics(forTextStyle: .body).scaledValue(for: 21, compatibleWith: traits)
 
     #expect(abs(content.width - CGFloat(width)) <= 1)
     #expect(content.contains(title))
     #expect(content.contains(progress))
     #expect(!title.intersects(progress))
     #expect(abs(progress.maxX - content.maxX) <= 1)
-    #expect(abs(secondary.minY - max(title.maxY, progress.maxY) - gap) <= 1)
-    #expect(abs(tags.minY - secondary.maxY - tagGap) <= 1)
     #expect(abs(title.minY - content.minY - padding) <= 1)
-    #expect(abs(content.maxY - tags.maxY - padding) <= 1)
+    #expect(abs(content.maxY - max(title.maxY, progress.maxY) - padding) <= 1)
+    #expect(!descendants(window).contains {
+      $0.accessibilityIdentifier == "capture-frame-note-tags-shelf-progress"
+    })
     if size == .accessibility3 && width == 280 {
       #expect(progress.minY >= title.maxY)
     } else if size == .large {
@@ -166,7 +160,7 @@ struct LibraryRowHostTests {
   }
 
   @Test(arguments: [DynamicTypeSize.large, .accessibility3])
-  func longUntaggedRowsGrowWithoutReservingTagSpace(size: DynamicTypeSize) async throws {
+  func untaggedRowsKeepTheCountAndDateOnTheTitleLine(size: DynamicTypeSize) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.windows.first(where: \.isKeyWindow)
@@ -178,8 +172,7 @@ struct LibraryRowHostTests {
       id: "shelf-untagged",
       title: "📚 A longer thought about the things we choose to keep close",
       updatedAt: .now, gistID: "shared", owner: "notebook-friend",
-      isOwned: false, isSecret: false, isStarred: true,
-      excerpt: "Words that stay readable when the title and date need more room.")
+      isOwned: false, isSecret: false, isStarred: true, commentCount: 3)
     window.rootViewController = UIHostingController(
       rootView: VStack {
         LibraryNoteRow(note: note, tags: [])
@@ -206,10 +199,9 @@ struct LibraryRowHostTests {
     }
     let content = try frame("content")
     let title = try frame("title")
-    let secondary = try frame("secondary")
-    let metrics = UIFontMetrics(forTextStyle: .body)
-    let gap = metrics.scaledValue(for: 3, compatibleWith: traits)
-    let padding = metrics.scaledValue(for: 21, compatibleWith: traits)
+    let date = try frame("date")
+    let count = try frame("comment-count")
+    let padding = UIFontMetrics(forTextStyle: .body).scaledValue(for: 21, compatibleWith: traits)
     let titleFont = UIFont.preferredFont(forTextStyle: .headline, compatibleWith: traits)
     let twoLines = UILabel()
     twoLines.font = titleFont
@@ -219,17 +211,22 @@ struct LibraryRowHostTests {
     let twoLineHeight = twoLines.sizeThatFits(
       CGSize(width: title.width, height: .greatestFiniteMagnitude)).height
     #expect(content.contains(title))
-    #expect(content.contains(secondary))
-    #expect(abs(secondary.minY - title.maxY - gap) <= 1)
+    #expect(content.contains(date))
+    #expect(abs(date.maxX - content.maxX) <= 1)
+    #expect(count.maxX <= date.minX)
+    #expect(count.midY > date.minY && count.midY < date.maxY)
     #expect(abs(title.minY - content.minY - padding) <= 1)
-    #expect(abs(content.maxY - secondary.maxY - padding) <= 1)
+    #expect(abs(content.maxY - max(title.maxY, date.maxY) - padding) <= 1)
     #expect(!descendants(window).contains {
       $0.accessibilityIdentifier == "capture-frame-note-tags-shelf-untagged"
     })
     if size.isAccessibilitySize {
       #expect(title.height > twoLineHeight)
+      #expect(date.minY >= title.maxY)
     } else {
       #expect(title.height <= twoLineHeight + 1)
+      #expect(date.midY > title.minY && date.midY < title.maxY)
+      #expect(title.maxX <= count.minX)
     }
   }
 
@@ -247,7 +244,7 @@ struct LibraryRowHostTests {
     var contrast: Double { ink.contrast(with: background) }
   }
 
-  /// Reads the secondary ink that rendered. The ink of each date or excerpt is its most common pixel
+  /// Reads the secondary ink that rendered. The ink of each date is its most common pixel
   /// that departs from the card, and it should sit on the line from that card to the label color.
   private func renderedSecondaryInk(
     in window: UIWindow
@@ -261,7 +258,7 @@ struct LibraryRowHostTests {
       let content = try frame(in: window, identifier: "capture-frame-note-content-\(id)")
       let contentPixels = try metadataPixels(in: image, rect: content)
       let background = try #require(contentPixels.max { $0.value < $1.value }?.key)
-      for part in ["date", "excerpt"] {
+      for part in ["date"] {
         let marker = try frame(in: window, identifier: "capture-frame-note-\(part)-\(id)")
         let pixels = try metadataPixels(in: image, rect: marker.insetBy(dx: -1, dy: -1))
         let found = try #require(

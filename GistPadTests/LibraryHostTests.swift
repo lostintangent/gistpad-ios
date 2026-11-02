@@ -369,7 +369,7 @@ struct LibraryHostTests {
   }
 
   @Test(arguments: [DynamicTypeSize.large, .accessibility3])
-  func ordinaryRowsKeepTagsBelowTheDateAndExcerptWithoutClipping(size: DynamicTypeSize) async throws {
+  func taggedRowsKeepTheDateBesideTheTitleAndTheCountBesideTheTags(size: DynamicTypeSize) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.windows.first(where: \.isKeyWindow)
@@ -378,8 +378,8 @@ struct LibraryHostTests {
       size == .large ? .large : .accessibilityExtraLarge
     let note = LibraryNote(
       id: "metadata", title: "Words worth keeping",
-      updatedAt: .now.addingTimeInterval(-172_800), tagIDs: ["ideas"], fileCount: 3,
-      excerpt: "A few sentences to return to when a thought needs a starting point.")
+      updatedAt: .now.addingTimeInterval(-172_800), gistID: "metadata", tagIDs: ["ideas"],
+      fileCount: 3, commentCount: 2)
     let tags = [LibraryTag(id: "ideas", name: "Ideas", colorHex: "#EBC85A")]
     var measuredSize: CGSize?
     window.rootViewController = UIHostingController(
@@ -400,17 +400,30 @@ struct LibraryHostTests {
     try await Task.sleep(for: .milliseconds(400))
     window.layoutIfNeeded()
     let measured = try #require(measuredSize)
-    let marker = try #require(descendants(window).first {
-      $0.accessibilityIdentifier == "capture-frame-note-tags-metadata" && !$0.bounds.isEmpty
-    })
-    let metadata = marker.bounds.size
+    func frame(_ part: String) throws -> CGRect {
+      let marker = try #require(descendants(window).first {
+        $0.accessibilityIdentifier == "capture-frame-note-\(part)-metadata" && !$0.bounds.isEmpty
+      })
+      return marker.convert(marker.bounds, to: window)
+    }
+    let title = try frame("title")
+    let date = try frame("date")
+    let tags = try frame("tags")
+    let count = try frame("comment-count")
     #expect(measured.width == 324)
+    #expect(tags.minY >= max(title.maxY, date.maxY))
+    #expect(count.midY > tags.minY && count.midY < tags.maxY)
+    #expect(count.minX >= tags.maxX)
     if size == .large {
-      #expect(measured.height <= 128)
-      #expect(metadata.height <= 30)
+      #expect(date.midY > title.minY && date.midY < title.maxY)
+      #expect(date.minX >= title.maxX)
+      #expect(measured.height <= 100)
+      #expect(tags.height <= 30)
     } else {
+      // The wrapped title moves the date beneath it rather than narrowing either.
+      #expect(date.minY >= title.maxY)
       #expect(measured.height > 128)
-      #expect(metadata.height > 30)
+      #expect(tags.height > 30)
     }
   }
 

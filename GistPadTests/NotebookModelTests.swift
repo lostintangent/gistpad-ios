@@ -1353,50 +1353,6 @@ struct NotebookModelTests {
     #expect(await provider.readIDs.isEmpty)
   }
 
-  @Test func ordinaryLibraryExcerptsUseTheDefaultFileAndPreferDirtyLocalSourceWithoutFetching() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "Dirty local note", content: "Cached base"),
-        try makeGist(
-          id: "b", title: "Multiple", content: "Wrong alphabetical file", filename: "Apple.md",
-          additionalFiles: ["README.md": "A real cached excerpt\nwith another line"]),
-      ])
-    _ = try await provider.stageExistingDraft(gistID: "a", text: "  The local thought\nwins  ")
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.excerpt == "The local thought wins")
-    #expect(model.library.snapshot.notes.first(where: { $0.id == "b" })?.excerpt == "A real cached excerpt with another line")
-    #expect(await provider.readIDs.isEmpty)
-  }
-
-  @Test func durableEditsRefreshCleanDefaultFileExcerptsWithoutUsingAnotherFile() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(
-          id: "a", title: "A useful note", content: "Cached source",
-          additionalFiles: ["Ideas.md": "Another file"])
-      ])
-    let primary = try await provider.stageExistingDraft(
-      gistID: "a", text: "# A useful note\n\nAn earlier thought.")
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    _ = try await model.persist(
-      draftID: primary.id, accountID: fixtureAccount.id,
-      text: "---\nprivate: metadata\n---\n\n# A useful note\n\n- [x] Keep **this thought**.",
-      generation: primary.generation + 1)
-    #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.excerpt == "Keep this thought.")
-    await model.open(gistID: "a", filename: "Ideas.md")
-    let secondaryDocument = try #require(model.loadedDocument)
-    let secondary = try await provider.openDraft(for: secondaryDocument)
-    _ = try await model.persist(
-      draftID: secondary.id, accountID: fixtureAccount.id,
-      text: "# Ideas\n\nThis is not the default file.", generation: secondary.generation + 1)
-    #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.excerpt == "Keep this thought.")
-    #expect(await provider.readIDs.isEmpty)
-  }
-
   @Test func refreshDoesNotReplaceAnOpenedDocumentOrFilters() async throws {
     let original = try makeGist(id: "a", title: "Original", content: "Original text")
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [original])
@@ -2020,7 +1976,6 @@ struct NotebookModelTests {
       text: "- [x] A retained task\n- [ ] A new task", generation: 1)
     let row = try #require(model.library.snapshot.notes.first { $0.id == "daily/2026-10-24.md" })
     #expect(row.progress == .init(completed: 1, total: 2))
-    #expect(row.excerpt == "A retained task A new task")
     #expect(row.isOverdue)
     #expect(model.library.dailyNoteCount == 2)
     _ = try await model.publish(draftID: draft.id, accountID: draft.accountID)
