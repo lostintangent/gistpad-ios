@@ -4,12 +4,12 @@
   import GistPadPlatform
   import GistPadSync
 
-  /// The one launch contract for UI tests and captures. `--fixture standard|empty|signed-out|offline` runs the
+  /// The one launch contract for UI tests and captures. `--fixture standard|empty|signed-out|offline|showcase` runs the
   /// real app against the fixture GitHub. `--open <gist>[/<file>]` (or `today`), `--mode edit|preview|split`,
   /// `--query <text>`, `--sheet tags|settings|today|intelligence|comments` and `--accent <#RRGGBB>` start it
   /// where a test or capture needs it.
   struct FixtureLaunch {
-    enum Fixture: String { case standard, empty, signedOut = "signed-out", offline }
+    enum Fixture: String { case standard, empty, signedOut = "signed-out", offline, showcase }
     enum Sheet: String { case tags, settings, today, intelligence, comments }
 
     let fixture: Fixture
@@ -50,10 +50,16 @@
     func library() async throws -> Library {
       let server = FixtureServer()
       if fixture == .standard || fixture == .offline { try FixtureLibrary.seed(server) }
+      if fixture == .showcase { FixtureLibrary.seedShowcase(server) }
       let accounts = try server.accounts()
       if fixture != .signedOut {
         let account = try await server.signIn(accounts)
-        let seeded = fixture == .empty ? [] : FixtureLibrary.preferences
+        let seeded =
+          switch fixture {
+          case .empty: [Preferences.Change]()
+          case .showcase: FixtureLibrary.showcasePreferences
+          default: FixtureLibrary.preferences
+          }
         _ = try await accounts.update(seeded + (accent.map { [.setAccentColor($0)] } ?? []), accountID: account.id)
       }
       let store = try DraftStore.open(inMemory: true)

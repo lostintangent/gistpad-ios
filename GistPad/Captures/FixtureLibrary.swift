@@ -78,6 +78,86 @@
         ("mixed", ["personal", "ink"]), ("longtitle", ["reading", "ink", "someday", "design"]),
       ].flatMap { gist, tags in tags.map { Preferences.Change.setTag(gistID: gist, tagID: $0, included: true) } }
 
+    /// A notebook that reads like a real person's, for the README and the App Store.
+    static func seedShowcase(_ server: FixtureServer, now: Date = .now) {
+      let minute: TimeInterval = 60
+      let day: TimeInterval = 86_400
+
+      server.addGist(
+        id: "talk", description: "SwiftUI talk notes",
+        files: [
+          "talk.md": "# SwiftUI talk notes\n\n1. Why native still matters\n2. Layout that adapts to the fold\n3. Widgets as front doors\n4. Questions\n",
+          "demos.md": "# Demos\n\n- The launcher widget, live\n- Split view on the Duo\n",
+        ],
+        updatedAt: now - 13 * day,
+        comments: ["Can you share the slides after?", "The widget demo would make a great opener."])
+      server.addGist(
+        id: "sourdough", description: "Sourdough schedule",
+        files: ["sourdough.md": "# Sourdough schedule\n\n- **8 AM** Feed the starter\n- **12 PM** Mix the dough\n- **1 to 4 PM** Fold every 30 minutes\n- **Next morning** Bake at 475°F\n"],
+        updatedAt: now - 5 * day)
+      server.addGist(
+        id: "lisbon", description: "Trip to Lisbon",
+        files: ["lisbon.md": "# Trip to Lisbon\n\nA slow first day in Alfama, with the tram up to the castle at sunset.\n\nPastéis de nata in Belém, then the walk along the river to the tower.\n"],
+        updatedAt: now - 2 * day)
+      server.addGist(
+        id: "reading", description: "Reading list",
+        files: ["books.md": "# Reading list\n\n- [x] The Remains of the Day\n- [ ] Pilgrim at Tinker Creek\n- [ ] A Gentleman in Moscow\n- [ ] The Overstory\n"],
+        updatedAt: now - day, isStarred: true)
+      server.addGist(
+        id: "daily", description: DailyNote.gistDescription,
+        files: [
+          dailyFile(now - 2 * day): "- [x] Pick up the dry cleaning\n- [x] Send the invoice\n",
+          dailyFile(now - day): "- [x] Water the plants\n- [x] Finish the talk outline\n",
+          dailyFile(now): "- [x] Morning pages\n- [ ] Call Mom about Thanksgiving\n- [ ] Renew passport\n\nCoffee with Sam at 3.\n",
+        ],
+        updatedAt: now - 120 * minute)
+      server.addGist(
+        id: "garden", description: "Garden plans",
+        files: ["garden.md": "# Garden plans\n\n- Tomatoes along the fence\n- Move the rosemary into the sun\n- Order seeds by February\n"],
+        updatedAt: now - 90 * minute)
+      server.addGist(
+        id: "menu", description: "Thanksgiving menu",
+        files: ["menu.md": thanksgivingMenu], updatedAt: now - 6 * minute,
+        comments: ["Can we do two pies this year?"])
+    }
+
+    static let showcasePreferences: [Preferences.Change] =
+      [.setPinned(gistID: "lisbon", pinned: true)]
+      + [
+        ("family", "Family", "#A88EB5"), ("cooking", "Cooking", "#E8A25A"), ("travel", "Travel", "#5A9BD5"),
+        ("books", "Books", "#EBC85A"), ("home", "Home", "#548C80"), ("work", "Work", nil),
+      ].map { Preferences.Change.upsertTag(id: $0.0, name: $0.1, color: $0.2) }
+      + [
+        ("menu", ["family", "cooking"]), ("garden", ["home"]), ("reading", ["books"]),
+        ("lisbon", ["travel"]), ("sourdough", ["cooking"]), ("talk", ["work"]),
+      ].flatMap { gist, tags in tags.map { Preferences.Change.setTag(gistID: gist, tagID: $0, included: true) } }
+
+    private static let thanksgivingMenu =
+      """
+      # Thanksgiving menu
+
+      Twelve at the table this year, and dinner's at 4.
+
+      ## To do
+
+      - [x] Order the turkey from Hayes Farm
+      - [x] Ask Sam about the green beans
+      - [ ] Brine the turkey Wednesday night
+      - [ ] Borrow Mom's gravy boat
+
+      ## Who's bringing what
+
+      | Dish | Who |
+      | --- | --- |
+      | Turkey and gravy | Me |
+      | Green beans | Sam |
+      | Stuffing | Aunt Rose |
+      | Pumpkin pie | Jess |
+
+      > The turkey goes in at 10:30, so the oven's free for pies by 3.
+
+      """
+
     private static func dailyFile(_ date: Date) -> String { DailyNote.filename(date: date) }
 
     private static let highlightMarkdown =
