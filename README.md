@@ -1,6 +1,6 @@
 # 📓 GistPad Native
 
-A native iPhone app for [GistPad](https://gistpad.dev), the notebook that keeps your notes, daily notes and prompts in GitHub Gists. It's the pocket companion to [gistpad.dev](https://gistpad.dev) and the [GistPad extension](https://aka.ms/gistpad) for VS Code. Sign in with GitHub and the same gists, daily notes, tags and pins are on your phone, woven into widgets, Siri, Spotlight and on-device Apple Intelligence.
+A native iPhone app for [GistPad](https://gistpad.dev), the notebook that keeps your notes, daily notes and prompts in GitHub Gists. It's the pocket companion to [gistpad.dev](https://gistpad.dev) and the [GistPad extension](https://aka.ms/gistpad) for VS Code, and it's made for the iPhone Duo, so unfolding it puts your library beside the note. Sign in with GitHub and the same gists, daily notes, tags and pins are on your phone, woven into widgets, Siri, Spotlight and on-device Apple Intelligence.
 
 ## Features
 
@@ -11,8 +11,6 @@ A native iPhone app for [GistPad](https://gistpad.dev), the notebook that keeps 
 - **Never lose a word:** Every keystroke is saved on your phone, so you can read and write offline. Edits publish to GitHub five seconds after you stop typing, and whenever you leave a note. If a gist changed somewhere else, GistPad shows both versions and lets you choose.
 - **Private AI on your phone:** Ask a question about a note and get an answer that cites it, describe an edit and review every change before applying it, or have a note reviewed for errors and unclear wording. Writing Tools work everywhere you type. It all runs on device with Apple Intelligence, so your notes never leave your phone for AI.
 - **Comments in context:** Select a passage to comment on it, and see highlights in the editor and Preview. They're the same gist comments you see on gistpad.dev.
-- **Made for the iPhone Duo:** Open the Duo and your library sits beside the note, like a notebook. Fold or unfold mid-sentence, and your mode, cursor and Undo stay exactly where they were.
-- **Organize and share:** Pin, star, archive and tag gists in your own colors, filter the library by tag, and share or copy a gistpad.dev link in a tap.
 
 ## Developing
 
