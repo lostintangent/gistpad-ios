@@ -1,17 +1,13 @@
 import GistPadInterface
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct NotebookAccountSwitchSheet: View {
   let current: String
   let replacement: String
-  let export: @MainActor () async throws -> Data
   let switchAccount: @MainActor () async throws -> Void
   let keepCurrent: @MainActor () -> Void
   @State private var isWorking = false
   @State private var error: String?
-  @State private var backup: NotebookDraftBackup?
-  @State private var showingExporter = false
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   var body: some View {
@@ -28,17 +24,8 @@ struct NotebookAccountSwitchSheet: View {
             work { try await switchAccount() }
           }
           .accessibilityIdentifier("account-switch-confirm")
-          Button("Export Current Drafts") {
-            work {
-              backup = NotebookDraftBackup(data: try await export())
-              showingExporter = true
-            }
-          }
-          .accessibilityIdentifier("account-switch-export")
         } footer: {
-          Text(
-            "Reconnect the original account to return to its drafts. Export makes an additional backup without changing or deleting anything."
-          )
+          Text("Reconnect the original account to return to its drafts.")
         }
         if let error {
           Section {
@@ -58,14 +45,6 @@ struct NotebookAccountSwitchSheet: View {
       .disabled(isWorking)
       .interactiveDismissDisabled(isWorking)
       .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
-      .fileExporter(
-        isPresented: $showingExporter, document: backup,
-        contentType: .json, defaultFilename: "GistPad-\(current)-drafts"
-      ) { result in
-        if case .failure(let failure) = result {
-          error = failure.localizedDescription
-        }
-      }
     }
   }
 
@@ -81,21 +60,5 @@ struct NotebookAccountSwitchSheet: View {
         self.error = error.localizedDescription
       }
     }
-  }
-}
-
-private struct NotebookDraftBackup: FileDocument {
-  static var readableContentTypes: [UTType] { [.json] }
-  let data: Data
-
-  init(data: Data) { self.data = data }
-  init(configuration: ReadConfiguration) throws {
-    guard let data = configuration.file.regularFileContents else {
-      throw CocoaError(.fileReadCorruptFile)
-    }
-    self.data = data
-  }
-  func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-    FileWrapper(regularFileWithContents: data)
   }
 }

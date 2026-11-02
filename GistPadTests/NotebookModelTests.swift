@@ -705,7 +705,7 @@ struct NotebookModelTests {
     #expect(model.library.today.text != nil)
     #expect(model.library.today.progress == .init(completed: 0, total: 0))
     let reads = await provider.readIDs
-    await model.updateCalendar()
+    model.updateCalendar()
     #expect(await provider.readIDs == reads)
     #expect(await provider.todayTargets.isEmpty)
     #expect(await provider.creationCount == 0)
@@ -751,7 +751,7 @@ struct NotebookModelTests {
     #expect(model.loadedDocument?.text == "Zebra source")
   }
 
-  @Test func accountSwitchKeepsAndExportsExactOriginalAccountDrafts() async throws {
+  @Test func accountSwitchKeepsExactOriginalAccountDrafts() async throws {
     let provider = StubNotebookProvider(
       account: fixtureAccount, gists: [try makeGist(id: "a", title: "Original account")])
     let selections = NotebookSelectionStore()
@@ -765,13 +765,7 @@ struct NotebookModelTests {
       id: UUID(), login: "other-account", preferences: .init(metadata: [:]))
     await provider.setSignInAccount(replacement)
     await model.signIn()
-    let export = try await model.exportCurrentDrafts()
-    let json = try #require(
-      try JSONSerialization.jsonObject(with: export) as? [String: Any])
-    let rows = try #require(json["drafts"] as? [[String: Any]])
-    #expect(json["accountID"] as? String == fixtureAccount.id.uuidString)
-    #expect(rows.count == 1)
-    #expect((rows.first?["text"] as? String)?.utf8.elementsEqual(text.utf8) == true)
+    #expect(model.pendingAccount?.id == replacement.id)
     model.keepCurrentNotebook()
     #expect(model.account?.id == fixtureAccount.id)
     #expect(model.pendingAccount == nil)
@@ -1150,7 +1144,7 @@ struct NotebookModelTests {
     #expect(model.library.snapshot.notes[index].isOverdue)
     // A row projected before midnight is stale until the calendar changes.
     model.library.snapshot.notes[index].isOverdue = false
-    await model.updateCalendar()
+    model.updateCalendar()
     #expect(model.library.snapshot.notes[index].isOverdue)
   }
 

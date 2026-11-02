@@ -639,7 +639,7 @@ final class NotebookModel {
         library.loadState = .reconnectRequired(
           message: String(
             localized:
-              "A different GitHub account signed in. Keep or export the current account's drafts before switching."
+              "A different GitHub account signed in. Keep the current notebook or switch to it."
           ))
         return
       }
@@ -682,38 +682,8 @@ final class NotebookModel {
       ))
   }
 
-  func exportCurrentDrafts() async throws -> Data {
-    guard let account else { throw AccountError.signedOut }
-    struct Export: Encodable {
-      let formatVersion = 1
-      let accountID: UUID
-      let login: String
-      let drafts: [ExportedDraft]
-    }
-    struct ExportedDraft: Encodable {
-      let id: UUID
-      let gistID: String?
-      let filename: String
-      let title: String
-      let text: String
-      let generation: UInt64
-    }
-    let local = try await provider.localState(accountID: account.id)
-    guard self.account?.id == account.id else { throw AccountError.accountChanged }
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-    return try encoder.encode(
-      Export(
-        accountID: account.id, login: account.login,
-        drafts: local.drafts.map {
-          ExportedDraft(
-            id: $0.id, gistID: $0.gistID, filename: $0.filename,
-            title: $0.description, text: $0.text, generation: $0.generation)
-        }))
-  }
-
   /// A new day moves Today and makes yesterday's unfinished tasks overdue.
-  func updateCalendar() async {
+  func updateCalendar() {
     projectLibrary()
     updateToday()
   }

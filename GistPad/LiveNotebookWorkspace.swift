@@ -243,14 +243,9 @@ struct LiveNotebookWorkspace: View {
       if phase == .background { finishBackgroundSaves() }
       if phase == .active {
         publishUnsyncedEdits()
-        Task {
-          await notebook.updateCalendar()
-          await active?.inspectRemoteChanges()
-        }
+        notebook.updateCalendar()
+        Task { await active?.inspectRemoteChanges() }
       }
-    }
-    .onChange(of: notebook.cachedLibrary?.cachedAt) {
-      NotebookPlatformBootstrap.scheduleRefresh()
     }
     .onChange(of: notebook.account, initial: true) {
       NotebookPlatformBootstrap.scheduleRefresh()
@@ -282,10 +277,7 @@ struct LiveNotebookWorkspace: View {
       if signingOut { comments.reset() }
     }
     .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
-      Task { await notebook.updateCalendar() }
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
-      Task { await notebook.updateCalendar() }
+      notebook.updateCalendar()
     }
   }
 
@@ -355,17 +347,8 @@ struct LiveNotebookWorkspace: View {
       },
       signOut: {
         guard let account else { throw AccountError.signedOut }
-        do {
-          _ = try await execute(.signOut, accountID: account.id)
-          showingSettings = false
-        } catch {
-          if notebook.account == nil {
-            showingSettings = false
-            actionMessage = String(
-              localized: "You're signed out on this iPhone, but session cleanup couldn't finish. Your local drafts are kept.")
-          }
-          throw error
-        }
+        _ = try await execute(.signOut, accountID: account.id)
+        showingSettings = false
       }
     ) {
       PersonalAccentColorRow(savedHex: account?.preferences.accentColor) { hex in
@@ -389,10 +372,6 @@ struct LiveNotebookWorkspace: View {
     if let account = notebook.account, let pending = notebook.pendingAccount {
       NotebookAccountSwitchSheet(
         current: account.login, replacement: pending.login,
-        export: {
-          try await finishAccountPersistence(account.id)
-          return try await notebook.exportCurrentDrafts()
-        },
         switchAccount: {
           try await finishAccountPersistence(account.id)
           activeID = nil
