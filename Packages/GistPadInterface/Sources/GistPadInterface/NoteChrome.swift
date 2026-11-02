@@ -34,7 +34,6 @@ extension PublishState {
 public enum NoteAccess: Equatable, Sendable {
     case editable
     case readOnly
-    case truncated
 
     public var canEdit: Bool { self == .editable }
 }

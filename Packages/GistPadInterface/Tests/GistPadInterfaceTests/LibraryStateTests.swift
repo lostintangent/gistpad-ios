@@ -100,7 +100,6 @@ struct LibraryStateTests {
     @Test func readOnlyGistsCantBeEdited() {
         #expect(NoteAccess.editable.canEdit)
         #expect(!NoteAccess.readOnly.canEdit)
-        #expect(!NoteAccess.truncated.canEdit)
     }
 
     @Test func aFailedPublishOffersPublishEvenWithAutosaveOn() {
