@@ -118,7 +118,7 @@ Keep known counts through refresh/offline and omit unknown counts. Home may show
 
 ### Today button and excerpts
 
-Use the native outlined `calendar` glyph, primary monochrome ink and a target of at least 44 pt. It is one adaptive toolbar item, with an attached foreground-filled/inverse-numeral badge like Comments, not a custom floating control or extra independent badge target. No personal tint, red urgency, progress donut or completion check.
+Use the native `calendar` glyph in primary monochrome ink with a target of at least 44 pt. It's outlined until today has a page, then sits on a label fill with an inverse glyph. It is one adaptive toolbar item, with an attached foreground-filled/inverse-numeral badge like Comments, not a custom floating control or extra independent badge target. Both the fill and the badge are quiet: they give visibility and never ask for attention. No personal tint, red urgency, progress donut or completion check.
 
 The badge counts **unfinished tasks in today's exact file**, not all tasks, all Daily Notes or overdue days. Reuse the existing Today task summary from durable local/cached source. Missing source means unknown, not zero. Update after committed local changes and resolve the current account/date; never carry yesterday's count or create/fetch a note merely to decorate the button.
 
@@ -127,8 +127,8 @@ The badge counts **unfinished tasks in today's exact file**, not all tasks, all 
 | Known 0 unfinished tasks | No badge; calendar remains enabled. Accessibility can state no unfinished tasks |
 | Known positive | Exact localized count through 99, then visual 99+; full accessible count. The board shows 3, 12 and 128 |
 | Unknown | No badge and no false zero/success claim. Existing opening/recovery remains available |
-| Today absent | Same enabled calendar, no badge. Tap stages the real durable local day and opens Edit, never automatically publishes an untouched default |
-| Today's exact file is visible | Native neutral selected material and selected trait. A different day in the same gist does not select Today |
+| Today absent | Outlined, enabled calendar, no badge. Tap stages the real durable local day and opens Edit, never automatically publishes an untouched default |
+| Today has a page (your draft or a cached copy), open or not | Label fill with an inverse glyph, plus the badge when tasks are unfinished. The fill isn't selection, so VoiceOver reads Today and the task status, never "selected" |
 
 Closed taps push Today through native navigation; Open taps replace the document while keeping Library position. Both use the existing explicit Today action, Edit-ready caret beneath its heading and keyboard request on editor attachment. Reuse the retained session rather than creating another copy. Default launch restoration stays quiet as specified above. Day rollover changes the button's target/count, never the open document.
 
