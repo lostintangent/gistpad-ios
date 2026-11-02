@@ -119,7 +119,7 @@ xcodebuild -project GistPad.xcodeproj -scheme GistPad \
 
 ## Module map
 
-Feature code lives in local packages, so parallel work doesn't churn `project.pbxproj`. The app target owns signing and wires the packages together.
+Feature code lives in local packages, so each area has a compiler-enforced public API and its tests run on macOS with `swift test`, without the simulator or the slot. The app and the widget extension link the same packages. The app target owns signing and wires the packages together.
 
 | Module | What it does |
 |---|---|
