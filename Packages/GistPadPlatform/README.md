@@ -10,10 +10,10 @@ needs the web's `apple-app-site-association` file deployed first.
 
 ## System surfaces
 
-`NoteEntity` is an `IndexedEntity` with title, exact filename, tags and a cached
-snippet, indexed with complete file protection. `NoteEntityQuery` resolves
-identifiers and strings for the signed-in account and answers the system's
-reindex requests.
+`GistEntity` is an `IndexedEntity`, one per gist, with its title, tags and a
+snippet, indexed with complete file protection. Opening one opens the gist the
+way the Library does. `GistEntityQuery` resolves identifiers and strings for the
+signed-in account and answers the system's reindex requests.
 
 Open Note, Open Today and Add to Today are App Shortcuts. The Add to Today control
 opens the capture sheet, and shortcut-provided text skips it. Captures append

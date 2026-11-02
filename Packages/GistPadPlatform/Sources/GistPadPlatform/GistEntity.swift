@@ -1,56 +1,61 @@
+import Foundation
 #if os(iOS)
 import AppIntents
 import CoreSpotlight
-import Foundation
 import UniformTypeIdentifiers
+#endif
 
-public struct NoteEntity: IndexedEntity {
-    public static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Note")
-    public static let defaultQuery = NoteEntityQuery()
-    let note: SystemNote
-    public var id: String { note.id }
+public struct GistEntity: Codable, Equatable, Identifiable, Sendable {
+    public var id: String { route.url.absoluteString }
+    let title: String
+    let excerpt: String?
+    let tags: [String]
+    let updatedAt: Date?
+    let route: NotebookRoute
+}
 
-    init(note: SystemNote) { self.note = note }
+#if os(iOS)
+extension GistEntity: IndexedEntity {
+    public static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Gist")
+    public static let defaultQuery = GistEntityQuery()
 
     public var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(
-            title: "\(note.title)", subtitle: "\(note.filename)",
+            title: "\(title)", subtitle: excerpt.map { "\($0)" },
             image: .init(systemName: "doc.text"))
     }
 
     public var attributeSet: CSSearchableItemAttributeSet {
         let attributes = CSSearchableItemAttributeSet(contentType: .text)
-        attributes.title = note.title
-        attributes.displayName = note.title
-        attributes.contentDescription = note.excerpt
-        attributes.keywords = note.tags + [note.filename]
-        attributes.contentModificationDate = note.updatedAt
-        attributes.contentURL = note.route.url
+        attributes.title = title
+        attributes.displayName = title
+        attributes.contentDescription = excerpt
+        attributes.keywords = tags
+        attributes.contentModificationDate = updatedAt
+        attributes.contentURL = route.url
         return attributes
     }
 }
 
-public struct NoteEntityQuery: EntityStringQuery, IndexedEntityQuery {
+public struct GistEntityQuery: EntityStringQuery, IndexedEntityQuery {
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
     @Dependency private var notebook: any NotebookIntentServing
     public init() {}
 
-    public func entities(for identifiers: [String]) async throws -> [NoteEntity] {
-        let notes = try await currentSnapshot()?.notes ?? []
-        let byID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
-        return identifiers.compactMap { byID[$0].map(NoteEntity.init) }
+    public func entities(for identifiers: [String]) async throws -> [GistEntity] {
+        try await currentSnapshot()?.gists.filter { identifiers.contains($0.id) } ?? []
     }
 
-    public func suggestedEntities() async throws -> [NoteEntity] {
-        try await currentSnapshot()?.notes.prefix(12).map(NoteEntity.init) ?? []
+    public func suggestedEntities() async throws -> [GistEntity] {
+        try await Array(currentSnapshot()?.gists.prefix(12) ?? [])
     }
 
-    public func entities(matching string: String) async throws -> [NoteEntity] {
+    public func entities(matching string: String) async throws -> [GistEntity] {
         let terms = string.split(whereSeparator: \.isWhitespace).map(String.init)
-        return try await currentSnapshot()?.notes.filter { note in
-            let content = ([note.title, note.filename] + note.tags).joined(separator: " ")
+        return try await currentSnapshot()?.gists.filter { gist in
+            let content = ([gist.title] + gist.tags).joined(separator: " ")
             return terms.allSatisfy { content.localizedStandardContains($0) }
-        }.map(NoteEntity.init) ?? []
+        } ?? []
     }
 
     public func reindexEntities(
@@ -60,8 +65,7 @@ public struct NoteEntityQuery: EntityStringQuery, IndexedEntityQuery {
     }
 
     public func reindexAllEntities(indexDescription: CSSearchableIndexDescription) async throws {
-        let notes = try await currentSnapshot()?.notes ?? []
-        try await NotebookEntityIndex.index.indexAppEntities(notes.map(NoteEntity.init))
+        try await NotebookEntityIndex.index.indexAppEntities(currentSnapshot()?.gists ?? [])
     }
 
     private func currentSnapshot() async throws -> NotebookSystemSnapshot? {
@@ -93,18 +97,18 @@ public actor NotebookEntityIndex {
 
     private func replaceIndex(with current: NotebookSystemSnapshot) async throws {
         guard CSSearchableIndex.isIndexingAvailable() else { return }
-        let currentIDs = Set(current.notes.map(\.id))
+        let currentIDs = Set(current.gists.map(\.id))
         if let indexedIDs {
             let removed = indexedIDs.subtracting(currentIDs)
             if !removed.isEmpty {
                 try await Self.index.deleteAppEntities(
-                    identifiedBy: Array(removed), ofType: NoteEntity.self)
+                    identifiedBy: Array(removed), ofType: GistEntity.self)
             }
         } else {
-            try await Self.index.deleteAppEntities(ofType: NoteEntity.self)
+            try await Self.index.deleteAllSearchableItems()
         }
         indexedIDs = nil
-        try await Self.index.indexAppEntities(current.notes.map(NoteEntity.init))
+        try await Self.index.indexAppEntities(current.gists)
         indexedIDs = currentIDs
     }
 }
@@ -115,12 +119,12 @@ public struct OpenNoteIntent: OpenIntent {
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
     public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
 
-    @Parameter(title: "Note") public var target: NoteEntity
+    @Parameter(title: "Gist") public var target: GistEntity
     public init() {}
 
     @MainActor
     public func perform() async throws -> some IntentResult {
-        NotebookRouteInbox.shared.submit(target.note.route)
+        NotebookRouteInbox.shared.submit(target.route)
         return .result()
     }
 }

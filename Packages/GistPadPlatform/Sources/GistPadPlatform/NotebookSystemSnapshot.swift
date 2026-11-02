@@ -21,17 +21,6 @@ public enum NotebookPlatformError: LocalizedError, Equatable, Sendable {
     }
 }
 
-struct SystemNote: Codable, Equatable, Identifiable, Sendable {
-    var id: String { "\(accountID.uuidString)/\(route.url.absoluteString)" }
-    let accountID: UUID
-    let title: String
-    let filename: String
-    let excerpt: String?
-    let tags: [String]
-    let updatedAt: Date?
-    let route: NotebookRoute
-}
-
 public struct TodayTask: Codable, Equatable, Identifiable, Sendable {
     public var id: String { "\(draftID.uuidString)/\(generation)/\(markerLocation)" }
     let draftID: UUID
@@ -62,7 +51,7 @@ public struct SystemToday: Codable, Equatable, Sendable {
 public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
     public let accountID: UUID?
     let accentHex: String?
-    let notes: [SystemNote]
+    let gists: [GistEntity]
     public let today: SystemToday
 
     public static func make(
@@ -70,36 +59,22 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
         date: Date = .now, timeZone: TimeZone = .current
     ) -> Self {
         let target = DailyNoteTarget(date: date, timeZone: timeZone)
-        var notes: [SystemNote] = []
-        if let accountID, let cache {
-            for gist in cache.gists {
-                for filename in gist.markdownFilenames {
-                    let draft = drafts.first { $0.gistID == gist.id && $0.filename == filename }
-                    let text = draft?.text ?? cache.content(gist: gist, filename: filename)
-                    notes.append(SystemNote(
-                        accountID: accountID, title: gist.displayName, filename: filename,
-                        excerpt: excerpt(text),
-                        tags: cache.preferences.tagNames(gistID: gist.id),
-                        updatedAt: gist.updatedAt,
-                        route: .note(gistID: gist.id, filename: filename)))
-                }
-            }
-        }
+        var gists: [GistEntity] = []
         if let accountID {
-            for draft in drafts {
-                let route: NotebookRoute
-                if let gistID = draft.gistID {
-                    guard cache?.gists.contains(where: { $0.id == gistID }) == true else { continue }
-                    route = .note(gistID: gistID, filename: draft.filename)
-                    guard !notes.contains(where: { $0.route == route }) else { continue }
-                } else {
-                    route = .draft(accountID: accountID, draftID: draft.id)
-                }
-                notes.append(SystemNote(
-                    accountID: accountID,
+            for gist in cache?.gists ?? [] {
+                guard let filename = gist.defaultMarkdownFilename else { continue }
+                let draft = drafts.first { $0.gistID == gist.id && $0.filename == filename }
+                gists.append(GistEntity(
+                    title: gist.displayName,
+                    excerpt: excerpt(draft?.text ?? cache?.content(gist: gist, filename: filename)),
+                    tags: cache?.preferences.tagNames(gistID: gist.id) ?? [],
+                    updatedAt: gist.updatedAt, route: .note(gistID: gist.id, filename: nil)))
+            }
+            for draft in drafts where draft.gistID == nil {
+                gists.append(GistEntity(
                     title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
-                    filename: draft.filename, excerpt: excerpt(draft.text), tags: [],
-                    updatedAt: nil, route: route))
+                    excerpt: excerpt(draft.text), tags: [], updatedAt: nil,
+                    route: .draft(accountID: accountID, draftID: draft.id)))
             }
         }
         let daily = cache?.owned.first(where: \.isDailyNote)
@@ -126,7 +101,7 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
         return Self(
             accountID: accountID,
             accentHex: cache?.preferences.accentColor,
-            notes: notes.sorted {
+            gists: gists.sorted {
                 $0.updatedAt == $1.updatedAt
                     ? $0.id < $1.id : ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast)
             },
@@ -141,7 +116,7 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
         let draftID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
         let target = DailyNoteTarget(date: date)
         return Self(
-            accountID: accountID, accentHex: nil, notes: [],
+            accountID: accountID, accentHex: nil, gists: [],
             today: SystemToday(
                 filename: target.filename, timeZoneIdentifier: target.timeZoneIdentifier,
                 excerpt: "A little room for what matters today.",
