@@ -1,10 +1,27 @@
-# Working in GistPad Native
+# How we work on GistPad Native
 
-How the team works in this repository. The channel purpose holds the charter: what we're building and the principles behind it. This file holds the mechanics.
+The channel purpose is the charter: what GistPad Native is and the bar it has to clear. This file is how we build it. Every agent working in this repository follows it.
+
+## Principles
+
+- **Lean on the system.** Use semantic, declarative SDK and SwiftUI behavior wherever it exists: system roles, placements, styles and state. Don't write custom logic or styling to replace what the system provides unless the user asks for it. A custom tint, size, layout calculation or wrapper type has to earn its place, and deleting one is usually the improvement.
+- **Happy path first.** Make the mainline path fast and reliable. Don't add defensive code for cases that rarely or never happen. Prefer deleting edge-case machinery over adding it, and keep sync as simple as the web's contract in `docs/sync.md`.
+- **Modern and idiomatic.** Use the newest APIs the current iOS SDK offers, the way Apple's own sample code would. No dated patterns and no web-feeling surfaces.
+- **One owner per area.** Each module has one owner, named in the channel roster. Agree seams with the owner in the channel instead of editing their code.
+- **Evidence over claims.** Back every claim with test names and counts, captures and commit hashes. Say plainly what you didn't verify.
+
+## How a change ships
+
+1. Work arrives as a task in the channel with one owner. Straightforward feedback ships quickly, so start right away.
+2. The effort has one integration branch, named in the task list. Branch from it into your own worktree.
+3. Work in small compiling commits. Package tests run on macOS at any time.
+4. When you need the simulator, take the build slot, rebase onto the integration branch, and do one build, one test run and one capture pass. Merge as soon as it's green, then release the slot.
+5. Designer signs off every visible surface from Dark captures.
+6. Lead batches the merged work into one build, bumps the build number, installs it on the user's phone, tags `main` as `v<version>-<build>` and merges the integration branch into it.
 
 ## Where things are
 
-- This repo is `~/Desktop/gistpad-ios`. The main checkout stays on `main`. Do your work in a worktree.
+- This repo is `~/Desktop/gistpad-ios`.
 - The web app at `~/Desktop/gistpad.dev` is the reference for behavior and the source of the Markdown renderer. Read it freely. Never commit to it, and propose any change to it in the channel first.
 - `README.md` has the module map. `docs/design-direction.md` and `docs/design-system.md` are the design spec, `docs/sync.md` is the sync contract, and `docs/engineering.md` records engineering choices.
 
@@ -27,15 +44,12 @@ The machine overloads, so the whole channel shares one simulator and one heavy j
   ```
 
 - **Release it** with `rm /tmp/gistpad-slot.lock` the moment you're done, and say so in the channel.
-- **Batch.** Rebase onto whatever has merged, then do one build, one test run and one capture pass per slot session.
 
 ## Branches
 
-- `main` holds shipped builds, tagged `v<version>-<build>`. Each effort has one integration branch, named in the channel's task list.
-- Work on your own branch in your own worktree under `~/Developer/gistpad-work/`.
-- Commit small checkpoints that compile. Stage only your own files, and never revert or reformat a teammate's work.
+- Work on your own branch in your own worktree under `~/Developer/gistpad-work/`. The main checkout stays on `main`.
+- Stage only your own files, and never revert or reformat a teammate's work.
 - Before fast-forwarding an integration branch, run `git merge-base --is-ancestor <integration> <yours>`. If your branch wasn't cut from the integration branch, merge instead.
-- Merge as soon as your slot run is green, so teammates rebase onto real work.
 
 ## Building and testing
 
@@ -51,8 +65,6 @@ The machine overloads, so the whole channel shares one simulator and one heavy j
 - Preserve unknown Supabase metadata fields and value shapes, so the web app keeps working.
 - Sign-in redirects to `gistpad://auth-callback`, which is already configured in Supabase.
 
-## Captures and evidence
+## Captures
 
 - Capture in Dark appearance, on the slot simulator, into `~/Developer/gistpad-work/captures/<task>/`. Attach captures to the channel message that presents them.
-- Designer signs off every visible surface from these captures.
-- Back every claim with evidence: test names and counts, captures and commit hashes. Say plainly what you didn't verify.
