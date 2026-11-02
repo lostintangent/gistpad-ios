@@ -38,4 +38,17 @@ final class GistUITests: XCTestCase {
     try waitUntil("Ideas.md") { (editor.value as? String)?.hasPrefix("# Ideas") == true }
     XCTAssertTrue(app.navigationBars.staticTexts["Ideas.md"].exists)
   }
+
+  func testAddLinkOpensReadyForItsURL() throws {
+    let app = launchGistPad(open: "shape/README.md", mode: "edit")
+    try tap(app.textViews["source-editor"], "the editor")
+    try tap(app.buttons["editor-insert-menu"], "Insert")
+    try tap(app.buttons["Link…"].firstMatch, "Link…")
+    let url = app.textFields["URL"]
+    try waitUntil("Add Link with its keyboard") { url.exists && app.keyboards.firstMatch.exists }
+
+    // Typing without a tap proves the URL field, not the Text field or the editor, has focus.
+    app.typeText("gistpad.dev")
+    XCTAssertEqual(url.value as? String, "gistpad.dev")
+  }
 }

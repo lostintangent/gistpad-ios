@@ -351,7 +351,6 @@
             .autocorrectionDisabled()
           if let error { Text(error).foregroundStyle(.red) }
         }
-        .defaultFocus($urlFocused, true)
         .navigationTitle(String(localized: "Add Link", bundle: .module))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -364,6 +363,7 @@
           }
         }
       }
+      .task { urlFocused = true }
     }
 
     private func insert() {
