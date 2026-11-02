@@ -119,7 +119,7 @@ struct InterfaceCaptureWorkspace: View {
             "status-limited", "tag-filters", "row-anatomy",
             "collection-loading", "no-pins", "three-pins", "today-0", "today-3", "today-99plus",
             "collections-expanded", "collections-collapsed", "collections-empty",
-            "collection-search", "collection-overlap", "long-library", "square-pins"
+            "collection-search", "collection-overlap", "long-library", "square-pins", "compact-rows"
         ].contains(state) || (LaunchArguments.captureMangaFixture && screen == "note"
             && ["markers", "rules", "bullets"].contains(state))
         _showingTagEditor = State(initialValue: state == "tag-editor" || state == "tag-readonly")
@@ -229,12 +229,18 @@ struct InterfaceCaptureWorkspace: View {
                 filename: "README.md"
             ))
         }
-        if state == "row-undated" {
-            snapshot.notes.append(.init(
-                id: "undated-draft", title: "A thought that is not dated yet", updatedAt: nil,
-                gistID: "undated-draft", filename: "Thought.md",
-                commentCount: 3
-            ))
+        if state == "compact-rows" {
+            if let index = snapshot.notes.firstIndex(where: { $0.id == "shape" }) {
+                snapshot.notes[index].title = "📚 Manga reading list"
+            }
+            if let index = snapshot.notes.firstIndex(where: { $0.id == "small" }) {
+                snapshot.notes[index].title = "📆 Family memories"
+                snapshot.notes[index].commentCount = 2
+            }
+            if let index = snapshot.notes.firstIndex(where: { $0.id == "weekend" }) {
+                snapshot.notes[index].tagIDs = []
+                snapshot.notes[index].commentCount = 4
+            }
         }
         if state == "tag-audit" {
             snapshot = LibrarySnapshot(
@@ -304,7 +310,7 @@ struct InterfaceCaptureWorkspace: View {
         case "collection-loading":
             model.replaceSnapshot(nil)
             model.loadState = .loading
-        case "daily", "daily-progress": expandedCollections = [.dailyNotes]
+        case "daily", "daily-progress", "compact-rows": expandedCollections = [.dailyNotes]
         case "starred", "collection-overlap": expandedCollections = [.starred]
         case "archive": expandedCollections = [.archive]
         case "collections-expanded", "long-library":
@@ -347,7 +353,7 @@ struct InterfaceCaptureWorkspace: View {
                     )
                     .captureTagFilters(captureState == "tag-filters")
                     .task {
-                        if ["notes", "featured", "tag-audit", "row-anatomy", "row-undated", "long-library", "collections-expanded", "collections-collapsed"].contains(captureState) {
+                        if ["notes", "featured", "tag-audit", "row-anatomy", "long-library", "collections-expanded", "collections-collapsed"].contains(captureState) {
                             try? await Task.sleep(for: .milliseconds(400))
                             if ["long-library", "collections-expanded", "collections-collapsed"].contains(captureState) {
                                 scroll.scrollTo(LibraryCollection.dailyNotes, anchor: .top)
@@ -413,7 +419,7 @@ struct InterfaceCaptureWorkspace: View {
                    !["empty", "collection-loading"].contains(captureState) {
                     library.selectedNoteID = "shape"
                 }
-                if (captureScreen == "library" && !["notes", "featured", "tag-audit", "row-anatomy", "row-undated", "long-library", "collections-expanded", "collections-collapsed"].contains(captureState))
+                if (captureScreen == "library" && !["notes", "featured", "tag-audit", "row-anatomy", "long-library", "collections-expanded", "collections-collapsed"].contains(captureState))
                     || captureState == "error" {
                     await markReady()
                 }

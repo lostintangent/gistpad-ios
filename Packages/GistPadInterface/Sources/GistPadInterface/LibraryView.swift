@@ -385,9 +385,9 @@ public struct LibraryView: View {
             .captureFrame("\(id)-title")
             Spacer(minLength: 8)
             if let count {
-                Text(count, format: .number)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                let number = Text(count, format: .number).monospacedDigit()
+                // The sidebar already draws its headers in secondary ink, so the count shares it.
+                (isSidebar ? number : number.foregroundStyle(.secondary))
                     .fixedSize()
                     .captureFrame("\(id)-count")
             }

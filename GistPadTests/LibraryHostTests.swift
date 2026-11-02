@@ -212,29 +212,38 @@ struct LibraryHostTests {
     let ordinaryFrame = ordinaryCell.convert(ordinaryCell.bounds, to: window)
       .offsetBy(dx: 0, dy: list.contentOffset.y)
     var headerFrames: [CGRect] = []
+    var countContrasts: [Double] = []
     var firstContentFrame: CGRect?
     for collection in [LibraryCollection.dailyNotes, .starred, .archive] {
       let marker = try #require(descendants(window).first {
         $0.accessibilityIdentifier == "capture-frame-library-collection-\(collection.rawValue)"
           && !$0.bounds.isEmpty
       })
-      let frame = marker.convert(marker.bounds, to: window)
-      #expect(window.bounds.contains(frame))
       var parent = marker.superview
       while parent != nil && !(parent is UICollectionViewCell) { parent = parent?.superview }
       let cell = try #require(parent as? UICollectionViewCell)
-      let visibleBottom = list.bounds.maxY - list.adjustedContentInset.bottom
-      if cell.frame.maxY > visibleBottom {
+      // The sidebar's floating search field overlaps the list's bottom content inset.
+      let search = descendants(window).first {
+        $0 is UISearchTextField && !$0.isHidden && !$0.bounds.isEmpty
+      }
+      let searchTop = search.map { $0.convert($0.bounds, to: window).minY - 8 }
+      let bottomClearance = max(
+        list.adjustedContentInset.bottom,
+        list.convert(list.bounds, to: window).maxY - (searchTop ?? .infinity))
+      if cell.frame.maxY > list.bounds.maxY - bottomClearance {
         let maximum = max(
           -list.adjustedContentInset.top,
           list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom)
-        let target = min(
-          maximum, cell.frame.maxY - list.bounds.height + list.adjustedContentInset.bottom + 8)
+        let target = min(maximum, cell.frame.maxY - list.bounds.height + bottomClearance + 8)
         list.setContentOffset(CGPoint(x: list.contentOffset.x, y: target), animated: false)
         try await Task.sleep(for: .milliseconds(100))
         window.layoutIfNeeded()
       }
+      #expect(window.bounds.contains(marker.convert(marker.bounds, to: window)))
       let cellFrame = cell.convert(cell.bounds, to: window)
+      if let searchTop {
+        #expect(cellFrame.maxY <= searchTop + 8, "The header scrolls clear of the search field.")
+      }
       headerFrames.append(cellFrame.offsetBy(dx: 0, dy: list.contentOffset.y))
       if firstContentFrame == nil {
         firstContentFrame = marker.convert(marker.bounds, to: window)
@@ -279,19 +288,17 @@ struct LibraryHostTests {
       let backgroundPixels = try nativeAccentPixels(
         in: UIImage(cgImage: countCrop), expected: background).personal
       #expect(countCrop.width * countCrop.height - backgroundPixels > 10, "The number draws real ink.")
-      // The count is quiet secondary ink, composited over the header background.
-      var red = CGFloat(0), green = CGFloat(0), blue = CGFloat(0), alpha = CGFloat(0)
-      UIColor.secondaryLabel.resolvedColor(with: window.traitCollection).getRed(
-        &red, green: &green, blue: &blue, alpha: &alpha)
-      func over(_ component: CGFloat, _ base: UInt8) -> UInt8 {
-        UInt8((min(1, max(0, component * alpha + CGFloat(base) / 255 * (1 - alpha))) * 255)
-          .rounded())
-      }
-      let ink = RGBColor(
-        red: over(red, background.red), green: over(green, background.green),
-        blue: over(blue, background.blue))
-      #expect(ink.contrast(with: background) >= 3)
-      #expect(try nativeAccentPixels(in: UIImage(cgImage: countCrop), expected: ink).personal > 10)
+      // The count is quiet secondary ink. The glass sidebar draws hierarchical `.secondary`
+      // with vibrancy, so measure the drawn glyph core rather than a fixed UIKit color.
+      let countContrast = try strongestInk(in: countCrop, against: background)
+        .contrast(with: background)
+      let primary = try #require(RGBColor(
+        uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
+      #expect(countContrast >= 3, "The count stays legible: \(countContrast)")
+      #expect(
+        countContrast < primary.contrast(with: background) / 2,
+        "The count reads as secondary, not primary: \(countContrast)")
+      countContrasts.append(countContrast)
     }
     for index in 1..<headerFrames.count {
       #expect(headerFrames[index].minY > headerFrames[index - 1].minY)
@@ -300,7 +307,8 @@ struct LibraryHostTests {
     let firstHeader = try #require(firstContentFrame)
     #expect(firstHeader.minY >= ordinaryFrame.maxY - 1 / image.scale)
     Attachment.record(
-      "Headers: \(headerFrames)\nOrdinary cell: \(ordinaryFrame)\nFirst content: \(firstHeader)",
+      "Headers: \(headerFrames)\nOrdinary cell: \(ordinaryFrame)\nFirst content: \(firstHeader)"
+        + "\nCount contrasts: \(countContrasts)",
       named: "collection-native-rhythm-\(dark)-\(size).txt")
     Attachment.record(
       image, named: "collection-titles-\(dark ? "Dark" : "Light")-\(size).png", as: .png)
@@ -408,22 +416,22 @@ struct LibraryHostTests {
     }
     let title = try frame("title")
     let date = try frame("date")
-    let tags = try frame("tags")
+    let tagLine = try frame("tags")
     let count = try frame("comment-count")
     #expect(measured.width == 324)
-    #expect(tags.minY >= max(title.maxY, date.maxY))
-    #expect(count.midY > tags.minY && count.midY < tags.maxY)
-    #expect(count.minX >= tags.maxX)
+    #expect(tagLine.minY >= max(title.maxY, date.maxY))
+    #expect(count.midY > tagLine.minY && count.midY < tagLine.maxY)
+    #expect(count.minX >= tagLine.maxX)
     if size == .large {
       #expect(date.midY > title.minY && date.midY < title.maxY)
       #expect(date.minX >= title.maxX)
       #expect(measured.height <= 100)
-      #expect(tags.height <= 30)
+      #expect(tagLine.height <= 30)
     } else {
       // The wrapped title moves the date beneath it rather than narrowing either.
       #expect(date.minY >= title.maxY)
       #expect(measured.height > 128)
-      #expect(tags.height > 30)
+      #expect(tagLine.height > 30)
     }
   }
 
@@ -485,7 +493,7 @@ struct LibraryHostTests {
     (dark: false, size: DynamicTypeSize.accessibility3, increasedContrast: true),
     (dark: true, size: DynamicTypeSize.accessibility3, increasedContrast: true),
   ])
-  func selectedPinnedProgressKeepsVisibleRingContrast(
+  func selectedDailyProgressKeepsVisibleRingContrast(
     dark: Bool, size: DynamicTypeSize, increasedContrast: Bool
   ) async throws {
     let scene = try #require(
@@ -500,17 +508,19 @@ struct LibraryHostTests {
     let model = LibraryModel(
       snapshot: .init(notes: [
         .init(
-          id: "pin", title: "A selected thought", updatedAt: .now, gistID: "pin",
-          isPinned: true, progress: .init(completed: 2, total: 5)),
+          id: "pin", title: "2026-10-23", updatedAt: .now, gistID: "daily", isDailyNote: true,
+          filename: "2026-10-23.md", progress: .init(completed: 2, total: 5),
+          dailyDate: ISO8601DateFormatter().date(from: "2026-10-23T00:00:00Z")),
         .init(
           id: "quiet-pin", title: "Another pinned thought", updatedAt: .now,
           gistID: "quiet-pin", isPinned: true),
-      ]), loadState: .ready)
+      ], dailyNoteCount: 1), loadState: .ready)
     model.selectedNoteID = "pin"
     window.rootViewController = UIHostingController(
       rootView: NavigationSplitView {
         LibraryView(
-          model: model, actions: .init(refresh: {}, create: {}, today: {}), isSidebar: true)
+          model: model, actions: .init(refresh: {}, create: {}, today: {}), isSidebar: true,
+          expandedCollections: .constant([.dailyNotes]))
       } detail: { Text("A retained document") }
       .environment(\.horizontalSizeClass, .regular)
       .environment(\.dynamicTypeSize, size)
@@ -541,7 +551,7 @@ struct LibraryHostTests {
     #expect(contrast >= 3, "The ring needs 3:1 against the native selected row: \(contrast)")
     Attachment.record(
       "Contrast: \(contrast), background: \(background)",
-      named: "pinned-progress-\(dark ? "Dark" : "Light")-\(size)-\(increasedContrast)-contrast.txt")
+      named: "daily-progress-\(dark ? "Dark" : "Light")-\(size)-\(increasedContrast)-contrast.txt")
   }
 
   @Test(arguments: [false, true])
@@ -751,6 +761,23 @@ struct LibraryHostTests {
       context.draw(corner, in: CGRect(x: 0, y: 0, width: 1, height: 1))
     }
     return RGBColor(red: pixel[0], green: pixel[1], blue: pixel[2])
+  }
+
+  /// The pixel that differs most from the background, which is the core of a glyph's ink.
+  private func strongestInk(in bitmap: CGImage, against background: RGBColor) throws -> RGBColor {
+    let width = bitmap.width
+    let height = bitmap.height
+    var pixels = [UInt8](repeating: 0, count: width * height * 4)
+    try pixels.withUnsafeMutableBytes { bytes in
+      let context = try #require(CGContext(
+        data: bytes.baseAddress, width: width, height: height, bitsPerComponent: 8,
+        bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+      context.draw(bitmap, in: CGRect(x: 0, y: 0, width: width, height: height))
+    }
+    return stride(from: 0, to: pixels.count, by: 4)
+      .map { RGBColor(red: pixels[$0], green: pixels[$0 + 1], blue: pixels[$0 + 2]) }
+      .max { $0.contrast(with: background) < $1.contrast(with: background) } ?? background
   }
 
 }

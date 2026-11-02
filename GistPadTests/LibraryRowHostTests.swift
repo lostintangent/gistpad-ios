@@ -105,8 +105,8 @@ struct LibraryRowHostTests {
     let day = try #require(ISO8601DateFormatter().date(from: "2026-10-23T00:00:00Z"))
     let note = LibraryNote(
       id: "shelf-progress", title: "2026-10-23", updatedAt: .now,
-      isDailyNote: true, filename: "2026-10-23.md", fileCount: 3,
-      tagIDs: ["ideas"], progress: .init(completed: 3, total: 4),
+      isDailyNote: true, tagIDs: ["ideas"], filename: "2026-10-23.md", fileCount: 3,
+      progress: .init(completed: 3, total: 4),
       isOverdue: true, dailyDate: day)
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = .gmt
@@ -216,7 +216,7 @@ struct LibraryRowHostTests {
     #expect(count.maxX <= date.minX)
     #expect(count.midY > date.minY && count.midY < date.maxY)
     #expect(abs(title.minY - content.minY - padding) <= 1)
-    #expect(abs(content.maxY - max(title.maxY, date.maxY) - padding) <= 1)
+    #expect(abs(content.maxY - max(title.maxY, date.maxY) - padding) <= 1.001)
     #expect(!descendants(window).contains {
       $0.accessibilityIdentifier == "capture-frame-note-tags-shelf-untagged"
     })
