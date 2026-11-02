@@ -126,7 +126,7 @@ Retained drafts whose gist has disappeared from the cache remain searchable by b
 
 ## App Group boundary
 
-Only the widget snapshot lives in the App Group container, written by GistPadPlatform's `SharedNotebookStore`. Canonical drafts stay in the app's private store, and the app is the only SwiftData writer. Widgets and Shortcuts run their edits in the main app through iOS 27's intent execution target.
+Only the widget snapshot lives in the App Group container, written by GistPadPlatform's `LibrarySnapshot`. Canonical drafts stay in the app's private store, and the app is the only SwiftData writer. Widgets and Shortcuts run their edits in the main app through iOS 27's intent execution target.
 
 ## Photos
 

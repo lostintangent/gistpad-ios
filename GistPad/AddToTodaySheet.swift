@@ -88,10 +88,10 @@ struct AddToTodaySheet: View {
     errorMessage = nil
     Task {
       do {
-        if let destination = try await NotebookPlatformBootstrap.bridge?.addToToday(
+        if let destination = try await PlatformBridge.shared?.addToToday(
           text: text, asTask: asTask, target: DailyNote.Day(date: day))
         {
-          NotebookRouteInbox.shared.submit(destination)
+          PendingLink.shared.link = destination
         }
         dismiss()
       } catch {

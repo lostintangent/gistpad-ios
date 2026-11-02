@@ -9,7 +9,7 @@ struct GistPadApp: App {
   @State private var cannotOpenLink = false
 
   init() {
-    NotebookPlatformBootstrap.install()
+    PlatformBridge.install()
   }
 
   /// Host tests run inside the app, so it stays out of their way.
@@ -30,7 +30,7 @@ struct GistPadApp: App {
       else {
         throw AccountError.invalidConfiguration
       }
-      notebook = try NotebookPlatformBootstrap.notebook(publishableKey: key)
+      notebook = try PlatformBridge.notebook(publishableKey: key)
     } catch {
       loadError = error.localizedDescription
     }
@@ -73,8 +73,8 @@ struct GistPadApp: App {
       }
       .onOpenURL { url in
         if url.scheme == "gistpad", url.host == "auth-callback" { return }
-        if let route = NotebookRoute(url: url) {
-          NotebookRouteInbox.shared.submit(route)
+        if let link = GistPadLink(url: url) {
+          PendingLink.shared.link = link
         } else {
           cannotOpenLink = true
         }

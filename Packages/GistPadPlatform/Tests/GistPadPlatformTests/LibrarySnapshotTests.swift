@@ -3,7 +3,7 @@ import GistPadSync
 import Testing
 @testable import GistPadPlatform
 
-struct NotebookSystemTests {
+struct LibrarySnapshotTests {
     private let account = UUID()
     private let date = Date(timeIntervalSince1970: 1_792_800_000)
     private let zone = TimeZone(secondsFromGMT: 0)!
@@ -18,11 +18,11 @@ struct NotebookSystemTests {
         let source = "日本語 👩🏽‍💻\n- [ ] First\n  - [x] Second\n"
         let accepted = try await store.persist(
             id: draft.id, accountID: account, text: source, generation: 9)
-        let snapshot = NotebookSystemSnapshot.make(
+        let snapshot = LibrarySnapshot.make(
             accountID: account, cache: cache(gist), drafts: [accepted], date: date, timeZone: zone)
         #expect(snapshot.today.tasks.map(\.title) == ["First", "Second"])
         #expect(snapshot.today.tasks.map(\.isChecked) == [false, true])
-        #expect(snapshot.gists.map(\.route) == [.note(gistID: gist.id, filename: nil)])
+        #expect(snapshot.gists.map(\.link) == [.gist(id: gist.id, filename: nil)])
         #expect(snapshot.gists.first?.tags == ["Work"])
         #expect(snapshot.accentHex == "#0EA5E9")
     }

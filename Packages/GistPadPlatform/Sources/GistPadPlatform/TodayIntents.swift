@@ -3,8 +3,8 @@ import AppIntents
 import Foundation
 import GistPadSync
 
-public struct SetTodayTaskIntent: AppIntent {
-    public static let title: LocalizedStringResource = "Set Today Task"
+public struct SetTaskIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Set Task"
     public static var supportedModes: IntentModes { .background }
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
     public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
@@ -12,7 +12,7 @@ public struct SetTodayTaskIntent: AppIntent {
 
     @Parameter(title: "Task") public var taskID: Int
     @Parameter(title: "Completed") public var completed: Bool
-    @Dependency private var notebook: any NotebookIntentServing
+    @Dependency private var dailyNotes: any DailyNoteActions
 
     public init() {}
     public init(task: FileTask, completed: Bool) {
@@ -22,7 +22,7 @@ public struct SetTodayTaskIntent: AppIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult {
-        try await notebook.setTask(id: taskID, completed: completed)
+        try await dailyNotes.setTask(id: taskID, completed: completed)
         return .result()
     }
 }
@@ -30,7 +30,7 @@ public struct SetTodayTaskIntent: AppIntent {
 public struct AddToTodayIntent: AppIntent {
     public static let title: LocalizedStringResource = "Add to Today"
     public static let description = IntentDescription(
-        "Append text or a task to today's daily note in your notebook.")
+        "Adds text or a task to today's note.")
     public static var supportedModes: IntentModes { .background }
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
     public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
@@ -38,7 +38,7 @@ public struct AddToTodayIntent: AppIntent {
     @Parameter(title: "Text", requestValueDialog: "What would you like to add to Today?")
     public var text: String
     @Parameter(title: "As Task", default: false) public var asTask: Bool
-    @Dependency var notebook: any NotebookIntentServing
+    @Dependency var dailyNotes: any DailyNoteActions
 
     public static var parameterSummary: some ParameterSummary {
         Summary("Add \(\.$text) to Today") { \.$asTask }
@@ -48,12 +48,12 @@ public struct AddToTodayIntent: AppIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        try await notebook.addToToday(text: text, asTask: asTask, target: DailyNote.Day())
+        try await dailyNotes.addToToday(text: text, asTask: asTask, target: DailyNote.Day())
         return .result(dialog: "Added to Today.")
     }
 }
 
-public struct CaptureTodayIntent: AppIntent {
+public struct ShowAddToTodayIntent: AppIntent {
     public static let title: LocalizedStringResource = "Add to Today"
     public static var supportedModes: IntentModes { .foreground(.immediate) }
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
@@ -63,7 +63,7 @@ public struct CaptureTodayIntent: AppIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult {
-        NotebookRouteInbox.shared.submit(.addToToday)
+        PendingLink.shared.link = .addToToday
         return .result()
     }
 }

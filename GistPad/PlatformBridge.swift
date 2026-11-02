@@ -7,12 +7,12 @@ import UIKit
 import WidgetKit
 
 @MainActor
-enum NotebookPlatformBootstrap {
-  private static var services: (model: NotebookModel, bridge: NotebookPlatformBridge)?
-  static var bridge: NotebookPlatformBridge? { services?.bridge }
+extension PlatformBridge {
+  private static var services: (model: NotebookModel, bridge: PlatformBridge)?
+  static var shared: PlatformBridge? { services?.bridge }
 
   static func install() {
-    AppDependencyManager.shared.add { () async throws -> any NotebookIntentServing in
+    AppDependencyManager.shared.add { () async throws -> any DailyNoteActions in
       try await MainActor.run {
         guard let key = Bundle.main.object(forInfoDictionaryKey: "SupabasePublishableKey") as? String,
           !key.isEmpty, !key.contains("$(")
@@ -36,7 +36,7 @@ enum NotebookPlatformBootstrap {
     _ provider: LiveNotebookProvider, store: DraftStore, selections: NotebookSelectionStore
   ) -> NotebookModel {
     let model = NotebookModel(provider: provider, selections: selections)
-    services = (model, NotebookPlatformBridge(provider: provider, store: store, notebook: model))
+    services = (model, PlatformBridge(provider: provider, store: store, notebook: model))
     return model
   }
 
@@ -47,7 +47,7 @@ enum NotebookPlatformBootstrap {
 }
 
 @MainActor
-final class NotebookPlatformBridge: NotebookIntentServing {
+final class PlatformBridge: DailyNoteActions {
   private struct WeakSession {
     weak var value: NotebookSessionController?
   }
@@ -94,13 +94,12 @@ final class NotebookPlatformBridge: NotebookIntentServing {
         return
       } catch {
         self?.logger.error(
-          "System notebook refresh failed: \(String(reflecting: type(of: error)), privacy: .public)")
+          "Widget and Spotlight refresh failed: \(String(reflecting: type(of: error)), privacy: .public)")
       }
     }
   }
 
   func refresh(date: Date = .now) async throws {
-    let shared = try SharedNotebookStore()
     let account = try await provider.cachedAccount()
     let accountID =
       notebook?.pendingAccount == nil
@@ -112,27 +111,27 @@ final class NotebookPlatformBridge: NotebookIntentServing {
     } else {
       local = nil
     }
-    let snapshot = NotebookSystemSnapshot.make(
+    let snapshot = LibrarySnapshot.make(
       accountID: accountID, cache: local?.library, drafts: local?.drafts ?? [], date: date)
     try Task.checkCancellation()
     let current = try await provider.cachedAccount()
-    guard current?.id == account?.id else { throw NotebookPlatformError.accountChanged }
-    try shared.write(snapshot)
+    guard current?.id == account?.id else { throw PlatformError.accountChanged }
+    try snapshot.write()
     WidgetCenter.shared.reloadTimelines(ofKind: TodayWidgetView.kind)
-    try await NotebookEntityIndex.shared.update(snapshot)
+    try await GistSpotlightIndex.shared.update(snapshot)
   }
 
   func setTask(id: Int, completed: Bool) async throws {
     try await serially {
-      guard let snapshot = try SharedNotebookStore().read(), let accountID = snapshot.accountID,
+      guard let snapshot = try LibrarySnapshot.read(), let accountID = snapshot.accountID,
         snapshot.today.day.filename == DailyNote.filename(),
         let shown = snapshot.today.tasks.first(where: { $0.id == id })
-      else { throw NotebookPlatformError.staleTask }
+      else { throw PlatformError.staleTask }
       let draft = try await self.todayDraft(accountID: accountID)
       // The task you tapped must still be at its place in your latest text.
       guard let task = FileTask.tasks(in: draft.text).first(where: { $0.id == id }),
         task.title == shown.title
-      else { throw NotebookPlatformError.staleTask }
+      else { throw PlatformError.staleTask }
       guard task.isChecked != completed else { return }
       try await self.apply(DraftEdit(
         draftID: draft.id, accountID: accountID, expectedGeneration: draft.generation,
@@ -144,14 +143,14 @@ final class NotebookPlatformBridge: NotebookIntentServing {
   @discardableResult
   func addToToday(
     text: String, asTask: Bool, target: DailyNote.Day
-  ) async throws -> NotebookRoute {
+  ) async throws -> GistPadLink {
     try await serially {
       guard let accountID = try await self.provider.cachedAccount()?.id else {
-        throw NotebookPlatformError.accountChanged
+        throw PlatformError.accountChanged
       }
       let draft = try await self.todayDraft(accountID: accountID, target: target)
       try await self.apply(.addToToday(text, asTask: asTask, to: draft))
-      return .draft(accountID: accountID, draftID: draft.id)
+      return .unpublishedGist(accountID: accountID, draftID: draft.id)
     }
   }
 
@@ -163,7 +162,7 @@ final class NotebookPlatformBridge: NotebookIntentServing {
     let today = try await provider.today(accountID: accountID, target: target)
     if let session = sessions[today.draft.id]?.value {
       guard session.canMutate, await session.waitForLocalSave() else {
-        throw NotebookPlatformError.editingInProgress
+        throw PlatformError.editingInProgress
       }
     }
     return try await store.draft(id: today.draft.id, accountID: accountID)
@@ -173,17 +172,17 @@ final class NotebookPlatformBridge: NotebookIntentServing {
     guard let current = try await provider.cachedAccount(), current.id == accountID,
       notebook?.pendingAccount == nil,
       notebook?.account == nil || notebook?.account?.id == accountID
-    else { throw NotebookPlatformError.accountChanged }
+    else { throw PlatformError.accountChanged }
   }
 
   private func apply(_ edit: DraftEdit) async throws {
     let draft = try await store.draft(id: edit.draftID, accountID: edit.accountID)
-    guard draft.attemptedGeneration == nil else { throw NotebookPlatformError.editingInProgress }
-    if case .conflict = draft.state { throw NotebookPlatformError.editingInProgress }
+    guard draft.attemptedGeneration == nil else { throw PlatformError.editingInProgress }
+    if case .conflict = draft.state { throw PlatformError.editingInProgress }
     let controller = sessions[edit.draftID]?.value
     if let controller {
       guard !controller.document.isRecovery, controller.canMutate else {
-        throw NotebookPlatformError.editingInProgress
+        throw PlatformError.editingInProgress
       }
       try await controller.applyDurableEdit(edit) {
         try await self.validateAccount(edit.accountID)

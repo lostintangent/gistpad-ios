@@ -1,13 +1,19 @@
 import PhotosUI
 import SwiftUI
 
-struct NotebookPhotoHost<Content: View>: View {
-  @Bindable var photos: NotebookPhotoController
-  @ViewBuilder let content: () -> Content
+extension View {
+  /// The Photos notice, picker, upload progress and failure for a file's photo uploads.
+  func photoPicker(_ photos: PhotoUpload) -> some View {
+    modifier(PhotoPicker(photos: photos))
+  }
+}
+
+struct PhotoPicker: ViewModifier {
+  @Bindable var photos: PhotoUpload
   @State private var selection: PhotosPickerItem?
 
-  var body: some View {
-    content()
+  func body(content: Content) -> some View {
+    content
       .alert("Photos Are Public", isPresented: $photos.isShowingNotice) {
         Button(role: .cancel) {}
         Button("Continue") { photos.acceptNotice() }

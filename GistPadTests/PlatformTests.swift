@@ -12,17 +12,17 @@ import UIKit
 
 @Suite(.serialized)
 @MainActor
-struct NotebookPlatformTests {
+struct PlatformTests {
   @Test
   func widgetToggleReachesTheOpenFileUndoesAsOneEditAndNeverOverwritesNewerTyping() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
-    let stale = try #require(try fixture.shared.read()?.today.tasks.first)
+    let stale = try #require(try LibrarySnapshot.read()?.today.tasks.first)
     let typed = "# Today\n\nStill typing\n- [ ] A real task\n"
     let draft = try await fixture.today().draft
     _ = try await fixture.store.persist(
       id: draft.id, accountID: fixture.account.id, text: typed, generation: draft.generation + 1)
-    await #expect(throws: NotebookPlatformError.staleTask) {
+    await #expect(throws: PlatformError.staleTask) {
       try await fixture.bridge.setTask(id: stale.id, completed: true)
     }
     let kept = try await fixture.store.draft(id: draft.id, accountID: fixture.account.id)
@@ -39,7 +39,7 @@ struct NotebookPlatformTests {
     defer { window.isHidden = true }
     try await Task.sleep(for: .milliseconds(100))
     let editor = controller.session.textView
-    let task = try #require(try fixture.shared.read()?.today.tasks.first)
+    let task = try #require(try LibrarySnapshot.read()?.today.tasks.first)
     try await fixture.bridge.setTask(id: task.id, completed: true)
     #expect(controller.session.text == typed.replacingOccurrences(of: "[ ]", with: "[x]"))
     #expect(controller.session.textView === editor)
@@ -53,18 +53,18 @@ struct NotebookPlatformTests {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
     let controller = try await fixture.controller()
-    let previousRoute = NotebookRouteInbox.shared.pending
+    let previousLink = PendingLink.shared.link
     let intent = AddToTodayIntent()
-    intent.notebook = fixture.bridge
+    intent.dailyNotes = fixture.bridge
     intent.text = "A thought\nSecond task"
     intent.asTask = true
     _ = try await intent.perform()
     #expect(
       controller.session.text.hasSuffix("- [ ] A real task\n- [ ] A thought\n- [ ] Second task\n"))
     #expect(
-      try fixture.shared.read()?.today.tasks.map(\.title)
+      try LibrarySnapshot.read()?.today.tasks.map(\.title)
         == ["A real task", "A thought", "Second task"])
-    #expect(NotebookRouteInbox.shared.pending == previousRoute)
+    #expect(PendingLink.shared.link == previousLink)
     #expect(fixture.publishes.isEmpty)
   }
 
@@ -83,7 +83,7 @@ struct NotebookPlatformTests {
     let original = controller.session.text
     let url = try #require(URL(string: "https://example.com/assets/daily123/photo.png"))
     var uploadedGistIDs: [String] = []
-    let photos = NotebookPhotoController(
+    let photos = PhotoUpload(
       note: controller, defaults: try #require(UserDefaults(suiteName: UUID().uuidString))
     ) { _, gistID in
       uploadedGistIDs.append(gistID)
@@ -113,8 +113,7 @@ private struct PlatformFixture {
   let notebook: NotebookFixture
   let provider: LiveNotebookProvider
   let model: NotebookModel
-  let bridge: NotebookPlatformBridge
-  let shared: SharedNotebookStore
+  let bridge: PlatformBridge
 
   static func make() async throws -> Self {
     let notebook = try await NotebookFixture { server in
@@ -129,11 +128,10 @@ private struct PlatformFixture {
     let provider = LiveNotebookProvider(accounts: notebook.accounts, drafts: notebook.store)
     let model = NotebookModel(provider: provider, selections: notebook.selections)
     await model.start()
-    let bridge = NotebookPlatformBridge(provider: provider, store: notebook.store, notebook: model)
+    let bridge = PlatformBridge(provider: provider, store: notebook.store, notebook: model)
     try await bridge.refresh()
     return Self(
-      notebook: notebook, provider: provider, model: model, bridge: bridge,
-      shared: try SharedNotebookStore())
+      notebook: notebook, provider: provider, model: model, bridge: bridge)
   }
 
   var account: Account { notebook.account }
@@ -154,6 +152,6 @@ private struct PlatformFixture {
   }
 
   func cleanUp() {
-    try? shared.write(.make(accountID: nil, cache: nil, drafts: []))
+    try? LibrarySnapshot.make(accountID: nil, cache: nil, drafts: []).write()
   }
 }

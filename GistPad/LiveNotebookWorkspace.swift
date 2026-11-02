@@ -9,7 +9,7 @@ import SwiftUI
 
 struct LiveNotebookWorkspace: View {
   @Bindable var notebook: NotebookModel
-  private let routes: NotebookRouteInbox
+  private let pending: PendingLink
   @State private var compactColumn: NavigationSplitViewColumn = .sidebar
   @State private var sheet: WorkspaceSheet?
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -24,10 +24,10 @@ struct LiveNotebookWorkspace: View {
 
   init(
     notebook: NotebookModel, layout: NotebookLayoutPreferences = NotebookLayoutPreferences(),
-    routes: NotebookRouteInbox = .shared
+    pending: PendingLink = .shared
   ) {
     self.notebook = notebook
-    self.routes = routes
+    self.pending = pending
     _layout = State(initialValue: layout)
     _comments = State(initialValue: CommentsPresentation(notebook: notebook))
   }
@@ -123,9 +123,9 @@ struct LiveNotebookWorkspace: View {
       await notebook.start()
       await notebook.publishUnsyncedEdits()
     }
-    .task(id: routeToOpen) { await openPendingRoute() }
+    .task(id: linkToOpen) { await openPendingLink() }
     #if DEBUG
-    .onChange(of: routes.pending) { presentFixtureSheet() }
+    .onChange(of: pending.link) { presentFixtureSheet() }
     #endif
     .onChange(of: active?.document.activationID, initial: true) { didActivate() }
     .onChange(of: active?.draft.id) { previous, _ in
@@ -220,7 +220,7 @@ struct LiveNotebookWorkspace: View {
     }
   }
 
-  /// The one sheet over the workspace. A route or another account replaces it.
+  /// The one sheet over the workspace. A link or another account replaces it.
   private enum WorkspaceSheet: Identifiable {
     case settings, addToToday
     case tags(NotebookTagTarget)
@@ -355,13 +355,12 @@ struct LiveNotebookWorkspace: View {
   private func note(
     _ controller: NotebookSessionController, availableWidth: CGFloat
   ) -> some View {
-    NotebookPhotoHost(photos: controller.photos) {
-      noteScreen(controller, photos: controller.photos, availableWidth: availableWidth)
-    }
+    noteScreen(controller, photos: controller.photos, availableWidth: availableWidth)
+      .photoPicker(controller.photos)
   }
 
   private func noteScreen(
-    _ controller: NotebookSessionController, photos: NotebookPhotoController,
+    _ controller: NotebookSessionController, photos: PhotoUpload,
     availableWidth: CGFloat
   ) -> some View {
     let mode = Binding(
@@ -793,23 +792,23 @@ struct LiveNotebookWorkspace: View {
     Task { await notebook.open(.today(target)) }
   }
 
-  /// The pending route, once the account it opens in has settled.
-  private var routeToOpen: NotebookRoute? {
+  /// The pending link, once the account it opens in has settled.
+  private var linkToOpen: GistPadLink? {
     guard !notebook.isStarting, !notebook.isSigningIn, notebook.pendingAccount == nil else {
       return nil
     }
-    return routes.pending
+    return pending.link
   }
 
   #if DEBUG
   /// Presents a fixture launch's `--sheet` once its note is open.
   private func presentFixtureSheet() {
-    guard let pending = FixtureLaunch.pendingSheet, routes.pending == nil, let active else {
+    guard let fixtureSheet = FixtureLaunch.pendingSheet, pending.link == nil, let active else {
       return
     }
     FixtureLaunch.pendingSheet = nil
     let actions = noteActions(active)
-    switch pending {
+    switch fixtureSheet {
     case .settings: sheet = .settings
     case .tags: actions.tags?()
     case .intelligence: actions.intelligence()
@@ -819,32 +818,32 @@ struct LiveNotebookWorkspace: View {
   }
   #endif
 
-  /// Opens a widget, Shortcut or Spotlight route in place of whatever was showing.
-  private func openPendingRoute() async {
-    guard let route = routeToOpen, let account = notebook.account else { return }
+  /// Opens a widget, Shortcut or Spotlight link in place of whatever was showing.
+  private func openPendingLink() async {
+    guard let link = linkToOpen, let account = notebook.account else { return }
     sheet = nil
     intelligence.target = nil
     notebook.documentError = nil
-    switch route {
+    switch link {
     case .today:
       await notebook.open(.today())
     case .addToToday:
       sheet = .addToToday
-    case .note(let gistID, let filename):
-      await notebook.open(.gist(id: gistID, filename: filename))
-    case .draft(let accountID, let draftID):
+    case .gist(let id, let filename):
+      await notebook.open(.gist(id: id, filename: filename))
+    case .unpublishedGist(let accountID, let draftID):
       guard accountID == account.id else {
         notebook.documentError = "This draft belongs to another GitHub account. Switch accounts to open it."
-        routes.clear()
+        pending.link = nil
         return
       }
       await notebook.open(.draft(id: draftID))
     }
-    guard !Task.isCancelled, routes.pending == route else { return }
+    guard !Task.isCancelled, pending.link == link else { return }
     if notebook.presentedDocument != nil || notebook.opening?.failure != nil {
       compactColumn = .detail
     }
-    routes.clear()
+    pending.link = nil
   }
 
   private func finishBackgroundSaves() {

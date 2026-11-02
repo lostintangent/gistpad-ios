@@ -67,12 +67,12 @@ final class NotebookSessionController {
     session.onEdit = { [weak self] text, generation in
       self?.persist(text: text, generation: generation)
     }
-    NotebookPlatformBootstrap.register(self, notebook: notebook)
+    PlatformBridge.register(self, notebook: notebook)
     observeAutosave()
   }
 
   /// Adds photos at the caret, uploading them to the notebook's account.
-  @ObservationIgnored private(set) lazy var photos = NotebookPhotoController(note: self) {
+  @ObservationIgnored private(set) lazy var photos = PhotoUpload(note: self) {
     [notebook = self.notebook, accountID = self.draft.accountID] png, gistID in
     try await notebook.uploadPhoto(png, gistID: gistID, accountID: accountID)
   }

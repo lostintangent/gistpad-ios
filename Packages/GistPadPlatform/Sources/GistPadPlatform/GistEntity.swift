@@ -6,12 +6,12 @@ import UniformTypeIdentifiers
 #endif
 
 public struct GistEntity: Codable, Equatable, Identifiable, Sendable {
-    public var id: String { route.url.absoluteString }
+    public var id: String { link.url.absoluteString }
     let title: String
     let excerpt: String?
     let tags: [String]
     let updatedAt: Date?
-    let route: NotebookRoute
+    let link: GistPadLink
 }
 
 #if os(iOS)
@@ -32,14 +32,14 @@ extension GistEntity: IndexedEntity {
         attributes.contentDescription = excerpt
         attributes.keywords = tags
         attributes.contentModificationDate = updatedAt
-        attributes.contentURL = route.url
+        attributes.contentURL = link.url
         return attributes
     }
 }
 
 public struct GistEntityQuery: EntityStringQuery, IndexedEntityQuery {
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
-    @Dependency private var notebook: any NotebookIntentServing
+    @Dependency private var dailyNotes: any DailyNoteActions
     public init() {}
 
     public func entities(for identifiers: [String]) async throws -> [GistEntity] {
@@ -61,31 +61,32 @@ public struct GistEntityQuery: EntityStringQuery, IndexedEntityQuery {
     public func reindexEntities(
         for identifiers: [String], indexDescription: CSSearchableIndexDescription
     ) async throws {
-        try await NotebookEntityIndex.index.indexAppEntities(entities(for: identifiers))
+        try await GistSpotlightIndex.index.indexAppEntities(entities(for: identifiers))
     }
 
     public func reindexAllEntities(indexDescription: CSSearchableIndexDescription) async throws {
-        try await NotebookEntityIndex.index.indexAppEntities(currentSnapshot()?.gists ?? [])
+        try await GistSpotlightIndex.index.indexAppEntities(currentSnapshot()?.gists ?? [])
     }
 
-    private func currentSnapshot() async throws -> NotebookSystemSnapshot? {
-        let snapshot = try SharedNotebookStore().read()
+    private func currentSnapshot() async throws -> LibrarySnapshot? {
+        let snapshot = try LibrarySnapshot.read()
         if let accountID = snapshot?.accountID {
-            try await notebook.validateAccount(accountID)
+            try await dailyNotes.validateAccount(accountID)
         }
         return snapshot
     }
 }
 
-public actor NotebookEntityIndex {
-    public static let shared = NotebookEntityIndex()
+public actor GistSpotlightIndex {
+    public static let shared = GistSpotlightIndex()
     private var indexedIDs: Set<String>?
     private var operation: Task<Void, any Error>?
+    /// Spotlight keeps this index across updates, so it keeps its first name.
     static var index: CSSearchableIndex {
         CSSearchableIndex(name: "GistPadNotes", protectionClass: .complete)
     }
 
-    public func update(_ current: NotebookSystemSnapshot) async throws {
+    public func update(_ current: LibrarySnapshot) async throws {
         let previousOperation = operation
         let task = Task {
             if let previousOperation { _ = await previousOperation.result }
@@ -95,7 +96,7 @@ public actor NotebookEntityIndex {
         try await task.value
     }
 
-    private func replaceIndex(with current: NotebookSystemSnapshot) async throws {
+    private func replaceIndex(with current: LibrarySnapshot) async throws {
         guard CSSearchableIndex.isIndexingAvailable() else { return }
         let currentIDs = Set(current.gists.map(\.id))
         if let indexedIDs {
@@ -113,8 +114,8 @@ public actor NotebookEntityIndex {
     }
 }
 
-public struct OpenNoteIntent: OpenIntent {
-    public static let title: LocalizedStringResource = "Open Note"
+public struct OpenGistIntent: OpenIntent {
+    public static let title: LocalizedStringResource = "Open Gist"
     public static var supportedModes: IntentModes { .foreground(.immediate) }
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
     public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
@@ -124,7 +125,7 @@ public struct OpenNoteIntent: OpenIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult {
-        NotebookRouteInbox.shared.submit(target.route)
+        PendingLink.shared.link = target.link
         return .result()
     }
 }
@@ -138,7 +139,7 @@ public struct OpenTodayIntent: AppIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult {
-        NotebookRouteInbox.shared.submit(.today)
+        PendingLink.shared.link = .today
         return .result()
     }
 }

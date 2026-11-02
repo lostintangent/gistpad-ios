@@ -10,7 +10,7 @@ public enum TodayWidgetState: Equatable, Sendable {
 
 public struct TodayWidgetView: View {
     public static let kind = "GistPadToday"
-    private let snapshot: NotebookSystemSnapshot?
+    private let snapshot: LibrarySnapshot?
     private let date: Date
     private let state: TodayWidgetState
     @Environment(\.widgetFamily) private var family
@@ -18,7 +18,7 @@ public struct TodayWidgetView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     public init(
-        snapshot: NotebookSystemSnapshot?, date: Date, state: TodayWidgetState
+        snapshot: LibrarySnapshot?, date: Date, state: TodayWidgetState
     ) {
         self.snapshot = snapshot
         self.date = date
@@ -79,7 +79,7 @@ public struct TodayWidgetView: View {
         .environment(\.timeZone, snapshot.flatMap {
             TimeZone(identifier: $0.today.day.timeZoneIdentifier)
         } ?? .current)
-        .widgetURL(NotebookRoute.today.url)
+        .widgetURL(GistPadLink.today.url)
         .redacted(reason: state == .placeholder ? .placeholder : [])
     }
 
@@ -145,7 +145,7 @@ public struct TodayWidgetView: View {
                     .foregroundStyle(.secondary)
             }
         } else {
-            Text(state == .available ? NotebookSystemSnapshot.excerpt(today?.text) ?? invitation : invitation)
+            Text(state == .available ? LibrarySnapshot.excerpt(today?.text) ?? invitation : invitation)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
@@ -163,7 +163,7 @@ public struct TodayWidgetView: View {
     }
 
     private func taskButton(_ task: FileTask, compact: Bool) -> some View {
-        Button(intent: SetTodayTaskIntent(task: task, completed: !task.isChecked)) {
+        Button(intent: SetTaskIntent(task: task, completed: !task.isChecked)) {
             HStack(spacing: 8) {
                 Image(systemName: task.isChecked ? "checkmark.circle.fill" : "circle")
                     .font(compact ? .title3 : .title2)

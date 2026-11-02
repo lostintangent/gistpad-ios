@@ -17,7 +17,7 @@ struct GistPadWidgetIntentPackages: AppIntentsPackage {
 
 struct TodayEntry: TimelineEntry {
   let date: Date
-  let snapshot: NotebookSystemSnapshot?
+  let snapshot: LibrarySnapshot?
   let state: TodayWidgetState
 }
 
@@ -46,7 +46,7 @@ struct TodayProvider: TimelineProvider {
 
   private func entry() -> TodayEntry {
     do {
-      let snapshot = try SharedNotebookStore().read()
+      let snapshot = try LibrarySnapshot.read()
       return TodayEntry(
         date: .now, snapshot: snapshot,
         state: snapshot?.accountID == nil ? .signedOut : .available)
@@ -71,12 +71,12 @@ struct TodayWidget: Widget {
 struct AddToTodayControl: ControlWidget {
   var body: some ControlWidgetConfiguration {
     StaticControlConfiguration(kind: "GistPadAddToToday") {
-      ControlWidgetButton(action: CaptureTodayIntent()) {
+      ControlWidgetButton(action: ShowAddToTodayIntent()) {
         Label("Add to Today", systemImage: "square.and.pencil")
       }
     }
     .displayName("Add to Today")
-    .description("Capture a thought or task in today's note.")
+    .description("Capture a thought or task in today's daily note.")
   }
 }
 

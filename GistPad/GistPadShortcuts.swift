@@ -12,9 +12,9 @@ struct GistPadShortcuts: AppShortcutsProvider {
       phrases: ["Open Today in \(.applicationName)", "Open my daily note in \(.applicationName)"],
       shortTitle: "Open Today", systemImageName: "calendar")
     AppShortcut(
-      intent: OpenNoteIntent(),
+      intent: OpenGistIntent(),
       phrases: ["Open \(\.$target) in \(.applicationName)"],
-      shortTitle: "Open Note", systemImageName: "doc.text")
+      shortTitle: "Open Gist", systemImageName: "doc.text")
     AppShortcut(
       intent: AddToTodayIntent(),
       phrases: ["Add to Today in \(.applicationName)", "Capture in \(.applicationName)"],

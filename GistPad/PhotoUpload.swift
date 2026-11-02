@@ -8,7 +8,7 @@ import SwiftUI
 /// Adds a photo the way gistpad.dev does: upload it to public storage, then insert its Markdown at the cursor.
 @MainActor
 @Observable
-final class NotebookPhotoController {
+final class PhotoUpload {
   struct Failure {
     let message: String
     let png: Data?

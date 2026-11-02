@@ -735,9 +735,9 @@ struct NotebookNavigationHostTests {
     #expect(host.editor(text: "")?.selectedRange == NSRange(location: 0, length: 0))
     try await host.waitForKeyboard(visible: true)
     fixture.restore()
-    host.routes.submit(.note(gistID: "kept", filename: nil))
+    host.pending.link = .gist(id: "kept", filename: nil)
     try await host.waitUntil {
-      host.routes.pending == nil && host.editor(text: "A real note") != nil
+      host.pending.link == nil && host.editor(text: "A real note") != nil
         && !host.model.localDrafts.contains { $0.id == first.id }
     }
     #expect(host.model.library.selectedID == "kept")
@@ -783,9 +783,9 @@ struct NotebookNavigationHostTests {
     #expect(host.model.library.selectedID == nil)
     #expect(!editor.isFirstResponder)
     let selection = editor.selectedRange
-    host.routes.submit(.note(gistID: "a", filename: nil))
+    host.pending.link = .gist(id: "a", filename: nil)
     try await host.waitUntil {
-      host.routes.pending == nil && host.editor(text: "Local Current source") === editor
+      host.pending.link == nil && host.editor(text: "Local Current source") === editor
         && !host.isLibraryVisible
     }
     #expect(editor.selectedRange == selection)
@@ -826,18 +826,18 @@ struct NotebookNavigationHostTests {
     #expect(fixture.publishes.isEmpty)
   }
 
-  @Test func aColdRouteWaitsForRestorationAndOpensTheExactFile() async throws {
+  @Test func aColdLinkWaitsForRestorationAndOpensTheExactFile() async throws {
     let fixture = try await NotebookFixture {
       $0.addGist(
         id: "b", description: "Routed note",
         files: ["README.md": "Text", "Ideas.md": "Routed file source"])
     }
-    let routes = NotebookRouteInbox()
-    routes.submit(.note(gistID: "b", filename: "Ideas.md"))
-    let host = try await NavigationHost(fixture: fixture, routes: routes)
+    let pending = PendingLink()
+    pending.link = .gist(id: "b", filename: "Ideas.md")
+    let host = try await NavigationHost(fixture: fixture, pending: pending)
     defer { await host.close() }
     try await host.waitUntil {
-      routes.pending == nil && host.editor(text: "Routed file source") != nil
+      pending.link == nil && host.editor(text: "Routed file source") != nil
     }
     #expect(host.model.loadedDocument?.filename == "Ideas.md")
     #expect(host.model.loadedDocument?.gist?.id == "b")
@@ -904,17 +904,17 @@ struct NotebookNavigationHostTests {
 private struct NavigationHost {
   let model: NotebookModel
   let window: UIWindow
-  let routes: NotebookRouteInbox
+  let pending: PendingLink
   let layout: NotebookLayoutPreferences
   private let suite: String
   private let previousWindow: UIWindow?
 
   init(
-    fixture: NotebookFixture, routes: NotebookRouteInbox = NotebookRouteInbox(),
+    fixture: NotebookFixture, pending: PendingLink = PendingLink(),
     sizeClass: UIUserInterfaceSizeClass? = nil, mode: FileMode = .edit
   ) async throws {
     model = fixture.model
-    self.routes = routes
+    self.pending = pending
     suite = "NotebookNavigationHost-\(UUID())"
     layout = NotebookLayoutPreferences(defaults: try #require(UserDefaults(suiteName: suite)))
     layout.select(mode)
@@ -929,7 +929,7 @@ private struct NavigationHost {
         width: sizeClass == .regular ? 1180 : sceneBounds.width, height: sceneBounds.height))
     if let sizeClass { window.traitOverrides.horizontalSizeClass = sizeClass }
     window.rootViewController = UIHostingController(
-      rootView: LiveNotebookWorkspace(notebook: model, layout: layout, routes: routes))
+      rootView: LiveNotebookWorkspace(notebook: model, layout: layout, pending: pending))
     window.makeKeyAndVisible()
     let model = model
     try await waitUntil {
@@ -1038,7 +1038,7 @@ private struct NavigationHost {
           presented: \(String(describing: model.presentedDocument?.id))
           opening: \(String(describing: model.opening))
           error: \(String(describing: model.documentError))
-          route: \(String(describing: routes.pending))
+          link: \(String(describing: pending.link))
           library visible: \(isLibraryVisible)
           editors: \(descendants.compactMap { ($0 as? UITextView)?.text })
           titles: \(descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title })

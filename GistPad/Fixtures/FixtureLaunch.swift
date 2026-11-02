@@ -13,7 +13,7 @@
     enum Sheet: String { case tags, settings, today, intelligence, comments }
 
     let fixture: Fixture
-    let route: NotebookRoute?
+    let link: GistPadLink?
     let mode: FileMode?
     let query: String?
     let sheet: Sheet?
@@ -27,8 +27,8 @@
       }
       guard let fixture = value("--fixture") else { return nil }
       self.fixture = Fixture(rawValue: fixture)!
-      route = value("--open").map {
-        NotebookRoute(url: URL(string: $0 == "today" ? "gistpad://today" : "gistpad://note/\($0)")!)!
+      link = value("--open").map {
+        GistPadLink(url: URL(string: $0 == "today" ? "gistpad://today" : "gistpad://note/\($0)")!)!
       }
       mode = value("--mode").map { ["edit": FileMode.edit, "preview": .preview, "split": .split][$0]! }
       query = value("--query")
@@ -43,7 +43,7 @@
       return defaults
     }()
 
-    /// The sheet still to present. The workspace clears it once it's up. Today arrives as a route.
+    /// The sheet still to present. The workspace clears it once it's up. Today arrives as a link.
     @MainActor static var pendingSheet = current?.sheet == .today ? nil : current?.sheet
 
     @MainActor
@@ -64,8 +64,8 @@
           account: account)
         server.intercept { _ in throw URLError(.notConnectedToInternet) }
       }
-      if let route = sheet == .today ? .addToToday : route { NotebookRouteInbox.shared.submit(route) }
-      let notebook = NotebookPlatformBootstrap.connect(
+      if let link = sheet == .today ? .addToToday : link { PendingLink.shared.link = link }
+      let notebook = PlatformBridge.connect(
         provider, store: store, selections: NotebookSelectionStore(defaults: Self.defaults))
       if let query { notebook.library.query = query }
       return notebook
