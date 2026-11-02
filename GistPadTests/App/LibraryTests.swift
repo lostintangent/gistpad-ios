@@ -235,7 +235,7 @@ struct LibraryTests {
     let library = fixture.library
     await library.start()
     let today = try #require(library.loadedFile?.draft)
-    #expect(library.isTodaySelected)
+    #expect(library.visibleFile?.filename == DailyNote.filename())
     #expect(Set(library.localDrafts.map(\.id)) == [kept.id, today.id])
     #expect(
       Set(library.state.gists.map(\.id)) == [kept.id.uuidString, today.id.uuidString])
@@ -330,7 +330,7 @@ struct LibraryTests {
     _ = try await library.perform(.delete(gistID: target.id))
     #expect(fixture.server.requests.filter { $0.hasPrefix("DELETE") } == ["DELETE /gists/a"])
     #expect(fixture.server.gists.isEmpty)
-    #expect(library.isTodaySelected)
+    #expect(library.visibleFile?.filename == DailyNote.filename())
     #expect(library.loadedFile?.editingRequestID == nil)
     #expect(library.state.selectedID == library.loadedFile?.rowID)
     #expect(library.libraryDeletionTarget(for: "a") == nil)
@@ -341,7 +341,7 @@ struct LibraryTests {
     let relaunched = fixture.relaunch()
     await relaunched.start()
     #expect(relaunched.state.gists.allSatisfy { $0.isDailyNote })
-    #expect(relaunched.isTodaySelected)
+    #expect(relaunched.visibleFile?.filename == DailyNote.filename())
   }
 
   // MARK: Account
@@ -410,7 +410,7 @@ struct LibraryTests {
     let draft = try #require(file.draft)
     #expect(file.filename == DailyNote.Day().filename)
     #expect(file.editingRequestID == nil)
-    #expect(library.isTodaySelected)
+    #expect(library.visibleFile?.filename == DailyNote.filename())
     #expect(fixture.publishes.isEmpty, "Opening today saves it on this iPhone first.")
     let session = FileSession(
       file: file, draft: draft, library: library, autosaveDelay: .milliseconds(1))
@@ -751,7 +751,7 @@ struct RootViewTests {
     host.returnToLibrary()
     try await host.waitUntil {
       host.isLibraryVisible && !host.library.localDrafts.contains { $0.id == second.id }
-        && host.library.isTodaySelected
+        && host.library.visibleFile?.filename == DailyNote.filename()
     }
     #expect(host.library.loadedFile?.editingRequestID == nil)
     let stored = try await fixture.store.drafts(accountID: fixture.account.id).map(\.id)

@@ -116,15 +116,6 @@ final class Library {
     return placeholder(for: request(forRow: selected)).title
   }
 
-  var isTodaySelected: Bool {
-    if let opening { return if case .today = opening.request { true } else { false } }
-    guard let file = visibleFile,
-      file.filename == DailyNote.filename()
-    else { return false }
-    return file.gist?.isDailyNote == true
-      || file.draft?.description == DailyNote.gistDescription
-  }
-
   @discardableResult
   func beginOpeningRow(id: String) -> Bool {
     guard account != nil, pendingAccount == nil else {
