@@ -175,7 +175,7 @@ public struct LibraryView: View {
                 }
                 ForEach(dateSections(now: context.date)) { dateSection($0, now: context.date) }
                 ForEach(displayedCollections) { collectionSection($0, now: context.date) }
-                if !hasVisibleNotes && model.loadState != .loading {
+                if model.loadState != .loading && (model.hasFilters ? !model.hasMatches : !hasVisibleNotes) {
                     emptyState
                 }
             }

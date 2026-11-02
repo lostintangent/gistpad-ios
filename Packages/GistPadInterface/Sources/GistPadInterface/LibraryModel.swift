@@ -218,6 +218,9 @@ public final class LibraryModel {
         return Self.gistCount(in: matchingNotes.filter(matchesFilter))
     }
 
+    /// Whether anything besides the open note matches the filter.
+    public var hasMatches: Bool { matchingNotes.contains(where: matchesFilter) }
+
     private func matchesFilter(_ note: LibraryNote) -> Bool {
         let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return selectedTagIDs.isSubset(of: note.tagIDs)

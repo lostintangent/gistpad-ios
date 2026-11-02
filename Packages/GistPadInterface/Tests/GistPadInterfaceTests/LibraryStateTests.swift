@@ -90,6 +90,11 @@ struct LibraryStateTests {
         model.selectedTagIDs = ["personal"]
         #expect(model.matchingNotes.map(\.id) == ["shape", "weekend", "mixed"])
         #expect(model.resultGistCount == 2)
+        #expect(model.hasMatches)
+
+        model.query = "zzz"
+        #expect(model.matchingNotes.map(\.id) == ["shape"])
+        #expect(!model.hasMatches)
     }
 
     @Test func readOnlyGistsCantBeEdited() {
