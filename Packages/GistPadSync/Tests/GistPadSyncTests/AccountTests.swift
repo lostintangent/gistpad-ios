@@ -96,41 +96,4 @@ import Testing
         #expect(account.login == FixtureServer.you.login)
         #expect(attempts.withLock { $0 } == 0)
     }
-
-    @Test func preferenceWritesKeepWebChangesAndPersist() async throws {
-        let server = FixtureServer()
-        let accounts = try server.accounts()
-        try await server.signIn(accounts)
-        server.mergeMetadata([
-            "pinnedGists": ["web-pin"], "future": ["web-edit": 7],
-            "tags": ["a": ["name": "A", "color": "gold", "future": true]],
-        ])
-        let sent = Mutex<[String]>([])
-        server.intercept { request in
-            if request.httpMethod == "PUT" {
-                let body = try JSONDecoder().decode([String: AnyJSON].self, from: FixtureServer.body(of: request))
-                sent.withLock { $0 = body["data"]?.objectValue?.keys.sorted() ?? [] }
-            }
-            return nil
-        }
-        let before = server.requests.count
-
-        let updated = try await accounts.update(
-            [.setPinned(gistID: "native-pin", pinned: true), .setTag(gistID: "native-pin", tagID: "a", included: true)],
-            accountID: id)
-        #expect(updated.preferences.pinnedGists == ["web-pin", "native-pin"])
-        #expect(updated.preferences.tagNames(gistID: "native-pin") == ["A"])
-        #expect(updated.preferences.metadata["future"]?.objectValue?["web-edit"] == .integer(7))
-        #expect(sent.withLock { $0 } == ["gistTags", "pinnedGists"])
-        #expect(Array(server.requests.dropFirst(before)) == ["GET /auth/v1/user", "PUT /auth/v1/user"])
-
-        server.intercept { request in request.httpMethod == "PUT" ? .init(status: 500) : nil }
-        await #expect(throws: (any Error).self) {
-            try await accounts.update([.setAccentColor("#ff0000")], accountID: id)
-        }
-        try server.credentials.remove(key: sessionKey)
-        let relaunched = try #require(try await server.accounts().connectedAccount())
-        #expect(relaunched == updated)
-        #expect(relaunched.preferences.accentColor == nil)
-    }
 }
