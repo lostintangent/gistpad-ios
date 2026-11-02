@@ -12,19 +12,19 @@
     private let source = FixtureModel.source
 
     @Test func nothingChangesUntilApplyAndApplyIsOneUndo() async throws {
-      let session = Editor(fileID: "apply-undo", text: source)
-      let window = host(session)
+      let editor = Editor(fileID: "apply-undo", text: source)
+      let window = host(editor)
       defer { window.isHidden = true }
-      let undo = try #require(session.textView.undoManager)
+      let undo = try #require(editor.textView.undoManager)
       undo.removeAllActions()
-      session.textView.selectedRange = NSRange(location: source.utf16.count, length: 0)
-      session.textView.insertText("!")
-      session.textViewDidChange(session.textView)
+      editor.textView.selectedRange = NSRange(location: source.utf16.count, length: 0)
+      editor.textView.insertText("!")
+      editor.textViewDidChange(editor.textView)
       try await Task.sleep(for: .milliseconds(30))
       let typed = source + "!"
       var changes = 0
-      session.onEdit = { _, _ in changes += 1 }
-      let model = IntelligenceState(session: session, backend: FixtureModel())
+      editor.onEdit = { _, _ in changes += 1 }
+      let model = IntelligenceState(editor: editor, backend: FixtureModel())
       model.action = .edit
       model.editPrompt = "Fix the typo and the time"
       await model.checkAvailability()
@@ -32,34 +32,34 @@
       await model.task?.value
       #expect(model.canApply)
       #expect(changes == 0)
-      #expect(session.text == typed)
+      #expect(editor.text == typed)
 
       let field = UITextField(frame: CGRect(x: 20, y: 20, width: 200, height: 44))
       window.rootViewController?.view.addSubview(field)
       #expect(field.becomeFirstResponder())
-      let selection = session.textView.selectedRange
-      let generation = session.generation
+      let selection = editor.textView.selectedRange
+      let generation = editor.generation
       model.apply()
       let edited = typed.replacingOccurrences(of: "teh", with: "the")
         .replacingOccurrences(of: "before the cafe", with: "after the cafe")
       #expect(model.errorMessage == nil)
-      #expect(session.text == edited)
-      #expect(session.generation == generation + 1)
+      #expect(editor.text == edited)
+      #expect(editor.generation == generation + 1)
       #expect(changes == 1)
 
       field.resignFirstResponder()
-      #expect(session.textView.becomeFirstResponder())
-      #expect(session.textView.undoManager === undo)
+      #expect(editor.textView.becomeFirstResponder())
+      #expect(editor.textView.undoManager === undo)
       for expected in [typed, source] {
         undo.undo()
-        session.textViewDidChange(session.textView)
-        #expect(session.text == expected)
-        if expected == typed { #expect(session.textView.selectedRange == selection) }
+        editor.textViewDidChange(editor.textView)
+        #expect(editor.text == expected)
+        if expected == typed { #expect(editor.textView.selectedRange == selection) }
       }
       for expected in [typed, edited] {
         undo.redo()
-        session.textViewDidChange(session.textView)
-        #expect(session.text == expected)
+        editor.textViewDidChange(editor.textView)
+        #expect(editor.text == expected)
       }
     }
 
@@ -75,16 +75,16 @@
       .answer([ModelAnswerPart(kind: .prose, text: "The user leaves at 9am.")]),
     ])
     func everyFailedAskShowsAReasonAndKeepsTheRequestAndFile(failure: AskFailure) async {
-      let session = Editor(fileID: "failed-ask", text: source)
+      let editor = Editor(fileID: "failed-ask", text: source)
       var changes = 0
-      session.onEdit = { _, _ in changes += 1 }
+      editor.onEdit = { _, _ in changes += 1 }
       let fixture = FixtureModel()
       switch failure {
       case .unavailable: fixture.unavailableReason = "Apple Intelligence is turned off."
       case .error(let error): fixture.failure = error
       case .answer(let parts): fixture.answer = parts
       }
-      let model = IntelligenceState(session: session, backend: fixture)
+      let model = IntelligenceState(editor: editor, backend: fixture)
       model.askPrompt = "When do I leave?"
       await model.checkAvailability()
       model.generate()
@@ -94,16 +94,16 @@
       #expect(!model.isRunning)
       #expect(model.answerParts.isEmpty)
       #expect(model.askPrompt == "When do I leave?")
-      #expect(session.text == source)
-      #expect(session.generation == 0)
+      #expect(editor.text == source)
+      #expect(editor.generation == 0)
       #expect(changes == 0)
     }
 
     @Test func cancelKeepsTheRequestAndTheFile() async {
-      let session = Editor(fileID: "cancel", text: source)
+      let editor = Editor(fileID: "cancel", text: source)
       let fixture = FixtureModel()
       fixture.delay = .seconds(5)
-      let model = IntelligenceState(session: session, backend: fixture)
+      let model = IntelligenceState(editor: editor, backend: fixture)
       model.askPrompt = "When do I leave?"
       await model.checkAvailability()
       model.generate()
@@ -120,14 +120,14 @@
       #expect(model.notice != nil)
       #expect(model.errorMessage == nil)
       #expect(model.askPrompt == "When do I leave?")
-      #expect(session.text == source)
-      #expect(session.generation == 0)
+      #expect(editor.text == source)
+      #expect(editor.generation == 0)
     }
 
     @Test func aReadOnlyFileAllowsAskAndReviewButNotEditOrApply() async {
-      let session = Editor(fileID: "read-only", text: source)
-      session.textView.isEditable = false
-      let model = IntelligenceState(session: session, backend: FixtureModel())
+      let editor = Editor(fileID: "read-only", text: source)
+      editor.textView.isEditable = false
+      let model = IntelligenceState(editor: editor, backend: FixtureModel())
       await model.checkAvailability()
       model.askPrompt = "When do I leave?"
       #expect(model.canGenerate)
@@ -141,22 +141,22 @@
       #expect(model.review?.comments.count == 2)
       #expect(!model.canApply)
       model.apply()
-      #expect(session.text == source)
-      #expect(session.generation == 0)
+      #expect(editor.text == source)
+      #expect(editor.generation == 0)
     }
 
     @Test(arguments: [false, true])
     func aCitationIntoHiddenFrontMatterShowsItsQuoteWithoutShowInFile(shown: Bool) async throws {
       let prefix = "---\nkey: e\u{301} 👩🏽‍💻\n---\n\n"
       let text = prefix + "# Content\n\nA retained thought."
-      let session = Editor(
+      let editor = Editor(
         fileID: "front-matter", text: text, generation: 8, showsFrontMatter: shown)
       let fixture = FixtureModel()
       fixture.answer = [
         ModelAnswerPart(kind: .prose, text: "Your key is set."),
         ModelAnswerPart(kind: .quote, text: "key: e\u{301} 👩🏽‍💻"),
       ]
-      let model = IntelligenceState(session: session, backend: fixture)
+      let model = IntelligenceState(editor: editor, backend: fixture)
       model.askPrompt = "What is my key?"
       await model.checkAvailability()
       model.generate()
@@ -167,21 +167,21 @@
       }
       let metadata = try #require(citation.ranges.first)
       #expect(model.canReveal(metadata) == shown)
-      session.setShowsFrontMatter(!shown)
+      editor.setShowsFrontMatter(!shown)
       #expect(model.canReveal(metadata) == !shown)
-      session.setShowsFrontMatter(shown)
+      editor.setShowsFrontMatter(shown)
       #expect(model.canReveal((text as NSString).range(of: "retained")))
-      #expect(session.text.utf8.elementsEqual(text.utf8))
-      #expect(session.generation == 8)
+      #expect(editor.text.utf8.elementsEqual(text.utf8))
+      #expect(editor.generation == 8)
     }
 
-    private func host(_ session: Editor) -> UIWindow {
-      let controller = UIHostingController(rootView: EditorView(editor: session))
+    private func host(_ editor: Editor) -> UIWindow {
+      let controller = UIHostingController(rootView: EditorView(editor: editor))
       let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
       window.rootViewController = controller
       window.makeKeyAndVisible()
       controller.view.layoutIfNeeded()
-      session.textView.becomeFirstResponder()
+      editor.textView.becomeFirstResponder()
       return window
     }
   }

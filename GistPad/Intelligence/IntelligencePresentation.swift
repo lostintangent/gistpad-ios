@@ -72,7 +72,7 @@ private struct IntelligenceSheetModifier: ViewModifier {
     content
       .sheet(item: $presentation.target, onDismiss: presentation.dismissed) { target in
         IntelligenceSheet(
-          session: target.editor, title: target.title,
+          editor: target.editor, title: target.title,
           revealSource: { target.reference = $0 }
         )
         .environment(\.accent, accent)

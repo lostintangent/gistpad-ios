@@ -14,13 +14,13 @@
     @FocusState private var promptFocused: Bool
 
     public init(
-      session: Editor, title: String,
+      editor: Editor, title: String,
       backend: any IntelligenceModel = OnDeviceModel(),
       revealSource: @escaping @MainActor (NSRange) -> Void
     ) {
       self.title = title
       self.revealSource = revealSource
-      _model = State(initialValue: IntelligenceState(session: session, backend: backend))
+      _model = State(initialValue: IntelligenceState(editor: editor, backend: backend))
     }
 
     public var body: some View {
@@ -31,7 +31,7 @@
             Picker(String(localized: "Action", bundle: .module), selection: $model.action) {
               Text("Ask", bundle: .module).tag(IntelligenceAction.ask)
               Text("Edit", bundle: .module).tag(IntelligenceAction.edit)
-                .disabled(!model.session.textView.isEditable)
+                .disabled(!model.editor.textView.isEditable)
               Text("Review", bundle: .module).tag(IntelligenceAction.review)
             }
             .pickerStyle(.segmented)
@@ -151,7 +151,7 @@
           .accessibilityIdentifier("intelligence-prompt")
         }
       } footer: {
-        if !model.session.textView.isEditable {
+        if !model.editor.textView.isEditable {
           Text(
             "This gist is read-only. You can ask and review, but not apply changes.",
             bundle: .module)

@@ -7,7 +7,7 @@
   @MainActor
   @Observable
   final class IntelligenceState {
-    let session: Editor
+    let editor: Editor
     var action = IntelligenceAction.ask
     var askPrompt = ""
     var editPrompt = ""
@@ -29,8 +29,8 @@
     private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
     @ObservationIgnored private(set) var task: Task<Void, Never>?
 
-    init(session: Editor, backend: any IntelligenceModel) {
-      self.session = session
+    init(editor: Editor, backend: any IntelligenceModel) {
+      self.editor = editor
       self.backend = backend
       engine = Intelligence(backend: backend)
     }
@@ -44,19 +44,19 @@
 
     var isStale: Bool {
       guard let snapshot else { return false }
-      return session.id != snapshot.sessionID || session.fileID != snapshot.fileID
-        || session.generation != snapshot.generation
-        || !session.text.utf8.elementsEqual(snapshot.source.utf8)
+      return editor.id != snapshot.sessionID || editor.fileID != snapshot.fileID
+        || editor.generation != snapshot.generation
+        || !editor.text.utf8.elementsEqual(snapshot.source.utf8)
     }
 
     var canGenerate: Bool {
       available && !isRunning
         && (action == .review || !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        && (action != .edit || session.textView.isEditable)
+        && (action != .edit || editor.textView.isEditable)
     }
 
     var canApply: Bool {
-      !isRunning && !isStale && session.canFormat && review?.canApply == true
+      !isRunning && !isStale && editor.canFormat && review?.canApply == true
     }
 
     var hasResults: Bool {
@@ -94,7 +94,7 @@
       let instruction = selectedAction == .review ? "" : prompt
       let requestID = UUID()
       logger.notice(
-        "request=\(requestID.uuidString, privacy: .public) action=\(selectedAction.rawValue, privacy: .public) state=started sourceUTF16=\(self.session.text.utf16.count)"
+        "request=\(requestID.uuidString, privacy: .public) action=\(selectedAction.rawValue, privacy: .public) state=started sourceUTF16=\(self.editor.text.utf16.count)"
       )
       task = Task { [weak self] in
         guard let self else { return }
@@ -105,7 +105,7 @@
           self.task = nil
         }
         do {
-          let snapshot = try self.session.snapshot()
+          let snapshot = try self.editor.snapshot()
           self.snapshot = snapshot
           let request = IntelligenceRequest(
             snapshot: snapshot, action: selectedAction, instruction: instruction, id: requestID)
@@ -154,7 +154,7 @@
         let count = review.comments.filter {
           $0.canApply && (commentID == nil || $0.id == commentID)
         }.count
-        let remaining = try session.apply(review, commentID: commentID)
+        let remaining = try editor.apply(review, commentID: commentID)
         if action == .edit { appliedEdit = review }
         self.review = remaining
         snapshot = remaining.snapshot
@@ -184,7 +184,7 @@
     }
 
     func isHiddenFrontMatterReference(_ range: NSRange) -> Bool {
-      range.location < session.contentStart
+      range.location < editor.contentStart
     }
   }
 #endif
