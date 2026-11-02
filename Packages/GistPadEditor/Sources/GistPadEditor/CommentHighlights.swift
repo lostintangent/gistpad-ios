@@ -12,7 +12,7 @@
       let fill: UIColor
       let selected: Bool
     }
-    private unowned let session: Editor
+    private unowned let editor: Editor
     private let backgroundLayer = CALayer()
     private var configuration = CommentHighlightConfiguration()
     private var onOpen: (@MainActor ([Int64]) -> Void)?
@@ -37,10 +37,10 @@
     private lazy var selectionTap = UITapGestureRecognizer(
       target: self, action: #selector(selectTappedWord))
 
-    init(session: Editor) {
-      self.session = session
+    init(editor: Editor) {
+      self.editor = editor
       super.init()
-      session.textView.layer.insertSublayer(backgroundLayer, at: 0)
+      editor.textView.layer.insertSublayer(backgroundLayer, at: 0)
       tap.delegate = self
       selectionTap.numberOfTapsRequired = 2
       selectionTap.cancelsTouchesInView = false
@@ -48,8 +48,8 @@
       selectionTap.delaysTouchesEnded = false
       selectionTap.delegate = self
       tap.require(toFail: selectionTap)
-      session.textView.addGestureRecognizer(selectionTap)
-      session.textView.addGestureRecognizer(tap)
+      editor.textView.addGestureRecognizer(selectionTap)
+      editor.textView.addGestureRecognizer(tap)
     }
 
     func configure(
@@ -72,7 +72,7 @@
       self.onAdd = onAdd
       if self.configuration != configuration || changesInteraction {
         self.configuration = configuration
-        session.highlight()
+        editor.highlight()
       }
       if needsInitialReport { publish(linkedIDs ?? [], force: true) }
       scrollSelectedCommentIfNeeded()
@@ -81,21 +81,21 @@
     func paint(in storage: NSTextStorage) {
       passages = []
       backgroundLayer.sublayers = nil
-      session.textView.setNeedsLayout()
+      editor.textView.setNeedsLayout()
       originalInk = []
-      paintedGeneration = session.generation
+      paintedGeneration = editor.generation
       let highlights =
         configuration.quotes.isEmpty
         ? []
-        : CommentQuoteMatcher.highlights(quotes: configuration.quotes, segments: [session.text])
-          .filter { $0.start >= session.contentStart }
+        : CommentQuoteMatcher.highlights(quotes: configuration.quotes, segments: [editor.text])
+          .filter { $0.start >= editor.contentStart }
       verifiedHighlights = highlights
       publish(Set(highlights.flatMap(\.commentIDs)))
       updateAccessibility()
       guard !highlights.isEmpty, !suspendsForFind, !suspendsForWritingTools else {
         return
       }
-      let traits = session.textView.traitCollection
+      let traits = editor.textView.traitCollection
       let accent = traits[AccentTrait.self]
       let roles = accent.roles(traits: traits)
       onSelected = roles.onFill.uiColor
@@ -141,18 +141,18 @@
 
     /// Comment fills are the only source ink that follows the personal accent.
     func accentDidChange() {
-      if !verifiedHighlights.isEmpty { session.highlight() }
+      if !verifiedHighlights.isEmpty { editor.highlight() }
     }
 
     func selectionDidChange() {
-      session.textView.setNeedsLayout()
-      guard !updatingSelection, !originalInk.isEmpty, paintedGeneration == session.generation,
-        session.isSettled, session.textView.textStorage.length == session.text.utf16.count
+      editor.textView.setNeedsLayout()
+      guard !updatingSelection, !originalInk.isEmpty, paintedGeneration == editor.generation,
+        editor.isSettled, editor.textView.textStorage.length == editor.text.utf16.count
       else { return }
       updatingSelection = true
       defer { updatingSelection = false }
-      let storage = session.textView.textStorage
-      let undo = session.textView.undoManager
+      let storage = editor.textView.textStorage
+      let undo = editor.textView.undoManager
       let undoEnabled = undo?.isUndoRegistrationEnabled == true
       if undoEnabled { undo?.disableUndoRegistration() }
       storage.beginEditing()
@@ -162,7 +162,7 @@
       applySelectedInk(in: storage)
       storage.endEditing()
       if undoEnabled { undo?.enableUndoRegistration() }
-      session.textView.setNeedsDisplay()
+      editor.textView.setNeedsDisplay()
     }
 
     private func applySelectedInk(in storage: NSTextStorage) {
@@ -178,11 +178,11 @@
       CATransaction.setDisableActions(true)
       defer { CATransaction.commit() }
       backgroundLayer.sublayers = nil
-      guard let manager = session.textView.textLayoutManager,
-        paintedGeneration == session.generation, !suspendsForFind, !suspendsForWritingTools,
-        session.isSettled
+      guard let manager = editor.textView.textLayoutManager,
+        paintedGeneration == editor.generation, !suspendsForFind, !suspendsForWritingTools,
+        editor.isSettled
       else { return }
-      let inset = session.textView.textContainerInset
+      let inset = editor.textView.textContainerInset
       var selectedFrames: [CGRect] = []
       var selectedFill: UIColor?
       for passage in passages {
@@ -252,9 +252,9 @@
 
     private func addAction(ranges: [NSRange]) -> UIAction? {
       guard onAdd != nil, !suspendsForFind, !suspendsForWritingTools,
-        ranges.count == 1, let range = ranges.first, session.isSettled,
-        range.location >= session.contentStart,
-        let quote = try? Edit.text(in: session.text, at: range),
+        ranges.count == 1, let range = ranges.first, editor.isSettled,
+        range.location >= editor.contentStart,
+        let quote = try? Edit.text(in: editor.text, at: range),
         CommentQuoteMatcher.isEligibleSelection(quote)
       else { return nil }
       return UIAction(
@@ -282,7 +282,7 @@
     }
 
     private func threadIDs(intersecting ranges: [NSRange]) -> [Int64] {
-      guard !suspendsForFind, !suspendsForWritingTools, session.isSettled else { return [] }
+      guard !suspendsForFind, !suspendsForWritingTools, editor.isSettled else { return [] }
       var seen: Set<Int64> = []
       return verifiedHighlights.filter { highlight in
         ranges.contains { range in
@@ -296,20 +296,20 @@
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch)
       -> Bool
     {
-      guard !session.textView.isFirstResponder, onOpen != nil,
-        !suspendsForFind, !suspendsForWritingTools, session.isSettled
+      guard !editor.textView.isFirstResponder, onOpen != nil,
+        !suspendsForFind, !suspendsForWritingTools, editor.isSettled
       else { return false }
-      let ids = threadIDs(at: touch.location(in: session.textView))
+      let ids = threadIDs(at: touch.location(in: editor.textView))
       pendingTap = ids.isEmpty ? nil : ids
       return !ids.isEmpty
     }
 
     func threadIDs(at point: CGPoint) -> [Int64] {
-      guard let manager = session.textView.textLayoutManager,
-        let position = session.textView.closestPosition(to: point)
+      guard let manager = editor.textView.textLayoutManager,
+        let position = editor.textView.closestPosition(to: point)
       else { return [] }
-      let offset = session.textView.offset(from: session.textView.beginningOfDocument, to: position)
-      let inset = session.textView.textContainerInset
+      let offset = editor.textView.offset(from: editor.textView.beginningOfDocument, to: position)
+      let inset = editor.textView.textContainerInset
       let textPoint = CGPoint(x: point.x - inset.left, y: point.y - inset.top)
       var ids: [Int64] = []
       var seen: Set<Int64> = []
@@ -361,8 +361,8 @@
     }
 
     @objc private func selectTappedWord() {
-      let view = session.textView
-      guard !view.isFirstResponder, session.isSettled, !suspendsForFind, !suspendsForWritingTools,
+      let view = editor.textView
+      guard !view.isFirstResponder, editor.isSettled, !suspendsForFind, !suspendsForWritingTools,
         let position = view.closestPosition(to: selectionTap.location(in: view)),
         let caret = view.textRange(from: position, to: position)
       else { return }
@@ -373,32 +373,32 @@
     }
 
     private func reportChangedQuote() {
-      session.inputError = String(
+      editor.inputError = String(
         localized: "This comment is no longer linked here. Select the quote again.", bundle: .module
       )
     }
 
     func scrollSelectedCommentIfNeeded() {
       guard needsSelectedScroll, !suspendsForFind, !suspendsForWritingTools,
-        session.textView.window != nil,
-        !session.textView.isHidden, scrollTask == nil,
-        session.textView.bounds.width > 0, session.textView.bounds.height > 0
+        editor.textView.window != nil,
+        !editor.textView.isHidden, scrollTask == nil,
+        editor.textView.bounds.width > 0, editor.textView.bounds.height > 0
       else { return }
       scrollTask = Task { @MainActor [weak self] in
         await Task.yield()
         guard !Task.isCancelled, let self else { return }
         defer { if !Task.isCancelled { self.scrollTask = nil } }
         guard self.needsSelectedScroll,
-          !self.suspendsForFind, !self.suspendsForWritingTools, self.session.isSettled,
+          !self.suspendsForFind, !self.suspendsForWritingTools, self.editor.isSettled,
           let selectedID = self.configuration.selectedCommentID,
           let highlight = self.verifiedHighlights.first(where: {
             $0.commentIDs.contains(selectedID)
           }),
-          self.session.textView.window != nil, !self.session.textView.isHidden
+          self.editor.textView.window != nil, !self.editor.textView.isHidden
         else { return }
         self.needsSelectedScroll = false
-        guard self.session.sourceView.revealPassage(highlight.range) else {
-          self.session.inputError = String(
+        guard self.editor.view.revealPassage(highlight.range) else {
+          self.editor.inputError = String(
             localized: "The comment passage could not be revealed.", bundle: .module)
           return
         }
@@ -407,31 +407,31 @@
 
     func suspendForFind() {
       suspendsForFind = true
-      session.highlight()
+      editor.highlight()
     }
 
     func frontMatterVisibilityDidChange() {
-      if !configuration.quotes.isEmpty { session.highlight() }
+      if !configuration.quotes.isEmpty { editor.highlight() }
     }
 
     func findVisibilityDidChange() {
-      let visible = session.textView.findInteraction?.isFindNavigatorVisible == true
+      let visible = editor.textView.findInteraction?.isFindNavigatorVisible == true
       guard suspendsForFind != visible, pendingFindUpdate == nil
       else { return }
       pendingFindUpdate = Task { @MainActor [weak self] in
         await Task.yield()
         guard let self else { return }
         self.pendingFindUpdate = nil
-        let visible = self.session.textView.findInteraction?.isFindNavigatorVisible == true
+        let visible = self.editor.textView.findInteraction?.isFindNavigatorVisible == true
         guard self.suspendsForFind != visible else { return }
         self.suspendsForFind = visible
-        self.session.highlight()
+        self.editor.highlight()
       }
     }
 
     func suspendForWritingTools() {
       suspendsForWritingTools = true
-      session.highlight()
+      editor.highlight()
     }
 
     func resumeAfterWritingTools() {
@@ -439,7 +439,7 @@
     }
 
     private func nativeRange(_ range: NSRange) -> NSTextRange? {
-      guard let content = session.textView.textLayoutManager?.textContentManager,
+      guard let content = editor.textView.textLayoutManager?.textContentManager,
         let start = content.location(content.documentRange.location, offsetBy: range.location),
         let end = content.location(start, offsetBy: range.length)
       else { return nil }
@@ -447,8 +447,8 @@
     }
 
     private func unselectedRanges(_ range: NSRange) -> [NSRange] {
-      let selection = session.textView.selectedRange
-      guard session.textView.isFirstResponder, selection.length > 0 else { return [range] }
+      let selection = editor.textView.selectedRange
+      guard editor.textView.isFirstResponder, selection.length > 0 else { return [range] }
       let overlap = NSIntersectionRange(range, selection)
       guard overlap.length > 0 else { return [range] }
       var ranges: [NSRange] = []
@@ -482,7 +482,7 @@
     }
 
     private func updateAccessibility() {
-      let view = session.sourceView
+      let view = editor.view
       guard !suspendsForFind, !suspendsForWritingTools,
         let selectedID = configuration.selectedCommentID,
         verifiedHighlights.contains(where: { $0.commentIDs.contains(selectedID) }),

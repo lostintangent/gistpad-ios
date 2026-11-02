@@ -394,7 +394,7 @@ struct RootView: View {
       areCommentsPresented: comments.isPresented && comments.matches(session.file)
     ) {
       EditorView(
-        session: session.editor,
+        editor: session.editor,
         insertPhoto: { comments.performAfterClosing { photos.choosePhoto() } },
         canInsertPhoto: photos.canChoosePhoto,
         intelligence: { comments.performAfterClosing { presentIntelligence(session) } },

@@ -23,7 +23,7 @@
   final class KeyboardBar: UIView {
     let buttons = UIStackView()
     let glass: UIVisualEffectView
-    weak var editor: UIView?
+    weak var textView: UIView?
     private let column = UILayoutGuide()
     private lazy var columnLeft = column.leftAnchor.constraint(equalTo: leftAnchor)
     private lazy var columnRight = column.rightAnchor.constraint(equalTo: rightAnchor)
@@ -84,8 +84,8 @@
     override func layoutSubviews() {
       var left: CGFloat = 0
       var right = bounds.width
-      if let editor, editor.window != nil, window != nil {
-        let frame = editor.convert(editor.bounds, to: self)
+      if let textView, textView.window != nil, window != nil {
+        let frame = textView.convert(textView.bounds, to: self)
         if frame.maxX > 0, frame.minX < bounds.width {
           left = max(frame.minX, 0)
           right = min(frame.maxX, bounds.width)

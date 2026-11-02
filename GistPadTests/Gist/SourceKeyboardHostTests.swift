@@ -214,7 +214,7 @@ private final class SourceKeyboardFixture {
                     ),
                     mode: .constant(.edit), saveState: .savedToGitHub
                 ) {
-                    EditorView(session: session)
+                    EditorView(editor: session)
                 } preview: {
                     Color.clear
                 }

@@ -109,7 +109,7 @@ private struct StatusFixture: View {
     NavigationStack {
       Group {
         if let session {
-          EditorView(session: session)
+          EditorView(editor: session)
         } else {
           Text("A real page remains in place.")
         }

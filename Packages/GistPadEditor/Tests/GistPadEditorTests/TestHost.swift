@@ -13,32 +13,32 @@
   enum HostedEditorTests {}
 
   @MainActor
-  func host(_ session: Editor, focused: Bool = true) -> UIWindow {
+  func host(_ editor: Editor, focused: Bool = true) -> UIWindow {
     let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
     let controller = UIViewController()
     window.rootViewController = controller
     window.makeKeyAndVisible()
-    session.textView.frame = controller.view.bounds
-    session.textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    controller.view.addSubview(session.textView)
+    editor.textView.frame = controller.view.bounds
+    editor.textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    controller.view.addSubview(editor.textView)
     window.layoutIfNeeded()
-    if focused { session.textView.becomeFirstResponder() }
+    if focused { editor.textView.becomeFirstResponder() }
     return window
   }
 
   @MainActor
   func hostEditor(
-    _ session: Editor, intelligence: (@MainActor () -> Void)? = nil,
+    _ editor: Editor, intelligence: (@MainActor () -> Void)? = nil,
     insertPhoto: (@MainActor () -> Void)? = nil, canInsertPhoto: Bool = false
   ) -> UIWindow {
     let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
     window.rootViewController = UIHostingController(
       rootView: EditorView(
-        session: session, insertPhoto: insertPhoto, canInsertPhoto: canInsertPhoto,
+        editor: editor, insertPhoto: insertPhoto, canInsertPhoto: canInsertPhoto,
         intelligence: intelligence))
     window.makeKeyAndVisible()
     window.layoutIfNeeded()
-    session.textView.becomeFirstResponder()
+    editor.textView.becomeFirstResponder()
     return window
   }
 #endif

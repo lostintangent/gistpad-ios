@@ -217,7 +217,7 @@ private struct LayoutFixture: View {
           saveState: .savedLocally,
           allowsSplit: LayoutPreferences.allowsSplit(availableWidth: width)
         ) {
-          EditorView(session: session)
+          EditorView(editor: session)
         } preview: {
           FilePreview(editor: session)
         }

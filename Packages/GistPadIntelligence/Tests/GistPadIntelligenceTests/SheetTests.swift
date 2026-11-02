@@ -176,7 +176,7 @@
     }
 
     private func host(_ session: Editor) -> UIWindow {
-      let controller = UIHostingController(rootView: EditorView(session: session))
+      let controller = UIHostingController(rootView: EditorView(editor: session))
       let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
       window.rootViewController = controller
       window.makeKeyAndVisible()

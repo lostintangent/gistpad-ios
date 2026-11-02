@@ -5,7 +5,7 @@
   import UIKit
 
   public struct EditorView: View {
-    public let session: Editor
+    public let editor: Editor
     private let insertPhoto: (@MainActor () -> Void)?
     private let canInsertPhoto: Bool
     private let intelligence: (@MainActor () -> Void)?
@@ -17,7 +17,7 @@
     @State private var actionError: String?
 
     public init(
-      session: Editor,
+      editor: Editor,
       insertPhoto: (@MainActor () -> Void)? = nil,
       canInsertPhoto: Bool = false,
       intelligence: (@MainActor () -> Void)? = nil,
@@ -26,7 +26,7 @@
       onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)? = nil,
       onAddComment: (@MainActor (String) -> Void)? = nil
     ) {
-      self.session = session
+      self.editor = editor
       self.insertPhoto = insertPhoto
       self.canInsertPhoto = canInsertPhoto
       self.intelligence = intelligence
@@ -38,8 +38,8 @@
 
     public var body: some View {
       GeometryReader { _ in
-        SourceTextView(
-          session: session,
+        TextViewRepresentable(
+          editor: editor,
           comments: comments, onOpenCommentThreads: onOpenCommentThreads,
           onLinkedCommentIDsChange: onLinkedCommentIDsChange,
           onAddComment: onAddComment,
@@ -47,21 +47,21 @@
             format: format, link: beginLink, indent: indent,
             photo: insertPhoto,
             intelligence: intelligence,
-            dismiss: { session.textView.resignFirstResponder() }),
+            dismiss: { editor.textView.resignFirstResponder() }),
           configuration: KeyboardBarConfiguration(
-            canFormat: session.canFormat,
+            canFormat: editor.canFormat,
             canInsertPhoto: canInsertPhoto && insertPhoto != nil,
-            canUseIntelligence: session.isSettled && intelligence != nil)
+            canUseIntelligence: editor.isSettled && intelligence != nil)
         )
-        .id(session.id)
+        .id(editor.id)
         .ignoresSafeArea([.container, .keyboard], edges: .vertical)
       }
-      .overlay { SourceViewport(session: session).allowsHitTesting(false) }
+      .overlay { ViewportRepresentable(editor: editor).allowsHitTesting(false) }
       .sheet(
         item: $linkRequest,
         onDismiss: {
-          if session.textView.window != nil, session.textView.isEditable {
-            session.textView.becomeFirstResponder()
+          if editor.textView.window != nil, editor.textView.isEditable {
+            editor.textView.becomeFirstResponder()
           }
         }
       ) { request in
@@ -70,36 +70,36 @@
             .link(label: label, destination: destination), in: request.source,
             selection: request.selection)
           {
-            try session.apply(edit, generation: request.generation)
+            try editor.apply(edit, generation: request.generation)
           }
         }
       }
       .alert(
         String(localized: "Couldn't Complete Action", bundle: .module),
         isPresented: Binding(
-          get: { actionError != nil || session.inputError != nil },
+          get: { actionError != nil || editor.inputError != nil },
           set: {
             if !$0 {
               actionError = nil
-              session.inputError = nil
+              editor.inputError = nil
             }
           })
       ) {
         Button(String(localized: "OK", bundle: .module), role: .cancel) {
           actionError = nil
-          session.inputError = nil
+          editor.inputError = nil
         }
       } message: {
-        Text(actionError ?? session.inputError ?? "")
+        Text(actionError ?? editor.inputError ?? "")
       }
     }
 
     private func format(_ command: Format) {
       do {
         if let edit = try Formatting.edit(
-          command, in: session.text, selection: session.textView.selectedRange)
+          command, in: editor.text, selection: editor.textView.selectedRange)
         {
-          try session.apply(edit, generation: session.generation)
+          try editor.apply(edit, generation: editor.generation)
         }
       } catch Edit.MutationError.compositionActive {
         actionError = String(
@@ -112,8 +112,8 @@
     }
 
     private func beginLink() {
-      let selection = session.textView.selectedRange
-      guard session.canFormat, let label = try? Edit.text(in: session.text, at: selection)
+      let selection = editor.textView.selectedRange
+      guard editor.canFormat, let label = try? Edit.text(in: editor.text, at: selection)
       else {
         actionError = String(
           localized: "Finish the current text edit, then select the link text again.",
@@ -121,12 +121,12 @@
         return
       }
       linkRequest = LinkRequest(
-        source: session.text, generation: session.generation, selection: selection, label: label)
+        source: editor.text, generation: editor.generation, selection: selection, label: label)
     }
 
     private func indent(outdent: Bool) {
       do {
-        try session.indent(outdent: outdent)
+        try editor.indent(outdent: outdent)
       } catch {
         actionError = String(
           localized: "Finish the current text edit, then select the lines again.", bundle: .module)
@@ -135,8 +135,8 @@
 
   }
 
-  private struct SourceTextView: UIViewRepresentable {
-    let session: Editor
+  private struct TextViewRepresentable: UIViewRepresentable {
+    let editor: Editor
     let comments: CommentHighlightConfiguration
     let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
     let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
@@ -151,7 +151,7 @@
     }
 
     func makeUIView(context: Context) -> TextViewHost {
-      let host = TextViewHost(session: session)
+      let host = TextViewHost(editor: editor)
       updateUIView(host, context: context)
       return host
     }
@@ -163,13 +163,13 @@
         view.isAccessibilityElement = isPaneVisible
         view.accessibilityElementsHidden = !isPaneVisible
         accessory.update(actions: actions, configuration: configuration)
-        accessory.editor = view
+        accessory.textView = view
         if view.inputAccessoryView !== accessory {
           view.inputAccessoryView = accessory
           if view.isFirstResponder { view.reloadInputViews() }
         }
         view.traitOverrides[AccentTrait.self] = accent
-        session.setCommentHighlights(
+        editor.setCommentHighlights(
           comments, onOpenCommentThreads: onOpenCommentThreads,
           onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment)
       }
@@ -185,23 +185,23 @@
       weak var host: TextViewHost?
     }
 
-    private let session: Editor
+    private let editor: Editor
     private var configuration: ((UITextView) -> Void)?
     private var isDismantled = false
 
-    init(session: Editor) {
-      self.session = session
+    init(editor: Editor) {
+      self.editor = editor
       super.init(frame: .zero)
-      session.sourceHosts.append(Reference(host: self))
+      editor.hosts.append(Reference(host: self))
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("Use init(session:)") }
+    required init?(coder: NSCoder) { fatalError("Use init(editor:)") }
 
     func configure(_ configuration: @escaping (UITextView) -> Void) {
       guard !isDismantled else { return }
       self.configuration = configuration
-      if ownsEditor { configuration(session.textView) }
+      if ownsEditor { configuration(editor.textView) }
     }
 
     override func didMoveToWindow() {
@@ -213,12 +213,12 @@
     override func layoutSubviews() {
       super.layoutSubviews()
       guard window != nil, !isDismantled else { return }
-      if session.sourceHost?.window == nil { updateOwnership() }
-      guard session.sourceHost === self else { return }
+      if editor.host?.window == nil { updateOwnership() }
+      guard editor.host === self else { return }
       if !ownsEditor { adoptEditor() }
-      if session.textView.frame != bounds { session.textView.frame = bounds }
+      if editor.textView.frame != bounds { editor.textView.frame = bounds }
       // Laying out now, inside any column animation, lets the keyboard capsule glide with the note.
-      if let accessory = session.textView.inputAccessoryView, accessory.window != nil {
+      if let accessory = editor.textView.inputAccessoryView, accessory.window != nil {
         accessory.setNeedsLayout()
         accessory.layoutIfNeeded()
       }
@@ -228,56 +228,56 @@
       isDismantled = true
       configuration = nil
       updateOwnership()
-      guard session.sourceHost == nil, session.textView.superview === self else { return }
-      session.setCommentHighlights(.init())
-      session.textView.inputAccessoryView = nil
-      session.textView.removeFromSuperview()
+      guard editor.host == nil, editor.textView.superview === self else { return }
+      editor.setCommentHighlights(.init())
+      editor.textView.inputAccessoryView = nil
+      editor.textView.removeFromSuperview()
     }
 
     private var ownsEditor: Bool {
-      session.sourceHost === self && session.textView.superview === self
+      editor.host === self && editor.textView.superview === self
     }
 
     private func updateOwnership() {
-      session.sourceHosts.removeAll {
+      editor.hosts.removeAll {
         $0.host == nil || $0.host?.isDismantled == true
       }
       // Re-entering an older native column must not supersede a newer live host.
-      let owner = session.sourceHosts.last { $0.host?.window != nil }?.host
-      guard session.sourceHost !== owner || owner?.ownsEditor == false else { return }
-      session.sourceHost = owner
+      let owner = editor.hosts.last { $0.host?.window != nil }?.host
+      guard editor.host !== owner || owner?.ownsEditor == false else { return }
+      editor.host = owner
       owner?.adoptEditor()
     }
 
     private func adoptEditor() {
-      guard window != nil, session.sourceHost === self, !isDismantled else { return }
+      guard window != nil, editor.host === self, !isDismantled else { return }
       // SwiftUI owns this container, never the text view shared with another host.
-      let editor = session.textView
-      editor.frame = bounds
-      editor.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      configuration?(editor)
-      addSubview(editor)
+      let textView = editor.textView
+      textView.frame = bounds
+      textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      configuration?(textView)
+      addSubview(textView)
     }
   }
 
-  private struct SourceViewport: UIViewRepresentable {
-    let session: Editor
+  private struct ViewportRepresentable: UIViewRepresentable {
+    let editor: Editor
 
-    func makeUIView(context: Context) -> SourceViewportView {
-      let view = SourceViewportView()
-      view.editor = session.textView
-      session.sourceView.updateViewportView(view)
+    func makeUIView(context: Context) -> ViewportView {
+      let view = ViewportView()
+      view.textView = editor.textView
+      editor.view.updateViewportView(view)
       return view
     }
 
-    func updateUIView(_ view: SourceViewportView, context: Context) {
-      view.editor = session.textView
-      session.sourceView.updateViewportView(view)
+    func updateUIView(_ view: ViewportView, context: Context) {
+      view.textView = editor.textView
+      editor.view.updateViewportView(view)
     }
   }
 
-  private final class SourceViewportView: UIView {
-    weak var editor: UITextView?
+  private final class ViewportView: UIView {
+    weak var textView: UITextView?
     private let topEdge = UIScrollEdgeElementContainerInteraction()
 
     override init(frame: CGRect) {
@@ -292,13 +292,13 @@
     override func didMoveToWindow() {
       super.didMoveToWindow()
       updateChrome()
-      editor?.setNeedsLayout()
+      textView?.setNeedsLayout()
     }
 
     override func layoutSubviews() {
       super.layoutSubviews()
       updateChrome()
-      editor?.setNeedsLayout()
+      textView?.setNeedsLayout()
     }
 
     private func updateChrome() {
@@ -313,9 +313,9 @@
         }
         responder = current.next
       }
-      guard topEdge.view !== navigationBar || topEdge.scrollView !== editor else { return }
+      guard topEdge.view !== navigationBar || topEdge.scrollView !== textView else { return }
       topEdge.view?.removeInteraction(topEdge)
-      topEdge.scrollView = editor
+      topEdge.scrollView = textView
       navigationBar?.addInteraction(topEdge)
     }
   }

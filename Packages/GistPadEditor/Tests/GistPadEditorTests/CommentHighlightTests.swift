@@ -9,60 +9,60 @@
     @MainActor
     struct CommentHighlightTests {
       @Test func annotationsPreserveExactSourceGenerationSelectionAndNativeUndo() throws {
-        let session = Editor(fileID: "comments", text: "A native note", generation: 7)
-        let window = host(session)
+        let editor = Editor(fileID: "comments", text: "A native note", generation: 7)
+        let window = host(editor)
         defer { window.isHidden = true }
-        let undo = try #require(session.textView.undoManager)
+        let undo = try #require(editor.textView.undoManager)
         undo.removeAllActions()
-        try session.apply(
+        try editor.apply(
           Edit(range: NSRange(location: 0, length: 1), expected: "A", replacement: "The"),
           generation: 7)
-        session.textView.selectedRange = NSRange(location: 4, length: 6)
-        let selection = session.textView.selectedRange
+        editor.textView.selectedRange = NSRange(location: 4, length: 6)
+        let selection = editor.textView.selectedRange
         var changes = 0
-        session.onEdit = { _, _ in changes += 1 }
-        session.setCommentHighlights(
+        editor.onEdit = { _, _ in changes += 1 }
+        editor.setCommentHighlights(
           .init(
             quotes: [CommentQuote(commentID: 10, quote: "native")], selectedCommentID: 10))
-        session.highlight()
-        #expect(session.text == "The native note")
-        #expect(session.generation == 8)
-        #expect(session.textView.selectedRange == selection)
+        editor.highlight()
+        #expect(editor.text == "The native note")
+        #expect(editor.generation == 8)
+        #expect(editor.textView.selectedRange == selection)
         #expect(changes == 0)
-        #expect(session.textView.textLayoutManager != nil)
-        #expect(session.textView.typingAttributes[.textHighlightStyle] == nil)
-        #expect(session.textView.typingAttributes[.textItemTag] == nil)
+        #expect(editor.textView.textLayoutManager != nil)
+        #expect(editor.textView.typingAttributes[.textHighlightStyle] == nil)
+        #expect(editor.textView.typingAttributes[.textItemTag] == nil)
         undo.undo()
-        session.textViewDidChange(session.textView)
-        #expect(session.text == "A native note")
+        editor.textViewDidChange(editor.textView)
+        #expect(editor.text == "A native note")
         #expect(!undo.canUndo)
         undo.redo()
-        session.textViewDidChange(session.textView)
-        #expect(session.text == "The native note")
+        editor.textViewDidChange(editor.textView)
+        #expect(editor.text == "The native note")
       }
 
       @Test func overlapMenuKeepsSystemActionsAndOpensEveryThread() throws {
-        let session = Editor(fileID: "overlap", text: "one two three")
+        let editor = Editor(fileID: "overlap", text: "one two three")
         var opened: [[Int64]] = []
-        session.setCommentHighlights(
+        editor.setCommentHighlights(
           .init(quotes: [
             CommentQuote(commentID: 10, quote: "one two"),
             CommentQuote(commentID: 20, quote: "two three"),
           ]), onOpenCommentThreads: { opened.append($0) })
         #expect(
-          session.textView.textStorage.attribute(
+          editor.textView.textStorage.attribute(
             CommentHighlights.annotationKey, at: 5, effectiveRange: nil) != nil)
         #expect(
-          session.textView.textStorage.attribute(.textHighlightStyle, at: 5, effectiveRange: nil)
+          editor.textView.textStorage.attribute(.textHighlightStyle, at: 5, effectiveRange: nil)
             == nil)
         #expect(
-          session.textView.textStorage.attribute(
+          editor.textView.textStorage.attribute(
             .textItemTag, at: 5, effectiveRange: nil) == nil)
         let copy = UIAction(title: "System Copy") { _ in }
-        let delegate: any UITextViewDelegate = session
+        let delegate: any UITextViewDelegate = editor
         let menu = try #require(
           delegate.textView?(
-            session.textView,
+            editor.textView,
             editMenuForTextInRanges: [NSValue(range: NSRange(location: 4, length: 3))],
             suggestedActions: [copy]) ?? nil)
         #expect(menu.children.first === copy)
@@ -73,44 +73,44 @@
         button.addAction(action, for: .touchUpInside)
         button.sendActions(for: .touchUpInside)
         #expect(opened == [[10, 20]])
-        #expect(session.text == "one two three")
-        #expect(session.generation == 0)
+        #expect(editor.text == "one two three")
+        #expect(editor.generation == 0)
       }
 
       @Test func passagesHitTestNativeGeometryAndAddCommentKeepsTheExactSelection() throws {
         let added = "  cafe\u{0301} 🫧\r\n"
         let source =
           "# Comment notebook\n\n🫧 A quiet native note, with **careful** words.\n" + added
-        let session = Editor(fileID: "hit-testing", text: source)
-        let window = host(session, focused: false)
+        let editor = Editor(fileID: "hit-testing", text: source)
+        let window = host(editor, focused: false)
         defer { window.isHidden = true }
         var quotes: [String] = []
-        session.setCommentHighlights(
+        editor.setCommentHighlights(
           .init(quotes: [
             CommentQuote(commentID: 10, quote: "quiet native"),
             CommentQuote(commentID: 20, quote: "native note"),
           ]), onOpenCommentThreads: { _ in }, onAddComment: { quotes.append($0) })
-        session.textView.layoutIfNeeded()
+        editor.textView.layoutIfNeeded()
         let range = (source as NSString).range(of: "native")
         let start = try #require(
-          session.textView.position(
-            from: session.textView.beginningOfDocument, offset: range.location))
-        let end = try #require(session.textView.position(from: start, offset: range.length))
-        let frame = session.textView.firstRect(
-          for: try #require(session.textView.textRange(from: start, to: end)))
+          editor.textView.position(
+            from: editor.textView.beginningOfDocument, offset: range.location))
+        let end = try #require(editor.textView.position(from: start, offset: range.length))
+        let frame = editor.textView.firstRect(
+          for: try #require(editor.textView.textRange(from: start, to: end)))
         #expect(!frame.isEmpty)
         #expect(
-          session.commentHighlights.threadIDs(
+          editor.commentHighlights.threadIDs(
             at: CGPoint(x: frame.midX, y: frame.midY)) == [10, 20],
-          "Native frame \(frame), container inset \(session.textView.textContainerInset)")
+          "Native frame \(frame), container inset \(editor.textView.textContainerInset)")
 
         let copy = UIAction(title: "System Copy") { _ in }
-        let selection = session.textView.selectedRange
+        let selection = editor.textView.selectedRange
         let addedRange = NSRange(
           location: source.utf16.count - added.utf16.count, length: added.utf16.count)
         let menu = try #require(
-          session.textView(
-            session.textView, editMenuForTextInRanges: [NSValue(range: addedRange)],
+          editor.textView(
+            editor.textView, editMenuForTextInRanges: [NSValue(range: addedRange)],
             suggestedActions: [copy]))
         #expect(menu.children.first === copy)
         let section = try #require(menu.children.last as? UIMenu)
@@ -121,66 +121,66 @@
         button.sendActions(for: .touchUpInside)
         #expect(quotes.count == 1)
         #expect(try #require(quotes.first).utf8.elementsEqual(added.utf8))
-        #expect(session.text.utf8.elementsEqual(source.utf8))
-        #expect(session.generation == 0)
-        #expect(session.textView.selectedRange == selection)
+        #expect(editor.text.utf8.elementsEqual(source.utf8))
+        #expect(editor.generation == 0)
+        #expect(editor.textView.selectedRange == selection)
       }
 
       @Test func explicitRevealCanReturnToTheSameSelectedQuoteWithoutChangingSource() async throws {
         let text =
           "# Start\n\n" + String(repeating: "Room for another thought.\n\n", count: 60)
           + "A late native passage."
-        let session = Editor(fileID: "repeat-reveal", text: text)
-        let window = host(session)
+        let editor = Editor(fileID: "repeat-reveal", text: text)
+        let window = host(editor)
         defer { window.isHidden = true }
-        session.textView.resignFirstResponder()
+        editor.textView.resignFirstResponder()
         var configuration = CommentHighlightConfiguration(
           quotes: [CommentQuote(commentID: 60, quote: "late native passage")], selectedCommentID: 60
         )
-        session.setCommentHighlights(configuration)
-        try await settle(session.textView) { session.textView.contentOffset.y > 100 }
-        #expect(session.textView.contentOffset.y > 100)
-        let top = CGPoint(x: 0, y: -session.textView.adjustedContentInset.top)
-        session.textView.setContentOffset(top, animated: false)
-        session.setCommentHighlights(configuration)
+        editor.setCommentHighlights(configuration)
+        try await settle(editor.textView) { editor.textView.contentOffset.y > 100 }
+        #expect(editor.textView.contentOffset.y > 100)
+        let top = CGPoint(x: 0, y: -editor.textView.adjustedContentInset.top)
+        editor.textView.setContentOffset(top, animated: false)
+        editor.setCommentHighlights(configuration)
         try await Task.sleep(for: .milliseconds(50))
-        #expect(abs(session.textView.contentOffset.y - top.y) < 1)
+        #expect(abs(editor.textView.contentOffset.y - top.y) < 1)
         configuration.revealRevision += 1
-        session.setCommentHighlights(configuration)
-        try await settle(session.textView) { session.textView.contentOffset.y > 100 }
-        #expect(session.textView.contentOffset.y > 100)
-        #expect(session.text == text)
-        #expect(session.generation == 0)
+        editor.setCommentHighlights(configuration)
+        try await settle(editor.textView) { editor.textView.contentOffset.y > 100 }
+        #expect(editor.textView.contentOffset.y > 100)
+        #expect(editor.text == text)
+        #expect(editor.generation == 0)
       }
 
       @Test func addCommentRequiresOneEligibleSelectionAndAnExplicitCallback() {
-        let session = Editor(fileID: "eligibility", text: "abc abcd 🫧🫧")
+        let editor = Editor(fileID: "eligibility", text: "abc abcd 🫧🫧")
         let range = NSValue(range: NSRange(location: 4, length: 4))
         #expect(
-          session.textView(
-            session.textView, editMenuForTextInRanges: [range], suggestedActions: []) == nil)
-        session.setCommentHighlights(.init(), onAddComment: { _ in })
+          editor.textView(
+            editor.textView, editMenuForTextInRanges: [range], suggestedActions: []) == nil)
+        editor.setCommentHighlights(.init(), onAddComment: { _ in })
         #expect(
-          session.textView(
-            session.textView,
+          editor.textView(
+            editor.textView,
             editMenuForTextInRanges: [NSValue(range: NSRange(location: 0, length: 3))],
             suggestedActions: []) == nil)
         #expect(
-          session.textView(
-            session.textView, editMenuForTextInRanges: [range, range], suggestedActions: []) == nil)
+          editor.textView(
+            editor.textView, editMenuForTextInRanges: [range, range], suggestedActions: []) == nil)
         #expect(
-          session.textView(
-            session.textView, editMenuForTextInRanges: [range], suggestedActions: []) != nil)
+          editor.textView(
+            editor.textView, editMenuForTextInRanges: [range], suggestedActions: []) != nil)
         #expect(
-          session.textView(
-            session.textView,
+          editor.textView(
+            editor.textView,
             editMenuForTextInRanges: [NSValue(range: NSRange(location: 9, length: 4))],
             suggestedActions: []) != nil)
       }
 
       @Test func hidingIdleAnnotationsKeepsSelectionAndContextualDiscovery() throws {
-        let session = Editor(fileID: "visibility", text: "one two three")
-        session.setCommentHighlights(
+        let editor = Editor(fileID: "visibility", text: "one two three")
+        editor.setCommentHighlights(
           .init(
             quotes: [
               CommentQuote(commentID: 10, quote: "one two"),
@@ -188,23 +188,23 @@
             ], selectedCommentID: 20, showsInlineComments: false),
           onOpenCommentThreads: { _ in })
         #expect(
-          session.textView.textStorage.attribute(
+          editor.textView.textStorage.attribute(
             CommentHighlights.annotationKey, at: 1, effectiveRange: nil) == nil)
         #expect(
-          session.textView.textStorage.attribute(
+          editor.textView.textStorage.attribute(
             CommentHighlights.annotationKey, at: 5, effectiveRange: nil) != nil)
-        let menu = session.textView(
-          session.textView,
+        let menu = editor.textView(
+          editor.textView,
           editMenuForTextInRanges: [NSValue(range: NSRange(location: 0, length: 3))],
           suggestedActions: [])
         #expect(menu != nil)
       }
 
       @Test func missingAmbiguousAndHiddenFrontMatterQuotesDoNotInventLinks() async {
-        let session = Editor(
+        let editor = Editor(
           fileID: "frontmatter", text: "---\ntitle: native\n---\n\nA native note")
         var linked: Set<Int64> = []
-        session.setCommentHighlights(
+        editor.setCommentHighlights(
           .init(quotes: [
             CommentQuote(commentID: 10, quote: "native"),
             CommentQuote(commentID: 20, quote: "title: native"),
@@ -214,33 +214,33 @@
         await Task.yield()
         #expect(linked == [40])
         #expect(
-          session.textView.textStorage.attribute(
+          editor.textView.textStorage.attribute(
             CommentHighlights.annotationKey, at: 5, effectiveRange: nil) == nil)
-        session.setShowsFrontMatter(true)
+        editor.setShowsFrontMatter(true)
         await Task.yield()
         #expect(linked == [20, 40])
         #expect(
-          session.textView.textStorage.attribute(
+          editor.textView.textStorage.attribute(
             CommentHighlights.annotationKey, at: 5, effectiveRange: nil) != nil)
       }
 
       @Test func highlightsStepAsideForWritingToolsAndFindWithoutChangingSource() async throws {
-        let session = Editor(fileID: "transient-ui", text: "A native note")
-        let window = host(session)
+        let editor = Editor(fileID: "transient-ui", text: "A native note")
+        let window = host(editor)
         defer { window.isHidden = true }
-        let view = session.textView
+        let view = editor.textView
         let annotated = {
           view.textStorage.attribute(CommentHighlights.annotationKey, at: 3, effectiveRange: nil)
             != nil
         }
-        session.setCommentHighlights(
+        editor.setCommentHighlights(
           .init(quotes: [CommentQuote(commentID: 10, quote: "native")], selectedCommentID: 10))
         #expect(annotated())
-        session.textViewWritingToolsWillBegin(view)
-        #expect(session.isWritingToolsActive)
+        editor.textViewWritingToolsWillBegin(view)
+        #expect(editor.isWritingToolsActive)
         #expect(!annotated())
-        session.textViewWritingToolsDidEnd(view)
-        session.highlight()
+        editor.textViewWritingToolsDidEnd(view)
+        editor.highlight()
         #expect(annotated())
 
         let interaction = try #require(view.findInteraction)
@@ -252,22 +252,22 @@
         try await settle(view) { !interaction.isFindNavigatorVisible && annotated() }
         #expect(!interaction.isFindNavigatorVisible)
         #expect(annotated())
-        #expect(session.text == "A native note")
-        #expect(session.generation == 0)
+        #expect(editor.text == "A native note")
+        #expect(editor.generation == 0)
       }
 
       @Test func selectedCommentHasNativeAccessibilityStateWithoutChangingTheEditorRole() throws {
-        let session = Editor(fileID: "accessibility", text: "A native note")
-        let provider = try #require(session.textView as? any AXCustomContentProvider)
-        session.setCommentHighlights(
+        let editor = Editor(fileID: "accessibility", text: "A native note")
+        let provider = try #require(editor.textView as? any AXCustomContentProvider)
+        editor.setCommentHighlights(
           .init(
             quotes: [CommentQuote(commentID: 10, quote: "native")], selectedCommentID: 10))
         let content = try #require(provider.accessibilityCustomContent.first)
         #expect(content.label == "Selected Comment")
         #expect(content.value == "native")
         #expect(content.importance == .high)
-        #expect(session.textView.accessibilityLabel == "Markdown source")
-        session.setCommentHighlights(.init())
+        #expect(editor.textView.accessibilityLabel == "Markdown source")
+        editor.setCommentHighlights(.init())
         #expect(provider.accessibilityCustomContent.isEmpty)
       }
 

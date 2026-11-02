@@ -25,7 +25,7 @@
       let window = UIWindow(windowScene: scene)
       let host = UIHostingController(
         rootView: NavigationStack {
-          EditorView(session: session).navigationTitle("Saturday walk")
+          EditorView(editor: session).navigationTitle("Saturday walk")
         }
         .intelligenceSheet(presentation))
       window.rootViewController = host

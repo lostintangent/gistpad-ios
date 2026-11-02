@@ -7,7 +7,7 @@
 
   @Suite(.serialized)
   @MainActor
-  struct SourceThemeTests {
+  struct SyntaxInkTests {
     @Test func syntaxUsesTheWebsInksAndNativeFontsWithoutChangingSourceOrSelection() throws {
       let source =
         """
@@ -34,9 +34,9 @@
       for size in [UIContentSizeCategory.large, .accessibilityExtraLarge] {
         for appearance in [UIUserInterfaceStyle.light, .dark] {
           for contrast in [UIAccessibilityContrast.normal, .high] {
-            let session = Editor(fileID: "theme", text: source)
-            session.setShowsFrontMatter(true)
-            let view = session.textView
+            let editor = Editor(fileID: "theme", text: source)
+            editor.setShowsFrontMatter(true)
+            let view = editor.textView
             view.traitOverrides.preferredContentSizeCategory = size
             view.traitOverrides.userInterfaceStyle = appearance
             view.traitOverrides.accessibilityContrast = contrast
@@ -44,7 +44,7 @@
             view.updateTraitsIfNeeded()
             let selection = NSRange(location: 4, length: 3)
             view.selectedRange = selection
-            session.highlight()
+            editor.highlight()
             let traits = view.traitCollection
             #expect(traits.preferredContentSizeCategory == size)
             #expect(traits.userInterfaceStyle == appearance)
@@ -141,7 +141,7 @@
             }
             #expect(view.text.utf8.elementsEqual(source.utf8))
             #expect(view.selectedRange == selection)
-            #expect(session.generation == 0)
+            #expect(editor.generation == 0)
           }
         }
       }
