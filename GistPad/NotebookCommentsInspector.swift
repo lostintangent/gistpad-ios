@@ -132,57 +132,57 @@ private struct CommentsInspectorHost: ViewModifier {
 
   func body(content: Content) -> some View {
     content
-    .toolbar(removing: comments.isPresented && horizontalSizeClass == .regular ? .sidebarToggle : nil)
-    .inspector(isPresented: $comments.isPresented) {
-      panel
-        .inspectorColumnWidth(min: 280, ideal: 320, max: 360)
-        .presentationDetents(
-          dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large],
-          selection: Binding(
-            get: { dynamicTypeSize.isAccessibilitySize ? .large : comments.detent },
-            set: { comments.detent = $0 }))
-        .presentationDragIndicator(.visible)
-        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-        .onDisappear {
-          if !comments.isPresented, let previous = comments.sidebarBeforeOpening {
-            comments.sidebarBeforeOpening = nil
-            columnVisibility = previous
+      .toolbar(removing: comments.isPresented && horizontalSizeClass == .regular ? .sidebarToggle : nil)
+      .inspector(isPresented: $comments.isPresented) {
+        panel
+          .inspectorColumnWidth(min: 280, ideal: 320, max: 360)
+          .presentationDetents(
+            dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large],
+            selection: Binding(
+              get: { dynamicTypeSize.isAccessibilitySize ? .large : comments.detent },
+              set: { comments.detent = $0 }))
+          .presentationDragIndicator(.visible)
+          .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+          .onDisappear {
+            if !comments.isPresented, let previous = comments.sidebarBeforeOpening {
+              comments.sidebarBeforeOpening = nil
+              columnVisibility = previous
+            }
+            comments.didDismiss()
           }
-          comments.didDismiss()
-        }
-    }
-    .onChange(of: comments.isPresented) { _, presented in
-      if presented, horizontalSizeClass == .regular {
-        if comments.sidebarBeforeOpening == nil {
-          comments.sidebarBeforeOpening = columnVisibility
-        }
-        columnVisibility = .detailOnly
-      } else if !presented, comments.sidebarBeforeOpening != nil {
-        // Dismiss any temporary overlay before restoring the pinned column at native completion.
-        columnVisibility = .detailOnly
       }
-    }
-    .onChange(of: horizontalSizeClass) { _, sizeClass in
-      if comments.isPresented, sizeClass == .regular {
-        if comments.sidebarBeforeOpening == nil {
-          comments.sidebarBeforeOpening = columnVisibility
+      .onChange(of: comments.isPresented) { _, presented in
+        if presented, horizontalSizeClass == .regular {
+          if comments.sidebarBeforeOpening == nil {
+            comments.sidebarBeforeOpening = columnVisibility
+          }
+          columnVisibility = .detailOnly
+        } else if !presented, comments.sidebarBeforeOpening != nil {
+          // Dismiss any temporary overlay before restoring the pinned column at native completion.
+          columnVisibility = .detailOnly
         }
-        columnVisibility = .detailOnly
       }
-    }
-    .onChange(of: commentCount, initial: true) { _, count in
-      if let count {
-        comments.notebook.recordCommentCount(
-          accountID: count.scope.accountID, gistID: count.scope.gistID, total: count.total)
+      .onChange(of: horizontalSizeClass) { _, sizeClass in
+        if comments.isPresented, sizeClass == .regular {
+          if comments.sidebarBeforeOpening == nil {
+            comments.sidebarBeforeOpening = columnVisibility
+          }
+          columnVisibility = .detailOnly
+        }
       }
-    }
-    .confirmationDialog(
-      String(localized: "Choose Comment"),
-      isPresented: choicePresented(inInspector: false),
-      titleVisibility: .visible
-    ) {
-      choices
-    }
+      .onChange(of: commentCount, initial: true) { _, count in
+        if let count {
+          comments.notebook.recordCommentCount(
+            accountID: count.scope.accountID, gistID: count.scope.gistID, total: count.total)
+        }
+      }
+      .confirmationDialog(
+        String(localized: "Choose Comment"),
+        isPresented: choicePresented(inInspector: false),
+        titleVisibility: .visible
+      ) {
+        choices
+      }
   }
 
   @ViewBuilder

@@ -166,9 +166,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                         )
                     }
                     if let url = document.shareURL {
-                        ShareLink(item: url, preview: SharePreview(document.title)) {
-                            Label(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up")
-                        }
+                        ShareLink(item: url, preview: SharePreview(document.title))
                         Button(String(localized: "Copy Link", bundle: .module), systemImage: "link") {
                             UIPasteboard.general.url = url
                             AccessibilityNotification.Announcement(

@@ -190,11 +190,16 @@ struct NotebookModelTests {
     let model = NotebookModel(provider: provider)
     await model.start()
     await model.open(.new)
-    let draft = try #require(model.loadedDocument?.draft)
+    let opened = try #require(model.loadedDocument)
+    let draft = try #require(opened.draft)
+    #expect(model.chrome(for: opened).shareURL == nil)
     _ = try await model.persist(
       draftID: draft.id, accountID: draft.accountID, text: "A new published note", generation: 1)
     let published = try await model.publish(draftID: draft.id, accountID: draft.accountID)
     let gistID = try #require(published.gistID)
+    let document = try #require(model.loadedDocument)
+    let shareURL = try #require(model.chrome(for: document).shareURL)
+    #expect(shareURL.absoluteString.hasPrefix("https://gistpad.dev/#/share/\(gistID)/"))
     let row = try #require(model.library.snapshot.notes.first { $0.id == gistID })
     #expect(!row.isRecovery)
     #expect(model.library.snapshot.notes.allSatisfy { $0.id != draft.id.uuidString })
@@ -2474,6 +2479,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookCommentProviding 
     let current = try await store.draft(id: draftID, accountID: accountID)
     if case .conflict = current.state { return current }
     publicationReasons.append(reason)
+    let createdID = draftID.uuidString.lowercased().replacingOccurrences(of: "-", with: "")
     try await store.beginAttempt(
       id: draftID, accountID: accountID, content: current.text,
       generation: current.generation)
@@ -2491,7 +2497,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookCommentProviding 
     } else if current.gistID == nil {
       notes.insert(
         Gist(
-          id: "created-\(draftID)", description: current.description,
+          id: createdID, description: current.description,
           files: [current.filename: GistFile(
             filename: current.filename, language: "Markdown", content: current.text,
             truncated: false, rawURL: nil, size: current.text.utf8.count)],
@@ -2500,7 +2506,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookCommentProviding 
           history: [], commentCount: nil),
         at: 0)
     }
-    let publishedGist = notes.first { $0.id == (current.gistID ?? "created-\(draftID)") }
+    let publishedGist = notes.first { $0.id == (current.gistID ?? createdID) }
     if let publishedGist, var cached {
       cached.owned.removeAll { $0.id == publishedGist.id }
       cached.owned.insert(publishedGist, at: 0)
@@ -2508,7 +2514,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookCommentProviding 
       self.cached = cached
     }
     return try await store.acknowledge(
-      id: draftID, accountID: accountID, gistID: current.gistID ?? "created-\(draftID)",
+      id: draftID, accountID: accountID, gistID: current.gistID ?? createdID,
       content: current.text, revision: "synthetic-revision", generation: current.generation,
       publishedGist: publishedGist)
   }
