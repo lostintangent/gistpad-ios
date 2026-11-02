@@ -47,6 +47,9 @@ for name, prompt, expected in [
     ("partial", "mark the first two tasks done", "daily-partial.md"),
     ("uncheck", "uncheck all tasks", "daily-uncheck.md"),
     ("japanese", "Read a chapter のタスクを完了にしてください", "daily-complete.md"),
+    ("text", "rename the Housework heading to Chores", "daily-text.md"),
+    ("mixed", "mark Read a chapter complete and rename the Housework heading to Chores",
+     "daily-mixed.md"),
 ]:
     cases.append(
         dict(

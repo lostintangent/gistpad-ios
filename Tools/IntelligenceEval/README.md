@@ -19,8 +19,8 @@ directory. Do not commit that directory or its `cases.json` or private results.
 Committed fixtures are synthetic, including front matter and multiple task lists.
 
 Each attempt starts from the original bytes. Edit is greedy. Completion,
-deletion, partial targeting and Japanese targeting require byte-exact expected
-source. Addition requires exactly one new unchecked task in the correct list,
+deletion, partial targeting, Japanese targeting, a heading rename and a request
+mixing a task completion with that rename require byte-exact expected source. Addition requires exactly one new unchecked task in the correct list,
 matching the requested task text case-insensitively. Removing only the inserted
 bytes must recover the entire original source exactly.
 
