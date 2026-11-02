@@ -101,9 +101,9 @@ extension DraftError: LocalizedError {
     }
 }
 
-/// One replacement in a draft's text from outside the editor, like a widget's task check or Add to
-/// Today. It lands only while the draft is still at `expectedGeneration` and `range` still holds
-/// `expectedText`, so a stale or repeated edit can't change newer text.
+/// One replacement in a draft's text from outside the editor, like Add to Today. It lands only
+/// while the draft is still at `expectedGeneration` and `range` still holds `expectedText`, so a
+/// stale or repeated edit can't change newer text.
 public struct DraftEdit: Equatable, Sendable {
     public let draftID: UUID
     public let accountID: UUID
