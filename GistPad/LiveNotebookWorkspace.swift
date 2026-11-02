@@ -11,17 +11,9 @@ struct LiveNotebookWorkspace: View {
   @Bindable var notebook: NotebookModel
   private let routes: NotebookRouteInbox
   @State private var compactColumn: NavigationSplitViewColumn = .sidebar
-  @State private var actionMessage: String?
-  @State private var shareURL: URL?
-  @State private var showingShare = false
-  @State private var sharingTarget: NotebookSharingTarget?
-  @State private var tagTarget: NotebookTagTarget?
-  @State private var nameTarget: NotebookNameTarget?
-  @State private var reviewTarget: NotebookConflictTarget?
+  @State private var sheet: WorkspaceSheet?
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
   @State private var layout = NotebookLayoutPreferences()
-  @State private var showingSettings = false
-  @State private var showingAddToToday = false
   @State private var intelligence = NotebookIntelligencePresentation()
   @State private var comments: NotebookCommentsPresentation
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -182,7 +174,7 @@ struct LiveNotebookWorkspace: View {
       await notebook.start()
       await notebook.publishUnsyncedEdits()
     }
-    .task(id: routeReadiness) { await receivePendingRoute() }
+    .task(id: routeToOpen) { await openPendingRoute() }
     #if DEBUG
     .onChange(of: [active?.draft.id.uuidString, routes.pending?.url.absoluteString], initial: true) {
       presentFixtureSheet()
@@ -251,11 +243,11 @@ struct LiveNotebookWorkspace: View {
     .onChange(of: notebook.localDrafts) {
       NotebookPlatformBootstrap.scheduleRefresh()
     }
-    .onChange(of: notebook.account?.id) { _, accountID in
+    .onChange(of: notebook.account?.id) {
       comments.reset()
       intelligence.target = nil
       columnVisibility = .all
-      if accountID == nil { showingSettings = false }
+      sheet = nil
     }
     .onChange(of: notebook.isSigningIn) { _, signingIn in
       if signingIn {
@@ -273,46 +265,44 @@ struct LiveNotebookWorkspace: View {
 
   private var workspaceSheets: some View {
     workspaceLifecycle
-    .alert(
-      "GistPad",
-      isPresented: Binding(
-        get: { actionMessage != nil || notebook.documentError != nil },
-        set: {
-          if !$0 {
-            actionMessage = nil
-            notebook.documentError = nil
-          }
-        })
-    ) {
-      Button("OK") {
-        actionMessage = nil
-        notebook.documentError = nil
-      }
+    .alert("GistPad", isPresented: $notebook.isShowingError) {
     } message: {
-      Text(actionMessage ?? notebook.documentError ?? "")
+      Text(notebook.documentError ?? "")
     }
-    .sheet(isPresented: $showingShare) {
-      if let shareURL {
-        NotebookActivitySheet(item: .url(shareURL))
+    .sheet(item: $sheet) { sheet in
+      switch sheet {
+      case .settings: settingsSheet
+      case .addToToday: AddToTodaySheet()
+      case .share(let url): NotebookActivitySheet(item: .url(url))
+      case .sharing(let target):
+        NotebookSharingSheet(controller: target.controller, copiesLink: target.copiesLink)
+      case .tags(let target): tagEditor(target)
+      case .name(let target): nameEditor(target)
+      case .review(let target):
+        NotebookConflictReview(controller: target.controller, review: target.review)
       }
     }
-    .sheet(item: $sharingTarget) { target in
-      NotebookSharingSheet(controller: target.controller, copiesLink: target.copiesLink)
-    }
-    .sheet(item: $tagTarget) { target in
-      tagEditor(target)
-    }
-    .sheet(item: $nameTarget) { target in
-      nameEditor(target)
-    }
-    .sheet(item: $reviewTarget) { target in
-      NotebookConflictReview(controller: target.controller, review: target.review)
-    }
-    .sheet(isPresented: $showingSettings) {
-      settingsSheet
-    }
-    .sheet(isPresented: $showingAddToToday) {
-      AddToTodaySheet()
+  }
+
+  /// The one sheet over the workspace. A route or another account replaces it.
+  private enum WorkspaceSheet: Identifiable {
+    case settings, addToToday
+    case share(URL)
+    case sharing(NotebookSharingTarget)
+    case tags(NotebookTagTarget)
+    case name(NotebookNameTarget)
+    case review(NotebookConflictTarget)
+
+    var id: String {
+      switch self {
+      case .settings: "settings"
+      case .addToToday: "addToToday"
+      case .share(let url): "share/\(url)"
+      case .sharing(let target): "sharing/\(target.id)"
+      case .tags(let target): "tags/\(target.id)"
+      case .name(let target): "name/\(target.id)"
+      case .review(let target): "review/\(target.id)"
+      }
     }
   }
 
@@ -325,7 +315,7 @@ struct LiveNotebookWorkspace: View {
         _ = try await notebook.apply(.preference(.setBoolean(key, value)), accountID: account.id)
       },
       connect: {
-        showingSettings = false
+        sheet = nil
         Task {
           await notebook.signIn()
           if notebook.account?.id == active?.draft.accountID,
@@ -338,7 +328,7 @@ struct LiveNotebookWorkspace: View {
       signOut: {
         guard let account else { throw AccountError.signedOut }
         _ = try await notebook.apply(.signOut, accountID: account.id)
-        showingSettings = false
+        sheet = nil
       }
     ) {
       PersonalAccentColorRow(savedHex: account?.preferences.accentColor) { hex in
@@ -374,12 +364,11 @@ struct LiveNotebookWorkspace: View {
       today: { startToday() })
     actions.select = { selectRow($0) }
     actions.openComments = { rowID in
-      guard canSwitchDocument else { return }
       comments.requestedRowID = rowID
       selectRow(rowID)
       openRequestedComments()
     }
-    actions.account = { showingSettings = true }
+    actions.account = { sheet = .settings }
     let reconnect: @MainActor () -> Void = {
       Task {
         await notebook.signIn()
@@ -405,7 +394,7 @@ struct LiveNotebookWorkspace: View {
     }
     actions.togglePin = { rowID in
       guard let account = notebook.account, let id = notebook.gistID(forRow: rowID) else {
-        actionMessage = String(localized: "Save this local draft to GitHub before pinning it.")
+        notebook.documentError = String(localized: "Save this local draft to GitHub before pinning it.")
         return
       }
       notebook.run(
@@ -416,7 +405,7 @@ struct LiveNotebookWorkspace: View {
       guard let account = notebook.account, let id = notebook.gistID(forRow: rowID),
         let gist = notebook.cachedLibrary?.gists.first(where: { $0.id == id })
       else {
-        actionMessage = String(
+        notebook.documentError = String(
           localized: "A recovery or unpublished draft cannot be archived on GitHub.")
         return
       }
@@ -424,7 +413,7 @@ struct LiveNotebookWorkspace: View {
     }
     actions.delete = { rowID in
       guard let target = notebook.libraryDeletionTarget(for: rowID) else {
-        actionMessage = String(localized: "This note is no longer available to delete.")
+        notebook.documentError = String(localized: "This note is no longer available to delete.")
         return
       }
       notebook.run(target.action, accountID: target.accountID)
@@ -559,7 +548,7 @@ struct LiveNotebookWorkspace: View {
         }) {
           open(gistID: note.id)
         } else {
-          actionMessage = String(localized: "No note with that title is in your library.")
+          notebook.documentError = String(localized: "No note with that title is in your library.")
         }
       })
       .id(controller.session.viewIdentity)
@@ -731,8 +720,8 @@ struct LiveNotebookWorkspace: View {
     actions.save = { publish(controller) }
     actions.reviewChanges = {
       do {
-        reviewTarget = .init(controller: controller, review: try controller.reviewContext())
-      } catch { actionMessage = error.localizedDescription }
+        sheet = .review(.init(controller: controller, review: try controller.reviewContext()))
+      } catch { notebook.documentError = error.localizedDescription }
     }
     actions.reconnect = {
       Task {
@@ -747,11 +736,12 @@ struct LiveNotebookWorkspace: View {
     if let gistID = controller.document.gist?.id {
       actions.selectFile = { open(gistID: gistID, filename: $0) }
       actions.tags = {
-        tagTarget = NotebookTagTarget(
-          accountID: controller.draft.accountID, gistID: gistID,
-          selected: Set(controller.chrome.tags.map(\.id)),
-          canEdit: notebook.account?.id == controller.draft.accountID
-            && notebook.pendingAccount == nil && !controller.document.isRecovery)
+        sheet = .tags(
+          NotebookTagTarget(
+            accountID: controller.draft.accountID, gistID: gistID,
+            selected: Set(controller.chrome.tags.map(\.id)),
+            canEdit: notebook.account?.id == controller.draft.accountID
+              && notebook.pendingAccount == nil && !controller.document.isRecovery))
       }
       if !controller.document.isRecovery {
         actions.togglePin = {
@@ -801,7 +791,7 @@ struct LiveNotebookWorkspace: View {
     if !controller.document.isRecovery, let gist = controller.document.gist {
       actions.openInGitHub = {
         do { openURL(try DocumentLinks(gist: gist).githubURL) } catch {
-          actionMessage = error.localizedDescription
+          notebook.documentError = error.localizedDescription
         }
       }
     }
@@ -819,39 +809,29 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func open(gistID: String, filename: String? = nil) {
-    guard active?.session.isSettled != false else {
-      notebook.library.selectedNoteID = active?.document.rowID
-      actionMessage = String(
-        localized: "Finish composition or Writing Tools before switching notes.")
-      return
-    }
     Task { await notebook.open(.gist(id: gistID, filename: filename)) }
   }
 
   private func selectRow(_ id: String) {
-    guard canSwitchDocument else {
-      notebook.library.selectedNoteID = active?.document.rowID
-      return
-    }
     notebook.select(rowID: id)
     compactColumn = .detail
   }
 
   private func publish(_ controller: NotebookSessionController) {
     guard controller.canMutate else {
-      actionMessage = String(
+      notebook.documentError = String(
         localized: "Finish composition or Writing Tools before saving to GitHub.")
       return
     }
     Task {
       await controller.publish()
-      if let error = controller.metadataError { actionMessage = error }
+      if let error = controller.metadataError { notebook.documentError = error }
     }
   }
 
   private func presentIntelligence(_ controller: NotebookSessionController) {
     guard controller.session.isSettled else {
-      actionMessage = String(
+      notebook.documentError = String(
         localized: "Finish composition or Writing Tools before opening Intelligence.")
       return
     }
@@ -859,13 +839,13 @@ struct LiveNotebookWorkspace: View {
       session: controller.session, title: controller.chrome.title,
       revealSource: { range in
         guard controller.chrome.access.canEdit else {
-          actionMessage = String(
+          notebook.documentError = String(
             localized: "This note is read-only. Its source reference can't be opened in the editor.")
           return
         }
         let generation = controller.session.generation
         guard Range(range, in: controller.session.text) != nil else {
-          actionMessage = String(localized: "This reference no longer matches the note.")
+          notebook.documentError = String(localized: "This reference no longer matches the note.")
           return
         }
         layout.select(.source)
@@ -873,7 +853,7 @@ struct LiveNotebookWorkspace: View {
         Task { @MainActor in
           await Task.yield()
           guard controller.session.generation == generation else {
-            actionMessage = String(localized: "This reference no longer matches the note.")
+            notebook.documentError = String(localized: "This reference no longer matches the note.")
             return
           }
           let view = controller.session.textView
@@ -888,10 +868,11 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func requestName(_ kind: NotebookNameTarget.Kind, controller: NotebookSessionController) {
-    nameTarget = NotebookNameTarget(
-      accountID: controller.draft.accountID, draftID: controller.draft.id,
-      gistID: controller.draft.gistID, filename: controller.draft.filename,
-      title: controller.chrome.title, kind: kind)
+    sheet = .name(
+      NotebookNameTarget(
+        accountID: controller.draft.accountID, draftID: controller.draft.id,
+        gistID: controller.draft.gistID, filename: controller.draft.filename,
+        title: controller.chrome.title, kind: kind))
   }
 
   private func nameEditor(_ target: NotebookNameTarget) -> some View {
@@ -947,7 +928,7 @@ struct LiveNotebookWorkspace: View {
 
   private func recoverWrite() async {
     do { try await notebook.retryWrite() } catch {
-      actionMessage = error.localizedDescription
+      notebook.documentError = error.localizedDescription
     }
     await active?.refreshPersistedState()
   }
@@ -964,46 +945,33 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func createNote() {
-    guard canSwitchDocument else { return }
     Task { await notebook.open(.new) }
   }
 
   private func startToday() {
-    guard canSwitchDocument else { return }
     compactColumn = .detail
     let target = DailyNoteTarget()
     Task { await notebook.open(.today(target)) }
   }
 
-  private struct RouteReadiness: Hashable {
-    let route: NotebookRoute?
-    let accountID: UUID?
-    let isReady: Bool
-    let isEditing: Bool
-  }
-
-  private var routeReadiness: RouteReadiness {
-    RouteReadiness(
-      route: routes.pending,
-      accountID: notebook.account?.id,
-      isReady: !notebook.isStarting && !notebook.isSigningIn && !notebook.isApplying
-        && notebook.library.loadState != .loading && notebook.pendingAccount == nil
-        && !showingSettings && !showingShare && !showingAddToToday
-        && sharingTarget == nil && tagTarget == nil && nameTarget == nil
-        && reviewTarget == nil
-        && intelligence.target == nil
-        && actionMessage == nil && notebook.documentError == nil,
-      isEditing: active?.session.isSettled == false)
+  /// The pending route, once the account it opens in has settled.
+  private var routeToOpen: NotebookRoute? {
+    guard !notebook.isStarting, !notebook.isSigningIn, notebook.pendingAccount == nil else {
+      return nil
+    }
+    return routes.pending
   }
 
   #if DEBUG
   /// Presents a fixture launch's `--sheet` once its note is open.
   private func presentFixtureSheet() {
-    guard let sheet = FixtureLaunch.pendingSheet, routes.pending == nil, let active else { return }
+    guard let pending = FixtureLaunch.pendingSheet, routes.pending == nil, let active else {
+      return
+    }
     FixtureLaunch.pendingSheet = nil
     let actions = noteActions(active)
-    switch sheet {
-    case .settings: showingSettings = true
+    switch pending {
+    case .settings: sheet = .settings
     case .tags: actions.tags?()
     case .intelligence: actions.intelligence()
     case .comments: actions.comments?()
@@ -1012,20 +980,22 @@ struct LiveNotebookWorkspace: View {
   }
   #endif
 
-  private func receivePendingRoute() async {
-    guard routeReadiness.isReady, !routeReadiness.isEditing,
-      let route = routes.pending, let account = notebook.account
-    else { return }
+  /// Opens a widget, Shortcut or Spotlight route in place of whatever was showing.
+  private func openPendingRoute() async {
+    guard let route = routeToOpen, let account = notebook.account else { return }
+    sheet = nil
+    intelligence.target = nil
+    notebook.documentError = nil
     switch route {
     case .today:
       await notebook.open(.today())
     case .addToToday:
-      showingAddToToday = true
+      sheet = .addToToday
     case .note(let gistID, let filename):
       await notebook.open(.gist(id: gistID, filename: filename))
     case .draft(let accountID, let draftID):
       guard accountID == account.id else {
-        actionMessage = "This draft belongs to another GitHub account. Switch accounts to open it."
+        notebook.documentError = "This draft belongs to another GitHub account. Switch accounts to open it."
         routes.clear()
         return
       }
@@ -1038,19 +1008,10 @@ struct LiveNotebookWorkspace: View {
     routes.clear()
   }
 
-  private var canSwitchDocument: Bool {
-    guard active?.session.isSettled != false else {
-      actionMessage = String(
-        localized: "Finish composition or Writing Tools before switching notes.")
-      return false
-    }
-    return true
-  }
-
   private func presentSharing(_ controller: NotebookSessionController, copiesLink: Bool) {
     Task {
       guard await controller.waitForLocalSave() else {
-        actionMessage = NotebookEditError.localPersistenceFailed.localizedDescription
+        notebook.documentError = NotebookEditError.localPersistenceFailed.localizedDescription
         return
       }
       do {
@@ -1062,14 +1023,13 @@ struct LiveNotebookWorkspace: View {
             UIAccessibility.post(
               notification: .announcement, argument: String(localized: "Link copied"))
           } else {
-            shareURL = links.shareURL
-            showingShare = true
+            sheet = .share(links.shareURL)
           }
         } else {
-          sharingTarget = .init(controller: controller, copiesLink: copiesLink)
+          sheet = .sharing(.init(controller: controller, copiesLink: copiesLink))
         }
       } catch {
-        actionMessage = error.localizedDescription
+        notebook.documentError = error.localizedDescription
       }
     }
   }

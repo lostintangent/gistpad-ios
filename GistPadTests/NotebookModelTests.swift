@@ -1939,6 +1939,34 @@ struct NotebookNavigationHostTests {
     try await host.waitForKeyboard(visible: false)
   }
 
+  @Test func switchingNotesMidCompositionKeepsAndPublishesTheComposedText() async throws {
+    let provider = StubNotebookProvider(
+      account: fixtureAccount,
+      gists: [
+        try makeGist(id: "a", title: "First note", content: "First note source"),
+        try makeGist(id: "b", title: "Second note", content: "Second note source"),
+      ])
+    let host = try await NavigationHost(provider: provider)
+    defer { await host.close() }
+    host.model.select(rowID: "a")
+    try await host.waitUntil { host.editor(text: "First note source") != nil }
+    let first = try #require(host.editor(text: "First note source"))
+    try #require(first.becomeFirstResponder())
+    first.selectedRange = NSRange(location: 0, length: 0)
+    first.setMarkedText("にほんご", selectedRange: NSRange(location: 4, length: 0))
+    try #require(first.markedTextRange != nil)
+    host.model.select(rowID: "b")
+    try await host.waitUntil { host.editor(text: "Second note source") != nil }
+    #expect(first.markedTextRange == nil)
+    #expect(first.text == "にほんごFirst note source")
+    try await host.waitUntil {
+      host.model.localDrafts.first(where: { $0.gistID == "a" }).map {
+        $0.text == "にほんごFirst note source" && $0.state == .savedToGitHub
+      } == true
+    }
+    #expect(await provider.publicationReasons == [.leaving])
+  }
+
   @Test func creatingOfflineReplacesTheOldNoteWithAnEditingFirstResponder() async throws {
     let provider = StubNotebookProvider(
       account: fixtureAccount,

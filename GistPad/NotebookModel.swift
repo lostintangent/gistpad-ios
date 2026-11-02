@@ -321,7 +321,12 @@ final class NotebookModel {
   private var localDraftRecords = 0
   private(set) var cachedLibrary: CachedLibrarySnapshot?
   private(set) var isCreating = false
+  /// The one message the app shows in an alert, such as a failed open or action.
   var documentError: String?
+  var isShowingError: Bool {
+    get { documentError != nil }
+    set { if !newValue { documentError = nil } }
+  }
   private(set) var remoteRefreshProblem: NotebookRemoteReadProblem?
   private(set) var isRefreshingRemote = false
   private(set) var writeFailure: NotebookWriteFailure?
