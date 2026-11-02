@@ -5,7 +5,7 @@ import Testing
 struct GistPadLinkTests {
     @Test func everyLinkTheAppEmitsRoundTrips() throws {
         let links: [GistPadLink] = [
-            .today, .addToToday,
+            .today, .addToToday, .newGist,
             .gist(id: "abc123", filename: nil),
             .gist(id: "abc123", filename: "日記 #1?%.md"),
             .unpublishedGist(accountID: UUID(), draftID: UUID())

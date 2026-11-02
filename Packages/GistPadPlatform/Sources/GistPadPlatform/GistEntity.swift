@@ -144,5 +144,19 @@ public struct OpenTodayIntent: AppIntent {
     }
 }
 
+public struct NewGistIntent: AppIntent {
+    public static let title: LocalizedStringResource = "New Gist"
+    public static var supportedModes: IntentModes { .foreground(.immediate) }
+    public static var allowedExecutionTargets: IntentExecutionTargets { .main }
+    public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
+    public init() {}
+
+    @MainActor
+    public func perform() async throws -> some IntentResult {
+        PendingLink.shared.link = .newGist
+        return .result()
+    }
+}
+
 public struct GistPadPlatformIntents: AppIntentsPackage {}
 #endif

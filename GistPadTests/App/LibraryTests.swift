@@ -847,6 +847,21 @@ struct RootViewTests {
     #expect(host.library.loadedFile?.gist?.id == "b")
   }
 
+  @Test func aNewGistLinkOpensABlankNoteReadyToWrite() async throws {
+    let fixture = try await LibraryFixture {
+      $0.addGist(id: "a", description: "Existing", files: ["README.md": "Existing source"])
+    }
+    let pending = PendingLink()
+    pending.link = .newGist
+    let host = try await NavigationHost(fixture: fixture, pending: pending)
+    defer { await host.close() }
+    try await host.waitUntil { pending.link == nil && host.editor(text: "")?.isFirstResponder == true }
+    let draft = try #require(host.library.visibleFile?.draft)
+    #expect(host.library.localDrafts.contains { $0.id == draft.id })
+    #expect(host.library.visibleFile?.gist == nil)
+    #expect(fixture.publishes.isEmpty)
+  }
+
   @Test func aFailedOpenShowsItsOwnTitleAndRetryInsteadOfThePreviousEditor() async throws {
     let fixture = try await LibraryFixture {
       $0.addGist(id: "a", description: "Previous", files: ["README.md": "Previous source"])

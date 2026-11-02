@@ -826,6 +826,8 @@ struct RootView: View {
       await library.open(.today())
     case .addToToday:
       sheet = .addToToday
+    case .newGist:
+      await library.open(.new)
     case .gist(let id, let filename):
       await library.open(.gist(id: id, filename: filename))
     case .unpublishedGist(let accountID, let draftID):

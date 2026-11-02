@@ -6,6 +6,7 @@ import Observation
 public enum GistPadLink: Codable, Hashable, Sendable {
     case today
     case addToToday
+    case newGist
     case gist(id: String, filename: String?)
     case unpublishedGist(accountID: UUID, draftID: UUID)
 
@@ -17,6 +18,8 @@ public enum GistPadLink: Codable, Hashable, Sendable {
             self = .today
         case ("add-to-today", 0):
             self = .addToToday
+        case ("new", 0):
+            self = .newGist
         case ("note", 1), ("note", 2):
             self = .gist(id: path[0], filename: path.count == 2 ? path[1] : nil)
         case ("draft", 2):
@@ -32,6 +35,7 @@ public enum GistPadLink: Codable, Hashable, Sendable {
         let (host, path): (String, [String]) = switch self {
         case .today: ("today", [])
         case .addToToday: ("add-to-today", [])
+        case .newGist: ("new", [])
         case .gist(let id, let filename): ("note", [id] + (filename.map { [$0] } ?? []))
         case .unpublishedGist(let accountID, let draftID): ("draft", [accountID.uuidString, draftID.uuidString])
         }
