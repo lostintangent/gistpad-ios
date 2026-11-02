@@ -123,6 +123,13 @@
 
     public var canFormat: Bool { textView.isEditable && isSettled }
 
+    /// Keeps what the keyboard is composing as typed text, as leaving a note does in Notes.
+    public func commitComposition() {
+      guard textView.markedTextRange != nil else { return }
+      textView.unmarkText()
+      synchronizeText()
+    }
+
     public func requestFocusAtEnd() {
       guard canFormat else {
         inputError = String(

@@ -390,6 +390,7 @@ final class NotebookSessionController {
 
   @discardableResult
   func finishLeavingNote() async -> Bool {
+    session.commitComposition()
     guard await waitForLocalSave() else { return false }
     if draft.isDiscardableBlank, notebook.isDraftSelected(draft.id) { return false }
     if draft.isDiscardableBlank,
