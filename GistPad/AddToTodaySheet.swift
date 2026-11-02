@@ -4,7 +4,7 @@ import GistPadSync
 import SwiftUI
 
 struct AddToTodaySheet: View {
-  let target: DailyNoteTarget
+  @State private var day = Date.now
   @State private var text = ""
   @State private var asTask = false
   @State private var isAdding = false
@@ -12,10 +12,6 @@ struct AddToTodaySheet: View {
   @FocusState private var isFocused: Bool
   @Environment(\.dismiss) private var dismiss
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-  init(target: DailyNoteTarget = DailyNoteTarget()) {
-    self.target = target
-  }
 
   var body: some View {
     NavigationStack {
@@ -45,7 +41,9 @@ struct AddToTodaySheet: View {
           .accessibilityIdentifier("today-capture-input")
           kindPicker
         } header: {
-          destinationDate
+          Text(day, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
+            .font(.caption)
+            .textCase(nil)
         }
       }
       .navigationTitle("Add to Today")
@@ -85,29 +83,13 @@ struct AddToTodaySheet: View {
     .accessibilityIdentifier("today-capture-kind")
   }
 
-  @ViewBuilder
-  private var destinationDate: some View {
-    let timeZone = TimeZone(identifier: target.timeZoneIdentifier) ?? .current
-    if let date = DailyNotesIndex.parseDateFilename(target.filename, timeZone: timeZone) {
-      Text(
-        date,
-        format: Date.FormatStyle(calendar: Calendar(identifier: .gregorian), timeZone: timeZone)
-          .weekday(.abbreviated).month(.abbreviated).day()
-      )
-      .font(.caption)
-      .textCase(nil)
-    } else {
-      Text(target.filename)
-    }
-  }
-
   private func add() {
     isAdding = true
     errorMessage = nil
     Task {
       do {
         if let destination = try await NotebookPlatformBootstrap.bridge?.addToToday(
-          text: text, asTask: asTask, target: target)
+          text: text, asTask: asTask, target: DailyNoteTarget(date: day))
         {
           NotebookRouteInbox.shared.submit(destination)
         }

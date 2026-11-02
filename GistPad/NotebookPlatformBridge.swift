@@ -44,8 +44,6 @@ enum NotebookPlatformBootstrap {
     guard services?.model === notebook else { return }
     services?.bridge.register(controller)
   }
-
-  static func scheduleRefresh() { services?.bridge.scheduleRefresh() }
 }
 
 @MainActor
@@ -66,6 +64,19 @@ final class NotebookPlatformBridge: NotebookIntentServing {
     self.provider = provider
     self.store = store
     self.notebook = notebook
+    followNotebook()
+  }
+
+  /// Widgets, Spotlight and Shortcuts follow the notebook's account and the drafts on this iPhone.
+  private func followNotebook() {
+    withObservationTracking {
+      _ = (notebook?.account, notebook?.pendingAccount, notebook?.localDrafts)
+    } onChange: { [weak self] in
+      Task { @MainActor in
+        self?.scheduleRefresh()
+        self?.followNotebook()
+      }
+    }
   }
 
   func register(_ controller: NotebookSessionController) {

@@ -171,6 +171,12 @@ struct LiveNotebookWorkspace: View {
     comments.open(for: active)
   }
 
+  /// The account whose notes are up, or nil while one signs in, out or waits to replace it.
+  private var settledAccountID: UUID? {
+    notebook.isSigningIn || notebook.isSigningOut || notebook.pendingAccount != nil
+      ? nil : notebook.account?.id
+  }
+
   private var workspaceLifecycle: some View {
     workspaceNavigationLifecycle
     .onChange(of: scenePhase, initial: true) { notebook.isForeground = scenePhase == .active }
@@ -182,30 +188,13 @@ struct LiveNotebookWorkspace: View {
         Task { await active?.inspectRemoteChanges() }
       }
     }
-    .onChange(of: notebook.account, initial: true) {
-      NotebookPlatformBootstrap.scheduleRefresh()
-    }
-    .onChange(of: notebook.pendingAccount?.id) { _, pending in
-      NotebookPlatformBootstrap.scheduleRefresh()
-      if pending != nil { comments.reset() }
-    }
-    .onChange(of: notebook.localDrafts) {
-      NotebookPlatformBootstrap.scheduleRefresh()
-    }
-    .onChange(of: notebook.account?.id) {
+    .onChange(of: settledAccountID) {
       comments.reset()
       intelligence.target = nil
+    }
+    .onChange(of: notebook.account?.id) {
       columnVisibility = .all
       sheet = nil
-    }
-    .onChange(of: notebook.isSigningIn) { _, signingIn in
-      if signingIn {
-        comments.reset()
-        intelligence.target = nil
-      }
-    }
-    .onChange(of: notebook.isSigningOut) { _, signingOut in
-      if signingOut { comments.reset() }
     }
     .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
       notebook.updateCalendar()
@@ -270,7 +259,6 @@ struct LiveNotebookWorkspace: View {
       signOut: {
         guard let account else { throw AccountError.signedOut }
         _ = try await notebook.apply(.signOut, accountID: account.id)
-        sheet = nil
       }
     ) {
       PersonalAccentColorRow(savedHex: account?.preferences.accentColor) { hex in
