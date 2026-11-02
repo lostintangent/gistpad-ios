@@ -53,7 +53,7 @@ struct NotebookPlatformTests {
     let notebook: any NotebookIntentServing = fixture.bridge
     AppDependencyManager.shared.add(dependency: notebook)
     defer { NotebookPlatformBootstrap.install() }
-    let previousRoute = NotebookRouteInbox.shared.pending?.id
+    let previousRoute = NotebookRouteInbox.shared.pending
     var intent = AddToTodayIntent()
     intent.text = "A thought\nSecond task"
     intent.asTask = true
@@ -61,7 +61,7 @@ struct NotebookPlatformTests {
     #expect(controller.session.text.hasSuffix("- [ ] A real task\n- [ ] A thought\n- [ ] Second task\n"))
     #expect(try fixture.shared.read()?.today.tasks.map(\.title) == ["A real task", "A thought", "Second task"])
     #expect(await fixture.provider.targets.count == 1)
-    #expect(NotebookRouteInbox.shared.pending?.id == previousRoute)
+    #expect(NotebookRouteInbox.shared.pending == previousRoute)
     #expect(await fixture.provider.publishCount == 0)
   }
 

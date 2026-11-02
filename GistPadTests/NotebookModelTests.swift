@@ -2011,8 +2011,8 @@ struct NotebookNavigationHostTests {
       host.setScenePhase(.active)
       try await Task.sleep(for: .milliseconds(450))
       try host.expectSourceInk(editor, named: "foreground-source-\(id)")
-      host.routes.submit(.library)
-      try await host.waitUntil { host.routes.pending == nil && host.isLibraryVisible }
+      host.returnToLibrary()
+      try await host.waitUntil { host.isLibraryVisible }
     }
   }
 
@@ -2031,9 +2031,9 @@ struct NotebookNavigationHostTests {
         $0.description != GistConventions.dailyNotesDescription
       }.map(\.id) == [blank.id]
     }
-    host.routes.submit(.library)
+    host.returnToLibrary()
     try await host.waitUntil {
-      host.routes.pending == nil && host.isLibraryVisible
+      host.isLibraryVisible
         && !host.model.localDrafts.contains { $0.id == blank.id } && host.model.isTodaySelected
         && host.model.loadedDocument?.draft?.isDiscardableBlank == true
     }
@@ -2056,8 +2056,8 @@ struct NotebookNavigationHostTests {
     let editor = try #require(host.editor(text: ""))
     let text = "A thought worth keeping 👩🏽‍💻"
     editor.insertText(text)
-    host.routes.submit(.library)
-    try await host.waitUntil { host.routes.pending == nil && host.isLibraryVisible }
+    host.returnToLibrary()
+    try await host.waitUntil { host.isLibraryVisible }
     try await host.waitUntil { host.model.localDrafts.first(where: { $0.id == draft.id })?.text == text }
     #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.first(where: {
       $0.id == draft.id
@@ -2075,7 +2075,7 @@ struct NotebookNavigationHostTests {
     let blank = try #require(host.model.loadedDocument?.draft)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     try await host.waitForKeyboard(visible: true)
-    host.routes.submit(.note(gistID: "kept", filename: nil, shared: false))
+    host.routes.submit(.note(gistID: "kept", filename: nil))
     try await host.waitUntil {
       host.routes.pending == nil && host.editor(text: "A real note") != nil
         && !host.model.localDrafts.contains { $0.id == blank.id }
@@ -2164,10 +2164,9 @@ struct NotebookNavigationHostTests {
     editor.selectedRange = .init(location: 0, length: 0)
     editor.insertText("Local ")
     try await host.waitUntil { host.model.localDrafts.first(where: { $0.gistID == "a" })?.generation == 1 }
-    host.routes.submit(.library)
+    host.returnToLibrary()
     try await host.waitUntil(timeout: .seconds(1)) {
-      host.routes.pending == nil
-        && host.model.localDrafts.first(where: { $0.gistID == "a" })?.state == .savedToGitHub
+      host.model.localDrafts.first(where: { $0.gistID == "a" })?.state == .savedToGitHub
     }
     try await host.waitUntil { host.isLibraryVisible }
     #expect(await provider.publicationReasons == [.leaving])
@@ -2179,7 +2178,7 @@ struct NotebookNavigationHostTests {
     }
     Attachment.record(image, named: "library-visible-after-compact-route.png", as: .png)
     let selection = editor.selectedRange
-    host.routes.submit(.note(gistID: "a", filename: nil, shared: false))
+    host.routes.submit(.note(gistID: "a", filename: nil))
     try await host.waitUntil {
       host.routes.pending == nil && host.editor(text: "Local Current source") === editor
         && !host.isLibraryVisible
@@ -2200,9 +2199,9 @@ struct NotebookNavigationHostTests {
     editor.selectedRange = .init(location: 0, length: 0)
     editor.insertText("Local ")
     try await host.waitUntil { host.model.localDrafts.first(where: { $0.gistID == "a" })?.generation == 1 }
-    host.routes.submit(.library)
+    host.returnToLibrary()
     try await host.waitUntil {
-      host.routes.pending == nil && host.isLibraryVisible
+      host.isLibraryVisible
         && host.model.localDrafts.first(where: { $0.gistID == "a" })?.state == .savedToGitHub
     }
     #expect(host.model.library.selectedNoteID == nil)
@@ -2210,7 +2209,7 @@ struct NotebookNavigationHostTests {
     #expect(await provider.publicationReasons == [.leaving])
     #expect(!editor.isFirstResponder)
     let selection = editor.selectedRange
-    host.routes.submit(.note(gistID: "a", filename: nil, shared: false))
+    host.routes.submit(.note(gistID: "a", filename: nil))
     try await host.waitUntil {
       host.routes.pending == nil && host.editor(text: "Local Current source") === editor
         && !host.isLibraryVisible
@@ -2235,12 +2234,12 @@ struct NotebookNavigationHostTests {
     try #require(editor.becomeFirstResponder())
     if settledKeyboard { try await host.waitForKeyboard(visible: true) }
     host.recordKeyboard(named: "library-round-trip-before-pop")
-    host.routes.submit(try NotebookRoute(url: #require(URL(string: "gistpad://library"))))
-    try await host.waitUntil { host.routes.pending == nil && host.isLibraryVisible }
+    host.returnToLibrary()
+    try await host.waitUntil { host.isLibraryVisible }
     try await host.waitForKeyboard(visible: false)
     host.recordKeyboard(named: "library-round-trip-after-pop")
     #expect(!editor.isFirstResponder)
-    host.routes.submit(.note(gistID: "a", filename: nil, shared: false))
+    host.routes.submit(.note(gistID: "a", filename: nil))
     try await host.waitUntil {
       host.routes.pending == nil && host.editor(text: "Current source") === editor
         && !host.isLibraryVisible
@@ -2254,83 +2253,13 @@ struct NotebookNavigationHostTests {
     try await host.waitForKeyboard(visible: false)
   }
 
-  @Test(arguments: ["gistpad://library", "https://gistpad.dev/"])
-  func libraryLinksKeepQuietTodayUnpushedAndUnfocused(address: String) async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let routes = NotebookRouteInbox()
-    routes.submit(try NotebookRoute(url: #require(URL(string: address))))
-    let host = try await NavigationHost(provider: provider, routes: routes, sizeClass: .compact)
-    defer { await host.close() }
-    try await host.waitUntil { routes.pending == nil && host.isLibraryVisible }
-    try await Task.sleep(for: .milliseconds(300))
-    #expect(host.isLibraryVisible)
-    #expect(host.model.loadedDocument?.filename == DailyNoteTarget().filename)
-    #expect(host.model.loadedDocument?.opensForEditing == false)
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
-  @Test(arguments: ["gistpad://library", "https://gistpad.dev/"], [false, true])
-  func libraryLinksShowTheActualLibraryInsteadOfLeavingTheRestoredNotePushed(
-    address: String, cold: Bool
-  ) async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
-    let route = try NotebookRoute(url: #require(URL(string: address)))
-    let routes = NotebookRouteInbox()
-    if cold { routes.submit(route) }
-    let host = try await NavigationHost(
-      provider: provider, routes: routes, sizeClass: .compact,
-      restoredSelection: cold ? .init(gistID: "a", filename: "README.md", draftID: nil) : nil)
-    defer { await host.close() }
-    if !cold {
-      await host.model.open(gistID: "a")
-      try await host.waitUntil { host.editor(text: "Current source") != nil }
-      #expect(!host.isLibraryVisible)
-      routes.submit(route)
-    }
-    try await host.waitUntil { routes.pending == nil && host.isLibraryVisible }
-    try await Task.sleep(for: .milliseconds(300))
-    #expect(host.isLibraryVisible)
-    #expect(host.model.loadedDocument?.gist?.id == "a")
-    #expect(host.model.library.selectedNoteID == nil)
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
-  @Test func returningToLibraryCancelsAnUncachedListSelectionWithoutLosingThePreviousNote() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "Current", content: "Current source"),
-        try makeGist(id: "b", title: "Held", content: "Held source"),
-      ], cachesContent: false)
-    let host = try await NavigationHost(provider: provider, sizeClass: .compact)
-    defer { await host.close() }
-    await host.model.open(gistID: "a")
-    try await host.waitUntil { host.editor(text: "Current source") != nil }
-    await provider.holdRead(id: "b")
-    defer { Task { await provider.releaseRead() } }
-    #expect(!host.model.beginOpeningRow(id: "b"))
-    let opening = Task { await host.model.openRow(id: "b") }
-    await provider.waitForHeldRead()
-    host.routes.submit(.library)
-    try await host.waitUntil { host.routes.pending == nil && host.isLibraryVisible }
-    await provider.releaseRead()
-    await opening.value
-    #expect(host.isLibraryVisible)
-    #expect(host.model.library.selectedNoteID == nil)
-    #expect(host.model.loadedDocument?.gist?.id == "a")
-    #expect(host.model.openingDocument == nil)
-    #expect(host.editor(text: "Held source") == nil)
-  }
-
   @Test func aColdRouteWaitsForRestorationAndOpensTheExactFile() async throws {
     let provider = StubNotebookProvider(
       account: fixtureAccount,
       gists: [try makeGist(
         id: "b", title: "Routed note", additionalFiles: ["Ideas.md": "Routed file source"])])
     let routes = NotebookRouteInbox()
-    routes.submit(.note(gistID: "b", filename: "Ideas.md", shared: false))
+    routes.submit(.note(gistID: "b", filename: "Ideas.md"))
     let host = try await NavigationHost(provider: provider, routes: routes)
     defer { await host.close() }
     try await host.waitUntil {
@@ -2338,37 +2267,6 @@ struct NotebookNavigationHostTests {
     }
     #expect(host.model.loadedDocument?.filename == "Ideas.md")
     #expect(host.model.loadedDocument?.gist?.id == "b")
-  }
-
-  @Test func sharedRoutesStartInPreviewWithoutChangingTheSavedSourcePreference() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(id: "b", title: "Shared note", content: "Shared source")])
-    let host = try await NavigationHost(provider: provider)
-    defer { await host.close() }
-    host.routes.submit(.note(gistID: "b", filename: nil, shared: true))
-    try await host.waitUntil {
-      host.routes.pending == nil
-        && host.descendants.compactMap { $0 as? UISegmentedControl }
-          .contains { $0.selectedSegmentIndex == 1 }
-    }
-    #expect(host.layout.preferredMode == .source)
-    #expect(host.editor(text: "Shared source")?.isFirstResponder != true)
-    #expect(host.model.loadedDocument?.gist?.id == "b")
-  }
-
-  @Test func aNewNoteRouteCreatesOneDurableEditingSessionAndAcknowledgesIt() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let host = try await NavigationHost(provider: provider)
-    defer { await host.close() }
-    host.routes.submit(.newNote)
-    try await host.waitUntil {
-      host.routes.pending == nil
-        && host.model.loadedDocument?.draft.map { host.editor(text: $0.text)?.isFirstResponder == true }
-          == true
-    }
-    #expect(await provider.creationCount == 1)
-    #expect(host.model.loadedDocument?.draft?.baseContent == nil)
   }
 
   @Test func anotherAccountsDraftRouteNeverOpensOrChangesTheCurrentNote() async throws {
@@ -2397,9 +2295,9 @@ struct NotebookNavigationHostTests {
     defer { await host.close() }
     await provider.holdRead(id: "a")
     defer { Task { await provider.releaseRead() } }
-    host.routes.submit(.note(gistID: "a", filename: nil, shared: false))
+    host.routes.submit(.note(gistID: "a", filename: nil))
     await provider.waitForHeldRead()
-    host.routes.submit(.note(gistID: "b", filename: nil, shared: false))
+    host.routes.submit(.note(gistID: "b", filename: nil))
     try await host.waitUntil {
       host.routes.pending == nil && host.editor(text: "Latest source") != nil
     }
@@ -2407,31 +2305,6 @@ struct NotebookNavigationHostTests {
     try await Task.sleep(for: .milliseconds(80))
     #expect(host.model.loadedDocument?.gist?.id == "b")
     #expect(host.model.library.selectedNoteID == "b")
-    #expect(host.editor(text: "Held source") == nil)
-  }
-
-  @Test func returningToLibrarySupersedesAHeldRouteWithoutOpeningItLater() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(id: "a", title: "Held", content: "Held source")],
-      cachesContent: false)
-    let host = try await NavigationHost(provider: provider)
-    defer { await host.close() }
-    await provider.holdRead(id: "a")
-    defer { Task { await provider.releaseRead() } }
-    host.routes.submit(.note(gistID: "a", filename: nil, shared: false))
-    await provider.waitForHeldRead()
-    host.routes.submit(.library)
-    try await host.waitUntil { host.routes.pending == nil }
-    await provider.releaseRead()
-    try await host.waitUntil {
-      !host.model.isOpeningDocument && host.model.isTodaySelected
-        && host.model.loadedDocument?.opensForEditing == false && host.isLibraryVisible
-    }
-    #expect(host.model.loadedDocument?.filename == DailyNoteTarget().filename)
-    #expect(host.model.loadedDocument?.opensForEditing == false)
-    #expect(host.model.presentedDocument?.gist?.id != "a")
-    #expect(host.isLibraryVisible)
     #expect(host.editor(text: "Held source") == nil)
   }
 
@@ -2682,6 +2555,13 @@ private struct NavigationHost {
       first responder: \(editor.isFirstResponder), text viewport: \(String(describing: editor.textLayoutManager?.textViewportLayoutController.viewportRange))
       """, named: "\(name)-geometry.txt")
     #expect(ink > 100, "Edit must show actual source glyphs after the keyboard is dismissed.")
+  }
+
+  /// Pops the pushed note the way the system back button does on iPhone.
+  func returnToLibrary() {
+    descendants.lazy.compactMap { $0.next as? UINavigationController }
+      .first { $0.viewControllers.count > 1 }?
+      .popViewController(animated: false)
   }
 
   var isLibraryVisible: Bool {

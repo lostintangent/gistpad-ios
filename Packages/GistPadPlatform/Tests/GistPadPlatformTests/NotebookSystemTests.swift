@@ -73,15 +73,6 @@ struct NotebookSystemTests {
         #expect(updated.text == source.replacingOccurrences(of: "- [x] Second", with: "- [ ] Second"))
     }
 
-    @Test @MainActor func acknowledgingAnOldRouteCannotDiscardANewerDestination() {
-        let inbox = NotebookRouteInbox()
-        inbox.submit(.today)
-        let first = inbox.pending?.id
-        inbox.submit(.note(gistID: "abc123", filename: "Exact.md", shared: true))
-        if let first { inbox.acknowledge(first) }
-        #expect(inbox.pending?.route == .note(gistID: "abc123", filename: "Exact.md", shared: true))
-    }
-
     private func cache(_ gist: Gist) -> CachedLibrarySnapshot {
         CachedLibrarySnapshot(
             accountID: account, owned: [gist], starred: [],

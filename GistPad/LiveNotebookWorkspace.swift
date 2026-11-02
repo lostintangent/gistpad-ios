@@ -28,7 +28,6 @@ struct LiveNotebookWorkspace: View {
   @State private var archiveUndo: NotebookArchiveUndo?
   @State private var showingSettings = false
   @State private var showingAddToToday = false
-  @State private var sharedPreviewGistID: String?
   @State private var intelligence = NotebookIntelligencePresentation()
   @State private var comments: NotebookCommentsPresentation
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -528,9 +527,6 @@ struct LiveNotebookWorkspace: View {
         if comments.isPresented, comments.matches(controller.document) {
           return comments.documentMode
         }
-        if let sharedPreviewGistID, sharedPreviewGistID == controller.draft.gistID {
-          return NoteMode.reading
-        }
         return layout.presentedMode(
           availableWidth: availableWidth, sessionMode: controller.mode,
           isEditing: controller.session.isEditing,
@@ -540,7 +536,6 @@ struct LiveNotebookWorkspace: View {
         if comments.isPresented, comments.matches(controller.document) {
           comments.documentMode = $0
         } else {
-          sharedPreviewGistID = nil
           layout.select($0)
           if $0 != .split { controller.mode = $0 }
         }
@@ -842,9 +837,7 @@ struct LiveNotebookWorkspace: View {
         if comments.isPresented {
           Task { await comments.close() }
         } else {
-          comments.open(
-            for: controller,
-            origin: sharedPreviewGistID == controller.document.gist?.id ? .reading : nil)
+          comments.open(for: controller)
         }
       }
     }
@@ -912,7 +905,6 @@ struct LiveNotebookWorkspace: View {
       }
     }
     actions.find = {
-      sharedPreviewGistID = nil
       controller.mode = .source
       controller.session.presentFind(replacing: true)
     }
@@ -946,7 +938,6 @@ struct LiveNotebookWorkspace: View {
         localized: "Finish composition or Writing Tools before switching notes.")
       return
     }
-    sharedPreviewGistID = nil
     openRequest = UUID()
     Task {
       await notebook.open(gistID: gistID, filename: filename)
@@ -958,7 +949,6 @@ struct LiveNotebookWorkspace: View {
       notebook.library.selectedNoteID = active?.document.rowID
       return
     }
-    sharedPreviewGistID = nil
     let request = UUID()
     openRequest = request
     let isPrepared = notebook.beginOpeningRow(id: id)
@@ -1095,7 +1085,6 @@ struct LiveNotebookWorkspace: View {
           actionMessage = String(localized: "This reference no longer matches the note.")
           return
         }
-        sharedPreviewGistID = nil
         layout.select(.source)
         controller.mode = .source
         Task { @MainActor in
@@ -1326,7 +1315,6 @@ struct LiveNotebookWorkspace: View {
       $0.draft.accountID == accountID && $0.draft.gistID == gistID
     }
     if archiveUndo?.gistID == gistID { archiveUndo = nil }
-    if sharedPreviewGistID == gistID { sharedPreviewGistID = nil }
     do {
       try await comments.discard(gistID: gistID, accountID: accountID)
     } catch {
@@ -1347,20 +1335,18 @@ struct LiveNotebookWorkspace: View {
 
   private func createNote() {
     guard canSwitchDocument else { return }
-    sharedPreviewGistID = nil
     Task { await notebook.createNote() }
   }
 
   private func startToday() {
     guard canSwitchDocument else { return }
-    sharedPreviewGistID = nil
     compactColumn = .detail
     let target = DailyNoteTarget()
     Task { await notebook.startToday(target: target) }
   }
 
   private struct RouteReadiness: Hashable {
-    let requestID: UUID?
+    let route: NotebookRoute?
     let accountID: UUID?
     let isReady: Bool
     let isEditing: Bool
@@ -1368,7 +1354,7 @@ struct LiveNotebookWorkspace: View {
 
   private var routeReadiness: RouteReadiness {
     RouteReadiness(
-      requestID: routes.pending?.id,
+      route: routes.pending,
       accountID: notebook.account?.id,
       isReady: !notebook.isStarting && !notebook.isSigningIn && !isPerformingAction
         && notebook.library.loadState != .loading && notebook.pendingAccount == nil
@@ -1398,54 +1384,32 @@ struct LiveNotebookWorkspace: View {
 
   private func receivePendingRoute() async {
     guard routeReadiness.isReady, !routeReadiness.isEditing,
-      let request = routes.pending
+      let route = routes.pending, let account = notebook.account
     else { return }
-    if case .library = request.route {
-      if horizontalSizeClass != .regular {
-        openRequest = UUID()
-        notebook.showLibrary()
-        active?.session.textView.resignFirstResponder()
-      }
-      columnVisibility = .all
-      compactColumn = .sidebar
-      routes.acknowledge(request.id)
-      return
-    }
-    guard let account = notebook.account else { return }
-    sharedPreviewGistID = nil
-    switch request.route {
-    case .library:
-      break
+    switch route {
     case .today:
       await notebook.startToday()
-    case .newNote:
-      await notebook.createNote()
     case .addToToday:
       showingAddToToday = true
-    case .note(let gistID, let filename, let shared):
-      if shared { sharedPreviewGistID = gistID }
+    case .note(let gistID, let filename):
       await notebook.open(gistID: gistID, filename: filename)
-      guard !Task.isCancelled, routes.pending?.id == request.id else { return }
+      guard !Task.isCancelled, routes.pending == route else { return }
       await activateLoadedDocument()
-      if shared {
-        active?.mode = .reading
-        active?.session.textView.resignFirstResponder()
-      }
     case .draft(let accountID, let draftID):
       guard accountID == account.id else {
         actionMessage = "This draft belongs to another GitHub account. Switch accounts to open it."
-        routes.acknowledge(request.id)
+        routes.clear()
         return
       }
       await notebook.openLocalDraft(id: draftID)
-      guard !Task.isCancelled, routes.pending?.id == request.id else { return }
+      guard !Task.isCancelled, routes.pending == route else { return }
       await activateLoadedDocument()
     }
-    guard !Task.isCancelled, routes.pending?.id == request.id else { return }
+    guard !Task.isCancelled, routes.pending == route else { return }
     if notebook.presentedDocument != nil || notebook.failedOpen != nil {
       compactColumn = .detail
     }
-    routes.acknowledge(request.id)
+    routes.clear()
   }
 
   private var canSwitchDocument: Bool {

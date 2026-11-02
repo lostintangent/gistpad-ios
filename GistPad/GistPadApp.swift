@@ -73,8 +73,9 @@ struct GistPadApp: App {
       }
       .onOpenURL { url in
         if url.scheme == "gistpad", url.host == "auth-callback" { return }
-        do { NotebookRouteInbox.shared.submit(try NotebookRoute(url: url)) }
-        catch {
+        if let route = NotebookRoute(url: url) {
+          NotebookRouteInbox.shared.submit(route)
+        } else {
           routeError = String(localized: "GistPad can't open this link.")
         }
       }

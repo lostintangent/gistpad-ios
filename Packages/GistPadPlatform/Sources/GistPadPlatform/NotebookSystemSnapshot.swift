@@ -81,7 +81,7 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
                         excerpt: excerpt(text),
                         tags: cache.preferences.tagNames(gistID: gist.id),
                         updatedAt: gist.updatedAt,
-                        route: .note(gistID: gist.id, filename: filename, shared: false)))
+                        route: .note(gistID: gist.id, filename: filename)))
                 }
             }
         }
@@ -90,7 +90,7 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
                 let route: NotebookRoute
                 if let gistID = draft.gistID {
                     guard cache?.gists.contains(where: { $0.id == gistID }) == true else { continue }
-                    route = .note(gistID: gistID, filename: draft.filename, shared: false)
+                    route = .note(gistID: gistID, filename: draft.filename)
                     guard !notes.contains(where: { $0.route == route }) else { continue }
                 } else {
                     route = .draft(accountID: accountID, draftID: draft.id)
@@ -113,7 +113,7 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
         let text = draft?.text ?? daily.flatMap { cache?.content(gist: $0, filename: target.filename) }
         let route: NotebookRoute
         if let daily, daily.files[target.filename] != nil || draft != nil {
-            route = .note(gistID: daily.id, filename: target.filename, shared: false)
+            route = .note(gistID: daily.id, filename: target.filename)
         } else if let draft, let accountID {
             route = .draft(accountID: accountID, draftID: draft.id)
         } else {
