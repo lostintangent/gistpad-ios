@@ -233,7 +233,7 @@ struct NotebookDocumentSwitchingTests {
     let root = UIViewController()
     window.rootViewController = root
     let outgoing = UIHostingController(
-      rootView: MarkdownEditorView(session: session).environment(\.isNotebookPaneVisible, true))
+      rootView: MarkdownEditorView(session: session).environment(\.isPaneVisible, true))
     root.addChild(outgoing)
     outgoing.view.frame = root.view.bounds
     outgoing.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -261,14 +261,14 @@ struct NotebookDocumentSwitchingTests {
     let incomingAccessory = session.textView.inputAccessoryView
 
     outgoing.rootView = MarkdownEditorView(session: session)
-      .environment(\.isNotebookPaneVisible, false)
+      .environment(\.isPaneVisible, false)
     try await Task.sleep(for: .milliseconds(150))
     #expect(!session.textView.isHidden)
     #expect(session.textView.isAccessibilityElement)
     #expect(session.textView.inputAccessoryView === incomingAccessory)
 
     outgoing.rootView = MarkdownEditorView(session: other)
-      .environment(\.isNotebookPaneVisible, false)
+      .environment(\.isPaneVisible, false)
     outgoing.view.setNeedsLayout()
     outgoing.view.layoutIfNeeded()
     try await Task.sleep(for: .milliseconds(150))

@@ -1,4 +1,4 @@
-import GistPadAppearance
+import GistPadAccent
 import Testing
 import UIKit
 

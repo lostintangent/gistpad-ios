@@ -1,4 +1,4 @@
-import GistPadAppearance
+import GistPadAccent
 import GistPadEditor
 import GistPadIntelligence
 import Observation
@@ -66,7 +66,7 @@ extension View {
 
 private struct NotebookIntelligenceModifier: ViewModifier {
   @Bindable var presentation: NotebookIntelligencePresentation
-  @Environment(\.personalAccent) private var personalAccent
+  @Environment(\.accent) private var accent
 
   func body(content: Content) -> some View {
     content
@@ -75,7 +75,7 @@ private struct NotebookIntelligenceModifier: ViewModifier {
           session: target.session, title: target.title,
           revealSource: { target.reference = $0 }
         )
-        .environment(\.personalAccent, personalAccent)
+        .environment(\.accent, accent)
       }
   }
 }

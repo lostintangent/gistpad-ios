@@ -1,5 +1,5 @@
 #if os(iOS)
-import GistPadAppearance
+import GistPadAccent
 import SwiftUI
 
 public struct TagEditor: View {
@@ -13,7 +13,7 @@ public struct TagEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.personalAccent) private var personalAccent
+    @Environment(\.accent) private var accent
     @ScaledMetric(relativeTo: .body) private var swatchSize: CGFloat = 12
 
     public init(
@@ -68,7 +68,7 @@ public struct TagEditor: View {
                     update: { try draft.upsert($0) },
                     delete: { draft.delete(tag) }
                 )
-                .personalAccent(savedHex: personalAccent.savedHex)
+                .accent(savedHex: accent.savedHex)
             }
             .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
             .presentationDragIndicator(.visible)

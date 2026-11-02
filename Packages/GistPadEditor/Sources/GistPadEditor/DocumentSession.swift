@@ -1,6 +1,6 @@
 #if canImport(UIKit)
   import Accessibility
-  import GistPadAppearance
+  import GistPadAccent
   import GistPadComments
   import Observation
   import SwiftUI
@@ -65,7 +65,7 @@
       ]) { (view: AnchoredTextView, _: UITraitCollection) in
         view.session?.highlight()
       }
-      textView.registerForTraitChanges([PersonalAccentTrait.self]) {
+      textView.registerForTraitChanges([AccentTrait.self]) {
         (view: AnchoredTextView, _: UITraitCollection) in
         view.session?.commentAnnotations.accentDidChange()
       }

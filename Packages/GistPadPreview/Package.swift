@@ -6,17 +6,17 @@ let package = Package(
     platforms: [.iOS("27.2"), .macOS(.v15)],
     products: [.library(name: "GistPadPreview", targets: ["GistPadPreview"])],
     dependencies: [
-        .package(path: "../GistPadAppearance"), .package(path: "../GistPadComments")
+        .package(path: "../GistPadAccent"), .package(path: "../GistPadComments")
     ],
     targets: [
         .target(
             name: "GistPadPreview",
-            dependencies: ["GistPadAppearance", "GistPadComments"],
+            dependencies: ["GistPadAccent", "GistPadComments"],
             resources: [.copy("Resources/Web"), .copy("Resources/Fixtures")]
         ),
         .testTarget(
             name: "GistPadPreviewTests",
-            dependencies: ["GistPadPreview", "GistPadAppearance", "GistPadComments"])
+            dependencies: ["GistPadPreview", "GistPadAccent", "GistPadComments"])
     ],
     swiftLanguageModes: [.v6]
 )

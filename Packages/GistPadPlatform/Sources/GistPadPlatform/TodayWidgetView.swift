@@ -1,5 +1,5 @@
 #if os(iOS)
-import GistPadAppearance
+import GistPadAccent
 import GistPadSync
 import SwiftUI
 import WidgetKit
@@ -75,7 +75,7 @@ public struct TodayWidgetView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .environment(\.personalAccent, PersonalAccent(savedHex: snapshot?.accentHex))
+        .environment(\.accent, Accent(savedHex: snapshot?.accentHex))
         .environment(\.timeZone, snapshot.flatMap {
             TimeZone(identifier: $0.today.day.timeZoneIdentifier)
         } ?? .current)

@@ -1,6 +1,6 @@
 #if os(iOS)
 import UIKit
-import GistPadAppearance
+import GistPadAccent
 
 struct PreviewAppearance: Equatable {
     let variables: [String: String]
@@ -14,7 +14,7 @@ struct PreviewAppearance: Equatable {
         self.boldText = boldText ?? UIAccessibility.isBoldTextEnabled
         let dark = traits.userInterfaceStyle == .dark
         colorScheme = dark ? "dark" : "light"
-        let accent = traits[PersonalAccentTrait.self].roles(traits: traits)
+        let accent = traits[AccentTrait.self].roles(traits: traits)
         let code = increasedContrast ? (dark ? "#F1F5F9" : "#334155") : (dark ? "#CBD5E1" : "#475569")
         let marker = Self.listMarker(traits: traits)
         var values = [

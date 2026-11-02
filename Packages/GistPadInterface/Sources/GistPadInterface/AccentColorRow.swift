@@ -1,8 +1,8 @@
 #if os(iOS)
-import GistPadAppearance
+import GistPadAccent
 import SwiftUI
 
-public struct PersonalAccentColorRow: View {
+public struct AccentColorRow: View {
     private let savedHex: String?
     private let save: @MainActor (String) async throws -> Void
     @State private var picked: RGBColor?
@@ -14,7 +14,7 @@ public struct PersonalAccentColorRow: View {
         self.save = save
     }
 
-    private var saved: RGBColor { PersonalAccent(savedHex: savedHex).color }
+    private var saved: RGBColor { Accent(savedHex: savedHex).color }
 
     public var body: some View {
         ColorPicker(
@@ -47,8 +47,8 @@ public struct PersonalAccentColorRow: View {
 }
 
 extension View {
-    public func personalAccent(savedHex: String?) -> some View {
-        environment(\.personalAccent, PersonalAccent(savedHex: savedHex))
+    public func accent(savedHex: String?) -> some View {
+        environment(\.accent, Accent(savedHex: savedHex))
     }
 }
 #endif

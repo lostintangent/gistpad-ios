@@ -145,7 +145,7 @@ private final class StatusHost {
     session = DocumentSession(documentID: "github-status-source", text: source)
     window = UIWindow(windowScene: scene)
     window.rootViewController = UIHostingController(
-      rootView: StatusFixture(model: model, session: session).personalAccent(savedHex: "#FACC15"))
+      rootView: StatusFixture(model: model, session: session).accent(savedHex: "#FACC15"))
     keyboardObserver = NotificationCenter.default.addObserver(
       forName: UIResponder.keyboardDidChangeFrameNotification, object: nil, queue: .main
     ) { [weak self] notification in

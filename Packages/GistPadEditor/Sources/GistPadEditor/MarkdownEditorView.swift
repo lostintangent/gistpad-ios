@@ -1,5 +1,5 @@
 #if canImport(UIKit)
-  import GistPadAppearance
+  import GistPadAccent
   import GistPadComments
   import SwiftUI
   import UIKit
@@ -145,8 +145,8 @@
     let onAddComment: (@MainActor (String) -> Void)?
     let actions: SourceToolbarActions
     let configuration: SourceToolbarConfiguration
-    @Environment(\.isNotebookPaneVisible) private var isPaneVisible
-    @Environment(\.personalAccent) private var personalAccent
+    @Environment(\.isPaneVisible) private var isPaneVisible
+    @Environment(\.accent) private var accent
 
     func makeCoordinator() -> SourceAccessoryView {
       SourceAccessoryView(actions: actions)
@@ -170,7 +170,7 @@
           view.inputAccessoryView = accessory
           if view.isFirstResponder { view.reloadInputViews() }
         }
-        view.traitOverrides[PersonalAccentTrait.self] = personalAccent
+        view.traitOverrides[AccentTrait.self] = accent
         session.setCommentHighlights(
           comments, onOpenCommentThreads: onOpenCommentThreads,
           onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment)

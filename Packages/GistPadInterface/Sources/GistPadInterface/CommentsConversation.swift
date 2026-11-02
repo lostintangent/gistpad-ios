@@ -1,5 +1,5 @@
 #if os(iOS)
-import GistPadAppearance
+import GistPadAccent
 import GistPadComments
 import SwiftUI
 

@@ -1,4 +1,4 @@
-import GistPadAppearance
+import GistPadAccent
 import GistPadEditor
 import GistPadInterface
 import SwiftUI
@@ -26,7 +26,7 @@ struct PreviewIntegrationTests {
         }
         let editor = session.textView
         try await waitFor("source profile trait") {
-            editor.traitCollection[PersonalAccentTrait.self].savedHex == "#FACC15"
+            editor.traitCollection[AccentTrait.self].savedHex == "#FACC15"
         }
         try await Task.sleep(for: .milliseconds(150))
         host.view.layoutIfNeeded()
@@ -42,7 +42,7 @@ struct PreviewIntegrationTests {
         try #require(editor.attributedText.isEqual(to: attributes), "Establish stable attributed runs before changing only the accent.")
         host.rootView = sourceFixture(session: session, accent: "#A855F7")
         try await waitFor("updated source profile trait") {
-            editor.traitCollection[PersonalAccentTrait.self].savedHex == "#A855F7"
+            editor.traitCollection[AccentTrait.self].savedHex == "#A855F7"
         }
         try await Task.sleep(for: .milliseconds(150))
         #expect(editor.tintColor.resolvedColor(with: editor.traitCollection)
@@ -63,7 +63,7 @@ struct PreviewIntegrationTests {
                 .navigationTitle("A retained thought")
                 .navigationBarTitleDisplayMode(.inline)
         }
-        .personalAccent(savedHex: accent)
+        .accent(savedHex: accent)
     }
 
     private func testWindow() throws -> UIWindow {

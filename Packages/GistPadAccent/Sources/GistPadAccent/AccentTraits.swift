@@ -2,31 +2,31 @@
 import SwiftUI
 import UIKit
 
-public struct PersonalAccentTrait: UITraitDefinition {
-    public static let defaultValue = PersonalAccent()
+public struct AccentTrait: UITraitDefinition {
+    public static let defaultValue = Accent()
     public static let affectsColorAppearance = true
 }
 
-private struct PersonalAccentEnvironmentKey: UITraitBridgedEnvironmentKey {
-    static let defaultValue = PersonalAccent()
+private struct AccentEnvironmentKey: UITraitBridgedEnvironmentKey {
+    static let defaultValue = Accent()
 
-    static func read(from traitCollection: UITraitCollection) -> PersonalAccent {
-        traitCollection[PersonalAccentTrait.self]
+    static func read(from traitCollection: UITraitCollection) -> Accent {
+        traitCollection[AccentTrait.self]
     }
 
-    static func write(to mutableTraits: inout any UIMutableTraits, value: PersonalAccent) {
-        mutableTraits[PersonalAccentTrait.self] = value
+    static func write(to mutableTraits: inout any UIMutableTraits, value: Accent) {
+        mutableTraits[AccentTrait.self] = value
     }
 }
 
 extension EnvironmentValues {
-    public var personalAccent: PersonalAccent {
-        get { self[PersonalAccentEnvironmentKey.self] }
-        set { self[PersonalAccentEnvironmentKey.self] = newValue }
+    public var accent: Accent {
+        get { self[AccentEnvironmentKey.self] }
+        set { self[AccentEnvironmentKey.self] = newValue }
     }
 
     /// Whether the editor or preview pane is the one on screen.
-    @Entry public var isNotebookPaneVisible = true
+    @Entry public var isPaneVisible = true
 }
 
 extension RGBColor {
@@ -46,7 +46,7 @@ extension RGBColor {
     }
 }
 
-extension PersonalAccent {
+extension Accent {
     public func roles(traits: UITraitCollection) -> AccentRoles {
         let dark = traits.userInterfaceStyle == .dark
         let increased = traits.accessibilityContrast == .high
@@ -68,7 +68,7 @@ public enum AccentRole: Sendable {
     case text
 
     public var uiColor: UIColor {
-        UIColor { traits in traits[PersonalAccentTrait.self].roles(traits: traits).text.uiColor }
+        UIColor { traits in traits[AccentTrait.self].roles(traits: traits).text.uiColor }
     }
 }
 #endif

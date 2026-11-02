@@ -84,7 +84,7 @@ struct GistPadApp: App {
       } message: {
         Text("GistPad can't open this link.")
       }
-      .personalAccent(savedHex: notebook?.account?.preferences.accentColor)
+      .accent(savedHex: notebook?.account?.preferences.accentColor)
     }
   }
 }

@@ -2,7 +2,7 @@
 
 Native Library and note-screen chrome for iOS 27.2 and later. Screen inputs are Sendable value types. The app owns navigation, authentication, editor sessions, rendering and persistence. This package never initiates a network write. Visual rules and review requirements belong to [the design system](../../docs/design-system.md) and [design direction](../../docs/design-direction.md).
 
-`PersonalAccentColorRow(savedHex:hasInvalidStoredValue:save:)` uses an opaque native color picker and an explicit async Save action. Supply an account-scoped callback so a pending selection cannot save to a switched account. Failures stay visible and retain the chosen color. Invalid saved metadata shows a warning rather than silently claiming it was valid. Apply `.personalAccent(savedHex:)` above the workspace and its sheets to share the same contrast-derived accent through SwiftUI, UIKit and preview content.
+`AccentColorRow(savedHex:hasInvalidStoredValue:save:)` uses an opaque native color picker and an explicit async Save action. Supply an account-scoped callback so a pending selection cannot save to a switched account. Failures stay visible and retain the chosen color. Invalid saved metadata shows a warning rather than silently claiming it was valid. Apply `.accent(savedHex:)` above the workspace and its sheets to share the same contrast-derived accent through SwiftUI, UIKit and preview content.
 
 Personal color belongs to content, not navigation or commands. Apply the accent environment, not an app-wide tint. Appearance resolves contrast-derived roles for SwiftUI, UIKit and Preview. Role derivation stays internal to Appearance.
 
@@ -56,7 +56,7 @@ Save labels are assertions about real persistence. In-memory and unsaved states 
 
 App-hosted tests cover native geometry and document-state preservation, not virtual accessibility handles. `GistPadUITests` drives the real controls through a real accessibility client against the fixture library.
 
-NoteScreen supplies `isNotebookPaneVisible` to retained children. Native editor and Preview representables apply it to UIKit visibility and accessibility without replacing their views. XCUITest can list hidden native views in its full snapshot, so snapshot absence alone is not a VoiceOver gate. Native flags and UIKit hit testing pass, but XCUITest's retained-editor/Preview accessibility-hit discrepancy remains open in t76.
+NoteScreen supplies `isPaneVisible` to retained children. Native editor and Preview representables apply it to UIKit visibility and accessibility without replacing their views. XCUITest can list hidden native views in its full snapshot, so snapshot absence alone is not a VoiceOver gate. Native flags and UIKit hit testing pass, but XCUITest's retained-editor/Preview accessibility-hit discrepancy remains open in t76.
 
 Run the two `testNativeSegmentTargetsAcrossTitlesAndAppearances` methods with the Duo simulator in Closed posture (466 by 678 points). Run the two `testNativeWideSegmentTargetsAcrossTitlesAndAppearances` methods separately in Open posture (951 by 669 points), which covers both two- and three-segment controls. Change posture in Device Hub between runs, not through rotation. Each method requires the actual window size before testing native targets, title separation and selection in Light/Dark.
 

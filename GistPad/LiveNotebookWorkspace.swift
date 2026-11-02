@@ -262,7 +262,7 @@ struct LiveNotebookWorkspace: View {
         _ = try await notebook.apply(.signOut, accountID: account.id)
       }
     ) {
-      PersonalAccentColorRow(savedHex: account?.preferences.accentColor) { hex in
+      AccentColorRow(savedHex: account?.preferences.accentColor) { hex in
         guard let account else { throw AccountError.signedOut }
         _ = try await notebook.apply(.preference(.setAccentColor(hex)), accountID: account.id)
       }

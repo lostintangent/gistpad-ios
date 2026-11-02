@@ -2,7 +2,7 @@
 import SwiftUI
 import WebKit
 import OSLog
-import GistPadAppearance
+import GistPadAccent
 import GistPadComments
 
 public struct MarkdownPreviewView: View {
@@ -62,8 +62,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.legibilityWeight) private var legibilityWeight
-    @Environment(\.personalAccent) private var personalAccent
-    @Environment(\.isNotebookPaneVisible) private var isPaneVisible
+    @Environment(\.accent) private var accent
+    @Environment(\.isPaneVisible) private var isPaneVisible
 
     func makeCoordinator() -> Coordinator {
         Coordinator(document: document, onEvent: onEvent)
@@ -110,11 +110,11 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             $0.userInterfaceStyle = colorScheme == .dark ? .dark : .light
             $0.accessibilityContrast = contrast == .increased ? .high : .normal
             $0.preferredContentSizeCategory = dynamicTypeSize.contentSizeCategory
-            $0[PersonalAccentTrait.self] = personalAccent
+            $0[AccentTrait.self] = accent
         }
         context.coordinator.appearance = PreviewAppearance(traits: traits, boldText: legibilityWeight == .bold)
         context.coordinator.commentHighlights.update(
-            document: document, configuration: comments, accent: personalAccent.color.hex,
+            document: document, configuration: comments, accent: accent.color.hex,
             onOpen: onOpenCommentThreads, onLinkedIDs: onLinkedCommentIDsChange, onAdd: onAddComment)
         context.coordinator.update(document)
     }

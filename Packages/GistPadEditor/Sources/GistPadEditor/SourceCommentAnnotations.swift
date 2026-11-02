@@ -1,6 +1,6 @@
 #if canImport(UIKit)
   import Accessibility
-  import GistPadAppearance
+  import GistPadAccent
   import GistPadComments
   import UIKit
 
@@ -96,7 +96,7 @@
         return
       }
       let traits = session.textView.traitCollection
-      let accent = traits[PersonalAccentTrait.self]
+      let accent = traits[AccentTrait.self]
       let roles = accent.roles(traits: traits)
       onSelected = roles.onFill.uiColor
       guard

@@ -67,7 +67,7 @@ public struct AccentRoles: Equatable, Sendable {
     public let onFill: RGBColor
 }
 
-public struct PersonalAccent: Hashable, Sendable {
+public struct Accent: Hashable, Sendable {
     public let savedHex: String?
     public let color: RGBColor
 
