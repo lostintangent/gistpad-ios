@@ -38,7 +38,7 @@ public struct AddToTodayIntent: AppIntent {
     @Parameter(title: "Text", requestValueDialog: "What would you like to add to Today?")
     public var text: String
     @Parameter(title: "As Task", default: false) public var asTask: Bool
-    @Dependency private var notebook: any NotebookIntentServing
+    @Dependency var notebook: any NotebookIntentServing
 
     public static var parameterSummary: some ParameterSummary {
         Summary("Add \(\.$text) to Today") { \.$asTask }

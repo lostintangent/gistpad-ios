@@ -29,7 +29,7 @@ final class DailyNotesUITests: XCTestCase {
 
   func testAddToTodayAppendsATask() throws {
     let app = launchGistPad(sheet: "today")
-    let input = app.textViews["today-capture-input"]
+    let input = app.textFields["today-capture-input"]
     try waitUntil("Add to Today") { input.isHittable && app.keyboards.firstMatch.exists }
     app.segmentedControls["today-capture-kind"].buttons["Task"].tap()
     input.tap()
@@ -38,7 +38,7 @@ final class DailyNotesUITests: XCTestCase {
 
     let editor = app.textViews["source-editor"]
     try waitUntil("today's note with the new task") {
-      app.noteShows("Pick up the dry cleaning") && !app.textViews["today-capture-input"].exists
+      app.noteShows("Pick up the dry cleaning") && !app.textFields["today-capture-input"].exists
     }
     if let source = editor.value as? String {
       XCTAssertTrue(source.contains("- [ ] Pick up the dry cleaning"), source)

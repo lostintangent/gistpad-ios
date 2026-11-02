@@ -28,7 +28,7 @@
       guard let fixture = value("--fixture") else { return nil }
       self.fixture = Fixture(rawValue: fixture)!
       route = value("--open").map {
-        try! NotebookRoute(url: URL(string: $0 == "today" ? "gistpad://today" : "gistpad://note/\($0)")!)
+        NotebookRoute(url: URL(string: $0 == "today" ? "gistpad://today" : "gistpad://note/\($0)")!)!
       }
       mode = value("--mode").map { ["edit": NoteMode.source, "preview": .reading, "split": .split][$0]! }
       query = value("--query")

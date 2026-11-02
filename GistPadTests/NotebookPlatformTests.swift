@@ -51,11 +51,9 @@ struct NotebookPlatformTests {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
     let controller = try await fixture.controller()
-    let notebook: any NotebookIntentServing = fixture.bridge
-    AppDependencyManager.shared.add(dependency: notebook)
-    defer { NotebookPlatformBootstrap.install() }
     let previousRoute = NotebookRouteInbox.shared.pending
     var intent = AddToTodayIntent()
+    intent.notebook = fixture.bridge
     intent.text = "A thought\nSecond task"
     intent.asTask = true
     _ = try await intent.perform()

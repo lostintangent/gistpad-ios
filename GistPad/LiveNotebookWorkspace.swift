@@ -204,7 +204,7 @@ struct LiveNotebookWorkspace: View {
     .task(id: searchInput) { await notebook.search() }
     .task(id: routeReadiness) { await receivePendingRoute() }
     #if DEBUG
-    .onChange(of: [activeID, routes.pending?.id.uuidString], initial: true) { presentFixtureSheet() }
+    .onChange(of: [activeID, routes.pending?.url.absoluteString], initial: true) { presentFixtureSheet() }
     #endif
     .onChange(of: autosaveInput, initial: true) {
       for controller in sessions.values {
