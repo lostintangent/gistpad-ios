@@ -226,4 +226,96 @@ struct EditTests {
       }
     }
   }
+
+  @Test(arguments: ["\n", "\r\n"])
+  func aRevisedNoteChangesOnlyItsChangedLines(newline: String) async throws {
+    func revised(_ text: String, _ revision: String) async throws -> String {
+      let source = text.replacingOccurrences(of: "\n", with: newline)
+      let result = try await edited(request(source, .edit, "Edit"), [.rewrite(revision)])
+      return result.replacingOccurrences(of: newline, with: "\n")
+    }
+    let daily = "---\ntags: [daily]\n---\n# Today\n\n- [ ] Coffee\n- [ ] Walk\n\nNotes\n"
+    #expect(
+      try await revised(daily, "# Today\n\n- [x] Coffee\n- [ ] Walk\n\nNotes")
+        == "---\ntags: [daily]\n---\n# Today\n\n- [x] Coffee\n- [ ] Walk\n\nNotes\n")
+    #expect(
+      try await revised(daily, "# Today\n\n- [ ] Coffee\n- [ ] Walk\n- [ ] Read\n\nNotes\n\n")
+        == "---\ntags: [daily]\n---\n# Today\n\n- [ ] Coffee\n- [ ] Walk\n- [ ] Read\n\nNotes\n")
+    #expect(
+      try await revised(
+        daily, "```markdown\nHi\n\n# Today\n\n- [ ] Coffee\n- [ ] Walk\n\nNotes\n```")
+        == "---\ntags: [daily]\n---\nHi\n\n# Today\n\n- [ ] Coffee\n- [ ] Walk\n\nNotes\n")
+    #expect(
+      try await revised(daily, "# Today\n\n- [ ] Coffee\n\nNotes")
+        == "---\ntags: [daily]\n---\n# Today\n\n- [ ] Coffee\n\nNotes\n")
+    #expect(
+      try await revised(daily, #"# Today\n\n- [x] Coffee\n- [ ] Walk\n\nNotes\n"}"#)
+        == "---\ntags: [daily]\n---\n# Today\n\n- [x] Coffee\n- [ ] Walk\n\nNotes\n")
+    #expect(try await revised(#"Use \n here"#, #"Use \n there"#) == #"Use \n there"#)
+    #expect(try await revised("One\n\nTwo\n\nThree", "One\n\nThree") == "One\n\nThree")
+    #expect(try await revised("One\n\nTwo\n\nThree", "Two\n\nThree") == "Two\n\nThree")
+    #expect(try await revised("- [ ] A\nKeep  \n", "- [x] A\nKeep") == "- [x] A\nKeep  \n")
+    #expect(
+      try await revised(
+        "# Title\n\nBody\n\n## Next\n\n- x\n",
+        "# Title\n\nSum.\n\nBody\n\n## Next\n\n- x\n\n## Risks\n\n- y")
+        == "# Title\n\nSum.\n\nBody\n\n## Next\n\n- x\n\n## Risks\n\n- y\n")
+    #expect(try await revised("", "Hello") == "Hello\n")
+    #expect(
+      try await revised("```swift\nlet a = 1\n```", "```swift\nlet a = 2\n```")
+        == "```swift\nlet a = 2\n```")
+    #expect(
+      try await revised("- [ ] A\n- [ ] B\n\nDone", "- [ ] A\n\n- [x] B\n\n- [ ] C\n\nDone")
+        == "- [ ] A\n- [x] B\n- [ ] C\n\nDone")
+    #expect(try await revised("- A\n\n- B\n", "- A\n\n- B\n\n- C") == "- A\n\n- B\n\n- C\n")
+    #expect(
+      try await revised("Intro\n- It's  \"here\"  \n", "Intro\n- It’s “here”\n- New")
+        == "Intro\n- It's  \"here\"  \n- New\n")
+    await #expect(throws: IntelligenceError.unsafeEdit) {
+      try await revised("Text\n", "Text\n\n```markdown\nMore")
+    }
+    await #expect(throws: IntelligenceError.unsafeEdit) {
+      try await revised("Keep me", "\n\n")
+    }
+  }
+
+  @Test func aRevisionNamesEachChangeAndNeverSeesFrontMatter() async throws {
+    func reasons(_ source: String, _ revision: String) async throws -> [String] {
+      let fixture = FixtureModel()
+      fixture.changes = { _ in [.rewrite(revision)] }
+      return try await Intelligence(backend: fixture).edit(request(source, .edit, "Edit"))
+        .comments.map(\.reason)
+    }
+    #expect(
+      try await reasons("A\n\nB\n\nC\n\nD", "A2\n\nB\n\nC\n\nD2")
+        == ["Change this text.", "Change this text."])
+    #expect(try await reasons("A", "A\n\nB") == ["Add this text."])
+    #expect(try await reasons("A\n\nB\n\nC", "A\n\nC") == ["Remove this text."])
+
+    let fixture = FixtureModel()
+    fixture.changes = { _ in [.rewrite("# Today")] }
+    let dated = request("---\ndate: 2025-01-01\n---\n# Note\n", .edit, "Rename it Today")
+    let review = try await Intelligence(backend: fixture).edit(dated)
+    #expect(fixture.passes.map(\.source) == ["# Note\n"])
+    #expect(fixture.passes.map(\.isPart) == [false])
+    #expect(
+      try review.application(to: dated.snapshot).source == "---\ndate: 2025-01-01\n---\n# Today\n")
+
+    // A rewrite too long for one reply isn't retried in parts.
+    for failure in [IntelligenceError.noteTooLong, .responseTooLarge] {
+      let failing = FixtureModel()
+      failing.failure = failure
+      await #expect(throws: failure) {
+        try await Intelligence(backend: failing).edit(request("A\n\nB", .edit, "Edit"))
+      }
+      #expect(failing.passes.count == 1)
+    }
+  }
+
+  private func edited(_ input: IntelligenceRequest, _ edits: [ModelEdit]) async throws -> String {
+    let fixture = FixtureModel()
+    fixture.changes = { _ in edits }
+    return try await Intelligence(backend: fixture).edit(input).application(to: input.snapshot)
+      .source
+  }
 }

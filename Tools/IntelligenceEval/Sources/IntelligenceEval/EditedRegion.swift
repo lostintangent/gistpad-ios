@@ -31,7 +31,12 @@ struct EditedRegion: Codable, Sendable {
     let text = written.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty, let before = self.written(in: original) else { return "nothingWritten" }
     if text == before.trimmingCharacters(in: .whitespacesAndNewlines) { return "unchanged" }
-    if text.contains("```") { return "codeFence" }
+    // New text may hold a code block like the note's own, but never fence its Markdown.
+    let fences = text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+      .filter { $0.hasPrefix("```") }
+    if fences.count % 2 == 1 || fences.contains(where: { ["```markdown", "```md"].contains($0) }) {
+      return "codeFence"
+    }
     if let shape, !matches(shape, text) { return "wrongShape" }
     if !isSeparated(written, replacing: before) { return "wrongSpacing" }
     if let language, NLLanguageRecognizer.dominantLanguage(for: text)?.rawValue != language {

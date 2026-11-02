@@ -128,6 +128,10 @@ for name, source, prompt, region in [
 cases.append(dict(id="draft-delete", action="edit", source=draft,
                   prompt="delete the paragraph about the first loaves",
                   expectedSource=fixture("draft-delete.md")))
+# One typo in a long, otherwise clean paragraph, which a block rewrite must not drift around.
+cases.append(dict(id="meeting-typo", action="edit",
+                  source=meeting.replace("400 testers", "400 tetsers"),
+                  prompt="fix the typo", expectedSource=meeting))
 
 
 def gist(gist_id):
@@ -182,5 +186,55 @@ if args.daily_gist:
             addedTaskText="clean the kitchen",
         )
     )
+
+# General Ask: one fact or list per question, each fact matched by any of its phrasings.
+meeting = fixture("meeting.md")
+readme = fixture("readme.md")
+draft = fixture("draft.md")
+people = ["Priya", "Marco", "Dana", "Sam", "Lee", "Ana"]
+areas = ["the onboarding flow", "the settings screen", "search", "the widget", "sync errors",
+         "the share sheet", "offline mode", "the empty state"]
+weeks = []
+for week in range(80):
+    first, second = people[week % 6], people[(week + 2) % 6]
+    area = areas[week % 8]
+    entry = (f"## Week {week + 1}\n\nWe reviewed {area}. {first} shared progress and {second} "
+             f"raised two questions about scope. We agreed to look at {area} again next week "
+             f"once the numbers are in.\n\n- [x] {first} updates the tracker\n"
+             f"- [ ] {second} follows up on {area}\n")
+    if week == 52:
+        entry += "\nThe team offsite will be in the Harbor Room on June 3.\n"
+    weeks.append(entry)
+long_notes = "# Team notes\n\n" + "\n".join(weeks)
+# A note longer than one rewrite: a text edit asks for a selection, and a task edit still works.
+cases.append(dict(id="long-room", action="edit", source=long_notes,
+                  prompt="move the team offsite to the Lighthouse Room",
+                  expectedError="noteTooLong"))
+cases.append(dict(id="long-all-done", action="edit", source=long_notes,
+                  prompt="mark everything done",
+                  expectedSource=long_notes.replace("- [ ] ", "- [x] ")))
+for name, source, prompt, mentions, avoids, words in [
+    ("meeting-date", meeting, "when is the launch?", [["May 12"]], None, 60),
+    ("meeting-delay", meeting, "who wanted to delay the launch, and why?",
+     [["Marco"], ["sign-in", "sign in"]], None, 60),
+    ("meeting-fix", meeting, "which release has the sign-in fix?", [["1.0.1"]], None, 60),
+    ("meeting-open", meeting, "what's still left to do?",
+     [["release notes"], ["workaround"]], None, 60),
+    ("meeting-unknown", meeting, "what's the launch budget?",
+     [["n't", "not ", "no "]], ["$", "dollar"], 60),
+    ("readme-install", readme, "how do I install tidy?", [["brew install tidy"]], None, 60),
+    ("readme-unique", readme, "what does -u do?", [["unique"]], None, 60),
+    ("readme-case", readme, "which flag ignores case?", [["-i"]], None, 60),
+    ("draft-why", draft, "why did I start baking?", [["quiet"]], None, 60),
+    ("draft-now", draft, "how often do I bake now?", [["Saturday"]], None, 60),
+    ("draft-summary", draft, "summarize this note",
+     [["bread", "bak"], ["notebook", "notes", "recorded", "wrote down"]], None, None),
+    ("daily-left", daily, "what's left on my list today?",
+     [["coffee"], ["chapter"], ["dishes"], ["recycling"]], None, None),
+    ("daily-done", daily, "what have I finished?", [["curtains"]], None, 60),
+    ("long-offsite", long_notes, "where is the team offsite?", [["Harbor Room"]], None, 60),
+]:
+    cases.append(dict(id=f"ask-{name}", action="ask", source=source, prompt=prompt,
+                      mentions=mentions, avoids=avoids, maximumAnswerWords=words))
 args.output.mkdir(parents=True, exist_ok=True)
 (args.output / "cases.json").write_text(json.dumps(cases, indent=2))

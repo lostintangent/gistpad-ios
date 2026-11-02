@@ -20,8 +20,7 @@ extension FileSnapshot {
       guard isSettled else {
         throw IntelligenceError.unavailable(
           String(
-            localized:
-              "Finish composition or Writing Tools before starting an intelligence action.",
+            localized: "Finish typing or wait for Writing Tools, then try again.",
             bundle: .module))
       }
       return FileSnapshot(

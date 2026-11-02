@@ -38,6 +38,10 @@ lenient and has accepted a shortened paragraph that changed a detail. Keep a
 separate held-out set of general cases outside the repository, write it before
 measuring and never tune on it.
 
+A note longer than one rewrite runs two cases. Moving its offsite to another room
+must end in the `noteTooLong` error, named by the case's `expectedError`, and
+marking every task done must still return byte-exact expected source.
+
 Favorite answers are graded on generated prose, not cited text or exact sentence
 equality. Deterministic checks require the expected work's name, a preference
 assertion and no alternative series in a favorite assertion. A separate greedy

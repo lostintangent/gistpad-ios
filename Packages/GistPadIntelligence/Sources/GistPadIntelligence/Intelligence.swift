@@ -1,4 +1,5 @@
 import Foundation
+import GistPadEditor
 import OSLog
 
 @MainActor
@@ -144,10 +145,22 @@ public final class Intelligence {
                   reason: String(localized: "Add this task.", bundle: .module)),
                 NSRange(location: offset, length: 0)
               ))
+          case .rewrite(let revised):
+            guard request.action == .edit else { throw IntelligenceError.invalidResponse }
+            let start = min(
+              max(chunk.range.location, FrontMatter.contentStart(in: request.snapshot.source)),
+              NSMaxRange(chunk.range))
+            candidates += try Revision.candidates(
+              in: request.snapshot.source,
+              visible: NSRange(location: start, length: NSMaxRange(chunk.range) - start),
+              revised: revised)
           }
         }
         completed += 1
-      } catch IntelligenceError.responseTooLarge, IntelligenceError.insufficientContext {
+        // Reading less doesn't shorten a rewrite of the whole note, so only Review retries smaller.
+      } catch IntelligenceError.responseTooLarge where purpose == .review,
+        IntelligenceError.insufficientContext
+      {
         let smaller = try await split(
           chunk, request: request, purpose: purpose, model: model, force: true)
         pending.append(contentsOf: smaller.reversed())
@@ -381,8 +394,15 @@ public final class Intelligence {
     source: String, model: ModelInfo, scope: NSRange? = nil,
     evidenceBlocks: [String]? = nil
   ) -> ModelPass {
-    ModelPass(
-      purpose: purpose, instruction: request.instruction, source: source,
+    var shown = source
+    // Edit never shows the model front matter, so a rewrite can't change it.
+    if purpose == .edit, let scope {
+      let hidden = min(
+        FrontMatter.contentStart(in: request.snapshot.source) - scope.location, scope.length)
+      if hidden > 0 { shown = (source as NSString).substring(from: hidden) }
+    }
+    return ModelPass(
+      purpose: purpose, instruction: request.instruction, source: shown,
       responseTokens: min(purpose == .answer ? answerTokens : 1_536, model.contextSize / 3),
       requestID: request.id,
       tasks: purpose == .edit
@@ -390,7 +410,8 @@ public final class Intelligence {
           guard let scope else { return true }
           return task.range.location >= scope.location
             && NSMaxRange(task.range) <= NSMaxRange(scope)
-        } : [], evidenceBlocks: evidenceBlocks)
+        } : [], evidenceBlocks: evidenceBlocks,
+      isPart: scope.map { $0.length < request.snapshot.source.utf16.count } ?? false)
   }
 
   private func validate(_ request: IntelligenceRequest) throws {

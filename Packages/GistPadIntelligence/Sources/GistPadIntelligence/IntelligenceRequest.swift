@@ -58,6 +58,7 @@ public enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
   case unsafeEdit
   case responseTooLarge
   case unverifiedQuotation
+  case noteTooLong
   case noEvidence
   case staleSnapshot
   case noApplicableChanges
@@ -103,6 +104,10 @@ public enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
       String(
         localized:
           "This edit repeats your instruction or would leave almost none of your file. Nothing was changed.",
+        bundle: .module)
+    case .noteTooLong:
+      String(
+        localized: "This file is too long to edit at once. Select a section and use Writing Tools.",
         bundle: .module)
     case .unverifiedQuotation:
       String(
@@ -151,11 +156,13 @@ public struct ModelPass: Sendable {
   public let requestID: UUID
   public let tasks: [ModelTask]
   public let evidenceBlocks: [String]?
+  /// Whether the source is one part of a note too long for one pass.
+  public let isPart: Bool
 
   public init(
     purpose: Purpose, instruction: String, source: String, responseTokens: Int,
     requestID: UUID = UUID(), tasks: [ModelTask] = [],
-    evidenceBlocks: [String]? = nil
+    evidenceBlocks: [String]? = nil, isPart: Bool = false
   ) {
     self.purpose = purpose
     self.instruction = instruction
@@ -164,6 +171,7 @@ public struct ModelPass: Sendable {
     self.requestID = requestID
     self.tasks = tasks
     self.evidenceBlocks = evidenceBlocks
+    self.isPart = isPart
   }
 }
 
@@ -212,6 +220,8 @@ public enum ModelEdit: Sendable {
   case setTaskStates(ids: [Int]?, isComplete: Bool)
   case insertTask(listID: Int, text: String)
   case deleteTasks(ids: [Int])
+  /// The whole note as the model revised it, which the app compares line by line.
+  case rewrite(String)
 }
 
 public struct ModelAnswerPart: Sendable, Equatable {

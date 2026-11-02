@@ -13,13 +13,20 @@ struct EvalCase: Codable, Sendable {
   let addedTaskText: String?
   let addedTaskListTitle: String?
   let maximumAnswerWords: Int?
+  /// Facts an answer must state: each group passes when the answer contains any of its phrases.
+  let mentions: [[String]]?
+  /// Phrases a grounded answer can't contain, like a number the note never gives.
+  let avoids: [String]?
   let editedRegion: EditedRegion?
+  /// The error a request must end in, like a note too long to rewrite.
+  let expectedError: String?
 
   init(
     id: String, action: String, source: String, prompt: String, favorite: String? = nil,
     expectedSource: String? = nil, addedTaskText: String? = nil,
     addedTaskListTitle: String? = nil, alternativeFavorites: [String]? = nil,
-    maximumAnswerWords: Int? = nil, editedRegion: EditedRegion? = nil
+    maximumAnswerWords: Int? = nil, mentions: [[String]]? = nil, avoids: [String]? = nil,
+    editedRegion: EditedRegion? = nil, expectedError: String? = nil
   ) {
     self.id = id
     self.action = action
@@ -31,7 +38,10 @@ struct EvalCase: Codable, Sendable {
     self.addedTaskText = addedTaskText
     self.addedTaskListTitle = addedTaskListTitle
     self.maximumAnswerWords = maximumAnswerWords
+    self.mentions = mentions
+    self.avoids = avoids
     self.editedRegion = editedRegion
+    self.expectedError = expectedError
   }
 }
 
@@ -51,6 +61,8 @@ struct EvalResult: Codable, Sendable {
   let proposedSource: String?
   let rejectedAnswers: [String]?
   let editOperations: [String]?
+  /// The largest input any pass sent the model, in tokens.
+  let inputTokens: Int?
   let modelGrade: Bool?
   let modelGradeError: String?
 }
@@ -121,7 +133,9 @@ enum Evaluator {
             answerSeconds = elapsed()
             let application = try review.application(to: request.snapshot)
             proposed = application.source
-            if let expected = item.expectedSource {
+            if item.expectedError != nil {
+              passed = false
+            } else if let expected = item.expectedSource {
               passed =
                 application.source.utf8.elementsEqual(expected.utf8)
                 && review.omittedCount == 0
@@ -159,13 +173,14 @@ enum Evaluator {
             proposedSource: retainPrivateOutput ? proposed : nil,
             rejectedAnswers: retainPrivateOutput ? backend.rejectedAnswers : nil,
             editOperations: retainPrivateOutput ? backend.operations : nil,
+            inputTokens: backend.inputTokens,
             modelGrade: modelGrade, modelGradeError: modelGradeError)
         } catch {
           let code = (error as? IntelligenceError).map { String(describing: $0) } ?? "unexpected"
           let type = String(reflecting: type(of: error))
           result = EvalResult(
             caseID: item.id, repeatIndex: repeatIndex, requestID: request.id,
-            passed: false, elapsedSeconds: elapsed(),
+            passed: item.expectedError == code, elapsedSeconds: elapsed(),
             answerCompletionSeconds: answerSeconds,
             answerPreparationSeconds: preparationSeconds,
             qualityRejectionCount: backend.rejectedAnswers.count,
@@ -173,6 +188,7 @@ enum Evaluator {
             errorCode: code, errorType: type, answer: nil, proposedSource: nil,
             rejectedAnswers: retainPrivateOutput ? backend.rejectedAnswers : nil,
             editOperations: retainPrivateOutput ? backend.operations : nil,
+            inputTokens: backend.inputTokens,
             modelGrade: nil, modelGradeError: nil)
         }
         results.append(result)
@@ -190,24 +206,31 @@ enum Evaluator {
     application: Review.Applied, original: FileSnapshot, expectedText: String,
     expectedList: String?
   ) -> Bool {
-    guard application.review.omittedCount == 0, application.applied.count == 1,
-      let change = application.applied.first, change.quote.isEmpty,
-      let range = change.range, let replacement = change.replacement
-    else { return false }
-    let newSnapshot = snapshot(application.source)
-    guard newSnapshot.tasks.count == original.tasks.count + 1 else { return false }
-    let added = newSnapshot.tasks.filter { task in
-      let line = (application.source as NSString).lineRange(for: task.range)
-      return range.location <= line.location
-        && line.location < range.location + replacement.utf16.count
+    guard application.review.omittedCount == 0, application.applied.count == 1 else {
+      return false
     }
-    guard let task = added.first, added.count == 1, !task.isComplete,
-      task.text.localizedCaseInsensitiveContains(expectedText),
-      expectedList.map({ task.listTitle.localizedCaseInsensitiveContains($0) }) ?? true
+    let source = application.source as NSString
+    let tasks = snapshot(application.source).tasks
+    guard tasks.count == original.tasks.count + 1 else { return false }
+    // The added task is the line whose removal, with one of its line breaks, restores every byte.
+    let added = tasks.first { task in
+      let line = source.lineRange(for: task.range)
+      var lineEnd = 0
+      var previousEnd = 0
+      source.getLineStart(nil, end: nil, contentsEnd: &lineEnd, for: task.range)
+      if line.location > 0 {
+        source.getLineStart(
+          nil, end: nil, contentsEnd: &previousEnd,
+          for: NSRange(location: line.location - 1, length: 0))
+      }
+      return [line, NSRange(location: previousEnd, length: lineEnd - previousEnd)].contains {
+        source.replacingCharacters(in: $0, with: "").utf8.elementsEqual(original.source.utf8)
+      }
+    }
+    guard let task = added, !task.isComplete,
+      task.text.localizedCaseInsensitiveContains(expectedText)
     else { return false }
-    let restored = (application.source as NSString).replacingCharacters(
-      in: NSRange(location: range.location, length: replacement.utf16.count), with: "")
-    return restored.utf8.elementsEqual(original.source.utf8)
+    return expectedList.map { task.listTitle.localizedCaseInsensitiveContains($0) } ?? true
   }
 
   private static func gradeFavorite(answer: String, expected: String) async throws -> Bool {
@@ -239,6 +262,14 @@ enum Evaluator {
       answer.split(whereSeparator: \.isWhitespace).count > maximum
     {
       return "answerTooLong"
+    }
+    if item.mentions?.contains(where: { group in
+      !group.contains { answer.localizedCaseInsensitiveContains($0) }
+    }) == true {
+      return "factMissing"
+    }
+    if item.avoids?.contains(where: { answer.localizedCaseInsensitiveContains($0) }) == true {
+      return "ungroundedFact"
     }
     if let favorite = item.favorite {
       return favoriteFailure(
@@ -281,8 +312,8 @@ enum Evaluator {
 
   static func table(_ results: [EvalResult]) -> String {
     var lines = [
-      "| Case | Pass rate | Meaning | Complete p50/p90 | Retried | Failures |",
-      "|---|---:|---:|---:|---:|---|",
+      "| Case | Pass rate | Meaning | Complete p50/p90 | Input tokens | Retried | Failures |",
+      "|---|---:|---:|---:|---:|---:|---|",
     ]
     for id in Set(results.map(\.caseID)).sorted() {
       let group = results.filter { $0.caseID == id }
@@ -291,8 +322,9 @@ enum Evaluator {
       let retried = group.filter { ($0.qualityRetryCount ?? 0) > 0 }.count
       let grades = group.compactMap(\.modelGrade)
       let meaning = grades.isEmpty ? "-" : "\(grades.filter { $0 }.count)/\(grades.count)"
+      let tokens = group.compactMap(\.inputTokens).max().map(String.init) ?? "-"
       lines.append(
-        "| \(id) | \(group.filter(\.passed).count)/\(group.count) | \(meaning) | \(complete) | \(retried) | \(failures.isEmpty ? "None" : failures) |"
+        "| \(id) | \(group.filter(\.passed).count)/\(group.count) | \(meaning) | \(complete) | \(tokens) | \(retried) | \(failures.isEmpty ? "None" : failures) |"
       )
     }
     return lines.joined(separator: "\n")
@@ -329,12 +361,15 @@ private struct FavoriteGrade {
 final class RecordingModel: IntelligenceModel {
   private let model = OnDeviceModel()
   private(set) var answerCalls = 0
+  private(set) var inputTokens: Int?
   private(set) var rejectedAnswers: [String] = []
   private(set) var operations: [String] = []
 
   func modelInfo() async throws -> ModelInfo { try await model.modelInfo() }
   func tokenCount(for pass: ModelPass) async throws -> Int {
-    try await model.tokenCount(for: pass)
+    let count = try await model.tokenCount(for: pass)
+    inputTokens = max(inputTokens ?? 0, count)
+    return count
   }
   func replacements(for pass: ModelPass) async throws -> [ModelReplacement] {
     try await model.replacements(for: pass)
