@@ -430,11 +430,10 @@ public actor DraftStore {
             )))
         } else if let sent = draft.attemptedGeneration, case .savingToGitHub = previousState {
             draft.stateData = try encode(.savingToGitHub(generation: sent))
-        } else if draft.attemptedGeneration != nil {
-            draft.stateData = try encode(previousState)
         } else {
+            // After a cut-off publish GitHub may hold the attempted text, so matching the base isn't saved.
             draft.stateData = try encode(
-                draft.gistID != nil && sourceEqual(text, draft.baseContent)
+                draft.attemptedGeneration == nil && draft.gistID != nil && sourceEqual(text, draft.baseContent)
                     ? .savedToGitHub : .savedLocally
             )
         }

@@ -5,7 +5,7 @@ import Security
 
 public enum AccountError: Error, Equatable, Sendable {
     case invalidConfiguration
-    case signInInProgress
+    case busy
     case signedOut
     case accountChanged
     case reconnectGitHub
@@ -18,7 +18,7 @@ extension AccountError: LocalizedError {
         switch self {
         case .invalidConfiguration:
             String(localized: "GitHub sign-in isn't configured correctly in this build.")
-        case .signInInProgress: String(localized: "Sign-in is already in progress.")
+        case .busy: String(localized: "Wait for your account to finish updating, then try again.")
         case .signedOut, .accountChanged, .reconnectGitHub:
             String(localized: "Reconnect GitHub to continue. Your gists on this iPhone are unchanged.")
         case .credentialPersistence:
@@ -166,7 +166,7 @@ public actor AccountStore {
     deinit { authEvents.cancel() }
 
     public func cachedAccount() async throws -> Account? {
-        guard !signingOut else { throw AccountError.signInInProgress }
+        guard !signingOut else { throw AccountError.busy }
         guard let session = try persistedSession() else { return nil }
         try retainConnection(session)
         return snapshot(session.user)
@@ -182,7 +182,7 @@ public actor AccountStore {
     }
 
     public func refreshAccount() async throws -> Account {
-        guard !signingIn, !signingOut else { throw AccountError.signInInProgress }
+        guard !signingIn, !signingOut else { throw AccountError.busy }
         _ = try persistedSession()
         let session = try await auth.session
         try retainConnection(session)
@@ -199,7 +199,7 @@ public actor AccountStore {
     /// Signs in through `launchFlow` instead of the system web session.
     @discardableResult
     func signIn(launchFlow: LaunchFlow?) async throws -> Account {
-        guard !signingIn, !signingOut, !updatingPreferences else { throw AccountError.signInInProgress }
+        guard !signingIn, !signingOut, !updatingPreferences else { throw AccountError.busy }
         signingIn = true
         defer { signingIn = false }
         let session = if let launchFlow {
@@ -287,7 +287,7 @@ public actor AccountStore {
 
     // The caller must first let the user keep/export/discard account-scoped unsynced work.
     public func signOut(accountID: UUID) async throws {
-        guard !signingIn, !signingOut, !updatingPreferences else { throw AccountError.signInInProgress }
+        guard !signingIn, !signingOut, !updatingPreferences else { throw AccountError.busy }
         guard try connectedAccountID() == accountID else { throw AccountError.accountChanged }
         signingOut = true
         defer { signingOut = false }
@@ -314,7 +314,7 @@ public actor AccountStore {
 
     /// The GitHub account this device is connected to. It survives Supabase session loss, so GitHub reads don't depend on Supabase.
     public func connectedAccountID() throws -> UUID? {
-        guard !signingOut else { throw AccountError.signInInProgress }
+        guard !signingOut else { throw AccountError.busy }
         if let session = try persistedSession() {
             try retainConnection(session)
             return session.user.id

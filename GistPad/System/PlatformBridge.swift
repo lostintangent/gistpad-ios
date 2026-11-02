@@ -177,7 +177,6 @@ final class PlatformBridge: DailyNoteActions {
 
   private func apply(_ edit: DraftEdit) async throws {
     let draft = try await store.draft(id: edit.draftID, accountID: edit.accountID)
-    guard draft.attemptedGeneration == nil else { throw PlatformError.editingInProgress }
     if case .conflict = draft.state { throw PlatformError.editingInProgress }
     let session = sessions[edit.draftID]?.value
     if let session {

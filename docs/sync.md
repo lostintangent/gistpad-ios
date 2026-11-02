@@ -38,7 +38,7 @@ You should never have to think about sync. Nothing you type is lost, you always 
 
 ## Daily notes
 
-- **Opening today's note creates it**, whether or not you type in it. That's true from the Today button, the widget, Shortcuts, or the app opening on today. The day starts from the Daily notes gist's template, with the date filled in, or a heading with the date when there's no template. It publishes on the normal schedule.
+- **Opening today's note creates it**, whether or not you type in it. That's true from the Today button, the widget, Shortcuts, or the app opening on today. The day starts from the Daily notes gist's template, with the date filled in, or a heading with the date when there's no template. It opens offline too, and publishes on the normal schedule.
 - **The first day creates the Daily notes gist.** If an earlier day never reached GitHub, opening the next day publishes it first, so every day lands in one gist.
 - **Earlier days** are deleted on purpose. Nothing carries over.
 - **Deleting a day** removes that day's file, or the whole gist when it's the last file.

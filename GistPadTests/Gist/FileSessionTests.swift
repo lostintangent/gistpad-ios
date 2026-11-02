@@ -66,6 +66,46 @@ struct FileSessionTests {
     #expect(second.saveState == .savedToGitHub)
   }
 
+  enum Moment: CaseIterable { case typing, leavingTheNote, leavingTheApp, returningToTheApp }
+
+  @Test(arguments: Moment.allCases)
+  func todayOpenedOfflinePublishesAtTheNextMomentOnceOnline(_ moment: Moment) async throws {
+    let fixture = try await LibraryFixture(
+      selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+    ) {
+      $0.addGist(id: "a", description: "Session fixture", files: ["README.md": "Base"])
+    }
+    let library = fixture.library
+    await library.start()
+    fixture.fail()
+    await library.open(.today())
+    let today = try #require(library.loadedFile?.draft)
+    #expect(today.filename == DailyNote.Day().filename)
+    let session = try #require(library.sessions[today.id])
+    // Today's create goes out and is cut off, so GitHub may or may not have it.
+    await library.publishUnsyncedEdits()
+    #expect(session.saveState == .failed(.network))
+    #expect(try await fixture.saved(session).attemptedContent == today.text)
+
+    fixture.restore()
+    switch moment {
+    case .typing:
+      edit(session, to: today.text + "- [ ] Walk")
+      #expect(await session.waitForLocalSave())
+      #expect(session.saveState == .savedLocally)
+      library.isForeground = true
+      #expect(session.autosaveRequest.eligible)
+      await session.publish(reason: .autosave)
+    case .leavingTheNote: await session.leave()
+    case .leavingTheApp: await FileSession.publishOnBackground([session], shouldContinue: { true })
+    case .returningToTheApp: await library.publishUnsyncedEdits()
+    }
+    #expect(fixture.publishes == ["POST /gists"])
+    let daily = try #require(fixture.server.gists.first { $0.isDailyNote })
+    #expect(fixture.remote(daily.id, today.filename) == session.editor.text)
+    #expect(session.saveState == .savedToGitHub)
+  }
+
   @Test func restoredGenerationsAndRapidEditsPersistInOrder() async throws {
     let fixture = try await makeFixture()
     let restored = try await fixture.stageEdit(

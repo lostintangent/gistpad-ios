@@ -164,6 +164,33 @@ import Testing
         #expect(fixture.count("PATCH /gists/\(gist.id)") == 1)
     }
 
+    @Test func typingAfterACutOffPublishIsSavedOnThisIPhoneUntilThePublishLands() async throws {
+        let fixture = try SyncFixture()
+        let gist = fixture.server.addGist(description: "Note", files: ["README.md": "base"])
+        let session = fixture.server.session
+        let cutOff = Mutex(true)
+        fixture.server.intercept { request in
+            guard request.httpMethod == "PATCH", cutOff.withLock({ first in
+                defer { first = false }
+                return first
+            }) else { return nil }
+            _ = try await session.data(for: request)
+            throw URLError(.networkConnectionLost)
+        }
+        let sent = try await fixture.type("local", in: fixture.open(gist))
+        await #expect(throws: URLError.self) { try await fixture.publish(sent) }
+        #expect(try await fixture.reload(sent).state == .failed(.network))
+
+        // GitHub has "local" now, so going back to the old text isn't saved there.
+        let undone = try await fixture.type("base", in: fixture.reload(sent))
+        #expect(undone.state == .savedLocally, "Typing lets autosave publish again.")
+        #expect(undone.attemptedContent == "local")
+
+        let published = try await fixture.publish(undone)
+        #expect(published.state == .savedToGitHub)
+        #expect(fixture.remote(gist.id) == "base")
+    }
+
     @Test(arguments: [true, false], [false, true])
     func aCutOffCreateFindsItsGistInsteadOfPostingTwice(landed: Bool, daily: Bool) async throws {
         let fixture = try SyncFixture()

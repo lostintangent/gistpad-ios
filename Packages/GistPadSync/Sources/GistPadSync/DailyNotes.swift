@@ -160,10 +160,14 @@ public actor DailyNotes {
     }
 
     private func dailyGist() async throws -> Gist? {
-        if let cached = try await store.cachedLibrary(accountID: accountID)?.owned.first(where: \.isDailyNote) {
-            return cached
+        let cached = try await store.cachedLibrary(accountID: accountID)
+        if let daily = cached?.owned.first(where: \.isDailyNote) { return daily }
+        do {
+            return try await client.listGists().first(where: \.isDailyNote)
+        } catch let error as URLError where cached != nil && error.code != .cancelled {
+            // Offline, the library on this iPhone has no daily notes gist, so today starts one.
+            return nil
         }
-        return try await client.listGists().first(where: \.isDailyNote)
     }
 
     /// A file's text from the cache when it's current, otherwise from GitHub, which then caches it.

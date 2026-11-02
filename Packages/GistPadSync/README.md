@@ -77,7 +77,9 @@ changed base becomes a conflict. Before sending, it records the attempted text
 and generation, so a publish cut off by a dropped connection or a quit checks
 GitHub before sending again. An edit that landed is acknowledged, and a create
 looks for its gist by description and file bytes, so it never posts twice.
-Typing during a publish stays unpublished for the next one.
+Typing during a publish stays unpublished for the next one. Typing after a
+cut-off publish is `.savedLocally` again, even back to the base text, because
+GitHub may hold the attempt.
 
 Failures persist as `PublishState`. Network and HTTP failures can be retried, a
 401 is `.reconnect`, and `Retry-After` is honored. An acknowledged publish
@@ -93,9 +95,11 @@ close it.
 `DailyNotes.stageToday(target:)` returns today's file, ready to edit. That's
 your draft if you've started the day, else a new file in the `📆 Daily notes`
 gist from `template.md` with `{{date}}` filled in, else the first day of a new
-daily gist with a `# YYYY-MM-DD` heading. Staging only reads, but the new day
-has no base, so the app publishes it whether or not you type. An earlier day
-that never reached GitHub publishes first, so it creates the gist today joins.
+daily gist with a `# YYYY-MM-DD` heading. It finds the daily gist in the
+library cache, else on GitHub, and offline the cache's answer stands. Staging
+only reads, but the new day has no base, so the app publishes it whether or not
+you type. An earlier day that never reached GitHub publishes first, so it
+creates the gist today joins.
 
 `DailyNote.Day` pins the date and time zone when an action starts. `DailyNote`
 reads a day from the cache and drafts for the widget, and `FileTask` and

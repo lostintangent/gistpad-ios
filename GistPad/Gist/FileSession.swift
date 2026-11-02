@@ -126,8 +126,7 @@ final class FileSession {
     library.isForeground && library.account?.id == draft.accountID && library.pendingAccount == nil
       && library.state.loadState == .ready
       && library.account?.preferences.isAutoSaveEnabled == true
-      && canMutate && editor.textView.markedTextRange == nil
-      && !file.isRecovery && draft.attemptedGeneration == nil
+      && canMutate && editor.textView.markedTextRange == nil && !file.isRecovery
   }
 
   private func publicationAllowed(reason: PublishReason) -> Bool {
@@ -136,8 +135,7 @@ final class FileSession {
     case .autosave: autosaveAllowed
     case .background, .leaving:
       library.account?.id == draft.accountID && library.pendingAccount == nil
-        && editor.isSettled
-        && editor.textView.markedTextRange == nil && draft.attemptedGeneration == nil
+        && editor.isSettled && editor.textView.markedTextRange == nil
     }
   }
 
