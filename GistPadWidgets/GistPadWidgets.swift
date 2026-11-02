@@ -7,6 +7,7 @@ import WidgetKit
 struct GistPadWidgetBundle: WidgetBundle {
   var body: some Widget {
     LauncherWidget()
+    LockScreenTodayWidget()
     AddToTodayControl()
     OpenTodayControl()
     NewGistControl()
@@ -68,6 +69,47 @@ struct LauncherWidget: Widget {
   }
 }
 
+struct LockScreenTodayEntry: TimelineEntry {
+  let date: Date
+}
+
+/// The mark never changes, so one entry serves for good.
+struct LockScreenTodayProvider: TimelineProvider {
+  func placeholder(in context: Context) -> LockScreenTodayEntry { LockScreenTodayEntry(date: .now) }
+
+  func getSnapshot(in context: Context, completion: @escaping (LockScreenTodayEntry) -> Void) {
+    completion(placeholder(in: context))
+  }
+
+  func getTimeline(in context: Context, completion: @escaping (Timeline<LockScreenTodayEntry>) -> Void) {
+    completion(Timeline(entries: [placeholder(in: context)], policy: .never))
+  }
+}
+
+/// One round button under the Lock Screen's clock, GistPad's notebook mark in the Lock Screen's tint.
+struct LockScreenTodayWidget: Widget {
+  var body: some WidgetConfiguration {
+    StaticConfiguration(kind: "GistPadLockScreenToday", provider: LockScreenTodayProvider()) { _ in
+      GeometryReader { proxy in
+        Image("TodayMark")
+          .resizable()
+          .scaledToFit()
+          .frame(height: proxy.size.height / 2)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+      .background { AccessoryWidgetBackground() }
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(Text("Today's note"))
+      .widgetURL(GistPadLink.today.url)
+      // The Lock Screen drops container backgrounds, so the disc lives in the content.
+      .containerBackground(for: .widget) { Color.clear }
+    }
+    .configurationDisplayName("Today")
+    .description("Open today's note.")
+    .supportedFamilies([.accessoryCircular])
+  }
+}
+
 struct AddToTodayControl: ControlWidget {
   var body: some ControlWidgetConfiguration {
     StaticControlConfiguration(kind: "GistPadAddToToday") {
@@ -116,4 +158,10 @@ struct NewGistControl: ControlWidget {
 } timeline: {
   LauncherEntry(date: .now, snapshot: .preview(), state: .available)
   LauncherEntry(date: .now, snapshot: nil, state: .signedOut)
+}
+
+#Preview("Today", as: .accessoryCircular) {
+  LockScreenTodayWidget()
+} timeline: {
+  LockScreenTodayEntry(date: .now)
 }

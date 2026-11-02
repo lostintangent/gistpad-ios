@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-23 -9 418 418" width="36" height="36">
+  <title>GistPad notebook mark for the Lock Screen Today widget, from the app icon's notebook and tabs</title>
+  <g fill="none" stroke="#000" stroke-width="32" stroke-linecap="round" stroke-linejoin="round">
+    <rect id="cover" x="16" y="8" width="312" height="384" rx="44"/>
+    <line id="spine" x1="92" y1="8" x2="92" y2="392"/>
+    <line id="line-1" x1="140" y1="120" x2="274" y2="120"/>
+    <line id="line-2" x1="140" y1="200" x2="274" y2="200"/>
+    <line id="line-3" x1="140" y1="280" x2="224" y2="280"/>
+  </g>
+  <g id="tabs" fill="#000">
+    <rect x="328" y="56" width="44" height="64" rx="14"/>
+    <rect x="328" y="156" width="44" height="64" rx="14"/>
+    <rect x="328" y="256" width="44" height="64" rx="14"/>
+  </g>
+</svg>
