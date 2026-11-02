@@ -32,23 +32,24 @@ final class CommentsUITests: XCTestCase {
 
   func testPostingAndReplying() throws {
     let app = launchGistPad(open: "highlights", mode: "preview", sheet: "comments")
-    let threads = app.descendants(matching: .any)
-      .matching(NSPredicate(format: "identifier BEGINSWITH 'comment-thread-'"))
     let composer = app.element("comment-composer-text")
-    try waitUntil("three threads") { threads.count == 3 && composer.exists }
+    try waitUntil("Comments") { app.element("comment-thread-1").exists && composer.exists }
 
     try tap(app.buttons["comment-reply-1"], "Reply")
     try waitUntil("the reply composer") { app.staticTexts["Replying to @octocat"].exists }
     composer.tap()
     composer.typeText("Agreed, keep it.")
     app.buttons["comment-post"].tap()
+    // Thread 1 had no replies, so its replies appearing means the reply didn't start a thread.
     try waitUntil("the reply") { app.element("comment-replies-1").exists }
-    XCTAssertEqual(threads.count, 3, "The reply became its own thread.")
+    try scroll(to: "comment-thread-3", in: app)
 
     composer.tap()
     composer.typeText("A new thought on the whole note.")
     app.buttons["comment-post"].tap()
-    try waitUntil("the new thread") { threads.count == 4 }
+    // GitHub numbers this gist's comments, so the reply is 4 and the new thread is 5.
+    try scroll(to: "comment-thread-5", in: app)
+    XCTAssertFalse(app.element("comment-thread-4").exists, "The reply became its own thread.")
   }
 
   func testTappingAHighlightSelectsItsThread() throws {
@@ -58,6 +59,15 @@ final class CommentsUITests: XCTestCase {
     careful.tap()
     let thread = app.element("comment-thread-2")
     try waitUntil("the selected thread") { thread.exists && thread.isSelected }
+  }
+
+  /// Swipes through the conversation until `thread` is on screen. Folded, the sheet fits two
+  /// threads, and only threads on screen are in the accessibility tree.
+  private func scroll(to thread: String, in app: XCUIApplication) throws {
+    let element = app.element(thread)
+    let conversation = app.element("comments-conversation")
+    for _ in 0..<6 where !element.exists { conversation.swipeUp() }
+    try waitUntil(thread) { element.exists }
   }
 
   /// Drags the Preview until `passage` sits on the first line under the navigation bar.
