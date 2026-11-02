@@ -1,13 +1,16 @@
 #if canImport(UIKit)
   import SwiftUI
+  import Testing
   import UIKit
 
   @testable import GistPadEditor
 
-  // Package tests have no connected UIWindowScene, so each test hosts the editor in its own
-  // window and hides it when the test ends. Suites run concurrently and main-actor tests
-  // interleave at every await, so check focus and Find before awaiting, since another suite's
-  // window can take key and first responder during the wait.
+  // Package tests have no connected UIWindowScene, so each test hosts the editor in its own key
+  // window and hides it when the test ends. Every suite that hosts a window nests here so those
+  // tests run one at a time. Otherwise main-actor tests from different suites interleave at each
+  // await, and one test's window takes key and first responder from another's.
+  @Suite(.serialized)
+  enum HostedEditorTests {}
 
   @MainActor
   func host(_ session: Editor, focused: Bool = true) -> UIWindow {
