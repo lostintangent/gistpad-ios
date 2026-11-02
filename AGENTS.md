@@ -19,6 +19,8 @@ The channel purpose is the charter: what GistPad Native is and the bar it has to
 5. Designer signs off every visible surface from Dark captures.
 6. Lead batches the merged work into one build, bumps the build number, installs it on the user's phone, tags `main` as `v<version>-<build>` and merges the integration branch into it.
 
+Simple, high-confidence changes don't wait for steps 4 and 5. When the user asks for a build, Lead builds from the finished branches and installs it right away. Tests, captures and sign-off follow as a check, and anything they catch goes in the next build.
+
 ## Where things are
 
 - This repo is `~/Desktop/gistpad-ios`.
