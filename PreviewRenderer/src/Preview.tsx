@@ -13,7 +13,6 @@ import Mermaid from "../../../gistpad.dev/src/features/markdown/Mermaid";
 import { taskRangePlugins } from "./tasks";
 import { toString } from "hast-util-to-string";
 import type { PreviewMessage, RenderRequest, TaskEdit } from "./protocol";
-import { useDiagramTheme } from "./diagramTheme";
 import { CommentText, type CommentHighlightController } from "./commentHighlights";
 
 const emojis = new Map(
@@ -267,7 +266,6 @@ function PreviewImage({ src, alt }: { src?: string; alt: string }) {
 }
 
 function NativeDiagram({ content }: { content: string }) {
-  const theme = useDiagramTheme();
   const container = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const updateScale = () => {
@@ -286,7 +284,7 @@ function NativeDiagram({ content }: { content: string }) {
       window.removeEventListener("gistpad-preview-appearance", updateScale);
     };
   }, []);
-  return <div ref={container} className="diagram-scroll" data-native-theme={theme} role="figure" aria-label="Mermaid diagram" tabIndex={0}>
+  return <div ref={container} className="diagram-scroll" role="figure" aria-label="Mermaid diagram" tabIndex={0}>
     <Mermaid content={content} onExpand={() => container.current?.focus()} />
   </div>;
 }
