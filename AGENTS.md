@@ -25,7 +25,7 @@ Simple, high-confidence changes don't wait for steps 4 and 5. When the user asks
 
 - This repo is `~/Desktop/gistpad-ios`.
 - The web app at `~/Desktop/gistpad.dev` is the reference for behavior and the source of the Markdown renderer. Read it freely. Never commit to it, and propose any change to it in the channel first.
-- `README.md` has the module map. `docs/design-direction.md` and `docs/design-system.md` are the design spec, `docs/sync.md` is the sync contract, and `docs/engineering.md` records engineering choices.
+- `README.md` has the module map. `docs/design.md` is the design spec, `docs/sync.md` is the sync contract, `docs/engineering.md` records engineering choices, and `docs/capture-matrix.md` covers captures.
 
 ## Toolchain
 
@@ -57,7 +57,7 @@ The machine overloads, so the whole channel shares one simulator and one heavy j
 
 - Simulator builds and tests follow the README's "Build and run" and "Checks" sections, using the slot simulator's ID. Add `-parallel-testing-enabled NO`, and use a `-derivedDataPath` inside your worktree.
 - UI tests drive the real app against the DEBUG fixture GitHub (`FixtureServer` in GistPadSync), never a live account.
-- `CommentsInspectorUITests/testCommentsCloseAcrossSheetAndInspectorPostureTransitions` needs a person at the Device Hub fold controls. Leave it to the manual pass.
+- `simctl` can't fold the Duo, so tests and captures run in whatever posture is set. Physical fold transitions are left to the manual pass on the phone.
 - Device builds use Release, `generic/platform=iOS`, team `RHFNBL7EG4` and `-allowProvisioningUpdates`. Install with `xcrun devicectl device install app --device 00008160-00041D6C0A200036 <path to GistPad.app>`. The bundle ID is `dev.gistpad.GistPad`.
 
 ## Data and secrets
