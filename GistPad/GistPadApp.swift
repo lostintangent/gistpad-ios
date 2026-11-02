@@ -87,10 +87,7 @@ struct GistPadApp: App {
       } message: {
         Text(routeError ?? "")
       }
-      .background {
-        NotebookSceneAccent(savedHex: notebook?.account?.preferences.accentColor)
-          .frame(width: 0, height: 0)
-      }
+      .personalAccent(savedHex: notebook?.account?.preferences.accentColor)
     }
   }
 }

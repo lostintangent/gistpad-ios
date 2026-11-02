@@ -74,10 +74,8 @@ struct LiveNotebookWorkspace: View {
     workspaceSheets
       .sheet(isPresented: accountSwitchPresented) {
         accountSwitchSheet
-          .personalAccent(savedHex: notebook.account?.preferences.accentColor)
       }
       .notebookIntelligence(intelligence)
-      .personalAccent(savedHex: notebook.account?.preferences.accentColor)
   }
 
   private var navigation: some View {
@@ -313,7 +311,6 @@ struct LiveNotebookWorkspace: View {
     .sheet(isPresented: $showingShare) {
       if let shareURL {
         NotebookActivitySheet(item: .url(shareURL))
-          .personalAccent(savedHex: notebook.account?.preferences.accentColor)
       }
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -339,27 +336,21 @@ struct LiveNotebookWorkspace: View {
     }
     .sheet(item: $sharingTarget) { target in
       NotebookSharingSheet(controller: target.controller, copiesLink: target.copiesLink)
-        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
     }
     .sheet(item: $tagTarget) { target in
       tagEditor(target)
-        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
     }
     .sheet(item: $nameTarget) { target in
       nameEditor(target)
-        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
     }
     .sheet(item: $reviewTarget) { target in
       NotebookConflictReview(controller: target.controller, review: target.review)
-        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
     }
     .sheet(isPresented: $showingSettings) {
       settingsSheet
-        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
     }
     .sheet(isPresented: $showingAddToToday) {
       AddToTodaySheet()
-        .personalAccent(savedHex: notebook.account?.preferences.accentColor)
     }
   }
 
