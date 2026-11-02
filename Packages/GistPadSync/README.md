@@ -83,15 +83,15 @@ Drafts remain account-isolated across sign-out. The account service does not del
 
 After an acknowledged remote rename, `updateDraftMetadata(id:accountID:expectedFilename:filename:description:)` retargets the same draft without changing source, generation, baseline or state. Filename collisions, stale metadata and unresolved publication attempts are explicit errors. Serialize remote metadata mutations with publication and flush the active session first. This operation does not rename anything on GitHub.
 
-After the user confirms deletion and GitHub acknowledges it, `removeDraftsForDeletedGist(gistID:accountID:)` permanently removes every draft for that account/gist, including unsynced text, publication attempts, image-upload bytes and command receipts. It also removes the gist and its content from the durable library cache. Other accounts and gists remain unchanged. No copy of the deleted text is retained after this explicit deletion.
+After the user confirms deletion and GitHub acknowledges it, `removeDraftsForDeletedGist(gistID:accountID:)` permanently removes every draft for that account/gist, including unsynced text, publication attempts and command receipts. It also removes the gist and its content from the durable library cache. Other accounts and gists remain unchanged. No copy of the deleted text is retained after this explicit deletion.
 
-`discardLocalCopy` removes one explicitly confirmed local draft, either a recovery draft or a never-published draft (no gist ID and no attempted publication), together with its linked history, images and command receipts, without a GitHub mutation. Its generation/account checks reject stale confirmations. A draft whose creation was attempted (`attemptedGeneration` set) throws `ambiguousCreation`; once it is `.failed(.creationUncertain)`, resolve it with `discardUncertainCreation` or `confirmNewCreation`. The `onlyIfClean` form additionally requires byte-identical text/base, no unresolved publication attempt and no uninserted image. The host uses it only after a successful full list and an authoritative gist 404. Draft edit timestamps change only with actual local text or metadata edits, not reads, publishing or refreshes. The optional stored timestamp migrates existing drafts without fabricating a historical date.
+`discardLocalCopy` removes one explicitly confirmed local draft, either a recovery draft or a never-published draft (no gist ID and no attempted publication), together with its linked history and command receipts, without a GitHub mutation. Its generation/account checks reject stale confirmations. A draft whose creation was attempted (`attemptedGeneration` set) throws `ambiguousCreation`; once it is `.failed(.creationUncertain)`, resolve it with `discardUncertainCreation` or `confirmNewCreation`. The `onlyIfClean` form additionally requires byte-identical text/base and no unresolved publication attempt. The host uses it only after a successful full list and an authoritative gist 404. Draft edit timestamps change only with actual local text or metadata edits, not reads, publishing or refreshes. The optional stored timestamp migrates existing drafts without fabricating a historical date.
 
 An acknowledged publication updates the cached owned gist, details and file content in the same store commit as its draft baseline. This makes newly created gists immediately available to Library actions even when a subsequent metadata GET is offline.
 
 The app adopts that acknowledged metadata without another GET. A confirmed Library deletion waits for an in-flight publication on the same retained document before taking its destructive lock, including the brief handoff where the durable draft knows the new gist ID before the session does. Autosave and departure publication use the same path as an explicit Save.
 
-`discardBlankDraft(id:accountID:expectedGeneration:)` quietly removes an unbound, locally saved draft with an empty description and whitespace-only source. It also accepts an untouched, generation-zero default daily date heading with no remote-file baseline, including a new day bound to an existing daily gist. Typed daily content, custom templates and published files are not blank. Neither case may have publication attempts or photo records. The store rechecks the generation and commits only the local draft deletion before returning `true`. The host must finish pending local edits and exclude its current note before requesting cleanup. It must not automatically publish a discardable blank.
+`discardBlankDraft(id:accountID:expectedGeneration:)` quietly removes an unbound, locally saved draft with an empty description and whitespace-only source. It also accepts an untouched, generation-zero default daily date heading with no remote-file baseline, including a new day bound to an existing daily gist. Typed daily content, custom templates and published files are not blank. Neither case may have publication attempts. The store rechecks the generation and commits only the local draft deletion before returning `true`. The host must finish pending local edits and exclude its current note before requesting cleanup. It must not automatically publish a discardable blank.
 
 ## Validation
 
@@ -130,36 +130,20 @@ Retained drafts whose gist has disappeared from the cache remain searchable by b
 
 `SharedStoreLocation` resolves the entitled App Group container that the widget snapshot uses. Canonical drafts stay in the app's private store, and the app is the only SwiftData writer. Widgets and Shortcuts run their edits in the main app through iOS 27's intent execution target.
 
-## Photos and durable image uploads
+## Photos
 
 ```swift
 let png = try PhotoImage.pngData(from: pickedData)
-let pending = try await store.enqueueImage(
-    pngData: png, draftID: draft.id, accountID: account.id,
-    expectedGeneration: draft.generation, insertionLocation: selectedUTF16Offset
-)
 let storage = try await accounts.imageStorageClient(accountID: account.id)
-let images = ImageUploadCoordinator(accountID: account.id, store: store, storage: storage)
-let uploaded = try await images.upload(id: pending.id)
-let proposal = try await store.imageInsertion(id: uploaded.id, accountID: account.id)
+let url = try await storage.upload(png, gistID: gistID)
+let markdown = ImageStorageClient.markdown(url) // ![Image](url)
 ```
 
-Use PhotosPicker in the app and load its transferable image data without requesting broad library access. Normalize off the main actor. `PhotoImage` converts the first image to upright PNG without carrying location/EXIF metadata. It explicitly rejects invalid images, inputs/outputs over 50 MB and decoded images over 100 megapixels. These are native safety limits, not claims about the server's configured bucket limit.
+Use PhotosPicker in the app and load its transferable image data without requesting broad library access. Normalize off the main actor. `PhotoImage` converts the first image to upright PNG without carrying location/EXIF metadata. It rejects invalid images, inputs/outputs over 50 MB and decoded images over 100 megapixels. These are native safety limits, not claims about the server's configured bucket limit.
+
 
 The upload contract matches the web: `POST /storage/v1/object/assets/{gistId}/{lowercase-uuid}.png`, the project `apikey`, a Bearer Supabase access token (never the GitHub provider token), `Content-Type: image/png`, and `Cache-Control: max-age=3600`. There is no upsert. The public URL is `/storage/v1/object/public/assets/{gistId}/{uuid}.png`. The low-level client supports the web's publishable-key fallback. Native account-bound clients instead reject signed-out/wrong-account use and refresh the Supabase session when needed.
 
 The app must offer insertion only for an editable, current-account document. The storage service does not determine GitHub ownership from an asset path. Storage conflict/error semantics follow [Supabase's current error codes](https://supabase.com/docs/guides/storage/debugging/error-codes).
 
-**Assets are public even when the gist is secret.** Explain that before the first upload. No test uploads to the live bucket. The native Photos action, its permission/privacy presentation and its undo/session integration remain app-owned.
-
-Enqueue commits PNG bytes and the original insertion generation/location to the same local SwiftData store as drafts before returning. A captured older generation is accepted so typing during Photos loading does not discard the chosen image, but its stale anchor cannot auto-insert. Future generations are rejected. On iOS, persistent store directories and existing SQLite/journal files request complete file protection. No background or locked-device transfer is promised. Pending images count as unsynced work and prevent deletion of an otherwise clean draft.
-
-`ImageUploadCoordinator` coalesces concurrent requests for one image. A stable UUID/path survives offline errors and relaunch. Interrupted requests reopen as uncertain. A retry first checks that exact public path with no credentials, comparing both byte count and SHA-256. The same verification follows successful POST and duplicate responses. A missing or mismatched asset never exposes a ready URL or inserts Markdown. Retry-After is durable and honored. Failures persist and throw, rather than dropping the image.
-
-Call `resumePending()` after account restoration, explicit foreground recovery or a connectivity change. It returns an explicit Result for each attempted transfer. Waiting unpublished notes remain visible without an HTTP request until their gist ID is acknowledged. Reconnect, permanent failure, queued, uploading, offline, uncertain, uploaded and inserted states are inspectable with `imageUploads(accountID:)`. Cancel active transfers on account change with `cancelUploads()`. This is foreground resumption, not an iOS background-transfer entitlement.
-
-Pending placeholders stay out of canonical Markdown and Undo, as on the web. A verified upload proposes exactly `![Image](URL)`, or `<img src="URL" />` for explicit HTML format. If the document generation changed, the original proposal is rejected. Let the user select a current insertion point and request `imageInsertion(id:accountID:expectedGeneration:insertionLocation:)` instead of guessing where to insert.
-
-Flush accepted session edits and wait for composition/Writing Tools to end before applying a proposal. `applyImageInsertion(id:accountID:command:)` commits the source edit, deduplication receipt and inserted state together. Reflect that exact edit in the active session as one undoable edit at the same generation, or reload an inactive session. Do not independently insert the text twice. An interrupted acknowledgement can safely replay the same command. Image insertion only saves locally. Ordinary autosave-off publication rules still apply.
-
-`discardImageUpload(id:accountID:)` removes local queued bytes/state only after the app's explicit discard action. It cannot cancel an in-flight transfer or delete a remote asset. After an inserted upload, discarding its local cache does not remove the note's Markdown. A public orphan from a canceled insertion is possible and is never silently deleted from the user's storage.
+**Assets are public even when the gist is secret.** Explain that before the first upload. No test uploads to the live bucket. Like the web, there is no local upload queue. The app uploads once, inserts the Markdown at the cursor as an ordinary undoable edit, and offers Try Again when an upload fails.

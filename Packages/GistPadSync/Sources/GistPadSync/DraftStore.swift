@@ -143,17 +143,12 @@ public actor DraftStore {
                 draft.stateData = try JSONEncoder().encode(PublishState.savedLocally)
             }
         }
-        for image in try context.fetch(FetchDescriptor<StoredImageUpload>()) {
-            if try JSONDecoder().decode(ImageUploadState.self, from: image.stateData) == .uploading {
-                image.stateData = try JSONEncoder().encode(ImageUploadState.uncertain)
-            }
-        }
         try context.save()
     }
 
     public static func open(url: URL? = nil, inMemory: Bool = false) throws -> DraftStore {
         let schema = Schema([
-            StoredDraft.self, StoredLibrary.self, StoredCommandReceipt.self, StoredImageUpload.self
+            StoredDraft.self, StoredLibrary.self, StoredCommandReceipt.self
         ])
         let configuration: ModelConfiguration
         if let url {
@@ -216,10 +211,6 @@ public actor DraftStore {
         guard draft.generation == expectedGeneration, try snapshot(draft).isDiscardableBlank else {
             return false
         }
-        let hasImage = try modelContext.fetchCount(FetchDescriptor<StoredImageUpload>(
-            predicate: #Predicate { $0.accountID == accountID && $0.draftID == id }
-        )) > 0
-        guard !hasImage else { return false }
         modelContext.delete(draft)
         try commit()
         return true
@@ -288,9 +279,6 @@ public actor DraftStore {
 
     func delete(_ drafts: [StoredDraft]) throws {
         let ids = Set(drafts.map(\.id))
-        for image in try modelContext.fetch(FetchDescriptor<StoredImageUpload>()) where ids.contains(image.draftID) {
-            modelContext.delete(image)
-        }
         for receipt in try modelContext.fetch(FetchDescriptor<StoredCommandReceipt>())
         where ids.contains(try JSONDecoder().decode(SharedDraftCommand.self, from: receipt.payload).draftID) {
             modelContext.delete(receipt)

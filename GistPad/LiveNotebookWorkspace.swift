@@ -267,14 +267,12 @@ struct LiveNotebookWorkspace: View {
       comments.reset()
       archiveUndo = nil
       intelligence.target = nil
-      let inactivePhotos = photoControllers.values.filter { $0.accountID != accountID }
       if accountID == nil {
         sessions.removeAll()
         photoControllers.removeAll()
         activeID = nil
         showingSettings = false
       }
-      Task { for photos in inactivePhotos { await photos.stop() } }
     }
     .onChange(of: notebook.isSigningIn) { _, signingIn in
       if signingIn {
@@ -427,9 +425,6 @@ struct LiveNotebookWorkspace: View {
         },
         switchAccount: {
           try await finishAccountPersistence(account.id)
-          for photos in photoControllers.values where photos.accountID == account.id {
-            await photos.stop()
-          }
           activeID = nil
           columnVisibility = .all
           await notebook.acceptPendingAccount()
@@ -512,7 +507,7 @@ struct LiveNotebookWorkspace: View {
   ) -> some View {
     Group {
       if let photos = photoControllers[controller.draft.id.uuidString] {
-        NotebookPhotoHost(controller: photos) {
+        NotebookPhotoHost(photos: photos) {
           noteScreen(controller, photos: photos, availableWidth: availableWidth)
         }
       } else {
@@ -566,26 +561,20 @@ struct LiveNotebookWorkspace: View {
       isSidebarHidden: columnVisibility == .detailOnly,
       areCommentsPresented: comments.isPresented && comments.matches(controller.document)
     ) {
-      NotebookPhotoSurface(controller: photos, isSource: true) {
-        MarkdownEditorView(
-          session: controller.session,
-          insertPhoto: { comments.performAfterClosing { photos.choosePhoto() } },
-          canInsertPhoto: photos.canChoosePhoto,
-          intelligence: { comments.performAfterClosing { presentIntelligence(controller) } },
-          comments: commentConfiguration(controller),
-          onOpenCommentThreads: commentOpener(controller, origin: .source),
-          onLinkedCommentIDsChange: { ids in
-            guard comments.sessionID == controller.session.viewIdentity else { return }
-            comments.sourceLinkedIDs = ids
-          },
-          onAddComment: commentComposer(controller, origin: .source))
-      }
+      MarkdownEditorView(
+        session: controller.session,
+        insertPhoto: { comments.performAfterClosing { photos.choosePhoto() } },
+        canInsertPhoto: photos.canChoosePhoto,
+        intelligence: { comments.performAfterClosing { presentIntelligence(controller) } },
+        comments: commentConfiguration(controller),
+        onOpenCommentThreads: commentOpener(controller, origin: .source),
+        onLinkedCommentIDsChange: { ids in
+          guard comments.sessionID == controller.session.viewIdentity else { return }
+          comments.sourceLinkedIDs = ids
+        },
+        onAddComment: commentComposer(controller, origin: .source))
     } preview: {
-      NotebookPhotoSurface(
-        controller: photos, isSource: false, showsAttachments: mode.wrappedValue != .split
-      ) {
-        preview(controller)
-      }
+      preview(controller)
     }
     .toolbar {
       if (notebook.writeAttentionStatus ?? controller.remoteInspectionStatus) != .idle
@@ -1083,7 +1072,7 @@ struct LiveNotebookWorkspace: View {
       let id = controller.draft.id.uuidString
       sessions[id] = nil
       if activeID == id { activeID = nil }
-      if let photos = photoControllers.removeValue(forKey: id) { await photos.stop() }
+      photoControllers[id] = nil
     }
   }
 
@@ -1265,7 +1254,6 @@ struct LiveNotebookWorkspace: View {
         let keys = sessions.filter { $0.value.draft.accountID == accountID }.map(\.key)
         for key in keys {
           sessions[key] = nil
-          await photoControllers[key]?.stop()
           photoControllers[key] = nil
         }
         activeID = nil
@@ -1287,7 +1275,7 @@ struct LiveNotebookWorkspace: View {
       case .deleted(let gistID):
         try await discardDeletedGistSessions(gistID: gistID, accountID: accountID)
       case .deletedFile(let gistID, let filename, let gist):
-        await closeSessions {
+        closeSessions {
           $0.draft.accountID == accountID && $0.draft.gistID == gistID
             && $0.draft.filename == filename
         }
@@ -1299,7 +1287,6 @@ struct LiveNotebookWorkspace: View {
         break
       case .discardedDraft(let id):
         sessions[id.uuidString] = nil
-        await photoControllers[id.uuidString]?.stop()
         photoControllers[id.uuidString] = nil
         if activeID == id.uuidString { activeID = nil }
       }
@@ -1311,7 +1298,7 @@ struct LiveNotebookWorkspace: View {
       if let failure = error as? NotebookActionError,
         case .remoteDeletedFileCleanupFailed(let gistID, let filename) = failure
       {
-        await closeSessions {
+        closeSessions {
           $0.draft.accountID == accountID && $0.draft.gistID == gistID
             && $0.draft.filename == filename
         }
@@ -1322,11 +1309,10 @@ struct LiveNotebookWorkspace: View {
     }
   }
 
-  private func closeSessions(where matches: (NotebookSessionController) -> Bool) async {
+  private func closeSessions(where matches: (NotebookSessionController) -> Bool) {
     let keys = sessions.filter { matches($0.value) }.map(\.key)
     for key in keys {
       sessions[key] = nil
-      await photoControllers[key]?.stop()
       photoControllers[key] = nil
       if activeID == key {
         activeID = nil
@@ -1336,7 +1322,7 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func discardDeletedGistSessions(gistID: String, accountID: UUID) async throws {
-    await closeSessions {
+    closeSessions {
       $0.draft.accountID == accountID && $0.draft.gistID == gistID
     }
     if archiveUndo?.gistID == gistID { archiveUndo = nil }
@@ -1354,14 +1340,9 @@ struct LiveNotebookWorkspace: View {
     let key = controller.draft.id.uuidString
     let accountID = controller.draft.accountID
     guard photoControllers[key] == nil else { return }
-    photoControllers[key] = NotebookPhotoController(
-      session: controller, notebook: notebook,
-      isCurrent: { [weak activity, weak notebook] in
-        activity?.activeID == key && notebook?.account?.id == accountID
-      },
-      reconnect: { [weak notebook] in
-        await notebook?.signIn()
-      })
+    photoControllers[key] = NotebookPhotoController(note: controller) { [notebook] png, gistID in
+      try await notebook.uploadPhoto(png, gistID: gistID, accountID: accountID)
+    }
   }
 
   private func createNote() {

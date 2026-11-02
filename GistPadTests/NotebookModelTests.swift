@@ -2884,7 +2884,7 @@ private actor NotebookCommentStoreFake: CommentConversationStore {
   }
 }
 
-private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, NotebookCommentProviding {
+private actor StubNotebookProvider: NotebookProviding, NotebookCommentProviding {
   private(set) var account: Account
   var signInAccount: Account
   var notes: [Gist]
@@ -2946,16 +2946,6 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
     cachedAccountReads += 1
     if isSigningOut { throw AccountError.signInInProgress }
     return isSignedOut ? nil : account
-  }
-  func photoServices(accountID: UUID) throws -> NotebookPhotoServices {
-    guard accountID == account.id else { throw AccountError.accountChanged }
-    let store = try draftStore()
-    let storage = try ImageStorageClient(publishableKey: "sb_publishable_fixture") {
-      throw URLError(.userAuthenticationRequired)
-    }
-    return NotebookPhotoServices(
-      store: store,
-      uploads: ImageUploadCoordinator(accountID: accountID, store: store, storage: storage))
   }
   func commentServices(accountID: UUID) throws -> NotebookCommentServices {
     guard accountID == account.id, !isSignedOut, !isSigningOut else {

@@ -8,7 +8,6 @@ import Observation
 enum NotebookEditError: Error {
   case localPersistenceFailed
   case invalidCommittedEdit
-  case photoServicesUnavailable
 }
 
 @MainActor

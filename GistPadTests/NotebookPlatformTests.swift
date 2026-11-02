@@ -64,6 +64,43 @@ struct NotebookPlatformTests {
     #expect(NotebookRouteInbox.shared.pending?.id == previousRoute)
     #expect(await fixture.provider.publishCount == 0)
   }
+
+  @Test func aPickedPhotoUploadsThenInsertsItsMarkdownAtTheCursorAsOneUndo() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    let controller = try await fixture.controller()
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = UIWindow(windowScene: scene)
+    window.rootViewController = UIHostingController(
+      rootView: MarkdownEditorView(session: controller.session))
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    try await Task.sleep(for: .milliseconds(100))
+    let original = controller.session.text
+    let url = try #require(URL(string: "https://example.com/assets/daily123/photo.png"))
+    var uploadedGistIDs: [String] = []
+    let photos = NotebookPhotoController(
+      note: controller, defaults: try #require(UserDefaults(suiteName: UUID().uuidString))
+    ) { _, gistID in
+      uploadedGistIDs.append(gistID)
+      return url
+    }
+    photos.choosePhoto()
+    #expect(photos.isShowingNotice && !photos.isShowingPicker)
+    photos.acceptNotice()
+    photos.noticeDidDismiss()
+    #expect(photos.isShowingPicker)
+    controller.session.textView.selectedRange = NSRange(location: (original as NSString).length, length: 0)
+    await photos.add(png: Data("png".utf8))
+    #expect(photos.failure == nil && !photos.isUploading)
+    #expect(uploadedGistIDs == ["daily123"])
+    #expect(controller.session.text == original + "![Image](\(url.absoluteString))")
+    controller.session.textView.undoManager?.undo()
+    #expect(controller.session.text == original)
+    #expect(await controller.waitForLocalSave())
+    #expect(await fixture.provider.publishCount == 0)
+  }
 }
 
 @MainActor

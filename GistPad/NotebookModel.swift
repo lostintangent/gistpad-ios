@@ -47,6 +47,7 @@ protocol NotebookProviding: Sendable {
   func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool
   func today(accountID: UUID, target: DailyNoteTarget) async throws -> TodayNote
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult
+  func uploadPhoto(_ png: Data, gistID: String, accountID: UUID) async throws -> URL
 }
 
 extension NotebookProviding {
@@ -56,6 +57,10 @@ extension NotebookProviding {
 
   func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
     try await cacheLibrary(owned: owned, starred: starred, account: account, keeping: [])
+  }
+
+  func uploadPhoto(_ png: Data, gistID: String, accountID: UUID) async throws -> URL {
+    throw CocoaError(.featureUnsupported)
   }
 }
 
@@ -1353,12 +1358,9 @@ final class NotebookModel {
     return true
   }
 
-  func photoServices(accountID: UUID) async throws -> NotebookPhotoServices {
+  func uploadPhoto(_ png: Data, gistID: String, accountID: UUID) async throws -> URL {
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
-    guard let provider = provider as? any NotebookPhotoProviding else {
-      throw NotebookEditError.photoServicesUnavailable
-    }
-    return try await provider.photoServices(accountID: accountID)
+    return try await provider.uploadPhoto(png, gistID: gistID, accountID: accountID)
   }
 
   func commentServices(accountID: UUID) async throws -> NotebookCommentServices {
@@ -2059,8 +2061,6 @@ final class NotebookModel {
           localized:
             "The accepted edit couldn't be matched to this editor. Keep it open to recover both versions."
         )
-      case .photoServicesUnavailable:
-        String(localized: "Photo uploading isn't available in this notebook.")
       }
     }
     if let error = error as? NotebookActionError {
