@@ -13,6 +13,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
     private let allowsSplit: Bool
     private let areCommentsPresented: Bool
     @State private var confirmingDeletion = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     // Match the native toolbar's settled segment size on its first layout.
     @ScaledMetric(relativeTo: .body) private var minimumModeSegmentWidth = 48
 
@@ -166,7 +167,13 @@ public struct GistScreen<Source: View, Preview: View>: View {
                         )
                     }
                     if let url = gist.shareURL {
-                        ShareLink(item: url, preview: SharePreview(gist.title))
+                        // The share sheet can't present over the Comments sheet on iPhone.
+                        if !(areCommentsPresented && horizontalSizeClass == .compact) {
+                            ShareLink(
+                                item: url,
+                                preview: SharePreview(gist.title, icon: Image("Artwork", bundle: .module))
+                            )
+                        }
                         Button(String(localized: "Copy Link", bundle: .module), systemImage: "link") {
                             UIPasteboard.general.url = url
                             AccessibilityNotification.Announcement(
