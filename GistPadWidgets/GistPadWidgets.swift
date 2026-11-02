@@ -39,10 +39,15 @@ struct LauncherProvider: TimelineProvider {
   func getTimeline(in context: Context, completion: @escaping (Timeline<LauncherEntry>) -> Void) {
     let current = entry()
     let calendar = Calendar.current
-    let midnight = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: current.date))
-      ?? current.date.addingTimeInterval(3600)
-    let retry = current.state == .unavailable ? current.date.addingTimeInterval(900) : midnight
-    completion(Timeline(entries: [current], policy: .after(min(midnight, retry))))
+    guard current.state != .unavailable,
+      let midnight = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: current.date))
+    else {
+      completion(Timeline(entries: [current], policy: .after(current.date.addingTimeInterval(900))))
+      return
+    }
+    // An entry appears right at its date, but a reload waits on the system, so tomorrow is drawn ahead.
+    let tomorrow = LauncherEntry(date: midnight, snapshot: current.snapshot, state: current.state)
+    completion(Timeline(entries: [current, tomorrow], policy: .atEnd))
   }
 
   private func entry() -> LauncherEntry {
