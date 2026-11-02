@@ -50,6 +50,9 @@ for name, prompt, expected in [
     ("text", "rename the Housework heading to Chores", "daily-text.md"),
     ("mixed", "mark Read a chapter complete and rename the Housework heading to Chores",
      "daily-mixed.md"),
+    ("rename-task", "change Make coffee to Make tea", "daily-rename-task.md"),
+    ("mixed-add", "add Water the plants to Housework and rename that heading to Home",
+     "daily-mixed-add.md"),
 ]:
     cases.append(
         dict(
