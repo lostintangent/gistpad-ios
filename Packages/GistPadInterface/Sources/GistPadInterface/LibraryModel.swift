@@ -127,7 +127,6 @@ public final class LibraryModel {
     public var selectedTagIDs: Set<String> = []
     public var selectedNoteID: String?
     public var today: DailyNote
-    public var searchState: LibrarySearchState = .inactive
 
     public init(
         snapshot: LibrarySnapshot? = nil, loadState: LibraryLoadState = .loading,
@@ -143,18 +142,12 @@ public final class LibraryModel {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedTagIDs.isEmpty
     }
 
+    /// Like the web, a filter matches titles and tags, and the open note stays listed.
     public var matchingNotes: [LibraryNote] {
-        switch searchState {
-        case .results(let notes): return notes
-        case .searching, .failed: return []
-        case .inactive: break
-        }
-        let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return snapshot.notes.filter { note in
-            let isIncluded = hasFilters
-                ? Self.primaryCollection(for: note) != nil : Self.includes(note, in: .gists)
-            return isIncluded && selectedTagIDs.isSubset(of: note.tagIDs)
-                && (search.isEmpty || note.title.localizedStandardContains(search))
+        snapshot.notes.filter { note in
+            hasFilters
+                ? Self.primaryCollection(for: note) != nil && (note.id == selectedNoteID || matchesFilter(note))
+                : Self.includes(note, in: .gists)
         }.sorted {
             if $0.updatedAt != $1.updatedAt {
                 return ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast)
@@ -219,12 +212,16 @@ public final class LibraryModel {
         }
     }
 
+    /// Gists the filter matches. The open note is listed without counting as a match.
     public var resultGistCount: Int? {
-        switch searchState {
-        case .results(let notes): Self.gistCount(in: notes)
-        case .inactive: hasFilters && hasKnownGistSnapshot ? Self.gistCount(in: matchingNotes) : nil
-        case .searching, .failed: nil
-        }
+        guard hasFilters, hasKnownGistSnapshot else { return nil }
+        return Self.gistCount(in: matchingNotes.filter(matchesFilter))
+    }
+
+    private func matchesFilter(_ note: LibraryNote) -> Bool {
+        let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return selectedTagIDs.isSubset(of: note.tagIDs)
+            && (search.isEmpty || note.title.localizedStandardContains(search))
     }
 
     /// Gists carrying the tag, counted over the same notes a tag filter searches.

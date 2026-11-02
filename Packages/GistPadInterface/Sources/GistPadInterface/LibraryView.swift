@@ -170,13 +170,12 @@ public struct LibraryView: View {
                 if !model.selectedTagIDs.isEmpty {
                     searchScope
                 }
-                searchStatus
                 if !pinnedNotes.isEmpty {
                     pinnedSection(now: context.date)
                 }
                 ForEach(dateSections(now: context.date)) { dateSection($0, now: context.date) }
                 ForEach(displayedCollections) { collectionSection($0, now: context.date) }
-                if !hasVisibleNotes && canShowEmptyState {
+                if !hasVisibleNotes && model.loadState != .loading {
                     emptyState
                 }
             }
@@ -381,31 +380,6 @@ public struct LibraryView: View {
                 .accessibilityIdentifier("library-filter-clear")
             }
             .padding(.vertical, 4)
-        }
-    }
-
-    private var canShowEmptyState: Bool {
-        guard model.loadState != .loading else { return false }
-        return switch model.searchState {
-        case .inactive, .results: true
-        case .searching, .failed: false
-        }
-    }
-
-    @ViewBuilder
-    private var searchStatus: some View {
-        switch model.searchState {
-        case .inactive, .results:
-            EmptyView()
-        case .searching:
-            Section {
-                ProgressView()
-            }
-        case .failed(let message):
-            Section {
-                Label(String(localized: "Search needs attention", bundle: .module), systemImage: "exclamationmark.circle")
-                Text(verbatim: message)
-            }
         }
     }
 

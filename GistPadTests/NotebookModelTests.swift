@@ -386,10 +386,6 @@ struct NotebookModelTests {
     #expect(target.localDraft?.id == draft.id)
     await model.refresh()
     #expect(model.library.snapshot.notes.first { $0.id == row.id }?.updatedAt == row.updatedAt)
-    model.library.query = "unpublished"
-    await model.search()
-    #expect(model.library.matchingNotes.first?.updatedAt == row.updatedAt)
-    #expect(model.library.matchingNotes.first?.isRecovery == true)
     await model.openLocalDraft(id: draft.id)
     #expect(model.loadedDocument?.isRecovery == true)
     _ = try await model.perform(target.action)
@@ -479,10 +475,6 @@ struct NotebookModelTests {
     #expect(model.loadedDocument?.gist?.id == gistID)
     #expect(model.library.selectedNoteID == gistID)
     #expect(await provider.readIDs.isEmpty)
-    model.library.query = "new published"
-    await model.search()
-    let searchRow = try #require(model.library.matchingNotes.first)
-    #expect(model.libraryDeletionTarget(for: searchRow.id)?.id == gistID)
   }
 
   @Test func deletedGistCommentControllersCannotReopenOrRecreateTheirDrafts() async throws {
@@ -548,9 +540,7 @@ struct NotebookModelTests {
   }
 
   @Test func commentTotalsUpdateEveryGistProjectionWithoutChangingTheDocument() async throws {
-    let gist = try makeGist(
-      id: "a", title: "A conversation", content: "Find this passage",
-      additionalFiles: ["Other.md": "Find another passage"]).withCommentCount(2)
+    let gist = try makeGist(id: "a", title: "A conversation").withCommentCount(2)
     let other = try makeGist(id: "b", title: "Another note").withCommentCount(3)
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [gist, other], starred: [gist])
     let model = NotebookModel(provider: provider)
@@ -566,13 +556,6 @@ struct NotebookModelTests {
     #expect(model.loadedDocument?.text == document.text)
     #expect(model.loadedDocument?.gist?.commentCount == 7)
     #expect(model.loadedDocument?.chrome.commentCount == 7)
-    model.library.query = "Find"
-    await model.search()
-    #expect(model.library.matchingNotes.count == 2)
-    #expect(model.library.matchingNotes.allSatisfy { $0.commentCount == 7 })
-    model.recordCommentCount(accountID: fixtureAccount.id, gistID: gist.id, total: 8)
-    #expect(model.library.matchingNotes.allSatisfy { $0.commentCount == 8 })
-    #expect(model.cachedLibrary?.gists.first(where: { $0.id == gist.id })?.commentCount == 8)
   }
 
   @Test func staleAccountCommentTotalsCannotChangeTheCurrentNotebook() async throws {
@@ -605,20 +588,6 @@ struct NotebookModelTests {
     for id in ["missing", "unknown", "shared"] {
       #expect(model.libraryDeletionTarget(for: id) == nil)
     }
-    model.library.query = "Find"
-    await model.search()
-    for note in model.library.matchingNotes {
-      if model.searchTargets[note.id]?.gistID == owned.id {
-        #expect(model.libraryDeletionTarget(for: note.id)?.id == owned.id)
-        #expect(model.libraryDeletionTarget(for: note.id)?.title == owned.displayName)
-      } else if note.isRecovery {
-        #expect(model.libraryDeletionTarget(for: note.id)?.localDraft?.id == recovery.id)
-      } else if note.id == local.id.uuidString {
-        #expect(model.libraryDeletionTarget(for: note.id)?.localDraft?.id == local.id)
-      } else {
-        #expect(model.libraryDeletionTarget(for: note.id) == nil)
-      }
-    }
     #expect(await provider.deletedIDs.isEmpty)
     #expect(model.localDrafts.first(where: { $0.id == local.id })?.text == "Find my local draft")
     #expect(model.localDrafts.first(where: { $0.id == recovery.id })?.text == "Find my recovery")
@@ -642,7 +611,7 @@ struct NotebookModelTests {
     #expect(model.libraryDeletionTarget(for: "a") == nil)
   }
 
-  @Test func deletingAnEditedPublishedGistPurgesItsDraftHistoryAndSearchResult() async throws {
+  @Test func deletingAnEditedPublishedGistPurgesItsDraftHistory() async throws {
     let title = "A published and edited note"
     let provider = StubNotebookProvider(
       account: fixtureAccount, gists: [try makeGist(id: "a", title: title)])
@@ -653,31 +622,22 @@ struct NotebookModelTests {
     _ = try await model.persist(
       draftID: draft.id, accountID: draft.accountID, text: "An accepted edit", generation: 1)
     _ = try await model.publish(draftID: draft.id, accountID: draft.accountID)
-    model.library.query = "accepted edit"
-    await model.search()
-    #expect(model.library.matchingNotes.count == 1)
     _ = try await model.perform(.delete(gistID: "a"))
     #expect(await provider.deletedIDs == ["a"])
     #expect(model.library.mainGistCount == 0)
-    #expect(model.library.matchingNotes.isEmpty)
     #expect(model.localDrafts.count == 1)
     #expect(model.localDrafts.first?.isDiscardableBlank == true)
     #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.allSatisfy {
       $0.gistID != "a" && $0.isDiscardableBlank
     })
     await model.refresh()
-    await model.search()
-    #expect(model.library.matchingNotes.isEmpty)
     #expect(model.library.snapshot.notes.allSatisfy { $0.isDailyNote })
     #expect(model.isTodaySelected)
     #expect(model.loadedDocument?.opensForEditing == false)
     let restarted = NotebookModel(provider: provider)
     await restarted.start()
-    restarted.library.query = "accepted edit"
-    await restarted.search()
     #expect(restarted.localDrafts.count == 1)
     #expect(restarted.localDrafts.first?.isDiscardableBlank == true)
-    #expect(restarted.library.matchingNotes.isEmpty)
     #expect(restarted.library.snapshot.notes.allSatisfy { $0.isDailyNote })
     #expect(restarted.isTodaySelected)
   }
@@ -1310,26 +1270,24 @@ struct NotebookModelTests {
     let model = NotebookModel(provider: provider)
     await model.start()
     await model.open(gistID: "a")
-    model.library.query = "Requested"
-    await model.search()
     await provider.setReadFailure(id: "b", fails: true)
-    await model.open(gistID: "b", filename: "Other.md", rowID: "search-result")
+    await model.open(gistID: "b", filename: "Other.md", rowID: "b")
     #expect(model.loadedDocument?.gist?.id == "a")
     #expect(model.presentedDocument == nil)
     #expect(model.failedOpen?.gistID == "b")
     #expect(model.failedOpen?.filename == "Other.md")
     #expect(model.failedOpen?.title == "Requested")
-    #expect(model.library.selectedNoteID == "search-result")
+    #expect(model.library.selectedNoteID == "b")
     #expect(model.documentError == nil)
     #expect(!model.isOpeningDocument)
     await provider.setReadFailure(id: "b", fails: false)
     await model.retryFailedOpen()
     #expect(model.failedOpen == nil)
     #expect(model.presentedDocument?.text == "Exact selected file")
-    #expect(model.presentedDocument?.rowID == "search-result")
+    #expect(model.presentedDocument?.rowID == "b")
   }
 
-  @Test func creationPresentsDurableContentBeforeAnyLocalReloadOrSearch() async throws {
+  @Test func creationPresentsDurableContentBeforeAnyLocalReload() async throws {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let model = NotebookModel(provider: provider)
     await model.start()
@@ -1496,29 +1454,27 @@ struct NotebookModelTests {
     #expect(await provider.readIDs.isEmpty)
   }
 
-  @Test func searchFindsCachedBodyTextAndNamedTagsWithoutTitleRefiltering() async throws {
+  @Test func theLibraryFilterMatchesTitlesAndEveryTagAndKeepsTheOpenNoteLikeTheWeb() async throws {
     let provider = StubNotebookProvider(
       account: fixtureAccount,
       gists: [
-        try makeGist(id: "a", title: "Ordinary title", content: "A needle phrase in the body."),
-        try makeGist(id: "b", title: "Needle phrase", content: "An untagged note."),
+        try makeGist(id: "a", title: "A tagged needle"),
+        try makeGist(id: "b", title: "An untagged needle"),
+        try makeGist(id: "c", title: "Ordinary title", content: "A needle in the body."),
       ])
+    await provider.failToday(true)
     let model = NotebookModel(provider: provider)
     await model.start()
-    model.library.query = "\"needle phrase\" tag:Ideas"
-    await model.search()
+    model.library.query = "NEEDLE"
+    #expect(Set(model.library.matchingNotes.map(\.id)) == ["a", "b"])
+    model.library.selectedTagIDs = ["ideas"]
     #expect(model.library.matchingNotes.map(\.id) == ["a"])
-    model.library.query = "tag:Missing"
-    await model.search()
-    guard case .failed(let message) = model.library.searchState else {
-      Issue.record("An unknown tag must be an explicit search error.")
-      return
-    }
-    #expect(message.contains("Missing"))
-    #expect(model.library.matchingNotes.isEmpty)
+    await model.open(gistID: "c")
+    #expect(Set(model.library.matchingNotes.map(\.id)) == ["a", "c"])
+    #expect(model.library.resultGistCount == 1)
   }
 
-  @Test func dailySearchRowsOpenTheirExactFile() async throws {
+  @Test func aDailyRowShowsItsDayAndTaskProgress() async throws {
     let filename = GistConventions.todayFilename()
     let provider = StubNotebookProvider(
       account: fixtureAccount,
@@ -1549,8 +1505,6 @@ struct NotebookModelTests {
       ])
     let model = NotebookModel(provider: provider)
     await model.start()
-    #expect(!model.library.hasFilters)
-    #expect(model.searchTargets.isEmpty)
     let rowID = "daily/2026-01-02.md"
     #expect(model.gistID(forRow: rowID) == "daily")
     #expect(model.gistID(forRow: "daily/2026-01-03.md") == nil)
@@ -1562,55 +1516,17 @@ struct NotebookModelTests {
     #expect(model.library.snapshot.notes[index].isOverdue)
   }
 
-  @Test(arguments: [false, true])
-  func allSearchSpansTheLibraryWithoutFetchingOrChangingDailyMembership(cachedContent: Bool) async throws {
+  @Test func uncachedDaysClaimNoTaskProgressOrOverdue() async throws {
     let daily = try makeGist(
       id: "daily", title: GistConventions.dailyNotesDescription,
-      content: "A daily needle\n- [ ] One", filename: "2026-10-23.md",
-      additionalFiles: [
-        "2026-10-24.md": "Another daily needle\n- [x] One",
-        "template.md": "A template needle",
-        "README.md": "Not a day needle",
-        "2026-02-30.md": "Not a real day needle",
-      ])
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "Pinned needle", content: "Pinned needle"),
-        try makeGist(id: "archive", title: "Archived needle [Archived]", content: "Archived needle"),
-        daily,
-      ],
-      cachesContent: cachedContent,
-      starred: [try makeGist(id: "starred", title: "Starred needle", content: "Starred needle", owner: "other")])
+      content: "- [ ] One", filename: "2026-10-23.md")
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily], cachesContent: false)
     await provider.failToday(true)
     let model = NotebookModel(provider: provider)
     await model.start()
-    #expect(model.library.hasKnownGistSnapshot)
-    #expect(model.library.dailyNoteCount == 2)
-    #expect(Set(model.library.snapshot.notes.map(\.id)) == [
-      "a", "archive", "starred", "daily/2026-10-23.md", "daily/2026-10-24.md",
-    ])
-    #expect(model.library.snapshot.notes.first { $0.id == "starred" }?.isOwned == false)
-    if !cachedContent {
-      #expect(model.library.snapshot.notes.filter(\.isDailyNote).allSatisfy {
-        $0.progress == nil && !$0.isOverdue
-      })
-    }
-    let reads = await provider.readIDs
-    let todayRequests = await provider.todayTargets
-    model.library.query = "needle"
-    await model.search()
-    let ids = Set(model.library.matchingNotes.map(\.id))
-    #expect(ids == (cachedContent
-      ? ["a", "archive", "starred", "daily/2026-10-23.md", "daily/2026-10-24.md"]
-      : ["a", "archive", "starred"]))
-    #expect(model.library.matchingNotes.first?.id == "a")
-    model.library.query = "does not match anything"
-    await model.search()
-    #expect(model.library.matchingNotes.isEmpty)
-    #expect(model.library.dailyNoteCount == 2)
-    #expect(await provider.readIDs == reads)
-    #expect(await provider.todayTargets == todayRequests)
+    let row = try #require(model.library.snapshot.notes.first { $0.id == "daily/2026-10-23.md" })
+    #expect(row.progress == nil)
+    #expect(!row.isOverdue)
   }
 
   @Test func dailyProjectionUnionsActualDaysAndAccountScopedDraftsWithoutRevivingDeletedFiles() async throws {
@@ -1716,7 +1632,7 @@ struct NotebookModelTests {
     #expect(await provider.todayTargets.isEmpty)
   }
 
-  @Test func unfilteredDailyRowsOpenTheirExactFileAndKeepSelectionWhenSearchEnds() async throws {
+  @Test func dailyRowsOpenAndDeleteTheirExactFile() async throws {
     let daily = try makeGist(
       id: "daily", title: GistConventions.dailyNotesDescription,
       content: "The alpha day", filename: "2026-10-23.md",
@@ -1731,14 +1647,7 @@ struct NotebookModelTests {
     #expect(model.library.selectedNoteID == "daily/2026-10-24.md")
     await model.openRow(id: "daily/2026-10-23.md")
     #expect(model.loadedDocument?.text == "The alpha day")
-    model.library.query = "alpha"
-    await model.search()
-    #expect(model.library.matchingNotes.map(\.id) == ["daily/2026-10-23.md"])
-    await model.openRow(id: "daily/2026-10-23.md")
-    model.library.query = ""
-    await model.search()
     #expect(model.library.selectedNoteID == "daily/2026-10-23.md")
-    #expect(model.loadedDocument?.rowID == "daily/2026-10-23.md")
     await model.open(gistID: daily.id, filename: "2026-10-24.md")
     #expect(model.library.selectedNoteID == "daily/2026-10-24.md")
     var readOnly = try #require(model.loadedDocument)
@@ -1756,7 +1665,7 @@ struct NotebookModelTests {
     #expect(await provider.readIDs.isEmpty)
   }
 
-  @Test func aStarredDailyGistKeepsItsGistRowOutsideExactFileSearch() async throws {
+  @Test func aStarredDailyGistKeepsItsGistRow() async throws {
     let filename = GistConventions.todayFilename()
     let starred = try makeGist(
       id: "foreign-daily", title: GistConventions.dailyNotesDescription,
@@ -1770,15 +1679,6 @@ struct NotebookModelTests {
     await model.open(gistID: starred.id, filename: filename)
     #expect(model.library.selectedNoteID == starred.id)
     #expect(model.loadedDocument?.chrome.access == .readOnly)
-    model.library.query = "needle"
-    await model.search()
-    let rowID = "\(starred.id)/\(filename)"
-    #expect(model.library.matchingNotes.map(\.id) == [rowID])
-    await model.openRow(id: rowID)
-    #expect(model.library.selectedNoteID == rowID)
-    model.library.query = ""
-    await model.search()
-    #expect(model.library.selectedNoteID == starred.id)
     #expect(model.loadedDocument?.filename == filename)
     #expect(model.libraryDeletionTarget(for: starred.id) == nil)
     #expect(await provider.readIDs.isEmpty)

@@ -201,7 +201,6 @@ struct LiveNotebookWorkspace: View {
     .task(id: notebook.loadedDocument?.activationID) {
       if notebook.loadedDocument == nil { activeID = nil } else { await activateLoadedDocument() }
     }
-    .task(id: searchInput) { await notebook.search() }
     .task(id: routeReadiness) { await receivePendingRoute() }
     #if DEBUG
     .onChange(of: [activeID, routes.pending?.url.absoluteString], initial: true) { presentFixtureSheet() }
@@ -492,11 +491,6 @@ struct LiveNotebookWorkspace: View {
     return actions
   }
 
-  private var searchInput: SearchInput {
-    SearchInput(
-      query: notebook.library.query, tags: notebook.library.selectedTagIDs)
-  }
-
   private func note(
     _ controller: NotebookSessionController, availableWidth: CGFloat
   ) -> some View {
@@ -781,11 +775,6 @@ struct LiveNotebookWorkspace: View {
 
   private func afterCommentsClose(_ action: @escaping () -> Void) -> () -> Void {
     { comments.performAfterClosing(action) }
-  }
-
-  private struct SearchInput: Equatable {
-    let query: String
-    let tags: Set<String>
   }
 
   private struct CommentReadInput: Hashable {

@@ -40,7 +40,10 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("the Library") { app.element("library-note-shape").exists }
     app.search("weekend")
     let result = app.element("library-note-weekend")
-    try waitUntil("one match") { app.libraryRows.count == 1 && result.isHittable }
+    // The open note stays listed while filtering, so only other gists must leave.
+    try waitUntil("the match") {
+      result.isHittable && !app.element("library-note-shape").exists && !app.element("library-note-words").exists
+    }
     result.tap()
     try waitUntil("the matching gist") { app.noteShows("Farmers market") }
   }
@@ -56,13 +59,12 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("the Ideas gists") {
       app.element("library-filter-count").label == "2 gists" && !app.element("library-note-weekend").exists
     }
-    // Filtered results list each Markdown file, so shape's rows carry its filenames.
-    XCTAssertTrue(app.libraryRows.matching(NSPredicate(format: "identifier BEGINSWITH 'library-note-shape'")).firstMatch.exists)
+    XCTAssertTrue(app.element("library-note-shape").exists)
     XCTAssertTrue(app.element("library-note-words").exists)
 
     app.search("words")
     try waitUntil("search inside the tag filter") {
-      app.libraryRows.count == 1 && app.element("library-note-words").exists
+      app.element("library-note-words").exists && !app.element("library-note-shape").exists
     }
     app.searchFields.firstMatch.buttons["Clear text"].tap()
     try waitUntil("the tag filter without the query") {

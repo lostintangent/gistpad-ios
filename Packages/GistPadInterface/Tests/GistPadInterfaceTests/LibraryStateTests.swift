@@ -50,25 +50,11 @@ struct LibraryStateTests {
         }
     }
 
-    @Test func searchResultsKeepTheirOrderAndLandInOneSectionEach() {
-        let model = LibraryModel(snapshot: library, loadState: .ready)
-        let results = library.notes.reversed().map(\.self)
-        model.query = "words only in the body"
-        model.searchState = .results(notes: results)
-        #expect(model.matchingNotes == results)
-        #expect(model.matchingNotes(in: .gists).map(\.id) == ["mixed", "words", "weekend", "shape"])
-        #expect(model.matchingNotes(in: .starred).map(\.id) == ["starred"])
-        let grouped = LibraryCollection.allCases.flatMap { model.matchingNotes(in: $0) }
-        #expect(Set(grouped.map(\.id)) == Set(results.map(\.id)))
-        #expect(grouped.count == results.count)
-    }
-
     @Test func theDailyCountIgnoresFilters() {
         var snapshot = library
         snapshot.dailyNoteCount = 12
         let model = LibraryModel(snapshot: snapshot, loadState: .ready)
         model.query = "no matching day"
-        model.searchState = .results(notes: [])
         #expect(model.count(in: .dailyNotes) == 12)
     }
 
@@ -76,15 +62,14 @@ struct LibraryStateTests {
         let today = InterfaceFixtures.referenceDate
         let notes: [LibraryNote] = [
             .init(id: "today", title: "Today", updatedAt: .now, gistID: "daily", isDailyNote: true, dailyDate: today),
-            .init(id: "old", title: "Old", updatedAt: .now, gistID: "daily", isDailyNote: true,
+            .init(id: "old", title: "Two days ago", updatedAt: .now, gistID: "daily", isDailyNote: true,
                   isOverdue: true, dailyDate: today.addingTimeInterval(-172_800)),
             .init(id: "yesterday", title: "Yesterday", updatedAt: .distantPast, gistID: "daily", isDailyNote: true,
                   isOverdue: true, dailyDate: today.addingTimeInterval(-86_400))
         ]
         let model = LibraryModel(snapshot: .init(notes: notes, dailyNoteCount: 3))
         #expect(model.unfilteredNotes(in: .dailyNotes).map(\.id) == ["yesterday", "old", "today"])
-        model.query = "body match"
-        model.searchState = .results(notes: notes)
+        model.query = "day"
         #expect(model.matchingNotes(in: .dailyNotes).map(\.id) == ["yesterday", "old", "today"])
     }
 
@@ -99,12 +84,12 @@ struct LibraryStateTests {
         #expect(model.unfilteredNotes(in: .dailyNotes).map(\.id) == ["local-day"])
     }
 
-    @Test func theOpenGistStaysOpenWhenAFilterHidesItsRow() {
+    @Test func theOpenGistStaysListedWithoutCountingAsAMatch() {
         let model = LibraryModel(snapshot: library, loadState: .ready)
         model.selectedNoteID = "shape"
         model.selectedTagIDs = ["personal"]
-        #expect(!model.matchingNotes.contains { $0.id == "shape" })
-        #expect(model.selectedNoteID == "shape")
+        #expect(model.matchingNotes.map(\.id) == ["shape", "weekend", "mixed"])
+        #expect(model.resultGistCount == 2)
     }
 
     @Test func readOnlyGistsCantBeEdited() {
