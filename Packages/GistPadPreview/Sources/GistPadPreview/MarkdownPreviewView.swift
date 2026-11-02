@@ -45,6 +45,8 @@ public struct MarkdownPreviewView: View {
                 onAddComment: onAddComment, onEvent: onEvent
             )
             .ignoresSafeArea(.container, edges: .vertical)
+            // Resize in one step so WebKit's scroll anchoring keeps the reading passage.
+            .transaction { $0.animation = nil }
         }
         .overlay { PreviewViewport(view: viewportView).allowsHitTesting(false) }
     }
@@ -368,6 +370,22 @@ private final class InsetAwareWebView: WKWebView {
     var onBuildCommentMenu: (() -> UIDeferredMenuElement?)?
     private weak var viewportView: UIView?
     private var applyingInsets = false
+
+    override var frame: CGRect {
+        willSet {
+            guard newValue.width != frame.width, window != nil else { return }
+            // WebKit drops its scroll anchor when a reflow clamps the offset, so keep room
+            // below the page until the new width has been anchored.
+            evaluateJavaScript("""
+                {
+                  const room = document.body.appendChild(document.createElement("div"));
+                  room.style.cssText = `height: ${document.documentElement.scrollHeight}px; overflow-anchor: none`;
+                  addEventListener("resize", () => requestAnimationFrame(() =>
+                    requestAnimationFrame(() => room.remove())), { once: true });
+                }
+                """)
+        }
+    }
 
     override func buildMenu(with builder: any UIMenuBuilder) {
         super.buildMenu(with: builder)
