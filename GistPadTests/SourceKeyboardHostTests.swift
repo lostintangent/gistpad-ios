@@ -181,7 +181,16 @@ struct SourceKeyboardHostTests {
         }
     }
 
-    @Test("The formatting capsule centers over the note beside an open sidebar")
+    @Test(
+        "The formatting capsule centers over the note beside an open sidebar",
+        .enabled("A sidebar sits beside the note only in a regular-width window") {
+            await MainActor.run {
+                UIApplication.shared.connectedScenes.contains {
+                    ($0 as? UIWindowScene)?.traitCollection.horizontalSizeClass == .regular
+                }
+            }
+        }
+    )
     func capsuleCentersOverTheNote() async throws {
         let fixture = try await SourceKeyboardFixture(source: Self.source, size: "large", sidebarFraction: 1 / 3)
         defer { fixture.close() }
