@@ -2,6 +2,8 @@
 
 A native iPhone app for [GistPad](https://gistpad.dev), the notebook that keeps your notes, daily notes and prompts in GitHub Gists. It's the pocket companion to [gistpad.dev](https://gistpad.dev) and the [GistPad extension](https://aka.ms/gistpad) for VS Code, and it's made for the iPhone Duo, so unfolding it puts your library beside the note. Sign in with GitHub and the same gists, daily notes, tags and pins are on your phone, woven into widgets, Siri, Spotlight and on-device Apple Intelligence.
 
+<img width="1000" src="docs/hero-dark.png" alt="GistPad iOS in dark mode on the unfolded iPhone Duo. The library sidebar lists six gists with colored tags, and Thanksgiving menu is open in Preview with its to-do list half checked off. The GistPad widget sits in front, showing Monday the 2nd beside Thanksgiving menu, Garden plans and Reading list." />
+
 ## Features
 
 - **Start your day from the Home Screen:** The GistPad widget shows today's date, your most recent gists and `New Gist`. Tap the date to open today's daily note, or a gist to pick up where you left off.
