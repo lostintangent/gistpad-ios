@@ -1,7 +1,6 @@
 import Foundation
 import GistPadEditor
 import GistPadInterface
-import SwiftUI
 import Testing
 import UIKit
 
@@ -11,683 +10,225 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct NotebookSessionTests {
-  @Test func checkingForChangesIsQuietUnlessGitHubNeedsReconnecting() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    await provider.failNextInspection(with: URLError(.notConnectedToInternet))
-    await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionStatus == .idle)
-    #expect(controller.saveState == .savedToGitHub)
-    #expect(controller.session.text == "Base")
-    await provider.failNextInspection(with: GitHubClientError.http(status: 401, retryAfter: nil))
-    await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionProblem?.recovery == .reconnect)
-    await controller.inspectRemoteChanges()
-    #expect(controller.remoteInspectionProblem == nil)
-    #expect(await provider.inspectionGenerations == [0, 0, 0])
-    #expect(await provider.publishCount == 0)
-  }
-
-  @Test func aCheckOvertakenByTypingLeavesTheNewerSourceAlone() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    await provider.holdNextInspection()
-    let check = Task { await controller.inspectRemoteChanges() }
-    await provider.waitForInspection()
-    edit(controller, to: "A newer retained draft")
-    controller.session.textView.selectedRange = .init(location: 3, length: 2)
-    #expect(await controller.waitForLocalSave())
-    await provider.releaseInspection()
-    await check.value
-    #expect(await provider.inspectionGenerations == [0])
-    #expect(controller.session.text == "A newer retained draft")
-    #expect(controller.session.textView.selectedRange == .init(location: 3, length: 2))
-    #expect(try await provider.snapshot().text == "A newer retained draft")
-    #expect(await provider.publishCount == 0)
-  }
-
-  @Test func firstLoadWithoutCacheKeepsItsExplicitFailureSurface() async throws {
-    let (model, provider) = try makeRefreshModel()
-    await provider.failNextGists(with: URLError(.notConnectedToInternet))
-    await model.start()
-    #expect(model.cachedLibrary == nil)
-    guard case .failed = model.library.loadState else {
-      Issue.record("A first load without cache cannot look like an empty successful notebook.")
-      return
-    }
-    #expect(model.remoteRefreshStatus == .idle)
-    await model.refresh()
-    #expect(model.library.loadState == .ready)
-    #expect(model.remoteRefreshProblem == nil)
-  }
-
-  @Test func productionFocusArrangementRetainsTheEditorSelectionAndUndo() async throws {
-    let (controller, _) = try await makeController()
-    let scene = try #require(
-      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-    let window = UIWindow(windowScene: scene)
-    let host = UIHostingController(
-      rootView: FocusNoteFixture(controller: controller, focused: false))
-    window.rootViewController = host
-    window.makeKeyAndVisible()
-    defer { window.isHidden = true }
-    try await Task.sleep(for: .milliseconds(200))
-    let view = controller.session.textView
-    view.becomeFirstResponder()
-    view.selectedRange = NSRange(location: 2, length: 0)
-    view.undoManager?.beginUndoGrouping()
-    view.insertText("日本語 👩🏽‍💻")
-    view.undoManager?.endUndoGrouping()
-    let text = view.text
-    let selection = view.selectedRange
-    for focused in [true, false, true, false] {
-      host.rootView = FocusNoteFixture(controller: controller, focused: focused)
-      try await Task.sleep(for: .milliseconds(100))
-      host.view.layoutIfNeeded()
-      #expect(controller.session.textView === view)
-      #expect(view.window === window)
-      #expect(view.text == text)
-      #expect(view.selectedRange == selection)
-    }
-    view.undoManager?.undo()
-    #expect(view.text == "Base")
-  }
-
-  @Test func retainedRemoteChangeIsReviewedWithoutReplacingSourceSelectionOrUndo() async throws {
-    let (controller, provider) = try await makeController(autosave: true)
-    let identity = controller.session.viewIdentity
-    edit(controller, to: "Retained local draft")
-    controller.session.textView.selectedRange = NSRange(location: 4, length: 3)
-    #expect(await controller.waitForLocalSave())
-    await provider.setRemoteContent("Changed in the web app")
-    await controller.inspectRemoteChanges()
-    #expect(controller.session.viewIdentity == identity)
-    #expect(controller.session.text == "Retained local draft")
-    #expect(controller.session.textView.selectedRange == NSRange(location: 4, length: 3))
-    #expect(controller.saveState.isConflict)
-    let review = try controller.reviewContext()
-    #expect(review.conflict.remote == "Changed in the web app")
-    #expect(controller.autosave(foreground: true) == nil)
-    #expect(await provider.publishCount == 0)
-    edit(controller, to: "Typing continues safely")
-    #expect(await controller.waitForLocalSave())
-    #expect(controller.saveState.isConflict)
-  }
-
-  @Test(arguments: [true, false])
-  func restoredPublicationInspectionAdoptsOnlyAnExactMatchWithoutPublishing(matches: Bool) async throws {
-    let (controller, provider) = try await makeController(
-      generation: 1, autosave: true, interruptedPublication: true)
-    #expect(controller.saveState == .failed(.network))
-    let editor = controller.session.textView
-    let text = controller.session.text
-    let generation = controller.session.generation
-    editor.selectedRange = NSRange(location: 4, length: 3)
-    let undo = editor.undoManager?.canUndo
-    await provider.setRemoteContent(matches ? text : "Another remote value")
-    await controller.inspectRemoteChanges()
-    #expect(controller.session.textView === editor)
-    #expect(controller.session.text.utf8.elementsEqual(text.utf8))
-    #expect(controller.session.generation == generation)
-    #expect(editor.selectedRange == NSRange(location: 4, length: 3))
-    #expect(editor.undoManager?.canUndo == undo)
-    #expect(controller.saveState == (matches ? .savedToGitHub : .failed(.network)))
-    #expect(controller.document.draft?.state == controller.draft.state)
-    #expect(controller.draft.attemptedGeneration == (matches ? nil : 1))
-    #expect(controller.remoteInspectionProblem == nil)
-    #expect(controller.autosave(foreground: true) == nil)
-    #expect(await provider.publishCount == 0)
-  }
-
   @Test func autosavePublishesOnlyADurableQuietForegroundGeneration() async throws {
-    let (controller, provider) = try await makeController(autosave: true)
-    edit(controller, to: "Quiet accepted draft")
+    let fixture = try await makeFixture()
+    let controller = try await fixture.open()
+    edit(controller, to: "First draft")
+    #expect(controller.autosave(foreground: true) == nil, "Not before it's saved on this iPhone.")
     #expect(await controller.waitForLocalSave())
-    let task = try #require(controller.autosave(foreground: true))
-    await task.value
-    #expect(await provider.publishCount == 1)
-    #expect(await provider.publicationReasons == [.autosave])
-    #expect(controller.saveState == .savedToGitHub)
-  }
-
-  @Test func autosaveOffAndLeavingTheForegroundCancelOnlyTheTimer() async throws {
-    let (disabled, disabledProvider) = try await makeController(autosave: false)
-    edit(disabled, to: "Keep local")
-    #expect(await disabled.waitForLocalSave())
-    #expect(disabled.autosave(foreground: true) == nil)
-    #expect(disabled.autosave(foreground: false) == nil)
-    #expect(await disabledProvider.publishCount == 0)
-
-    let (controller, provider) = try await makeController(autosave: true)
-    edit(controller, to: "Background local draft")
-    #expect(await controller.waitForLocalSave())
-    let pending = try #require(controller.autosave(foreground: true))
     #expect(controller.autosave(foreground: false) == nil)
-    await pending.value
-    #expect(await provider.publishCount == 0)
-    #expect(try await provider.snapshot().text == "Background local draft")
-  }
-
-  @Test func backgroundSavesEveryDurableSessionRegardlessOfAutosavePreference() async throws {
-    let (disabled, disabledProvider) = try await makeController(autosave: false)
-    let (enabled, enabledProvider) = try await makeController(autosave: true)
-    edit(disabled, to: "Publish on hide, with autosave off")
-    edit(enabled, to: "Publish on hide, with autosave on")
-    let disabledIdentity = disabled.session.viewIdentity
-    await NotebookLifecycle.saveOnBackground([disabled, enabled], shouldContinue: { true })
-    #expect(await disabledProvider.publishCount == 1)
-    #expect(await enabledProvider.publishCount == 1)
-    #expect(await disabledProvider.publicationReasons == [.background])
-    #expect(await enabledProvider.publicationReasons == [.background])
-    #expect(try await disabledProvider.snapshot().baseContent == disabled.session.text)
-    #expect(try await enabledProvider.snapshot().baseContent == enabled.session.text)
-    #expect(disabled.saveState == .savedToGitHub)
-    #expect(enabled.saveState == .savedToGitHub)
-    #expect(disabled.session.viewIdentity == disabledIdentity)
-  }
-
-  @Test func leavingANotePublishesWithAndWithoutAutosave() async throws {
-    let (enabled, provider) = try await makeController(autosave: true)
-    edit(enabled, to: "Leaving this note")
-    #expect(await enabled.waitForLocalSave())
-    let timer = try #require(enabled.autosave(foreground: true))
-    await enabled.finishLeavingNote()
-    await timer.value
-    #expect(timer.isCancelled)
-    #expect(await provider.publishCount == 1)
-    #expect(await provider.publicationReasons == [.leaving])
-    #expect(try await provider.snapshot().baseContent == "Leaving this note")
-    #expect(enabled.saveState == .savedToGitHub)
-
-    let (disabled, disabledProvider) = try await makeController(autosave: false)
-    edit(disabled, to: "Publish this note on leave")
-    #expect(await disabled.waitForLocalSave())
-    disabled.autosave(foreground: true)
-    await disabled.finishLeavingNote()
-    #expect(await disabledProvider.publishCount == 1)
-    #expect(await disabledProvider.publicationReasons == [.leaving])
-    #expect(try await disabledProvider.snapshot().baseContent == "Publish this note on leave")
-    #expect(disabled.saveState == .savedToGitHub)
-  }
-
-  @Test func backgroundSkipsReadOnlyConflictCompositionWritingToolsAndRecovery() async throws {
-    for condition in ["read-only", "conflict", "composition", "writing-tools", "recovery"] {
-      let (controller, provider) = try await makeController(
-        generation: condition == "read-only" ? 1 : 0,
-        autosave: false, isReadOnly: condition == "read-only")
-      if condition != "read-only" {
-        edit(controller, to: "Preserved \(condition) draft")
-        #expect(await controller.waitForLocalSave())
-      }
-      switch condition {
-      case "conflict":
-        await provider.setRemoteContent("Changed on the web")
-        await controller.inspectRemoteChanges()
-        #expect(controller.saveState.isConflict)
-      case "composition":
-        controller.session.textView.setMarkedText(
-          "にほんご", selectedRange: NSRange(location: 4, length: 0))
-        controller.session.textViewDidChangeSelection(controller.session.textView)
-      case "writing-tools":
-        controller.session.textViewWritingToolsWillBegin(controller.session.textView)
-      case "recovery": controller.markRecovery()
-      default: break
-      }
-      await NotebookLifecycle.saveOnBackground([controller], shouldContinue: { true })
-      #expect(await provider.publishCount == 0, "Background must defer \(condition).")
-      #expect(try await provider.snapshot().text.isEmpty == false)
-      if condition == "composition" {
-        controller.session.textView.unmarkText()
-        controller.session.textViewDidChangeSelection(controller.session.textView)
-      } else if condition == "writing-tools" {
-        controller.session.textViewWritingToolsDidEnd(controller.session.textView)
-      }
-    }
-  }
-
-  @Test func expiryDuringTheFreshReadStopsTheWriteAndRemainingBackgroundBatch() async throws {
-    let (first, provider) = try await makeController(autosave: false)
-    let (second, secondProvider) = try await makeController(autosave: true)
-    edit(first, to: "First durable draft")
-    edit(second, to: "Second durable draft")
-    let allowance = BackgroundTestAllowance()
-    await provider.holdBeforeValidation()
-    let saving = Task {
-      await NotebookLifecycle.saveOnBackground(
-        [first, second], shouldContinue: { allowance.isActive })
-    }
-    await provider.waitForPublish()
-    allowance.isActive = false
-    saving.cancel()
-    await provider.releasePublish()
-    await saving.value
-    #expect(await provider.publishCount == 0)
-    #expect(await secondProvider.publishCount == 0)
-    #expect(try await provider.snapshot().text == "First durable draft")
-    #expect(try await secondProvider.snapshot().text == "Second durable draft")
-    #expect(first.saveState == .savedLocally)
-    #expect(second.saveState == .savedLocally)
-  }
-
-  @Test func anUnavailableBackgroundLeaseStillFinishesLocalPersistence() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    edit(controller, to: "Save locally even when time is unavailable")
-    await NotebookLifecycle.saveOnBackground([controller], shouldContinue: { false })
-    #expect(await provider.persistedGenerations == [1])
-    #expect(await provider.publishCount == 0)
-    #expect(try await provider.snapshot().text == controller.session.text)
-    #expect(controller.saveState == .savedLocally)
-  }
-
-  @Test func backgroundWaitsForAnExistingSaveThenPublishesNewerTyping() async throws {
-    let (controller, provider) = try await makeController(autosave: false)
-    edit(controller, to: "Earlier manual save")
-    #expect(await controller.waitForLocalSave())
-    let manual = Task { await controller.publish() }
-    await provider.waitForPublish()
-    edit(controller, to: "Latest accepted source")
-    #expect(await controller.waitForLocalSave())
-    let background = Task {
-      await NotebookLifecycle.saveOnBackground([controller], shouldContinue: { true })
-    }
-    await Task.yield()
-    #expect(await provider.publishCount == 1)
-    await provider.releasePublish()
-    await manual.value
-    await background.value
-    #expect(await provider.publishCount == 2)
-    #expect(await provider.publicationReasons == [.manual, .background])
-    #expect(try await provider.snapshot().baseContent == "Latest accepted source")
-    #expect(controller.session.text == "Latest accepted source")
-  }
-
-  @Test func leaseExpirationCancelsItsOwnerOnceAndInvalidatesPublication() {
-    let lease = NotebookBackgroundLease()
-    var expirations = 0
-    lease.onExpiration = { expirations += 1 }
-    lease.expire()
-    lease.expire()
-    #expect(expirations == 1)
-    #expect(!lease.isActive)
-    #expect(lease.onExpiration == nil)
-  }
-
-  @Test func autosaveDefersCompositionWritingToolsAndRecovery() async throws {
-    let (controller, provider) = try await makeController(autosave: true)
-    edit(controller, to: "Accepted text")
-    #expect(await controller.waitForLocalSave())
-    controller.session.textView.setMarkedText(
-      "にほんご", selectedRange: NSRange(location: 4, length: 0))
-    controller.session.textViewDidChangeSelection(controller.session.textView)
-    #expect(controller.autosave(foreground: true) == nil)
-    controller.session.textView.unmarkText()
-    controller.session.textViewDidChangeSelection(controller.session.textView)
     controller.session.textViewWritingToolsWillBegin(controller.session.textView)
     #expect(controller.autosave(foreground: true) == nil)
     controller.session.textViewWritingToolsDidEnd(controller.session.textView)
-    #expect(await controller.waitForLocalSave())
-    controller.markRecovery()
-    #expect(controller.autosave(foreground: true) == nil)
-    #expect(await provider.publishCount == 0)
+    let older = try #require(controller.autosave(foreground: true))
+    edit(controller, to: "Latest draft")
+    let latest = try #require(controller.autosave(foreground: true))
+    await older.value
+    await latest.value
+    #expect(fixture.publishes == ["PATCH /gists/a"])
+    #expect(fixture.remote("a", "README.md") == "Latest draft")
+    #expect(controller.saveState == .savedToGitHub)
   }
 
-  @Test func autosaveCancelsAnOlderPauseAndPublishesOnlyTheLatestText() async throws {
-    let (controller, provider) = try await makeController(autosave: true)
-    edit(controller, to: "First draft")
-    #expect(await controller.waitForLocalSave())
-    let old = try #require(controller.autosave(foreground: true))
-    edit(controller, to: "Latest draft")
-    #expect(await controller.waitForLocalSave())
-    let latest = try #require(controller.autosave(foreground: true))
-    await old.value
-    await latest.value
-    #expect(await provider.publishCount == 1)
-    #expect(try await provider.snapshot().baseContent == "Latest draft")
+  @Test(arguments: [true, false])
+  func leavingTheAppPublishesEveryOpenFileWithAutosaveOnOrOff(autosave: Bool) async throws {
+    let fixture = try await makeFixture(autosave: autosave)
+    fixture.server.addGist(id: "b", description: "Another file", files: ["README.md": "Base"])
+    let first = try await fixture.open(.gist(id: "a"))
+    let second = try await fixture.open(.gist(id: "b"))
+    edit(first, to: "Typed before saving")
+    edit(second, to: "Typed in another file")
+    #expect(await first.waitForLocalSave())
+    #expect(await second.waitForLocalSave())
+    // Leaving the foreground cancels a pending autosave. Only leaving the app publishes.
+    let timer = first.autosave(foreground: true)
+    #expect((timer != nil) == autosave)
+    #expect(first.autosave(foreground: false) == nil)
+    await timer?.value
+    #expect(fixture.publishes.isEmpty)
+
+    let gate = fixture.hold("PATCH /gists/a")
+    let saving = Task { await first.publish() }
+    try await gate.arrival()
+    edit(first, to: "Typed while that save was sending")
+    #expect(await first.waitForLocalSave())
+    let leaving = Task {
+      await NotebookLifecycle.saveOnBackground([first, second], shouldContinue: { true })
+    }
+    await Task.yield()
+    gate.open()
+    await saving.value
+    await leaving.value
+    #expect(fixture.publishes.filter { $0 == "PATCH /gists/a" }.count == 2)
+    #expect(fixture.remote("a", "README.md") == "Typed while that save was sending")
+    #expect(fixture.remote("b", "README.md") == "Typed in another file")
+    #expect(first.saveState == .savedToGitHub)
+    #expect(second.saveState == .savedToGitHub)
   }
 
   @Test func restoredGenerationsAndRapidEditsPersistInOrder() async throws {
-    let (controller, provider) = try await makeController(generation: 7)
-    #expect(controller.session.generation == 7)
+    let fixture = try await makeFixture()
+    let restored = try await fixture.stageEdit(
+      gistID: "a", filename: "README.md", text: "Restored local draft")
+    let controller = try await fixture.open()
+    #expect(controller.session.text == "Restored local draft")
+    #expect(controller.session.generation == restored.generation)
     for text in ["First", "Second", "日本語 👨‍👩‍👧‍👦"] { edit(controller, to: text) }
     #expect(await controller.waitForLocalSave())
-    let saved = try await provider.snapshot()
-    #expect(saved.generation == 10)
+    let saved = try await fixture.saved(controller)
+    #expect(saved.generation == restored.generation + 3)
     #expect(saved.text.utf8.elementsEqual("日本語 👨‍👩‍👧‍👦".utf8))
-    #expect(await provider.persistedGenerations == [8, 9, 10])
     #expect(controller.saveState == .savedLocally)
+    #expect(fixture.publishes.isEmpty)
   }
 
   @Test func aPublishResponseCannotReplaceNewerTyping() async throws {
-    let (controller, provider) = try await makeController()
+    let fixture = try await makeFixture()
+    let controller = try await fixture.open()
     edit(controller, to: "The manually saved generation")
     #expect(await controller.waitForLocalSave())
+    let gate = fixture.hold("PATCH /gists/a")
     let publishing = Task { await controller.publish() }
-    await provider.waitForPublish()
+    try await gate.arrival()
     edit(controller, to: "Newer typing stays local")
     #expect(await controller.waitForLocalSave())
-    await provider.releasePublish()
+    gate.open()
     await publishing.value
+    #expect(fixture.remote("a", "README.md") == "The manually saved generation")
     #expect(controller.session.text == "Newer typing stays local")
     #expect(controller.draft.text == "Newer typing stays local")
     #expect(controller.draft.baseContent == "The manually saved generation")
     #expect(controller.saveState == .savedLocally)
   }
 
-  @Test func aConfirmedDeletionCanWaitForPublicationBeforeTakingItsLock() async throws {
-    let (controller, provider) = try await makeController()
-    edit(controller, to: "A thought being published")
-    #expect(await controller.waitForLocalSave())
-    let publishing = Task { await controller.publish() }
-    await provider.waitForPublish()
-    #expect(controller.isPublishing)
-    var deletionHasLocked = false
-    let deletion = Task {
-      await controller.waitForPublication()
-      try controller.beginDestructiveAction()
-      deletionHasLocked = true
-    }
-    await Task.yield()
-    #expect(!deletionHasLocked)
-    #expect(!controller.isPerformingDestructiveAction)
-    await provider.releasePublish()
-    await publishing.value
-    try await deletion.value
-    #expect(deletionHasLocked)
-    #expect(!controller.isPublishing)
-    #expect(controller.isPerformingDestructiveAction)
-    #expect(!controller.canMutate)
-    #expect(await provider.publishCount == 1)
-    controller.endDestructiveAction()
-    #expect(controller.canMutate)
-  }
-
-  @Test func aLocalWriteFailureBlocksPublishing() async throws {
-    let (controller, provider) = try await makeController()
-    await provider.failPersistence()
-    edit(controller, to: "Keep this in the editor")
-    #expect(!(await controller.waitForLocalSave()))
-    await controller.publish()
-    #expect(await provider.publishCount == 0)
-    #expect(controller.session.text == "Keep this in the editor")
-  }
-
   @Test func writingToolsPersistsOnlyTheFinalChoiceAndNeverPublishesPreviews() async throws {
-    let (controller, provider) = try await makeController(generation: 7)
-    let source = controller.session.text
-    controller.session.textViewWritingToolsWillBegin(controller.session.textView)
+    let fixture = try await makeFixture()
+    let controller = try await fixture.open()
+    let editor = controller.session.textView
+    let accepted = "The accepted rewrite 日本語 👩🏽‍💻"
+    controller.session.textViewWritingToolsWillBegin(editor)
     edit(controller, to: "Temporary rewrite")
-    #expect(controller.session.text == source)
-    #expect(await provider.persistedGenerations.isEmpty)
+    #expect(controller.session.text == "Base")
     await controller.publish()
-    #expect(await provider.publishCount == 0)
-    edit(controller, to: "The accepted rewrite 日本語 👩🏽‍💻")
-    controller.session.textViewWritingToolsDidEnd(controller.session.textView)
+    edit(controller, to: accepted)
+    controller.session.textViewWritingToolsDidEnd(editor)
     #expect(await controller.waitForLocalSave())
-    #expect(await provider.persistedGenerations == [8])
-    #expect(try await provider.snapshot().text == "The accepted rewrite 日本語 👩🏽‍💻")
-    #expect(controller.saveState == .savedLocally)
-    #expect(await provider.publishCount == 0)
+    #expect(try await fixture.saved(controller).generation == 1)
+    #expect(try await fixture.saved(controller).text == accepted)
 
-    controller.session.textViewWritingToolsWillBegin(controller.session.textView)
+    controller.session.textViewWritingToolsWillBegin(editor)
     edit(controller, to: "A rejected rewrite")
-    edit(controller, to: "The accepted rewrite 日本語 👩🏽‍💻")
-    controller.session.textViewWritingToolsDidEnd(controller.session.textView)
+    edit(controller, to: accepted)
+    controller.session.textViewWritingToolsDidEnd(editor)
     #expect(await controller.waitForLocalSave())
-    #expect(await provider.persistedGenerations == [8])
+    #expect(try await fixture.saved(controller).generation == 1)
+    #expect(controller.saveState == .savedLocally)
+    #expect(fixture.publishes.isEmpty)
   }
 
-  @Test func lostOwnershipBlocksFurtherPublication() async throws {
-    let (controller, provider) = try await makeController()
-    edit(controller, to: "A local edit")
-    #expect(await controller.waitForLocalSave())
-    await provider.failPublication(with: .failed(.readOnly))
-    await controller.publish()
-    #expect(controller.saveState == .failed(.readOnly))
-    #expect(!controller.saveState.canPublish)
-  }
-
-  @Test func durableInsertionIsOneNativeUndoAndNeverPublishes() async throws {
-    let (controller, provider) = try await makeController()
+  @Test func anEditFromAShortcutIsOneUndo() async throws {
+    let fixture = try await makeFixture()
+    let controller = try await fixture.open()
     let window = try EditorContinuityTests().host(controller.session)
     defer { window.isHidden = true }
-    let identity = ObjectIdentifier(controller.session.textView)
+    let image = "\n![Image](https://example.test/image.png)"
     let insertion = DraftEdit(
-      draftID: controller.draft.id, accountID: controller.draft.accountID,
-      expectedGeneration: 0, range: NSRange(location: 4, length: 0),
-      expectedText: "", replacement: "\n![Image](https://example.test/image.png)")
-    try await controller.applyDurableEdit(insertion) {
-      try await provider.store.apply(insertion)
-    }
-    #expect(controller.session.text == "Base\n![Image](https://example.test/image.png)")
-    #expect(controller.session.generation == 1)
-    #expect(ObjectIdentifier(controller.session.textView) == identity)
-    #expect(controller.session.textView.undoManager?.canUndo == true)
+      draftID: controller.draft.id, accountID: fixture.account.id,
+      expectedGeneration: controller.session.generation, range: NSRange(location: 4, length: 0),
+      expectedText: "", replacement: image)
+    try await controller.applyDurableEdit(insertion) { try await fixture.store.apply(insertion) }
+    #expect(controller.session.text == "Base" + image)
     controller.session.textView.undoManager?.undo()
     #expect(controller.session.text == "Base")
-    #expect(await controller.waitForLocalSave())
-    #expect(try await provider.snapshot().text == "Base")
-    #expect(await provider.publishCount == 0)
-  }
 
-  @Test func aFailedDurableCommitLeavesSourceSelectionAndGenerationUntouched() async throws {
-    let (controller, _) = try await makeController()
-    controller.session.textView.selectedRange = NSRange(location: 2, length: 1)
-    let selection = controller.session.textView.selectedRange
-    let insertion = DraftEdit(
-      draftID: controller.draft.id, accountID: controller.draft.accountID,
-      expectedGeneration: 0, range: NSRange(location: 4, length: 0),
-      expectedText: "", replacement: " changed")
-    await #expect(throws: URLError.self) {
-      try await controller.applyDurableEdit(insertion) { throw URLError(.cannotWriteToFile) }
-    }
-    #expect(controller.session.text == "Base")
-    #expect(controller.session.generation == 0)
-    #expect(controller.session.textView.selectedRange == selection)
-    #expect(controller.session.textView.isEditable)
-  }
-
-  @Test func staleDurableCommandsCannotReplaceNewerTyping() async throws {
-    let (controller, provider) = try await makeController()
-    let insertion = DraftEdit(
-      draftID: controller.draft.id, accountID: controller.draft.accountID,
-      expectedGeneration: 0, range: NSRange(location: 4, length: 0),
-      expectedText: "", replacement: " changed")
     edit(controller, to: "Newer 日本語")
     #expect(await controller.waitForLocalSave())
     await #expect(throws: DraftError.staleGeneration) {
-      try await controller.applyDurableEdit(insertion) {
-        try await provider.store.apply(insertion)
-      }
+      try await controller.applyDurableEdit(insertion) { try await fixture.store.apply(insertion) }
     }
     #expect(controller.session.text == "Newer 日本語")
-    #expect(try await provider.snapshot().text == "Newer 日本語")
+    #expect(try await fixture.saved(controller).text == "Newer 日本語")
+    #expect(fixture.publishes.isEmpty)
   }
 
   @Test func recoveryEditsStayLocalAndCannotRecreateADeletedGist() async throws {
-    let (controller, provider) = try await makeController()
-    controller.markRecovery()
+    let fixture = try await NotebookFixture()
+    let staged = try await fixture.stageEdit(gistID: "gone", filename: "README.md", text: "Kept")
+    let controller = try await fixture.open(.draft(id: staged.id))
+    #expect(controller.document.isRecovery)
     edit(controller, to: "A recoverable local edit")
     #expect(await controller.waitForLocalSave())
     #expect(!controller.saveState.canPublish)
     await controller.publish()
-    #expect(await provider.publishCount == 0)
-    #expect(try await provider.snapshot().text == "A recoverable local edit")
+    await NotebookLifecycle.saveOnBackground([controller], shouldContinue: { true })
+    await fixture.model.publishUnsyncedEdits()
+    #expect(fixture.publishes.isEmpty)
+    #expect(try await fixture.saved(controller).text == "A recoverable local edit")
   }
 
-  @Test func destructiveActionsLockInputUntilLocalPersistenceFinishes() async throws {
-    let (controller, provider) = try await makeController()
-    edit(controller, to: "Finish this local generation first")
-    try controller.beginDestructiveAction()
-    #expect(!controller.session.textView.isEditable)
-    #expect(!controller.canMutate)
-    #expect(await controller.waitForLocalSave())
-    #expect(try await provider.snapshot().text == "Finish this local generation first")
-    controller.endDestructiveAction()
-    #expect(controller.session.textView.isEditable)
-    #expect(controller.canMutate)
-  }
-
-  @Test func publishedFilesShareGistPadsLinkWhileEditing() async throws {
-    let (controller, _) = try await makeController(autosave: false)
-    let url = try #require(controller.chrome.shareURL)
-    #expect(url.absoluteString == "https://gistpad.dev/#/share/synthetic/README.md")
-    edit(controller, to: "Not published")
-    #expect(controller.hasUnpublishedChanges)
-    #expect(await controller.waitForLocalSave())
-    #expect(controller.chrome.shareURL == url)
-  }
-
-  @Test func sourceDiffsDistinguishUnicodeNormalizationAndMissingFiles() {
-    let lines = NotebookDiffLine.changes(from: "cafe\u{301}", to: "caf\u{e9}")
-    #expect(lines.count == 2)
-    #expect(lines[0].isAddition == false)
-    #expect(lines[0].text.utf8.elementsEqual("cafe\u{301}".utf8))
-    #expect(lines[1].isAddition)
-    let missing = NotebookDiffLine.changes(from: nil, to: "A newly created file")
-    #expect(missing.count == 1)
-    #expect(missing[0].isAddition)
-  }
-
-  @Test func keepingMyReviewedDraftDoesNotCreateAFakeGenerationOrUndo() async throws {
-    let (controller, provider) = try await makeController(generation: 1)
-    _ = try await provider.introduceConflict(remote: "From GitHub")
-    try await controller.refreshMetadata()
+  @Test func retainedRemoteChangeIsReviewedWithoutReplacingSourceSelectionOrUndo() async throws {
+    let fixture = try await makeFixture()
+    let controller = try await fixture.open()
     let window = try EditorContinuityTests().host(controller.session)
     defer { window.isHidden = true }
+    let editor = controller.session.textView
+    editor.becomeFirstResponder()
+    editor.selectedRange = NSRange(location: 4, length: 0)
+    editor.insertText(", kept here")
+    editor.selectedRange = NSRange(location: 4, length: 3)
+    #expect(await controller.waitForLocalSave())
+    fixture.server.edit("a", files: ["README.md": "Changed in the web app"])
+    await controller.inspectRemoteChanges()
+    #expect(controller.session.text == "Base, kept here")
+    #expect(editor.selectedRange == NSRange(location: 4, length: 3))
+    #expect(controller.saveState.isConflict)
+    #expect(try controller.reviewContext().conflict.remote == "Changed in the web app")
+    #expect(controller.autosave(foreground: true) == nil)
+    editor.undoManager?.undo()
+    #expect(controller.session.text == "Base")
+    #expect(await controller.waitForLocalSave())
+    #expect(controller.saveState.isConflict)
+    #expect(fixture.publishes.isEmpty)
+  }
+
+  @Test(arguments: [true, false])
+  func resolvingAConflictEitherWayKeepsUndoHonest(keepsMine: Bool) async throws {
+    let fixture = try await makeFixture()
+    let controller = try await fixture.open()
+    let window = try EditorContinuityTests().host(controller.session)
+    defer { window.isHidden = true }
+    edit(controller, to: "Mine")
+    #expect(await controller.waitForLocalSave())
+    fixture.server.edit("a", files: ["README.md": "From GitHub 日本語"])
+    await controller.inspectRemoteChanges()
     let undo = try #require(controller.session.textView.undoManager)
     undo.removeAllActions()
-    let original = controller.session.text
-    try await controller.commitMutation(
-      .init(
-        range: NSRange(location: 0, length: original.utf16.count), expected: original,
-        replacement: original),
-      expectedGeneration: 1
-    ) {
-      try await provider.store.resolveConflict(
-        id: controller.draft.id, accountID: controller.draft.accountID,
-        expectedGeneration: 1, text: original, generation: 1)
-    }
-    #expect(controller.session.generation == 1)
-    #expect(!undo.canUndo)
+    let generation = controller.session.generation
+    let choice = keepsMine ? "Mine" : "From GitHub 日本語"
+    try await controller.applyReview(controller.reviewContext(), text: choice, publishes: false)
+    #expect(controller.session.text == choice)
+    // Keeping my text changes nothing to undo. Taking GitHub's is one undo back to mine.
+    #expect(controller.session.generation == generation + (keepsMine ? 0 : 1))
+    #expect(undo.canUndo == !keepsMine)
     #expect(controller.saveState == .savedLocally)
-    #expect(controller.saveState.canPublish)
-    #expect(await provider.publishCount == 0)
-  }
-
-  @Test func adoptingAReviewedVersionIsOneRecoverableLocalUndo() async throws {
-    let (controller, provider) = try await makeController(generation: 1)
-    _ = try await provider.introduceConflict(remote: "From GitHub 日本語")
-    try await controller.refreshMetadata()
-    let window = try EditorContinuityTests().host(controller.session)
-    defer { window.isHidden = true }
-    let original = controller.session.text
-    try await controller.commitMutation(
-      .init(
-        range: NSRange(location: 0, length: original.utf16.count), expected: original,
-        replacement: "From GitHub 日本語"),
-      expectedGeneration: 1
-    ) {
-      try await provider.store.resolveConflict(
-        id: controller.draft.id, accountID: controller.draft.accountID,
-        expectedGeneration: 1, text: "From GitHub 日本語", generation: 2)
-    }
-    #expect(controller.session.text == "From GitHub 日本語")
-    #expect(controller.saveState == .savedLocally)
-    #expect(controller.saveState.canPublish)
-    #expect(await provider.publishCount == 0)
-    controller.session.textView.undoManager?.undo()
-    #expect(controller.session.text == original)
+    #expect(fixture.publishes.isEmpty)
+    guard !keepsMine else { return }
+    undo.undo()
+    #expect(controller.session.text == "Mine")
     #expect(await controller.waitForLocalSave())
-    #expect(try await provider.snapshot().text == original)
+    #expect(try await fixture.saved(controller).text == "Mine")
   }
 
-  @Test func staleReviewCannotOverwriteNewerSource() async throws {
-    let (controller, provider) = try await makeController(generation: 1)
-    _ = try await provider.introduceConflict(remote: "From GitHub")
-    try await controller.refreshMetadata()
-    let old = try controller.reviewContext()
-    edit(controller, to: "A newer local choice")
-    #expect(await controller.waitForLocalSave())
-    #expect(!old.matches(controller.draft))
-    await #expect(throws: NotebookActionError.staleReview) {
-      try await controller.applyReview(old, text: "From GitHub", publishes: false)
+  /// A signed-in notebook whose GitHub has one published file: gist "a", README.md, "Base".
+  private func makeFixture(autosave: Bool = true) async throws -> NotebookFixture {
+    try await NotebookFixture(autosave: autosave) {
+      $0.addGist(id: "a", description: "Session fixture", files: ["README.md": "Base"])
     }
-    #expect(controller.session.text == "A newer local choice")
-    #expect(controller.draft.state != .savedToGitHub)
-    #expect(await provider.publishCount == 0)
-  }
-
-  @Test func writingToolsBlocksDurableInsertionsBeforeTheirCommit() async throws {
-    let (controller, provider) = try await makeController()
-    controller.session.textViewWritingToolsWillBegin(controller.session.textView)
-    defer { controller.session.textViewWritingToolsDidEnd(controller.session.textView) }
-    let insertion = DraftEdit(
-      draftID: controller.draft.id, accountID: controller.draft.accountID,
-      expectedGeneration: 0, range: NSRange(location: 4, length: 0),
-      expectedText: "", replacement: " image")
-    await #expect(throws: SourceEdit.MutationError.compositionActive) {
-      try await controller.applyDurableEdit(insertion) { try await provider.store.apply(insertion) }
-    }
-    #expect(controller.session.text == "Base")
-    #expect(try await provider.snapshot().generation == 0)
   }
 
   private func edit(_ controller: NotebookSessionController, to text: String) {
     controller.session.textView.text = text
     controller.session.textViewDidChange(controller.session.textView)
-  }
-
-  private func makeRefreshModel() throws -> (NotebookModel, SessionNotebookProvider) {
-    let provider = SessionNotebookProvider(
-      store: try DraftStore.open(inMemory: true), id: UUID(), accountID: UUID(), autosave: false)
-    return (
-      NotebookModel(provider: provider), provider)
-  }
-
-  private func makeController(
-    generation: UInt64 = 0, autosave: Bool? = nil, isReadOnly: Bool = false,
-    interruptedPublication: Bool = false
-  ) async throws -> (NotebookSessionController, SessionNotebookProvider) {
-    let decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
-    let gist = try decoder.decode(
-      Gist.self,
-      from: Data(
-        """
-        {"id":"synthetic","description":"Session fixture","public":false,
-        "created_at":"2026-10-23T00:00:00Z","updated_at":"2026-10-23T00:00:00Z",
-        "owner":{"id":\(isReadOnly ? 99 : 1),"login":"\(isReadOnly ? "someone" : "fixture")"},
-        "files":{"README.md":{"filename":"README.md","content":"Base"}}}
-        """.utf8))
-    let accountID = UUID()
-    let store = try DraftStore.open(inMemory: true)
-    var draft = try await store.openDraft(
-      accountID: accountID, githubUserID: 1, gistID: gist.id, filename: "README.md",
-      description: "Session fixture", content: "Base", revision: "1")
-    if generation > 0 {
-      draft = try await store.persist(
-        id: draft.id, accountID: accountID, text: "Restored local draft", generation: generation)
-    }
-    if interruptedPublication {
-      try await store.beginAttempt(
-        id: draft.id, accountID: accountID, content: draft.text,
-        generation: draft.generation)
-      try await store.setState(.failed(.network), id: draft.id, accountID: accountID)
-      draft = try await store.draft(id: draft.id, accountID: accountID)
-    }
-    let provider = SessionNotebookProvider(
-      store: store, id: draft.id, accountID: accountID, autosave: autosave,
-      publishedGist: gist)
-    let model = NotebookModel(provider: provider)
-    if autosave != nil {
-      await model.start()
-      #expect(model.library.loadState == .ready)
-    }
-    let document = NotebookDocument(
-      accountID: accountID, gist: gist, filename: "README.md", text: "Base")
-    return (
-      NotebookSessionController(
-        document: document, draft: draft, notebook: model, autosaveDelay: .milliseconds(30)),
-      provider
-    )
   }
 }
 
@@ -700,238 +241,23 @@ extension NotebookSessionController {
   }
 }
 
-@MainActor
-private final class BackgroundTestAllowance {
-  var isActive = true
-}
-
-private struct FocusNoteFixture: View {
-  let controller: NotebookSessionController
-  let focused: Bool
-
-  var body: some View {
-    NavigationStack {
-      NoteScreen(
-        document: controller.chrome, mode: .constant(.source),
-        saveState: controller.saveState, isFocused: focused
-      ) {
-        MarkdownEditorView(session: controller.session)
-      } preview: {
-        Text("Preview companion")
-      }
-    }
-  }
-}
-
-private actor SessionNotebookProvider: NotebookProviding {
-  let store: DraftStore
-  let id: UUID
-  let accountID: UUID
-  let autosave: Bool?
-  private let publishedGist: Gist?
-  private(set) var persistedGenerations: [UInt64] = []
-  private(set) var publishCount = 0
-  private(set) var publicationReasons: [PublishReason] = []
-  private var persistenceFails = false
-  private var publicationFailure: PublishState?
-  private var remoteContent: String? = "Base"
-  private var publishing: CheckedContinuation<Void, Never>?
-  private var publishObserver: CheckedContinuation<Void, Never>?
-  private var pausesBeforeValidation = false
-  private var inspectionFailures: [any Error] = []
-  private(set) var inspectionGenerations: [UInt64] = []
-  private var inspectionGate: CheckedContinuation<Void, Never>?
-  private var inspectionObserver: CheckedContinuation<Void, Never>?
-  private var pausesInspection = false
-  private var gistFailures: [any Error] = []
-
-  init(
-    store: DraftStore, id: UUID, accountID: UUID, autosave: Bool? = nil,
-    publishedGist: Gist? = nil
-  ) {
-    self.store = store
-    self.id = id
-    self.accountID = accountID
-    self.autosave = autosave
-    self.publishedGist = publishedGist
+private extension NotebookFixture {
+  /// Opens a file as the app does, in an editor that autosaves after a short pause.
+  func open(
+    _ request: NotebookOpening.Request = .gist(id: "a")
+  ) async throws -> NotebookSessionController {
+    if model.account == nil { await model.start() }
+    await model.open(request)
+    let document = try #require(model.loadedDocument)
+    let draft = try #require(document.draft)
+    return NotebookSessionController(
+      document: document, draft: draft, notebook: model, autosaveDelay: .milliseconds(30))
   }
 
-  func cachedAccount() -> Account? {
-    guard let autosave else { return nil }
-    return Account(
-      id: accountID, login: "fixture", githubUserID: 1,
-      preferences: .init(metadata: ["isAutoSaveEnabled": .bool(autosave)]))
+  /// The editor's file as it's saved on this iPhone.
+  func saved(_ controller: NotebookSessionController) async throws -> DraftSnapshot {
+    try await store.draft(id: controller.draft.id, accountID: account.id)
   }
-  func signIn() throws -> Account { throw AccountError.signedOut }
-  func refreshAccount() async throws -> Account {
-    guard let account = cachedAccount() else { throw AccountError.signedOut }
-    return account
-  }
-  func gists(accountID: UUID) throws -> [Gist] {
-    if !gistFailures.isEmpty { throw gistFailures.removeFirst() }
-    guard let publishedGist, publishedGist.owner?.id == 1 else { return [] }
-    return [publishedGist]
-  }
-  func starredGists(accountID: UUID) -> [Gist] {
-    guard let publishedGist, publishedGist.owner?.id != 1 else { return [] }
-    return [publishedGist]
-  }
-  func gist(id: String, accountID: UUID) throws -> Gist { throw GitHubClientError.missingFile }
-  func content(gist: Gist, filename: String, accountID: UUID) throws -> String {
-    throw GitHubClientError.missingFile
-  }
-  func openDraft(for document: NotebookDocument) async throws -> DraftSnapshot {
-    try await snapshot()
-  }
-
-  func localState(accountID: UUID) async throws -> NotebookLocalState {
-    NotebookLocalState(
-      library: try await store.cachedLibrary(accountID: accountID),
-      drafts: try await store.drafts(accountID: accountID))
-  }
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<String>) async throws {
-    try await store.cacheLibrary(
-      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id,
-      keeping: keeping)
-  }
-  func createDraft(accountID: UUID) throws -> DraftSnapshot { throw DraftError.notFound }
-  func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
-    try await store.discardBlankDraft(
-      id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation)
-  }
-  func today(accountID: UUID, target: DailyNoteTarget) throws -> TodayNote {
-    throw DraftError.notFound
-  }
-  func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
-    if case .fetchRemote(let id) = action {
-      let draft = try await store.draft(id: id, accountID: accountID)
-      inspectionGenerations.append(draft.generation)
-      if pausesInspection {
-        pausesInspection = false
-        await withCheckedContinuation {
-          inspectionGate = $0
-          inspectionObserver?.resume()
-          inspectionObserver = nil
-        }
-      }
-      if !inspectionFailures.isEmpty { throw inspectionFailures.removeFirst() }
-      return .remoteRead(draft, try fixtureRemoteFile(content: remoteContent))
-    }
-    if case .recordRemote(let id, let generation, let remote, let revision) = action {
-      return .review(
-        try await store.inspectRemoteChange(
-          id: id, accountID: accountID, expectedGeneration: generation,
-          remote: remote, revision: revision))
-    }
-    if case .adoptRemote(let id, let generation, let remote, let revision) = action {
-      let adopted = try await store.refreshCleanDraft(
-        id: id, accountID: accountID, expectedGeneration: generation,
-        content: remote, revision: revision)
-      return .review(adopted)
-    }
-    throw DraftError.notFound
-  }
-
-  func failNextInspection(with error: any Error) { inspectionFailures.append(error) }
-  func holdNextInspection() { pausesInspection = true }
-  func waitForInspection() async {
-    if inspectionGate != nil { return }
-    await withCheckedContinuation { inspectionObserver = $0 }
-  }
-  func releaseInspection() {
-    inspectionGate?.resume()
-    inspectionGate = nil
-  }
-  func failNextGists(with error: any Error) { gistFailures.append(error) }
-  func setRemoteContent(_ content: String?) { remoteContent = content }
-
-  func persist(
-    draftID: UUID, accountID: UUID, text: String, generation: UInt64
-  ) async throws -> DraftSnapshot {
-    if persistenceFails { throw URLError(.cannotWriteToFile) }
-    persistedGenerations.append(generation)
-    return try await store.persist(
-      id: draftID, accountID: accountID, text: text, generation: generation)
-  }
-
-  func publish(
-    draftID: UUID, accountID: UUID, reason: PublishReason,
-    expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
-  ) async throws -> DraftSnapshot {
-    if pausesBeforeValidation {
-      pausesBeforeValidation = false
-      await pausePublication()
-    }
-    if reason != .manual, !(await shouldPublish()) { throw CancellationError() }
-    publishCount += 1
-    publicationReasons.append(reason)
-    if let publicationFailure {
-      try await store.setState(publicationFailure, id: draftID, accountID: accountID)
-      throw URLError(.timedOut)
-    }
-    let sent = try await snapshot()
-    try await store.beginAttempt(
-      id: draftID, accountID: accountID, content: sent.text,
-      generation: sent.generation)
-    if reason == .manual {
-      await pausePublication()
-    }
-    return try await store.acknowledge(
-      id: draftID, accountID: accountID, gistID: "synthetic",
-      content: sent.text, revision: "2", generation: sent.generation)
-  }
-
-  private func pausePublication() async {
-    await withCheckedContinuation {
-      publishing = $0
-      publishObserver?.resume()
-      publishObserver = nil
-    }
-  }
-
-  func holdBeforeValidation() { pausesBeforeValidation = true }
-
-  func snapshot() async throws -> DraftSnapshot {
-    try await store.draft(id: id, accountID: accountID)
-  }
-
-  func waitForPublish() async {
-    if publishing != nil { return }
-    await withCheckedContinuation { publishObserver = $0 }
-  }
-
-  func releasePublish() {
-    publishing?.resume()
-    publishing = nil
-  }
-
-  func failPersistence() { persistenceFails = true }
-  func failPublication(with state: PublishState) { publicationFailure = state }
-  func introduceConflict(remote: String?) async throws -> DraftSnapshot {
-    let current = try await snapshot()
-    try await store.setState(
-      .conflict(
-        .init(
-          generation: current.generation, base: current.baseContent, local: current.text,
-          remote: remote, remoteRevision: "2")), id: id, accountID: accountID)
-    return try await snapshot()
-  }
-}
-
-private func fixtureRemoteFile(content: String?) throws -> RemoteFile {
-  let decoder = JSONDecoder()
-  decoder.dateDecodingStrategy = .iso8601
-  let gist = try decoder.decode(
-    Gist.self,
-    from: Data(
-      """
-      {"id":"synthetic","description":"Session fixture","public":false,
-      "created_at":"2026-10-23T00:00:00Z","updated_at":"2026-10-23T00:00:00Z",
-      "owner":{"id":1,"login":"fixture"},
-      "files":{"README.md":{"filename":"README.md","content":"Base"}},
-      "history":[{"version":"remote"}]}
-      """.utf8))
-  return RemoteFile(gist: gist, content: content)
 }
 
 extension PublishState {

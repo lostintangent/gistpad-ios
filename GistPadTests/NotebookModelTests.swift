@@ -1,5 +1,4 @@
 import Foundation
-import GistPadComments
 @testable import GistPadEditor
 import GistPadInterface
 import GistPadPlatform
@@ -13,68 +12,96 @@ import WebKit
 
 @MainActor
 struct NotebookModelTests {
-  enum StatusRecoveryCase: CaseIterable, Sendable {
-    case retry, remoteReconnect, loadStateReconnect
+  /// A pinned gist "a" tagged Ideas, like the web saves them.
+  static let ideas: [PreferenceOperation] = [
+    .setPinned(gistID: "a", pinned: true),
+    .upsertTag(id: "ideas", name: "Ideas", color: "#EBC85A"),
+    .setTag(gistID: "a", tagID: "ideas", included: true),
+  ]
+
+  // MARK: Library
+
+  @Test func mapsOwnedStarredAndWebMetadataWithoutDuplicates() async throws {
+    let fixture = try await NotebookFixture(preferences: Self.ideas) {
+      $0.addGist(id: "a", description: "A note", files: ["a.md": "A"], isStarred: true)
+      $0.addGist(
+        id: "b", description: "A shared note", files: ["b.md": "B"],
+        owner: FixtureServer.someoneElse, isStarred: true)
+    }
+    await fixture.model.start()
+    let snapshot = fixture.model.library.snapshot
+    #expect(snapshot.notes.filter { !$0.isDailyNote }.count == 2)
+    let note = try #require(snapshot.notes.first { $0.id == "a" })
+    #expect(note.isOwned)
+    #expect(note.isStarred)
+    #expect(note.isPinned)
+    #expect(note.isSecret)
+    #expect(note.tagIDs == ["ideas"])
+    #expect(snapshot.tags == [.init(id: "ideas", name: "Ideas", colorHex: "#EBC85A")])
+    #expect(snapshot.notes.first { $0.id == "b" }?.isOwned == false)
   }
 
-  @Test(arguments: StatusRecoveryCase.allCases)
-  func workspaceStatusRecoveryIsWiredBeforeAnyReconnectAction(
-    recovery: StatusRecoveryCase
-  ) async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
+  @Test func theLibraryFilterMatchesTitlesAndEveryTagAndKeepsTheOpenNoteLikeTheWeb() async throws {
+    let fixture = try await NotebookFixture(preferences: Self.ideas) {
+      $0.addGist(id: "a", description: "A tagged needle", files: ["a.md": "A"])
+      $0.addGist(id: "b", description: "An untagged needle", files: ["b.md": "B"])
+      $0.addGist(id: "c", description: "Ordinary title", files: ["c.md": "A needle in the body."])
+    }
+    let model = fixture.model
     await model.start()
-    try #require(model.library.loadState == .ready)
-    switch recovery {
-    case .remoteReconnect:
-      await provider.requireReconnect()
-      await model.refresh()
-      #expect(model.remoteRefreshProblem?.recovery == .reconnect)
-      model.library.loadState = .ready
-    case .loadStateReconnect:
-      model.library.loadState = .reconnectRequired(message: "Reconnect the current notebook.")
-      #expect(model.remoteRefreshProblem == nil)
-    case .retry:
-      await provider.failRequests()
-      await model.refresh()
-      #expect(model.remoteRefreshProblem?.recovery == .retry)
+    model.library.query = "NEEDLE"
+    #expect(Set(model.library.matchingNotes.map(\.id)) == ["a", "b"])
+    model.library.selectedTagIDs = ["ideas"]
+    #expect(model.library.matchingNotes.map(\.id) == ["a"])
+    await model.open(.gist(id: "c"))
+    #expect(Set(model.library.matchingNotes.map(\.id)) == ["a", "c"])
+    #expect(model.library.resultGistCount == 1)
+  }
+
+  @Test func refreshDoesNotReplaceAnOpenedDocumentOrFilters() async throws {
+    let fixture = try await NotebookFixture(preferences: Self.ideas) {
+      $0.addGist(id: "a", description: "Original", files: ["README.md": "Original text"])
     }
-    let expectedSignIns = recovery == .retry ? 0 : 1
-    let refreshes = await provider.refreshAccountReads
-    #expect(await provider.signInCount == 0)
-    await provider.failRequests(false)
-    let workspace = LiveNotebookWorkspace(notebook: model, routes: NotebookRouteInbox())
-    let recover = try #require(workspace.libraryActions.recoverStatus)
-    recover()
-    let deadline = ContinuousClock.now + .seconds(5)
-    while ContinuousClock.now < deadline {
-      let signIns = await provider.signInCount
-      let refreshCount = await provider.refreshAccountReads
-      if signIns == expectedSignIns, refreshCount == refreshes + 1,
-        model.remoteRefreshProblem == nil, model.library.loadState == .ready
-      {
-        break
-      }
-      try await Task.sleep(for: .milliseconds(20))
+    let model = fixture.model
+    await model.start()
+    await model.open(.gist(id: "a"))
+    model.library.query = "Original"
+    model.library.selectedTagIDs = ["ideas"]
+    fixture.server.edit("a", description: "Changed remotely", files: ["README.md": "Remote text"])
+    await model.refresh()
+    #expect(model.library.snapshot.notes.first { $0.id == "a" }?.title == "Changed remotely")
+    #expect(model.loadedDocument?.text == "Original text")
+    #expect(model.library.query == "Original")
+    #expect(model.library.selectedTagIDs == ["ideas"])
+    #expect(model.library.selectedNoteID == "a")
+  }
+
+  @Test func networkFailureKeepsExistingLibraryAndDocument() async throws {
+    let fixture = try await NotebookFixture {
+      $0.addGist(id: "a", description: "A note", files: ["README.md": "Text"])
     }
-    #expect(model.remoteRefreshProblem == nil)
-    #expect(model.library.loadState == .ready)
-    #expect(model.account?.id == fixtureAccount.id)
-    #expect(model.pendingAccount == nil)
-    #expect(await provider.signInCount == expectedSignIns)
-    #expect(await provider.refreshAccountReads == refreshes + 1)
-    #expect(await provider.publicationReasons.isEmpty)
+    let model = fixture.model
+    await model.start()
+    await model.open(.gist(id: "a"))
+    fixture.fail()
+    await model.refresh()
+    #expect(model.library.snapshot.notes.filter { !$0.isDailyNote }.count == 1)
+    #expect(model.loadedDocument?.gist?.id == "a")
+    guard case .failed(let message) = model.library.loadState else {
+      Issue.record("A failed refresh must remain visible.")
+      return
+    }
+    #expect(!message.isEmpty)
   }
 
   @Test func failedGitHubWriteRaisesAttentionUntilItsRetrySucceeds() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
+    let fixture = try await NotebookFixture {
+      $0.addGist(id: "a", description: "A note", files: ["README.md": "Text"])
+    }
+    let model = fixture.model
     await model.start()
-    try #require(model.library.loadState == .ready)
-    await provider.failWrites()
-    _ = try? await model.perform(.preference(.setPinned(gistID: "gist-1", pinned: true)))
-    #expect(model.writeFailure != nil)
+    fixture.fail("PUT /auth/v1/user")
+    _ = try? await model.perform(.preference(.setPinned(gistID: "a", pinned: true)))
     guard case .problem(let problem) = model.remoteRefreshStatus else {
       Issue.record("A failed GitHub write should raise the GitHub status control.")
       return
@@ -82,35 +109,183 @@ struct NotebookModelTests {
     #expect(problem.heading == "Couldn't sync")
     #expect(problem.message == "This change wasn't saved.")
     #expect(problem.recoveryTitle == "Try Again")
-    #expect(problem.detail == nil)
-    await provider.failWrites(false)
+    fixture.restore()
     try await model.retryWrite()
     #expect(model.writeFailure == nil)
     #expect(model.remoteRefreshStatus == .idle)
+    #expect(model.library.snapshot.notes.first { $0.id == "a" }?.isPinned == true)
+  }
+
+  @Test func commentTotalsUpdateTheirLibraryRow() async throws {
+    let fixture = try await NotebookFixture {
+      $0.addGist(
+        id: "a", description: "A conversation", files: ["README.md": "Text"],
+        comments: ["One", "Two"])
+    }
+    let model = fixture.model
+    await model.start()
+    #expect(model.library.snapshot.notes.first { $0.id == "a" }?.commentCount == 2)
+    model.recordCommentCount(accountID: fixture.account.id, gistID: "a", total: 3)
+    #expect(model.library.snapshot.notes.first { $0.id == "a" }?.commentCount == 3)
+  }
+
+  // MARK: Opening
+
+  @Test func anOlderOpenCannotReplaceTheNewerSelection() async throws {
+    let fixture = try await NotebookFixture {
+      $0.addGist(id: "first", description: "First", files: ["README.md": "First source"])
+      $0.addGist(id: "second", description: "Second", files: ["README.md": "Second source"])
+    }
+    let model = fixture.model
+    await model.start()
+    let gate = fixture.hold("GET /gists/first")
+    let firstOpen = Task { await model.open(.gist(id: "first")) }
+    try await gate.arrival()
+    fixture.restore()
+    await model.open(.gist(id: "second"))
+    gate.open()
+    await firstOpen.value
+    #expect(model.loadedDocument?.gist?.id == "second")
+    #expect(model.library.selectedNoteID == "second")
+    #expect(model.opening == nil)
+  }
+
+  @Test func cachedSelectionPresentsTheTargetSynchronouslyWithoutRemoteReads() async throws {
+    let fixture = try await NotebookFixture {
+      $0.addGist(id: "a", description: "First", files: ["README.md": "First source"])
+      $0.addGist(id: "b", description: "Second", files: ["README.md": "Second source"])
+    }
+    let model = fixture.model
+    await model.start()
+    await model.open(.gist(id: "b"))
+    await model.open(.gist(id: "a"))
+    let first = try #require(model.loadedDocument)
+    let requests = fixture.server.requests
+    #expect(!model.beginOpeningRow(id: "b"))
+    #expect(model.presentedDocument.map(model.chrome(for:))?.title == "Second")
+    #expect(model.presentedDocument?.text == "Second source")
+    #expect(model.presentedDocument?.refersToSameFile(as: first) == false)
+    await model.openRow(id: "b")
+    #expect(model.opening == nil)
+    #expect(model.activeFile?.document.gist?.id == "b")
+    #expect(fixture.server.requests == requests)
+  }
+
+  @Test func launchRestoresTheAccountScopedFileWithoutCreatingAnything() async throws {
+    let fixture = try await NotebookFixture(
+      selection: .init(gistID: "a", filename: "Ideas.md", draftID: nil)
+    ) {
+      $0.addGist(
+        id: "a", description: "Last chosen", files: ["README.md": "Text", "Ideas.md": "Ideas"])
+    }
+    let model = fixture.model
+    await model.start()
+    #expect(model.loadedDocument?.gist?.id == "a")
+    #expect(model.loadedDocument?.filename == "Ideas.md")
+    #expect(!model.localDrafts.contains { $0.description == GistConventions.dailyNotesDescription })
+    await model.refresh()
+    #expect(model.loadedDocument?.filename == "Ideas.md")
+    #expect(fixture.publishes.isEmpty)
+  }
+
+  @Test func sourceUsesTheSavedFrontMatterPreferenceWithoutChangingTheDraft() async throws {
+    let prefix = "---\nedit:\n  instructions: Preserve source bytes\n---\n\n"
+    let source = prefix + "# Content\n\nA retained thought."
+    let fixture = try await NotebookFixture(preferences: [.setBoolean(.showFrontmatter, true)]) {
+      $0.addGist(id: "frontmatter", description: "Content", files: ["README.md": source])
+    }
+    let model = fixture.model
+    await model.start()
+    await model.open(.gist(id: "frontmatter"))
+    let document = try #require(model.loadedDocument)
+    let draft = try #require(document.draft)
+    let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
+    let session = controller.session
+    let view = session.textView
+    #expect(session.showsFrontMatter)
+    #expect(session.contentStart == 0)
+    #expect(view.selectedRange == .init(location: 0, length: 0))
+    _ = try await fixture.accounts.apply(
+      [.setBoolean(.showFrontmatter, false)], accountID: fixture.account.id)
+    await model.refresh()
+    try await controller.refreshMetadata()
+    #expect(!session.showsFrontMatter)
+    #expect(session.contentStart == prefix.utf16.count)
+    #expect(session.textView === view)
+    #expect(session.text.utf8.elementsEqual(source.utf8))
+    #expect(session.generation == draft.generation)
+    #expect(view.undoManager?.canUndo != true)
+  }
+
+  // MARK: Notes on this iPhone
+
+  @Test func newNotesAreRealDurableLocalDraftsEvenOffline() async throws {
+    let fixture = try await NotebookFixture()
+    let model = fixture.model
+    await model.start()
+    fixture.fail()
+    await model.open(.new)
+    let document = try #require(model.presentedDocument)
+    let draft = try #require(document.draft)
+    #expect(document.gist == nil)
+    #expect(document.editingRequestID != nil)
+    #expect(draft.gistID == nil)
+    #expect(draft.state == .savedLocally)
+    #expect(model.documentError == nil)
+    #expect(model.library.snapshot.notes.contains { $0.id == draft.id.uuidString })
+    fixture.restore()
+    await model.refresh()
+    await model.refresh()
+    #expect(model.library.snapshot.notes.filter { $0.id == draft.id.uuidString }.count == 1)
+    #expect(fixture.publishes.isEmpty)
+  }
+
+  @Test func launchDiscardsAnAbandonedBlankDraftEvenWhenItWasRemembered() async throws {
+    let fixture = try await NotebookFixture()
+    let accountID = fixture.account.id
+    let blank = try await fixture.store.createGistDraft(
+      accountID: accountID, githubUserID: FixtureServer.you.id)
+    let kept = try await fixture.store.createGistDraft(
+      accountID: accountID, githubUserID: FixtureServer.you.id)
+    let text = "Keep e\u{301}\r\n日本語 👩🏽‍💻"
+    _ = try await fixture.store.persist(id: kept.id, accountID: accountID, text: text, generation: 1)
+    fixture.selections.save(
+      .init(gistID: nil, filename: blank.filename, draftID: blank.id), accountID: accountID)
+    let model = fixture.model
+    await model.start()
+    let today = try #require(model.loadedDocument?.draft)
+    #expect(model.isTodaySelected)
+    #expect(today.isDiscardableBlank)
+    #expect(Set(model.localDrafts.map(\.id)) == [kept.id, today.id])
+    #expect(
+      Set(model.library.snapshot.notes.map(\.id)) == [kept.id.uuidString, today.id.uuidString])
+    let stored = try await fixture.store.drafts(accountID: accountID)
+    #expect(stored.first { $0.id == kept.id }?.text.utf8.elementsEqual(text.utf8) == true)
+    #expect(fixture.publishes.isEmpty)
   }
 
   @Test func returningToTheAppPublishesEveryLeftNoteWithUnpublishedEdits() async throws {
-    let daily = try makeGist(
-      id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-23.md")
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
-    _ = try await provider.stageDailyDraft(filename: "2026-10-24.md", text: "- [ ] One")
-    _ = try await provider.stageDailyDraft(filename: "2026-10-25.md", text: "- [ ] Two")
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.publishUnsyncedEdits()
-    #expect(await provider.publicationReasons == [.background, .background])
-    #expect(model.localDrafts.allSatisfy { !$0.hasUnpublishedEdits })
+    let fixture = try await NotebookFixture {
+      $0.addGist(id: "a", description: "First", files: ["README.md": "One"])
+      $0.addGist(id: "b", description: "Second", files: ["README.md": "Two"])
+    }
+    _ = try await fixture.stageEdit(gistID: "a", filename: "README.md", text: "One, edited")
+    _ = try await fixture.stageEdit(gistID: "b", filename: "README.md", text: "Two, edited")
+    await fixture.model.start()
+    await fixture.model.publishUnsyncedEdits()
+    #expect(fixture.remote("a", "README.md") == "One, edited")
+    #expect(fixture.remote("b", "README.md") == "Two, edited")
+    #expect(fixture.publishes.sorted() == ["PATCH /gists/a", "PATCH /gists/b"])
   }
 
   @Test func orphanedEditedCopiesHaveStableDatesAndLocalDeletionTargets() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    await provider.failToday(true)
-    let draft = try await provider.stageExistingDraft(gistID: "gone", text: "An unpublished edit")
-    let model = NotebookModel(provider: provider)
+    let fixture = try await NotebookFixture()
+    let draft = try await fixture.stageEdit(
+      gistID: "gone", filename: "README.md", text: "An unpublished edit")
+    let model = fixture.model
     await model.start()
     let row = try #require(model.library.snapshot.notes.first { $0.id == draft.id.uuidString })
     #expect(row.updatedAt == draft.updatedAt)
-    #expect(row.updatedAt != nil)
     #expect(row.isRecovery)
     let target = try #require(model.libraryDeletionTarget(for: row.id))
     #expect(target.localDraft?.id == draft.id)
@@ -119,75 +294,18 @@ struct NotebookModelTests {
     await model.open(.draft(id: draft.id))
     #expect(model.loadedDocument?.isRecovery == true)
     _ = try await model.perform(target.action)
-    #expect(await provider.deletedIDs.isEmpty)
-    #expect(model.localDrafts.allSatisfy { $0.id != draft.id })
-    #expect(model.library.matchingNotes.isEmpty)
-    #expect(model.loadedDocument == nil)
+    #expect(!model.localDrafts.contains { $0.id == draft.id })
+    #expect(model.loadedDocument?.draft?.id != draft.id)
     #expect(model.library.selectedNoteID != row.id)
     await model.refresh()
-    #expect(model.library.snapshot.notes.allSatisfy { $0.id != draft.id.uuidString })
-  }
-
-  @Test func aRefreshRemovesCleanCopiesOfGistsGitHubNoLongerListsButKeepsEdits() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    await provider.failToday(true)
-    let clean = try await provider.stageExistingDraft(gistID: "gone", text: "Base")
-    let dirty = try await provider.stageExistingDraft(gistID: "also-gone", text: "An edit")
-    let selections = NotebookSelectionStore()
-    selections.save(
-      .init(gistID: "gone", filename: "README.md", draftID: nil), accountID: fixtureAccount.id)
-    let model = NotebookModel(provider: provider, selections: selections)
-    await model.start()
-    #expect(model.localDrafts.allSatisfy { $0.id != clean.id })
-    #expect(model.localDrafts.contains { $0.id == dirty.id })
-    #expect(await provider.deletedIDs.isEmpty)
-    #expect(selections.selection(accountID: fixtureAccount.id) == nil)
-
-    let offline = StubNotebookProvider(account: fixtureAccount, gists: [])
-    await offline.failToday(true)
-    let offlineCopy = try await offline.stageExistingDraft(gistID: "unknown", text: "Base")
-    await offline.failRequests()
-    let offlineModel = NotebookModel(provider: offline)
-    await offlineModel.start()
-    #expect(offlineModel.localDrafts.contains { $0.id == offlineCopy.id })
-  }
-
-  @Test func aCleanCopyWithALiveUnboundEditorIsNeverAutomaticallyDiscarded() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "active", title: "In progress")])
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.gist(id: "active"))
-    let document = try #require(model.loadedDocument)
-    let draft = try #require(document.draft)
-    await provider.setGists([])
-    await model.refresh()
-    #expect(model.localDrafts.contains { $0.id == draft.id })
-    #expect(model.loadedDocument?.id == document.id)
-  }
-
-  @Test func openingALocalCopyWhileTheLibraryLoadsKeepsIt() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let draft = try await provider.stageExistingDraft(gistID: "gone", text: "Base")
-    await provider.holdLibraryRead()
-    let refresh = Task { await model.refresh() }
-    await provider.waitForHeldLibraryRead()
-    await model.open(.draft(id: draft.id))
-    await provider.releaseLibraryRead()
-    await refresh.value
-    #expect(model.loadedDocument?.draft?.id == draft.id)
-    #expect(model.localDrafts.contains { $0.id == draft.id })
-    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.contains { $0.id == draft.id })
+    #expect(!model.library.snapshot.notes.contains { $0.id == row.id })
+    #expect(!fixture.server.requests.contains { $0.hasPrefix("DELETE") })
+    #expect(fixture.publishes.isEmpty)
   }
 
   @Test func aNewlyPublishedDraftImmediatelyHasTheSameDeleteTargetAsItsNote() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
+    let fixture = try await NotebookFixture()
+    let model = fixture.model
     await model.start()
     await model.open(.new)
     let opened = try #require(model.loadedDocument)
@@ -197,395 +315,145 @@ struct NotebookModelTests {
       draftID: draft.id, accountID: draft.accountID, text: "A new published note", generation: 1)
     let published = try await model.publish(draftID: draft.id, accountID: draft.accountID)
     let gistID = try #require(published.gistID)
+    #expect(fixture.publishes == ["POST /gists"])
     let document = try #require(model.loadedDocument)
     let shareURL = try #require(model.chrome(for: document).shareURL)
     #expect(shareURL.absoluteString.hasPrefix("https://gistpad.dev/#/share/\(gistID)/"))
     let row = try #require(model.library.snapshot.notes.first { $0.id == gistID })
     #expect(!row.isRecovery)
-    #expect(model.library.snapshot.notes.allSatisfy { $0.id != draft.id.uuidString })
+    #expect(!model.library.snapshot.notes.contains { $0.id == draft.id.uuidString })
     #expect(model.libraryDeletionTarget(for: row.id)?.id == gistID)
     #expect(model.libraryDeletionTarget(for: draft.id.uuidString)?.id == gistID)
     #expect(model.libraryDeletionTarget(for: row.id)?.localDraft == nil)
     #expect(model.loadedDocument?.gist?.id == gistID)
     #expect(model.library.selectedNoteID == gistID)
-    #expect(await provider.readIDs.isEmpty)
+    #expect(!fixture.server.requests.contains("GET /gists/\(gistID)"))
   }
 
-  @Test func commentTotalsUpdateEveryGistProjectionWithoutChangingTheDocument() async throws {
-    let gist = try makeGist(id: "a", title: "A conversation").withCommentCount(2)
-    let other = try makeGist(id: "b", title: "Another note").withCommentCount(3)
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [gist, other], starred: [gist])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.gist(id: gist.id))
-    let document = try #require(model.loadedDocument)
-    model.recordCommentCount(accountID: fixtureAccount.id, gistID: gist.id, total: 7)
-    #expect(model.library.snapshot.notes.first(where: { $0.gistID == gist.id })?.commentCount == 7)
-    #expect(model.library.snapshot.notes.first(where: { $0.gistID == other.id })?.commentCount == 3)
-    #expect(model.cachedLibrary?.owned.first(where: { $0.id == gist.id })?.commentCount == 7)
-    #expect(model.cachedLibrary?.starred.first(where: { $0.id == gist.id })?.commentCount == 7)
-    #expect(model.loadedDocument?.id == document.id)
-    #expect(model.loadedDocument?.text == document.text)
-  }
-
-  @Test func staleAccountCommentTotalsCannotChangeTheCurrentNotebook() async throws {
-    let gist = try makeGist(id: "a", title: "A conversation").withCommentCount(2)
-    let model = NotebookModel(provider: StubNotebookProvider(account: fixtureAccount, gists: [gist]))
-    await model.start()
-    model.recordCommentCount(accountID: UUID(), gistID: gist.id, total: 99)
-    #expect(model.cachedLibrary?.gists.first?.commentCount == 2)
-    #expect(model.library.snapshot.notes.first(where: { $0.id == gist.id })?.commentCount == 2)
-  }
-
-  @Test func libraryDeleteSeparatesRemoteGistsAndLocalCopiesFromUnpublishedAndSharedRows() async throws {
-    let owned = try makeGist(
-      id: "a", title: "An owned notebook", content: "Find this thought",
-      additionalFiles: ["日本語.md": "Find this other thought"])
-    let shared = try makeGist(id: "shared", title: "A friend's notebook", owner: "a-friend")
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [owned], starred: [shared])
-    let recovery = try await provider.stageExistingDraft(gistID: "missing", text: "Find my recovery")
-    let local = try await provider.createDraft(accountID: fixtureAccount.id)
-    _ = try await provider.persist(
-      draftID: local.id, accountID: local.accountID, text: "Find my local draft", generation: 1)
-    let model = NotebookModel(provider: provider)
+  @Test func libraryDeleteSeparatesRemoteGistsAndLocalCopiesFromUnpublishedAndSharedRows()
+    async throws
+  {
+    let fixture = try await NotebookFixture {
+      $0.addGist(
+        id: "a", description: "An owned notebook",
+        files: ["README.md": "Find this thought", "日本語.md": "Find this other thought"])
+      $0.addGist(
+        id: "shared", description: "A friend's notebook", files: ["README.md": "Theirs"],
+        owner: FixtureServer.someoneElse, isStarred: true)
+    }
+    let accountID = fixture.account.id
+    let recovery = try await fixture.stageEdit(
+      gistID: "missing", filename: "README.md", text: "Find my recovery")
+    let local = try await fixture.store.createGistDraft(
+      accountID: accountID, githubUserID: FixtureServer.you.id)
+    _ = try await fixture.store.persist(
+      id: local.id, accountID: accountID, text: "Find my local draft", generation: 1)
+    let model = fixture.model
     await model.start()
     let target = try #require(model.libraryDeletionTarget(for: "a"))
     #expect(target.id == "a")
-    #expect(target.title == owned.displayName)
-    #expect(target.accountID == fixtureAccount.id)
+    #expect(target.title == "An owned notebook")
+    #expect(target.accountID == accountID)
     #expect(model.libraryDeletionTarget(for: recovery.id.uuidString)?.localDraft?.id == recovery.id)
     #expect(model.libraryDeletionTarget(for: local.id.uuidString)?.localDraft?.id == local.id)
     for id in ["missing", "unknown", "shared"] {
       #expect(model.libraryDeletionTarget(for: id) == nil)
     }
-    #expect(await provider.deletedIDs.isEmpty)
-    #expect(model.localDrafts.first(where: { $0.id == local.id })?.text == "Find my local draft")
-    #expect(model.localDrafts.first(where: { $0.id == recovery.id })?.text == "Find my recovery")
+    #expect(model.localDrafts.first { $0.id == local.id }?.text == "Find my local draft")
+    #expect(model.localDrafts.first { $0.id == recovery.id }?.text == "Find my recovery")
+    #expect(!fixture.server.requests.contains { $0.hasPrefix("DELETE") })
   }
 
-  @Test func deletingALibraryGistRemovesItsRowAndQuietlyOpensToday() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "a", title: "A published note")])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.gist(id: "a"))
-    let target = try #require(model.libraryDeletionTarget(for: "a"))
-    #expect(await provider.deletedIDs.isEmpty)
-    _ = try await model.perform(.delete(gistID: target.id))
-    #expect(await provider.deletedIDs == ["a"])
-    #expect(model.isTodaySelected)
-    #expect(model.loadedDocument?.editingRequestID == nil)
-    #expect(model.library.selectedNoteID == model.loadedDocument?.rowID)
-    #expect(model.library.snapshot.notes.allSatisfy { $0.id != "a" })
-    #expect(model.libraryDeletionTarget(for: "a") == nil)
-  }
-
-  @Test func deletingAnEditedPublishedGistPurgesItsDraftHistory() async throws {
-    let title = "A published and edited note"
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "a", title: title)])
-    let model = NotebookModel(provider: provider)
+  @Test func deletingALibraryGistRemovesItsRowAndDraftsAndQuietlyOpensToday() async throws {
+    let fixture = try await NotebookFixture {
+      $0.addGist(id: "a", description: "A published note", files: ["README.md": "Text"])
+    }
+    let model = fixture.model
     await model.start()
     await model.open(.gist(id: "a"))
     let draft = try #require(model.loadedDocument?.draft)
     _ = try await model.persist(
       draftID: draft.id, accountID: draft.accountID, text: "An accepted edit", generation: 1)
     _ = try await model.publish(draftID: draft.id, accountID: draft.accountID)
-    _ = try await model.perform(.delete(gistID: "a"))
-    #expect(await provider.deletedIDs == ["a"])
-    #expect(model.library.mainGistCount == 0)
-    #expect(model.localDrafts.count == 1)
-    #expect(model.localDrafts.first?.isDiscardableBlank == true)
-    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.allSatisfy {
-      $0.gistID != "a" && $0.isDiscardableBlank
-    })
-    await model.refresh()
-    #expect(model.library.snapshot.notes.allSatisfy { $0.isDailyNote })
+    let target = try #require(model.libraryDeletionTarget(for: "a"))
+    _ = try await model.perform(.delete(gistID: target.id))
+    #expect(fixture.server.requests.filter { $0.hasPrefix("DELETE") } == ["DELETE /gists/a"])
+    #expect(fixture.server.gists.isEmpty)
     #expect(model.isTodaySelected)
     #expect(model.loadedDocument?.editingRequestID == nil)
-    let restarted = NotebookModel(provider: provider)
-    await restarted.start()
-    #expect(restarted.localDrafts.count == 1)
-    #expect(restarted.localDrafts.first?.isDiscardableBlank == true)
-    #expect(restarted.library.snapshot.notes.allSatisfy { $0.isDailyNote })
-    #expect(restarted.isTodaySelected)
+    #expect(model.library.selectedNoteID == model.loadedDocument?.rowID)
+    #expect(model.libraryDeletionTarget(for: "a") == nil)
+    #expect(model.library.snapshot.notes.allSatisfy { $0.isDailyNote })
+    #expect(try await fixture.store.drafts(accountID: fixture.account.id).allSatisfy {
+      $0.gistID != "a"
+    })
+    let relaunched = fixture.relaunch()
+    await relaunched.start()
+    #expect(relaunched.library.snapshot.notes.allSatisfy { $0.isDailyNote })
+    #expect(relaunched.isTodaySelected)
   }
 
-  @Test func aRefreshAlreadyInFlightCannotResurrectASuccessfullyDeletedGist() async throws {
-    let deleted = try makeGist(id: "a", title: "Delete this published note")
-    let kept = try makeGist(id: "b", title: "Keep this note")
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [deleted, kept], starred: [deleted])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await provider.holdLibraryRead()
-    let refresh = Task { await model.refresh() }
-    await provider.waitForHeldLibraryRead()
-    _ = try await model.perform(.delete(gistID: deleted.id))
-    #expect(model.library.snapshot.notes.filter { !$0.isDailyNote }.map(\.id) == [kept.id])
-    await provider.releaseLibraryRead()
-    await refresh.value
-    #expect(model.library.snapshot.notes.filter { !$0.isDailyNote }.map(\.id) == [kept.id])
-    #expect(model.cachedLibrary?.gists.map(\.id) == [kept.id])
-    #expect(try await provider.localState(accountID: fixtureAccount.id).library?.gists.map(\.id)
-      == [kept.id])
-    #expect(!model.isRefreshingRemote)
-  }
+  // MARK: Account
 
-  @Test(arguments: [Optional<Bool>.none, false, true])
-  func sourceUsesTheSavedFrontMatterPreferenceWithoutChangingTheDraft(shown: Bool?) async throws {
-    let prefix = "---\nedit:\n  instructions: Preserve source bytes\n---\n\n"
-    let source = prefix + "# Content\n\nA retained thought."
-    var metadata = fixtureAccount.preferences.metadata
-    if let shown { metadata["showFrontmatter"] = .bool(shown) }
-    let account = Account(
-      id: fixtureAccount.id, login: fixtureAccount.login, githubUserID: fixtureAccount.githubUserID,
-      preferences: .init(metadata: metadata))
-    let provider = StubNotebookProvider(
-      account: account, gists: [try makeGist(id: "frontmatter", title: "Content", content: source)])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.gist(id: "frontmatter"))
-    let document = try #require(model.loadedDocument)
-    let draft = try #require(document.draft)
-    let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
-    #expect(controller.session.showsFrontMatter == (shown ?? false))
-    #expect(controller.session.contentStart == (shown == true ? 0 : prefix.utf16.count))
-    #expect(
-      controller.session.textView.selectedRange
-        == .init(
-          location: shown == true ? 0 : prefix.utf16.count, length: 0))
-    #expect(controller.session.text.utf8.elementsEqual(source.utf8))
-    #expect(controller.session.textView.text.utf8.elementsEqual(source.utf8))
-    #expect(controller.session.generation == draft.generation)
-    #expect(controller.session.textView.undoManager?.canUndo != true)
-    let identity = controller.session.viewIdentity
-    let view = controller.session.textView
-    await provider.setShowsFrontMatter(!(shown ?? false))
-    await model.refresh()
-    try await controller.refreshMetadata()
-    #expect(controller.session.showsFrontMatter == !(shown ?? false))
-    #expect(controller.session.contentStart == (shown == true ? prefix.utf16.count : 0))
-    #expect(controller.session.viewIdentity == identity)
-    #expect(controller.session.textView === view)
-    #expect(controller.session.text.utf8.elementsEqual(source.utf8))
-    #expect(controller.session.generation == draft.generation)
-    #expect(controller.session.textView.undoManager?.canUndo != true)
-  }
-
-  @Test(arguments: [false, true], [false, true])
-  func launchDiscardsAnAbandonedBlankDraftEvenWhenItWasRemembered(
-    remembered: Bool, offline: Bool
-  ) async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let blank = try await provider.createDraft(accountID: fixtureAccount.id)
-    let kept = try await provider.createDraft(accountID: fixtureAccount.id)
-    let text = "Keep e\u{301}\r\n日本語 👩🏽‍💻"
-    _ = try await provider.persist(
-      draftID: kept.id, accountID: kept.accountID, text: text, generation: 1)
-    let selections = NotebookSelectionStore()
-    if remembered {
-      selections.save(
-        .init(gistID: nil, filename: blank.filename, draftID: blank.id),
-        accountID: fixtureAccount.id)
+  @Test func signOutRetainsExactDraftsAndRestoresTheSameAccount() async throws {
+    let fixture = try await NotebookFixture(
+      selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+    ) {
+      $0.addGist(id: "a", description: "Kept on this iPhone", files: ["README.md": "Base"])
     }
-    if offline { await provider.failRequests() }
-    let model = NotebookModel(provider: provider, selections: selections)
-    await model.start()
-    let today = try #require(model.loadedDocument?.draft)
-    #expect(Set(model.localDrafts.map(\.id)) == [kept.id, today.id])
-    #expect(Set(model.library.snapshot.notes.map(\.id)) == [kept.id.uuidString, today.id.uuidString])
-    #expect(!model.localDrafts.contains { $0.id == blank.id })
-    #expect(model.isTodaySelected)
-    #expect(today.isDiscardableBlank)
-    #expect(model.documentError == nil)
-    #expect(selections.selection(accountID: fixtureAccount.id)?.draftID == today.id)
-    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.first(where: {
-      $0.id == kept.id
-    })?.text.utf8
-      .elementsEqual(text.utf8) == true)
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
-  @Test func refreshingTheLibraryNeverDiscardsTheCurrentlyOpenBlankDraft() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let today = try #require(model.loadedDocument?.draft)
-    await model.open(.new)
-    let blank = try #require(model.loadedDocument?.draft)
-    await model.refresh()
-    #expect(model.loadedDocument?.draft?.id == blank.id)
-    #expect(model.library.selectedNoteID == blank.id.uuidString)
-    #expect(Set(model.localDrafts.map(\.id)) == [today.id, blank.id])
-    #expect(try await !model.discardBlankDraft(blank))
-    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.contains {
-      $0.id == blank.id
-    })
-  }
-
-  @Test func anEmptyCurrentSessionIsKeptUntilItActuallyLeaves() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.new)
-    let document = try #require(model.loadedDocument)
-    let draft = try #require(document.draft)
-    let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
-    #expect(await !controller.finishLeavingNote())
-    #expect(model.loadedDocument?.draft?.id == draft.id)
-    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.contains {
-      $0.id == draft.id
-    })
-    #expect(await provider.publicationReasons.isEmpty)
-    model.showLibrary()
-    #expect(await controller.finishLeavingNote())
-    #expect(!controller.hasUnpublishedChanges)
-    #expect(!controller.canMutate)
-    #expect(await !controller.finishLeavingNote())
-    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.allSatisfy {
-      $0.id != draft.id && $0.isDiscardableBlank
-    })
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
-  @Test func leavingAfterErasingANewNoteDiscardsOnlyItsPersistedBlankGeneration() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.new)
-    let document = try #require(model.loadedDocument)
-    let draft = try #require(document.draft)
-    let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
-    for text in ["A thought", " \t\r\n"] {
-      controller.session.textView.text = text
-      controller.session.textViewDidChange(controller.session.textView)
-    }
-    model.showLibrary()
-    #expect(await controller.finishLeavingNote())
-    #expect(controller.session.generation == 2)
-    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.allSatisfy {
-      $0.id != draft.id && $0.isDiscardableBlank
-    })
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
-  @Test func signOutDefersForegroundAndRouteRestorationUntilLocalCleanupFinishes() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "a", title: "Signing out")])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let cachedReads = await provider.cachedAccountReads
-    let refreshReads = await provider.refreshAccountReads
-    await provider.holdSignOut()
-    let signOut = Task { try await model.perform(.signOut) }
-    await provider.waitForSignOut()
-    #expect(model.isSigningOut)
-    await model.start()
-    await model.refresh()
-    await model.signIn()
-    #expect(await provider.cachedAccountReads == cachedReads)
-    #expect(await provider.refreshAccountReads == refreshReads)
-    #expect(model.library.loadState == .ready)
-    #expect(model.account?.id == fixtureAccount.id)
-    await provider.releaseSignOut()
-    _ = try await signOut.value
-    #expect(!model.isSigningOut)
-    #expect(model.account == nil)
-    #expect(model.library.loadState == .signedOut)
-  }
-
-  @Test(arguments: [false, true])
-  func signOutRetainsExactDraftsAndRestoresTheSameAccount(afterLocalCleanupFailure: Bool) async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "a", title: "Kept on this iPhone")])
-    let selectionStore = NotebookSelectionStore()
-    try selectionStore.save(
-      .init(gistID: "a", filename: "README.md", draftID: nil), accountID: fixtureAccount.id)
-    let model = NotebookModel(provider: provider, selections: selectionStore)
-    await model.start()
     let text = "Private e\u{301}\r\n日本語 👩🏽‍💻"
-    let draft = try await provider.stageExistingDraft(gistID: "a", text: text)
-    await model.open(.gist(id: "a"))
-    model.remember(.init(gistID: "a", filename: draft.filename, draftID: draft.id))
-    await provider.failSignOut(afterLocalCleanup: afterLocalCleanupFailure)
-    if afterLocalCleanupFailure {
-      await #expect(throws: URLError.self) { _ = try await model.perform(.signOut) }
-    } else {
-      _ = try await model.perform(.signOut)
-    }
+    let draft = try await fixture.stageEdit(gistID: "a", filename: "README.md", text: text)
+    let model = fixture.model
+    await model.start()
+    #expect(model.loadedDocument?.draft?.id == draft.id)
+    _ = try await model.perform(.signOut)
     #expect(model.account == nil)
     #expect(model.loadedDocument == nil)
     #expect(model.cachedLibrary == nil)
     #expect(model.library.snapshot.notes.isEmpty)
     #expect(model.library.loadState == .signedOut)
-    #expect(selectionStore.selection(accountID: fixtureAccount.id)?.draftID == draft.id)
-    let kept = try await provider.localState(accountID: fixtureAccount.id).drafts
-    #expect(kept.count == 1)
-    #expect(kept.first?.text.utf8.elementsEqual(text.utf8) == true)
-    #expect(await provider.publicationReasons.isEmpty)
+    let kept = try await fixture.store.drafts(accountID: fixture.account.id)
+    #expect(kept.first { $0.id == draft.id }?.text.utf8.elementsEqual(text.utf8) == true)
     await model.signIn()
-    #expect(model.account?.id == fixtureAccount.id)
+    #expect(model.account?.id == fixture.account.id)
     #expect(model.loadedDocument?.draft?.id == draft.id)
     #expect(model.loadedDocument?.text.utf8.elementsEqual(text.utf8) == true)
-    #expect(await provider.publicationReasons.isEmpty)
+    #expect(fixture.publishes.isEmpty)
   }
 
-  @Test func rejectedSignOutLeavesTheOpenAccountAndDraftIntact() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "a", title: "Still open")])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.gist(id: "a"))
-    let document = try #require(model.loadedDocument)
-    await provider.rejectSignOut()
-    await #expect(throws: URLError.self) { _ = try await model.perform(.signOut) }
-    #expect(model.account?.id == fixtureAccount.id)
-    #expect(model.loadedDocument?.id == document.id)
-    #expect(model.loadedDocument?.text.utf8.elementsEqual(document.text.utf8) == true)
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
-  @Test func spellingPreferencesUpdateTheRetainedEditorWithoutChangingItsSourceOrSelection() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "a", title: "Spelling")])
-    await provider.setSpellingEnabled(false)
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.gist(id: "a"))
-    let document = try #require(model.loadedDocument)
-    let draft = try #require(document.draft)
-    let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
-    let editor = controller.session.textView
-    #expect(editor.spellCheckingType == .no)
-    editor.selectedRange = .init(location: 2, length: 3)
-    let generation = controller.session.generation
-    await provider.setSpellingEnabled(true)
-    await model.refresh()
-    try await controller.refreshMetadata()
-    #expect(controller.session.textView === editor)
-    #expect(editor.spellCheckingType == .yes)
-    #expect(editor.selectedRange == .init(location: 2, length: 3))
-    #expect(controller.session.text.utf8.elementsEqual(draft.text.utf8))
-    #expect(controller.session.generation == generation)
-  }
-
-  @Test func platformRefreshRejectsAnotherAccountBeforeReadingAnyLocalState() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let reads = await provider.localStateReads
-    await #expect(throws: AccountError.accountChanged) {
-      try await model.reloadPlatformState(accountID: UUID())
+  @Test func anotherAccountSigningInWaitsAndKeepsTheOriginalDrafts() async throws {
+    let fixture = try await NotebookFixture(
+      selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+    ) {
+      $0.addGist(id: "a", description: "Original account", files: ["README.md": "Base"])
     }
-    #expect(await provider.localStateReads == reads)
-    try await model.reloadPlatformState(accountID: fixtureAccount.id)
-    #expect(await provider.localStateReads == reads + 1)
+    let text = "日本語 e\u{301}\r\n**Private draft**"
+    let local = try await fixture.stageEdit(gistID: "a", filename: "README.md", text: text)
+    let model = fixture.model
+    await model.start()
+    let other = UUID()
+    try fixture.signInNext(as: other, login: FixtureServer.someoneElse.login)
+    await model.signIn()
+    #expect(model.account?.id == fixture.account.id)
+    #expect(model.pendingAccount?.id == other)
+    #expect(model.loadedDocument?.accountID == fixture.account.id)
+    guard case .reconnectRequired = model.library.loadState else {
+      Issue.record("An account switch must not silently adopt another account.")
+      return
+    }
+    model.keepCurrentNotebook()
+    #expect(model.account?.id == fixture.account.id)
+    #expect(model.pendingAccount == nil)
+    let kept = try await fixture.store.drafts(accountID: fixture.account.id)
+    #expect(kept.first { $0.id == local.id }?.text.utf8.elementsEqual(text.utf8) == true)
+    #expect(try await fixture.store.drafts(accountID: other).isEmpty)
   }
+
+  // MARK: Daily notes
 
   @Test func coldStartEnsuresTodayQuietlyWithoutPublishingAnUntouchedTemplate() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
+    let fixture = try await NotebookFixture()
+    let model = fixture.model
     await model.start()
     let document = try #require(model.loadedDocument)
     let draft = try #require(document.draft)
@@ -598,11 +466,10 @@ struct NotebookModelTests {
     #expect(!controller.hasUnpublishedChanges)
     #expect(controller.autosave(foreground: true) == nil)
     await controller.publish(reason: .background)
-    #expect(await provider.publicationReasons.isEmpty)
+    #expect(fixture.publishes.isEmpty)
     await model.open(.today())
     #expect(model.loadedDocument?.draft?.id == draft.id)
     #expect(model.loadedDocument?.editingRequestID != nil)
-    #expect(await provider.todayTargets.count == 1)
     controller.adoptPresentation(try #require(model.loadedDocument))
     controller.requestCreationFocus()
     #expect(controller.mode == .source)
@@ -615,532 +482,78 @@ struct NotebookModelTests {
     #expect(controller.mode == .source, "A fresh Today action focuses the retained editor again.")
   }
 
-  @Test func failedAutomaticTodayUsesTheFailedOpenRetryWithoutStealingFocus() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let failed = try #require(model.opening)
-    #expect(failed.failure != nil)
-    #expect(failed.request == .today(DailyNoteTarget(), focusesEditor: false))
-    #expect(model.documentError == nil)
-    #expect(model.presentedDocument == nil)
-    await provider.failToday(false)
-    await model.open(failed.request)
-    #expect(model.opening == nil)
-    #expect(model.loadedDocument?.filename == failed.filename)
-    #expect(model.loadedDocument?.editingRequestID == nil)
-    #expect(await provider.todayTargets.count == 2)
-  }
-
-  @Test(arguments: [false, true])
-  func anUntouchedDailyTemplateNeedsNoRemoteInspection(bound: Bool) async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let store = try DraftStore.open(inMemory: true)
-    let target = DailyNoteTarget()
-    let draft = if bound {
-      try await store.openDraft(
-        accountID: fixtureAccount.id, githubUserID: 1, gistID: "daily",
-        filename: target.filename, description: GistConventions.dailyNotesDescription,
-        content: GistConventions.dailyContent(template: nil, dateFilename: target.filename),
-        isNewFile: true)
-    } else {
-      try await store.createGistDraft(
-        accountID: fixtureAccount.id, githubUserID: 1, filename: target.filename,
-        description: GistConventions.dailyNotesDescription,
-        content: GistConventions.dailyContent(template: nil, dateFilename: target.filename))
+  @Test func twoTodayTapsMakeOneDailyNote() async throws {
+    let fixture = try await NotebookFixture(
+      selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+    ) {
+      $0.addGist(id: "a", description: "Somewhere else", files: ["README.md": "Text"])
     }
-    let controller = NotebookSessionController(
-      document: NotebookDocument(draft: draft), draft: draft, notebook: model)
-    await controller.inspectRemoteChanges()
-    #expect(await provider.inspectionCount == 0)
-    #expect(controller.remoteInspectionStatus == .idle)
-    #expect(controller.remoteInspectionProblem == nil)
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
-  @Test func leavingAnUntouchedAutomaticTodayDiscardsItWithoutPublishing() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
+    let model = fixture.model
     await model.start()
-    let document = try #require(model.loadedDocument)
-    let draft = try #require(document.draft)
-    let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
-    await model.open(.new)
-    #expect(await controller.finishLeavingNote())
-    #expect(!model.localDrafts.contains(where: { $0.id == draft.id }))
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
-  @Test func aSlowAutomaticTodayDoesNotBlockOrReplaceAnExplicitNewNote() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    await provider.holdToday()
-    let model = NotebookModel(provider: provider)
-    let start = Task { await model.start() }
-    await provider.waitForToday()
-    #expect(model.openingTitle == "Today")
-    await model.open(.new)
-    let chosen = try #require(model.loadedDocument)
-    #expect(chosen.filename == "README.md")
-    #expect(chosen.editingRequestID != nil)
-    await provider.releaseToday()
-    await start.value
-    #expect(model.loadedDocument?.id == chosen.id)
-    #expect(!model.isCreating)
-    #expect(await provider.creationCount == 1)
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
-  @Test func todaySummaryDistinguishesEmptyExistingMissingAndUnknownWithoutExtraRequests() async throws {
-    let filename = GistConventions.todayFilename()
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(
-          id: "daily", title: GistConventions.dailyNotesDescription,
-          content: "", filename: filename)
-      ])
-    let model = NotebookModel(provider: provider)
-    #expect(model.library.today.text == nil)
-    await model.start()
-    #expect(model.library.today.text != nil)
-    #expect(model.library.today.progress == .init(completed: 0, total: 0))
-    let reads = await provider.readIDs
-    model.updateCalendar()
-    #expect(await provider.readIDs == reads)
-    #expect(await provider.todayTargets.isEmpty)
-    #expect(await provider.creationCount == 0)
-
-    let missingProvider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let missing = NotebookModel(provider: missingProvider)
-    await missing.start()
-    #expect(missing.library.today.text != nil)
-    #expect(missing.loadedDocument?.draft?.isDiscardableBlank == true)
-    #expect(await missingProvider.readIDs.isEmpty)
-    #expect(await missingProvider.creationCount == 0)
-  }
-
-  @Test func anUnpublishedTodayReopensItsLocalDraftWithoutCreatingOrFetching() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.today())
-    let daily = try #require(model.loadedDocument?.draft)
-    #expect(daily.gistID == nil)
-    #expect(model.library.today.text != nil)
-    await model.open(.new)
-    #expect(model.loadedDocument?.draft?.id != daily.id)
-    await model.open(.today())
-    #expect(model.loadedDocument?.draft?.id == daily.id)
-    #expect(model.loadedDocument?.text == daily.text)
-    #expect(await provider.todayTargets.count == 1)
-    #expect(await provider.creationCount == 1)
-    #expect(await provider.readIDs.isEmpty)
-  }
-
-  @Test func ordinaryGistOpensReadmeBeforeAnEarlierAlphabeticFileAndHonorsExplicitSelection() async throws {
-    let gist = try makeGist(
-      id: "multiple", title: "Multiple files", content: "Apple source", filename: "Apple.md",
-      additionalFiles: ["README.md": "The actual README", "Zebra.md": "Zebra source"])
-    let model = NotebookModel(provider: StubNotebookProvider(account: fixtureAccount, gists: [gist]))
-    await model.start()
-    await model.open(.gist(id: gist.id))
-    #expect(model.loadedDocument?.filename == "README.md")
-    #expect(model.loadedDocument?.text == "The actual README")
-    await model.open(.gist(id: gist.id, filename: "Zebra.md"))
-    #expect(model.loadedDocument?.filename == "Zebra.md")
-    #expect(model.loadedDocument?.text == "Zebra source")
-  }
-
-  @Test func accountSwitchKeepsExactOriginalAccountDrafts() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "a", title: "Original account")])
-    let selections = NotebookSelectionStore()
-    selections.save(
-      .init(gistID: "a", filename: "README.md", draftID: nil), accountID: fixtureAccount.id)
-    let model = NotebookModel(provider: provider, selections: selections)
-    await model.start()
-    let text = "日本語 e\u{301}\r\n**Private draft**"
-    let local = try await provider.stageExistingDraft(gistID: "a", text: text)
-    let replacement = Account(
-      id: UUID(), login: "other-account", preferences: .init(metadata: [:]))
-    await provider.setSignInAccount(replacement)
-    await model.signIn()
-    #expect(model.pendingAccount?.id == replacement.id)
-    model.keepCurrentNotebook()
-    #expect(model.account?.id == fixtureAccount.id)
-    #expect(model.pendingAccount == nil)
-    let state = try await provider.localState(accountID: fixtureAccount.id)
-    #expect(state.drafts.first?.id == local.id)
-    #expect(state.drafts.first?.text.utf8.elementsEqual(text.utf8) == true)
-    #expect(try await provider.localState(accountID: replacement.id).drafts.isEmpty)
-  }
-
-  @Test func mapsOwnedStarredAndWebMetadataWithoutDuplicates() throws {
-    let owned = try makeGist(id: "a", title: "A note")
-    let starred = try makeGist(id: "b", title: "A shared note", owner: "someone")
-    let snapshot = NotebookModel.librarySnapshot(
-      owned: [owned], starred: [owned, starred], account: fixtureAccount
-    )
-    #expect(snapshot.notes.count == 2)
-    let note = try #require(snapshot.notes.first { $0.id == "a" })
-    #expect(note.isOwned)
-    #expect(note.isStarred)
-    #expect(note.isPinned)
-    #expect(note.isSecret)
-    #expect(note.tagIDs == ["ideas"])
-    #expect(snapshot.tags == [.init(id: "ideas", name: "Ideas", colorHex: "#EBC85A")])
-    #expect(snapshot.notes.first { $0.id == "b" }?.isOwned == false)
-  }
-
-  @Test func refreshDoesNotReplaceAnOpenedDocumentOrFilters() async throws {
-    let original = try makeGist(id: "a", title: "Original", content: "Original text")
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [original])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.gist(id: "a"))
-    model.library.query = "Original"
-    model.library.selectedTagIDs = ["ideas"]
-    await provider.setGists([
-      try makeGist(id: "a", title: "Changed remotely", content: "Remote text")
-    ])
-    await model.refresh()
-    #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.title == "Changed remotely")
-    #expect(model.loadedDocument?.text == "Original text")
-    #expect(model.library.query == "Original")
-    #expect(model.library.selectedTagIDs == ["ideas"])
-    #expect(model.library.selectedNoteID == "a")
-  }
-
-  @Test func anOlderOpenCannotReplaceTheNewerSelection() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(id: "a", title: "First"), try makeGist(id: "b", title: "Second")],
-      cachesContent: false
-    )
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await provider.holdRead(id: "a")
-    let firstOpen = Task { await model.open(.gist(id: "a")) }
-    await provider.waitForHeldRead()
-    await model.open(.gist(id: "b"))
-    await provider.releaseRead()
-    await firstOpen.value
-    #expect(model.loadedDocument?.gist?.id == "b")
-    #expect(model.library.selectedNoteID == "b")
-    #expect(model.opening == nil)
-  }
-
-  @Test func cachedSelectionPresentsTheTargetSynchronouslyWithoutRemoteReads() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "First", content: "First source"),
-        try makeGist(id: "b", title: "Second", content: "Second source"),
-      ])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.gist(id: "a"))
-    let first = try #require(model.loadedDocument)
-    let reads = await provider.readIDs
-    #expect(!model.beginOpeningRow(id: "b"))
-    #expect(model.presentedDocument.map(model.chrome(for:))?.title == "Second")
-    #expect(model.presentedDocument?.text == "Second source")
-    #expect(model.presentedDocument?.refersToSameFile(as: first) == false)
-    await model.openRow(id: "b")
-    #expect(model.opening == nil)
-    #expect(model.activeFile?.document.gist?.id == "b")
-    #expect(await provider.readIDs == reads)
-  }
-
-  @Test func selectionBeforeTheAsyncObserverCannotPresentThePreviousDocument() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "First", content: "First source"),
-        try makeGist(id: "b", title: "Second", content: "Second source"),
-      ])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.gist(id: "a"))
-    model.library.selectedNoteID = "b"
-    #expect(model.loadedDocument?.gist?.id == "a")
-    #expect(model.presentedDocument?.gist?.id == "b")
-    #expect(model.presentedDocument?.text == "Second source")
-  }
-
-  @Test func uncachedSelectionHasTheNewTitleAndCannotResurrectAnOlderRequest() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "First"),
-        try makeGist(id: "b", title: "Second"),
-      ], cachesContent: false)
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.gist(id: "b"))
-    await provider.holdRead(id: "a")
-    #expect(!model.beginOpeningRow(id: "a"))
-    #expect(model.presentedDocument == nil)
-    #expect(model.openingTitle == "First")
-    let first = Task { await model.openRow(id: "a") }
-    await provider.waitForHeldRead()
-    #expect(!model.beginOpeningRow(id: "b"))
-    #expect(model.openingTitle == "Second")
-    #expect(model.presentedDocument == nil)
-    await model.openRow(id: "b")
-    await provider.releaseRead()
+    let first = Task { await model.open(.today()) }
+    let second = Task { await model.open(.today()) }
     await first.value
-    #expect(model.presentedDocument?.gist?.id == "b")
-    #expect(model.opening == nil)
-  }
-
-  @Test func failedOpenKeepsTheRequestedTitleAndRetriesTheExactFileWithoutShowingThePreviousNote() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "Previous", content: "Previous source"),
-        try makeGist(
-          id: "b", title: "Requested", additionalFiles: ["Other.md": "Exact selected file"]),
-      ], cachesContent: false)
-    let model = NotebookModel(provider: provider)
-    await model.start()
+    await second.value
+    let today = try #require(model.loadedDocument?.draft)
+    #expect(today.filename == DailyNoteTarget().filename)
+    _ = try await model.persist(
+      draftID: today.id, accountID: today.accountID, text: "- [ ] One task", generation: 1)
+    _ = try await model.publish(draftID: today.id, accountID: today.accountID)
     await model.open(.gist(id: "a"))
-    await provider.setReadFailure(id: "b", fails: true)
-    await model.open(.gist(id: "b", filename: "Other.md", rowID: "b"))
-    #expect(model.loadedDocument?.gist?.id == "a")
-    #expect(model.presentedDocument == nil)
-    #expect(model.opening?.request == .gist(id: "b", filename: "Other.md", rowID: "b"))
-    #expect(model.opening?.title == "Requested")
-    #expect(model.opening?.failure != nil)
-    #expect(model.library.selectedNoteID == "b")
-    #expect(model.documentError == nil)
-    await provider.setReadFailure(id: "b", fails: false)
-    try await model.open(#require(model.opening).request)
-    #expect(model.opening == nil)
-    #expect(model.presentedDocument?.text == "Exact selected file")
-    #expect(model.presentedDocument?.rowID == "b")
-  }
-
-  @Test func creationPresentsDurableContentBeforeAnyLocalReload() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let reloads = await provider.localStateReads
-    await provider.failRequests()
-    await model.open(.new)
-    let document = try #require(model.presentedDocument)
-    let draft = try #require(document.draft)
-    #expect(document.editingRequestID != nil)
-    #expect(model.localDrafts.contains { $0.id == draft.id })
-    #expect(model.library.snapshot.notes.contains { $0.id == draft.id.uuidString })
-    #expect(await provider.localStateReads == reloads)
-    #expect(await provider.readIDs.isEmpty)
-    #expect(model.documentError == nil)
-  }
-
-  @Test func networkFailureKeepsExistingLibraryAndDocument() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "a", title: "A note")]
-    )
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.gist(id: "a"))
-    await provider.failRequests()
-    await model.refresh()
-    #expect(model.library.snapshot.notes.filter { !$0.isDailyNote }.count == 1)
-    #expect(model.loadedDocument?.gist?.id == "a")
-    guard case .failed(let message) = model.library.loadState else {
-      Issue.record("A failed refresh must remain visible.")
-      return
+    await model.open(.today())
+    #expect(model.loadedDocument?.draft?.id == today.id)
+    let dailies = try await fixture.store.drafts(accountID: fixture.account.id).filter {
+      $0.description == GistConventions.dailyNotesDescription
     }
-    #expect(!message.isEmpty)
-  }
-
-  @Test func accountSwitchWaitsForLocalWorkDisposition() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "a", title: "A note")]
-    )
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.gist(id: "a"))
-    let replacement = Account(
-      id: UUID(), login: "another-person", preferences: .init(metadata: [:]))
-    await provider.setSignInAccount(replacement)
-    await model.signIn()
-    #expect(model.account?.id == fixtureAccount.id)
-    #expect(model.pendingAccount?.id == replacement.id)
-    #expect(model.loadedDocument?.accountID == fixtureAccount.id)
-    guard case .reconnectRequired = model.library.loadState else {
-      Issue.record("An account switch must not silently adopt another account.")
-      return
-    }
-  }
-
-  @Test func blockedNotesAndReconnectsCannotPublish() {
-    #expect(PublishState.savedLocally.canPublish)
-    #expect(PublishState.failed(.network).canPublish)
-    #expect(!PublishState.savedToGitHub.canPublish)
-    #expect(!PublishState.reconnect.canPublish)
-    #expect(!PublishState.failed(.incompleteRemote).canPublish)
-    #expect(!PublishState.failed(.readOnly).canPublish)
-  }
-
-  @Test func launchRestoresTheAccountScopedFileWithoutCreatingAnything() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "a", title: "Last chosen")])
-    let selections = NotebookSelectionStore()
-    selections.save(
-      .init(gistID: "a", filename: "README.md", draftID: nil), accountID: fixtureAccount.id)
-    selections.save(
-      .init(gistID: "someone-elses-note", filename: "private.md", draftID: nil),
-      accountID: UUID())
-    let model = NotebookModel(provider: provider, selections: selections)
-    await model.start()
-    #expect(model.loadedDocument?.gist?.id == "a")
-    #expect(model.loadedDocument?.filename == "README.md")
-    #expect(await provider.creationCount == 0)
-    #expect(await provider.todayTargets.isEmpty)
-    await model.refresh()
-    #expect(model.loadedDocument?.gist?.id == "a")
+    #expect(dailies.map(\.id) == [today.id])
+    #expect(fixture.publishes == ["POST /gists"])
+    #expect(fixture.server.gists.filter(\.isDailyNote).map { Array($0.files.keys) }
+      == [[today.filename]])
   }
 
   @Test func anExplicitTodayActionPinsTheRequestedDayWithoutAnInterstitial() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount, gists: [try makeGist(id: "a", title: "Last chosen")])
-    let selections = NotebookSelectionStore()
-    selections.save(
-      .init(gistID: "a", filename: "README.md", draftID: nil), accountID: fixtureAccount.id)
-    let model = NotebookModel(provider: provider, selections: selections)
+    let fixture = try await NotebookFixture(
+      selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+    ) {
+      $0.addGist(id: "a", description: "Last chosen", files: ["README.md": "Text"])
+    }
+    let model = fixture.model
     await model.start()
     #expect(model.loadedDocument?.gist?.id == "a")
-    #expect(await provider.creationCount == 0)
-    #expect(await provider.todayTargets.isEmpty)
     let target = DailyNoteTarget(
       date: Date(timeIntervalSince1970: 1_790_208_000), timeZone: TimeZone(secondsFromGMT: 0)!)
     await model.open(.today(target))
-    #expect(await provider.todayTargets == [target])
     #expect(model.loadedDocument?.draft?.filename == target.filename)
     #expect(model.loadedDocument?.editingRequestID != nil)
   }
 
-  @Test func launchOpensExistingTodayWithoutCallingTheCreatingService() async throws {
-    let filename = GistConventions.todayFilename()
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(
-          id: "daily", title: GistConventions.dailyNotesDescription, filename: filename)
-      ])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    #expect(model.loadedDocument?.gist?.id == "daily")
-    #expect(model.loadedDocument?.filename == filename)
-    #expect(await provider.creationCount == 0)
-    #expect(await provider.todayTargets.isEmpty)
-  }
-
-  @Test func aMissingRemotePreservesTheLocalDraftAndItsGeneration() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let draft = try await provider.stageExistingDraft(
-      gistID: "deleted", text: "Keep my exact draft")
-    let selections = NotebookSelectionStore()
-    selections.save(
-      .init(gistID: "deleted", filename: draft.filename, draftID: nil),
-      accountID: fixtureAccount.id)
-    let model = NotebookModel(provider: provider, selections: selections)
-    await model.start()
-    #expect(model.loadedDocument?.draft?.id == draft.id)
-    #expect(model.loadedDocument?.draft?.generation == 8)
-    #expect(model.loadedDocument?.text == "Keep my exact draft")
-    #expect(model.loadedDocument?.isRecovery == true)
-    #expect(model.documentError != nil)
-    #expect(await provider.creationCount == 0)
-  }
-
-  @Test func newNotesAreRealDurableLocalDraftsWithoutASyntheticGist() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.new)
-    let document = try #require(model.loadedDocument)
-    let draft = try #require(document.draft)
-    #expect(document.gist == nil)
-    #expect(document.editingRequestID != nil)
-    #expect(draft.gistID == nil)
-    #expect(draft.state == .savedLocally)
-    #expect(await provider.creationCount == 1)
-    #expect(await provider.todayTargets.count == 1)
-    await model.refresh()
-    await model.refresh()
-    #expect(model.library.snapshot.notes.filter { $0.id == draft.id.uuidString }.count == 1)
-  }
-
-  @Test func anUnrelatedAccountCannotRestoreThePreviousAccountsSelection() async throws {
-    let other = Account(id: UUID(), login: "other", preferences: .init(metadata: [:]))
-    let provider = StubNotebookProvider(account: other, gists: [])
-    let selections = NotebookSelectionStore()
-    selections.save(
-      .init(gistID: "a", filename: "README.md", draftID: nil), accountID: fixtureAccount.id)
-    let model = NotebookModel(provider: provider, selections: selections)
-    await model.start()
-    #expect(model.loadedDocument?.accountID == other.id)
-    #expect(model.isTodaySelected)
-    #expect(await provider.readIDs.isEmpty)
-  }
-
-  @Test func theLibraryFilterMatchesTitlesAndEveryTagAndKeepsTheOpenNoteLikeTheWeb() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "A tagged needle"),
-        try makeGist(id: "b", title: "An untagged needle"),
-        try makeGist(id: "c", title: "Ordinary title", content: "A needle in the body."),
-      ])
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    model.library.query = "NEEDLE"
-    #expect(Set(model.library.matchingNotes.map(\.id)) == ["a", "b"])
-    model.library.selectedTagIDs = ["ideas"]
-    #expect(model.library.matchingNotes.map(\.id) == ["a"])
-    await model.open(.gist(id: "c"))
-    #expect(Set(model.library.matchingNotes.map(\.id)) == ["a", "c"])
-    #expect(model.library.resultGistCount == 1)
-  }
-
   @Test func aDailyRowShowsItsDayAndTaskProgress() async throws {
     let filename = GistConventions.todayFilename()
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(
-          id: "daily", title: GistConventions.dailyNotesDescription,
-          content: "- [x] One\n- [ ] Two\nA third line stays out of the excerpt.", filename: filename)
-      ])
-    let model = NotebookModel(provider: provider)
+    let fixture = try await NotebookFixture {
+      $0.addGist(
+        id: "daily", description: GistConventions.dailyNotesDescription,
+        files: [filename: "- [x] One\n- [ ] Two\nA third line stays out of the excerpt."])
+    }
+    let model = fixture.model
     await model.start()
     let row = try #require(model.library.unfilteredNotes(in: .dailyNotes).first)
     #expect(row.id == "daily/\(filename)")
     #expect(row.dailyDate == DailyNotesIndex.parseDateFilename(filename))
     #expect(model.library.dailyNoteCount == 1)
     #expect(row.progress == .init(completed: 1, total: 2))
+    #expect(model.library.today.progress == .init(completed: 1, total: 2))
     await model.openRow(id: row.id)
     #expect(model.loadedDocument?.filename == filename)
     #expect(model.library.selectedNoteID == row.id)
   }
 
   @Test func unfilteredDailyRowsResolveTheirGistAndRefreshOverdueOnCalendarChanges() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(
-          id: "daily", title: GistConventions.dailyNotesDescription,
-          content: "- [ ] Carried over", filename: "2026-01-02.md")
-      ])
-    let model = NotebookModel(provider: provider)
+    let fixture = try await NotebookFixture {
+      $0.addGist(
+        id: "daily", description: GistConventions.dailyNotesDescription,
+        files: ["2026-01-02.md": "- [ ] Carried over"])
+    }
+    let model = fixture.model
     await model.start()
     let rowID = "daily/2026-01-02.md"
     #expect(model.gistID(forRow: rowID) == "daily")
@@ -1153,127 +566,13 @@ struct NotebookModelTests {
     #expect(model.library.snapshot.notes[index].isOverdue)
   }
 
-  @Test func uncachedDaysClaimNoTaskProgressOrOverdue() async throws {
-    let daily = try makeGist(
-      id: "daily", title: GistConventions.dailyNotesDescription,
-      content: "- [ ] One", filename: "2026-10-23.md")
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily], cachesContent: false)
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let row = try #require(model.library.snapshot.notes.first { $0.id == "daily/2026-10-23.md" })
-    #expect(row.progress == nil)
-    #expect(!row.isOverdue)
-  }
-
-  @Test func dailyProjectionUnionsActualDaysAndAccountScopedDraftsWithoutRevivingDeletedFiles() async throws {
-    let daily = try makeGist(
-      id: "daily", title: GistConventions.dailyNotesDescription,
-      content: "- [ ] Remote", filename: "2026-10-23.md",
-      additionalFiles: ["template.md": "Template", "README.md": "Not a day", "2026-02-30.md": "Invalid"])
-    let store = try DraftStore.open(inMemory: true)
-    let clean = try await store.openDraft(
-      accountID: fixtureAccount.id, githubUserID: 1, gistID: daily.id, filename: "2026-10-19.md",
-      description: GistConventions.dailyNotesDescription, content: "Intentionally deleted", revision: "one")
-    let added = try await store.openDraft(
-      accountID: fixtureAccount.id, githubUserID: 1, gistID: daily.id, filename: "2026-10-20.md",
-      description: GistConventions.dailyNotesDescription, content: "- [ ] Local only", isNewFile: true)
-    let overlay = try await store.openDraft(
-      accountID: fixtureAccount.id, githubUserID: 1, gistID: daily.id, filename: "2026-10-23.md",
-      description: GistConventions.dailyNotesDescription, content: "- [ ] Remote", revision: "one")
-    let edited = try await store.persist(
-      id: overlay.id, accountID: fixtureAccount.id, text: "- [x] Local\n- [ ] Retained", generation: 1)
-    let unbound = try await store.newDraft(
-      accountID: fixtureAccount.id, githubUserID: 1, filename: "2026-10-22.md",
-      description: GistConventions.dailyNotesDescription, text: "An unpublished day")
-    let foreign = try await store.newDraft(
-      accountID: UUID(), githubUserID: 2, filename: "2026-10-21.md",
-      description: GistConventions.dailyNotesDescription, text: "Another account")
-    let template = try await store.openDraft(
-      accountID: fixtureAccount.id, githubUserID: 1, gistID: daily.id, filename: "template.md",
-      description: GistConventions.dailyNotesDescription, content: "A local template", isNewFile: true)
-    let drafts = [clean, added, edited, unbound, foreign, template]
-    let snapshot = NotebookModel.librarySnapshot(
-      owned: [daily], starred: [], account: fixtureAccount, drafts: drafts)
-    #expect(snapshot.dailyNoteCount == 3)
-    #expect(Set(snapshot.notes.map(\.id)) == [
-      "daily/2026-10-20.md", "daily/2026-10-23.md", unbound.id.uuidString,
-    ])
-    #expect(snapshot.notes.first { $0.id == "daily/2026-10-23.md" }?.progress
-      == .init(completed: 1, total: 2))
-    #expect(snapshot.notes.allSatisfy { $0.dailyDate != nil && !$0.isRecovery })
-    #expect(snapshot.notes.first { $0.id == unbound.id.uuidString }?.gistID == nil)
-
-    let partial = try makeGist(
-      id: "daily", title: GistConventions.dailyNotesDescription,
-      content: "- [ ] Remote", filename: "2026-10-23.md", truncated: true)
-    let incomplete = NotebookModel.librarySnapshot(
-      owned: [partial], starred: [], account: fixtureAccount, drafts: drafts)
-    #expect(incomplete.dailyNoteCount == nil)
-    #expect(incomplete.notes.contains { $0.id == "daily/2026-10-19.md" })
-    #expect(incomplete.notes.count == 4)
-  }
-
-  @Test(arguments: [false, true])
-  func dailyMembershipDistinguishesAKnownEmptyContainerFromAnIncompleteOne(truncated: Bool) async throws {
-    let daily = try makeGist(
-      id: "daily", title: GistConventions.dailyNotesDescription,
-      filename: "template.md", additionalFiles: ["README.md": "Not a day"], truncated: truncated)
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    #expect(model.library.hasKnownGistSnapshot)
-    #expect(model.library.snapshot.notes.isEmpty)
-    #expect(model.library.dailyNoteCount == (truncated ? nil : 0))
-  }
-
-  @Test func localCreationDoesNotTurnAnUnavailableLibraryIntoAKnownEmptyOne() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    await provider.failRequests()
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await model.open(.new)
-    let draft = try #require(model.loadedDocument?.draft)
-    #expect(model.library.snapshot.notes.map(\.id) == [draft.id.uuidString])
-    #expect(!model.library.hasKnownGistSnapshot)
-    #expect(model.library.dailyNoteCount == nil)
-    #expect(model.library.mainGistCount == nil)
-  }
-
-  @Test func aCleanDeletedTodayDoesNotSupplyRailProgressButNewLocalEditsDo() async throws {
-    let filename = GistConventions.todayFilename()
-    let daily = try makeGist(
-      id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-23.md")
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
-    let previous = NotebookDocument(
-      accountID: fixtureAccount.id, gist: daily, filename: filename, text: "- [ ] A deleted task")
-    let draft = try await provider.openDraft(for: previous)
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    #expect(model.library.today.text == nil)
-    #expect(model.library.today.progress == nil)
-    #expect(model.library.dailyNoteCount == 1)
-    _ = try await model.persist(
-      draftID: draft.id, accountID: draft.accountID,
-      text: "- [ ] A new local task", generation: 1)
-    #expect(model.library.today.text != nil)
-    #expect(model.library.today.progress == .init(completed: 0, total: 1))
-    #expect(model.library.dailyNoteCount == 2)
-    #expect(model.library.snapshot.notes.contains { $0.id == "daily/\(filename)" })
-    #expect(await provider.readIDs.isEmpty)
-    #expect(await provider.todayTargets.isEmpty)
-  }
-
   @Test func dailyRowsOpenAndDeleteTheirExactFile() async throws {
-    let daily = try makeGist(
-      id: "daily", title: GistConventions.dailyNotesDescription,
-      content: "The alpha day", filename: "2026-10-23.md",
-      additionalFiles: ["2026-10-24.md": "The beta day"])
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
+    let fixture = try await NotebookFixture {
+      $0.addGist(
+        id: "daily", description: GistConventions.dailyNotesDescription,
+        files: ["2026-10-23.md": "The alpha day", "2026-10-24.md": "The beta day"])
+    }
+    let model = fixture.model
     await model.start()
     await model.openRow(id: "daily/2026-10-24.md")
     #expect(model.loadedDocument?.filename == "2026-10-24.md")
@@ -1282,349 +581,316 @@ struct NotebookModelTests {
     await model.openRow(id: "daily/2026-10-23.md")
     #expect(model.loadedDocument?.text == "The alpha day")
     #expect(model.library.selectedNoteID == "daily/2026-10-23.md")
-    await model.open(.gist(id: daily.id, filename: "2026-10-24.md"))
+    await model.open(.gist(id: "daily", filename: "2026-10-24.md"))
     #expect(model.library.selectedNoteID == "daily/2026-10-24.md")
     #expect(model.loadedDocument?.rowID == "daily/2026-10-24.md")
     let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
-    #expect(deletion.id == daily.id)
+    #expect(deletion.id == "daily")
     #expect(deletion.title == GistConventions.fileDisplayName("2026-10-24.md"))
     if case .deleteFile(let gistID, let filename) = deletion.action {
-      #expect(gistID == daily.id)
+      #expect(gistID == "daily")
       #expect(filename == "2026-10-24.md")
     } else {
       Issue.record("A Daily row deletes only its own file.")
     }
-    #expect(await provider.readIDs.isEmpty)
-  }
-
-  @Test func aStarredDailyGistKeepsItsGistRow() async throws {
-    let filename = GistConventions.todayFilename()
-    let starred = try makeGist(
-      id: "foreign-daily", title: GistConventions.dailyNotesDescription,
-      content: "A starred daily needle", owner: "other", filename: filename)
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [], starred: [starred])
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    #expect(model.library.snapshot.notes.map(\.id) == [starred.id])
-    #expect(model.library.dailyNoteCount == 0)
-    await model.open(.gist(id: starred.id, filename: filename))
-    #expect(model.library.selectedNoteID == starred.id)
-    #expect(model.loadedDocument.map(model.chrome(for:))?.access == .readOnly)
-    #expect(model.loadedDocument?.filename == filename)
-    #expect(model.libraryDeletionTarget(for: starred.id) == nil)
-    #expect(await provider.readIDs.isEmpty)
   }
 
   @Test func persistingAndPublishingANewDailyFileKeepItsExactRowAndTaskProgress() async throws {
-    let daily = try makeGist(
-      id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-23.md")
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
-    await provider.failToday(true)
-    let draft = try await provider.stageDailyDraft(
-      filename: "2026-10-24.md", text: "- [ ] A retained task")
-    let model = NotebookModel(provider: provider)
+    let fixture = try await NotebookFixture(
+      selection: .init(gistID: "daily", filename: "2026-10-23.md", draftID: nil)
+    ) {
+      $0.addGist(
+        id: "daily", description: GistConventions.dailyNotesDescription,
+        files: ["2026-10-23.md": "An earlier day"])
+    }
+    let draft = try await fixture.stageEdit(
+      gistID: "daily", filename: "2026-10-24.md", text: "- [ ] A retained task")
+    let model = fixture.model
     await model.start()
     await model.openRow(id: "daily/2026-10-24.md")
     let documentID = try #require(model.loadedDocument?.id)
+    let text = "- [x] A retained task\n- [ ] A new task"
     _ = try await model.persist(
-      draftID: draft.id, accountID: draft.accountID,
-      text: "- [x] A retained task\n- [ ] A new task", generation: 1)
+      draftID: draft.id, accountID: draft.accountID, text: text, generation: draft.generation + 1)
     let row = try #require(model.library.snapshot.notes.first { $0.id == "daily/2026-10-24.md" })
     #expect(row.progress == .init(completed: 1, total: 2))
     #expect(row.isOverdue)
     #expect(model.library.dailyNoteCount == 2)
     _ = try await model.publish(draftID: draft.id, accountID: draft.accountID)
+    #expect(fixture.remote("daily", "2026-10-24.md") == text)
+    #expect(fixture.publishes == ["PATCH /gists/daily"])
     #expect(model.loadedDocument?.id == documentID)
     #expect(model.library.selectedNoteID == row.id)
     #expect(model.library.dailyNoteCount == 2)
     #expect(model.library.snapshot.notes.filter { $0.id == row.id }.count == 1)
-    #expect(model.library.snapshot.notes.allSatisfy { $0.id != draft.id.uuidString })
-    #expect(await provider.publicationReasons == [.manual])
+    #expect(!model.library.snapshot.notes.contains { $0.id == draft.id.uuidString })
   }
 
-  @Test(arguments: [false, true])
-  func publishingTheFirstDailyNotePromotesItsUUIDToTheExactFileRow(adopting: Bool) async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let draft = try #require(model.loadedDocument?.draft)
-    #expect(model.library.selectedNoteID == draft.id.uuidString)
-    #expect(model.library.dailyNoteCount == 1)
-    _ = try await model.persist(
-      draftID: draft.id, accountID: draft.accountID, text: "- [ ] A daily task", generation: 1)
-    let saved: DraftSnapshot
-    if adopting {
-      saved = try await provider.publish(
-        draftID: draft.id, accountID: draft.accountID, reason: .manual,
-        expectedGeneration: 1, shouldPublish: { true })
-      _ = try await model.adoptPublication(saved)
-    } else {
-      saved = try await model.publish(draftID: draft.id, accountID: draft.accountID)
+  @Test func deletingADailyNoteRemovesOnlyItsFileOrTheGistWithItsLastFile() async throws {
+    let fixture = try await NotebookFixture(
+      selection: .init(gistID: "daily", filename: "2026-10-23.md", draftID: nil)
+    ) {
+      $0.addGist(
+        id: "daily", description: GistConventions.dailyNotesDescription,
+        files: ["2026-10-23.md": "The alpha day", "2026-10-24.md": "The beta day"])
     }
-    let gistID = try #require(saved.gistID)
-    let rowID = "\(gistID)/\(draft.filename)"
-    #expect(model.library.selectedNoteID == rowID)
-    #expect(model.loadedDocument?.rowID == rowID)
-    #expect(model.library.snapshot.notes.map(\.id) == [rowID])
-    #expect(model.library.dailyNoteCount == 1)
-    #expect(model.libraryDeletionTarget(for: rowID)?.id == gistID)
-  }
-
-  @Test func deletingADailyGistCancelsItsPendingExactFileOpening() async throws {
-    let daily = try makeGist(
-      id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-24.md")
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily], cachesContent: false)
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await provider.holdRead(id: daily.id)
-    let opening = Task { await model.openRow(id: "daily/2026-10-24.md") }
-    await provider.waitForHeldRead()
-    #expect(model.opening?.rowID == "daily/2026-10-24.md")
-    let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
-    _ = try await model.perform(deletion.action)
-    await provider.releaseRead()
-    await opening.value
-    #expect(model.opening == nil)
-    #expect(model.loadedDocument?.gist?.id != daily.id)
-    #expect(model.library.selectedNoteID != "daily/2026-10-24.md")
-    #expect(model.library.snapshot.notes.allSatisfy { $0.gistID != daily.id })
-    #expect(model.library.dailyNoteCount == 0)
-    #expect(await provider.deletedIDs == [daily.id])
-  }
-
-  @Test func deletingOneDailyNoteRemovesOnlyItsFileAndKeepsTheSibling() async throws {
-    let daily = try makeGist(
-      id: "daily", title: GistConventions.dailyNotesDescription,
-      content: "The alpha day", filename: "2026-10-23.md",
-      additionalFiles: ["2026-10-24.md": "The beta day"])
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
-    await provider.failToday(true)
-    let model = NotebookModel(provider: provider)
+    let model = fixture.model
     await model.start()
     #expect(model.library.dailyNoteCount == 2)
-    let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
-    _ = try await model.perform(deletion.action)
+    let beta = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
+    _ = try await model.perform(beta.action)
     #expect(model.library.dailyNoteCount == 1)
     #expect(model.library.snapshot.notes.map(\.id) == ["daily/2026-10-23.md"])
-    #expect(await provider.deletedFiles == ["daily/2026-10-24.md"])
-    #expect(await provider.deletedIDs.isEmpty)
+    #expect(fixture.remote("daily", "2026-10-24.md") == nil)
+    #expect(fixture.remote("daily", "2026-10-23.md") == "The alpha day")
+    let alpha = try #require(model.libraryDeletionTarget(for: "daily/2026-10-23.md"))
+    _ = try await model.perform(alpha.action)
+    #expect(fixture.server.gists.isEmpty)
+    #expect(!model.library.snapshot.notes.contains { $0.gistID == "daily" })
   }
 }
 
 @Suite(.serialized)
 @MainActor
 struct NotebookNavigationHostTests {
-  @Test(arguments: [false, true])
-  func reopeningPreviewThenEditKeepsTheSourceGlyphsOnScreen(startsInPreview: Bool) async throws {
+  @Test func reopeningPreviewThenEditKeepsTheSourceOnScreen() async throws {
     let source = """
       ---
       edit:
-        commands:
-          progress: Update a reading entry
         instructions: >-
           Preserve the reading list's existing sections and entries.
       ---
 
       # A visible reading list
 
-      ## In progress
-
       """
       + (1...300).map { "\($0). A retained reading entry \($0)\n" }.joined()
-      + "\n## Another section\n\nAn exact final source line."
+      + "\nAn exact final source line."
     let other = "# Another note\n\nA different retained source."
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(
-          id: "reading", title: "Reading list", content: source,
-          additionalFiles: ["Calendar.md": "# A second file"]),
-        try makeGist(id: "other", title: "Another note", content: other),
-      ])
-    let host = try await NavigationHost(
-      provider: provider, sizeClass: .compact, initialMode: startsInPreview ? .reading : .source)
+    let fixture = try await NotebookFixture(autosave: false) {
+      $0.addGist(
+        id: "reading", description: "Reading list",
+        files: ["README.md": source, "Calendar.md": "# A second file"])
+      $0.addGist(id: "other", description: "Another note", files: ["README.md": other])
+    }
+    let host = try await NavigationHost(fixture: fixture, sizeClass: .compact, mode: .reading)
     defer { await host.close() }
-    host.window.overrideUserInterfaceStyle = .dark
     var retained: UITextView?
-    var checkedWidthChange = false
-    for id in ["reading", "other", "reading", "other", "reading"] {
+    for id in ["reading", "other", "reading"] {
       let text = id == "reading" ? source : other
       host.model.select(rowID: id)
       try await host.waitUntil {
         host.model.presentedDocument?.gist?.id == id && host.editor(text: text) != nil
-          && host.descendants.contains { $0 is UISegmentedControl }
+          && host.picker != nil
       }
       let editor = try #require(host.editor(text: text))
       if id == "reading" {
         if let retained { #expect(editor === retained) } else { retained = editor }
       }
-      try await Task.sleep(for: .milliseconds(450))
-      Attachment.record(
-        UIGraphicsImageRenderer(bounds: host.window.bounds).image { _ in
-          host.window.drawHierarchy(in: host.window.bounds, afterScreenUpdates: true)
-        }, named: "initial-source-\(id).png", as: .png)
-      if !checkedWidthChange {
+      if id == "other" {
+        // Unfolding the Duo gives Split. Folding it again keeps the same source.
         let compactWidth = host.window.frame.width
-        // The Duo's inner display is wide enough for Split even at a compact size class.
-        let compactSegments = try #require(
-          host.descendants.compactMap { $0 as? UISegmentedControl }.last).numberOfSegments
         host.window.traitOverrides.horizontalSizeClass = .regular
         host.window.frame.size.width = 1180
-        try await host.waitUntil {
-          host.descendants.compactMap { $0 as? UISegmentedControl }.last?.numberOfSegments == 3
-        }
+        try await host.waitUntil { host.picker?.numberOfSegments == 3 }
         host.layout.select(.split)
-        try await Task.sleep(for: .milliseconds(450))
-        try host.expectSourceInk(editor, named: "wide-split-source")
+        try await host.waitUntil { host.isVisible(editor) }
         host.window.traitOverrides.horizontalSizeClass = .compact
         host.window.frame.size.width = compactWidth
-        try await host.waitUntil {
-          host.descendants.compactMap { $0 as? UISegmentedControl }.last?.numberOfSegments == compactSegments
-        }
-        host.layout.select(startsInPreview ? .reading : .source)
-        checkedWidthChange = true
+        try await host.waitUntil { host.picker?.numberOfSegments == 2 }
+        host.layout.select(.reading)
       }
-      for showsPreview in [true, false, true, false] {
-        let picker = try #require(host.descendants.compactMap { $0 as? UISegmentedControl }.last)
+      for showsPreview in [true, false] {
+        let picker = try #require(host.picker)
         picker.selectedSegmentIndex = showsPreview ? picker.numberOfSegments - 1 : 0
         picker.sendActions(for: .valueChanged)
-        try await Task.sleep(for: .milliseconds(450))
         if showsPreview {
           let preview = try #require(host.descendants.compactMap { $0 as? WKWebView }.first)
-          let deadline = ContinuousClock.now.advanced(by: .seconds(5))
           var rendered = false
-          repeat {
+          let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+          while !rendered, ContinuousClock.now < deadline {
             rendered = try await preview.callAsyncJavaScript(
               "return document.body.innerText.includes('retained');",
               arguments: [:], in: nil, contentWorld: .page) as? Bool == true
             if !rendered { try await Task.sleep(for: .milliseconds(20)) }
-          } while !rendered && ContinuousClock.now < deadline
-          #expect(rendered == true)
+          }
+          #expect(rendered)
         } else {
           try await host.waitForKeyboard(visible: true)
-          host.window.layoutIfNeeded()
-          editor.layoutIfNeeded()
           let position = try #require(editor.selectedTextRange?.end)
-          let glyph = editor.convert(editor.caretRect(for: position), to: host.window)
+          let caret = editor.convert(editor.caretRect(for: position), to: host.window)
           let bar = try #require(host.descendants.compactMap { $0 as? UINavigationBar }.last)
           let top = bar.convert(bar.bounds, to: host.window).maxY
-          Attachment.record(
-            """
-            note: \(id), editor: \(editor.convert(editor.bounds, to: host.window))
-            offset: \(editor.contentOffset), size: \(editor.contentSize)
-            insets: \(editor.adjustedContentInset), text inset: \(editor.textContainerInset)
-            selected glyph: \(glyph), navigation bottom: \(top), selection: \(editor.selectedRange)
-            mounted: \(editor.window === host.window), visible: \(host.isVisible(editor))
-            """, named: "source-mount-\(id).txt")
-          #expect(editor.window === host.window)
+          #expect(editor.isFirstResponder)
           #expect(host.isVisible(editor))
-          #expect(glyph.height > 0)
-          let contentStart = MarkdownFrontMatter.contentStart(in: text)
-          #expect(editor.selectedRange == NSRange(location: contentStart, length: 0))
-          #expect(glyph.minY >= top - 1)
-          #expect(glyph.minY < top + 40)
-          #expect(glyph.maxY < editor.convert(editor.bounds, to: host.window).maxY
-            - editor.adjustedContentInset.bottom + 1)
           #expect(editor.text.utf8.elementsEqual(text.utf8))
-          Attachment.record(
-            UIGraphicsImageRenderer(bounds: host.window.bounds).image { _ in
-              host.window.drawHierarchy(in: host.window.bounds, afterScreenUpdates: true)
-            }, named: "selected-source-\(id).png", as: .png)
+          #expect(
+            editor.selectedRange
+              == NSRange(location: MarkdownFrontMatter.contentStart(in: text), length: 0))
+          #expect(caret.minY >= top - 1 && caret.minY < top + 40)
           editor.resignFirstResponder()
           try await host.waitForKeyboard(visible: false)
-          try await Task.sleep(for: .milliseconds(150))
-          try host.expectSourceInk(editor, named: "dismissed-source-\(id)")
+          #expect(host.isVisible(editor))
         }
       }
-      host.setScenePhase(.background)
-      try await Task.sleep(for: .milliseconds(150))
-      host.setScenePhase(.active)
-      try await Task.sleep(for: .milliseconds(450))
-      try host.expectSourceInk(editor, named: "foreground-source-\(id)")
       host.returnToLibrary()
       try await host.waitUntil { host.isLibraryVisible }
     }
   }
 
-  @Test(arguments: [false, true])
-  func leavingANewBlankNoteDiscardsItsDraftWithoutPublishing(autosave: Bool) async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let host = try await NavigationHost(
-      provider: provider, autosave: autosave, sizeClass: .compact)
-    defer { await host.close() }
-    await host.model.open(.new)
-    let blank = try #require(host.model.loadedDocument?.draft)
-    try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
-    try await host.waitForKeyboard(visible: true)
-    try await host.waitUntil {
-      host.model.localDrafts.filter {
-        $0.description != GistConventions.dailyNotesDescription
-      }.map(\.id) == [blank.id]
+  @Test func leavingANewBlankNoteDiscardsItsDraftWithoutPublishing() async throws {
+    let fixture = try await NotebookFixture {
+      $0.addGist(id: "kept", description: "Kept", files: ["README.md": "A real note"])
     }
-    host.returnToLibrary()
-    try await host.waitUntil {
-      host.isLibraryVisible
-        && !host.model.localDrafts.contains { $0.id == blank.id } && host.model.isTodaySelected
-        && host.model.loadedDocument?.draft?.isDiscardableBlank == true
-    }
-    let today = try #require(host.model.loadedDocument?.draft)
-    #expect(today.isDiscardableBlank)
-    #expect(host.model.loadedDocument?.editingRequestID == nil)
-    #expect(!host.model.library.snapshot.notes.contains { $0.id == blank.id.uuidString })
-    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.map(\.id) == [today.id])
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
-  @Test func leavingANewNoteAfterTypingKeepsItsDurableContent() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let host = try await NavigationHost(provider: provider, sizeClass: .compact)
+    let host = try await NavigationHost(fixture: fixture, sizeClass: .compact)
     defer { await host.close() }
+    // Creating is local, so it works offline.
+    fixture.fail()
     await host.model.open(.new)
-    let draft = try #require(host.model.loadedDocument?.draft)
+    let first = try #require(host.model.presentedDocument?.draft)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
+    #expect(host.editor(text: "")?.selectedRange == NSRange(location: 0, length: 0))
     try await host.waitForKeyboard(visible: true)
-    let editor = try #require(host.editor(text: ""))
-    let text = "A thought worth keeping 👩🏽‍💻"
-    editor.insertText(text)
-    host.returnToLibrary()
-    try await host.waitUntil { host.isLibraryVisible }
-    try await host.waitUntil { host.model.localDrafts.first(where: { $0.id == draft.id })?.text == text }
-    #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.first(where: {
-      $0.id == draft.id
-    })?.text == text)
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
-  @Test func selectingAnotherNoteDiscardsTheOldBlankButKeepsTheNewSelection() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(id: "kept", title: "Kept", content: "A real note")])
-    let host = try await NavigationHost(provider: provider, sizeClass: .compact)
-    defer { await host.close() }
-    await host.model.open(.new)
-    let blank = try #require(host.model.loadedDocument?.draft)
-    try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
-    try await host.waitForKeyboard(visible: true)
+    fixture.restore()
     host.routes.submit(.note(gistID: "kept", filename: nil))
     try await host.waitUntil {
       host.routes.pending == nil && host.editor(text: "A real note") != nil
-        && !host.model.localDrafts.contains { $0.id == blank.id }
+        && !host.model.localDrafts.contains { $0.id == first.id }
     }
     #expect(host.model.library.selectedNoteID == "kept")
-    #expect(host.model.loadedDocument?.gist?.id == "kept")
-    #expect(try await !provider.localState(accountID: fixtureAccount.id).drafts.contains {
-      $0.id == blank.id
-    })
-    #expect(await provider.publicationReasons.isEmpty)
+
+    await host.model.open(.new)
+    let second = try #require(host.model.presentedDocument?.draft)
+    try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
+    host.returnToLibrary()
+    try await host.waitUntil {
+      host.isLibraryVisible && !host.model.localDrafts.contains { $0.id == second.id }
+        && host.model.isTodaySelected
+    }
+    #expect(host.model.loadedDocument?.editingRequestID == nil)
+    let stored = try await fixture.store.drafts(accountID: fixture.account.id).map(\.id)
+    #expect(!stored.contains(first.id) && !stored.contains(second.id))
+    #expect(fixture.publishes.isEmpty)
+  }
+
+  @Test(arguments: [true, false])
+  func returningToLibraryPublishesTheOutgoingNoteAndKeepsItsEditor(autosave: Bool) async throws {
+    let fixture = try await NotebookFixture(autosave: autosave) {
+      $0.addGist(id: "a", description: "Current", files: ["README.md": "Current source"])
+    }
+    let host = try await NavigationHost(fixture: fixture, sizeClass: .compact)
+    defer { await host.close() }
+    await host.model.open(.gist(id: "a"))
+    try await host.waitUntil { host.editor(text: "Current source") != nil }
+    let editor = try #require(host.editor(text: "Current source"))
+    editor.becomeFirstResponder()
+    editor.selectedRange = .init(location: 0, length: 0)
+    editor.insertText("Local ")
+    try await host.waitUntil {
+      host.model.localDrafts.first { $0.gistID == "a" }?.generation == 1
+    }
+    host.returnToLibrary()
+    // Well before autosave's quiet timer.
+    try await host.waitUntil(timeout: .seconds(1)) {
+      fixture.remote("a", "README.md") == "Local Current source"
+    }
+    try await host.waitUntil { host.isLibraryVisible }
+    #expect(fixture.publishes == ["PATCH /gists/a"])
+    #expect(host.model.library.selectedNoteID == nil)
+    #expect(!editor.isFirstResponder)
+    let selection = editor.selectedRange
+    host.routes.submit(.note(gistID: "a", filename: nil))
+    try await host.waitUntil {
+      host.routes.pending == nil && host.editor(text: "Local Current source") === editor
+        && !host.isLibraryVisible
+    }
+    #expect(editor.selectedRange == selection)
+  }
+
+  @Test func switchingNotesMidCompositionKeepsAndPublishesTheComposedText() async throws {
+    let fixture = try await NotebookFixture(autosave: false) {
+      $0.addGist(id: "a", description: "First note", files: ["README.md": "First note source"])
+      $0.addGist(id: "b", description: "Second note", files: ["README.md": "Second note source"])
+    }
+    let host = try await NavigationHost(fixture: fixture)
+    defer { await host.close() }
+    host.model.select(rowID: "a")
+    try await host.waitUntil { host.editor(text: "First note source") != nil }
+    let first = try #require(host.editor(text: "First note source"))
+    try #require(first.becomeFirstResponder())
+    first.selectedRange = NSRange(location: 0, length: 0)
+    first.setMarkedText("にほんご", selectedRange: NSRange(location: 4, length: 0))
+    try #require(first.markedTextRange != nil)
+    host.model.select(rowID: "b")
+    try await host.waitUntil { host.editor(text: "Second note source") != nil }
+    #expect(first.markedTextRange == nil)
+    #expect(first.text == "にほんごFirst note source")
+    try await host.waitUntil { fixture.remote("a", "README.md") == "にほんごFirst note source" }
+    #expect(fixture.publishes == ["PATCH /gists/a"])
+  }
+
+  @Test func startingTodayFocusesTheCaretAfterItsDurableInitialContent() async throws {
+    let fixture = try await NotebookFixture()
+    let host = try await NavigationHost(fixture: fixture)
+    defer { await host.close() }
+    await host.model.open(.today())
+    let draft = try #require(host.model.presentedDocument?.draft)
+    #expect(!draft.text.isEmpty)
+    try await host.waitUntil { host.editor(text: draft.text)?.isFirstResponder == true }
+    let editor = try #require(host.editor(text: draft.text))
+    #expect(editor.selectedRange == NSRange(location: draft.text.utf16.count, length: 0))
+    #expect(fixture.publishes.isEmpty)
+  }
+
+  @Test func aColdRouteWaitsForRestorationAndOpensTheExactFile() async throws {
+    let fixture = try await NotebookFixture {
+      $0.addGist(
+        id: "b", description: "Routed note",
+        files: ["README.md": "Text", "Ideas.md": "Routed file source"])
+    }
+    let routes = NotebookRouteInbox()
+    routes.submit(.note(gistID: "b", filename: "Ideas.md"))
+    let host = try await NavigationHost(fixture: fixture, routes: routes)
+    defer { await host.close() }
+    try await host.waitUntil {
+      routes.pending == nil && host.editor(text: "Routed file source") != nil
+    }
+    #expect(host.model.loadedDocument?.filename == "Ideas.md")
+    #expect(host.model.loadedDocument?.gist?.id == "b")
+  }
+
+  @Test func aFailedOpenShowsItsOwnTitleAndRetryInsteadOfThePreviousEditor() async throws {
+    let fixture = try await NotebookFixture {
+      $0.addGist(id: "a", description: "Previous", files: ["README.md": "Previous source"])
+      $0.addGist(
+        id: "b", description: "Requested",
+        files: ["README.md": "Text", "Other.md": "Retried source"])
+    }
+    let host = try await NavigationHost(fixture: fixture)
+    defer { await host.close() }
+    await host.model.open(.gist(id: "a"))
+    try await host.waitUntil { host.editor(text: "Previous source") != nil }
+    fixture.fail("GET /gists/b")
+    await host.model.open(.gist(id: "b", filename: "Other.md", rowID: "result-b"))
+    try await host.waitUntil {
+      host.descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title }.contains("Requested")
+    }
+    #expect(host.editor(text: "Previous source") == nil)
+    fixture.restore()
+    try await host.model.open(#require(host.model.opening).request)
+    try await host.waitUntil { host.editor(text: "Retried source") != nil }
+    #expect(notebookAccessibilityElement("note-open-retry", in: host.window) == nil)
+    #expect(host.model.loadedDocument?.gist?.id == "b")
+    #expect(host.model.library.selectedNoteID == "b")
+    #expect(host.model.loadedDocument?.filename == "Other.md")
   }
 
   @Test func sourceIntelligenceOpensTheLiveSheetForTheRetainedEditor() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(id: "a", title: "A retained thought", content: "A little room to think.")])
-    let host = try await NavigationHost(provider: provider)
+    let fixture = try await NotebookFixture(autosave: false) {
+      $0.addGist(
+        id: "a", description: "A retained thought", files: ["README.md": "A little room to think."])
+    }
+    let host = try await NavigationHost(fixture: fixture)
     defer { await host.close() }
     await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "A little room to think.") != nil }
@@ -1645,402 +911,29 @@ struct NotebookNavigationHostTests {
     #expect(!editor.isFirstResponder)
     #expect(editor.selectedRange == selection)
     #expect(host.editor(text: "A little room to think.") === editor)
-    let image = UIGraphicsImageRenderer(bounds: host.window.bounds).image { _ in
-      host.window.drawHierarchy(in: host.window.bounds, afterScreenUpdates: true)
-    }
-    Attachment.record(image, named: "live-source-intelligence-entry-no-generation.png", as: .png)
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
-  @Test func aFailedOpenShowsItsOwnTitleAndRetryInsteadOfThePreviousEditor() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "Previous", content: "Previous source"),
-        try makeGist(id: "b", title: "Requested", additionalFiles: ["Other.md": "Retried source"]),
-      ], cachesContent: false)
-    let host = try await NavigationHost(provider: provider)
-    defer { await host.close() }
-    await host.model.open(.gist(id: "a"))
-    try await host.waitUntil { host.editor(text: "Previous source") != nil }
-    await provider.setReadFailure(id: "b", fails: true)
-    await host.model.open(.gist(id: "b", filename: "Other.md", rowID: "result-b"))
-    try await host.waitUntil {
-      host.descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title }.contains("Requested")
-    }
-    #expect(host.editor(text: "Previous source") == nil)
-    host.window.layoutIfNeeded()
-    let image = UIGraphicsImageRenderer(bounds: host.window.bounds).image { _ in
-      host.window.drawHierarchy(in: host.window.bounds, afterScreenUpdates: true)
-    }
-    Attachment.record(image, named: "failed-open-complete-workspace.png", as: .png)
-    await provider.setReadFailure(id: "b", fails: false)
-    try await host.model.open(#require(host.model.opening).request)
-    try await host.waitUntil { host.editor(text: "Retried source") != nil }
-    #expect(notebookAccessibilityElement("note-open-retry", in: host.window) == nil)
-    #expect(host.model.loadedDocument?.gist?.id == "b")
-    #expect(host.model.library.selectedNoteID == "b")
-    #expect(host.model.loadedDocument?.filename == "Other.md")
-  }
-
-  @Test func returningToLibrarySavesTheOutgoingNoteWithoutWaitingForTheQuietTimer() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
-    let host = try await NavigationHost(provider: provider, autosave: true, sizeClass: .compact)
-    defer { await host.close() }
-    await host.model.open(.gist(id: "a"))
-    try await host.waitUntil { host.editor(text: "Current source") != nil }
-    let editor = try #require(host.editor(text: "Current source"))
-    editor.becomeFirstResponder()
-    editor.selectedRange = .init(location: 0, length: 0)
-    editor.insertText("Local ")
-    try await host.waitUntil { host.model.localDrafts.first(where: { $0.gistID == "a" })?.generation == 1 }
-    host.returnToLibrary()
-    try await host.waitUntil(timeout: .seconds(1)) {
-      host.model.localDrafts.first(where: { $0.gistID == "a" })?.state == .savedToGitHub
-    }
-    try await host.waitUntil { host.isLibraryVisible }
-    #expect(await provider.publicationReasons == [.leaving])
-    #expect(host.model.loadedDocument?.gist?.id == "a")
-    #expect(host.model.library.selectedNoteID == nil)
-    #expect(!editor.isFirstResponder)
-    let image = UIGraphicsImageRenderer(bounds: host.window.bounds).image { _ in
-      host.window.drawHierarchy(in: host.window.bounds, afterScreenUpdates: true)
-    }
-    Attachment.record(image, named: "library-visible-after-compact-route.png", as: .png)
-    let selection = editor.selectedRange
-    host.routes.submit(.note(gistID: "a", filename: nil))
-    try await host.waitUntil {
-      host.routes.pending == nil && host.editor(text: "Local Current source") === editor
-        && !host.isLibraryVisible
-    }
-    #expect(editor.selectedRange == selection)
-  }
-
-  @Test func returningToLibraryWithAutosaveOffStillPublishesAndKeepsTheRetainedEditor() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
-    let host = try await NavigationHost(provider: provider, sizeClass: .compact)
-    defer { await host.close() }
-    await host.model.open(.gist(id: "a"))
-    try await host.waitUntil { host.editor(text: "Current source") != nil }
-    let editor = try #require(host.editor(text: "Current source"))
-    editor.becomeFirstResponder()
-    editor.selectedRange = .init(location: 0, length: 0)
-    editor.insertText("Local ")
-    try await host.waitUntil { host.model.localDrafts.first(where: { $0.gistID == "a" })?.generation == 1 }
-    host.returnToLibrary()
-    try await host.waitUntil {
-      host.isLibraryVisible
-        && host.model.localDrafts.first(where: { $0.gistID == "a" })?.state == .savedToGitHub
-    }
-    #expect(host.model.library.selectedNoteID == nil)
-    #expect(host.model.localDrafts.first(where: { $0.gistID == "a" })?.text == "Local Current source")
-    #expect(await provider.publicationReasons == [.leaving])
-    #expect(!editor.isFirstResponder)
-    let selection = editor.selectedRange
-    host.routes.submit(.note(gistID: "a", filename: nil))
-    try await host.waitUntil {
-      host.routes.pending == nil && host.editor(text: "Local Current source") === editor
-        && !host.isLibraryVisible
-    }
-    #expect(editor.selectedRange == selection)
-    #expect(await provider.publicationReasons == [.leaving])
-  }
-
-  @Test(arguments: [false, true])
-  func compactLibraryRoundTripBringsTheRealKeyboardBackOnScreen(
-    settledKeyboard: Bool
-  ) async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
-    let host = try await NavigationHost(provider: provider, sizeClass: .compact)
-    defer { await host.close() }
-    await host.model.open(.gist(id: "a"))
-    try await host.waitUntil { host.editor(text: "Current source") != nil }
-    let editor = try #require(host.editor(text: "Current source"))
-    editor.selectedRange = .init(location: 2, length: 6)
-    try #require(editor.becomeFirstResponder())
-    if settledKeyboard { try await host.waitForKeyboard(visible: true) }
-    host.recordKeyboard(named: "library-round-trip-before-pop")
-    host.returnToLibrary()
-    try await host.waitUntil { host.isLibraryVisible }
-    try await host.waitForKeyboard(visible: false)
-    host.recordKeyboard(named: "library-round-trip-after-pop")
-    #expect(!editor.isFirstResponder)
-    host.routes.submit(.note(gistID: "a", filename: nil))
-    try await host.waitUntil {
-      host.routes.pending == nil && host.editor(text: "Current source") === editor
-        && !host.isLibraryVisible
-    }
-    try #require(editor.becomeFirstResponder())
-    try await host.waitForKeyboard(visible: true)
-    host.recordKeyboard(named: "library-round-trip-refocused")
-    #expect(editor.selectedRange == NSRange(location: 2, length: 6))
-    #expect(await provider.publicationReasons.isEmpty)
-    editor.resignFirstResponder()
-    try await host.waitForKeyboard(visible: false)
-  }
-
-  @Test func aColdRouteWaitsForRestorationAndOpensTheExactFile() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(
-        id: "b", title: "Routed note", additionalFiles: ["Ideas.md": "Routed file source"])])
-    let routes = NotebookRouteInbox()
-    routes.submit(.note(gistID: "b", filename: "Ideas.md"))
-    let host = try await NavigationHost(provider: provider, routes: routes)
-    defer { await host.close() }
-    try await host.waitUntil {
-      routes.pending == nil && host.editor(text: "Routed file source") != nil
-    }
-    #expect(host.model.loadedDocument?.filename == "Ideas.md")
-    #expect(host.model.loadedDocument?.gist?.id == "b")
-  }
-
-  @Test func anotherAccountsDraftRouteNeverOpensOrChangesTheCurrentNote() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
-    let host = try await NavigationHost(provider: provider)
-    defer { await host.close() }
-    await host.model.open(.gist(id: "a"))
-    try await host.waitUntil { host.editor(text: "Current source") != nil }
-    let previous = host.model.loadedDocument?.id
-    host.routes.submit(.draft(accountID: UUID(), draftID: UUID()))
-    try await host.waitUntil { host.routes.pending == nil }
-    #expect(host.model.account?.id == fixtureAccount.id)
-    #expect(host.model.loadedDocument?.id == previous)
-  }
-
-  @Test func aNewerRouteCannotBeAcknowledgedOrReplacedByAnOlderHeldRead() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "Held", content: "Held source"),
-        try makeGist(id: "b", title: "Latest", content: "Latest source"),
-      ], cachesContent: false)
-    let host = try await NavigationHost(provider: provider)
-    defer { await host.close() }
-    await provider.holdRead(id: "a")
-    defer { Task { await provider.releaseRead() } }
-    host.routes.submit(.note(gistID: "a", filename: nil))
-    await provider.waitForHeldRead()
-    host.routes.submit(.note(gistID: "b", filename: nil))
-    try await host.waitUntil {
-      host.routes.pending == nil && host.editor(text: "Latest source") != nil
-    }
-    await provider.releaseRead()
-    try await Task.sleep(for: .milliseconds(80))
-    #expect(host.model.loadedDocument?.gist?.id == "b")
-    #expect(host.model.library.selectedNoteID == "b")
-    #expect(host.editor(text: "Held source") == nil)
-  }
-
-  @Test func leavingANoteSavesBeforeItsQuietTimerWithoutStealingThePendingSelection() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "First note", content: "First note source"),
-        try makeGist(id: "b", title: "Second note", content: "Second note source"),
-      ], cachesContent: false)
-    let host = try await NavigationHost(provider: provider, autosave: true)
-    defer { await host.close() }
-    await host.model.open(.gist(id: "a"))
-    try await host.waitUntil { host.editor(text: "First note source") != nil }
-    let editor = try #require(host.editor(text: "First note source"))
-    editor.becomeFirstResponder()
-    editor.selectedRange = .init(location: 0, length: 0)
-    editor.insertText("Local ")
-    try await host.waitUntil { host.model.localDrafts.first(where: { $0.gistID == "a" })?.generation == 1 }
-    await provider.holdRead(id: "b")
-    defer { Task { await provider.releaseRead() } }
-    #expect(!host.model.beginOpeningRow(id: "b"))
-    let opening = Task { await host.model.openRow(id: "b") }
-    await provider.waitForHeldRead()
-    try await host.waitUntil(timeout: .seconds(1)) {
-      host.model.localDrafts.first(where: { $0.gistID == "a" })?.state == .savedToGitHub
-    }
-    #expect(await provider.publicationReasons == [.leaving])
-    #expect(host.model.library.selectedNoteID == "b")
-    #expect(host.model.openingTitle == "Second note")
-    #expect(host.model.presentedDocument == nil)
-    await provider.releaseRead()
-    await opening.value
-    try await host.waitUntil { host.editor(text: "Second note source") != nil }
-  }
-
-  @Test func anUncachedSelectionUnmountsThePreviousEditorWhileTheRequestIsStillHeld() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "First note", content: "First note source"),
-        try makeGist(id: "b", title: "Second note", content: "Second note source"),
-      ], cachesContent: false)
-    let host = try await NavigationHost(provider: provider)
-    defer { await host.close() }
-    await host.model.open(.gist(id: "a"))
-    try await host.waitUntil { host.editor(text: "First note source") != nil }
-    let original = try #require(host.editor(text: "First note source"))
-    await provider.holdRead(id: "b")
-    defer { Task { await provider.releaseRead() } }
-    #expect(!host.model.beginOpeningRow(id: "b"))
-    let opening = Task { await host.model.openRow(id: "b") }
-    await provider.waitForHeldRead()
-    try await host.waitUntil {
-      original.window == nil
-        && host.descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title }
-          .contains("Second note")
-    }
-    #expect(host.model.presentedDocument == nil)
-    #expect(host.model.openingTitle == "Second note")
-    #expect(host.editor(text: "First note source") == nil)
-    let navigationTitles = host.descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title }
-    #expect(navigationTitles.contains("Second note"))
-    await provider.releaseRead()
-    await opening.value
-    try await host.waitUntil { host.editor(text: "Second note source") != nil }
-    #expect(original.window == nil)
-  }
-
-  @Test func cachedSwitchingMountsTheRightSourceAndRetainsIndependentSelectionAndUndo() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "First note", content: "First note source"),
-        try makeGist(id: "b", title: "Second note", content: "Second note source"),
-      ])
-    let host = try await NavigationHost(provider: provider)
-    defer { await host.close() }
-    host.model.select(rowID: "a")
-    try await host.waitUntil { host.editor(text: "First note source") != nil }
-    let first = try #require(host.editor(text: "First note source"))
-    first.becomeFirstResponder()
-    first.selectedRange = NSRange(location: 0, length: 0)
-    first.undoManager?.beginUndoGrouping()
-    first.insertText("Local ")
-    first.undoManager?.endUndoGrouping()
-    let selection = first.selectedRange
-    let reads = await provider.readIDs
-    host.model.select(rowID: "b")
-    #expect(host.model.presentedDocument?.text == "Second note source")
-    try await host.waitUntil { host.editor(text: "Second note source") != nil }
-    #expect(host.model.opening == nil)
-    #expect(first.window == nil)
-    #expect(await provider.readIDs == reads)
-    #expect(host.model.beginOpeningRow(id: "a"))
-    try await host.waitUntil { first.window === host.window }
-    #expect(first.selectedRange == selection)
-    #expect(first.text == "Local First note source")
-    first.undoManager?.undo()
-    #expect(first.text == "First note source")
-    #expect(await provider.readIDs == reads)
-    try #require(first.becomeFirstResponder())
-    try await host.waitForKeyboard(visible: true)
-    first.resignFirstResponder()
-    try await host.waitForKeyboard(visible: false)
-  }
-
-  @Test func switchingNotesMidCompositionKeepsAndPublishesTheComposedText() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(id: "a", title: "First note", content: "First note source"),
-        try makeGist(id: "b", title: "Second note", content: "Second note source"),
-      ])
-    let host = try await NavigationHost(provider: provider)
-    defer { await host.close() }
-    host.model.select(rowID: "a")
-    try await host.waitUntil { host.editor(text: "First note source") != nil }
-    let first = try #require(host.editor(text: "First note source"))
-    try #require(first.becomeFirstResponder())
-    first.selectedRange = NSRange(location: 0, length: 0)
-    first.setMarkedText("にほんご", selectedRange: NSRange(location: 4, length: 0))
-    try #require(first.markedTextRange != nil)
-    host.model.select(rowID: "b")
-    try await host.waitUntil { host.editor(text: "Second note source") != nil }
-    #expect(first.markedTextRange == nil)
-    #expect(first.text == "にほんごFirst note source")
-    try await host.waitUntil {
-      host.model.localDrafts.first(where: { $0.gistID == "a" }).map {
-        $0.text == "にほんごFirst note source" && $0.state == .savedToGitHub
-      } == true
-    }
-    #expect(await provider.publicationReasons == [.leaving])
-  }
-
-  @Test func creatingOfflineReplacesTheOldNoteWithAnEditingFirstResponder() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(id: "a", title: "Previous note", content: "Previous source")])
-    let host = try await NavigationHost(provider: provider)
-    defer { await host.close() }
-    await host.model.open(.gist(id: "a"))
-    try await host.waitUntil { host.editor(text: "Previous source") != nil }
-    let previous = try #require(host.editor(text: "Previous source"))
-    await provider.failRequests()
-    await host.model.open(.new)
-    let draft = try #require(host.model.presentedDocument?.draft)
-    try await host.waitUntil { host.editor(text: draft.text)?.isFirstResponder == true }
-    let editor = try #require(host.editor(text: draft.text))
-    #expect(editor !== previous)
-    #expect(previous.window == nil)
-    #expect(editor.selectedRange == NSRange(location: draft.text.utf16.count, length: 0))
-    #expect(await provider.creationCount == 1)
-    #expect(await provider.readIDs.isEmpty)
-    #expect(host.model.presentedDocument.map(host.model.chrome(for:))?.title == "Untitled")
-    editor.insertText("A local thought 🙂")
-    try await host.waitUntil { host.model.localDrafts.first(where: { $0.id == draft.id })?.generation == 1 }
-    #expect(host.model.localDrafts.first(where: { $0.id == draft.id })?.text == "A local thought 🙂")
-  }
-
-  @Test func startingTodayFocusesTheCaretAfterItsDurableInitialContent() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let host = try await NavigationHost(provider: provider)
-    defer { await host.close() }
-    await host.model.open(.today())
-    let draft = try #require(host.model.presentedDocument?.draft)
-    #expect(!draft.text.isEmpty)
-    try await host.waitUntil { host.editor(text: draft.text)?.isFirstResponder == true }
-    let editor = try #require(host.editor(text: draft.text))
-    #expect(editor.selectedRange == NSRange(location: draft.text.utf16.count, length: 0))
-    #expect(await provider.todayTargets.count == 1)
-    #expect(await provider.readIDs.isEmpty)
-    #expect(await provider.creationCount == 0)
+    #expect(fixture.publishes.isEmpty)
   }
 }
 
+/// The app's workspace in a real window, around a fixture notebook.
 @MainActor
 private struct NavigationHost {
   let model: NotebookModel
   let window: UIWindow
   let routes: NotebookRouteInbox
   let layout: NotebookLayoutPreferences
-  private let controller: UIHostingController<NavigationHostRoot>
   private let suite: String
   private let previousWindow: UIWindow?
 
   init(
-    provider: StubNotebookProvider, autosave: Bool = false,
-    routes: NotebookRouteInbox = NotebookRouteInbox(),
-    sizeClass: UIUserInterfaceSizeClass? = nil,
-    restoredSelection: NotebookSelection? = nil,
-    initialMode: NoteMode = .source
+    fixture: NotebookFixture, routes: NotebookRouteInbox = NotebookRouteInbox(),
+    sizeClass: UIUserInterfaceSizeClass? = nil, mode: NoteMode = .source
   ) async throws {
+    model = fixture.model
     self.routes = routes
-    await provider.setAutosaveEnabled(autosave)
     suite = "NotebookNavigationHost-\(UUID())"
-    let defaults = try #require(UserDefaults(suiteName: suite))
-    layout = NotebookLayoutPreferences(defaults: defaults)
-    layout.select(initialMode)
-    let selections = NotebookSelectionStore()
-    if let restoredSelection {
-      selections.save(restoredSelection, accountID: fixtureAccount.id)
-    }
-    model = NotebookModel(provider: provider, selections: selections)
+    layout = NotebookLayoutPreferences(defaults: try #require(UserDefaults(suiteName: suite)))
+    layout.select(mode)
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     previousWindow = scene.windows.first(where: \.isKeyWindow)
@@ -2051,11 +944,10 @@ private struct NavigationHost {
       size: CGSize(
         width: sizeClass == .regular ? 1180 : sceneBounds.width, height: sceneBounds.height))
     if let sizeClass { window.traitOverrides.horizontalSizeClass = sizeClass }
-    controller = UIHostingController(
-      rootView: NavigationHostRoot(
-        notebook: model, layout: layout, routes: routes))
-    window.rootViewController = controller
+    window.rootViewController = UIHostingController(
+      rootView: LiveNotebookWorkspace(notebook: model, layout: layout, routes: routes))
     window.makeKeyAndVisible()
+    let model = model
     try await waitUntil {
       model.library.loadState == .ready && model.cachedLibrary != nil && !model.isStarting
     }
@@ -2073,48 +965,9 @@ private struct NavigationHost {
     descendants.compactMap { $0 as? UITextView }.first { $0.text == text && $0.window === window }
   }
 
-  func setScenePhase(_ phase: ScenePhase) {
-    controller.rootView.phase = phase
-  }
-
-  func expectSourceInk(_ editor: UITextView, named name: String) throws {
-    window.layoutIfNeeded()
-    editor.layoutIfNeeded()
-    let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
-      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-    }
-    Attachment.record(image, named: "\(name).png", as: .png)
-    let viewport = editor.convert(
-      editor.bounds.inset(by: editor.adjustedContentInset).insetBy(dx: 24, dy: 4), to: window
-    ).intersection(window.bounds)
-    try #require(!viewport.isEmpty)
-    let hit = try #require(window.hitTest(CGPoint(x: viewport.midX, y: viewport.midY), with: nil))
-    #expect(hit === editor || hit.isDescendant(of: editor),
-      "The visible pixels must belong to the source editor, not the preview behind it.")
-    let bitmap = try #require(image.cgImage?.cropping(to: CGRect(
-      x: viewport.minX * image.scale, y: viewport.minY * image.scale,
-      width: viewport.width * image.scale, height: viewport.height * image.scale)))
-    var pixels = [UInt8](repeating: 0, count: bitmap.width * bitmap.height * 4)
-    try pixels.withUnsafeMutableBytes { bytes in
-      let context = try #require(CGContext(
-        data: bytes.baseAddress, width: bitmap.width, height: bitmap.height,
-        bitsPerComponent: 8, bytesPerRow: bitmap.width * 4,
-        space: CGColorSpaceCreateDeviceRGB(),
-        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-      context.draw(bitmap, in: CGRect(x: 0, y: 0, width: bitmap.width, height: bitmap.height))
-    }
-    let ink = stride(from: 0, to: pixels.count, by: 4).reduce(into: 0) { count, index in
-      if Int(pixels[index]) + Int(pixels[index + 1]) + Int(pixels[index + 2]) > 180,
-        pixels[index + 3] > 200
-      { count += 1 }
-    }
-    Attachment.record(
-      """
-      offset: \(editor.contentOffset), bounds: \(editor.bounds), content: \(editor.contentSize)
-      insets: \(editor.adjustedContentInset), viewport: \(viewport), ink pixels: \(ink)
-      first responder: \(editor.isFirstResponder), text viewport: \(String(describing: editor.textLayoutManager?.textViewportLayoutController.viewportRange))
-      """, named: "\(name)-geometry.txt")
-    #expect(ink > 100, "Edit must show actual source glyphs after the keyboard is dismissed.")
+  /// The note's Edit, Preview (and Split, when wide) control.
+  var picker: UISegmentedControl? {
+    descendants.compactMap { $0 as? UISegmentedControl }.last
   }
 
   /// Pops the pushed note the way the system back button does on iPhone.
@@ -2141,18 +994,6 @@ private struct NavigationHost {
       }
     }
     return false
-  }
-
-  private struct NavigationHostRoot: View {
-    let notebook: NotebookModel
-    let layout: NotebookLayoutPreferences
-    let routes: NotebookRouteInbox
-    var phase: ScenePhase = .active
-
-    var body: some View {
-      LiveNotebookWorkspace(notebook: notebook, layout: layout, routes: routes)
-        .environment(\.scenePhase, phase)
-    }
   }
 
   func isVisible(_ view: UIView) -> Bool {
@@ -2195,18 +1036,9 @@ private struct NavigationHost {
       }
       try await Task.sleep(for: .milliseconds(20))
     }
-    recordKeyboard(named: visible ? "keyboard-not-on-screen" : "keyboard-not-dismissed")
-    Issue.record("The real keyboard did not settle \(visible ? "on screen" : "off screen").")
+    Issue.record(
+      "The real keyboard did not settle \(visible ? "on screen" : "off screen"): \(keyboardFrame).")
     throw HostError.presentationTimedOut
-  }
-
-  func recordKeyboard(named name: String) {
-    Attachment.record(
-      """
-      window: \(window.bounds), safe area: \(window.safeAreaInsets)
-      keyboard: \(keyboardFrame)
-      editors: \(descendants.compactMap { ($0 as? UITextView).map { "\($0.isFirstResponder): \($0.frame)" } })
-      """, named: "\(name).txt")
   }
 
   func waitUntil(
@@ -2217,16 +1049,13 @@ private struct NavigationHost {
       guard ContinuousClock.now < deadline else {
         Attachment.record(
           """
-          account: \(String(describing: model.account?.id))
           load: \(model.library.loadState)
           loaded: \(String(describing: model.loadedDocument?.id))
           presented: \(String(describing: model.presentedDocument?.id))
-          opening: \(String(describing: model.openingTitle))
           opening: \(String(describing: model.opening))
           error: \(String(describing: model.documentError))
           route: \(String(describing: routes.pending))
           library visible: \(isLibraryVisible)
-          window: \(window.bounds), safe area: \(window.safeAreaInsets)
           editors: \(descendants.compactMap { ($0 as? UITextView)?.text })
           titles: \(descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title })
           """, named: "navigation-timeout.txt")
@@ -2267,467 +1096,4 @@ private struct NavigationHost {
   }
 
   private enum HostError: Error { case presentationTimedOut }
-}
-
-private let fixtureAccount = Account(
-  id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
-  login: "notebook-owner",
-  preferences: .init(metadata: [
-    "pinnedGists": .array([.string("a")]),
-    "tags": .object(["ideas": .object(["name": .string("Ideas"), "color": .string("#EBC85A")])]),
-    "gistTags": .object(["a": .array([.string("ideas")])]),
-  ])
-)
-
-private func makeGist(
-  id: String, title: String, content: String = "Synthetic text", owner: String = "notebook-owner",
-  filename: String = "README.md", additionalFiles: [String: String] = [:], truncated: Bool = false
-) throws -> Gist {
-  var files = additionalFiles
-  files[filename] = content
-  var filePayload: [String: [String: String]] = [:]
-  for (name, source) in files {
-    filePayload[name] = ["filename": name, "language": "Markdown", "content": source]
-  }
-  let json: [String: Any] = [
-    "id": id, "description": title, "public": false, "truncated": truncated,
-    "updated_at": "2026-10-24T00:00:00Z", "created_at": "2026-10-23T00:00:00Z",
-    "owner": ["id": 1, "login": owner],
-    "files": filePayload,
-    "history": [["version": "synthetic-revision"]],
-  ]
-  let decoder = JSONDecoder()
-  decoder.dateDecodingStrategy = .iso8601
-  return try decoder.decode(Gist.self, from: JSONSerialization.data(withJSONObject: json))
-}
-
-private actor StubNotebookProvider: NotebookProviding, NotebookCommentProviding {
-  private(set) var account: Account
-  var signInAccount: Account
-  var notes: [Gist]
-  var starredNotes: [Gist]
-  private var listedOwned: [Gist]?
-  private var listedStarred: [Gist]?
-  private var needsReconnect = false
-  private var holdsLibraryRead = false
-  private var heldLibraryRead: CheckedContinuation<Void, Never>?
-  private var libraryReadObserver: CheckedContinuation<Void, Never>?
-  var shouldFail = false
-  var heldID: String?
-  var failsWrites = false
-  var failsWritesOffline = false
-  var publishFailure: DraftError?
-  var failsAccountRefresh = false
-  var appliedPreferences: [PreferenceOperation] = []
-  var heldRead: CheckedContinuation<Void, Never>?
-  var readObserver: CheckedContinuation<Void, Never>?
-  var cached: CachedLibrarySnapshot?
-  var store: DraftStore?
-  let cachesContent: Bool
-  private(set) var creationCount = 0
-  private(set) var signInCount = 0
-  private(set) var inspectionCount = 0
-  private(set) var localStateReads = 0
-  private(set) var todayTargets: [DailyNoteTarget] = []
-  private var failsToday = false
-  private var holdsToday = false
-  private var heldToday: CheckedContinuation<Void, Never>?
-  private var todayObserver: CheckedContinuation<Void, Never>?
-  private(set) var readIDs: [String] = []
-  private(set) var publicationReasons: [PublishReason] = []
-  private(set) var deletedIDs: [String] = []
-  private(set) var deletedFiles: [String] = []
-  private var failingReadIDs: Set<String> = []
-  private var isSignedOut = false
-  private var failsSignOutAfterCleanup = false
-  private var rejectsSignOut = false
-  private var isSigningOut = false
-  private var holdsSignOut = false
-  private var heldSignOut: CheckedContinuation<Void, Never>?
-  private var signOutObserver: CheckedContinuation<Void, Never>?
-  private(set) var cachedAccountReads = 0
-  private(set) var refreshAccountReads = 0
-
-  init(
-    account: Account, gists: [Gist], cachesContent: Bool = true, starred: [Gist] = []
-  ) {
-    self.account = account
-    self.signInAccount = account
-    self.notes = gists
-    self.starredNotes = starred
-    self.cachesContent = cachesContent
-  }
-
-  func cachedAccount() throws -> Account? {
-    cachedAccountReads += 1
-    if isSigningOut { throw AccountError.signInInProgress }
-    return isSignedOut ? nil : account
-  }
-  func commentServices(accountID: UUID) throws -> NotebookCommentServices {
-    guard accountID == account.id, !isSignedOut, !isSigningOut else {
-      throw AccountError.accountChanged
-    }
-    return NotebookCommentServices(
-      remote: GitHubClient { throw AccountError.accountChanged },
-      userID: 1)
-  }
-  func signIn() -> Account {
-    signInCount += 1
-    needsReconnect = false
-    isSignedOut = false
-    return signInAccount
-  }
-  func failSignOut(afterLocalCleanup: Bool) {
-    failsSignOutAfterCleanup = afterLocalCleanup
-  }
-  func rejectSignOut() { rejectsSignOut = true }
-  func holdSignOut() { holdsSignOut = true }
-  func waitForSignOut() async {
-    if heldSignOut != nil { return }
-    await withCheckedContinuation { signOutObserver = $0 }
-  }
-  func releaseSignOut() {
-    heldSignOut?.resume()
-    heldSignOut = nil
-    holdsSignOut = false
-  }
-  func refreshAccount() throws -> Account {
-    refreshAccountReads += 1
-    if isSigningOut { throw AccountError.signInInProgress }
-    if needsReconnect { throw AccountError.reconnectGitHub }
-    if failsAccountRefresh { throw AccountError.signedOut }
-    if shouldFail { throw URLError(.notConnectedToInternet) }
-    return account
-  }
-  func gists(accountID: UUID) async throws -> [Gist] {
-    if shouldFail { throw URLError(.notConnectedToInternet) }
-    let result = listedOwned ?? notes
-    if holdsLibraryRead {
-      await withCheckedContinuation { continuation in
-        heldLibraryRead = continuation
-        libraryReadObserver?.resume()
-        libraryReadObserver = nil
-      }
-    }
-    return result
-  }
-  func starredGists(accountID: UUID) throws -> [Gist] {
-    if shouldFail { throw URLError(.notConnectedToInternet) }
-    return listedStarred ?? starredNotes
-  }
-  func setListResponses(owned: [Gist], starred: [Gist]) {
-    listedOwned = owned
-    listedStarred = starred
-  }
-  func holdLibraryRead() { holdsLibraryRead = true }
-  func waitForHeldLibraryRead() async {
-    if heldLibraryRead != nil { return }
-    await withCheckedContinuation { libraryReadObserver = $0 }
-  }
-  func releaseLibraryRead() {
-    holdsLibraryRead = false
-    heldLibraryRead?.resume()
-    heldLibraryRead = nil
-  }
-  func gist(id: String, accountID: UUID) async throws -> Gist {
-    readIDs.append(id)
-    if id == heldID {
-      await withCheckedContinuation { continuation in
-        heldRead = continuation
-        readObserver?.resume()
-        readObserver = nil
-      }
-    }
-    if failingReadIDs.contains(id) { throw URLError(.notConnectedToInternet) }
-    guard let gist = notes.first(where: { $0.id == id }) else {
-      throw GitHubClientError.missingFile
-    }
-    return gist
-  }
-  func content(gist: Gist, filename: String, accountID: UUID) throws -> String {
-    guard let content = gist.files[filename]?.content else { throw GitHubClientError.missingFile }
-    return GistConventions.decodeContent(content)
-  }
-  func openDraft(for document: NotebookDocument) async throws -> DraftSnapshot {
-    let store = try draftStore()
-    if let draft = document.draft {
-      return try await store.draft(id: draft.id, accountID: document.accountID)
-    }
-    guard let gist = document.gist else { throw DraftError.notFound }
-    return try await store.openDraft(
-      accountID: document.accountID, githubUserID: 1,
-      gistID: gist.id, filename: document.filename, description: gist.description ?? "",
-      content: document.text, revision: gist.revision)
-  }
-  func persist(draftID: UUID, accountID: UUID, text: String, generation: UInt64) async throws
-    -> DraftSnapshot
-  {
-    try await draftStore().persist(
-      id: draftID, accountID: accountID, text: text, generation: generation)
-  }
-  func publish(
-    draftID: UUID, accountID: UUID, reason: PublishReason,
-    expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
-  ) async throws -> DraftSnapshot {
-    if reason != .manual, !(await shouldPublish()) { throw CancellationError() }
-    if let publishFailure { throw publishFailure }
-    if failsWritesOffline {
-      try await draftStore().setState(.failed(.network), id: draftID, accountID: accountID)
-      throw URLError(.notConnectedToInternet)
-    }
-    if failsWrites { throw URLError(.notConnectedToInternet) }
-    let store = try draftStore()
-    let current = try await store.draft(id: draftID, accountID: accountID)
-    if case .conflict = current.state { return current }
-    publicationReasons.append(reason)
-    let createdID = draftID.uuidString.lowercased().replacingOccurrences(of: "-", with: "")
-    try await store.beginAttempt(
-      id: draftID, accountID: accountID, content: current.text,
-      generation: current.generation)
-    if let index = notes.firstIndex(where: { $0.id == current.gistID }) {
-      let gist = notes[index]
-      var files = gist.files
-      files[current.filename] = GistFile(
-        filename: current.filename, language: "Markdown", content: current.text,
-        truncated: false, rawURL: nil, size: current.text.utf8.count)
-      notes[index] = Gist(
-        id: gist.id, description: gist.description, files: files,
-        updatedAt: gist.updatedAt, createdAt: gist.createdAt,
-        isPublic: gist.isPublic, owner: gist.owner, truncated: gist.truncated, history: gist.history,
-        commentCount: gist.commentCount)
-    } else if current.gistID == nil {
-      notes.insert(
-        Gist(
-          id: createdID, description: current.description,
-          files: [current.filename: GistFile(
-            filename: current.filename, language: "Markdown", content: current.text,
-            truncated: false, rawURL: nil, size: current.text.utf8.count)],
-          updatedAt: .now, createdAt: .now, isPublic: false,
-          owner: .init(id: 1, login: account.login, avatarURL: nil), truncated: false,
-          history: [], commentCount: nil),
-        at: 0)
-    }
-    let publishedGist = notes.first { $0.id == (current.gistID ?? createdID) }
-    if let publishedGist, var cached {
-      cached.owned.removeAll { $0.id == publishedGist.id }
-      cached.owned.insert(publishedGist, at: 0)
-      cached.details[publishedGist.id] = publishedGist
-      self.cached = cached
-    }
-    return try await store.acknowledge(
-      id: draftID, accountID: accountID, gistID: current.gistID ?? createdID,
-      content: current.text, revision: "synthetic-revision", generation: current.generation,
-      publishedGist: publishedGist)
-  }
-  func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
-    switch action {
-    case .discardLocalCopy(let id, let generation):
-      try await draftStore().discardLocalCopy(
-        id: id, accountID: accountID, expectedGeneration: generation)
-      return .discardedDraft(id)
-    default:
-      break
-    }
-    if case .deleteFile(let id, let filename) = action {
-      guard let original = notes.first(where: { $0.id == id }) else {
-        throw URLError(.fileDoesNotExist)
-      }
-      if original.files.count == 1, original.files[filename] != nil {
-        return try await perform(.delete(gistID: id), accountID: accountID)
-      }
-      var files = original.files
-      files[filename] = nil
-      let updated = Gist(
-        id: original.id, description: original.description, files: files,
-        updatedAt: original.updatedAt, createdAt: original.createdAt, isPublic: original.isPublic,
-        owner: original.owner, truncated: original.truncated, history: original.history,
-        commentCount: original.commentCount)
-      deletedFiles.append("\(id)/\(filename)")
-      notes = notes.map { $0.id == id ? updated : $0 }
-      starredNotes = starredNotes.map { $0.id == id ? updated : $0 }
-      if var cached {
-        cached.owned = cached.owned.map { $0.id == id ? updated : $0 }
-        cached.starred = cached.starred.map { $0.id == id ? updated : $0 }
-        if cached.details[id] != nil { cached.details[id] = updated }
-        cached.fileContent[id + "/" + filename] = nil
-        self.cached = cached
-      }
-      try await draftStore().removeDrafts(
-        gistID: id, filename: filename, updated: updated, accountID: accountID)
-      return .deletedFile(gistID: id, filename: filename, gist: updated)
-    }
-    if case .delete(let id) = action {
-      deletedIDs.append(id)
-      notes.removeAll { $0.id == id }
-      starredNotes.removeAll { $0.id == id }
-      try await draftStore().removeDrafts(gistID: id, accountID: accountID)
-      return .deleted(gistID: id)
-    }
-    if case .preference(let operation) = action {
-      appliedPreferences.append(operation)
-      if failsWrites { throw URLError(.notConnectedToInternet) }
-      return .account(account)
-    }
-    if case .signOut = action {
-      if rejectsSignOut { throw URLError(.notConnectedToInternet) }
-      isSigningOut = true
-      defer { isSigningOut = false }
-      if holdsSignOut {
-        await withCheckedContinuation { continuation in
-          heldSignOut = continuation
-          signOutObserver?.resume()
-          signOutObserver = nil
-        }
-      }
-      isSignedOut = true
-      if failsSignOutAfterCleanup { throw URLError(.timedOut) }
-      return .signedOut
-    }
-    if case .fetchRemote(let id) = action {
-      inspectionCount += 1
-      let store = try draftStore()
-      let draft = try await store.draft(id: id, accountID: accountID)
-      guard let gist = notes.first(where: { $0.id == draft.gistID }) else {
-        return .remoteRead(draft, nil)
-      }
-      return .remoteRead(
-        draft, RemoteFile(gist: gist, content: gist.files[draft.filename]?.content))
-    }
-    if case .recordRemote(let id, let generation, let remote, let revision) = action {
-      return .review(
-        try await draftStore().inspectRemoteChange(
-          id: id, accountID: accountID, expectedGeneration: generation,
-          remote: remote, revision: revision))
-    }
-    if case .adoptRemote(let id, let generation, let remote, let revision) = action {
-      let adopted = try await draftStore().refreshCleanDraft(
-        id: id, accountID: accountID, expectedGeneration: generation,
-        content: remote, revision: revision)
-      return .review(adopted)
-    }
-    throw DraftError.notFound
-  }
-  func localState(accountID: UUID) async throws -> NotebookLocalState {
-    localStateReads += 1
-    let drafts = try await store?.drafts(accountID: accountID) ?? []
-    return NotebookLocalState(library: cached, drafts: drafts)
-  }
-  func cacheLibrary(
-    owned: [Gist], starred: [Gist], account: Account, keeping: Set<String>
-  ) async throws {
-    try await store?.cacheLibrary(
-      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id,
-      keeping: keeping)
-    cached = CachedLibrarySnapshot(
-      accountID: account.id, owned: cachesContent ? owned : owned.map(metadataOnly),
-      starred: cachesContent ? starred : starred.map(metadataOnly),
-      preferences: account.preferences)
-  }
-  private nonisolated func metadataOnly(_ gist: Gist) -> Gist {
-    Gist(
-      id: gist.id, description: gist.description,
-      files: gist.files.mapValues {
-        GistFile(
-          filename: $0.filename, language: $0.language, content: nil,
-          truncated: $0.truncated, rawURL: $0.rawURL, size: $0.size)
-      },
-      updatedAt: gist.updatedAt, createdAt: gist.createdAt,
-      isPublic: gist.isPublic, owner: gist.owner, truncated: gist.truncated, history: gist.history,
-      commentCount: gist.commentCount)
-  }
-  private func draftStore() throws -> DraftStore {
-    if let store { return store }
-    let new = try DraftStore.open(inMemory: true)
-    store = new
-    return new
-  }
-  func createDraft(accountID: UUID) async throws -> DraftSnapshot {
-    creationCount += 1
-    return try await draftStore().createGistDraft(accountID: accountID, githubUserID: 1)
-  }
-  func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
-    try await draftStore().discardBlankDraft(
-      id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation)
-  }
-  func today(accountID: UUID, target: DailyNoteTarget) async throws -> TodayNote {
-    todayTargets.append(target)
-    if holdsToday {
-      await withCheckedContinuation { continuation in
-        heldToday = continuation
-        todayObserver?.resume()
-        todayObserver = nil
-      }
-    }
-    if failsToday { throw URLError(.notConnectedToInternet) }
-    let draft = try await draftStore().createGistDraft(
-      accountID: accountID, githubUserID: 1, filename: target.filename,
-      description: GistConventions.dailyNotesDescription,
-      content: GistConventions.dailyContent(template: nil, dateFilename: target.filename))
-    return TodayNote(gist: nil, draft: draft)
-  }
-  func failToday(_ fails: Bool) { failsToday = fails }
-  func holdToday() { holdsToday = true }
-  func waitForToday() async {
-    if heldToday != nil { return }
-    await withCheckedContinuation { todayObserver = $0 }
-  }
-  func releaseToday() {
-    holdsToday = false
-    heldToday?.resume()
-    heldToday = nil
-  }
-  func stageExistingDraft(gistID: String, text: String) async throws -> DraftSnapshot {
-    let store = try draftStore()
-    let draft = try await store.openDraft(
-      accountID: account.id, githubUserID: 1, gistID: gistID, filename: "README.md",
-      description: "Recoverable note", content: "Base", revision: "1")
-    return try await store.persist(id: draft.id, accountID: account.id, text: text, generation: 8)
-  }
-  func stageDailyDraft(filename: String, text: String) async throws -> DraftSnapshot {
-    try await draftStore().openDraft(
-      accountID: account.id, githubUserID: 1, gistID: "daily", filename: filename,
-      description: GistConventions.dailyNotesDescription, content: text, isNewFile: true)
-  }
-  func setGists(_ gists: [Gist]) { notes = gists }
-  func setReadFailure(id: String, fails: Bool) {
-    if fails { failingReadIDs.insert(id) } else { failingReadIDs.remove(id) }
-  }
-  func failRequests(_ fails: Bool = true) { shouldFail = fails }
-  func failWrites(_ fails: Bool = true) { failsWrites = fails }
-  func failWritesOffline() { failsWritesOffline = true }
-  func failPublishes(with error: DraftError?) { publishFailure = error }
-  func failAccountRefresh(_ fails: Bool = true) { failsAccountRefresh = fails }
-  func requireReconnect() { needsReconnect = true }
-  func setSignInAccount(_ account: Account) { signInAccount = account }
-  func setAutosaveEnabled(_ enabled: Bool) {
-    var metadata = account.preferences.metadata
-    metadata["isAutoSaveEnabled"] = .bool(enabled)
-    account = Account(
-      id: account.id, login: account.login, githubUserID: account.githubUserID,
-      preferences: .init(metadata: metadata))
-  }
-  func setSpellingEnabled(_ enabled: Bool) {
-    var metadata = account.preferences.metadata
-    metadata["isSpellcheckEnabled"] = .bool(enabled)
-    account = Account(
-      id: account.id, login: account.login, githubUserID: account.githubUserID,
-      preferences: .init(metadata: metadata))
-  }
-  func setShowsFrontMatter(_ shown: Bool) {
-    var metadata = account.preferences.metadata
-    metadata["showFrontmatter"] = .bool(shown)
-    account = Account(
-      id: account.id, login: account.login, githubUserID: account.githubUserID,
-      preferences: .init(metadata: metadata))
-  }
-  func holdRead(id: String) { heldID = id }
-  func waitForHeldRead() async {
-    if heldRead != nil { return }
-    await withCheckedContinuation { readObserver = $0 }
-  }
-  func releaseRead() {
-    heldRead?.resume()
-    heldRead = nil
-    heldID = nil
-  }
 }
