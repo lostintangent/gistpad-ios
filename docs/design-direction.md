@@ -128,7 +128,7 @@ The badge counts **unfinished tasks in today's exact file**, not all tasks, all 
 | Known positive | Exact localized count through 99, then visual 99+; full accessible count. The board shows 3, 12 and 128 |
 | Unknown | No badge and no false zero/success claim. Existing opening/recovery remains available |
 | Today absent | Outlined, enabled calendar, no badge. Tap stages the real durable local day and opens Edit, never automatically publishes an untouched default |
-| Today has a page (your draft or a cached copy), open or not | Label fill with an inverse glyph, plus the badge when tasks are unfinished. The fill isn't selection, so VoiceOver reads Today and the task status, never "selected" |
+| Today has a page (your draft or a cached copy), open or not | Label fill with an inverse glyph, plus the badge when tasks are unfinished. The fill is the system's on toolbar toggle, the only way to keep it inside the shared glass pill, so VoiceOver says "Selected" before Today and the task status |
 
 Closed taps push Today through native navigation; Open taps replace the document while keeping Library position. Both use the existing explicit Today action, Edit-ready caret beneath its heading and keyboard request on editor attachment. Reuse the retained session rather than creating another copy. Default launch restoration stays quiet as specified above. Day rollover changes the button's target/count, never the open document.
 
