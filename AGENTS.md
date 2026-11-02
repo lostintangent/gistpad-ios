@@ -117,6 +117,8 @@ xcodebuild -project GistPad.xcodeproj -scheme GistPad \
     -- --fixture standard --open shape --mode split
   ```
 
+- Widget and control taps need a plain `xcodebuild build` after `build-for-testing` and before `test-without-building`. `build-for-testing` links the packages as shared frameworks, and the system then fails every widget intent with "There is no metadata for … Intent". Shipping builds link them statically.
+
 ## Module map
 
 Feature code lives in local packages, so each area has a compiler-enforced public API and its tests run on macOS with `swift test`, without the simulator or the slot. The app and the widget extension link the same packages. The app target owns signing and wires the packages together.
@@ -141,7 +143,7 @@ Feature code lives in local packages, so each area has a compiler-enforced publi
 | `GistPad/Settings` | Settings, account switching and layout preferences. |
 | `GistPad/System` | `PlatformBridge` and App Shortcuts, which connect the library to intents, widgets and Spotlight. |
 | `GistPad/Captures` | DEBUG fixture launch arguments and the fixture library. |
-| `GistPadWidgets` | The GistPad widget and the Add to Today and Open Today controls. |
+| `GistPadWidgets` | The GistPad widget and the Add to Today, Open Today and New Gist controls. |
 | `GistPadTests` | App-hosted tests, in folders that mirror `GistPad`. |
 | `GistPadUITests` | UI tests for the Library, a gist, daily notes and comments. |
 | `PreviewRenderer` | Builds Preview's web bundle from `../gistpad.dev` into `GistPadPreview`. |

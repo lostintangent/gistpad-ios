@@ -65,6 +65,8 @@ final class PlatformBridge: DailyNoteActions {
     self.store = store
     self.library = library
     followLibrary()
+    // Launch also catches up on anything that changed while the app wasn't running.
+    scheduleRefresh()
   }
 
   /// Widgets, Spotlight and Shortcuts follow the library's account and the drafts on this iPhone.
@@ -99,7 +101,7 @@ final class PlatformBridge: DailyNoteActions {
     }
   }
 
-  func refresh(date: Date = .now) async throws {
+  func refresh() async throws {
     let account = try await sync.cachedAccount()
     let accountID =
       library?.pendingAccount == nil
@@ -112,32 +114,13 @@ final class PlatformBridge: DailyNoteActions {
       local = nil
     }
     let snapshot = LibrarySnapshot.make(
-      accountID: accountID, cache: local?.cache, drafts: local?.drafts ?? [], date: date)
+      accountID: accountID, cache: local?.cache, drafts: local?.drafts ?? [])
     try Task.checkCancellation()
     let current = try await sync.cachedAccount()
     guard current?.id == account?.id else { throw PlatformError.accountChanged }
     try snapshot.write()
-    WidgetCenter.shared.reloadTimelines(ofKind: TodayWidgetView.kind)
+    WidgetCenter.shared.reloadTimelines(ofKind: LauncherWidgetView.kind)
     try await GistSpotlightIndex.shared.update(snapshot)
-  }
-
-  func setTask(id: Int, completed: Bool) async throws {
-    try await serially {
-      guard let snapshot = try LibrarySnapshot.read(), let accountID = snapshot.accountID,
-        snapshot.today.day.filename == DailyNote.filename(),
-        let shown = snapshot.today.tasks.first(where: { $0.id == id })
-      else { throw PlatformError.staleTask }
-      let draft = try await self.todayDraft(accountID: accountID)
-      // The task you tapped must still be at its place in your latest text.
-      guard let task = FileTask.tasks(in: draft.text).first(where: { $0.id == id }),
-        task.title == shown.title
-      else { throw PlatformError.staleTask }
-      guard task.isChecked != completed else { return }
-      try await self.apply(DraftEdit(
-        draftID: draft.id, accountID: accountID, expectedGeneration: draft.generation,
-        range: NSRange(location: task.markerRange.location + 1, length: 1),
-        expectedText: task.isChecked ? "x" : " ", replacement: completed ? "x" : " "))
-    }
   }
 
   @discardableResult

@@ -122,6 +122,7 @@ public struct OpenGistIntent: OpenIntent {
 
     @Parameter(title: "Gist") public var target: GistEntity
     public init() {}
+    public init(target: GistEntity) { self.target = target }
 
     @MainActor
     public func perform() async throws -> some IntentResult {

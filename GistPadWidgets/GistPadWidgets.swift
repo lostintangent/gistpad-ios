@@ -6,9 +6,10 @@ import WidgetKit
 @main
 struct GistPadWidgetBundle: WidgetBundle {
   var body: some Widget {
-    TodayWidget()
+    LauncherWidget()
     AddToTodayControl()
     OpenTodayControl()
+    NewGistControl()
   }
 }
 
@@ -16,56 +17,54 @@ struct GistPadWidgetIntentPackages: AppIntentsPackage {
   static var includedPackages: [any AppIntentsPackage.Type] { [GistPadPlatformIntents.self] }
 }
 
-struct TodayEntry: TimelineEntry {
+struct LauncherEntry: TimelineEntry {
   let date: Date
   let snapshot: LibrarySnapshot?
-  let state: TodayWidgetState
+  let state: LauncherWidgetState
 }
 
-struct TodayProvider: TimelineProvider {
-  func placeholder(in context: Context) -> TodayEntry {
-    TodayEntry(date: .now, snapshot: .preview(), state: .placeholder)
+struct LauncherProvider: TimelineProvider {
+  func placeholder(in context: Context) -> LauncherEntry {
+    LauncherEntry(date: .now, snapshot: .preview(), state: .placeholder)
   }
 
-  func getSnapshot(in context: Context, completion: @escaping (TodayEntry) -> Void) {
+  func getSnapshot(in context: Context, completion: @escaping (LauncherEntry) -> Void) {
     completion(context.isPreview
-      ? TodayEntry(date: .now, snapshot: .preview(), state: .available) : entry())
+      ? LauncherEntry(date: .now, snapshot: .preview(), state: .available) : entry())
   }
 
-  func getTimeline(in context: Context, completion: @escaping (Timeline<TodayEntry>) -> Void) {
+  /// The app reloads the widget when the library changes, so the timeline only turns the day over,
+  /// or retries soon when the snapshot couldn't be read, such as before first unlock.
+  func getTimeline(in context: Context, completion: @escaping (Timeline<LauncherEntry>) -> Void) {
     let current = entry()
-    var calendar = Calendar(identifier: .gregorian)
-    if let zone = current.snapshot?.today.day.timeZoneIdentifier,
-      let timeZone = TimeZone(identifier: zone)
-    {
-      calendar.timeZone = timeZone
-    }
+    let calendar = Calendar.current
     let midnight = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: current.date))
       ?? current.date.addingTimeInterval(3600)
-    completion(Timeline(entries: [current], policy: .after(min(midnight, current.date.addingTimeInterval(900)))))
+    let retry = current.state == .unavailable ? current.date.addingTimeInterval(900) : midnight
+    completion(Timeline(entries: [current], policy: .after(min(midnight, retry))))
   }
 
-  private func entry() -> TodayEntry {
+  private func entry() -> LauncherEntry {
     do {
       let snapshot = try LibrarySnapshot.read()
-      return TodayEntry(
+      return LauncherEntry(
         date: .now, snapshot: snapshot,
         state: snapshot?.accountID == nil ? .signedOut : .available)
     } catch {
-      return TodayEntry(date: .now, snapshot: nil, state: .unavailable)
+      return LauncherEntry(date: .now, snapshot: nil, state: .unavailable)
     }
   }
 }
 
-struct TodayWidget: Widget {
+struct LauncherWidget: Widget {
   var body: some WidgetConfiguration {
-    StaticConfiguration(kind: TodayWidgetView.kind, provider: TodayProvider()) { entry in
-      TodayWidgetView(snapshot: entry.snapshot, date: entry.date, state: entry.state)
+    StaticConfiguration(kind: LauncherWidgetView.kind, provider: LauncherProvider()) { entry in
+      LauncherWidgetView(snapshot: entry.snapshot, date: entry.date, state: entry.state)
         .containerBackground(.background, for: .widget)
     }
-    .configurationDisplayName("Today")
-    .description("Keep your daily note close, and check off what matters.")
-    .supportedFamilies([.systemSmall, .systemMedium, .accessoryInline, .accessoryRectangular])
+    .configurationDisplayName("GistPad")
+    .description("Open today's note, a recent gist or start a new one.")
+    .supportedFamilies([.systemSmall, .systemMedium])
   }
 }
 
@@ -73,7 +72,7 @@ struct AddToTodayControl: ControlWidget {
   var body: some ControlWidgetConfiguration {
     StaticControlConfiguration(kind: "GistPadAddToToday") {
       ControlWidgetButton(action: ShowAddToTodayIntent()) {
-        Label("Add to Today", systemImage: "square.and.pencil")
+        Label("Add to Today", systemImage: "calendar.badge.plus")
       }
     }
     .displayName("Add to Today")
@@ -93,22 +92,28 @@ struct OpenTodayControl: ControlWidget {
   }
 }
 
-#Preview("Tasks", as: .systemSmall) {
-  TodayWidget()
-} timeline: {
-  TodayEntry(date: .now, snapshot: .preview(), state: .available)
-  TodayEntry(date: .now, snapshot: nil, state: .signedOut)
+struct NewGistControl: ControlWidget {
+  var body: some ControlWidgetConfiguration {
+    StaticControlConfiguration(kind: "GistPadNewGist") {
+      ControlWidgetButton(action: NewGistIntent()) {
+        Label("New Gist", systemImage: "square.and.pencil")
+      }
+    }
+    .displayName("New Gist")
+    .description("Start a new gist.")
+  }
 }
 
-#Preview("Tasks", as: .systemMedium) {
-  TodayWidget()
+#Preview("Launcher", as: .systemSmall) {
+  LauncherWidget()
 } timeline: {
-  TodayEntry(date: .now, snapshot: .preview(), state: .available)
-  TodayEntry(date: .now, snapshot: nil, state: .signedOut)
+  LauncherEntry(date: .now, snapshot: .preview(), state: .available)
+  LauncherEntry(date: .now, snapshot: nil, state: .signedOut)
 }
 
-#Preview("Lock Screen", as: .accessoryRectangular) {
-  TodayWidget()
+#Preview("Launcher", as: .systemMedium) {
+  LauncherWidget()
 } timeline: {
-  TodayEntry(date: .now, snapshot: .preview(), state: .available)
+  LauncherEntry(date: .now, snapshot: .preview(), state: .available)
+  LauncherEntry(date: .now, snapshot: nil, state: .signedOut)
 }

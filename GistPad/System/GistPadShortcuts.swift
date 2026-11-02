@@ -18,6 +18,10 @@ struct GistPadShortcuts: AppShortcutsProvider {
     AppShortcut(
       intent: AddToTodayIntent(),
       phrases: ["Add to Today in \(.applicationName)", "Capture in \(.applicationName)"],
-      shortTitle: "Add to Today", systemImageName: "square.and.pencil")
+      shortTitle: "Add to Today", systemImageName: "calendar.badge.plus")
+    AppShortcut(
+      intent: NewGistIntent(),
+      phrases: ["New gist in \(.applicationName)", "Start a new gist in \(.applicationName)"],
+      shortTitle: "New Gist", systemImageName: "square.and.pencil")
   }
 }

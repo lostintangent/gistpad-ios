@@ -13,40 +13,6 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct PlatformTests {
-  @Test
-  func widgetToggleReachesTheOpenFileUndoesAsOneEditAndNeverOverwritesNewerTyping() async throws {
-    let fixture = try await PlatformFixture.make()
-    defer { fixture.cleanUp() }
-    let stale = try #require(try LibrarySnapshot.read()?.today.tasks.first)
-    let typed = "# Today\n\nStill typing\n- [ ] A real task\n"
-    let session = try await fixture.session()
-    try await fixture.type(typed, in: session)
-    await #expect(throws: PlatformError.staleTask) {
-      try await fixture.bridge.setTask(id: stale.id, completed: true)
-    }
-    let kept = try await fixture.store.draft(id: session.draft.id, accountID: fixture.account.id)
-    #expect(kept.text == typed)
-
-    try await fixture.bridge.refresh()
-    let scene = try #require(
-      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-    let window = UIWindow(windowScene: scene)
-    window.rootViewController = UIHostingController(
-      rootView: EditorView(editor: session.editor))
-    window.makeKeyAndVisible()
-    defer { window.isHidden = true }
-    try await Task.sleep(for: .milliseconds(100))
-    let editor = session.editor.textView
-    let task = try #require(try LibrarySnapshot.read()?.today.tasks.first)
-    try await fixture.bridge.setTask(id: task.id, completed: true)
-    #expect(session.editor.text == typed.replacingOccurrences(of: "[ ]", with: "[x]"))
-    #expect(session.editor.textView === editor)
-    session.editor.textView.undoManager?.undo()
-    #expect(await session.waitForLocalSave())
-    #expect(session.editor.text == typed)
-    #expect(fixture.publishes.isEmpty)
-  }
-
   @Test func addToTodayFromAShortcutLandsInTodaysNoteWithoutASheetOrAPublish() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
@@ -59,9 +25,6 @@ struct PlatformTests {
     _ = try await intent.perform()
     #expect(
       session.editor.text.hasSuffix("- [ ] A real task\n- [ ] A thought\n- [ ] Second task\n"))
-    #expect(
-      try LibrarySnapshot.read()?.today.tasks.map(\.title)
-        == ["A real task", "A thought", "Second task"])
     #expect(PendingLink.shared.link == previousLink)
     #expect(fixture.publishes.isEmpty)
   }

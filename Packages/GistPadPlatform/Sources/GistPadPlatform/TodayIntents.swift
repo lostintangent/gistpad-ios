@@ -3,30 +3,6 @@ import AppIntents
 import Foundation
 import GistPadSync
 
-public struct SetTaskIntent: AppIntent {
-    public static let title: LocalizedStringResource = "Set Task"
-    public static var supportedModes: IntentModes { .background }
-    public static var allowedExecutionTargets: IntentExecutionTargets { .main }
-    public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
-    public static var isDiscoverable: Bool { false }
-
-    @Parameter(title: "Task") public var taskID: Int
-    @Parameter(title: "Completed") public var completed: Bool
-    @Dependency private var dailyNotes: any DailyNoteActions
-
-    public init() {}
-    public init(task: FileTask, completed: Bool) {
-        taskID = task.id
-        self.completed = completed
-    }
-
-    @MainActor
-    public func perform() async throws -> some IntentResult {
-        try await dailyNotes.setTask(id: taskID, completed: completed)
-        return .result()
-    }
-}
-
 public struct AddToTodayIntent: AppIntent {
     public static let title: LocalizedStringResource = "Add to Today"
     public static let description = IntentDescription(
