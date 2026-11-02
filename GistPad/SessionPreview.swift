@@ -29,11 +29,11 @@ struct SessionPreview: View {
       .allowsHitTesting(renderError == nil)
       if let renderError {
         ContentUnavailableView {
-          Label("Preview Unavailable", systemImage: "exclamationmark.triangle")
+          Label("Preview Unavailable", systemImage: "exclamationmark.circle")
         } description: {
           Text(renderError)
         } actions: {
-          Button("Retry") {
+          Button("Try Again") {
             self.renderError = nil
             reload += 1
           }

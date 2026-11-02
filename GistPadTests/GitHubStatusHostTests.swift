@@ -86,7 +86,7 @@ struct GitHubStatusHostTests {
     .init(
       heading: "Couldn't check for updates",
       message: "A connection could not be established after retrying.",
-      recoveryTitle: "Retry", detail: "Your notes on this iPhone are unchanged.")
+      recoveryTitle: "Try Again", detail: "Your notes on this iPhone are unchanged.")
   }
 }
 

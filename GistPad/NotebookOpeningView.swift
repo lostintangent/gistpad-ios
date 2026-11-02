@@ -15,7 +15,7 @@ struct NotebookOpeningView: View {
       if let document {
         if let renderError {
           ContentUnavailableView {
-            Label("Preview unavailable", systemImage: "exclamationmark.triangle")
+            Label("Preview Unavailable", systemImage: "exclamationmark.circle")
           } description: {
             Text(renderError)
           } actions: {
@@ -39,17 +39,9 @@ struct NotebookOpeningView: View {
       } else {
         ZStack {
           if progressTitle == title {
-            VStack(spacing: 12) {
-              ProgressView()
-                .controlSize(.regular)
-              Text("Opening note...")
-                .font(.subheadline)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(Text("Opening \(title)"))
-            .accessibilityIdentifier("opening-note-progress")
+            ProgressView()
+              .accessibilityLabel(Text("Opening \(title)"))
+              .accessibilityIdentifier("opening-note-progress")
           }
         }
         .padding(24)
@@ -82,7 +74,7 @@ struct NotebookFailedOpeningView: View {
 
   var body: some View {
     ContentUnavailableView {
-      Label("Couldn't Open Note", systemImage: "exclamationmark.circle")
+      Label("Couldn't Open This File", systemImage: "exclamationmark.circle")
     } description: {
       Text(message)
     } actions: {

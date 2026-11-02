@@ -39,7 +39,7 @@ struct NotebookNameEditor: View {
         if let error {
           Section {
             Label(error, systemImage: "exclamationmark.circle")
-            Button("Retry", action: commit)
+            Button("Try Again", action: commit)
           }
         }
       }

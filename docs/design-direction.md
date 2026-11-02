@@ -36,9 +36,9 @@ Existing notes open rendered unless resuming a genuine interrupted edit. Create 
 | Opening state | Experience |
 | --- | --- |
 | Cached | Selected title and real local content immediately, including offline. No previous-note frame, skeleton, loading flash or wait for refresh |
-| Uncached, pending | Known title and semantic page immediately. After 350 ms, one native circular progress indicator with “Opening note...” in scaled subheadline, 12 pt below, centered in the usable detail viewport |
+| Uncached, pending | Known title and semantic page immediately. After 350 ms, one native circular progress indicator with no caption, centered in the usable detail viewport. VoiceOver reads “Opening” and the title |
 | Ready | Replace progress immediately, with no minimum hold, second entrance or delayed input |
-| Failed / offline without cache | Retain selected identity, explain the condition and offer Try Again. Never substitute another note or a blank editable file |
+| Failed / offline without cache | Retain selected identity, say **Couldn't Open This File** with the condition and offer Try Again. Never substitute another note or a blank editable file |
 | Empty / first run | Modest original notebook artwork and one relevant sign-in/create invitation. Signed-in emptiness is not signed-out state |
 | Empty collection / no matches | Explain the actual scope/query and offer clear-filter, broader search or creation as appropriate |
 
@@ -164,7 +164,7 @@ Offline, cached notes stay editable, and new notes and files can be created on t
 
 Routine Library checks are quiet; pull-to-refresh uses its own native indicator. The note retains its native trailing status slot: after 350 ms, one small circular native spinner with the actual operation as its accessible label, no forced hold. Cancel the delay when superseded. Transient failures/cancellation do not become warnings; the sync owner determines persistent problems.
 
-Status has three meanings: nothing shown when the note is on GitHub, **Not published yet** when edits are on the phone, and **Needs you** for a conflict or a lapsed GitHub sign-in. **Needs you** shows one neutral native glass `exclamationmark` action labeled **GitHub needs attention**, which opens **GitHub status** in a native popover or adaptive sheet. For a lapsed sign-in, the popover heading is **Couldn't reconnect GitHub.**, and its only action is **Reconnect GitHub**, which starts sign-in directly. If the Supabase session is missing, the body is **Tags and pinned gists can't sync until you reconnect GitHub.** If only the GitHub token is missing, it is **Gists can't update until you reconnect GitHub.** With unsent edits, the body adds **Changes haven't synced. Reconnect GitHub to send them.** for tags and pins, or **Changes haven't reached GitHub. Reconnect GitHub to send them.** for gist content. Edits stay on the phone while the lapse lasts and publish after reconnecting. A failed publish that isn't a lapse stays **Not published yet** and retries at the next trigger, so there is no Retry button. While this control is visible, Library does not also show its own reconnect action.
+Status has three meanings: nothing shown when the note is on GitHub, **Not published yet** when edits are on the phone, and **Needs you** for a conflict or a lapsed GitHub sign-in. **Needs you** shows one neutral native glass `exclamationmark` action labeled **GitHub needs attention**, which opens **GitHub status** in a native popover or adaptive sheet. For a lapsed sign-in, the popover heading is **Couldn't reconnect GitHub.**, and its only action is **Reconnect GitHub**, which starts sign-in directly. If the Supabase session is missing, the body is **Tags and pinned gists can't sync until you reconnect GitHub.** If only the GitHub token is missing, it is **Gists can't update until you reconnect GitHub.** With unsent edits, the body adds **Changes haven't synced. Reconnect GitHub to send them.** for tags and pins, or **Changes haven't reached GitHub. Reconnect GitHub to send them.** for gist content. Edits stay on the phone while the lapse lasts and publish after reconnecting. A failed publish that isn't a lapse stays **Not published yet** and retries at the next trigger, so there is no Try Again button. While this control is visible, Library does not also show its own reconnect action.
 
 Say **Couldn't check for updates** for inspection and **Changes haven't reached GitHub** for publication. Claim **Your changes are saved on this iPhone** only after durable saving; inspection-only trouble can say the local notes are unchanged. No raw errors or speculative safety claims.
 
@@ -172,7 +172,7 @@ If the writing keyboard covers the nonblocking remote-status slot, remove it fro
 
 | Data risk | Required response |
 | --- | --- |
-| Local write failed | **Changes aren't saved. Keep this note open.** Retry, no safe-offline claim |
+| Local write failed | **Changes aren't saved. Keep this note open.** Try Again, no safe-offline claim |
 | Publication/creation uncertain | Check Status / Check GitHub before retrying. Never blindly duplicate a gist or write |
 | Changed remotely while this note has unsent edits | **Needs you**. Keep the local text. Nothing publishes until you choose in Review changes |
 | Truncated, unavailable or blocked source | Explain the actual reason and recovery. Never offer unsafe replacement |
@@ -215,10 +215,10 @@ Pending photos use a bounded, scrollable note-local attachment row above problem
 | Waiting for gist | Save this note to GitHub to upload the photo. Never create/publish solely to release the queue |
 | Offline | Saved on this iPhone. Waiting for connection. No active spinner |
 | Uploading / uncertain | Uploading photo... / Checking upload...; reconcile the stable asset ID, never offer duplicate upload or invented percentages |
-| Reconnect / upload failure | Reconnect GitHub / Retry, retaining local data and respecting retry timing |
+| Reconnect / upload failure | Reconnect GitHub / Try Again, retaining local data and respecting retry timing |
 | Uploaded, original target valid | One durable native undoable insertion, then reveal the real Markdown |
 | Uploaded, target stale | Photo ready / Insert Here only in the originating note at a fresh safe cursor. Finish composition first |
-| Local queue/insertion failed | Couldn't save this photo on this iPhone / Retry, retaining data without a durability claim |
+| Local queue/insertion failed | Couldn't save this photo on this iPhone / Try Again, retaining data without a durability claim |
 
 Resume eligible work only for the same account. Never insert into whichever note is now open or guess a shifted offset. Remove the row only after durable source insertion. Undo removes that edit, not the public object, and never reinserts automatically.
 
@@ -252,7 +252,7 @@ The approved inspector observes one document-owned Review, separate from Ask/Edi
 
 Normal Close hides running/unresolved Review without clearing it. Dismiss Suggestion changes no source. More contains neutral Review Again and Dismiss Review; the latter cancels/clears Review, not GitHub comments or composer drafts. Resolving/dismissing the last suggestion removes the picker and returns to Comments, preserving position and sensible accessibility focus.
 
-No suggestions shows its result and Done before clearing. Failure retains explanation and Retry/Dismiss. Closing acknowledges/clears these terminal messages. Cancel Review clears immediately. Document departure/account change clears private Review. Stale Review retains its explanation with Review Again / Dismiss Review and no unsafe Apply.
+No suggestions shows its result and Done before clearing. Failure retains explanation and Try Again/Dismiss. Closing acknowledges/clears these terminal messages. Cancel Review clears immediately. Document departure/account change clears private Review. Stale Review retains its explanation with Review Again / Dismiss Review and no unsafe Apply.
 
 Use the note title as context, with verified Before/After and individual Apply. No redundant filename/device row, author avatar, Reply, Send, GitHub count or automatic publication. Daily/unpublished notes use the same Review-only inspector without Comments or a picker; final resolution, dismissal, cancellation or Done closes it. Gist-comment eligibility never gates on-device Review.
 

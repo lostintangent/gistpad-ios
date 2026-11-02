@@ -408,11 +408,11 @@ public struct LibraryView: View {
                 ContentUnavailableView.search(text: model.query)
             case .failed(let message):
                 ContentUnavailableView {
-                    Label(String(localized: "Couldn't update from GitHub.", bundle: .module), systemImage: "exclamationmark.circle")
+                    Label(String(localized: "Couldn't Load Your Gists", bundle: .module), systemImage: "exclamationmark.circle")
                 } description: {
                     Text(verbatim: message)
                 } actions: {
-                    Button(String(localized: "Retry", bundle: .module)) {
+                    Button(String(localized: "Try Again", bundle: .module)) {
                         Task { await actions.refresh() }
                     }
                 }

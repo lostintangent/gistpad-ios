@@ -373,7 +373,7 @@
     "Copy Link" : {
 
     },
-    "Couldn't finish saving tags." : {
+    "Couldn't Load Your Gists" : {
 
     },
     "Couldn't prepare this photo." : {
@@ -385,7 +385,7 @@
     "Couldn't save this photo on this iPhone" : {
 
     },
-    "Couldn't update from GitHub." : {
+    "Couldn't save your tags." : {
 
     },
     "Couldn't upload photo" : {
@@ -538,9 +538,6 @@
     "Rename File" : {
 
     },
-    "Retry" : {
-
-    },
     "Review changes" : {
 
     },
@@ -601,12 +598,6 @@
     "Shows details and recovery actions" : {
 
     },
-    "Some changes may already be saved. Closing does not undo saved changes." : {
-
-    },
-    "Some changes may already be saved. Retry to finish applying your choices." : {
-
-    },
     "Source & Preview" : {
 
     },
@@ -656,6 +647,9 @@
 
     },
     "Today" : {
+
+    },
+    "Try Again" : {
 
     },
     "Try another title or clear your tag filters." : {

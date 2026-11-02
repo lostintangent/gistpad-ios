@@ -29,11 +29,9 @@ public struct TagEditor: View {
             List {
                 if let saveError {
                     Section {
-                        Label(String(localized: "Couldn't finish saving tags.", bundle: .module), systemImage: "exclamationmark.circle")
+                        Label(String(localized: "Couldn't save your tags.", bundle: .module), systemImage: "exclamationmark.circle")
                         Text(verbatim: saveError).font(.subheadline)
-                        Text("Some changes may already be saved. Retry to finish applying your choices.", bundle: .module)
-                            .font(.footnote)
-                        Button(String(localized: "Retry", bundle: .module), action: commit)
+                        Button(String(localized: "Try Again", bundle: .module), action: commit)
                     }
                     .foregroundStyle(.primary)
                 }

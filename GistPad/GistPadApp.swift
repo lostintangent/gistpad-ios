@@ -57,11 +57,11 @@ struct GistPadApp: App {
           workspace(notebook)
         } else if let loadError {
           ContentUnavailableView {
-            Label("Couldn't Load Your Gists", systemImage: "exclamationmark.triangle")
+            Label("Couldn't Load Your Gists", systemImage: "exclamationmark.circle")
           } description: {
             Text(loadError)
           } actions: {
-            Button("Retry") { Task { await load() } }
+            Button("Try Again") { Task { await load() } }
               .buttonStyle(.borderedProminent)
           }
         } else if !Self.isHostingTests {
