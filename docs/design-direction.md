@@ -195,8 +195,6 @@ The session owns selection and Undo. **Use GitHub's** waits for IME or Writing T
 
 A conflict keeps the note from publishing until you choose, so GitHub's version can't be overwritten by accident. No Apply & Publish. Account changes and quitting keep the draft on the phone.
 
-If the file was deleted on GitHub while you had unsent edits, the sheet shows **My Draft** and the GitHub tab says **This file isn't in the gist on GitHub anymore.** Its only action is **Keep Mine**, with the caption **Adds this file back to the gist with your text.** There is no **Use GitHub's**, because there is no GitHub text. Close with the system close button. Nothing publishes until you choose, and the draft stays on the phone.
-
 ### Photos
 
 Insert > Photo uses one system PhotosPicker. Capture originating account, draft, accepted generation and UTF-16 insertion location before presentation. Insert after selected text, never replace it. Read-only/incomplete source and active IME/Writing Tools block mutation.
