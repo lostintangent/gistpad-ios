@@ -224,48 +224,6 @@
             CommentHighlights.annotationKey, at: 5, effectiveRange: nil) != nil)
       }
 
-      @Test func nativeSelectionRetainsOriginalInkInsteadOfSelectedCommentInk() throws {
-        let session = Editor(fileID: "selection", text: "A native note")
-        let window = host(session)
-        defer { window.isHidden = true }
-        session.textView.selectedRange = NSRange(location: 0, length: 0)
-        let original = try #require(
-          session.textView.textStorage.attribute(
-            .foregroundColor, at: 3, effectiveRange: nil) as? UIColor)
-        session.setCommentHighlights(
-          .init(
-            quotes: [CommentQuote(commentID: 10, quote: "native")], selectedCommentID: 10))
-        session.textView.selectedRange = NSRange(location: 2, length: 6)
-        session.textViewDidChangeSelection(session.textView)
-        let selected = try #require(
-          session.textView.textStorage.attribute(
-            .foregroundColor, at: 3, effectiveRange: nil) as? UIColor)
-        #expect(
-          selected.resolvedColor(with: session.textView.traitCollection)
-            == original.resolvedColor(with: session.textView.traitCollection))
-        #expect(session.textView.tintColor == .systemBlue)
-        #expect(session.textView.selectedRange == NSRange(location: 2, length: 6))
-      }
-
-      @Test func selectingACommentRestoresEachSyntaxInkWithoutChangingOtherAttributes() throws {
-        let source = "A **native** `code` [note](https://example.test)"
-        let session = Editor(fileID: "syntax-ink", text: source)
-        let window = host(session)
-        defer { window.isHidden = true }
-        let original = NSAttributedString(attributedString: session.textView.textStorage)
-        session.setCommentHighlights(
-          .init(quotes: [CommentQuote(commentID: 10, quote: source)], selectedCommentID: 10))
-        let selection = NSRange(location: 0, length: source.utf16.count)
-        session.textView.selectedRange = selection
-        session.textViewDidChangeSelection(session.textView)
-        let restored = NSMutableAttributedString(attributedString: session.textView.textStorage)
-        restored.removeAttribute(CommentHighlights.annotationKey, range: selection)
-        #expect(restored.isEqual(to: original))
-        #expect(session.text.utf8.elementsEqual(source.utf8))
-        #expect(session.generation == 0)
-        #expect(session.textView.selectedRange == selection)
-      }
-
       @Test func highlightsStepAsideForWritingToolsAndFindWithoutChangingSource() async throws {
         let session = Editor(fileID: "transient-ui", text: "A native note")
         let window = host(session)

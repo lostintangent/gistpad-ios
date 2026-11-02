@@ -259,90 +259,60 @@ struct LibraryTests {
     #expect(fixture.publishes.sorted() == ["PATCH /gists/a", "PATCH /gists/b", "POST /gists"])
   }
 
-  @Test func orphanedEditedCopiesHaveStableDatesAndLocalDeletionTargets() async throws {
-    let fixture = try await LibraryFixture()
-    let draft = try await fixture.stageEdit(
-      gistID: "gone", filename: "README.md", text: "An unpublished edit")
-    let library = fixture.library
-    await library.start()
-    let row = try #require(library.state.gists.first { $0.id == draft.id.uuidString })
-    #expect(row.updatedAt == draft.updatedAt)
-    #expect(row.isRecovery)
-    let target = try #require(library.libraryDeletionTarget(for: row.id))
-    #expect(target.localDraft?.id == draft.id)
-    await library.refresh()
-    #expect(library.state.gists.first { $0.id == row.id }?.updatedAt == row.updatedAt)
-    await library.open(.draft(id: draft.id))
-    #expect(library.loadedFile?.isRecovery == true)
-    _ = try await library.perform(target.action)
-    #expect(!library.localDrafts.contains { $0.id == draft.id })
-    #expect(library.loadedFile?.draft?.id != draft.id)
-    #expect(library.state.selectedID != row.id)
-    await library.refresh()
-    #expect(!library.state.gists.contains { $0.id == row.id })
-    #expect(!fixture.server.requests.contains { $0.hasPrefix("DELETE") })
-    #expect(fixture.publishes.isEmpty)
-  }
-
-  @Test func aNewlyPublishedDraftImmediatelyHasTheSameDeleteTargetAsItsNote() async throws {
-    let fixture = try await LibraryFixture()
-    let library = fixture.library
-    await library.start()
-    await library.open(.new)
-    let opened = try #require(library.loadedFile)
-    let draft = try #require(opened.draft)
-    #expect(library.details(for: opened).shareURL == nil)
-    _ = try await library.persist(
-      draftID: draft.id, accountID: draft.accountID, text: "A new published note", generation: 1)
-    let published = try await library.publish(draftID: draft.id, accountID: draft.accountID)
-    let gistID = try #require(published.gistID)
-    #expect(fixture.publishes == ["POST /gists"])
-    let file = try #require(library.loadedFile)
-    let shareURL = try #require(library.details(for: file).shareURL)
-    #expect(shareURL.absoluteString.hasPrefix("https://gistpad.dev/#/share/\(gistID)/"))
-    let row = try #require(library.state.gists.first { $0.id == gistID })
-    #expect(!row.isRecovery)
-    #expect(!library.state.gists.contains { $0.id == draft.id.uuidString })
-    #expect(library.libraryDeletionTarget(for: row.id)?.id == gistID)
-    #expect(library.libraryDeletionTarget(for: draft.id.uuidString)?.id == gistID)
-    #expect(library.libraryDeletionTarget(for: row.id)?.localDraft == nil)
-    #expect(library.loadedFile?.gist?.id == gistID)
-    #expect(library.state.selectedID == gistID)
-    #expect(!fixture.server.requests.contains("GET /gists/\(gistID)"))
-  }
-
-  @Test func libraryDeleteSeparatesRemoteGistsAndLocalCopiesFromUnpublishedAndSharedRows()
-    async throws
-  {
+  @Test func everyOwnedRowDeletesInAnyStateAndSomeoneElsesCannot() async throws {
     let fixture = try await LibraryFixture {
-      $0.addGist(
-        id: "a", description: "An owned gist",
-        files: ["README.md": "Find this thought", "日本語.md": "Find this other thought"])
+      $0.addGist(id: "a", description: "An owned gist", files: ["README.md": "Mine"])
       $0.addGist(
         id: "shared", description: "A friend's gist", files: ["README.md": "Theirs"],
         owner: FixtureServer.someoneElse, isStarred: true)
     }
     let accountID = fixture.account.id
-    let recovery = try await fixture.stageEdit(
-      gistID: "missing", filename: "README.md", text: "Find my recovery")
+    let orphan = try await fixture.stageEdit(
+      gistID: "gone", filename: "README.md", text: "An edit to a gist deleted elsewhere")
     let local = try await fixture.store.newGistDraft(
       accountID: accountID, githubUserID: FixtureServer.you.id)
     _ = try await fixture.store.persist(
-      id: local.id, accountID: accountID, text: "Find my local draft", generation: 1)
+      id: local.id, accountID: accountID, text: "A gist never published", generation: 1)
     let library = fixture.library
     await library.start()
-    let target = try #require(library.libraryDeletionTarget(for: "a"))
-    #expect(target.id == "a")
-    #expect(target.title == "An owned gist")
-    #expect(target.accountID == accountID)
-    #expect(library.libraryDeletionTarget(for: recovery.id.uuidString)?.localDraft?.id == recovery.id)
-    #expect(library.libraryDeletionTarget(for: local.id.uuidString)?.localDraft?.id == local.id)
-    for id in ["missing", "unknown", "shared"] {
+    let orphanRow = try #require(library.state.gists.first { $0.id == orphan.id.uuidString })
+    #expect(orphanRow.isRecovery)
+    await library.refresh()
+    #expect(library.state.gists.first { $0.id == orphanRow.id }?.updatedAt == orphan.updatedAt)
+
+    // A new gist's row is its own as soon as it publishes.
+    await library.open(.new)
+    let created = try #require(library.loadedFile?.draft)
+    #expect(library.loadedFile.map(library.details(for:))?.shareURL == nil)
+    _ = try await library.persist(
+      draftID: created.id, accountID: accountID, text: "Just published", generation: 1)
+    let published = try await library.publish(draftID: created.id, accountID: accountID)
+    let gistID = try #require(published.gistID)
+    let shareURL = try #require(library.loadedFile.map(library.details(for:))?.shareURL)
+    #expect(shareURL.absoluteString.hasPrefix("https://gistpad.dev/#/share/\(gistID)/"))
+    #expect(library.state.selectedID == gistID)
+    #expect(library.libraryDeletionTarget(for: created.id.uuidString)?.id == gistID)
+    for id in ["gone", "unknown", "shared"] {
       #expect(library.libraryDeletionTarget(for: id) == nil)
     }
-    #expect(library.localDrafts.first { $0.id == local.id }?.text == "Find my local draft")
-    #expect(library.localDrafts.first { $0.id == recovery.id }?.text == "Find my recovery")
-    #expect(!fixture.server.requests.contains { $0.hasPrefix("DELETE") })
+
+    await library.open(.draft(id: orphan.id))
+    #expect(library.loadedFile?.isRecovery == true)
+    let owned = [orphanRow.id, local.id.uuidString, "a", gistID]
+    for rowID in owned {
+      let target = try #require(library.libraryDeletionTarget(for: rowID))
+      _ = try await library.perform(target.action)
+    }
+    #expect(library.state.selectedID != orphanRow.id)
+    await library.refresh()
+    let rows = Set(library.state.gists.map(\.id))
+    #expect(rows.isDisjoint(with: owned) && rows.contains("shared"))
+    #expect(fixture.server.gists.map(\.id) == ["shared"])
+    #expect(
+      fixture.server.requests.filter { $0.hasPrefix("DELETE") }
+        == ["DELETE /gists/a", "DELETE /gists/\(gistID)"])
+    let stored = Set(try await fixture.store.drafts(accountID: accountID).map(\.id))
+    #expect(stored.isDisjoint(with: [orphan.id, local.id, created.id]))
   }
 
   @Test func deletingALibraryGistRemovesItsRowAndDraftsAndQuietlyOpensToday() async throws {
@@ -510,24 +480,45 @@ struct LibraryTests {
     #expect(library.loadedFile?.editingRequestID != nil)
   }
 
-  @Test func aDailyRowShowsItsDayAndTaskProgress() async throws {
-    let filename = DailyNote.filename()
+  @Test func dailyRowsShowTheirDayAndTaskProgressThroughEditingAndPublishing() async throws {
+    let today = DailyNote.filename()
     let fixture = try await LibraryFixture {
       $0.addGist(
         id: "daily", description: DailyNote.gistDescription,
-        files: [filename: "- [x] One\n- [ ] Two\nA third line stays out of the excerpt."])
+        files: [
+          today: "- [x] One\n- [ ] Two\nA third line stays out of the excerpt.",
+          "2026-10-23.md": "An earlier day",
+        ])
     }
+    let draft = try await fixture.stageEdit(
+      gistID: "daily", filename: "2026-10-24.md", text: "- [ ] A retained task")
     let library = fixture.library
     await library.start()
-    let row = try #require(library.state.unfilteredGists(in: .dailyNotes).first)
-    #expect(row.id == "daily/\(filename)")
-    #expect(row.dailyDate == DailyNote.date(filename: filename))
-    #expect(library.state.dailyNoteCount == 1)
-    #expect(row.progress == .init(completed: 1, total: 2))
+    let todayRow = try #require(
+      library.state.unfilteredGists(in: .dailyNotes).first { $0.id == "daily/\(today)" })
+    #expect(todayRow.dailyDate == DailyNote.date(filename: today))
+    #expect(todayRow.progress == .init(completed: 1, total: 2))
     #expect(library.state.today.progress == .init(completed: 1, total: 2))
-    await library.openRow(id: row.id)
-    #expect(library.loadedFile?.filename == filename)
-    #expect(library.state.selectedID == row.id)
+    #expect(library.state.dailyNoteCount == 3)
+
+    // A day that's new on this phone keeps its one row through editing and publishing.
+    let rowID = "daily/2026-10-24.md"
+    await library.openRow(id: rowID)
+    let fileID = try #require(library.loadedFile?.id)
+    let text = "- [x] A retained task\n- [ ] A new task"
+    _ = try await library.persist(
+      draftID: draft.id, accountID: draft.accountID, text: text, generation: draft.generation + 1)
+    let row = try #require(library.state.gists.first { $0.id == rowID })
+    #expect(row.progress == .init(completed: 1, total: 2))
+    #expect(row.isOverdue)
+    _ = try await library.publish(draftID: draft.id, accountID: draft.accountID)
+    #expect(fixture.remote("daily", "2026-10-24.md") == text)
+    #expect(fixture.publishes == ["PATCH /gists/daily"])
+    #expect(library.loadedFile?.id == fileID)
+    #expect(library.state.selectedID == rowID)
+    #expect(library.state.dailyNoteCount == 3)
+    #expect(library.state.gists.filter { $0.id == rowID }.count == 1)
+    #expect(!library.state.gists.contains { $0.id == draft.id.uuidString })
   }
 
   @Test func unfilteredDailyRowsResolveTheirGistAndRefreshOverdueOnCalendarChanges() async throws {
@@ -578,37 +569,6 @@ struct LibraryTests {
     } else {
       Issue.record("A Daily row deletes only its own file.")
     }
-  }
-
-  @Test func persistingAndPublishingANewDailyFileKeepItsExactRowAndTaskProgress() async throws {
-    let fixture = try await LibraryFixture(
-      selection: .init(gistID: "daily", filename: "2026-10-23.md", draftID: nil)
-    ) {
-      $0.addGist(
-        id: "daily", description: DailyNote.gistDescription,
-        files: ["2026-10-23.md": "An earlier day"])
-    }
-    let draft = try await fixture.stageEdit(
-      gistID: "daily", filename: "2026-10-24.md", text: "- [ ] A retained task")
-    let library = fixture.library
-    await library.start()
-    await library.openRow(id: "daily/2026-10-24.md")
-    let fileID = try #require(library.loadedFile?.id)
-    let text = "- [x] A retained task\n- [ ] A new task"
-    _ = try await library.persist(
-      draftID: draft.id, accountID: draft.accountID, text: text, generation: draft.generation + 1)
-    let row = try #require(library.state.gists.first { $0.id == "daily/2026-10-24.md" })
-    #expect(row.progress == .init(completed: 1, total: 2))
-    #expect(row.isOverdue)
-    #expect(library.state.dailyNoteCount == 2)
-    _ = try await library.publish(draftID: draft.id, accountID: draft.accountID)
-    #expect(fixture.remote("daily", "2026-10-24.md") == text)
-    #expect(fixture.publishes == ["PATCH /gists/daily"])
-    #expect(library.loadedFile?.id == fileID)
-    #expect(library.state.selectedID == row.id)
-    #expect(library.state.dailyNoteCount == 2)
-    #expect(library.state.gists.filter { $0.id == row.id }.count == 1)
-    #expect(!library.state.gists.contains { $0.id == draft.id.uuidString })
   }
 
   @Test func deletingADailyNoteRemovesOnlyItsFileOrTheGistWithItsLastFile() async throws {

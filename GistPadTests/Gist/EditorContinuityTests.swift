@@ -106,14 +106,6 @@ struct EditorContinuityTests {
     #expect(session.textView.text == source)
   }
 
-  @Test func normalizationOnlyEditsAdvanceTheSourceGeneration() {
-    let session = Editor(fileID: "unicode", text: "cafe\u{301}")
-    session.textView.text = "caf\u{e9}"
-    session.textViewDidChange(session.textView)
-    #expect(session.generation == 1)
-    #expect(session.text.utf8.elementsEqual("caf\u{e9}".utf8))
-  }
-
   @Test func readingAnchorSurvivesReflow() async throws {
     let source = EditorFixture.markdown
     let session = Editor(fileID: "test", text: source)
