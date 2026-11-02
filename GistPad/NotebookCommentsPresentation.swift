@@ -23,7 +23,7 @@ final class NotebookCommentsPresentation {
   var previewLinkedIDs: Set<Int64>?
   var documentMode: NoteMode = .reading
   var detent = PresentationDetent.medium
-  var focusRequest: UInt64 = 0
+  var isComposerFocused = false
   var preparationFailure: String?
   var overlappingIDs: [Int64] = []
   var sidebarBeforeOpening: NavigationSplitViewVisibility?
@@ -94,7 +94,7 @@ final class NotebookCommentsPresentation {
       guard let model = await prepare() else { return }
       if let quote {
         model.beginQuote(quote, filename: filename)
-        focusRequest &+= 1
+        isComposerFocused = true
       }
       if model.comments == nil {
         await model.refresh()
@@ -114,7 +114,15 @@ final class NotebookCommentsPresentation {
     isPresented = false
     selectedRootID = nil
     overlappingIDs = []
-    focusRequest = 0
+    isComposerFocused = false
+  }
+
+  /// Shows a thread's passage in the note, out from under the keyboard and a full-height sheet.
+  func revealPassage(_ id: Int64) {
+    selectedRootID = id
+    isComposerFocused = false
+    detent = .medium
+    revealRevision &+= 1
   }
 
   func didDismiss() {

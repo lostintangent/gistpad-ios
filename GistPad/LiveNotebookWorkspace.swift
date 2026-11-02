@@ -635,12 +635,9 @@ struct LiveNotebookWorkspace: View {
           threadRevealRevision: comments.threadRevealRevision,
           linkedRootIDs: comments.documentMode == .source
             ? comments.sourceLinkedIDs : comments.previewLinkedIDs,
-          focusRequest: $comments.focusRequest,
+          isComposerFocused: $comments.isComposerFocused,
           close: { comments.hide() },
-          revealPassage: { id in
-            comments.selectedRootID = id
-            comments.revealRevision &+= 1
-          },
+          revealPassage: comments.revealPassage,
           didFocus: { comments.detent = .large })
       } else {
         NavigationStack {

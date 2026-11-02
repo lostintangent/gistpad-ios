@@ -16,17 +16,17 @@ public struct CommentsComposer: View {
     private let isEditable: Bool
     private let isPosting: Bool
     private let failure: String?
-    private let focusRequest: UInt64
+    @Binding private var isFocused: Bool
     private let post: () -> Void
     private let removeContext: (() -> Void)?
     private let didFocus: () -> Void
-    @FocusState private var isFocused: Bool
+    @FocusState private var focus: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     public init(
         text: Binding<String>, context: CommentsComposerContext = .root,
         canPost: Bool, isEditable: Bool = true, isPosting: Bool = false, failure: String? = nil,
-        focusRequest: UInt64 = 0, post: @escaping () -> Void, removeContext: (() -> Void)? = nil,
+        isFocused: Binding<Bool> = .constant(false), post: @escaping () -> Void, removeContext: (() -> Void)? = nil,
         didFocus: @escaping () -> Void = {}
     ) {
         self._text = text
@@ -35,59 +35,61 @@ public struct CommentsComposer: View {
         self.isEditable = isEditable
         self.isPosting = isPosting
         self.failure = failure
-        self.focusRequest = focusRequest
+        self._isFocused = isFocused
         self.post = post
         self.removeContext = removeContext
         self.didFocus = didFocus
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let failure {
-                Text(verbatim: failure)
-                    .font(.footnote)
-                    .accessibilityIdentifier("comment-post-error")
-            }
-            if context != .root {
-                contextLine
-            }
-            HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .bottom, spacing: 8) {
+            // Like an attachment in the Messages field, the context lives inside the field's glass.
+            VStack(alignment: .leading, spacing: 4) {
+                if let failure {
+                    Text(verbatim: failure)
+                        .font(.footnote)
+                        .accessibilityIdentifier("comment-post-error")
+                }
+                if context != .root {
+                    contextLine
+                }
                 TextField(
                     prompt, text: $text, axis: .vertical
                 )
                 .font(.body)
                 .lineLimit(1...maximumLines)
                 .textFieldStyle(.plain)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .frame(minHeight: 44)
-                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
-                .focused($isFocused)
+                .focused($focus)
                 .tint(Color(uiColor: .systemBlue))
                 .disabled(!isEditable || isPosting)
                 .accessibilityIdentifier("comment-composer-text")
-                Button(role: .confirm, action: post) {
-                    Label(String(localized: "Post", bundle: .module), systemImage: "arrow.up")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle)
-                .controlSize(.large)
-                .tint(Color(uiColor: .tintColor))
-                .disabled(!canPost || isPosting)
-                .keyboardShortcut(.return, modifiers: .command)
-                .accessibilityIdentifier("comment-post")
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(minHeight: 44)
+            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
+            Button(role: .confirm, action: post) {
+                Label(String(localized: "Post", bundle: .module), systemImage: "arrow.up")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.circle)
+            .controlSize(.large)
+            .tint(Color(uiColor: .tintColor))
+            .disabled(!canPost || isPosting)
+            .keyboardShortcut(.return, modifiers: .command)
+            .accessibilityIdentifier("comment-post")
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 8)
-        .onChange(of: focusRequest, initial: true) { _, request in
-            isFocused = request > 0
+        .onChange(of: isFocused, initial: true) { _, wanted in
+            focus = wanted
         }
-        .onChange(of: isFocused) { _, focused in
+        .onChange(of: focus) { _, focused in
+            isFocused = focused
             if focused { didFocus() }
         }
-        .onDisappear { isFocused = false }
+        .onDisappear { focus = false }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("comments-composer")
     }
@@ -109,7 +111,7 @@ public struct CommentsComposer: View {
     }
 
     private var contextLine: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Group {
                 switch context {
                 case .root:
@@ -133,7 +135,7 @@ public struct CommentsComposer: View {
                     Text("Editing your comment", bundle: .module)
                 }
             }
-            .font(.caption)
+            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             if context != .root, let removeContext {
                 Button(action: removeContext) {
@@ -141,15 +143,18 @@ public struct CommentsComposer: View {
                         context == .editing
                             ? String(localized: "Cancel editing comment", bundle: .module)
                             : String(localized: "Remove comment context", bundle: .module),
-                        systemImage: "xmark")
+                        systemImage: "xmark.circle.fill")
                         .labelStyle(.iconOnly)
-                        .frame(minWidth: 44, minHeight: 44)
+                        .foregroundStyle(.tertiary)
+                        // A 44-point target that doesn't make the context row taller.
+                        .contentShape(.rect.inset(by: -13))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .disabled(!isEditable || isPosting)
                 .accessibilityIdentifier("comment-remove-context")
             }
         }
+        .font(.footnote)
     }
 }
 

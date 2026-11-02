@@ -7,7 +7,7 @@ struct NotebookCommentsInspector: View {
   let selectedRootID: Int64?
   var threadRevealRevision: UInt64 = 0
   let linkedRootIDs: Set<Int64>?
-  @Binding var focusRequest: UInt64
+  @Binding var isComposerFocused: Bool
   let close: () -> Void
   let revealPassage: (Int64) -> Void
   let didFocus: () -> Void
@@ -74,10 +74,10 @@ struct NotebookCommentsInspector: View {
       text: $conversation.draft, context: composerContext, canPost: conversation.canPost,
       isPosting: conversation.isPosting,
       failure: conversation.failure == .load ? nil : conversation.failure?.interfaceDescription,
-      focusRequest: focusRequest,
+      isFocused: $isComposerFocused,
       post: { Task { await conversation.post() } },
       removeContext: {
-        if case .edit = conversation.target { focusRequest = 0 } else { focusComposer() }
+        if case .edit = conversation.target { isComposerFocused = false } else { focusComposer() }
         conversation.removeContext()
       },
       didFocus: didFocus)
@@ -98,6 +98,6 @@ struct NotebookCommentsInspector: View {
 
   private func focusComposer() {
     didFocus()
-    focusRequest &+= 1
+    isComposerFocused = true
   }
 }
