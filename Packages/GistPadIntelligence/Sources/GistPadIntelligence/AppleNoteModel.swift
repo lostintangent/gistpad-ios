@@ -195,6 +195,10 @@ public final class AppleNoteModel: NoteModelBackend {
     do {
       return try await operation()
     } catch let error as LanguageModelError {
+      // At the limit, guided generation closes the answer mid-sentence instead of throwing.
+      guard response.usage.output.totalTokenCount < pass.responseTokens else {
+        throw NoteIntelligenceError.responseTooLarge
+      }
       logger.error(
         "request=\(pass.requestID.uuidString, privacy: .public) modelFailure=\(Self.errorCode(error), privacy: .public)"
       )
@@ -215,10 +219,6 @@ public final class AppleNoteModel: NoteModelBackend {
       default:
         throw error
       }
-    } catch is GeneratedContent.ParsingError {
-      logger.error(
-        "request=\(pass.requestID.uuidString, privacy: .public) modelFailure=responseLimit")
-      throw NoteIntelligenceError.responseTooLarge
     }
   }
 
