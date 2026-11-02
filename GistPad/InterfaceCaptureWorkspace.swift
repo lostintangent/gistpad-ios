@@ -235,6 +235,13 @@ struct InterfaceCaptureWorkspace: View {
                 filename: "README.md", excerpt: "Not published yet."
             ))
         }
+        if state == "row-undated" {
+            snapshot.notes.append(.init(
+                id: "undated-draft", title: "A thought that is not dated yet", updatedAt: nil,
+                gistID: "undated-draft", filename: "Thought.md",
+                excerpt: "Keep the thought, not the interface.", commentCount: 3
+            ))
+        }
         if state == "tag-audit" {
             snapshot = LibrarySnapshot(
                 notes: [
@@ -346,7 +353,7 @@ struct InterfaceCaptureWorkspace: View {
                     )
                     .captureTagFilters(captureState == "tag-filters")
                     .task {
-                        if ["notes", "featured", "tag-audit", "row-anatomy", "long-library", "collections-expanded", "collections-collapsed"].contains(captureState) {
+                        if ["notes", "featured", "tag-audit", "row-anatomy", "row-undated", "long-library", "collections-expanded", "collections-collapsed"].contains(captureState) {
                             try? await Task.sleep(for: .milliseconds(400))
                             if ["long-library", "collections-expanded", "collections-collapsed"].contains(captureState) {
                                 scroll.scrollTo(LibraryCollection.dailyNotes, anchor: .top)
@@ -412,7 +419,7 @@ struct InterfaceCaptureWorkspace: View {
                    !["empty", "collection-loading"].contains(captureState) {
                     library.selectedNoteID = "shape"
                 }
-                if (captureScreen == "library" && !["notes", "featured", "tag-audit", "row-anatomy", "long-library", "collections-expanded", "collections-collapsed"].contains(captureState))
+                if (captureScreen == "library" && !["notes", "featured", "tag-audit", "row-anatomy", "row-undated", "long-library", "collections-expanded", "collections-collapsed"].contains(captureState))
                     || captureState == "error" {
                     await markReady()
                 }
