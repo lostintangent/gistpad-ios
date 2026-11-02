@@ -138,10 +138,7 @@ struct TagLabels: View {
         var body: some View {
             Text("+\(count)", bundle: .module)
                 .font(.footnote.weight(.medium))
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color(uiColor: .secondarySystemBackground), in: .rect(cornerRadius: 8))
+                .foregroundStyle(.secondary)
         }
     }
 

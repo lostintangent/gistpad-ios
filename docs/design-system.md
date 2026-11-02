@@ -48,7 +48,7 @@ Non-destructive swipe actions use explicit `UIColor.darkGray` with native white 
 
 Use scaled Footnote medium, 8-pt horizontal/4-pt vertical padding and 8-pt corners. Fill the label with the exact saved tag color at full opacity. Ink is black or white, whichever has higher contrast, so every fill reaches at least 4.58:1 and passes 4.5:1. A missing color uses the neutral system fill with primary text. No internal dot, tinted overlay, arbitrary colored text or whole-label opacity. Keep saved white and black exact, with their own edge against the surface.
 
-Rows show up to two complete names plus truthful `+N` at standard type; ordinary rows wrap/grow at AX. Use 6-pt gaps between tags. Metadata labels are not nested controls. Picker rows instead show one standalone swatch on an untinted row, full name and separate neutral selection check. Use an own-hue hairline only where needed, neutral gray for white; no universal black outline. Increased Contrast strengthens necessary boundaries. Measure final text/fill with white, black, yellow, saturated and similar hues.
+At standard type a row's tags stay on one line: up to two names, truncating the first only when one won't fit, plus a truthful `+N` in plain secondary text, never a chip. Ordinary rows wrap/grow at AX. Use 6-pt gaps between tags. Metadata labels are not nested controls. Picker rows instead show one standalone swatch on an untinted row, full name and separate neutral selection check. Use an own-hue hairline only where needed, neutral gray for white; no universal black outline. Increased Contrast strengthens necessary boundaries. Measure final text/fill with white, black, yellow, saturated and similar hues.
 
 ## 3. Typography and geometry
 
