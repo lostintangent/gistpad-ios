@@ -1,4 +1,4 @@
-# 📓 GistPad Native
+# 📓 GistPad iOS
 
 A native iPhone app for [GistPad](https://gistpad.dev), the notebook that keeps your notes, daily notes and prompts in GitHub Gists. It's the pocket companion to [gistpad.dev](https://gistpad.dev) and the [GistPad extension](https://aka.ms/gistpad) for VS Code, and it's made for the iPhone Duo, so unfolding it puts your library beside the note. Sign in with GitHub and the same gists, daily notes, tags and pins are on your phone, woven into widgets, Siri, Spotlight and on-device Apple Intelligence.
 
