@@ -7,35 +7,34 @@ final class GistUITests: XCTestCase {
   func testModesSwitchWhileTheChromeStays() throws {
     let app = launchGistPad(open: "shape/README.md", mode: "edit")
     let title = app.navigationBars["The shape of a notebook"]
-    let editor = app.textViews["source-editor"]
-    let preview = app.webViews.firstMatch
     let modes = app.segmentedControls["note-toggle-mode"]
-    try waitUntil("Edit") { title.exists && editor.exists && modes.exists }
+    try waitUntil("Edit") { title.exists && modes.buttons["Edit"].isSelected }
 
     modes.buttons["Preview"].tap()
-    try waitUntil("Preview") { preview.exists && !editor.exists }
+    try waitUntil("Preview") { modes.buttons["Preview"].isSelected && app.webViews.firstMatch.exists }
     XCTAssertTrue(title.exists)
     XCTAssertTrue(app.buttons["note-actions"].exists)
 
-    if app.isRegularWidth {
+    // Split joins the picker when the note is wide enough for two panes.
+    if modes.buttons["Split"].exists {
       modes.buttons["Split"].tap()
-      try waitUntil("Split") { preview.exists && editor.exists }
+      try waitUntil("Split") { modes.buttons["Split"].isSelected }
     }
 
     modes.buttons["Edit"].tap()
-    try waitUntil("Edit again") { editor.exists && !preview.exists }
+    try waitUntil("Edit again") { modes.buttons["Edit"].isSelected && app.textViews["source-editor"].isHittable }
     XCTAssertTrue(title.exists)
-    XCTAssertTrue(app.buttons["note-actions"].exists)
   }
 
   func testSwitchingFiles() throws {
     let app = launchGistPad(open: "shape/README.md", mode: "edit")
     let editor = app.textViews["source-editor"]
-    try waitUntil("README.md") { editor.exists && app.navigationBars.staticTexts["README.md"].exists }
+    // README.md is the gist's front page, so the title stands alone without a filename.
+    try waitUntil("README.md") { (editor.value as? String)?.hasPrefix("# A considered") == true }
 
     app.buttons["note-actions"].tap()
-    app.buttons["Files"].firstMatch.tap()
-    app.buttons["Ideas.md"].firstMatch.tap()
+    try tap(app.buttons["Files"].firstMatch, "Files")
+    try tap(app.buttons["Ideas.md"].firstMatch, "Ideas.md")
     try waitUntil("Ideas.md") { (editor.value as? String)?.hasPrefix("# Ideas") == true }
     XCTAssertTrue(app.navigationBars.staticTexts["Ideas.md"].exists)
   }

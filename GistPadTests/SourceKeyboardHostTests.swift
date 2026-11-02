@@ -253,7 +253,11 @@ struct SourceKeyboardHostTests {
           .enabled(if: ProcessInfo.processInfo.environment["GISTPAD_SOURCE_PERFORMANCE"] == "1"),
           arguments: ["large", "ax3"])
     func longNoteEditingPerformance(size: String) async throws {
-        let source = NotebookCommentsCaptureData.longReadingMarkdown(title: "Reading at scale")
+        let paragraph = "Keep the useful things close and give each thought enough room to breathe. "
+            + "A walk can change the shape of a question before an answer arrives."
+        let source = "# Reading at scale\n\n" + (1...18).map {
+            "## Reading section \($0)\n\n" + Array(repeating: paragraph, count: 5).joined(separator: "\n\n")
+        }.joined(separator: "\n\n") + "\n"
         let fixture = try await SourceKeyboardFixture(source: source, size: size)
         defer { fixture.close() }
         fixture.session.requestFocusAtEnd()

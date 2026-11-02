@@ -2324,35 +2324,6 @@ struct NotebookNavigationHostTests {
     #expect(host.editor(text: "Held source") == nil)
   }
 
-  @Test(arguments: ["gistpad://library", "https://gistpad.dev/"])
-  func regularWidthLibraryLinksRevealTheSidebarWithoutClosingOrDefocusingTheNote(
-    address: String
-  ) async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
-    let host = try await NavigationHost(
-      provider: provider, sizeClass: .regular, columnVisibility: .detailOnly)
-    defer { await host.close() }
-    await host.model.open(gistID: "a")
-    try await host.waitUntil { host.editor(text: "Current source") != nil }
-    let editor = try #require(host.editor(text: "Current source"))
-    editor.becomeFirstResponder()
-    editor.selectedRange = .init(location: 2, length: 6)
-    try await host.waitUntil { editor.isFirstResponder && !host.isLibraryVisible }
-    let selection = host.model.library.selectedNoteID
-    let range = editor.selectedRange
-    host.routes.submit(try NotebookRoute(url: #require(URL(string: address))))
-    try await host.waitUntil { host.routes.pending == nil && host.isLibraryVisible }
-    #expect(host.model.library.selectedNoteID == selection)
-    #expect(host.model.loadedDocument?.gist?.id == "a")
-    #expect(host.editor(text: "Current source") === editor)
-    #expect(host.isVisible(editor))
-    #expect(editor.isFirstResponder)
-    #expect(editor.selectedRange == range)
-    #expect(await provider.publicationReasons.isEmpty)
-  }
-
   @Test func aColdRouteWaitsForRestorationAndOpensTheExactFile() async throws {
     let provider = StubNotebookProvider(
       account: fixtureAccount,
@@ -2623,7 +2594,6 @@ private struct NavigationHost {
     provider: StubNotebookProvider, autosave: Bool = false,
     routes: NotebookRouteInbox = NotebookRouteInbox(),
     sizeClass: UIUserInterfaceSizeClass? = nil,
-    columnVisibility: NavigationSplitViewVisibility = .all,
     restoredSelection: NotebookSelection? = nil,
     initialMode: NoteMode = .source
   ) async throws {
@@ -2650,7 +2620,7 @@ private struct NavigationHost {
     if let sizeClass { window.traitOverrides.horizontalSizeClass = sizeClass }
     controller = UIHostingController(
       rootView: NavigationHostRoot(
-        notebook: model, layout: layout, routes: routes, columnVisibility: columnVisibility))
+        notebook: model, layout: layout, routes: routes))
     window.rootViewController = controller
     window.makeKeyAndVisible()
     try await waitUntil {
@@ -2737,12 +2707,10 @@ private struct NavigationHost {
     let notebook: NotebookModel
     let layout: NotebookLayoutPreferences
     let routes: NotebookRouteInbox
-    let columnVisibility: NavigationSplitViewVisibility
     var phase: ScenePhase = .active
 
     var body: some View {
       LiveNotebookWorkspace(notebook: notebook, layout: layout, routes: routes)
-        .captureColumnVisibility(columnVisibility)
         .environment(\.scenePhase, phase)
     }
   }

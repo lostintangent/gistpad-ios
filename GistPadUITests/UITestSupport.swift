@@ -38,9 +38,12 @@ extension XCUIApplication {
   /// The sidebar keeps secondary actions in its More menu. A compact Library shows them directly.
   func tapToolbarButton(_ identifier: String, label: String) {
     let button = buttons[identifier].firstMatch
-    if !button.isHittable, buttons["More"].firstMatch.isHittable {
-      buttons["More"].firstMatch.tap()
-      buttons[label].firstMatch.tap()
+    let more = navigationBars["GistPad"].buttons["More"].firstMatch
+    if !button.isHittable, more.isHittable {
+      more.tap()
+      let item = buttons[label].firstMatch
+      XCTAssertTrue(item.waitForExistence(timeout: 5))
+      item.tap()
     } else {
       button.tap()
     }
@@ -82,6 +85,17 @@ extension XCTestCase {
     }
     XCTFail("Timed out waiting for \(description).", file: file, line: line)
     throw UITestTimeout()
+  }
+}
+
+extension XCTestCase {
+  /// Taps `element` once it can be tapped, since menus and swipe actions animate in.
+  @MainActor
+  func tap(
+    _ element: XCUIElement, _ description: String, file: StaticString = #filePath, line: UInt = #line
+  ) throws {
+    try waitUntil(description, file: file, line: line) { element.isHittable }
+    element.tap()
   }
 }
 

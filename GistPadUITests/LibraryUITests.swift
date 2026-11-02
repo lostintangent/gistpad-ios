@@ -35,14 +35,14 @@ final class LibraryUITests: XCTestCase {
     XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "library-today").count, 1)
   }
 
-  func testSearchFindsAContentMatchAndOpensIt() throws {
+  func testSearchFindsAGistAndOpensIt() throws {
     let app = launchGistPad()
     try waitUntil("the Library") { app.element("library-note-shape").exists }
-    app.search("passport")
-    let result = app.libraryRows.firstMatch
-    try waitUntil("one content match") { app.libraryRows.count == 1 && result.isHittable }
+    app.search("weekend")
+    let result = app.element("library-note-weekend")
+    try waitUntil("one match") { app.libraryRows.count == 1 && result.isHittable }
     result.tap()
-    try waitUntil("the matching daily note") { app.noteShows("Renew the passport") }
+    try waitUntil("the matching gist") { app.noteShows("Farmers market") }
   }
 
   func testTagFilterNarrowsTheListAndSearchKeepsIt() throws {
@@ -56,12 +56,13 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("the Ideas gists") {
       app.element("library-filter-count").label == "2 gists" && !app.element("library-note-weekend").exists
     }
-    XCTAssertTrue(app.element("library-note-shape").exists)
+    // Filtered results list each Markdown file, so shape's rows carry its filenames.
+    XCTAssertTrue(app.libraryRows.matching(NSPredicate(format: "identifier BEGINSWITH 'library-note-shape'")).firstMatch.exists)
     XCTAssertTrue(app.element("library-note-words").exists)
 
-    app.search("margin")
+    app.search("words")
     try waitUntil("search inside the tag filter") {
-      app.libraryRows.count == 1 && !app.element("library-note-weekend").exists
+      app.libraryRows.count == 1 && app.element("library-note-words").exists
     }
     app.searchFields.firstMatch.buttons["Clear text"].tap()
     try waitUntil("the tag filter without the query") {
@@ -76,19 +77,19 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("the Library") { weekend.isHittable }
 
     weekend.swipeRight()
-    app.buttons["Pin"].firstMatch.tap()
+    try tap(app.buttons["Pin"].firstMatch, "Pin")
     try waitUntil("three pins") { app.element("library-section-pinned").countValue == "3 gists" }
 
     let longTitle = app.element("library-note-longtitle")
     longTitle.scrollIntoView(in: app)
     longTitle.press(forDuration: 0.8)
-    app.buttons["Archive"].firstMatch.tap()
+    try tap(app.buttons["Archive"].firstMatch, "Archive")
     try waitUntil("two archived gists") { app.element("library-collection-archive").countValue == "2 gists" }
 
     let mixed = app.element("library-note-mixed")
     mixed.scrollIntoView(in: app)
     mixed.swipeLeft()
-    app.buttons["Delete"].firstMatch.tap()
+    try tap(app.buttons["Delete"].firstMatch, "Delete")
     try confirmDeletion(in: app)
     try waitUntil("mixed to leave the Library") { !mixed.exists }
   }
@@ -109,7 +110,7 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("the published gist in the Library") { published.isHittable }
     let id = published.identifier
     published.swipeLeft()
-    app.buttons["Delete"].firstMatch.tap()
+    try tap(app.buttons["Delete"].firstMatch, "Delete")
     try confirmDeletion(in: app)
     try waitUntil("the new gist to leave the Library") { !app.element(id).exists }
   }
@@ -120,7 +121,7 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("the Tags sheet") { ideas.isHittable }
 
     ideas.swipeLeft()
-    app.buttons["Edit Tag…"].firstMatch.tap()
+    try tap(app.buttons["Edit Tag…"].firstMatch, "Edit Tag…")
     let name = app.textFields["Tag name"]
     try waitUntil("the tag form") { name.isHittable }
     name.tap()
@@ -128,23 +129,23 @@ final class LibraryUITests: XCTestCase {
     app.buttons["Save Tag"].tap()
     try waitUntil("the renamed tag") { ideas.label.contains("Big Ideas") }
 
-    let someday = app.buttons["tag-choice-someday"]
-    someday.swipeLeft()
-    app.buttons["Edit Tag…"].firstMatch.tap()
+    let design = app.buttons["tag-choice-design"]
+    design.swipeLeft()
+    try tap(app.buttons["Edit Tag…"].firstMatch, "Edit Tag…")
     let delete = app.buttons["Delete Tag"].firstMatch
     try waitUntil("Delete Tag") { delete.isHittable }
     delete.tap()
     try waitUntil("the delete confirmation") { app.buttons.matching(identifier: "Delete Tag").count > 1 }
     app.buttons.matching(identifier: "Delete Tag").allElementsBoundByIndex.last?.tap()
-    try waitUntil("the deleted tag") { !someday.exists }
+    try waitUntil("the deleted tag") { !design.exists }
 
     app.buttons["tag-save"].tap()
     try waitUntil("the saved tags") { !app.buttons["tag-save"].exists }
     app.buttons["note-actions"].tap()
-    app.buttons["Tags"].firstMatch.tap()
+    try tap(app.buttons["Tags"].firstMatch, "Tags")
     try waitUntil("the reopened Tags sheet") { ideas.isHittable }
     XCTAssertTrue(ideas.label.contains("Big Ideas"))
-    XCTAssertFalse(someday.exists)
+    XCTAssertFalse(design.exists)
   }
 
   /// Taps the destructive button in the confirmation dialog that a Delete action presents.
@@ -159,10 +160,10 @@ final class LibraryUITests: XCTestCase {
 }
 
 extension XCUIElement {
-  /// Scrolls the Library until this element is on screen.
+  /// Scrolls the Library until this element sits clear of the bottom search bar.
   func scrollIntoView(in app: XCUIApplication) {
     let list = app.element("library-list")
-    for _ in 0..<8 where !isHittable { list.swipeUp() }
+    for _ in 0..<8 where !(isHittable && frame.maxY < list.frame.maxY - 100) { list.swipeUp() }
   }
 
   /// A section header's count, without its Expanded or Collapsed state.

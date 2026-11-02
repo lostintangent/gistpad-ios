@@ -58,26 +58,20 @@
           "Ideas.md": "# Ideas\n\n- A margin for second thoughts\n- Pages that remember where you were\n",
         ],
         updatedAt: now - 10 * 60, comments: ["Love where this is going."])
-
-      server.mergeMetadata([
-        "pinnedGists": ["shape", "words"],
-        "tags": [
-          "ideas": ["name": "Ideas", "color": "#EBC85A"],
-          "design": ["name": "Design", "color": "#548C80"],
-          "personal": ["name": "Personal", "color": "#A88EB5"],
-          "reading": ["name": "Reading list for the long winter evenings", "color": "#FFFFFF"],
-          "ink": ["name": "Ink", "color": "#000000"],
-          "someday": ["name": "Someday"],
-        ],
-        "gistTags": [
-          "shape": ["ideas", "design"],
-          "weekend": ["personal", "someday"],
-          "words": ["ideas", "reading"],
-          "mixed": ["personal", "ink"],
-          "longtitle": ["reading", "ink", "someday", "design"],
-        ],
-      ])
     }
+
+    /// Pins and tags, written through the account's real preference path once the fixture signs in.
+    static let preferences: [PreferenceOperation] =
+      [.setPinned(gistID: "shape", pinned: true), .setPinned(gistID: "words", pinned: true)]
+      + [
+        ("ideas", "Ideas", "#EBC85A"), ("design", "Design", "#548C80"), ("personal", "Personal", "#A88EB5"),
+        ("reading", "Reading list for the long winter evenings", "#FFFFFF"), ("ink", "Ink", "#000000"),
+        ("someday", "Someday", nil),
+      ].map { PreferenceOperation.upsertTag(id: $0.0, name: $0.1, color: $0.2) }
+      + [
+        ("shape", ["ideas", "design"]), ("weekend", ["personal", "someday"]), ("words", ["ideas", "reading"]),
+        ("mixed", ["personal", "ink"]), ("longtitle", ["reading", "ink", "someday", "design"]),
+      ].flatMap { gist, tags in tags.map { PreferenceOperation.setTag(gistID: gist, tagID: $0, included: true) } }
 
     private static func dailyFile(_ date: Date) -> String { GistConventions.todayFilename(date: date) }
 
@@ -95,6 +89,8 @@
       """
       + Array(repeating: "A little room for thoughts, sketches, and the shape of a good day.", count: 20)
       .joined(separator: "\n\n")
-      + "\n\n## Further down\n\nA late native passage should scroll into view.\n"
+      + "\n\n## Further down\n\nA late native passage should scroll into view.\n\n"
+      + Array(repeating: "Room below, so the late passage can rest at the top of the page.", count: 12)
+      .joined(separator: "\n\n") + "\n"
   }
 #endif

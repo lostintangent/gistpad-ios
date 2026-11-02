@@ -8,13 +8,21 @@ final class CommentsUITests: XCTestCase {
     let app = launchGistPad(open: "highlights", mode: "preview")
     let late = app.buttons["A late native passage"].firstMatch
     try waitUntil("the Preview") { app.webViews.firstMatch.exists && late.exists }
+    // With the sidebar hidden, Comments is the only thing that changes the reading width.
+    let hideSidebar = app.buttons["Hide Sidebar"].firstMatch
+    if hideSidebar.isHittable {
+      hideSidebar.tap()
+      try waitUntil("the hidden sidebar") { app.buttons["Show Sidebar"].firstMatch.isHittable }
+    }
     for _ in 0..<6 where !late.isHittable { app.webViews.firstMatch.swipeUp() }
     try waitUntil("the late passage on screen") { late.isHittable }
+    try alignToTop(late, in: app)
     let before = late.frame
 
     app.element("note-comments").tap()
     let close = app.buttons["comments-close"]
     try waitUntil("Comments") { close.isHittable && app.element("comment-thread-1").exists }
+    try waitUntil("the passage on the same line beside Comments") { abs(late.frame.minY - before.minY) <= 8 }
     close.tap()
     try waitUntil("Comments to close") { !close.exists }
     try waitUntil("the passage back where it was") {
@@ -26,22 +34,21 @@ final class CommentsUITests: XCTestCase {
     let app = launchGistPad(open: "highlights", mode: "preview", sheet: "comments")
     let threads = app.descendants(matching: .any)
       .matching(NSPredicate(format: "identifier BEGINSWITH 'comment-thread-'"))
-    let composer = app.textViews["comment-composer-text"]
+    let composer = app.element("comment-composer-text")
     try waitUntil("three threads") { threads.count == 3 && composer.exists }
+
+    try tap(app.buttons["comment-reply-1"], "Reply")
+    try waitUntil("the reply composer") { app.staticTexts["Replying to @octocat"].exists }
+    composer.tap()
+    composer.typeText("Agreed, keep it.")
+    app.buttons["comment-post"].tap()
+    try waitUntil("the reply") { app.element("comment-replies-1").exists }
+    XCTAssertEqual(threads.count, 3, "The reply became its own thread.")
 
     composer.tap()
     composer.typeText("A new thought on the whole note.")
     app.buttons["comment-post"].tap()
     try waitUntil("the new thread") { threads.count == 4 }
-
-    let reply = app.buttons["comment-reply-1"]
-    for _ in 0..<6 where !reply.isHittable { app.element("comments-conversation").swipeDown() }
-    reply.tap()
-    composer.tap()
-    composer.typeText("Agreed, keep it.")
-    app.buttons["comment-post"].tap()
-    try waitUntil("the reply") { app.element("comment-replies-1").exists }
-    XCTAssertEqual(threads.count, 4)
   }
 
   func testTappingAHighlightSelectsItsThread() throws {
@@ -51,5 +58,23 @@ final class CommentsUITests: XCTestCase {
     careful.tap()
     let thread = app.element("comment-thread-2")
     try waitUntil("the selected thread") { thread.exists && thread.isSelected }
+  }
+
+  /// Drags the Preview until `passage` sits on the first line under the navigation bar.
+  /// The Preview anchors its top line through reflow, so that's the line that must hold still.
+  private func alignToTop(_ passage: XCUIElement, in app: XCUIApplication) throws {
+    let top = app.navigationBars["A notebook with comments"].frame.maxY
+    let firstLine = top...(top + 16)
+    for _ in 0..<6 where !firstLine.contains(passage.frame.minY) {
+      // The scroll view spends a drag's first points on touch slop before the page moves.
+      let offset = top + 8 - passage.frame.minY
+      let start = app.webViews.firstMatch.coordinate(
+        withNormalizedOffset: CGVector(dx: 0.5, dy: offset < 0 ? 0.9 : 0.2))
+      start.press(
+        forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: offset + (offset < 0 ? -10 : 10))),
+        withVelocity: .slow, thenHoldForDuration: 0.3)
+      RunLoop.current.run(until: .now.addingTimeInterval(0.5))
+    }
+    XCTAssertTrue(firstLine.contains(passage.frame.minY), "The passage never reached the top line.")
   }
 }

@@ -1408,7 +1408,7 @@ struct LiveNotebookWorkspace: View {
     switch sheet {
     case .settings: showingSettings = true
     case .tags: actions.tags?()
-    case .intelligence: actions.intelligence?()
+    case .intelligence: actions.intelligence()
     case .comments: actions.comments?()
     case .today: break
     }

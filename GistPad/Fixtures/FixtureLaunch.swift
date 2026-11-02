@@ -37,7 +37,7 @@
     }
 
     /// Settings that would otherwise carry over from the last launch.
-    static let defaults: UserDefaults = {
+    @MainActor static let defaults: UserDefaults = {
       let defaults = UserDefaults(suiteName: "dev.gistpad.fixture")!
       defaults.removePersistentDomain(forName: "dev.gistpad.fixture")
       return defaults
@@ -50,9 +50,12 @@
     func notebook() async throws -> NotebookModel {
       let server = FixtureServer()
       if fixture == .standard || fixture == .offline { try FixtureLibrary.seed(server) }
-      if let accent { server.mergeMetadata(["accentColor": .string(accent)]) }
       let accounts = try server.accounts()
-      if fixture != .signedOut { try await server.signIn(accounts) }
+      if fixture != .signedOut {
+        let account = try await server.signIn(accounts)
+        let seeded = fixture == .empty ? [] : FixtureLibrary.preferences
+        _ = try await accounts.apply(seeded + (accent.map { [.setAccentColor($0)] } ?? []), accountID: account.id)
+      }
       let store = try DraftStore.open(inMemory: true)
       let provider = LiveNotebookProvider(accounts: accounts, drafts: store)
       if fixture == .offline, let account = try await provider.connectedAccount() {
