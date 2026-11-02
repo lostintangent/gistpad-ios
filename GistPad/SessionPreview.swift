@@ -4,7 +4,7 @@ import GistPadPreview
 import SwiftUI
 
 struct SessionPreview: View {
-  let session: DocumentSession
+  let session: Editor
   var allowsMutations = true
   var comments = CommentHighlightConfiguration()
   var onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
@@ -18,7 +18,7 @@ struct SessionPreview: View {
   var body: some View {
     ZStack {
       MarkdownPreviewView(
-        document: session.text, documentID: session.documentID,
+        document: session.text, documentID: session.fileID,
         generation: session.generation, allowsTaskEdits: allowsMutations,
         comments: comments, onOpenCommentThreads: onOpenCommentThreads,
         onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment,
@@ -48,7 +48,7 @@ struct SessionPreview: View {
     case .taskToggle(let edit):
       // The bridge only sends toggles for editable notes, for the current generation's exact marker.
       try? session.apply(
-        SourceEdit(
+        Edit(
           range: edit.range, expected: edit.expectedMarker, replacement: edit.replacementMarker),
         generation: edit.generation)
     case .linkTapped(let link):

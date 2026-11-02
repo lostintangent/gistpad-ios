@@ -8,7 +8,7 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct EditorContinuityTests {
-  func host(_ session: DocumentSession) throws -> UIWindow {
+  func host(_ session: Editor) throws -> UIWindow {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
@@ -24,7 +24,7 @@ struct EditorContinuityTests {
 
   @Test func sameTextViewSelectionAndUndoSurviveRepeatedResize() throws {
     let source = EditorFixture.markdown
-    let session = DocumentSession(documentID: "test", text: source)
+    let session = Editor(fileID: "test", text: source)
     let window = try host(session)
     defer { window.isHidden = true }
     session.textView.becomeFirstResponder()
@@ -46,7 +46,7 @@ struct EditorContinuityTests {
   }
 
   @Test func programmaticMarkedTextSurvivesResizeWithoutHighlighting() throws {
-    let session = DocumentSession(documentID: "test", text: "日本語のノート\n👨‍👩‍👧‍👦")
+    let session = Editor(fileID: "test", text: "日本語のノート\n👨‍👩‍👧‍👦")
     let window = try host(session)
     defer { window.isHidden = true }
     session.textView.becomeFirstResponder()
@@ -68,34 +68,34 @@ struct EditorContinuityTests {
 
   @Test func validatedMutationIsUndoableAndRejectsStaleOrComposingEdits() throws {
     let source = "- [ ] Duplicate\n- [ ] Duplicate"
-    let session = DocumentSession(documentID: "test", text: source)
+    let session = Editor(fileID: "test", text: source)
     let window = try host(session)
     defer { window.isHidden = true }
     session.textView.becomeFirstResponder()
-    let edit = SourceEdit(
+    let edit = Edit(
       range: (source as NSString).range(of: "[ ]", options: .backwards), expected: "[ ]",
       replacement: "[x]")
     try session.apply(edit, generation: 0)
     #expect(session.text == "- [ ] Duplicate\n- [x] Duplicate")
-    #expect(throws: SourceEdit.MutationError.staleGeneration) {
+    #expect(throws: Edit.MutationError.staleGeneration) {
       try session.apply(edit, generation: 0)
     }
     session.textView.undoManager?.undo()
     #expect(session.textView.text == source)
     session.textView.setMarkedText("に", selectedRange: NSRange(location: 1, length: 0))
-    #expect(throws: SourceEdit.MutationError.compositionActive) {
+    #expect(throws: Edit.MutationError.compositionActive) {
       try session.apply(edit, generation: session.generation)
     }
   }
 
   @Test func previewMutationDoesNotNeedKeyboardAndPreservesSelection() throws {
     let source = "👨‍👩‍👧‍👦\n- [ ] Duplicate\n- [ ] Duplicate\n日本語"
-    let session = DocumentSession(documentID: "test", text: source)
+    let session = Editor(fileID: "test", text: source)
     let window = try host(session)
     defer { window.isHidden = true }
     session.textView.selectedRange = NSRange(location: 0, length: 0)
     try session.apply(
-      SourceEdit(
+      Edit(
         range: (source as NSString).range(of: "[ ]", options: .backwards),
         expected: "[ ]", replacement: "[x]"),
       generation: 0)
@@ -107,7 +107,7 @@ struct EditorContinuityTests {
   }
 
   @Test func normalizationOnlyEditsAdvanceTheSourceGeneration() {
-    let session = DocumentSession(documentID: "unicode", text: "cafe\u{301}")
+    let session = Editor(fileID: "unicode", text: "cafe\u{301}")
     session.textView.text = "caf\u{e9}"
     session.textViewDidChange(session.textView)
     #expect(session.generation == 1)
@@ -116,7 +116,7 @@ struct EditorContinuityTests {
 
   @Test func readingAnchorSurvivesReflow() async throws {
     let source = EditorFixture.markdown
-    let session = DocumentSession(documentID: "test", text: source)
+    let session = Editor(fileID: "test", text: source)
     let window = try host(session)
     defer { window.isHidden = true }
     let view = session.textView

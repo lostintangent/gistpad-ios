@@ -7,7 +7,7 @@ import UIKit
 extension EditorContinuityTests {
   @Test func completeWritingToolsUsesPlainSourceAndAbsoluteIgnoredRanges() {
     let source = "日本語 👩🏽‍💻 before ``a ` b`` after"
-    let session = DocumentSession(documentID: "test", text: source)
+    let session = Editor(fileID: "test", text: source)
     #expect(session.textView.writingToolsBehavior == .complete)
     #expect(session.textView.allowedWritingToolsResultOptions == .plainText)
     let enclosing = (source as NSString).range(of: "before ``a ` b`` after")
@@ -18,9 +18,9 @@ extension EditorContinuityTests {
 
   @Test func temporaryPreviewsCannotPersistOrAcceptExternalMutations() throws {
     let source = "Original 日本語 `source`"
-    let session = DocumentSession(documentID: "test", text: source, generation: 7)
+    let session = Editor(fileID: "test", text: source, generation: 7)
     var changes: [String] = []
-    session.onSourceChange = { text, _ in changes.append(text) }
+    session.onEdit = { text, _ in changes.append(text) }
     session.textViewWritingToolsWillBegin(session.textView)
     for preview in ["First proposal", "Another proposal", source] {
       session.textView.text = preview
@@ -30,21 +30,21 @@ extension EditorContinuityTests {
       #expect(session.generation == 7)
       #expect(changes.isEmpty)
     }
-    #expect(throws: SourceEdit.MutationError.compositionActive) {
+    #expect(throws: Edit.MutationError.compositionActive) {
       try session.apply(
-        SourceEdit(
+        Edit(
           range: NSRange(location: 0, length: 8), expected: "Original", replacement: "External"),
         generation: 7)
     }
     session.textViewWritingToolsDidEnd(session.textView)
-    #expect(!session.writingToolsActive)
+    #expect(!session.isWritingToolsActive)
     #expect(session.generation == 7)
     #expect(changes.isEmpty)
   }
 
   @Test func acceptedNativeReplacementIsOneUndoableEditAndSurvivesReflow() async throws {
     let source = "A rough sentence.\n日本語 👨‍👩‍👧‍👦 `protected`"
-    let session = DocumentSession(documentID: "test", text: source)
+    let session = Editor(fileID: "test", text: source)
     let window = try host(session)
     defer {
       session.textView.resignFirstResponder()
@@ -53,7 +53,7 @@ extension EditorContinuityTests {
     session.textView.becomeFirstResponder()
     session.textView.selectedRange = (source as NSString).range(of: "rough")
     var changes: [String] = []
-    session.onSourceChange = { text, _ in changes.append(text) }
+    session.onEdit = { text, _ in changes.append(text) }
     session.textViewWritingToolsWillBegin(session.textView)
     let selected = try #require(session.textView.selectedTextRange)
     session.textView.replace(selected, withText: "clearer")

@@ -6,10 +6,10 @@
 
   @Suite(.serialized)
   @MainActor
-  struct DocumentFocusTests {
+  struct EditorFocusTests {
     @Test func focusRequestPlacesCaretNowAndFocusesOnWindowAttachment() {
       let source = "# Today\n\n日本語 👩🏽‍💻"
-      let session = DocumentSession(documentID: "new", text: source)
+      let session = Editor(fileID: "new", text: source)
       let end = NSRange(location: source.utf16.count, length: 0)
       session.requestFocusAtEnd()
       #expect(session.textView.selectedRange == end)
@@ -25,7 +25,7 @@
     }
 
     @Test func focusRequestIsConsumedOnceAndKeepsSourceAndNativeUndo() throws {
-      let session = DocumentSession(documentID: "one-shot", text: "note")
+      let session = Editor(fileID: "one-shot", text: "note")
       session.requestFocusAtEnd()
       let window = host(session, focused: false)
       defer { window.isHidden = true }
@@ -33,7 +33,7 @@
       let undo = try #require(session.textView.undoManager)
       undo.removeAllActions()
       try session.apply(
-        SourceEdit(range: NSRange(location: 4, length: 0), expected: "", replacement: "!"),
+        Edit(range: NSRange(location: 4, length: 0), expected: "", replacement: "!"),
         generation: 0)
       session.textView.selectedRange = NSRange(location: 0, length: 0)
       session.requestFocusAtEnd()

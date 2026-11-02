@@ -12,7 +12,7 @@ final class NotebookIntelligencePresentation {
   private var retainedTarget: Target?
 
   func present(
-    session: DocumentSession, title: String,
+    session: Editor, title: String,
     revealSource: @escaping @MainActor (NSRange) -> Void
   ) {
     let target = Target(session: session, title: title, revealSource: revealSource)
@@ -40,14 +40,14 @@ final class NotebookIntelligencePresentation {
   @MainActor
   final class Target: Identifiable {
     let id = UUID()
-    let session: DocumentSession
+    let session: Editor
     let title: String
     let revealSource: @MainActor (NSRange) -> Void
     let wasEditing: Bool
     var reference: NSRange?
 
     init(
-      session: DocumentSession, title: String,
+      session: Editor, title: String,
       revealSource: @escaping @MainActor (NSRange) -> Void
     ) {
       self.session = session

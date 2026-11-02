@@ -591,7 +591,7 @@ struct NotebookModelTests {
     let model = fixture.model
     await model.start()
     await model.openRow(id: "daily/2026-10-24.md")
-    let documentID = try #require(model.loadedDocument?.id)
+    let fileID = try #require(model.loadedDocument?.id)
     let text = "- [x] A retained task\n- [ ] A new task"
     _ = try await model.persist(
       draftID: draft.id, accountID: draft.accountID, text: text, generation: draft.generation + 1)
@@ -602,7 +602,7 @@ struct NotebookModelTests {
     _ = try await model.publish(draftID: draft.id, accountID: draft.accountID)
     #expect(fixture.remote("daily", "2026-10-24.md") == text)
     #expect(fixture.publishes == ["PATCH /gists/daily"])
-    #expect(model.loadedDocument?.id == documentID)
+    #expect(model.loadedDocument?.id == fileID)
     #expect(model.library.selectedNoteID == row.id)
     #expect(model.library.dailyNoteCount == 2)
     #expect(model.library.snapshot.notes.filter { $0.id == row.id }.count == 1)
@@ -709,7 +709,7 @@ struct NotebookNavigationHostTests {
           #expect(editor.text.utf8.elementsEqual(text.utf8))
           #expect(
             editor.selectedRange
-              == NSRange(location: MarkdownFrontMatter.contentStart(in: text), length: 0))
+              == NSRange(location: FrontMatter.contentStart(in: text), length: 0))
           #expect(caret.minY >= top - 1 && caret.minY < top + 40)
           editor.resignFirstResponder()
           try await host.waitForKeyboard(visible: false)

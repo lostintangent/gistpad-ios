@@ -2,8 +2,8 @@
   import UIKit
 
   @MainActor
-  struct SourceToolbarActions {
-    let format: @MainActor (MarkdownFormat) -> Void
+  struct KeyboardBarActions {
+    let format: @MainActor (Format) -> Void
     let link: @MainActor () -> Void
     let indent: @MainActor (Bool) -> Void
     let photo: (@MainActor () -> Void)?
@@ -11,7 +11,7 @@
     let dismiss: @MainActor () -> Void
   }
 
-  struct SourceToolbarConfiguration: Equatable {
+  struct KeyboardBarConfiguration: Equatable {
     let canFormat: Bool
     let canInsertPhoto: Bool
     let canUseIntelligence: Bool
@@ -20,21 +20,21 @@
   /// The glass capsule above the keyboard. Its buttons call the latest actions SwiftUI passed in.
   /// It centers over the editor's column rather than the keyboard, so an open sidebar doesn't push it off the note.
   @MainActor
-  final class SourceAccessoryView: UIView {
+  final class KeyboardBar: UIView {
     let buttons = UIStackView()
     let glass: UIVisualEffectView
     weak var editor: UIView?
     private let column = UILayoutGuide()
     private lazy var columnLeft = column.leftAnchor.constraint(equalTo: leftAnchor)
     private lazy var columnRight = column.rightAnchor.constraint(equalTo: rightAnchor)
-    private var actions: SourceToolbarActions
-    private var configuration: SourceToolbarConfiguration?
+    private var actions: KeyboardBarActions
+    private var configuration: KeyboardBarConfiguration?
 
     override var intrinsicContentSize: CGSize {
       CGSize(width: UIView.noIntrinsicMetric, height: 72)
     }
 
-    init(actions: SourceToolbarActions) {
+    init(actions: KeyboardBarActions) {
       self.actions = actions
       let effect = UIGlassEffect(style: .regular)
       effect.isInteractive = true
@@ -96,7 +96,7 @@
       super.layoutSubviews()
     }
 
-    func update(actions: SourceToolbarActions, configuration: SourceToolbarConfiguration) {
+    func update(actions: KeyboardBarActions, configuration: KeyboardBarConfiguration) {
       self.actions = actions
       guard self.configuration != configuration else { return }
       self.configuration = configuration
@@ -193,7 +193,7 @@
 
     private func command(
       _ title: String.LocalizationValue, image: String,
-      perform: @escaping @MainActor (SourceAccessoryView) -> Void
+      perform: @escaping @MainActor (KeyboardBar) -> Void
     ) -> UIButton {
       let title = String(localized: title, bundle: .module)
       let button = UIButton(type: .system)
@@ -214,7 +214,7 @@
 
     private func action(
       _ title: String, image: String? = nil,
-      perform: @escaping @MainActor (SourceAccessoryView) -> Void
+      perform: @escaping @MainActor (KeyboardBar) -> Void
     ) -> UIAction {
       UIAction(title: title, image: image.flatMap { UIImage(systemName: $0) }) { [weak self] _ in
         guard let self else { return }

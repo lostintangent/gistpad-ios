@@ -1,6 +1,6 @@
 import Foundation
 
-public enum MarkdownSyntax {
+public enum Syntax {
   enum Kind: Sendable {
     case heading, strong, emphasis, blockquote, htmlTag, strikethrough, orderedMarker
     case code, frontmatter, link, task, checkedTask, punctuation, linkDestination

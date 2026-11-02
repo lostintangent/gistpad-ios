@@ -29,7 +29,7 @@ enum NotebookEditError: LocalizedError {
 @Observable
 final class NotebookSessionController {
   private(set) var document: NotebookDocument
-  let session: DocumentSession
+  let session: Editor
   private(set) var draft: DraftSnapshot
   private(set) var saveState: PublishState
   private(set) var isPublishing = false
@@ -57,14 +57,14 @@ final class NotebookSessionController {
     self.draft = draft
     self.notebook = notebook
     self.autosaveDelay = autosaveDelay
-    session = DocumentSession(
-      documentID: document.id, text: draft.text, generation: draft.generation,
+    session = Editor(
+      fileID: document.id, text: draft.text, generation: draft.generation,
       showsFrontMatter: notebook.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
     saveState = document.isRecovery ? .failed(.readOnly) : draft.state
     if draft.baseContent == nil { mode = .source }
     session.textView.isEditable = chrome.access.canEdit
     applyWritingPreferences()
-    session.onSourceChange = { [weak self] text, generation in
+    session.onEdit = { [weak self] text, generation in
       self?.persist(text: text, generation: generation)
     }
     NotebookPlatformBootstrap.register(self, notebook: notebook)
@@ -220,7 +220,7 @@ final class NotebookSessionController {
         // Every text change bumps the generation, so this commit is refused if any edit or publish
         // landed after the fetch. Adoption can't overwrite unpublished text.
         try await commitMutation(
-          SourceEdit(
+          Edit(
             range: NSRange(location: 0, length: session.text.utf16.count),
             expected: session.text, replacement: content),
           expectedGeneration: current.generation
@@ -283,7 +283,7 @@ final class NotebookSessionController {
     let changed = !text.utf8.elementsEqual(session.text.utf8)
     let generation = session.generation + (changed ? 1 : 0)
     try await commitMutation(
-      SourceEdit(
+      Edit(
         range: NSRange(location: 0, length: session.text.utf16.count),
         expected: session.text, replacement: text),
       expectedGeneration: review.draft.generation
@@ -318,15 +318,15 @@ final class NotebookSessionController {
       throw AccountError.accountChanged
     }
     try await commitMutation(
-      SourceEdit(range: edit.range, expected: edit.expectedText, replacement: edit.replacement),
+      Edit(range: edit.range, expected: edit.expectedText, replacement: edit.replacement),
       expectedGeneration: edit.expectedGeneration, commit: commit)
   }
 
   func commitMutation(
-    _ edit: SourceEdit, expectedGeneration: UInt64,
+    _ edit: Edit, expectedGeneration: UInt64,
     commit: @MainActor () async throws -> DraftSnapshot
   ) async throws {
-    guard canMutate else { throw SourceEdit.MutationError.compositionActive }
+    guard canMutate else { throw Edit.MutationError.compositionActive }
     guard session.generation == expectedGeneration else { throw DraftError.staleGeneration }
     let result = try edit.applying(to: session.text)
     let changed = !result.utf8.elementsEqual(session.text.utf8)

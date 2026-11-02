@@ -10,7 +10,7 @@
   // window can take key and first responder during the wait.
 
   @MainActor
-  func host(_ session: DocumentSession, focused: Bool = true) -> UIWindow {
+  func host(_ session: Editor, focused: Bool = true) -> UIWindow {
     let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
     let controller = UIViewController()
     window.rootViewController = controller
@@ -25,12 +25,12 @@
 
   @MainActor
   func hostEditor(
-    _ session: DocumentSession, intelligence: (@MainActor () -> Void)? = nil,
+    _ session: Editor, intelligence: (@MainActor () -> Void)? = nil,
     insertPhoto: (@MainActor () -> Void)? = nil, canInsertPhoto: Bool = false
   ) -> UIWindow {
     let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
     window.rootViewController = UIHostingController(
-      rootView: MarkdownEditorView(
+      rootView: EditorView(
         session: session, insertPhoto: insertPhoto, canInsertPhoto: canInsertPhoto,
         intelligence: intelligence))
     window.makeKeyAndVisible()

@@ -7,7 +7,7 @@
   @MainActor
   @Observable
   final class NoteIntelligenceModel {
-    let session: DocumentSession
+    let session: Editor
     var action = NoteIntelligenceAction.ask
     var askPrompt = ""
     var editPrompt = ""
@@ -29,7 +29,7 @@
     private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
     @ObservationIgnored private(set) var task: Task<Void, Never>?
 
-    init(session: DocumentSession, backend: any NoteModelBackend) {
+    init(session: Editor, backend: any NoteModelBackend) {
       self.session = session
       self.backend = backend
       engine = NoteIntelligenceEngine(backend: backend)
@@ -44,7 +44,7 @@
 
     var isStale: Bool {
       guard let snapshot else { return false }
-      return session.viewIdentity != snapshot.sessionID || session.documentID != snapshot.documentID
+      return session.id != snapshot.sessionID || session.fileID != snapshot.documentID
         || session.generation != snapshot.generation
         || !session.text.utf8.elementsEqual(snapshot.source.utf8)
     }

@@ -8,34 +8,34 @@
 
   @MainActor
   @Observable
-  public final class DocumentSession: NSObject, UITextViewDelegate,
+  public final class Editor: NSObject, Identifiable, UITextViewDelegate,
     @MainActor NSTextContentStorageDelegate
   {
-    public let documentID: String
-    public let viewIdentity = UUID()
+    public let fileID: String
+    public let id = UUID()
     public private(set) var text: String
     public private(set) var generation: UInt64
     public private(set) var isComposing = false
     public private(set) var isEditing = false
-    public private(set) var writingToolsActive = false
+    public private(set) var isWritingToolsActive = false
     private(set) var showsFrontMatter = false
     public private(set) var contentStart = 0
     public var inputError: String?
-    let sourceView = AnchoredTextView(usingTextLayoutManager: true)
+    let sourceView = TextView(usingTextLayoutManager: true)
     public var textView: UITextView { sourceView }
-    @ObservationIgnored weak var sourceHost: SourceTextViewHost?
-    @ObservationIgnored var sourceHosts: [SourceTextViewHost.Reference] = []
-    @ObservationIgnored public var onSourceChange: ((String, UInt64) -> Void)?
+    @ObservationIgnored weak var sourceHost: TextViewHost?
+    @ObservationIgnored var sourceHosts: [TextViewHost.Reference] = []
+    @ObservationIgnored public var onEdit: ((String, UInt64) -> Void)?
     @ObservationIgnored private var highlightTask: Task<Void, Never>?
     @ObservationIgnored private var isApplyingSourceEdit = false
     @ObservationIgnored private var pendingFocusRequest = false
     @ObservationIgnored private var pendingShowsFrontMatter: Bool?
-    @ObservationIgnored lazy var commentAnnotations = SourceCommentAnnotations(session: self)
+    @ObservationIgnored lazy var commentHighlights = CommentHighlights(session: self)
 
     public init(
-      documentID: String, text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
+      fileID: String, text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
     ) {
-      self.documentID = documentID
+      self.fileID = fileID
       self.text = text
       self.generation = generation
       self.showsFrontMatter = showsFrontMatter
@@ -62,12 +62,12 @@
       textView.registerForTraitChanges([
         UITraitPreferredContentSizeCategory.self, UITraitUserInterfaceStyle.self,
         UITraitAccessibilityContrast.self, UITraitLegibilityWeight.self,
-      ]) { (view: AnchoredTextView, _: UITraitCollection) in
+      ]) { (view: TextView, _: UITraitCollection) in
         view.session?.highlight()
       }
       textView.registerForTraitChanges([AccentTrait.self]) {
-        (view: AnchoredTextView, _: UITraitCollection) in
-        view.session?.commentAnnotations.accentDidChange()
+        (view: TextView, _: UITraitCollection) in
+        view.session?.commentHighlights.accentDidChange()
       }
       updateHiddenFrontMatter()
       textView.selectedRange = NSRange(location: contentStart, length: 0)
@@ -75,13 +75,13 @@
     }
 
     /// Applies one change as an undoable step. A nil selection keeps the caret where it was.
-    public func apply(_ edit: SourceEdit, generation: UInt64) throws {
-      guard isSettled else { throw SourceEdit.MutationError.compositionActive }
-      guard self.generation == generation else { throw SourceEdit.MutationError.staleGeneration }
+    public func apply(_ edit: Edit, generation: UInt64) throws {
+      guard isSettled else { throw Edit.MutationError.compositionActive }
+      guard self.generation == generation else { throw Edit.MutationError.staleGeneration }
       let result = try edit.applying(to: text)
-      if let selection = edit.selection { _ = try SourceEdit.text(in: result, at: selection) }
+      if let selection = edit.selection { _ = try Edit.text(in: result, at: selection) }
       let previousSelection = textView.selectedRange
-      let inverse = SourceEdit(
+      let inverse = Edit(
         range: NSRange(location: edit.range.location, length: edit.replacement.utf16.count),
         expected: edit.replacement,
         replacement: (text as NSString).substring(with: edit.range),
@@ -118,7 +118,7 @@
 
     /// Nothing is mid-input: no marked text, dictation or Writing Tools session.
     public var isSettled: Bool {
-      !isComposing && !writingToolsActive && textView.markedTextRange == nil
+      !isComposing && !isWritingToolsActive && textView.markedTextRange == nil
     }
 
     public var canFormat: Bool { textView.isEditable && isSettled }
@@ -162,7 +162,7 @@
       guard value != showsFrontMatter else { return }
       showsFrontMatter = value
       updateHiddenFrontMatter()
-      commentAnnotations.frontMatterVisibilityDidChange()
+      commentHighlights.frontMatterVisibilityDidChange()
     }
 
     public func textContentManager(
@@ -177,7 +177,7 @@
 
     private func updateHiddenFrontMatter(in source: String? = nil) {
       let source = source ?? text
-      let start = showsFrontMatter ? 0 : MarkdownFrontMatter.contentStart(in: source)
+      let start = showsFrontMatter ? 0 : FrontMatter.contentStart(in: source)
       textView.accessibilityValue = start > 0 ? (source as NSString).substring(from: start) : nil
       guard start != contentStart else { return }
       contentStart = start
@@ -199,7 +199,7 @@
       pendingFocusRequest = false
       guard canFormat, textView.becomeFirstResponder() else {
         inputError = String(
-          localized: "The editor couldn't receive focus. Tap the note to start writing.",
+          localized: "The editor couldn't receive focus. Tap the file to start writing.",
           bundle: .module)
         return
       }
@@ -231,7 +231,7 @@
       else { return true }
       synchronizeText()
       do {
-        guard let edit = try MarkdownTyping.edit(in: text, selection: range, replacement: replacement)
+        guard let edit = try Typing.edit(in: text, selection: range, replacement: replacement)
         else { return true }
         try apply(edit, generation: generation)
         return false
@@ -244,21 +244,21 @@
     }
 
     func indent(outdent: Bool) throws {
-      guard canFormat else { throw SourceEdit.MutationError.compositionActive }
-      if let edit = try MarkdownTyping.indent(
+      guard canFormat else { throw Edit.MutationError.compositionActive }
+      if let edit = try Typing.indent(
         in: text, selection: textView.selectedRange, outdent: outdent)
       {
         try apply(edit, generation: generation)
       }
     }
 
-    public func presentFind(replacing: Bool = false) {
+    public func find(replacing: Bool = false) {
       guard isSettled else {
         inputError = String(
           localized: "Finish the current text edit before finding text.", bundle: .module)
         return
       }
-      commentAnnotations.suspendForFind()
+      commentHighlights.suspendForFind()
       textView.findInteraction?.presentFindNavigator(showingReplace: replacing)
     }
 
@@ -270,22 +270,22 @@
       }
       isComposing = textView.markedTextRange != nil
       if isComposing { sourceView.cancelEditingCaretReveal() }
-      commentAnnotations.selectionDidChange()
+      commentHighlights.selectionDidChange()
       if !isComposing, let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
       if !isComposing { scheduleHighlight() }
     }
 
     public func textViewWritingToolsWillBegin(_ textView: UITextView) {
       synchronizeText()
-      commentAnnotations.suspendForWritingTools()
-      writingToolsActive = true
+      commentHighlights.suspendForWritingTools()
+      isWritingToolsActive = true
       highlightTask?.cancel()
       sourceView.cancelEditingCaretReveal()
     }
 
     public func textViewWritingToolsDidEnd(_ textView: UITextView) {
-      writingToolsActive = false
-      commentAnnotations.resumeAfterWritingTools()
+      isWritingToolsActive = false
+      commentHighlights.resumeAfterWritingTools()
       synchronizeText()
       if let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
       sourceView.rememberReadingAnchor()
@@ -294,7 +294,7 @@
     public func textView(
       _ textView: UITextView, writingToolsIgnoredRangesInEnclosingRange enclosingRange: NSRange
     ) -> [NSValue] {
-      var ranges = MarkdownSyntax.ignoredWritingToolsRanges(
+      var ranges = Syntax.ignoredWritingToolsRanges(
         in: textView.text, enclosing: enclosingRange)
       var hidden = NSIntersectionRange(NSRange(location: 0, length: contentStart), enclosingRange)
       if hidden.length > 0 {
@@ -321,7 +321,7 @@
       onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)? = nil,
       onAddComment: (@MainActor (String) -> Void)? = nil
     ) {
-      commentAnnotations.configure(
+      commentHighlights.configure(
         configuration, onOpen: onOpenCommentThreads, onLinkedIDs: onLinkedCommentIDsChange,
         onAdd: onAddComment)
     }
@@ -330,7 +330,7 @@
       _ textView: UITextView, editMenuForTextInRanges ranges: [NSValue],
       suggestedActions: [UIMenuElement]
     ) -> UIMenu? {
-      commentAnnotations.editMenu(ranges: ranges.map(\.rangeValue), suggestedActions: suggestedActions)
+      commentHighlights.editMenu(ranges: ranges.map(\.rangeValue), suggestedActions: suggestedActions)
     }
 
     // gistpad.dev's GitHub palette in Light, Dark, and each with Increase Contrast. Where the
@@ -382,7 +382,7 @@
           .font: bodyFont,
           .foregroundColor: UIColor.label,
         ], range: NSRange(location: 0, length: storage.length))
-      for span in MarkdownSyntax.spans(in: textView.text) {
+      for span in Syntax.spans(in: textView.text) {
         let attributes: [NSAttributedString.Key: Any]
         switch span.kind {
         case .heading:
@@ -426,7 +426,7 @@
           }
         }
       }
-      commentAnnotations.paint(in: storage)
+      commentHighlights.paint(in: storage)
       storage.endEditing()
       if storage !== textView.textStorage {
         applyChangedHighlightAttributes(storage, to: textView.textStorage)
@@ -462,14 +462,14 @@
 
     private func synchronizeText() {
       // Inline previews are transient. UIKit owns their selection and native undo history.
-      guard !writingToolsActive && !isApplyingSourceEdit else { return }
+      guard !isWritingToolsActive && !isApplyingSourceEdit else { return }
       isComposing = textView.markedTextRange != nil
       if !text.utf8.elementsEqual(textView.text.utf8) {
         text = textView.text
         updateHiddenFrontMatter()
         generation += 1
         sourceView.requestEditingCaretReveal()
-        onSourceChange?(text, generation)
+        onEdit?(text, generation)
       }
       if !isComposing, let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
       scheduleHighlight()
@@ -477,7 +477,7 @@
 
     private func scheduleHighlight() {
       highlightTask?.cancel()
-      guard !isComposing && !writingToolsActive else { return }
+      guard !isComposing && !isWritingToolsActive else { return }
       highlightTask = Task { [weak self] in
         try? await Task.sleep(for: .milliseconds(100))
         guard !Task.isCancelled else { return }
@@ -486,7 +486,7 @@
     }
   }
 
-  final class AnchoredTextView: UITextView, @MainActor AXCustomContentProvider {
+  final class TextView: UITextView, @MainActor AXCustomContentProvider {
     private var commentAccessibilityContent: [AXCustomContent] = []
     var accessibilityCustomContent: [AXCustomContent]! {
       get { commentAccessibilityContent }
@@ -497,9 +497,9 @@
       case caret
     }
 
-    weak var session: DocumentSession?
+    weak var session: Editor?
     /// Writing Tools owns inline animations and scrolling until its session finishes.
-    private var sourceInteractionActive: Bool { session?.writingToolsActive == true }
+    private var sourceInteractionActive: Bool { session?.isWritingToolsActive == true }
     private var contentStart: Int { session?.contentStart ?? 0 }
     private var previousWidth: CGFloat = 0
     private var previousHeight: CGFloat = 0
@@ -719,7 +719,7 @@
     }
 
     override func layoutSubviews() {
-      session?.commentAnnotations.findVisibilityDidChange()
+      session?.commentHighlights.findVisibilityDidChange()
       applyViewportInsets()
       let needsInitialAnchor = previousWidth == 0
       if sourceInteractionActive {
@@ -754,8 +754,8 @@
       restoringAnchor = false
       if needsInitialAnchor, bounds.width > 0 { layoutDocument() }
       if needsInitialAnchor { rememberReadingAnchor() }
-      session?.commentAnnotations.layoutBackgrounds()
-      session?.commentAnnotations.scrollSelectedCommentIfNeeded()
+      session?.commentHighlights.layoutBackgrounds()
+      session?.commentHighlights.scrollSelectedCommentIfNeeded()
     }
 
     /// TextKit 2 estimates the height of text it hasn't laid out, which leaves scroll limits and

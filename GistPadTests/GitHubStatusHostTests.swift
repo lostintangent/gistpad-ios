@@ -51,7 +51,7 @@ struct GitHubStatusHostTests {
     let viewportSource = try #require(sourceAtViewportTop())
     let caret = try #require(editor.selectedTextRange).end
     let writingPosition = editor.convert(editor.caretRect(for: caret), to: host.window)
-    let identity = session.viewIdentity
+    let identity = session.id
     let canUndo = editor.undoManager?.canUndo
     capture("scrolled")
     let generation = session.generation
@@ -66,7 +66,7 @@ struct GitHubStatusHostTests {
       try await host.waitUntil { host.model.renderedState == state }
       try await Task.sleep(for: .milliseconds(350))
       capture(stage)
-      #expect(session.viewIdentity == identity)
+      #expect(session.id == identity)
       #expect(editor.selectedRange == selection)
       #expect(session.generation == generation)
       #expect(session.text.utf8.elementsEqual(source.utf8))
@@ -103,13 +103,13 @@ private final class StatusModel {
 @MainActor
 private struct StatusFixture: View {
   @Bindable var model: StatusModel
-  var session: DocumentSession?
+  var session: Editor?
 
   var body: some View {
     NavigationStack {
       Group {
         if let session {
-          MarkdownEditorView(session: session)
+          EditorView(session: session)
         } else {
           Text("A real page remains in place.")
         }
@@ -133,7 +133,7 @@ private struct StatusFixture: View {
 private final class StatusHost {
   let model = StatusModel()
   let window: UIWindow
-  let session: DocumentSession?
+  let session: Editor?
   private(set) var keyboardHeight: CGFloat = 0
   private let previous: UIWindow?
   private var keyboardObserver: NSObjectProtocol?
@@ -142,7 +142,7 @@ private final class StatusHost {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     previous = scene.windows.first(where: \.isKeyWindow)
-    session = DocumentSession(documentID: "github-status-source", text: source)
+    session = Editor(fileID: "github-status-source", text: source)
     window = UIWindow(windowScene: scene)
     window.rootViewController = UIHostingController(
       rootView: StatusFixture(model: model, session: session).accent(savedHex: "#FACC15"))

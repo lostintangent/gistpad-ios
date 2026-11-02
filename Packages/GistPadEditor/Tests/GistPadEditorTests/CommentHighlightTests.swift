@@ -7,20 +7,20 @@
 
   @Suite(.serialized)
   @MainActor
-  struct SourceCommentAnnotationTests {
+  struct CommentHighlightTests {
     @Test func annotationsPreserveExactSourceGenerationSelectionAndNativeUndo() throws {
-      let session = DocumentSession(documentID: "comments", text: "A native note", generation: 7)
+      let session = Editor(fileID: "comments", text: "A native note", generation: 7)
       let window = host(session)
       defer { window.isHidden = true }
       let undo = try #require(session.textView.undoManager)
       undo.removeAllActions()
       try session.apply(
-        SourceEdit(range: NSRange(location: 0, length: 1), expected: "A", replacement: "The"),
+        Edit(range: NSRange(location: 0, length: 1), expected: "A", replacement: "The"),
         generation: 7)
       session.textView.selectedRange = NSRange(location: 4, length: 6)
       let selection = session.textView.selectedRange
       var changes = 0
-      session.onSourceChange = { _, _ in changes += 1 }
+      session.onEdit = { _, _ in changes += 1 }
       session.setCommentHighlights(
         .init(
           quotes: [CommentQuote(commentID: 10, quote: "native")], selectedCommentID: 10))
@@ -42,7 +42,7 @@
     }
 
     @Test func overlapMenuKeepsSystemActionsAndOpensEveryThread() throws {
-      let session = DocumentSession(documentID: "overlap", text: "one two three")
+      let session = Editor(fileID: "overlap", text: "one two three")
       var opened: [[Int64]] = []
       session.setCommentHighlights(
         .init(quotes: [
@@ -51,7 +51,7 @@
         ]), onOpenCommentThreads: { opened.append($0) })
       #expect(
         session.textView.textStorage.attribute(
-          SourceCommentAnnotations.annotationKey, at: 5, effectiveRange: nil) != nil)
+          CommentHighlights.annotationKey, at: 5, effectiveRange: nil) != nil)
       #expect(
         session.textView.textStorage.attribute(.textHighlightStyle, at: 5, effectiveRange: nil) == nil)
       #expect(
@@ -78,7 +78,7 @@
     @Test func passagesHitTestNativeGeometryAndAddCommentKeepsTheExactSelection() throws {
       let added = "  cafe\u{0301} 🫧\r\n"
       let source = "# Comment notebook\n\n🫧 A quiet native note, with **careful** words.\n" + added
-      let session = DocumentSession(documentID: "hit-testing", text: source)
+      let session = Editor(fileID: "hit-testing", text: source)
       let window = host(session, focused: false)
       defer { window.isHidden = true }
       var quotes: [String] = []
@@ -95,7 +95,7 @@
       let frame = session.textView.firstRect(for: try #require(session.textView.textRange(from: start, to: end)))
       #expect(!frame.isEmpty)
       #expect(
-        session.commentAnnotations.threadIDs(at: CGPoint(x: frame.midX, y: frame.midY)) == [10, 20],
+        session.commentHighlights.threadIDs(at: CGPoint(x: frame.midX, y: frame.midY)) == [10, 20],
         "Native frame \(frame), container inset \(session.textView.textContainerInset)")
 
       let copy = UIAction(title: "System Copy") { _ in }
@@ -123,7 +123,7 @@
     @Test func explicitRevealCanReturnToTheSameSelectedQuoteWithoutChangingSource() async throws {
       let text = "# Start\n\n" + String(repeating: "Room for another thought.\n\n", count: 60)
         + "A late native passage."
-      let session = DocumentSession(documentID: "repeat-reveal", text: text)
+      let session = Editor(fileID: "repeat-reveal", text: text)
       let window = host(session)
       defer { window.isHidden = true }
       session.textView.resignFirstResponder()
@@ -146,7 +146,7 @@
     }
 
     @Test func addCommentRequiresOneEligibleSelectionAndAnExplicitCallback() {
-      let session = DocumentSession(documentID: "eligibility", text: "abc abcd 🫧🫧")
+      let session = Editor(fileID: "eligibility", text: "abc abcd 🫧🫧")
       let range = NSValue(range: NSRange(location: 4, length: 4))
       #expect(
         session.textView(
@@ -169,7 +169,7 @@
     }
 
     @Test func hidingIdleAnnotationsKeepsSelectionAndContextualDiscovery() throws {
-      let session = DocumentSession(documentID: "visibility", text: "one two three")
+      let session = Editor(fileID: "visibility", text: "one two three")
       session.setCommentHighlights(
         .init(
           quotes: [
@@ -179,10 +179,10 @@
         onOpenCommentThreads: { _ in })
       #expect(
         session.textView.textStorage.attribute(
-          SourceCommentAnnotations.annotationKey, at: 1, effectiveRange: nil) == nil)
+          CommentHighlights.annotationKey, at: 1, effectiveRange: nil) == nil)
       #expect(
         session.textView.textStorage.attribute(
-          SourceCommentAnnotations.annotationKey, at: 5, effectiveRange: nil) != nil)
+          CommentHighlights.annotationKey, at: 5, effectiveRange: nil) != nil)
       let menu = session.textView(
         session.textView, editMenuForTextInRanges: [NSValue(range: NSRange(location: 0, length: 3))],
         suggestedActions: [])
@@ -190,8 +190,8 @@
     }
 
     @Test func missingAmbiguousAndHiddenFrontMatterQuotesDoNotInventLinks() async {
-      let session = DocumentSession(
-        documentID: "frontmatter", text: "---\ntitle: native\n---\n\nA native note")
+      let session = Editor(
+        fileID: "frontmatter", text: "---\ntitle: native\n---\n\nA native note")
       var linked: Set<Int64> = []
       session.setCommentHighlights(
         .init(quotes: [
@@ -204,17 +204,17 @@
       #expect(linked == [40])
       #expect(
         session.textView.textStorage.attribute(
-          SourceCommentAnnotations.annotationKey, at: 5, effectiveRange: nil) == nil)
+          CommentHighlights.annotationKey, at: 5, effectiveRange: nil) == nil)
       session.setShowsFrontMatter(true)
       await Task.yield()
       #expect(linked == [20, 40])
       #expect(
         session.textView.textStorage.attribute(
-          SourceCommentAnnotations.annotationKey, at: 5, effectiveRange: nil) != nil)
+          CommentHighlights.annotationKey, at: 5, effectiveRange: nil) != nil)
     }
 
     @Test func nativeSelectionRetainsOriginalInkInsteadOfSelectedCommentInk() throws {
-      let session = DocumentSession(documentID: "selection", text: "A native note")
+      let session = Editor(fileID: "selection", text: "A native note")
       let window = host(session)
       defer { window.isHidden = true }
       session.textView.selectedRange = NSRange(location: 0, length: 0)
@@ -238,7 +238,7 @@
 
     @Test func selectingACommentRestoresEachSyntaxInkWithoutChangingOtherAttributes() throws {
       let source = "A **native** `code` [note](https://example.test)"
-      let session = DocumentSession(documentID: "syntax-ink", text: source)
+      let session = Editor(fileID: "syntax-ink", text: source)
       let window = host(session)
       defer { window.isHidden = true }
       let original = NSAttributedString(attributedString: session.textView.textStorage)
@@ -248,7 +248,7 @@
       session.textView.selectedRange = selection
       session.textViewDidChangeSelection(session.textView)
       let restored = NSMutableAttributedString(attributedString: session.textView.textStorage)
-      restored.removeAttribute(SourceCommentAnnotations.annotationKey, range: selection)
+      restored.removeAttribute(CommentHighlights.annotationKey, range: selection)
       #expect(restored.isEqual(to: original))
       #expect(session.text.utf8.elementsEqual(source.utf8))
       #expect(session.generation == 0)
@@ -256,19 +256,19 @@
     }
 
     @Test func highlightsStepAsideForWritingToolsAndFindWithoutChangingSource() async throws {
-      let session = DocumentSession(documentID: "transient-ui", text: "A native note")
+      let session = Editor(fileID: "transient-ui", text: "A native note")
       let window = host(session)
       defer { window.isHidden = true }
       let view = session.textView
       let annotated = {
-        view.textStorage.attribute(SourceCommentAnnotations.annotationKey, at: 3, effectiveRange: nil)
+        view.textStorage.attribute(CommentHighlights.annotationKey, at: 3, effectiveRange: nil)
           != nil
       }
       session.setCommentHighlights(
         .init(quotes: [CommentQuote(commentID: 10, quote: "native")], selectedCommentID: 10))
       #expect(annotated())
       session.textViewWritingToolsWillBegin(view)
-      #expect(session.writingToolsActive)
+      #expect(session.isWritingToolsActive)
       #expect(!annotated())
       session.textViewWritingToolsDidEnd(view)
       session.highlight()
@@ -288,7 +288,7 @@
     }
 
     @Test func selectedCommentHasNativeAccessibilityStateWithoutChangingTheEditorRole() throws {
-      let session = DocumentSession(documentID: "accessibility", text: "A native note")
+      let session = Editor(fileID: "accessibility", text: "A native note")
       let provider = try #require(session.textView as? any AXCustomContentProvider)
       session.setCommentHighlights(
         .init(

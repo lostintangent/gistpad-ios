@@ -52,21 +52,21 @@ final class NotebookCommentsPresentation {
   func activate(_ next: NotebookSessionController) {
     let nextScope = Self.supports(next.document)
       ? next.document.gist.map { Scope(accountID: next.document.accountID, gistID: $0.id) } : nil
-    guard sessionID != next.session.viewIdentity || scope != nextScope else { return }
+    guard sessionID != next.session.id || scope != nextScope else { return }
     if scope != nextScope {
       hide()
       conversation = nil
     }
     scope = nextScope
     controller = next
-    sessionID = next.session.viewIdentity
+    sessionID = next.session.id
     sourceLinkedIDs = nil
     previewLinkedIDs = nil
     preparationFailure = nil
   }
 
   func prepareAnnotations(for next: NotebookSessionController, showsInline: Bool) async {
-    guard showsInline, sessionID == next.session.viewIdentity else { return }
+    guard showsInline, sessionID == next.session.id else { return }
     await prepare()?.refresh()
   }
 
@@ -74,7 +74,7 @@ final class NotebookCommentsPresentation {
     for next: NotebookSessionController, origin: NoteMode? = nil,
     rootID: Int64? = nil, quote: String? = nil
   ) {
-    guard sessionID == next.session.viewIdentity, Self.supports(next.document) else { return }
+    guard sessionID == next.session.id, Self.supports(next.document) else { return }
     let opening = !isPresented
     if opening {
       returnsToEditing = next.session.textView.isFirstResponder

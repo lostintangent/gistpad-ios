@@ -82,9 +82,9 @@ struct NotebookLayoutTests {
     let original = (1...80).map { "Paragraph \($0): a retained native notebook." }.joined(
       separator: "\n\n")
     let draft = try await store.newDraft(accountID: accountID, githubUserID: 42, text: original)
-    let session = DocumentSession(documentID: draft.id.uuidString, text: draft.text)
+    let session = Editor(fileID: draft.id.uuidString, text: draft.text)
     var persistence: Task<DraftSnapshot, any Error>?
-    session.onSourceChange = { text, generation in
+    session.onEdit = { text, generation in
       persistence = Task {
         try await store.persist(
           id: draft.id, accountID: accountID, text: text, generation: generation)
@@ -198,7 +198,7 @@ struct NotebookLayoutTests {
 }
 
 private struct LayoutNoteFixture: View {
-  let session: DocumentSession
+  let session: Editor
   let layout: NotebookLayoutPreferences
   let width: CGFloat
 
@@ -217,7 +217,7 @@ private struct LayoutNoteFixture: View {
           saveState: .savedLocally,
           allowsSplit: NotebookLayoutPreferences.allowsSplit(availableWidth: width)
         ) {
-          MarkdownEditorView(session: session)
+          EditorView(session: session)
         } preview: {
           SessionPreview(session: session)
         }

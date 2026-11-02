@@ -30,11 +30,11 @@ struct SourceKeyboardHostTests {
                 in: range, with: change.1
             )
             try session.apply(
-                SourceEdit(range: range, expected: change.0, replacement: change.1),
+                Edit(range: range, expected: change.0, replacement: change.1),
                 generation: session.generation
             )
             session.highlight()
-            let expected = DocumentSession(documentID: "expected-style", text: expectedText)
+            let expected = Editor(fileID: "expected-style", text: expectedText)
             expected.textView.traitOverrides.preferredContentSizeCategory =
                 session.textView.traitCollection.preferredContentSizeCategory
             expected.highlight()
@@ -189,7 +189,7 @@ struct SourceKeyboardHostTests {
 
 @MainActor
 private final class SourceKeyboardFixture {
-    let session: DocumentSession
+    let session: Editor
     let window: UIWindow
     private let host: UIViewController
     private weak var previousKeyWindow: UIWindow?
@@ -200,7 +200,7 @@ private final class SourceKeyboardFixture {
             UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         )
         previousKeyWindow = scene.keyWindow
-        let session = DocumentSession(documentID: "source-keyboard-\(size)", text: source)
+        let session = Editor(fileID: "source-keyboard-\(size)", text: source)
         self.session = session
         let window = UIWindow(windowScene: scene)
         self.window = window
@@ -214,7 +214,7 @@ private final class SourceKeyboardFixture {
                     ),
                     mode: .constant(.source), saveState: .savedToGitHub
                 ) {
-                    MarkdownEditorView(session: session)
+                    EditorView(session: session)
                 } preview: {
                     Color.clear
                 }

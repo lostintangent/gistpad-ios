@@ -17,7 +17,7 @@ struct FrontMatterRangeTests {
     ("", ""),
   ])
   func hiddenPrefixMatchesTheWebBoundary(source: String, prefix: String) {
-    #expect(MarkdownFrontMatter.contentStart(in: source) == prefix.utf16.count)
+    #expect(FrontMatter.contentStart(in: source) == prefix.utf16.count)
   }
 }
 
@@ -34,7 +34,7 @@ struct FrontMatterRangeTests {
     func hiddenPrefixOccupiesNoSpaceAndKeepsSourceBytesThroughEditsAndUndo(prefix: String) throws {
       let body = "# Visible content\n\n- [ ] A thought 日本語"
       let source = prefix + body
-      let session = DocumentSession(documentID: "frontmatter", text: source)
+      let session = Editor(fileID: "frontmatter", text: source)
       let view = session.textView
       let window = host(session, focused: false)
       defer { window.isHidden = true }
@@ -83,7 +83,7 @@ struct FrontMatterRangeTests {
       #expect(view.accessibilityValue == body)
 
       try session.apply(
-        SourceEdit(
+        Edit(
           range: (source as NSString).range(of: "[ ]"), expected: "[ ]", replacement: "[x]"),
         generation: 0)
       #expect(session.text == prefix + body.replacingOccurrences(of: "[ ]", with: "[x]"))
@@ -117,14 +117,14 @@ struct FrontMatterRangeTests {
       let prefix = "---\nkey: A longer value 👩🏽‍💻\n---\n\n"
       let body = "A retained thought"
       let source = prefix + body
-      let session = DocumentSession(documentID: "frontmatter-mutation", text: source)
+      let session = Editor(fileID: "frontmatter-mutation", text: source)
       let view = session.textView
       let window = host(session)
       defer { window.isHidden = true }
       try #require(view.isFirstResponder)
       let range = (source as NSString).range(of: "A longer value 👩🏽‍💻")
       try session.apply(
-        SourceEdit(range: range, expected: "A longer value 👩🏽‍💻", replacement: "Short"),
+        Edit(range: range, expected: "A longer value 👩🏽‍💻", replacement: "Short"),
         generation: session.generation)
       let nextPrefix = "---\nkey: Short\n---\n\n"
       #expect(session.text.utf8.elementsEqual((nextPrefix + body).utf8))
@@ -139,7 +139,7 @@ struct FrontMatterRangeTests {
 
     @Test func showingMetadataWaitsForCompositionAndDoesNotChangeSourceGeneration() throws {
       let prefix = "---\nkey: value\n---\n\n"
-      let session = DocumentSession(documentID: "frontmatter-composition", text: prefix + "Body")
+      let session = Editor(fileID: "frontmatter-composition", text: prefix + "Body")
       let view = session.textView
       view.selectedRange = NSRange(location: prefix.utf16.count, length: 0)
       view.setMarkedText("日本", selectedRange: NSRange(location: 2, length: 0))
@@ -168,13 +168,13 @@ struct FrontMatterRangeTests {
     func replacingTheWholeSourceCanRemoveThePrefixAndUndoRestoresIt(replacement: String) throws {
       let prefix = "---\nkey: A longer metadata prefix\n---\n\n"
       let source = prefix + "A retained thought"
-      let session = DocumentSession(documentID: "frontmatter-replacement", text: source)
+      let session = Editor(fileID: "frontmatter-replacement", text: source)
       let view = session.textView
       let window = host(session)
       defer { window.isHidden = true }
       try #require(view.isFirstResponder)
       try session.apply(
-        SourceEdit(
+        Edit(
           range: NSRange(location: 0, length: source.utf16.count), expected: source,
           replacement: replacement),
         generation: session.generation)
@@ -190,7 +190,7 @@ struct FrontMatterRangeTests {
 
     @Test func visibilityChangesWaitForWritingToolsAndDoNotAddAnUndoStep() {
       let source = "---\nkey: value\n---\n\nBody"
-      let session = DocumentSession(documentID: "frontmatter-writing-tools", text: source)
+      let session = Editor(fileID: "frontmatter-writing-tools", text: source)
       let view = session.textView
       session.textViewWritingToolsWillBegin(view)
       session.setShowsFrontMatter(true)

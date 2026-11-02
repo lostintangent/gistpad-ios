@@ -13,11 +13,11 @@
     @Test func closingIntelligenceRestoresSourceSelectionFocusAndUndo() async throws {
       let source =
         NoteModelFixture.source + "\n" + (1...120).map { "Stop \($0) on the river path." }.joined(separator: "\n")
-      let session = DocumentSession(documentID: "intelligence-return", text: source)
+      let session = Editor(fileID: "intelligence-return", text: source)
       let editor = session.textView
       let selection = (source as NSString).range(of: "Stop 60 ")
       var changes = 0
-      session.onSourceChange = { _, _ in changes += 1 }
+      session.onEdit = { _, _ in changes += 1 }
       let presentation = NotebookIntelligencePresentation()
       let scene = try #require(
         UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -25,7 +25,7 @@
       let window = UIWindow(windowScene: scene)
       let host = UIHostingController(
         rootView: NavigationStack {
-          MarkdownEditorView(session: session).navigationTitle("Saturday walk")
+          EditorView(session: session).navigationTitle("Saturday walk")
         }
         .notebookIntelligence(presentation))
       window.rootViewController = host

@@ -34,7 +34,7 @@
       for size in [UIContentSizeCategory.large, .accessibilityExtraLarge] {
         for appearance in [UIUserInterfaceStyle.light, .dark] {
           for contrast in [UIAccessibilityContrast.normal, .high] {
-            let session = DocumentSession(documentID: "theme", text: source)
+            let session = Editor(fileID: "theme", text: source)
             session.setShowsFrontMatter(true)
             let view = session.textView
             view.traitOverrides.preferredContentSizeCategory = size

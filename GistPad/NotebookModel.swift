@@ -649,7 +649,7 @@ final class NotebookModel {
       guard !file.isPublishing, !file.isApplyingDurableEdit else {
         throw NotebookActionError.publicationInProgress
       }
-      guard file.session.isSettled else { throw SourceEdit.MutationError.compositionActive }
+      guard file.session.isSettled else { throw Edit.MutationError.compositionActive }
       guard await file.waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
     }
     guard self.pendingAccount == pendingAccount else { return }

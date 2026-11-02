@@ -34,7 +34,7 @@ struct NotebookPlatformTests {
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
     window.rootViewController = UIHostingController(
-      rootView: MarkdownEditorView(session: controller.session))
+      rootView: EditorView(session: controller.session))
     window.makeKeyAndVisible()
     defer { window.isHidden = true }
     try await Task.sleep(for: .milliseconds(100))
@@ -76,7 +76,7 @@ struct NotebookPlatformTests {
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
     window.rootViewController = UIHostingController(
-      rootView: MarkdownEditorView(session: controller.session))
+      rootView: EditorView(session: controller.session))
     window.makeKeyAndVisible()
     defer { window.isHidden = true }
     try await Task.sleep(for: .milliseconds(100))

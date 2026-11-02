@@ -14,7 +14,7 @@
     @FocusState private var promptFocused: Bool
 
     public init(
-      session: DocumentSession, title: String,
+      session: Editor, title: String,
       backend: any NoteModelBackend = AppleNoteModel(),
       revealSource: @escaping @MainActor (NSRange) -> Void
     ) {

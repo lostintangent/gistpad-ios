@@ -4,8 +4,8 @@
   import SwiftUI
   import UIKit
 
-  public struct MarkdownEditorView: View {
-    public let session: DocumentSession
+  public struct EditorView: View {
+    public let session: Editor
     private let insertPhoto: (@MainActor () -> Void)?
     private let canInsertPhoto: Bool
     private let intelligence: (@MainActor () -> Void)?
@@ -17,7 +17,7 @@
     @State private var actionError: String?
 
     public init(
-      session: DocumentSession,
+      session: Editor,
       insertPhoto: (@MainActor () -> Void)? = nil,
       canInsertPhoto: Bool = false,
       intelligence: (@MainActor () -> Void)? = nil,
@@ -43,17 +43,17 @@
           comments: comments, onOpenCommentThreads: onOpenCommentThreads,
           onLinkedCommentIDsChange: onLinkedCommentIDsChange,
           onAddComment: onAddComment,
-          actions: SourceToolbarActions(
+          actions: KeyboardBarActions(
             format: format, link: beginLink, indent: indent,
             photo: insertPhoto,
             intelligence: intelligence,
             dismiss: { session.textView.resignFirstResponder() }),
-          configuration: SourceToolbarConfiguration(
+          configuration: KeyboardBarConfiguration(
             canFormat: session.canFormat,
             canInsertPhoto: canInsertPhoto && insertPhoto != nil,
             canUseIntelligence: session.isSettled && intelligence != nil)
         )
-        .id(session.viewIdentity)
+        .id(session.id)
         .ignoresSafeArea([.container, .keyboard], edges: .vertical)
       }
       .overlay { SourceViewport(session: session).allowsHitTesting(false) }
@@ -66,7 +66,7 @@
         }
       ) { request in
         LinkEditor(label: request.label) { label, destination in
-          if let edit = try MarkdownFormatting.edit(
+          if let edit = try Formatting.edit(
             .link(label: label, destination: destination), in: request.source,
             selection: request.selection)
           {
@@ -94,14 +94,14 @@
       }
     }
 
-    private func format(_ command: MarkdownFormat) {
+    private func format(_ command: Format) {
       do {
-        if let edit = try MarkdownFormatting.edit(
+        if let edit = try Formatting.edit(
           command, in: session.text, selection: session.textView.selectedRange)
         {
           try session.apply(edit, generation: session.generation)
         }
-      } catch SourceEdit.MutationError.compositionActive {
+      } catch Edit.MutationError.compositionActive {
         actionError = String(
           localized:
             "The source couldn't be formatted. Try again after composition or Writing Tools finishes.",
@@ -115,7 +115,7 @@
 
     private func beginLink() {
       let selection = session.textView.selectedRange
-      guard session.canFormat, let label = try? SourceEdit.text(in: session.text, at: selection)
+      guard session.canFormat, let label = try? Edit.text(in: session.text, at: selection)
       else {
         actionError = String(
           localized: "Finish the current text edit, then select the link text again.",
@@ -138,27 +138,27 @@
   }
 
   private struct SourceTextView: UIViewRepresentable {
-    let session: DocumentSession
+    let session: Editor
     let comments: CommentHighlightConfiguration
     let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
     let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
     let onAddComment: (@MainActor (String) -> Void)?
-    let actions: SourceToolbarActions
-    let configuration: SourceToolbarConfiguration
+    let actions: KeyboardBarActions
+    let configuration: KeyboardBarConfiguration
     @Environment(\.isPaneVisible) private var isPaneVisible
     @Environment(\.accent) private var accent
 
-    func makeCoordinator() -> SourceAccessoryView {
-      SourceAccessoryView(actions: actions)
+    func makeCoordinator() -> KeyboardBar {
+      KeyboardBar(actions: actions)
     }
 
-    func makeUIView(context: Context) -> SourceTextViewHost {
-      let host = SourceTextViewHost(session: session)
+    func makeUIView(context: Context) -> TextViewHost {
+      let host = TextViewHost(session: session)
       updateUIView(host, context: context)
       return host
     }
 
-    func updateUIView(_ host: SourceTextViewHost, context: Context) {
+    func updateUIView(_ host: TextViewHost, context: Context) {
       let accessory = context.coordinator
       host.configure { view in
         view.isHidden = !isPaneVisible
@@ -177,21 +177,21 @@
       }
     }
 
-    static func dismantleUIView(_ host: SourceTextViewHost, coordinator: SourceAccessoryView) {
+    static func dismantleUIView(_ host: TextViewHost, coordinator: KeyboardBar) {
       host.dismantle()
     }
   }
 
-  final class SourceTextViewHost: UIView {
+  final class TextViewHost: UIView {
     struct Reference {
-      weak var host: SourceTextViewHost?
+      weak var host: TextViewHost?
     }
 
-    private let session: DocumentSession
+    private let session: Editor
     private var configuration: ((UITextView) -> Void)?
     private var isDismantled = false
 
-    init(session: DocumentSession) {
+    init(session: Editor) {
       self.session = session
       super.init(frame: .zero)
       session.sourceHosts.append(Reference(host: self))
@@ -263,7 +263,7 @@
   }
 
   private struct SourceViewport: UIViewRepresentable {
-    let session: DocumentSession
+    let session: Editor
 
     func makeUIView(context: Context) -> SourceViewportView {
       let view = SourceViewportView()
@@ -373,7 +373,7 @@
       do {
         try save(label, destination)
         dismiss()
-      } catch MarkdownFormatting.FormattingError.invalidLink {
+      } catch Formatting.FormattingError.invalidLink {
         self.error = String(
           localized: "Enter a complete web, email or phone link.", bundle: .module)
       } catch {

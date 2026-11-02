@@ -74,7 +74,7 @@ final class NotebookPhotoController {
       let markdown = ImageStorageClient.markdown(try await upload(png, gistID))
       let session = note.session
       try session.apply(
-        SourceEdit(
+        Edit(
           range: NSRange(location: NSMaxRange(session.textView.selectedRange), length: 0), expected: "",
           replacement: markdown),
         generation: session.generation)

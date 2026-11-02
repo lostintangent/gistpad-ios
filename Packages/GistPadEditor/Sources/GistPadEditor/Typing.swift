@@ -1,11 +1,11 @@
 import Foundation
 
-enum MarkdownTyping {
+enum Typing {
   /// Returns nil for ordinary input or protected syntax so the caller can use native input.
   static func edit(
     in source: String, selection: NSRange, replacement: String
-  ) throws -> SourceEdit? {
-    let selected = try SourceEdit.text(in: source, at: selection)
+  ) throws -> Edit? {
+    let selected = try Edit.text(in: source, at: selection)
     if ["\n", "\r", "\r\n"].contains(replacement) {
       let protected = protectedRanges(in: source)
       guard !isProtected(selection, ranges: protected) else { return nil }
@@ -26,7 +26,7 @@ enum MarkdownTyping {
       .replacingOccurrences(of: "(", with: "%28").replacingOccurrences(of: ")", with: "%29")
       .replacingOccurrences(of: "<", with: "%3C").replacingOccurrences(of: ">", with: "%3E")
     let markdown = "[\(label)](\(destination))"
-    return SourceEdit(
+    return Edit(
       range: selection, expected: selected, replacement: markdown,
       selection: NSRange(location: selection.location + markdown.utf16.count, length: 0))
   }
@@ -34,10 +34,10 @@ enum MarkdownTyping {
   /// Call only outside composition and Writing Tools. Offsets and returned selection are UTF-16.
   static func indent(
     in source: String, selection: NSRange, outdent: Bool
-  ) throws -> SourceEdit? {
-    _ = try SourceEdit.text(in: source, at: selection)
+  ) throws -> Edit? {
+    _ = try Edit.text(in: source, at: selection)
     let text = source as NSString
-    let block = MarkdownFormatting.lineRange(in: text, selection: selection)
+    let block = Formatting.lineRange(in: text, selection: selection)
     guard !isProtected(block, ranges: protectedRanges(in: source)) else { return nil }
     var changes: [(range: NSRange, replacement: String)] = []
     var offset = block.location
@@ -57,13 +57,13 @@ enum MarkdownTyping {
       offset = NSMaxRange(line)
     } while offset < NSMaxRange(block)
     guard !changes.isEmpty else { return nil }
-    return SourceEdit(
+    return Edit(
       range: block, expected: text.substring(with: block), replacements: changes, selection: selection)
   }
 
   private static func continueList(
     in source: String, selection: NSRange, protected: [NSRange]
-  ) -> SourceEdit? {
+  ) -> Edit? {
     let text = source as NSString
     var lineStart = 0
     var lineEnd = 0
@@ -81,7 +81,7 @@ enum MarkdownTyping {
     let content = value.substring(from: match.range.length)
     if content.allSatisfy(\.isWhitespace) {
       let range = NSRange(location: lineStart, length: contentsEnd - lineStart)
-      return SourceEdit(
+      return Edit(
         range: range, expected: line, replacement: "",
         selection: NSRange(location: lineStart, length: 0))
     }
@@ -112,7 +112,7 @@ enum MarkdownTyping {
         indentation: capture(1), delimiter: capture(7), nextNumber: number + 2, protected: protected
       )
     }
-    return SourceEdit(
+    return Edit(
       range: selection, expected: text.substring(with: selection), replacement: replacement,
       selection: NSRange(location: selection.location + replacement.utf16.count, length: 0))
   }
@@ -120,7 +120,7 @@ enum MarkdownTyping {
   private static func continuedNumberedList(
     in source: String, selection: NSRange, replacement: String, nextLine: Int,
     indentation: String, delimiter: String, nextNumber: Int, protected: [NSRange]
-  ) -> SourceEdit {
+  ) -> Edit {
     let text = source as NSString
     var changes: [(range: NSRange, replacement: String)] = [(selection, replacement)]
     var offset = nextLine
@@ -155,14 +155,14 @@ enum MarkdownTyping {
         in: NSRange(location: change.range.location - range.location, length: change.range.length),
         with: change.replacement)
     }
-    return SourceEdit(
+    return Edit(
       range: range, expected: expected, replacement: result as String,
       selection: NSRange(location: selection.location + replacement.utf16.count, length: 0))
   }
 
   private static func protectedRanges(in source: String) -> [NSRange] {
     // Probe the next character so an EOF caret in an unfinished block stays protected.
-    MarkdownSyntax.spans(in: source + "\u{FFFC}").compactMap { span in
+    Syntax.spans(in: source + "\u{FFFC}").compactMap { span in
       span.kind == .code || span.kind == .frontmatter ? span.range : nil
     }
   }
@@ -176,6 +176,6 @@ enum MarkdownTyping {
     }
   }
 
-  private static let listPrefix = MarkdownFormatting.expression(
+  private static let listPrefix = Formatting.expression(
     "^([ \\t]*)(?:([-*+])([ \\t]+)(?:\\[([ xX])\\]([ \\t]+|$))?|([0-9]{1,9})([.)])([ \\t]+))")
 }

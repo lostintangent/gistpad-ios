@@ -15,10 +15,10 @@ struct NotebookDocumentSwitchingTests {
   @Test(arguments: [false, true])
   func supersededContainersCannotReconfigureDetachOrReclaimTheEditor(composing: Bool) throws {
     let source = "# A retained source\nAn editable thought."
-    let session = DocumentSession(documentID: "owned-source", text: source)
+    let session = Editor(fileID: "owned-source", text: source)
     let fixture = try SourceHostWindow()
     defer { fixture.close() }
-    let outgoing = SourceTextViewHost(session: session)
+    let outgoing = TextViewHost(session: session)
     outgoing.frame = fixture.root.view.bounds
     outgoing.configure { $0.isHidden = false }
     fixture.root.view.addSubview(outgoing)
@@ -38,7 +38,7 @@ struct NotebookDocumentSwitchingTests {
     let selection = editor.selectedRange
     let generation = session.generation
     let accessory = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 72))
-    let incoming = SourceTextViewHost(session: session)
+    let incoming = TextViewHost(session: session)
     incoming.frame = fixture.root.view.bounds
     incoming.configure {
       $0.isHidden = false
@@ -76,11 +76,11 @@ struct NotebookDocumentSwitchingTests {
 
   @Test(arguments: [false, true])
   func aReturningStaleHostCannotOrphanTheVisibleHost(dismantled: Bool) throws {
-    let session = DocumentSession(documentID: "stale-return", text: "# Still visible")
+    let session = Editor(fileID: "stale-return", text: "# Still visible")
     let fixture = try SourceHostWindow()
     defer { fixture.close() }
-    let stale = SourceTextViewHost(session: session)
-    let visible = SourceTextViewHost(session: session)
+    let stale = TextViewHost(session: session)
+    let visible = TextViewHost(session: session)
     let accessory = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 72))
     stale.frame = fixture.root.view.bounds
     visible.frame = fixture.root.view.bounds
@@ -121,11 +121,11 @@ struct NotebookDocumentSwitchingTests {
   func anOwnerLeavingOrDismantlingImmediatelyReturnsTheEditorToThePreviousLiveHost(
     dismantled: Bool
   ) throws {
-    let session = DocumentSession(documentID: "owner-left", text: "# Still attached")
+    let session = Editor(fileID: "owner-left", text: "# Still attached")
     let fixture = try SourceHostWindow()
     defer { fixture.close() }
-    let previous = SourceTextViewHost(session: session)
-    let owner = SourceTextViewHost(session: session)
+    let previous = TextViewHost(session: session)
+    let owner = TextViewHost(session: session)
     previous.frame = fixture.root.view.bounds
     owner.frame = fixture.root.view.bounds
     fixture.root.view.addSubview(previous)
@@ -146,14 +146,14 @@ struct NotebookDocumentSwitchingTests {
 
   @Test(arguments: OwnerState.allCases)
   func anInWindowContainerRepairsMissingDetachedAndCurrentOwnership(owner: OwnerState) throws {
-    let session = DocumentSession(documentID: "reattached", text: "# Still here")
+    let session = Editor(fileID: "reattached", text: "# Still here")
     let fixture = try SourceHostWindow()
     defer { fixture.close() }
-    let host = SourceTextViewHost(session: session)
+    let host = TextViewHost(session: session)
     host.frame = fixture.root.view.bounds
     fixture.root.view.addSubview(host)
     let editor = session.textView
-    let detachedOwner = SourceTextViewHost(session: session)
+    let detachedOwner = TextViewHost(session: session)
     editor.removeFromSuperview()
     try #require(editor.window == nil)
     switch owner {
@@ -174,8 +174,8 @@ struct NotebookDocumentSwitchingTests {
 
   @Test(arguments: [false, true])
   func animatedIdentityAndModeChangesKeepTheEditorMounted(splitNavigation: Bool) async throws {
-    let session = DocumentSession(
-      documentID: "animated-source", text: "# A visible source\nAn editable thought.")
+    let session = Editor(
+      fileID: "animated-source", text: "# A visible source\nAn editable thought.")
     let state = ReidentifiedSourceState()
     let fixture = try SourceHostWindow()
     defer { fixture.close() }
@@ -223,9 +223,9 @@ struct NotebookDocumentSwitchingTests {
   }
 
   @Test func anOutgoingHostCannotDetachTheRetainedEditorFromItsNewHost() async throws {
-    let session = DocumentSession(
-      documentID: "retained", text: "# Still visible\nA retained source.")
-    let other = DocumentSession(documentID: "other", text: "# A different source")
+    let session = Editor(
+      fileID: "retained", text: "# Still visible\nA retained source.")
+    let other = Editor(fileID: "other", text: "# A different source")
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.keyWindow
@@ -233,7 +233,7 @@ struct NotebookDocumentSwitchingTests {
     let root = UIViewController()
     window.rootViewController = root
     let outgoing = UIHostingController(
-      rootView: MarkdownEditorView(session: session).environment(\.isPaneVisible, true))
+      rootView: EditorView(session: session).environment(\.isPaneVisible, true))
     root.addChild(outgoing)
     outgoing.view.frame = root.view.bounds
     outgoing.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -250,7 +250,7 @@ struct NotebookDocumentSwitchingTests {
     try await Task.sleep(for: .milliseconds(150))
     try #require(session.textView.isDescendant(of: outgoing.view))
 
-    let incoming = UIHostingController(rootView: MarkdownEditorView(session: session))
+    let incoming = UIHostingController(rootView: EditorView(session: session))
     root.addChild(incoming)
     incoming.view.frame = root.view.bounds
     incoming.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -260,14 +260,14 @@ struct NotebookDocumentSwitchingTests {
     try #require(session.textView.isDescendant(of: incoming.view))
     let incomingAccessory = session.textView.inputAccessoryView
 
-    outgoing.rootView = MarkdownEditorView(session: session)
+    outgoing.rootView = EditorView(session: session)
       .environment(\.isPaneVisible, false)
     try await Task.sleep(for: .milliseconds(150))
     #expect(!session.textView.isHidden)
     #expect(session.textView.isAccessibilityElement)
     #expect(session.textView.inputAccessoryView === incomingAccessory)
 
-    outgoing.rootView = MarkdownEditorView(session: other)
+    outgoing.rootView = EditorView(session: other)
       .environment(\.isPaneVisible, false)
     outgoing.view.setNeedsLayout()
     outgoing.view.layoutIfNeeded()
@@ -289,12 +289,12 @@ struct NotebookDocumentSwitchingTests {
   }
 
   @Test func changingDocumentsMountsTheCorrectRetainedTextViewAndIsolatesUndo() async throws {
-    let daily = DocumentSession(documentID: "daily", text: "# Today's note\nDaily source")
-    let note = DocumentSession(documentID: "another-gist", text: "# Another gist\nIts raw source")
+    let daily = Editor(fileID: "daily", text: "# Today's note\nDaily source")
+    let note = Editor(fileID: "another-gist", text: "# Another gist\nIts raw source")
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
-    let host = UIHostingController(rootView: MarkdownEditorView(session: daily))
+    let host = UIHostingController(rootView: EditorView(session: daily))
     window.rootViewController = host
     window.makeKeyAndVisible()
     defer { window.isHidden = true }
@@ -309,7 +309,7 @@ struct NotebookDocumentSwitchingTests {
     let dailyText = dailyView.text
     let dailySelection = dailyView.selectedRange
 
-    host.rootView = MarkdownEditorView(session: note)
+    host.rootView = EditorView(session: note)
     try await Task.sleep(for: .milliseconds(150))
     #expect(noteView.window === window)
     #expect(dailyView.window == nil)
@@ -323,7 +323,7 @@ struct NotebookDocumentSwitchingTests {
     let noteSelection = noteView.selectedRange
 
     for session in [daily, note, daily, note] {
-      host.rootView = MarkdownEditorView(session: session)
+      host.rootView = EditorView(session: session)
       try await Task.sleep(for: .milliseconds(100))
       #expect(session.textView.window === window)
       #expect(daily.textView === dailyView)
@@ -336,7 +336,7 @@ struct NotebookDocumentSwitchingTests {
     noteView.undoManager?.undo()
     #expect(noteView.text == "# Another gist\nIts raw source")
     #expect(dailyView.text == dailyText)
-    host.rootView = MarkdownEditorView(session: daily)
+    host.rootView = EditorView(session: daily)
     try await Task.sleep(for: .milliseconds(100))
     dailyView.undoManager?.undo()
     #expect(dailyView.text == "# Today's note\nDaily source")
@@ -375,7 +375,7 @@ private final class ReidentifiedSourceState {
 }
 
 private struct ReidentifiedSourceFixture: View {
-  let session: DocumentSession
+  let session: Editor
   @Bindable var state: ReidentifiedSourceState
   let splitNavigation: Bool
 
@@ -399,7 +399,7 @@ private struct ReidentifiedSourceFixture: View {
         selectedFileID: "README.md"),
       mode: $state.mode, saveState: .savedToGitHub
     ) {
-      MarkdownEditorView(session: session)
+      EditorView(session: session)
         .id(state.identity)
         .transition(.opacity)
     } preview: {

@@ -6,9 +6,9 @@
 
   @Suite(.serialized)
   @MainActor
-  struct FormattingSessionTests {
+  struct EditorFormattingTests {
     @Test func formattingIsOneNativeUndoWithFinalSelection() throws {
-      let session = DocumentSession(documentID: "format", text: "A 日本語 note")
+      let session = Editor(fileID: "format", text: "A 日本語 note")
       let window = hostEditor(session)
       defer { window.isHidden = true }
       let originalSelection = (session.text as NSString).range(of: "日本語")
@@ -16,12 +16,12 @@
       session.textView.undoManager?.removeAllActions()
       var savedSelection: NSRange?
       var changes = 0
-      session.onSourceChange = { _, _ in
+      session.onEdit = { _, _ in
         savedSelection = session.textView.selectedRange
         changes += 1
       }
       let edit = try #require(
-        try MarkdownFormatting.edit(.bold, in: session.text, selection: originalSelection))
+        try Formatting.edit(.bold, in: session.text, selection: originalSelection))
       try session.apply(edit, generation: 0)
       #expect(session.text == "A **日本語** note")
       #expect(session.textView.selectedRange == edit.selection)
@@ -39,18 +39,18 @@
     }
 
     @Test func staleLinkAndInvalidResultSelectionNeverChangeSource() throws {
-      let session = DocumentSession(documentID: "link", text: "note")
+      let session = Editor(fileID: "link", text: "note")
       let edit = try #require(
-        try MarkdownFormatting.edit(
+        try Formatting.edit(
           .link(label: "note", destination: "https://example.com"),
           in: session.text, selection: NSRange(location: 0, length: 4)))
-      #expect(throws: SourceEdit.MutationError.staleGeneration) {
+      #expect(throws: Edit.MutationError.staleGeneration) {
         try session.apply(edit, generation: 1)
       }
-      let invalid = SourceEdit(
+      let invalid = Edit(
         range: edit.range, expected: edit.expected, replacement: edit.replacement,
         selection: NSRange(location: 900, length: 0))
-      #expect(throws: SourceEdit.MutationError.invalidRange) {
+      #expect(throws: Edit.MutationError.invalidRange) {
         try session.apply(invalid, generation: 0)
       }
       #expect(session.text == "note")
@@ -58,27 +58,27 @@
     }
 
     @Test func compositionWritingToolsAndReadOnlyBlockFormatting() throws {
-      let session = DocumentSession(documentID: "blocked", text: "note")
+      let session = Editor(fileID: "blocked", text: "note")
       let window = hostEditor(session)
       defer { window.isHidden = true }
       let edit = try #require(
-        try MarkdownFormatting.edit(
+        try Formatting.edit(
           .bold, in: session.text, selection: NSRange(location: 0, length: 4)))
       session.textViewWritingToolsWillBegin(session.textView)
-      session.presentFind()
+      session.find()
       #expect(session.inputError != nil)
       #expect(session.textView.findInteraction?.isFindNavigatorVisible == false)
       session.inputError = nil
-      #expect(throws: SourceEdit.MutationError.compositionActive) {
+      #expect(throws: Edit.MutationError.compositionActive) {
         try session.apply(edit, generation: 0)
       }
       session.textViewWritingToolsDidEnd(session.textView)
       session.textView.setMarkedText("日本", selectedRange: NSRange(location: 2, length: 0))
       #expect(!session.canFormat)
-      session.presentFind()
+      session.find()
       #expect(session.inputError != nil)
       #expect(session.textView.findInteraction?.isFindNavigatorVisible == false)
-      #expect(throws: SourceEdit.MutationError.compositionActive) {
+      #expect(throws: Edit.MutationError.compositionActive) {
         try session.apply(edit, generation: 0)
       }
       session.textView.unmarkText()
@@ -89,13 +89,13 @@
 
     @Test func smartTypingYieldsToCompositionWritingToolsAndProtectedSyntax() {
       for source in ["```\n- code", "---\n- metadata", "Ordinary prose"] {
-        let session = DocumentSession(documentID: "protected", text: source)
+        let session = Editor(fileID: "protected", text: source)
         let caret = NSRange(location: source.utf16.count, length: 0)
         #expect(
           session.textView(session.textView, shouldChangeTextIn: caret, replacementText: "\n"))
         #expect(session.text == source)
       }
-      let session = DocumentSession(documentID: "composing", text: "- note")
+      let session = Editor(fileID: "composing", text: "- note")
       let window = hostEditor(session)
       defer { window.isHidden = true }
       session.textViewWritingToolsWillBegin(session.textView)
@@ -115,7 +115,7 @@
     }
 
     @Test func indentAndOutdentRetainSelectionAndNativeUndo() throws {
-      let session = DocumentSession(documentID: "indent", text: "- 日本語\n- next")
+      let session = Editor(fileID: "indent", text: "- 日本語\n- next")
       let window = hostEditor(session)
       defer { window.isHidden = true }
       let original = session.text
@@ -132,10 +132,10 @@
     }
 
     @Test func keyboardBarBoldEditsTheSessionAndPhotoNeedsTheCapability() throws {
-      let session = DocumentSession(documentID: "accessory", text: "A note")
+      let session = Editor(fileID: "accessory", text: "A note")
       let window = hostEditor(session, insertPhoto: {}, canInsertPhoto: false)
       defer { window.isHidden = true }
-      let toolbar = try #require(session.textView.inputAccessoryView as? SourceAccessoryView)
+      let toolbar = try #require(session.textView.inputAccessoryView as? KeyboardBar)
       let items = toolbar.buttons.arrangedSubviews.compactMap { $0 as? UIButton }
       let style = try #require(items.first { $0.accessibilityLabel == "Text Style" }?.menu)
       let bold = try #require(menuActions(style.children).first { $0.title == "Bold" })
@@ -157,12 +157,12 @@
     }
 
     @Test func intelligenceAccessoryInvokesItsCallbackWithoutChangingSource() throws {
-      let session = DocumentSession(documentID: "intelligence-button", text: "A note")
+      let session = Editor(fileID: "intelligence-button", text: "A note")
       var requests = 0
       let window = hostEditor(session, intelligence: { requests += 1 })
       defer { window.isHidden = true }
       session.textView.undoManager?.removeAllActions()
-      let toolbar = try #require(session.textView.inputAccessoryView as? SourceAccessoryView)
+      let toolbar = try #require(session.textView.inputAccessoryView as? KeyboardBar)
       let button = try #require(
         toolbar.buttons.arrangedSubviews.compactMap { $0 as? UIButton }.first {
           $0.accessibilityIdentifier == "editor-intelligence"
@@ -176,11 +176,11 @@
     }
 
     @Test func nativeFindAndReplaceKeepsURLReplacementsLiteral() throws {
-      let session = DocumentSession(documentID: "find", text: "A note and another note")
+      let session = Editor(fileID: "find", text: "A note and another note")
       let window = hostEditor(session)
       defer { window.isHidden = true }
       let interaction = try #require(session.textView.findInteraction)
-      session.presentFind(replacing: true)
+      session.find(replacing: true)
       defer { interaction.dismissFindNavigator() }
       #expect(interaction.isFindNavigatorVisible)
       let find = try #require(interaction.activeFindSession)

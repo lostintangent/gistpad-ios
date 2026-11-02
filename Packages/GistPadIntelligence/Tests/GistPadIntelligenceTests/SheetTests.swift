@@ -12,7 +12,7 @@
     private let source = NoteModelFixture.source
 
     @Test func nothingChangesUntilApplyAndApplyIsOneUndo() async throws {
-      let session = DocumentSession(documentID: "apply-undo", text: source)
+      let session = Editor(fileID: "apply-undo", text: source)
       let window = host(session)
       defer { window.isHidden = true }
       let undo = try #require(session.textView.undoManager)
@@ -23,7 +23,7 @@
       try await Task.sleep(for: .milliseconds(30))
       let typed = source + "!"
       var changes = 0
-      session.onSourceChange = { _, _ in changes += 1 }
+      session.onEdit = { _, _ in changes += 1 }
       let model = NoteIntelligenceModel(session: session, backend: NoteModelFixture())
       model.action = .edit
       model.editPrompt = "Fix the typo and the time"
@@ -75,9 +75,9 @@
       .answer([ModelAnswerPart(kind: .prose, text: "The user leaves at 9am.")]),
     ])
     func everyFailedAskShowsAReasonAndKeepsTheRequestAndFile(failure: AskFailure) async {
-      let session = DocumentSession(documentID: "failed-ask", text: source)
+      let session = Editor(fileID: "failed-ask", text: source)
       var changes = 0
-      session.onSourceChange = { _, _ in changes += 1 }
+      session.onEdit = { _, _ in changes += 1 }
       let fixture = NoteModelFixture()
       switch failure {
       case .unavailable: fixture.unavailableReason = "Apple Intelligence is turned off."
@@ -100,7 +100,7 @@
     }
 
     @Test func cancelKeepsTheRequestAndTheFile() async {
-      let session = DocumentSession(documentID: "cancel", text: source)
+      let session = Editor(fileID: "cancel", text: source)
       let fixture = NoteModelFixture()
       fixture.delay = .seconds(5)
       let model = NoteIntelligenceModel(session: session, backend: fixture)
@@ -125,7 +125,7 @@
     }
 
     @Test func aReadOnlyFileAllowsAskAndReviewButNotEditOrApply() async {
-      let session = DocumentSession(documentID: "read-only", text: source)
+      let session = Editor(fileID: "read-only", text: source)
       session.textView.isEditable = false
       let model = NoteIntelligenceModel(session: session, backend: NoteModelFixture())
       await model.checkAvailability()
@@ -149,8 +149,8 @@
     func aCitationIntoHiddenFrontMatterShowsItsQuoteWithoutShowInFile(shown: Bool) async throws {
       let prefix = "---\nkey: e\u{301} 👩🏽‍💻\n---\n\n"
       let text = prefix + "# Content\n\nA retained thought."
-      let session = DocumentSession(
-        documentID: "front-matter", text: text, generation: 8, showsFrontMatter: shown)
+      let session = Editor(
+        fileID: "front-matter", text: text, generation: 8, showsFrontMatter: shown)
       let fixture = NoteModelFixture()
       fixture.answer = [
         ModelAnswerPart(kind: .prose, text: "Your key is set."),
@@ -175,8 +175,8 @@
       #expect(session.generation == 8)
     }
 
-    private func host(_ session: DocumentSession) -> UIWindow {
-      let controller = UIHostingController(rootView: MarkdownEditorView(session: session))
+    private func host(_ session: Editor) -> UIWindow {
+      let controller = UIHostingController(rootView: EditorView(session: session))
       let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
       window.rootViewController = controller
       window.makeKeyAndVisible()

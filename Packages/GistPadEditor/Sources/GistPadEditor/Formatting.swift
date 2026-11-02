@@ -1,7 +1,7 @@
 import Foundation
 
 /// One change to a note's source, with UTF-16 offsets.
-public struct SourceEdit: Sendable {
+public struct Edit: Sendable {
   public let range: NSRange
   public let expected: String
   public let replacement: String
@@ -79,7 +79,7 @@ public struct SourceEdit: Sendable {
   }
 }
 
-extension SourceEdit.MutationError: LocalizedError {
+extension Edit.MutationError: LocalizedError {
   public var errorDescription: String? {
     switch self {
     case .compositionActive:
@@ -95,23 +95,23 @@ extension SourceEdit.MutationError: LocalizedError {
   }
 }
 
-enum MarkdownFormat: Sendable {
+enum Format: Sendable {
   case heading(Int)
   case bold, italic, bulletList, numberedList, checklist, quote
   case inlineCode, codeBlock
   case link(label: String, destination: String)
 }
 
-enum MarkdownFormatting {
+enum Formatting {
   enum FormattingError: Error, Equatable {
     case invalidHeadingLevel, invalidLink
   }
 
   static func edit(
-    _ format: MarkdownFormat, in source: String, selection: NSRange
-  ) throws -> SourceEdit? {
+    _ format: Format, in source: String, selection: NSRange
+  ) throws -> Edit? {
     let text = source as NSString
-    let selected = try SourceEdit.text(in: source, at: selection)
+    let selected = try Edit.text(in: source, at: selection)
     switch format {
     case .bold:
       return wrapped("**", source: source, selection: selection, selected: selected)
@@ -128,7 +128,7 @@ enum MarkdownFormatting {
           && !selected.allSatisfy(\.isWhitespace))
       let padding = padded ? " " : ""
       let replacement = delimiter + padding + selected + padding + delimiter
-      return SourceEdit(
+      return Edit(
         range: selection, expected: selected, replacement: replacement,
         selection: NSRange(
           location: selection.location + delimiter.utf16.count + padding.utf16.count,
@@ -150,7 +150,7 @@ enum MarkdownFormatting {
         .replacingOccurrences(of: "[", with: "\\[")
         .replacingOccurrences(of: "]", with: "\\]")
       let replacement = "[\(title)](\(escaped))"
-      return SourceEdit(
+      return Edit(
         range: selection, expected: selected, replacement: replacement,
         selection: NSRange(location: selection.location + replacement.utf16.count, length: 0))
     case .codeBlock:
@@ -162,7 +162,7 @@ enum MarkdownFormatting {
       let terminator = endsLine ? "" : newline
       let trailing = endsLine ? newline : ""
       let opening = fence + newline
-      return SourceEdit(
+      return Edit(
         range: block, expected: content,
         replacement: opening + content + terminator + fence + trailing,
         selection: NSRange(
@@ -177,7 +177,7 @@ enum MarkdownFormatting {
 
   private static func unwrappedCode(
     in source: String, selection: NSRange, selected: String
-  ) -> SourceEdit? {
+  ) -> Edit? {
     let text = source as NSString
     var opening = selection.location
     var closing = NSMaxRange(selection)
@@ -195,7 +195,7 @@ enum MarkdownFormatting {
     let before = selection.location - opening - padding
     if before > longestBacktickRun(selected), closing - NSMaxRange(selection) - padding == before {
       let enclosing = NSRange(location: opening, length: closing - opening)
-      return SourceEdit(
+      return Edit(
         range: enclosing, expected: text.substring(with: enclosing), replacement: selected,
         selection: NSRange(location: opening, length: selected.utf16.count))
     }
@@ -208,14 +208,14 @@ enum MarkdownFormatting {
     if content.hasPrefix(" "), content.hasSuffix(" "), !content.allSatisfy(\.isWhitespace) {
       content = String(content.dropFirst().dropLast())
     }
-    return SourceEdit(
+    return Edit(
       range: selection, expected: selected, replacement: content,
       selection: NSRange(location: selection.location, length: content.utf16.count))
   }
 
   private static func wrapped(
     _ marker: String, source: String, selection: NSRange, selected: String
-  ) -> SourceEdit {
+  ) -> Edit {
     let text = source as NSString
     let count = marker.utf16.count
     let italicSelection =
@@ -227,7 +227,7 @@ enum MarkdownFormatting {
     {
       let content = (selected as NSString).substring(
         with: NSRange(location: count, length: selected.utf16.count - count * 2))
-      return SourceEdit(
+      return Edit(
         range: selection, expected: selected, replacement: content,
         selection: NSRange(location: selection.location, length: content.utf16.count))
     }
@@ -243,18 +243,18 @@ enum MarkdownFormatting {
     {
       let enclosing = NSRange(
         location: selection.location - count, length: selection.length + count * 2)
-      return SourceEdit(
+      return Edit(
         range: enclosing, expected: text.substring(with: enclosing), replacement: selected,
         selection: NSRange(location: enclosing.location, length: selected.utf16.count))
     }
-    return SourceEdit(
+    return Edit(
       range: selection, expected: selected, replacement: marker + selected + marker,
       selection: NSRange(location: selection.location + count, length: selection.length))
   }
 
   private static func lines(
-    _ format: MarkdownFormat, in source: String, selection: NSRange
-  ) -> SourceEdit? {
+    _ format: Format, in source: String, selection: NSRange
+  ) -> Edit? {
     let text = source as NSString
     let block = lineRange(in: text, selection: selection)
     let content = text.substring(with: block)
@@ -316,7 +316,7 @@ enum MarkdownFormatting {
       (prefixes.map { (range: $0.range, replacement: remove ? "" : $0.marker) }
       + suffixes.map { (range: $0, replacement: "") })
       .sorted { $0.range.location < $1.range.location }
-    let edit = SourceEdit(
+    let edit = Edit(
       range: block, expected: content, replacements: changes, selection: selection)
     return edit.replacement.utf8.elementsEqual(content.utf8) ? nil : edit
   }

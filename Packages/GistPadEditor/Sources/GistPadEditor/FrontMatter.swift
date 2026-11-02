@@ -1,6 +1,6 @@
 import Foundation
 
-public enum MarkdownFrontMatter {
+public enum FrontMatter {
   public static func contentStart(in text: String) -> Int {
     let source = text as NSString
     guard source.length > 0 else { return 0 }

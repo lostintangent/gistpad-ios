@@ -166,7 +166,7 @@ struct LiveNotebookWorkspace: View {
   /// Opens the comments a library row asked for, once its note is the active one.
   private func openRequestedComments() {
     guard let active, comments.requestedRowID == active.document.rowID,
-      comments.sessionID == active.session.viewIdentity
+      comments.sessionID == active.session.id
     else { return }
     comments.requestedRowID = nil
     comments.open(for: active)
@@ -398,7 +398,7 @@ struct LiveNotebookWorkspace: View {
       isSidebarHidden: columnVisibility == .detailOnly,
       areCommentsPresented: comments.isPresented && comments.matches(controller.document)
     ) {
-      MarkdownEditorView(
+      EditorView(
         session: controller.session,
         insertPhoto: { comments.performAfterClosing { photos.choosePhoto() } },
         canInsertPhoto: photos.canChoosePhoto,
@@ -406,7 +406,7 @@ struct LiveNotebookWorkspace: View {
         comments: commentConfiguration(controller),
         onOpenCommentThreads: commentOpener(controller, origin: .source),
         onLinkedCommentIDsChange: { ids in
-          guard comments.sessionID == controller.session.viewIdentity else { return }
+          guard comments.sessionID == controller.session.id else { return }
           comments.sourceLinkedIDs = ids
         },
         onAddComment: commentComposer(controller, origin: .source))
@@ -436,13 +436,13 @@ struct LiveNotebookWorkspace: View {
               await controller.inspectRemoteChanges()
             }
           }
-          .id(controller.session.viewIdentity)
+          .id(controller.session.id)
         }
         .sharedBackgroundVisibility(.hidden)
       }
     }
     .task(id: CommentReadInput(
-      session: controller.session.viewIdentity, gistID: controller.document.gist?.id,
+      session: controller.session.id, gistID: controller.document.gist?.id,
       knownTotal: controller.document.gist?.commentCount,
       isReady: notebook.account?.id == controller.draft.accountID
         && notebook.pendingAccount == nil && !notebook.isSigningIn && !notebook.isSigningOut,
@@ -469,7 +469,7 @@ struct LiveNotebookWorkspace: View {
       comments: commentConfiguration(controller),
       onOpenCommentThreads: commentOpener(controller, origin: .reading),
       onLinkedCommentIDsChange: { ids in
-        guard comments.sessionID == controller.session.viewIdentity else { return }
+        guard comments.sessionID == controller.session.id else { return }
         comments.previewLinkedIDs = ids
       },
       onAddComment: commentComposer(controller, origin: .reading),
@@ -482,7 +482,7 @@ struct LiveNotebookWorkspace: View {
           notebook.documentError = String(localized: "No note with that title is in your library.")
         }
       })
-      .id(controller.session.viewIdentity)
+      .id(controller.session.id)
   }
 
   private func commentConfiguration(
@@ -504,7 +504,7 @@ struct LiveNotebookWorkspace: View {
   ) -> (@MainActor ([Int64]) -> Void)? {
     guard NotebookCommentsPresentation.supports(controller.document) else { return nil }
     return { ids in
-      guard comments.sessionID == controller.session.viewIdentity else { return }
+      guard comments.sessionID == controller.session.id else { return }
       if ids.count == 1, let id = ids.first {
         comments.open(for: controller, origin: origin, rootID: id)
       } else if !ids.isEmpty {
@@ -522,7 +522,7 @@ struct LiveNotebookWorkspace: View {
   ) -> (@MainActor (String) -> Void)? {
     guard NotebookCommentsPresentation.supports(controller.document) else { return nil }
     return { selection in
-      guard comments.sessionID == controller.session.viewIdentity else { return }
+      guard comments.sessionID == controller.session.id else { return }
       comments.open(for: controller, origin: origin, quote: selection)
     }
   }
@@ -629,7 +629,7 @@ struct LiveNotebookWorkspace: View {
     }
     actions.find = {
       controller.mode = .source
-      controller.session.presentFind(replacing: true)
+      controller.session.find(replacing: true)
     }
     actions.intelligence = { presentIntelligence(controller) }
     if !controller.document.isRecovery, let gist = controller.document.gist {

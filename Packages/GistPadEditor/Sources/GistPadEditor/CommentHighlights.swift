@@ -5,14 +5,14 @@
   import UIKit
 
   @MainActor
-  final class SourceCommentAnnotations: NSObject, UIGestureRecognizerDelegate {
+  final class CommentHighlights: NSObject, UIGestureRecognizerDelegate {
     static let annotationKey = NSAttributedString.Key("dev.gistpad.comment.highlight")
     private struct Passage {
       let highlight: CommentQuoteHighlight
       let fill: UIColor
       let selected: Bool
     }
-    private unowned let session: DocumentSession
+    private unowned let session: Editor
     private let backgroundLayer = CALayer()
     private var configuration = CommentHighlightConfiguration()
     private var onOpen: (@MainActor ([Int64]) -> Void)?
@@ -37,7 +37,7 @@
     private lazy var selectionTap = UITapGestureRecognizer(
       target: self, action: #selector(selectTappedWord))
 
-    init(session: DocumentSession) {
+    init(session: Editor) {
       self.session = session
       super.init()
       session.textView.layer.insertSublayer(backgroundLayer, at: 0)
@@ -254,7 +254,7 @@
       guard onAdd != nil, !suspendsForFind, !suspendsForWritingTools,
         ranges.count == 1, let range = ranges.first, session.isSettled,
         range.location >= session.contentStart,
-        let quote = try? SourceEdit.text(in: session.text, at: range),
+        let quote = try? Edit.text(in: session.text, at: range),
         CommentQuoteMatcher.isEligibleSelection(quote)
       else { return nil }
       return UIAction(
