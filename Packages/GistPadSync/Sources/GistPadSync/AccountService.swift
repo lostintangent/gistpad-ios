@@ -110,9 +110,13 @@ public actor AccountService {
     private let authEvents: Task<Void, Never>
     private let publishableKey: String
     private let httpSession: URLSession
+    private let launchFlow: LaunchFlow?
     private var signingIn = false
     private var signingOut = false
     private var updatingPreferences = false
+
+    /// Stands in for the system web session: it gets the sign-in URL and returns the callback.
+    typealias LaunchFlow = @MainActor @Sendable (URL) async throws -> URL
 
     public init(
         publishableKey: String,
@@ -120,9 +124,20 @@ public actor AccountService {
         session: URLSession? = nil,
         automaticallyRefreshesToken: Bool = true
     ) throws {
+        try self.init(
+            publishableKey: publishableKey, credentials: credentials, session: session,
+            automaticallyRefreshesToken: automaticallyRefreshesToken, launchFlow: nil)
+    }
+
+    /// An account whose `signIn()` goes through `launchFlow`. The fixture server uses this.
+    init(
+        publishableKey: String, credentials: any AuthLocalStorage, session: URLSession?,
+        automaticallyRefreshesToken: Bool, launchFlow: LaunchFlow?
+    ) throws {
         guard Self.isPublishableKey(publishableKey) else {
             throw AccountError.invalidConfiguration
         }
+        self.launchFlow = launchFlow
         self.credentials = credentials
         self.publishableKey = publishableKey
         let session = session ?? GitHubClient.makeSession()
@@ -177,12 +192,12 @@ public actor AccountService {
 
     @discardableResult
     public func signIn() async throws -> Account {
-        try await signIn(launchFlow: nil)
+        try await signIn(launchFlow: launchFlow)
     }
 
-    /// Signs in through `launchFlow` instead of the system web session. The fixture server uses this.
+    /// Signs in through `launchFlow` instead of the system web session.
     @discardableResult
-    func signIn(launchFlow: (@MainActor @Sendable (URL) async throws -> URL)?) async throws -> Account {
+    func signIn(launchFlow: LaunchFlow?) async throws -> Account {
         guard !signingIn, !signingOut, !updatingPreferences else { throw AccountError.signInInProgress }
         signingIn = true
         defer { signingIn = false }

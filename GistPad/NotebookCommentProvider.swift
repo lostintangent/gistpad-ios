@@ -7,15 +7,7 @@ struct NotebookCommentServices: Sendable {
   let userID: Int64
 }
 
-protocol NotebookCommentProviding: Sendable {
-  func commentServices(accountID: UUID) async throws -> NotebookCommentServices
-}
-
-enum NotebookCommentError: Error {
-  case unavailable
-}
-
-extension LiveNotebookProvider: NotebookCommentProviding {
+extension LiveNotebookProvider {
   func commentServices(accountID: UUID) async throws -> NotebookCommentServices {
     guard let account = try await accounts.cachedAccount(), account.id == accountID else {
       throw AccountError.accountChanged

@@ -19,47 +19,8 @@ struct NotebookWriteFailure {
   let recovery: NotebookRemoteReadProblem.Recovery
 }
 
-protocol NotebookProviding: Sendable {
-  func cachedAccount() async throws -> Account?
-  func connectedAccount() async throws -> Account?
-  func signIn() async throws -> Account
-  func refreshAccount() async throws -> Account
-  func gists(accountID: UUID) async throws -> [Gist]
-  func starredGists(accountID: UUID) async throws -> [Gist]
-  func gist(id: String, accountID: UUID) async throws -> Gist
-  func content(gist: Gist, filename: String, accountID: UUID) async throws -> String
-  func openDraft(for document: NotebookDocument) async throws -> DraftSnapshot
-  func persist(draftID: UUID, accountID: UUID, text: String, generation: UInt64) async throws
-    -> DraftSnapshot
-  func publish(
-    draftID: UUID, accountID: UUID, reason: PublishReason,
-    expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
-  ) async throws -> DraftSnapshot
-  func localState(accountID: UUID) async throws -> NotebookLocalState
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<String>)
-    async throws
-  func createDraft(accountID: UUID) async throws -> DraftSnapshot
-  func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool
-  func today(accountID: UUID, target: DailyNoteTarget) async throws -> TodayNote
-  func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult
-  func uploadPhoto(_ png: Data, gistID: String, accountID: UUID) async throws -> URL
-}
-
-extension NotebookProviding {
-  func connectedAccount() async throws -> Account? {
-    try await cachedAccount()
-  }
-
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
-    try await cacheLibrary(owned: owned, starred: starred, account: account, keeping: [])
-  }
-
-  func uploadPhoto(_ png: Data, gistID: String, accountID: UUID) async throws -> URL {
-    throw CocoaError(.featureUnsupported)
-  }
-}
-
-actor LiveNotebookProvider: NotebookProviding {
+/// GitHub, the account and the drafts on this iPhone, behind one actor the notebook talks to.
+actor LiveNotebookProvider {
   let accounts: AccountService
   let drafts: DraftStore
   let mutationQueue = NotebookMutationQueue()
@@ -157,7 +118,7 @@ actor LiveNotebookProvider: NotebookProviding {
     return NotebookLocalState(library: library, drafts: localDrafts)
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<String>)
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<String> = [])
     async throws
   {
     try await drafts.cacheLibrary(
@@ -336,7 +297,7 @@ final class NotebookModel {
   var isForeground = false
   private(set) var isApplying = false
 
-  @ObservationIgnored private let provider: any NotebookProviding
+  @ObservationIgnored private let provider: LiveNotebookProvider
   @ObservationIgnored private let selections: NotebookSelectionStore
   @ObservationIgnored private var libraryRequest = UUID()
   @ObservationIgnored private var documentRequest = UUID()
@@ -344,7 +305,7 @@ final class NotebookModel {
     subsystem: "dev.gistpad.GistPad", category: "Notebook")
 
   init(
-    provider: any NotebookProviding, selections: NotebookSelectionStore = NotebookSelectionStore()
+    provider: LiveNotebookProvider, selections: NotebookSelectionStore = NotebookSelectionStore()
   ) {
     self.provider = provider
     self.selections = selections
@@ -1050,9 +1011,6 @@ final class NotebookModel {
 
   func commentServices(accountID: UUID) async throws -> NotebookCommentServices {
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
-    guard let provider = provider as? any NotebookCommentProviding else {
-      throw NotebookCommentError.unavailable
-    }
     return try await provider.commentServices(accountID: accountID)
   }
 

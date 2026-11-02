@@ -56,12 +56,13 @@ public final class FixtureServer: Sendable {
     public func accounts() throws -> AccountService {
         try AccountService(
             publishableKey: "sb_publishable_fixture", credentials: credentials, session: session,
-            automaticallyRefreshesToken: false)
+            automaticallyRefreshesToken: false,
+            launchFlow: { _ in URL(string: "gistpad://auth-callback?code=fixture")! })
     }
 
     @discardableResult
     public func signIn(_ accounts: AccountService) async throws -> Account {
-        try await accounts.signIn { _ in URL(string: "gistpad://auth-callback?code=fixture")! }
+        try await accounts.signIn()
     }
 
     /// The gists on GitHub right now, newest first.

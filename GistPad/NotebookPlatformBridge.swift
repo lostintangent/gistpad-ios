@@ -52,7 +52,7 @@ final class NotebookPlatformBridge: NotebookIntentServing {
     weak var value: NotebookSessionController?
   }
 
-  private let provider: any NotebookProviding
+  private let provider: LiveNotebookProvider
   private let store: DraftStore
   private weak var notebook: NotebookModel?
   private var sessions: [UUID: WeakSession] = [:]
@@ -60,7 +60,7 @@ final class NotebookPlatformBridge: NotebookIntentServing {
   private var operation: Task<Void, Never>?
   private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "SystemIntegration")
 
-  init(provider: any NotebookProviding, store: DraftStore, notebook: NotebookModel) {
+  init(provider: LiveNotebookProvider, store: DraftStore, notebook: NotebookModel) {
     self.provider = provider
     self.store = store
     self.notebook = notebook
