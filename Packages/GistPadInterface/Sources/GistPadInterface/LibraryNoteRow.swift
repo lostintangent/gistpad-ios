@@ -15,16 +15,29 @@ struct LibraryNoteRow: View {
     var body: some View {
         TimelineView(.everyMinute) { context in
             let count = note.visibleCommentCount
-            // Daily notes stay one line, and only tagged notes earn a second line.
+            // Daily notes stay one line, and only tagged notes earn a tag line.
             let rowTags = note.isDailyNote ? [] : tags
+            // At accessibility sizes the row stacks, so the count joins the date
+            // and the tag line holds only tags.
+            let isStacked = dynamicTypeSize.isAccessibilitySize
+            let countOnTitleLine = isStacked || rowTags.isEmpty
             VStack(alignment: .leading, spacing: lineSpacing) {
-                titleRow(relativeTo: context.date, count: rowTags.isEmpty ? count : nil)
+                if isStacked {
+                    titleContent(relativeTo: context.date)
+                    metadata(relativeTo: context.date, count: count)
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        titleContent(relativeTo: context.date)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        metadata(relativeTo: context.date, count: countOnTitleLine ? count : nil)
+                    }
+                }
                 if !rowTags.isEmpty {
                     HStack(spacing: 8) {
                         TagLabels(tags: rowTags, limit: 2)
                             .captureFrame("note-tags-\(note.id)")
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        if let count {
+                        if let count, !countOnTitleLine {
                             LibraryCommentCount(count: count, noteID: note.id)
                                 .font(.footnote)
                         }
@@ -35,32 +48,6 @@ struct LibraryNoteRow: View {
             .accessibilityElement(children: .combine)
             .accessibilityValue(Text(verbatim: note.accessibilityDetail))
             .captureFrame("note-content-\(note.id)")
-        }
-    }
-
-    @ViewBuilder
-    private func titleRow(relativeTo now: Date, count: Int?) -> some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            // A title too long to share its line moves the metadata beneath it.
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    titleContent(relativeTo: now)
-                        .fixedSize(horizontal: true, vertical: false)
-                    Spacer(minLength: 8)
-                    trailingMetadata(relativeTo: now, count: count)
-                }
-                VStack(alignment: .trailing, spacing: lineSpacing) {
-                    titleContent(relativeTo: now)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    trailingMetadata(relativeTo: now, count: count)
-                }
-            }
-        } else {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                titleContent(relativeTo: now)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                trailingMetadata(relativeTo: now, count: count)
-            }
         }
     }
 
@@ -81,7 +68,7 @@ struct LibraryNoteRow: View {
     }
 
     @ViewBuilder
-    private func trailingMetadata(relativeTo now: Date, count: Int?) -> some View {
+    private func metadata(relativeTo now: Date, count: Int?) -> some View {
         let updated = updateLabel(relativeTo: now)
         if note.isDailyNote {
             if let progress = note.progress, progress.total > 0 {

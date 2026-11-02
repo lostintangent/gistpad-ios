@@ -146,15 +146,16 @@ struct LibraryRowHostTests {
     #expect(content.contains(title))
     #expect(content.contains(progress))
     #expect(!title.intersects(progress))
-    #expect(abs(progress.maxX - content.maxX) <= 1)
     #expect(abs(title.minY - content.minY - padding) <= 1)
     #expect(abs(content.maxY - max(title.maxY, progress.maxY) - padding) <= 1)
     #expect(!descendants(window).contains {
       $0.accessibilityIdentifier == "capture-frame-note-tags-shelf-progress"
     })
-    if size == .accessibility3 && width == 280 {
+    if size.isAccessibilitySize {
       #expect(progress.minY >= title.maxY)
-    } else if size == .large {
+      #expect(abs(progress.minX - title.minX) <= 1)
+    } else {
+      #expect(abs(progress.maxX - content.maxX) <= 1)
       #expect(progress.midY >= title.minY && progress.midY <= title.maxY)
     }
   }
@@ -212,7 +213,6 @@ struct LibraryRowHostTests {
       CGSize(width: title.width, height: .greatestFiniteMagnitude)).height
     #expect(content.contains(title))
     #expect(content.contains(date))
-    #expect(abs(date.maxX - content.maxX) <= 1)
     #expect(count.maxX <= date.minX)
     #expect(count.midY > date.minY && count.midY < date.maxY)
     #expect(abs(title.minY - content.minY - padding) <= 1)
@@ -223,7 +223,9 @@ struct LibraryRowHostTests {
     if size.isAccessibilitySize {
       #expect(title.height > twoLineHeight)
       #expect(date.minY >= title.maxY)
+      #expect(abs(count.minX - title.minX) <= 1)
     } else {
+      #expect(abs(date.maxX - content.maxX) <= 1)
       #expect(title.height <= twoLineHeight + 1)
       #expect(date.midY > title.minY && date.midY < title.maxY)
       #expect(title.maxX <= count.minX)

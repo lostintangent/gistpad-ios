@@ -420,16 +420,19 @@ struct LibraryHostTests {
     let count = try frame("comment-count")
     #expect(measured.width == 324)
     #expect(tagLine.minY >= max(title.maxY, date.maxY))
-    #expect(count.midY > tagLine.minY && count.midY < tagLine.maxY)
-    #expect(count.minX >= tagLine.maxX)
     if size == .large {
       #expect(date.midY > title.minY && date.midY < title.maxY)
       #expect(date.minX >= title.maxX)
+      #expect(count.midY > tagLine.minY && count.midY < tagLine.maxY)
+      #expect(count.minX >= tagLine.maxX)
       #expect(measured.height <= 100)
       #expect(tagLine.height <= 30)
     } else {
-      // The wrapped title moves the date beneath it rather than narrowing either.
+      // Accessibility sizes stack leading-aligned: title, count and date, then only tags.
       #expect(date.minY >= title.maxY)
+      #expect(count.midY > date.minY && count.midY < date.maxY)
+      #expect(count.maxX <= date.minX)
+      #expect(abs(count.minX - title.minX) <= 1)
       #expect(measured.height > 128)
       #expect(tagLine.height > 30)
     }
