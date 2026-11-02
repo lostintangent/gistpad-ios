@@ -1,11 +1,12 @@
 import GistPadPlatform
+import GistPadSync
 import SwiftUI
 
 @main
 struct GistPadApp: App {
   @State private var notebook: NotebookModel?
   @State private var loadError: String?
-  @State private var routeError: String?
+  @State private var cannotOpenLink = false
 
   init() {
     NotebookPlatformBootstrap.install()
@@ -28,7 +29,7 @@ struct GistPadApp: App {
       guard let key = Bundle.main.object(forInfoDictionaryKey: "SupabasePublishableKey") as? String,
         !key.isEmpty, !key.contains("$(")
       else {
-        throw NotebookConfigurationError.missingPublicKey
+        throw AccountError.invalidConfiguration
       }
       notebook = try NotebookPlatformBootstrap.notebook(publishableKey: key)
     } catch {
@@ -76,29 +77,14 @@ struct GistPadApp: App {
         if let route = NotebookRoute(url: url) {
           NotebookRouteInbox.shared.submit(route)
         } else {
-          routeError = String(localized: "GistPad can't open this link.")
+          cannotOpenLink = true
         }
       }
-      .alert("Cannot Open Link", isPresented: Binding(
-        get: { routeError != nil },
-        set: { if !$0 { routeError = nil } })
-      ) {
-        Button("OK") { routeError = nil }
+      .alert("Cannot Open Link", isPresented: $cannotOpenLink) {
       } message: {
-        Text(routeError ?? "")
+        Text("GistPad can't open this link.")
       }
       .personalAccent(savedHex: notebook?.account?.preferences.accentColor)
     }
-  }
-}
-
-private enum NotebookConfigurationError: LocalizedError {
-  case missingPublicKey
-
-  var errorDescription: String? {
-    String(
-      localized:
-        "The public sign-in configuration is missing. Regenerate Public.xcconfig and rebuild the app."
-    )
   }
 }

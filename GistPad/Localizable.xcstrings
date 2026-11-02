@@ -1,28 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "%lld changes didn't reach GitHub." : {
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld change didn't reach GitHub."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld changes didn't reach GitHub."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "Comments" : {},
     "All files in this gist" : {},
     "Comments actions" : {},
@@ -42,9 +20,7 @@
     "A comment draft couldn’t be saved. Return to Comments for that note and try saving again." : {},
     "Finish composition or Writing Tools before opening Comments." : {},
     "Tap the note to resume writing." : {},
-    "Show Front Matter" : {
-
-    }
+    "Show Front Matter" : {}
   },
   "version" : "1.0"
 }

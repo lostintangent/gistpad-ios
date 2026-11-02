@@ -25,13 +25,13 @@ struct LiveNotebookWorkspace: View {
   @State private var isPerformingAction = false
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
   @State private var layout = NotebookLayoutPreferences()
-  @State private var archiveUndo: NotebookArchiveUndo?
   @State private var showingSettings = false
   @State private var showingAddToToday = false
   @State private var intelligence = NotebookIntelligencePresentation()
   @State private var comments: NotebookCommentsPresentation
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.openURL) private var openURL
+  @Environment(\.undoManager) private var undoManager
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -113,7 +113,7 @@ struct LiveNotebookWorkspace: View {
             if let active, active.document.refersToSameFile(as: document) {
               note(active, availableWidth: geometry.size.width)
             } else {
-              NotebookOpeningView(title: document.chrome.title, document: document)
+              NotebookOpeningView(title: notebook.chrome(for: document).title, document: document)
                 .id(document.id)
             }
           } else if let title = notebook.openingTitle {
@@ -259,7 +259,6 @@ struct LiveNotebookWorkspace: View {
     }
     .onChange(of: notebook.account?.id) { _, accountID in
       comments.reset()
-      archiveUndo = nil
       intelligence.target = nil
       if accountID == nil {
         sessions.removeAll()
@@ -308,27 +307,6 @@ struct LiveNotebookWorkspace: View {
     .sheet(isPresented: $showingShare) {
       if let shareURL {
         NotebookActivitySheet(item: .url(shareURL))
-      }
-    }
-    .safeAreaInset(edge: .bottom, spacing: 0) {
-      if let undo = archiveUndo, notebook.account?.id == undo.accountID {
-        HStack(spacing: 16) {
-          Label(
-            undo.wasArchived
-              ? String(localized: "Note unarchived") : String(localized: "Note archived"),
-            systemImage: "archivebox")
-          Spacer()
-          Button("Undo") {
-            run(.undoArchive(undo), accountID: undo.accountID)
-          }
-          .disabled(isPerformingAction)
-          Button("Dismiss", systemImage: "xmark") { archiveUndo = nil }
-            .labelStyle(.iconOnly)
-        }
-        .font(.subheadline)
-        .padding(.horizontal, 20)
-        .frame(minHeight: 44)
-        .background(.bar)
       }
     }
     .sheet(item: $sharingTarget) { target in
@@ -472,7 +450,7 @@ struct LiveNotebookWorkspace: View {
           localized: "A recovery or unpublished draft cannot be archived on GitHub.")
         return
       }
-      run(.archive(gistID: id, archived: !gist.isArchived), accountID: account.id)
+      setArchived(!gist.isArchived, gistID: id, accountID: account.id)
     }
     actions.delete = { rowID in
       guard let target = notebook.libraryDeletionTarget(for: rowID) else {
@@ -513,7 +491,7 @@ struct LiveNotebookWorkspace: View {
         return layout.presentedMode(
           availableWidth: availableWidth, sessionMode: controller.mode,
           isEditing: controller.session.isEditing,
-          canEdit: controller.document.chrome.access.canEdit)
+          canEdit: controller.chrome.access.canEdit)
       },
       set: {
         if comments.isPresented, comments.matches(controller.document) {
@@ -528,7 +506,7 @@ struct LiveNotebookWorkspace: View {
           controller.session.textView.resignFirstResponder()
         }
       })
-    var chrome = controller.document.chrome
+    var chrome = controller.chrome
     if comments.matches(controller.document) {
       chrome.commentCount = comments.conversation?.comments?.count ?? chrome.commentCount
     }
@@ -606,7 +584,7 @@ struct LiveNotebookWorkspace: View {
 
   private func preview(_ controller: NotebookSessionController) -> some View {
     SessionPreview(
-      session: controller.session, allowsMutations: controller.document.chrome.access.canEdit,
+      session: controller.session, allowsMutations: controller.chrome.access.canEdit,
       comments: commentConfiguration(controller),
       onOpenCommentThreads: commentOpener(controller, origin: .reading),
       onLinkedCommentIDsChange: { ids in
@@ -804,7 +782,7 @@ struct LiveNotebookWorkspace: View {
     actions.reviewChanges = {
       do {
         reviewTarget = .init(controller: controller, review: try controller.reviewContext())
-      } catch { actionMessage = NotebookModel.message(for: error) }
+      } catch { actionMessage = error.localizedDescription }
     }
     actions.reconnect = {
       Task {
@@ -821,7 +799,7 @@ struct LiveNotebookWorkspace: View {
       actions.tags = {
         tagTarget = NotebookTagTarget(
           accountID: controller.draft.accountID, gistID: gistID,
-          selected: Set(controller.document.chrome.tags.map(\.id)),
+          selected: Set(controller.chrome.tags.map(\.id)),
           canEdit: notebook.account?.id == controller.draft.accountID
             && notebook.pendingAccount == nil && !controller.document.isRecovery)
       }
@@ -830,18 +808,18 @@ struct LiveNotebookWorkspace: View {
           run(
             .preference(
               .setPinned(
-                gistID: gistID, pinned: !controller.document.chrome.isPinned)),
+                gistID: gistID, pinned: !controller.chrome.isPinned)),
             accountID: controller.draft.accountID)
         }
         actions.toggleStar = {
           run(
-            .star(gistID: gistID, starred: !controller.document.chrome.isStarred),
+            .star(gistID: gistID, starred: !controller.chrome.isStarred),
             accountID: controller.draft.accountID)
         }
-        if controller.document.chrome.access.canEdit {
+        if controller.chrome.access.canEdit {
           actions.toggleArchive = {
-            run(
-              .archive(gistID: gistID, archived: !controller.document.chrome.isArchived),
+            setArchived(
+              !controller.chrome.isArchived, gistID: gistID,
               accountID: controller.draft.accountID)
           }
           actions.delete = {
@@ -852,14 +830,14 @@ struct LiveNotebookWorkspace: View {
         }
       }
     }
-    if controller.document.chrome.access.canEdit, !controller.document.isRecovery {
+    if controller.chrome.access.canEdit, !controller.document.isRecovery {
       actions.rename = { requestName(.title, controller: controller) }
     }
     if controller.document.isRecovery || controller.draft.gistID == nil {
       actions.delete = {
         let target = NotebookDeletionTarget(
           id: controller.draft.id.uuidString, accountID: controller.draft.accountID,
-          title: controller.document.chrome.title, localDraft: controller.draft)
+          title: controller.chrome.title, localDraft: controller.draft)
         run(target.action, accountID: target.accountID)
       }
     }
@@ -873,7 +851,7 @@ struct LiveNotebookWorkspace: View {
     if !controller.document.isRecovery, let gist = controller.document.gist {
       actions.openInGitHub = {
         do { openURL(try DocumentLinks(gist: gist).githubURL) } catch {
-          actionMessage = NotebookModel.message(for: error)
+          actionMessage = error.localizedDescription
         }
       }
     }
@@ -1029,9 +1007,9 @@ struct LiveNotebookWorkspace: View {
       return
     }
     intelligence.present(
-      session: controller.session, title: controller.document.chrome.title,
+      session: controller.session, title: controller.chrome.title,
       revealSource: { range in
-        guard controller.document.chrome.access.canEdit else {
+        guard controller.chrome.access.canEdit else {
           actionMessage = String(
             localized: "This note is read-only. Its source reference can't be opened in the editor.")
           return
@@ -1064,7 +1042,7 @@ struct LiveNotebookWorkspace: View {
     nameTarget = NotebookNameTarget(
       accountID: controller.draft.accountID, draftID: controller.draft.id,
       gistID: controller.draft.gistID, filename: controller.draft.filename,
-      title: controller.document.chrome.title, kind: kind)
+      title: controller.chrome.title, kind: kind)
   }
 
   private func nameEditor(_ target: NotebookNameTarget) -> some View {
@@ -1119,21 +1097,28 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func recoverWrite() async {
-    if let draftID = notebook.blockedNoteDraftID {
-      selectRow(draftID.uuidString)
-      return
-    }
-    do { try await notebook.recoverWrite() } catch {
-      actionMessage = NotebookModel.message(for: error)
+    do { try await notebook.retryWrite() } catch {
+      actionMessage = error.localizedDescription
     }
     await active?.refreshPersistedState()
+  }
+
+  /// Archiving is absolute, so its undo is the opposite archive, registered with the scene so
+  /// shake to undo and the undo gesture reverse it.
+  private func setArchived(_ archived: Bool, gistID: String, accountID: UUID) {
+    run(.archive(gistID: gistID, archived: archived), accountID: accountID)
+    undoManager?.registerUndo(withTarget: notebook) { _ in
+      setArchived(!archived, gistID: gistID, accountID: accountID)
+    }
+    undoManager?.setActionName(
+      archived ? String(localized: "Archive") : String(localized: "Unarchive"))
   }
 
   private func run(_ action: NotebookAction, accountID: UUID) {
     Task {
       do { _ = try await execute(action, accountID: accountID) } catch {
-        guard NotebookModel.writeProblem(for: .action(action), error) == nil else { return }
-        actionMessage = NotebookModel.message(for: error)
+        guard NotebookModel.writeRecovery(for: .action(action), error) == nil else { return }
+        actionMessage = error.localizedDescription
       }
     }
   }
@@ -1203,12 +1188,10 @@ struct LiveNotebookWorkspace: View {
         }
         activeID = nil
         compactColumn = .sidebar
-      case .gist(let gist, _), .archived(let gist, _):
+      case .gist(let gist, _):
         for controller in sessions.values where controller.draft.gistID == gist.id {
           try await controller.refreshMetadata(gist: gist)
         }
-        if case .archived(_, let undo) = result { archiveUndo = undo }
-        if case .undoArchive = action { archiveUndo = nil }
       case .account:
         for controller in sessions.values where controller.draft.accountID == accountID {
           try await controller.refreshMetadata()
@@ -1218,7 +1201,8 @@ struct LiveNotebookWorkspace: View {
           try await controller.refreshMetadata(gist: gist)
         }
       case .deleted(let gistID):
-        try await discardDeletedGistSessions(gistID: gistID, accountID: accountID)
+        closeSessions { $0.draft.accountID == accountID && $0.draft.gistID == gistID }
+        comments.discard(gistID: gistID, accountID: accountID)
       case .deletedFile(let gistID, let filename, let gist):
         closeSessions {
           $0.draft.accountID == accountID && $0.draft.gistID == gistID
@@ -1237,17 +1221,6 @@ struct LiveNotebookWorkspace: View {
       }
       return result
     } catch {
-      if case .remoteDeletedLocalCleanupFailed(let gistID)? = error as? NotebookActionError {
-        try await discardDeletedGistSessions(gistID: gistID, accountID: accountID)
-      }
-      if let failure = error as? NotebookActionError,
-        case .remoteDeletedFileCleanupFailed(let gistID, let filename) = failure
-      {
-        closeSessions {
-          $0.draft.accountID == accountID && $0.draft.gistID == gistID
-            && $0.draft.filename == filename
-        }
-      }
       Logger(subsystem: "dev.gistpad.GistPad", category: "Notebook")
         .error("Note action failed: \(String(reflecting: type(of: error)), privacy: .public)")
       throw error
@@ -1264,14 +1237,6 @@ struct LiveNotebookWorkspace: View {
         compactColumn = .sidebar
       }
     }
-  }
-
-  private func discardDeletedGistSessions(gistID: String, accountID: UUID) async throws {
-    closeSessions {
-      $0.draft.accountID == accountID && $0.draft.gistID == gistID
-    }
-    if archiveUndo?.gistID == gistID { archiveUndo = nil }
-    comments.discard(gistID: gistID, accountID: accountID)
   }
 
   private func preparePhotos(for controller: NotebookSessionController) {
@@ -1374,7 +1339,7 @@ struct LiveNotebookWorkspace: View {
   private func presentSharing(_ controller: NotebookSessionController, copiesLink: Bool) {
     Task {
       guard await controller.waitForLocalSave() else {
-        actionMessage = NotebookModel.message(for: NotebookEditError.localPersistenceFailed)
+        actionMessage = NotebookEditError.localPersistenceFailed.localizedDescription
         return
       }
       do {
@@ -1393,7 +1358,7 @@ struct LiveNotebookWorkspace: View {
           sharingTarget = .init(controller: controller, copiesLink: copiesLink)
         }
       } catch {
-        actionMessage = NotebookModel.message(for: error)
+        actionMessage = error.localizedDescription
       }
     }
   }

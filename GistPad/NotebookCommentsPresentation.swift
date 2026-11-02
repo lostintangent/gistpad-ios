@@ -84,7 +84,7 @@ final class NotebookCommentsPresentation {
     } else if let origin {
       documentMode = origin
     }
-    if !next.document.chrome.access.canEdit { documentMode = .reading }
+    if !next.chrome.access.canEdit { documentMode = .reading }
     detent = quote == nil ? .medium : .large
     selectedRootID = rootID
     preparationFailure = nil
@@ -180,7 +180,7 @@ final class NotebookCommentsPresentation {
       return model
     } catch {
       guard self.scope == scope else { return nil }
-      preparationFailure = NotebookModel.message(for: error)
+      preparationFailure = error.localizedDescription
       Logger(subsystem: "dev.gistpad.GistPad", category: "Comments")
         .error("Comments preparation failed: \(String(reflecting: type(of: error)), privacy: .public)")
       return nil

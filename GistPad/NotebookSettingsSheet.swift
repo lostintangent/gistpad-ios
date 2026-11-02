@@ -129,7 +129,7 @@ struct NotebookSettingsSheet<Appearance: View>: View {
         try await signOut()
         dismiss()
       } catch {
-        saveError = NotebookModel.message(for: error)
+        saveError = error.localizedDescription
       }
     }
   }
@@ -150,7 +150,7 @@ struct NotebookSettingsSheet<Appearance: View>: View {
           do {
             try await savePreference(key, value)
           } catch {
-            saveError = NotebookModel.message(for: error)
+            saveError = error.localizedDescription
           }
         }
       })

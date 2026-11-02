@@ -63,7 +63,7 @@ struct NotebookAccountSwitchSheet: View {
         contentType: .json, defaultFilename: "GistPad-\(current)-drafts"
       ) { result in
         if case .failure(let failure) = result {
-          error = NotebookModel.message(for: failure)
+          error = failure.localizedDescription
         }
       }
     }
@@ -78,7 +78,7 @@ struct NotebookAccountSwitchSheet: View {
         try await operation()
         error = nil
       } catch {
-        self.error = NotebookModel.message(for: error)
+        self.error = error.localizedDescription
       }
     }
   }

@@ -79,6 +79,22 @@ public struct SourceEdit: Sendable {
   }
 }
 
+extension SourceEdit.MutationError: LocalizedError {
+  public var errorDescription: String? {
+    switch self {
+    case .compositionActive:
+      String(
+        localized:
+          "Finish composition or Writing Tools before continuing. Your current draft is unchanged.",
+        bundle: .module)
+    case .invalidRange, .sourceChanged, .staleGeneration:
+      String(
+        localized: "This file changed. Review the latest version first.",
+        bundle: .module)
+    }
+  }
+}
+
 enum MarkdownFormat: Sendable {
   case heading(Int)
   case bold, italic, bulletList, numberedList, checklist, quote

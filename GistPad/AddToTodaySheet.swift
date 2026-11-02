@@ -126,6 +126,6 @@ struct AddToTodaySheet: View {
     {
       return String(localized: "Your text is still here. Tap Add to try again.")
     }
-    return NotebookModel.message(for: error)
+    return error.localizedDescription
   }
 }

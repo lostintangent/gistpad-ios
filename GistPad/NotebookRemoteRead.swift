@@ -3,17 +3,15 @@ import GistPadInterface
 import GistPadSync
 
 struct NotebookRemoteReadProblem: Equatable {
-  enum Recovery: Equatable { case retry, reconnect, showNote }
+  enum Recovery: Equatable { case retry, reconnect }
 
   let message: String
   var recovery: Recovery = .retry
 
   func status(heading: String, detail: String?) -> GitHubStatusState {
-    let recoveryTitle: String
-    switch recovery {
-    case .retry: recoveryTitle = String(localized: "Retry")
-    case .reconnect: recoveryTitle = String(localized: "Reconnect GitHub")
-    case .showNote: recoveryTitle = String(localized: "Show Note")
+    let recoveryTitle = switch recovery {
+    case .retry: String(localized: "Try Again")
+    case .reconnect: String(localized: "Reconnect GitHub")
     }
     return .problem(
       .init(
@@ -35,7 +33,7 @@ enum NotebookRemoteRead {
       return .init(
         message: String(localized: "Reconnect GitHub to check for changes."), recovery: .reconnect)
     }
-    return .init(message: NotebookModel.message(for: error))
+    return .init(message: error.localizedDescription)
   }
 
   static func needsReconnect(_ error: any Error) -> Bool {

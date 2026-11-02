@@ -43,7 +43,7 @@ struct NotebookConflictReview: View {
               do {
                 review = try controller.reviewContext()
                 error = nil
-              } catch { self.error = NotebookModel.message(for: error) }
+              } catch { self.error = error.localizedDescription }
             }
           }
           if let error {
@@ -168,7 +168,7 @@ struct NotebookConflictReview: View {
         try await controller.applyReview(review, text: text, publishes: publishes)
         dismiss()
       } catch {
-        self.error = NotebookModel.message(for: error)
+        self.error = error.localizedDescription
       }
     }
   }

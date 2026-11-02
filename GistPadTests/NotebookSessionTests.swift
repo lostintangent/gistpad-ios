@@ -657,7 +657,7 @@ struct NotebookSessionTests {
         """
         {"id":"synthetic","description":"Session fixture","public":false,
         "created_at":"2026-10-23T00:00:00Z","updated_at":"2026-10-23T00:00:00Z",
-        "owner":{"id":\(isReadOnly ? 99 : 1),"login":"fixture"},
+        "owner":{"id":\(isReadOnly ? 99 : 1),"login":"\(isReadOnly ? "someone" : "fixture")"},
         "files":{"README.md":{"filename":"README.md","content":"Base"}}}
         """.utf8))
     let accountID = UUID()
@@ -685,10 +685,7 @@ struct NotebookSessionTests {
       #expect(model.library.loadState == .ready)
     }
     let document = NotebookDocument(
-      accountID: accountID, gist: gist, filename: "README.md", text: "Base",
-      chrome: NoteChrome(
-        title: "Session fixture", files: [.init(id: "README.md", filename: "README.md")],
-        selectedFileID: "README.md"))
+      accountID: accountID, gist: gist, filename: "README.md", text: "Base")
     return (
       NotebookSessionController(
         document: document, draft: draft, notebook: model, autosaveDelay: .milliseconds(30)),
@@ -709,7 +706,7 @@ private struct FocusNoteFixture: View {
   var body: some View {
     NavigationStack {
       NoteScreen(
-        document: controller.document.chrome, mode: .constant(.source),
+        document: controller.chrome, mode: .constant(.source),
         saveState: controller.saveState, isFocused: focused
       ) {
         MarkdownEditorView(session: controller.session)

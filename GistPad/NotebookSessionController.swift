@@ -5,9 +5,24 @@ import GistPadSync
 import OSLog
 import Observation
 
-enum NotebookEditError: Error {
+enum NotebookEditError: LocalizedError {
   case localPersistenceFailed
   case invalidCommittedEdit
+
+  var errorDescription: String? {
+    switch self {
+    case .localPersistenceFailed:
+      String(
+        localized:
+          "Your latest changes couldn't be saved on this iPhone. Keep the editor open and retry the local save."
+      )
+    case .invalidCommittedEdit:
+      String(
+        localized:
+          "The accepted edit couldn't be matched to this editor. Keep it open to recover both versions."
+      )
+    }
+  }
 }
 
 @MainActor
@@ -40,11 +55,7 @@ final class NotebookSessionController {
     document: NotebookDocument, draft: DraftSnapshot, notebook: NotebookModel,
     autosaveDelay: Duration = .seconds(5)
   ) {
-    var initialDocument = document
-    if notebook.account?.id == draft.accountID {
-      initialDocument.chrome = notebook.chrome(gist: document.gist, draft: draft)
-    }
-    self.document = initialDocument
+    self.document = document
     self.draft = draft
     self.notebook = notebook
     self.autosaveDelay = autosaveDelay
@@ -53,7 +64,7 @@ final class NotebookSessionController {
       showsFrontMatter: notebook.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
     saveState = document.isRecovery ? .failed(.readOnly) : draft.state
     if draft.baseContent == nil { mode = .source }
-    session.textView.isEditable = self.document.chrome.access.canEdit
+    session.textView.isEditable = chrome.access.canEdit
     applyWritingPreferences()
     session.onSourceChange = { [weak self] text, generation in
       self?.persist(text: text, generation: generation)
@@ -61,16 +72,17 @@ final class NotebookSessionController {
     NotebookPlatformBootstrap.register(self, notebook: notebook)
   }
 
+  /// The note's header and actions, always current with the notebook.
+  var chrome: NoteChrome { notebook.chrome(for: document) }
+
   var canMutate: Bool {
-    document.chrome.access.canEdit && !isDiscarded && session.isSettled
+    chrome.access.canEdit && !isDiscarded && session.isSettled
       && !isPerformingDestructiveAction
       && !isApplyingDurableEdit
   }
 
   var remoteInspectionStatus: GitHubStatusState {
-    guard let problem = remoteInspectionProblem, document.chrome.access != .truncated else {
-      return .idle
-    }
+    guard let problem = remoteInspectionProblem else { return .idle }
     switch saveState {
     case .failed, .conflict, .reconnect:
       return .idle
@@ -156,9 +168,8 @@ final class NotebookSessionController {
     document.draft = draft
     document.filename = draft.filename
     if let gist { document.gist = gist }
-    document.chrome = notebook.chrome(gist: document.gist, draft: draft)
     session.textView.isEditable =
-      document.chrome.access.canEdit && !isPerformingDestructiveAction && !isApplyingDurableEdit
+      chrome.access.canEdit && !isPerformingDestructiveAction && !isApplyingDurableEdit
     applyWritingPreferences()
   }
 
@@ -235,7 +246,6 @@ final class NotebookSessionController {
     document.editingRequestID = incoming.editingRequestID
     document.revealsDetail = incoming.revealsDetail
     if let gist = incoming.gist { document.gist = gist }
-    document.chrome = notebook.chrome(gist: document.gist, draft: draft)
   }
 
   var hasUnpublishedChanges: Bool {
@@ -258,7 +268,6 @@ final class NotebookSessionController {
     }
     document.gist = gist
     document.draft = draft
-    document.chrome = notebook.chrome(gist: gist, draft: draft)
     metadataError = nil
   }
 
@@ -301,7 +310,7 @@ final class NotebookSessionController {
 
   func endDestructiveAction() {
     isPerformingDestructiveAction = false
-    session.textView.isEditable = document.chrome.access.canEdit && !isDiscarded
+    session.textView.isEditable = chrome.access.canEdit && !isDiscarded
   }
 
   func applyDurableEdit(
@@ -329,7 +338,7 @@ final class NotebookSessionController {
     session.textView.isEditable = false
     defer {
       isApplyingDurableEdit = false
-      session.textView.isEditable = document.chrome.access.canEdit
+      session.textView.isEditable = chrome.access.canEdit
       if wasFirstResponder { session.textView.becomeFirstResponder() }
     }
     guard await waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
@@ -347,7 +356,6 @@ final class NotebookSessionController {
     }
     draft = committed
     document.draft = committed
-    document.chrome = notebook.chrome(gist: document.gist, draft: committed)
     saveState = committed.state
     guard await waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
   }
@@ -369,13 +377,11 @@ final class NotebookSessionController {
     }
     draft = persisted
     document.draft = persisted
-    document.chrome = notebook.chrome(gist: document.gist, draft: persisted)
     saveState = session.generation == persisted.generation ? persisted.state : .savedLocally
     guard persisted.state == .savedToGitHub,
       let gist = try? await notebook.adoptPublication(persisted)
     else { return }
     document.gist = gist
-    document.chrome = notebook.chrome(gist: gist, draft: persisted)
   }
 
   func waitForPublication() async {
@@ -450,7 +456,6 @@ final class NotebookSessionController {
         })
       draft = saved
       document.draft = saved
-      document.chrome = notebook.chrome(gist: document.gist, draft: saved)
       saveState = session.generation == saved.generation ? saved.state : .savedLocally
       if saved.state == .savedToGitHub || saved.state == .savedLocally {
         if reason == .background || reason == .leaving, Task.isCancelled || !shouldContinue() { return }
@@ -459,7 +464,6 @@ final class NotebookSessionController {
           if let gist {
             document.gist = gist
             document.draft = saved
-            document.chrome = notebook.chrome(gist: gist, draft: saved)
           }
           metadataError = nil
         } catch is CancellationError {

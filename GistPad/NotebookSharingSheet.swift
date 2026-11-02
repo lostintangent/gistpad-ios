@@ -8,9 +8,24 @@ struct NotebookSharingTarget: Identifiable {
   let copiesLink: Bool
 }
 
-enum NotebookSharingError: Error {
+enum NotebookSharingError: LocalizedError {
   case saveNotConfirmed
   case draftChangedWhileSaving
+
+  var errorDescription: String? {
+    switch self {
+    case .saveNotConfirmed:
+      String(
+        localized:
+          "GitHub hasn't confirmed the current draft. Nothing was shared. Return to the note to review its save status."
+      )
+    case .draftChangedWhileSaving:
+      String(
+        localized:
+          "Your draft changed while saving. Nothing was shared. Save the latest version or choose its saved link."
+      )
+    }
+  }
 }
 
 struct NotebookSharingSheet: View {
@@ -26,7 +41,7 @@ struct NotebookSharingSheet: View {
     NavigationStack {
       List {
         Section {
-          Text(controller.document.chrome.title).font(.headline)
+          Text(controller.chrome.title).font(.headline)
           if controller.document.gist?.isPublic != true {
             Label("Secret gist", systemImage: "lock")
             Text("Anyone with a shared link can read the saved note.")
@@ -103,7 +118,7 @@ struct NotebookSharingSheet: View {
       links = try controller.savedLinks()
       error = nil
     } catch {
-      self.error = NotebookModel.message(for: error)
+      self.error = error.localizedDescription
     }
   }
 
@@ -128,7 +143,7 @@ struct NotebookSharingSheet: View {
         links = try controller.savedLinks()
         error = nil
       } catch {
-        self.error = NotebookModel.message(for: error)
+        self.error = error.localizedDescription
       }
     }
   }

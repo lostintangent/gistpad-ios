@@ -7,7 +7,6 @@ enum NotebookAction: Sendable {
   case saveTags([PreferenceOperation])
   case star(gistID: String, starred: Bool)
   case archive(gistID: String, archived: Bool)
-  case undoArchive(NotebookArchiveUndo)
   case rename(gistID: String, title: String)
   case renameLocal(draftID: UUID, title: String)
   case renameFile(gistID: String, filename: String, newFilename: String)
@@ -25,7 +24,6 @@ enum NotebookActionResult: Sendable {
   case signedOut
   case account(Account)
   case gist(Gist, starred: Bool? = nil)
-  case archived(Gist, undo: NotebookArchiveUndo)
   case draft(DraftSnapshot, gist: Gist? = nil)
   case deleted(gistID: String)
   case deletedFile(gistID: String, filename: String, gist: Gist)
@@ -39,26 +37,19 @@ enum NotebookActionError: Error, Equatable {
   case invalidFilename
   case filenameExists
   case publicationInProgress
-  case remoteChangedLocalUpdateFailed(gistID: String)
-  case remoteDeletedLocalCleanupFailed(gistID: String)
-  case remoteDeletedFileCleanupFailed(gistID: String, filename: String)
   case staleReview
-  case archiveChangedElsewhere
 }
 
-struct NotebookArchiveUndo: Equatable, Sendable {
-  let accountID: UUID
-  let gistID: String
-  let originalDescription: String
-  let archivedDescription: String
-  let wasArchived: Bool
-
-  func validate(gist: Gist, accountID: UUID) throws {
-    guard self.accountID == accountID else { throw AccountError.accountChanged }
-    guard gist.id == gistID,
-      (gist.description ?? "").utf8.elementsEqual(archivedDescription.utf8)
-    else {
-      throw NotebookActionError.archiveChangedElsewhere
+extension NotebookActionError: LocalizedError {
+  var errorDescription: String? {
+    switch self {
+    case .invalidTitle: String(localized: "Enter a name for this note.")
+    case .invalidFilename:
+      String(localized: "Enter a Markdown filename ending in .md, without a slash.")
+    case .filenameExists: String(localized: "This gist already has a file with that name.")
+    case .publicationInProgress: String(localized: "You can change this after the gist publishes.")
+    case .staleReview:
+      String(localized: "Your draft changed while this review was open. Review the latest draft.")
     }
   }
 }
@@ -148,17 +139,7 @@ extension LiveNotebookProvider {
       return .gist(gist, starred: starred)
     case .archive(let id, let archived):
       let (client, gist, _) = try await ownedGist(id: id, account: account)
-      let updated = try await client.setArchived(archived, gist: gist)
-      return .archived(
-        updated,
-        undo: NotebookArchiveUndo(
-          accountID: accountID, gistID: id, originalDescription: gist.description ?? "",
-          archivedDescription: updated.description ?? "", wasArchived: gist.isArchived))
-    case .undoArchive(let undo):
-      let id = undo.gistID
-      let (client, gist, _) = try await ownedGist(id: id, account: account)
-      try undo.validate(gist: gist, accountID: accountID)
-      return .gist(try await client.updateGist(id: id, description: undo.originalDescription))
+      return .gist(try await client.setArchived(archived, gist: gist))
     case .rename(let id, let title):
       let (client, gist, _) = try await ownedGist(id: id, account: account)
       guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -169,14 +150,10 @@ extension LiveNotebookProvider {
         throw NotebookActionError.publicationInProgress
       }
       let updated = try await client.updateDescription(title, gist: gist)
-      do {
-        for draft in local {
-          _ = try await drafts.updateDraftMetadata(
-            id: draft.id, accountID: accountID, expectedFilename: draft.filename,
-            filename: draft.filename, description: updated.description ?? "")
-        }
-      } catch {
-        throw NotebookActionError.remoteChangedLocalUpdateFailed(gistID: id)
+      for draft in local {
+        _ = try await drafts.updateDraftMetadata(
+          id: draft.id, accountID: accountID, expectedFilename: draft.filename,
+          filename: draft.filename, description: updated.description ?? "")
       }
       return .gist(updated)
     case .renameFile(let id, let filename, let newFilename):
@@ -193,14 +170,10 @@ extension LiveNotebookProvider {
         throw NotebookActionError.publicationInProgress
       }
       let updated = try await client.updateGist(id: id, files: [filename: .rename(newFilename)])
-      do {
-        for draft in local where draft.filename == filename {
-          _ = try await drafts.updateDraftMetadata(
-            id: draft.id, accountID: accountID, expectedFilename: filename,
-            filename: newFilename, description: updated.description ?? "")
-        }
-      } catch {
-        throw NotebookActionError.remoteChangedLocalUpdateFailed(gistID: id)
+      for draft in local where draft.filename == filename {
+        _ = try await drafts.updateDraftMetadata(
+          id: draft.id, accountID: accountID, expectedFilename: filename,
+          filename: newFilename, description: updated.description ?? "")
       }
       return .gist(updated)
     case .addFile(let id, let filename):
@@ -221,20 +194,13 @@ extension LiveNotebookProvider {
         // GitHub can't leave a gist without files, so deleting the last file deletes the gist.
         return try await deleteGist(id, client: client, accountID: accountID)
       }
-      // A retry after a partial failure finds the file already gone, so only local cleanup remains.
-      let updated: Gist
-      if gist.files[filename] == nil {
-        updated = gist
-      } else {
-        updated = try await client.updateGist(id: id, files: [filename: .delete])
-      }
-      do {
-        try await drafts.removeDrafts(
-          gistID: id, filename: filename, updated: updated, accountID: accountID)
-        return .deletedFile(gistID: id, filename: filename, gist: updated)
-      } catch {
-        throw NotebookActionError.remoteDeletedFileCleanupFailed(gistID: id, filename: filename)
-      }
+      // A file that's already gone from GitHub only needs its copy on this iPhone removed.
+      let updated =
+        gist.files[filename] == nil
+        ? gist : try await client.updateGist(id: id, files: [filename: .delete])
+      try await drafts.removeDrafts(
+        gistID: id, filename: filename, updated: updated, accountID: accountID)
+      return .deletedFile(gistID: id, filename: filename, gist: updated)
     }
   }
 
@@ -242,12 +208,8 @@ extension LiveNotebookProvider {
     _ id: String, client: GitHubClient, accountID: UUID
   ) async throws -> NotebookActionResult {
     try await client.deleteGist(id: id)
-    do {
-      try await drafts.removeDrafts(gistID: id, accountID: accountID)
-      return .deleted(gistID: id)
-    } catch {
-      throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: id)
-    }
+    try await drafts.removeDrafts(gistID: id, accountID: accountID)
+    return .deleted(gistID: id)
   }
 
   private func ownedGist(

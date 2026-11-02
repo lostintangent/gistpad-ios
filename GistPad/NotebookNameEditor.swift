@@ -69,7 +69,7 @@ struct NotebookNameEditor: View {
         try await save(value)
         dismiss()
       } catch {
-        self.error = NotebookModel.message(for: error)
+        self.error = error.localizedDescription
       }
     }
   }

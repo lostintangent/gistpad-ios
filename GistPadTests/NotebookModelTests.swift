@@ -79,119 +79,14 @@ struct NotebookModelTests {
       Issue.record("A failed GitHub write should raise the GitHub status control.")
       return
     }
-    #expect(problem.heading == "Couldn't save to GitHub.")
-    #expect(problem.message == "This pin didn't reach GitHub.")
-    #expect(problem.recoveryTitle == "Retry")
+    #expect(problem.heading == "Couldn't sync")
+    #expect(problem.message == "This change wasn't saved.")
+    #expect(problem.recoveryTitle == "Try Again")
     #expect(problem.detail == nil)
     await provider.failWrites(false)
     try await model.retryWrite()
     #expect(model.writeFailure == nil)
     #expect(model.library.gitHubStatus == .idle)
-  }
-
-  @Test func retryingAFailedWriteReappliesItsAbsoluteValueAndThenStops() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    try #require(model.library.loadState == .ready)
-    let pinned = PreferenceOperation.setPinned(gistID: "gist-1", pinned: true)
-    await provider.failWrites()
-    _ = try? await model.perform(.preference(pinned))
-    await provider.failWrites(false)
-    try await model.retryWrite()
-    try await model.retryWrite()
-    let applied = await provider.appliedPreferences
-    #expect(model.writeFailure == nil)
-    #expect(applied == [pinned, pinned])
-  }
-
-  @Test func aLaterSuccessfulWriteToTheSameTargetClearsAttentionWithoutReverting() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    try #require(model.library.loadState == .ready)
-    let pinned = PreferenceOperation.setPinned(gistID: "gist-1", pinned: true)
-    let unpinned = PreferenceOperation.setPinned(gistID: "gist-1", pinned: false)
-    await provider.failWrites()
-    _ = try? await model.perform(.preference(pinned))
-    #expect(model.writeFailure != nil)
-    await provider.failWrites(false)
-    _ = try await model.perform(.preference(unpinned))
-    try await model.retryWrite()
-    let applied = await provider.appliedPreferences
-    #expect(model.writeFailure == nil)
-    #expect(model.library.gitHubStatus == .idle)
-    #expect(applied.last == unpinned)
-    #expect(applied.filter { $0 == pinned }.count == 1)
-  }
-
-  @Test func aSuccessfulWriteToADifferentTargetKeepsAttention() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    try #require(model.library.loadState == .ready)
-    await provider.failWrites()
-    _ = try? await model.perform(.preference(.setPinned(gistID: "gist-1", pinned: true)))
-    await provider.failWrites(false)
-    _ = try await model.perform(.preference(.setPinned(gistID: "gist-2", pinned: true)))
-    #expect(model.writeFailures.map { NotebookModel.writeTarget($0.operation) } == ["pin:gist-1"])
-  }
-
-  @Test func severalUnsentChangesAreCountedInTheMessage() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    try #require(model.library.loadState == .ready)
-    await provider.failWrites()
-    _ = try? await model.perform(.preference(.setPinned(gistID: "gist-1", pinned: true)))
-    _ = try? await model.perform(.preference(.setPinned(gistID: "gist-2", pinned: true)))
-    guard case .problem(let problem) = model.library.gitHubStatus else {
-      Issue.record("Several failed writes should raise the GitHub status control.")
-      return
-    }
-    #expect(problem.message == "2 changes didn't reach GitHub.")
-  }
-
-  @Test func failedNotePublishRaisesAttentionUntilItsRetrySucceeds() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let draft = try #require(model.loadedDocument?.draft)
-    _ = try await model.persist(
-      draftID: draft.id, accountID: draft.accountID, text: "- [ ] Unsent", generation: 1)
-    await provider.failWrites()
-    _ = try? await model.publish(draftID: draft.id, accountID: draft.accountID, reason: .leaving)
-    #expect(model.writeFailures.map { NotebookModel.writeTarget($0.operation) } == ["note:\(draft.id.uuidString)"])
-    guard case .problem(let problem) = model.library.gitHubStatus else {
-      Issue.record("A failed note publish should raise the GitHub status control.")
-      return
-    }
-    #expect(problem.heading == "Couldn't save to GitHub.")
-    #expect(problem.message == "This note didn't reach GitHub.")
-    #expect(problem.detail == "It's still on this iPhone.")
-    #expect(problem.recoveryTitle == "Retry")
-    await provider.failWrites(false)
-    try await model.retryWrite()
-    #expect(model.writeFailure == nil)
-    #expect(model.library.gitHubStatus == .idle)
-  }
-
-  @Test func retryingAFailedNotePublishesTheLatestText() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let draft = try #require(model.loadedDocument?.draft)
-    _ = try await model.persist(
-      draftID: draft.id, accountID: draft.accountID, text: "- [ ] First", generation: 1)
-    await provider.failWrites()
-    _ = try? await model.publish(draftID: draft.id, accountID: draft.accountID, reason: .leaving)
-    _ = try await model.persist(
-      draftID: draft.id, accountID: draft.accountID, text: "- [ ] Second", generation: 2)
-    await provider.failWrites(false)
-    try await model.retryWrite()
-    let published = model.localDrafts.first { $0.id == draft.id }
-    #expect(model.writeFailure == nil)
-    #expect(published?.baseContent == "- [ ] Second")
   }
 
   @Test func returningToTheAppPublishesEveryLeftNoteWithUnpublishedEdits() async throws {
@@ -205,171 +100,6 @@ struct NotebookModelTests {
     await model.publishUnsyncedEdits(accountID: fixtureAccount.id) { _ in nil }
     #expect(await provider.publicationReasons == [.background, .background])
     #expect(model.localDrafts.allSatisfy { !$0.hasUnpublishedEdits })
-  }
-
-  @Test func theUnsyncedSweepStopsAtTheFirstOfflineNote() async throws {
-    let daily = try makeGist(
-      id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-23.md")
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
-    _ = try await provider.stageDailyDraft(filename: "2026-10-24.md", text: "- [ ] One")
-    _ = try await provider.stageDailyDraft(filename: "2026-10-25.md", text: "- [ ] Two")
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    await provider.failWritesOffline()
-    await model.publishUnsyncedEdits(accountID: fixtureAccount.id) { _ in nil }
-    let first = try #require(model.localDrafts.first { $0.filename == "2026-10-24.md" })
-    let second = try #require(model.localDrafts.first { $0.filename == "2026-10-25.md" })
-    #expect(first.state == .failed(.network))
-    #expect(second.state != .failed(.network))
-    #expect(second.hasUnpublishedEdits)
-  }
-
-  @Test func aLaterSuccessfulNoteSaveClearsItsAttentionWithoutRetry() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let draft = try #require(model.loadedDocument?.draft)
-    _ = try await model.persist(
-      draftID: draft.id, accountID: draft.accountID, text: "- [ ] Unsent", generation: 1)
-    await provider.failWrites()
-    _ = try? await model.publish(draftID: draft.id, accountID: draft.accountID, reason: .leaving)
-    #expect(model.writeFailure != nil)
-    await provider.failWrites(false)
-    _ = try await model.publish(draftID: draft.id, accountID: draft.accountID, reason: .autosave)
-    #expect(model.writeFailure == nil)
-    #expect(model.library.gitHubStatus == .idle)
-  }
-
-  @Test func aCancelledNotePublishRaisesNoAttention() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let draft = try #require(model.loadedDocument?.draft)
-    _ = try await model.persist(
-      draftID: draft.id, accountID: draft.accountID, text: "- [ ] Unsent", generation: 1)
-    await provider.failWrites()
-    _ = try? await model.publish(
-      draftID: draft.id, accountID: draft.accountID, reason: .autosave,
-      shouldPublish: { false })
-    #expect(model.writeFailure == nil)
-    #expect(model.library.gitHubStatus == .idle)
-  }
-
-  @Test func aMixedFailureDoesNotClaimThatTheWholeChangeIsOnlyOnThisPhone() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let draft = try #require(model.loadedDocument?.draft)
-    _ = try await model.persist(
-      draftID: draft.id, accountID: draft.accountID, text: "- [ ] Unsent", generation: 1)
-    await provider.failWrites()
-    _ = try? await model.perform(.preference(.setPinned(gistID: "gist-1", pinned: true)))
-    _ = try? await model.publish(draftID: draft.id, accountID: draft.accountID, reason: .leaving)
-    guard case .problem(let problem) = model.library.gitHubStatus else {
-      Issue.record("Mixed failed writes should raise the GitHub status control.")
-      return
-    }
-    #expect(problem.message == "2 changes didn't reach GitHub.")
-    #expect(problem.detail == nil)
-  }
-
-  @Test func aReadOnlyNotePublishOffersShowNoteAndIsNotRetried() async throws {
-    try await expectBlockedNotePublish(
-      error: .readOnly, message: "This note can't be published as it is.")
-  }
-
-  private func expectBlockedNotePublish(error: DraftError, message: String) async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let draft = try #require(model.loadedDocument?.draft)
-    _ = try await model.persist(
-      draftID: draft.id, accountID: draft.accountID, text: "- [ ] Blocked", generation: 1)
-    await provider.failPublishes(with: error)
-    _ = try? await model.publish(draftID: draft.id, accountID: draft.accountID, reason: .leaving)
-    guard case .problem(let problem) = model.library.gitHubStatus else {
-      Issue.record("A blocked note publish should raise the GitHub status control.")
-      return
-    }
-    #expect(problem.heading == "Couldn't save to GitHub.")
-    #expect(problem.message == message)
-    #expect(problem.detail == nil)
-    #expect(problem.recoveryTitle == "Show Note")
-    #expect(model.blockedNoteDraftID == draft.id)
-    await provider.failPublishes(with: nil)
-    try await model.retryWrite()
-    #expect(model.writeFailure != nil)
-    #expect(model.blockedNoteDraftID == draft.id)
-  }
-
-  @Test func aBlockedNoteClearsWhenItsPublishSucceeds() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let draft = try #require(model.loadedDocument?.draft)
-    _ = try await model.persist(
-      draftID: draft.id, accountID: draft.accountID, text: "- [ ] Blocked", generation: 1)
-    await provider.failPublishes(with: .readOnly)
-    _ = try? await model.publish(draftID: draft.id, accountID: draft.accountID, reason: .leaving)
-    #expect(model.blockedNoteDraftID == draft.id)
-    await provider.failPublishes(with: nil)
-    _ = try await model.publish(draftID: draft.id, accountID: draft.accountID, reason: .autosave)
-    #expect(model.writeFailure == nil)
-    #expect(model.library.gitHubStatus == .idle)
-  }
-
-  @Test func aMixedSetRetriesTheChangeBeforeOfferingShowNote() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    let draft = try #require(model.loadedDocument?.draft)
-    _ = try await model.persist(
-      draftID: draft.id, accountID: draft.accountID, text: "- [ ] Blocked", generation: 1)
-    await provider.failWrites()
-    await provider.failPublishes(with: .readOnly)
-    _ = try? await model.perform(.preference(.setPinned(gistID: "gist-1", pinned: true)))
-    _ = try? await model.publish(draftID: draft.id, accountID: draft.accountID, reason: .leaving)
-    guard case .problem(let problem) = model.library.gitHubStatus else {
-      Issue.record("A mixed failed set should raise the GitHub status control.")
-      return
-    }
-    #expect(problem.recoveryTitle == "Retry")
-    #expect(problem.message == "This pin didn't reach GitHub.")
-    #expect(model.blockedNoteDraftID == nil)
-    await provider.failWrites(false)
-    await provider.failPublishes(with: nil)
-    try await model.retryWrite()
-    #expect(model.writeFailures.count == 1)
-    #expect(model.blockedNoteDraftID == draft.id)
-    guard case .problem(let blocked) = model.library.gitHubStatus else {
-      Issue.record("The blocked note should keep the GitHub status control.")
-      return
-    }
-    #expect(blocked.recoveryTitle == "Show Note")
-  }
-
-  @Test func archiveChangedElsewhereIsNotAWriteFailure() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    try #require(model.library.loadState == .ready)
-    await provider.rejectArchiveChanges()
-    _ = try? await model.perform(.archive(gistID: "gist-1", archived: true))
-    #expect(model.writeFailure == nil)
-    #expect(model.library.gitHubStatus == .idle)
-  }
-
-  @Test func lostSupabaseRefreshKeepsGitHubReadsQuiet() async throws {
-    let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    try #require(model.library.loadState == .ready)
-    await provider.failAccountRefresh()
-    await model.refresh()
-    #expect(model.remoteRefreshProblem == nil)
-    #expect(model.library.gitHubStatus == .idle)
-    #expect(model.library.loadState == .ready)
-    #expect(model.account?.id == fixtureAccount.id)
   }
 
   @Test func orphanedEditedCopiesHaveStableDatesAndLocalDeletionTargets() async throws {
@@ -492,8 +222,6 @@ struct NotebookModelTests {
     #expect(model.cachedLibrary?.starred.first(where: { $0.id == gist.id })?.commentCount == 7)
     #expect(model.loadedDocument?.id == document.id)
     #expect(model.loadedDocument?.text == document.text)
-    #expect(model.loadedDocument?.gist?.commentCount == 7)
-    #expect(model.loadedDocument?.chrome.commentCount == 7)
   }
 
   @Test func staleAccountCommentTotalsCannotChangeTheCurrentNotebook() async throws {
@@ -815,17 +543,6 @@ struct NotebookModelTests {
     #expect(await provider.publicationReasons.isEmpty)
   }
 
-  @Test func accountIdentityOmitsMissingNamesAndUsesTheNativeAvatarURL() throws {
-    let account = Account(
-      id: UUID(), login: "octavia", avatarURL: URL(string: "https://avatars.githubusercontent.com/u/1"),
-      preferences: .init(metadata: ["full_name": .string("  "), "name": .string("Octavia")]))
-    #expect(account.displayName == "Octavia")
-    #expect(account.avatarURL?.host == "avatars.githubusercontent.com")
-    #expect(fixtureAccount.displayName == nil)
-    #expect(NotebookModel.message(for: URLError(.notConnectedToInternet))
-      == "You're offline. Connect to the internet, then try again.")
-  }
-
   @Test func spellingPreferencesUpdateTheRetainedEditorWithoutChangingItsSourceOrSelection() async throws {
     let provider = StubNotebookProvider(
       account: fixtureAccount, gists: [try makeGist(id: "a", title: "Spelling")])
@@ -1064,21 +781,6 @@ struct NotebookModelTests {
     #expect(try await provider.localState(accountID: replacement.id).drafts.isEmpty)
   }
 
-  @Test func archiveUndoRequiresTheExactAccountAndUnchangedRemoteMetadata() throws {
-    let original = try makeGist(id: "a", title: "Caf\u{E9} [Archived]")
-    let undo = NotebookArchiveUndo(
-      accountID: fixtureAccount.id, gistID: "a", originalDescription: "Caf\u{E9}",
-      archivedDescription: original.description ?? "", wasArchived: false)
-    try undo.validate(gist: original, accountID: fixtureAccount.id)
-    #expect(throws: AccountError.accountChanged) {
-      try undo.validate(gist: original, accountID: UUID())
-    }
-    let renamed = try makeGist(id: "a", title: "Cafe\u{301} [Archived]")
-    #expect(throws: NotebookActionError.archiveChangedElsewhere) {
-      try undo.validate(gist: renamed, accountID: fixtureAccount.id)
-    }
-  }
-
   @Test func mapsOwnedStarredAndWebMetadataWithoutDuplicates() throws {
     let owned = try makeGist(id: "a", title: "A note")
     let starred = try makeGist(id: "b", title: "A shared note", owner: "someone")
@@ -1147,7 +849,7 @@ struct NotebookModelTests {
     let first = try #require(model.loadedDocument)
     let reads = await provider.readIDs
     #expect(model.beginOpeningRow(id: "b"))
-    #expect(model.presentedDocument?.chrome.title == "Second")
+    #expect(model.presentedDocument.map(model.chrome(for:))?.title == "Second")
     #expect(model.presentedDocument?.text == "Second source")
     #expect(model.presentedDocument?.refersToSameFile(as: first) == false)
     #expect(model.openingDocument == nil)
@@ -1549,10 +1251,7 @@ struct NotebookModelTests {
       id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-23.md")
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
     let previous = NotebookDocument(
-      accountID: fixtureAccount.id, gist: daily, filename: filename, text: "- [ ] A deleted task",
-      chrome: .init(
-        title: daily.displayName, files: [.init(id: filename, filename: filename)],
-        selectedFileID: filename, access: .editable))
+      accountID: fixtureAccount.id, gist: daily, filename: filename, text: "- [ ] A deleted task")
     let draft = try await provider.openDraft(for: previous)
     let model = NotebookModel(provider: provider)
     await model.start()
@@ -1588,9 +1287,7 @@ struct NotebookModelTests {
     #expect(model.library.selectedNoteID == "daily/2026-10-23.md")
     await model.open(gistID: daily.id, filename: "2026-10-24.md")
     #expect(model.library.selectedNoteID == "daily/2026-10-24.md")
-    var readOnly = try #require(model.loadedDocument)
-    readOnly.chrome.access = .readOnly
-    #expect(readOnly.rowID == "daily/2026-10-24.md")
+    #expect(model.loadedDocument?.rowID == "daily/2026-10-24.md")
     let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
     #expect(deletion.id == daily.id)
     #expect(deletion.title == GistConventions.fileDisplayName("2026-10-24.md"))
@@ -1616,7 +1313,7 @@ struct NotebookModelTests {
     #expect(model.library.dailyNoteCount == 0)
     await model.open(gistID: starred.id, filename: filename)
     #expect(model.library.selectedNoteID == starred.id)
-    #expect(model.loadedDocument?.chrome.access == .readOnly)
+    #expect(model.loadedDocument.map(model.chrome(for:))?.access == .readOnly)
     #expect(model.loadedDocument?.filename == filename)
     #expect(model.libraryDeletionTarget(for: starred.id) == nil)
     #expect(await provider.readIDs.isEmpty)
@@ -2269,7 +1966,7 @@ struct NotebookNavigationHostTests {
     #expect(editor.selectedRange == NSRange(location: draft.text.utf16.count, length: 0))
     #expect(await provider.creationCount == 1)
     #expect(await provider.readIDs.isEmpty)
-    #expect(host.model.presentedDocument?.chrome.title == "Untitled")
+    #expect(host.model.presentedDocument.map(host.model.chrome(for:))?.title == "Untitled")
     editor.insertText("A local thought 🙂")
     try await host.waitUntil { host.model.localDrafts.first(where: { $0.id == draft.id })?.generation == 1 }
     #expect(host.model.localDrafts.first(where: { $0.id == draft.id })?.text == "A local thought 🙂")
@@ -2596,7 +2293,6 @@ private actor StubNotebookProvider: NotebookProviding, NotebookCommentProviding 
   var publishFailure: DraftError?
   var failsAccountRefresh = false
   var appliedPreferences: [PreferenceOperation] = []
-  var rejectsArchiveChanges = false
   var heldRead: CheckedContinuation<Void, Never>?
   var readObserver: CheckedContinuation<Void, Never>?
   var cached: CachedLibrarySnapshot?
@@ -2797,9 +2493,6 @@ private actor StubNotebookProvider: NotebookProviding, NotebookCommentProviding 
       publishedGist: publishedGist)
   }
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
-    if case .archive = action, rejectsArchiveChanges {
-      throw NotebookActionError.archiveChangedElsewhere
-    }
     switch action {
     case .discardLocalCopy(let id, let generation):
       try await draftStore().discardLocalCopy(
@@ -2977,7 +2670,6 @@ private actor StubNotebookProvider: NotebookProviding, NotebookCommentProviding 
   func failWritesOffline() { failsWritesOffline = true }
   func failPublishes(with error: DraftError?) { publishFailure = error }
   func failAccountRefresh(_ fails: Bool = true) { failsAccountRefresh = fails }
-  func rejectArchiveChanges() { rejectsArchiveChanges = true }
   func requireReconnect() { needsReconnect = true }
   func setSignInAccount(_ account: Account) { signInAccount = account }
   func setAutosaveEnabled(_ enabled: Bool) {

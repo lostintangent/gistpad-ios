@@ -84,7 +84,7 @@ final class NotebookPhotoController {
     case PhotoImageError.imageTooLarge: String(localized: "Choose a photo under 50 MB and 100 megapixels.")
     case is PhotoImageError: String(localized: "This item couldn't be read as an image. Choose another photo.")
     case ImageStorageError.http: String(localized: "GistPad's image storage didn't accept the photo.")
-    default: NotebookModel.message(for: error)
+    default: error.localizedDescription
     }
   }
 }
