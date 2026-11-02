@@ -32,6 +32,8 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 
 Use size classes and the container's geometry, never device names. Respect the Duo's asymmetric safe areas. Folding or unfolding never changes the mode, the caret or Undo.
 
+**Sheet buttons.** Every sheet closes with the system X in `.cancellationAction`: `Button(role: .cancel)` when closing throws away an edit, `Button(role: .close)` when there's nothing to lose. A sheet that saves confirms with `Button(role: .confirm)` in `.confirmationAction`, the system's blue glass checkmark. The roles supply the symbol, color and VoiceOver label, so neither sets text, an accessibility label, a tint or a button style. While saving, the checkmark becomes a `ProgressView`. Both stay visible while a field has focus, so on the Closed Duo they sit in the trailing rail like Comments' X. This covers Rename Gist…, Rename File…, Add File…, Add Link, Add to Today and the tag sheets.
+
 Launch restores the last open file, or opens today's note. Existing files open in Preview. New gists and today's note open in Edit with the caret ready. The mode you pick sticks.
 
 Opening a file:
