@@ -125,9 +125,7 @@ struct LiveNotebookWorkspace: View {
     }
     .task(id: routeToOpen) { await openPendingRoute() }
     #if DEBUG
-    .onChange(of: [active?.draft.id.uuidString, routes.pending?.url.absoluteString], initial: true) {
-      presentFixtureSheet()
-    }
+    .onChange(of: routes.pending) { presentFixtureSheet() }
     #endif
     .onChange(of: active?.document.activationID, initial: true) { didActivate() }
     .onChange(of: active?.draft.id) { previous, _ in
@@ -160,6 +158,9 @@ struct LiveNotebookWorkspace: View {
     if notebook.library.selectedNoteID != nil, active.document.revealsDetail {
       compactColumn = .detail
     }
+    #if DEBUG
+    presentFixtureSheet()
+    #endif
   }
 
   /// Opens the comments a library row asked for, once its note is the active one.
