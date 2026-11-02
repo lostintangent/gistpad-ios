@@ -52,10 +52,11 @@ Headers use the system header font with `.headerProminence(.increased)` and a se
 
 | Part | Look |
 | --- | --- |
-| Title line | `.headline` title, with `star.fill` after it when starred. Trailing `.footnote` metadata: comment count, then date |
-| Tag line | Only when tagged, 6 pt below. Up to two tag labels, then `+N` in secondary text |
+| Title line | `.headline` title, with `star.fill` after it when starred. Trailing `.footnote` metadata: file count, comment count, then date |
+| Tag line | Only when tagged, 6 pt below. Up to two tag labels, then `+N` in secondary text. The counts move to its trailing end |
+| Counts | Secondary `.footnote`, each an inline glyph and number 8 pt apart (scaled): `doc.text` with the file count when a gist has two or more files, then `text.bubble` with the comment count when it has comments. A missing count leaves no gap. VoiceOver reads "3 files, 2 comments" |
 | Date | `.secondary`, the one muted exception, like Notes. Time today, then Yesterday, the weekday this week, then a short date |
-| Daily row | One line: the day ("Monday, Nov 2", with the year when it differs) and a task ring with `3/4`. Complete shows a green `checkmark.circle.fill`. An earlier day's unfinished tasks show in orange. No tags or comments |
+| Daily row | One line: the day ("Monday, Nov 2", with the year when it differs) and a task ring with `3/4`. Complete shows a green `checkmark.circle.fill`. An earlier day's unfinished tasks show in orange. No tags or counts |
 
 No excerpts, thumbnails or cards. Vertical padding is 14 pt, scaled with Body, and the compact horizontal inset is 16 pt. At accessibility sizes the row stacks: title, metadata, then tags.
 
