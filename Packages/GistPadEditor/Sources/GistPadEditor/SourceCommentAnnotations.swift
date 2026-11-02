@@ -139,6 +139,11 @@
       scrollSelectedCommentIfNeeded()
     }
 
+    /// Comment fills are the only source ink that follows the personal accent.
+    func accentDidChange() {
+      if !verifiedHighlights.isEmpty { session.highlight() }
+    }
+
     func selectionDidChange() {
       session.textView.setNeedsLayout()
       guard !updatingSelection, !originalInk.isEmpty, paintedGeneration == session.generation,

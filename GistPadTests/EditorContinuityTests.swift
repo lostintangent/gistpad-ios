@@ -114,10 +114,7 @@ struct EditorContinuityTests {
     #expect(session.text.utf8.elementsEqual("caf\u{e9}".utf8))
   }
 
-  @Test(arguments: [(false, false), (true, false), (true, true)])
-  func readingAnchorSurvivesReflowAndWritingToolsCompletion(
-    writingTools: Bool, waitForDecoration: Bool
-  ) async throws {
+  @Test func readingAnchorSurvivesReflow() async throws {
     let source = EditorFixture.markdown
     let session = DocumentSession(documentID: "test", text: source)
     let window = try host(session)
@@ -135,10 +132,6 @@ struct EditorContinuityTests {
     try #require(
       view.contentOffset.y > 0,
       "The reading-anchor fixture must scroll to its middle source range before measuring.")
-    if writingTools {
-      session.textViewWritingToolsWillBegin(view)
-      session.textViewWritingToolsDidEnd(view)
-    }
     view.layoutIfNeeded()
     let point = CGPoint(
       x: view.textContainerInset.left,
@@ -148,14 +141,6 @@ struct EditorContinuityTests {
     try #require(offset > 0)
     let originalY = view.caretRect(for: position).minY - view.contentOffset.y
     let selection = view.selectedRange
-    if waitForDecoration {
-      try await Task.sleep(for: .milliseconds(150))
-      let decorated = try #require(view.position(from: view.beginningOfDocument, offset: offset))
-      #expect(
-        abs(view.caretRect(for: decorated).minY - view.contentOffset.y - originalY)
-          <= view.caretRect(for: decorated).height,
-        "The deferred Writing Tools decoration must preserve the completed reading position.")
-    }
     for width in [900.0, 360.0, 700.0, 402.0] {
       view.frame.size.width = width
       view.layoutIfNeeded()

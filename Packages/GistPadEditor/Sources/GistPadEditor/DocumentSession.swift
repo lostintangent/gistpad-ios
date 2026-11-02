@@ -62,9 +62,12 @@
       textView.registerForTraitChanges([
         UITraitPreferredContentSizeCategory.self, UITraitUserInterfaceStyle.self,
         UITraitAccessibilityContrast.self, UITraitLegibilityWeight.self,
-        PersonalAccentTrait.self,
       ]) { (view: AnchoredTextView, _: UITraitCollection) in
         view.session?.highlight()
+      }
+      textView.registerForTraitChanges([PersonalAccentTrait.self]) {
+        (view: AnchoredTextView, _: UITraitCollection) in
+        view.session?.commentAnnotations.accentDidChange()
       }
       updateHiddenFrontMatter()
       textView.selectedRange = NSRange(location: contentStart, length: 0)
