@@ -206,7 +206,7 @@ In the gist, a commented passage gets a 50% accent highlight and no underline. S
 
 ## Widgets and shortcuts
 
-The Today widget comes in small, medium and the inline and rectangular Lock Screen sizes. The date is SF Rounded semibold Large Title, the accent marks the date and tasks, tasks check off in place, and it's redacted when locked. **Add to Today** captures Text or a Task into today's note, and failure says **Couldn't Add to Today**. Open Today is a shortcut. Spotlight finds gists, and `gistpad://today` and gist links open through the normal opening states.
+The Today widget comes in small, medium and the inline and rectangular Lock Screen sizes. Small and medium lead with the date alone, like Calendar's icon: the abbreviated weekday in `.caption2` semibold over the day in SF Rounded semibold Large Title, both in the accent, with no "Today" or count beside it. Medium puts the tasks or the note to the date's right, and small puts them below it. Tasks check off in place, and the widget is redacted when locked. **Add to Today** captures Text or a Task into today's note, and failure says **Couldn't Add to Today**. Open Today is a shortcut. Spotlight finds gists, and `gistpad://today` and gist links open through the normal opening states.
 
 ## Motion
 
