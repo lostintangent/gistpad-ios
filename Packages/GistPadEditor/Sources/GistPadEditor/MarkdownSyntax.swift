@@ -14,10 +14,7 @@ public enum MarkdownSyntax {
   private static let inlinePatterns: [(NSRegularExpression, [(Int, Kind)])] = {
     let patterns: [(String, [(Int, Kind)])] = [
       ("^ {0,3}(?:>[ \\t]*)+.*$", [(0, .blockquote)]),
-      (
-        "^ {0,3}(#{1,6})(?:[ \\t]+.*?)?(?:[ \\t]+(#+))?[ \\t]*$",
-        [(0, .heading), (1, .punctuation), (2, .punctuation)]
-      ),
+      ("^ {0,3}#{1,6}(?:[ \\t]+.*?)?(?:[ \\t]+#+)?[ \\t]*$", [(0, .heading)]),
       (
         #"(?<!\\)(\*{3})(?=\S)(.+?\S|\S)\1"#,
         [(0, .strong), (0, .emphasis)]

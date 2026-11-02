@@ -333,6 +333,14 @@
       commentAnnotations.editMenu(ranges: ranges.map(\.rangeValue), suggestedActions: suggestedActions)
     }
 
+    /// gistpad.dev's GitHub Dark purple for headings, bold and italic. Light keeps the text ink, as the web does.
+    static let emphasisInk = UIColor { traits in
+      guard traits.userInterfaceStyle == .dark else { return .label.resolvedColor(with: traits) }
+      return traits.accessibilityContrast == .high
+        ? UIColor(red: 0xE6 / 255, green: 0xCC / 255, blue: 1, alpha: 1)
+        : UIColor(red: 0xD2 / 255, green: 0xA8 / 255, blue: 1, alpha: 1)
+    }
+
     func highlight() {
       guard isSettled else { return }
       let anchor = sourceView.beginAttributeUpdate()
@@ -364,9 +372,9 @@
         let attributes: [NSAttributedString.Key: Any]
         switch span.kind {
         case .heading:
-          attributes = [.font: headingFont]
+          attributes = [.foregroundColor: Self.emphasisInk, .font: headingFont]
         case .strong, .emphasis:
-          attributes = [:]
+          attributes = [.foregroundColor: Self.emphasisInk]
         case .blockquote, .htmlTag, .orderedMarker, .punctuation, .task, .checkedTask:
           attributes = [.foregroundColor: UIColor.secondaryLabel]
         case .strikethrough:

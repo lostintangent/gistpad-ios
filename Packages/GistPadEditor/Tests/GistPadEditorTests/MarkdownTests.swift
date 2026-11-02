@@ -125,7 +125,7 @@ func writingToolsProtectsFencesUntilTheirActualClosingDelimiter(source: String, 
     spans.filter { $0.kind == kind }.map { (source as NSString).substring(with: $0.range) }
   }
   #expect(strings(.heading) == ["## A heading ##"])
-  #expect(strings(.punctuation) == ["##", "##", "-", "-"])
+  #expect(strings(.punctuation) == ["-", "-"])
   #expect(strings(.task) == ["[ ]"])
   #expect(strings(.checkedTask) == ["[X]"])
   #expect(strings(.link) == ["[Link label](https://example.com)", "[[Wiki note]]"])

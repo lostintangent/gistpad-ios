@@ -8,7 +8,7 @@
   @Suite(.serialized)
   @MainActor
   struct SourceThemeTests {
-    @Test func syntaxUsesSystemInksAndNativeFontsWithoutChangingSourceOrSelection() throws {
+    @Test func syntaxUsesTheWebsInksAndNativeFontsWithoutChangingSourceOrSelection() throws {
       let source =
         """
         ---
@@ -67,16 +67,24 @@
             #expect(metadata.pointSize == bodySize)
             #expect(code.fontDescriptor.symbolicTraits.contains(.traitMonoSpace))
             #expect(metadata.fontDescriptor.symbolicTraits.contains(.traitMonoSpace))
-            // Markers that start a line are markup, and the text they introduce is content.
+            // As on gistpad.dev, headings, bold and italic are GitHub Dark's purple, markers
+            // included. Other markers that start a line are markup, and their text is content.
+            let purple =
+              appearance == .light
+              ? UIColor.label
+              : contrast == .high
+                ? UIColor(red: 0xE6 / 255, green: 0xCC / 255, blue: 1, alpha: 1)
+                : UIColor(red: 0xD2 / 255, green: 0xA8 / 255, blue: 1, alpha: 1)
             let inks: [(UIColor, [String])] = [
+              (.label, ["Plain", "Bullet", "Numbered", "code", "title", "fenced line"]),
               (
-                .label,
-                ["Heading", "Plain", "**outer", "Bullet", "Numbered", "code", "title", "fenced line"]
+                purple,
+                ["# Heading", "Heading", "_emphasis", "**strong", "***both", "**outer", "_inner"]
               ),
               (
                 .secondaryLabel,
                 [
-                  "# Heading", "> Quoted", "2)", "14.", "- Bullet", "* Nested", "+ Another",
+                  "> Quoted", "2)", "14.", "- Bullet", "* Nested", "+ Another",
                   "<span>", "</span>", "[ ]", "[x]", "```toc",
                 ]
               ),
