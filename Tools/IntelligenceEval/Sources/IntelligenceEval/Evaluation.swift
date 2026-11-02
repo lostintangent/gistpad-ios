@@ -212,7 +212,8 @@ enum NoteIntelligenceEvaluation {
     }
     if let issue = NoteAnswerIssue.check(
       answer, source: item.source, instruction: item.prompt,
-      maximumWords: item.maximumAnswerWords ?? (item.favorite == nil ? nil : 60))
+      maximumWords: item.maximumAnswerWords
+        ?? (item.favorite == nil ? NoteAnswerIssue.maximumWords : 60))
     {
       return issue.rawValue
     }

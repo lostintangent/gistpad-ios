@@ -20,8 +20,9 @@ struct AnswerIssueTests {
     ("It appears in the first block.", .internalIdentifier),
     ("Check blockIDs for the reference.", .internalIdentifier),
     ("The second block supports that.", .internalIdentifier),
+    (String(repeating: "You like An Example. ", count: 51), .answerTooLong),
   ])
-  func theGateRejectsInventedQuotesThirdPersonMarkupAndMetadata(
+  func theGateRejectsInventedQuotesThirdPersonMarkupMetadataAndRunaways(
     prose: String, issue: NoteAnswerIssue
   ) async {
     let fixture = NoteModelFixture()
@@ -45,9 +46,7 @@ struct AnswerIssueTests {
         "The blockID parameter identifies your block.",
         source: "The blockID parameter identifies a block.",
         instruction: "What does blockID do?") == nil)
-    let sixty = Array(repeating: "word", count: 60).joined(separator: " ")
-    #expect(NoteAnswerIssue.check(sixty, source: "", maximumWords: 60) == nil)
-    #expect(
-      NoteAnswerIssue.check(sixty + " extra", source: "", maximumWords: 60) == .answerTooLong)
+    let longest = Array(repeating: "word", count: NoteAnswerIssue.maximumWords)
+    #expect(NoteAnswerIssue.check(longest.joined(separator: " "), source: "") == nil)
   }
 }

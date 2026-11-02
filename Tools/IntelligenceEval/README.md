@@ -30,8 +30,9 @@ assertion and no alternative series in a favorite assertion. A separate greedy
 on-device meaning grade is recorded as an extra signal, not the primary pass
 decision. Every Ask case rejects unverified quoted spans, leaked block/field
 identifiers, third-person references to the reader and unrequested HTML. Factual
-cases also have a 60-word cap, excluding app-supplied citations. Production rejects
-the same guardable prose failures, with one bounded retry, before terminal success.
+cases also have a 60-word cap, excluding app-supplied citations. Production caps
+every answer at 200 words and rejects the same guardable prose failures, with one
+bounded retry, before terminal success.
 The private results retain rejected prose too. Ranking-based caveats are allowed. Review retained answers
 alongside the table, including model-grade disagreements. The conservative text
 checks are English-specific and can reject comparative explanations. Summary must

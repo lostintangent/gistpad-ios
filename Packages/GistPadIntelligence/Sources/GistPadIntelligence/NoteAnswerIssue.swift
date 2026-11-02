@@ -7,8 +7,12 @@ public enum NoteAnswerIssue: String, Sendable {
   case markupLeak
   case answerTooLong
 
+  /// Real answers measure under 70 words. A runaway repeats itself to the response limit, past 600.
+  public static let maximumWords = 200
+
   public static func check(
-    _ answer: String, source: String, instruction: String = "", maximumWords: Int? = nil
+    _ answer: String, source: String, instruction: String = "",
+    maximumWords: Int = NoteAnswerIssue.maximumWords
   ) -> Self? {
     for match in answer.matches(of: /["“]([^"”\n]+)["”]/) {
       if NoteAnchors.matches(String(match.output.1), in: source).isEmpty {
@@ -45,7 +49,7 @@ public enum NoteAnswerIssue: String, Sendable {
     for match in answer.matches(of: /(?i)<\/?(?:span|div|script|html|body)[^>]*>/) {
       if !source.contains(String(match.output)) { return .markupLeak }
     }
-    if let maximumWords, answer.split(whereSeparator: \.isWhitespace).count > maximumWords {
+    if answer.split(whereSeparator: \.isWhitespace).count > maximumWords {
       return .answerTooLong
     }
     return nil
