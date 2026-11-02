@@ -56,9 +56,10 @@ public struct DailyNote: Codable, Equatable, Sendable {
     }
 }
 
-extension DraftSourceEdit {
-    /// Adds `text` to the end of the day's `source`: a paragraph, or with `asTask`, one task per line.
-    public static func addToToday(_ text: String, asTask: Bool, in source: String) -> Self {
+extension DraftEdit {
+    /// Adds `text` to the end of the day's draft: a paragraph, or with `asTask`, one task per line.
+    public static func addToToday(_ text: String, asTask: Bool, to draft: DraftSnapshot) -> Self {
+        let source = draft.text
         let content = asTask
             ? text.split(whereSeparator: \.isNewline)
                 .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -69,7 +70,9 @@ extension DraftSourceEdit {
         let separator = source.isEmpty || source.hasSuffix(asTask ? "\n" : "\n\n") ? ""
             : asTask || source.hasSuffix("\n") ? "\n" : "\n\n"
         return Self(
-            location: source.utf16.count, length: 0, expectedText: "", replacement: separator + content + "\n")
+            draftID: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation,
+            range: NSRange(location: source.utf16.count, length: 0), expectedText: "",
+            replacement: separator + content + "\n")
     }
 }
 

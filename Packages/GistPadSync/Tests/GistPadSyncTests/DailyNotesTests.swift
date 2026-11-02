@@ -65,11 +65,12 @@ private func day(_ iso: String) throws -> DailyNoteTarget {
         #expect(sync.count("POST /gists") == 1)
     }
 
-    @Test func addToTodayAppendsAParagraphOrOneTaskPerLine() throws {
-        var text = "# Today\n\nA thought"
-        text = try DraftSourceEdit.addToToday("A second thought", asTask: false, in: text).apply(to: text)
-        text = try DraftSourceEdit.addToToday("First task\n  \t\n日本語 👩🏽‍💻\n", asTask: true, in: text).apply(to: text)
-        #expect(text == "# Today\n\nA thought\n\nA second thought\n- [ ] First task\n- [ ] 日本語 👩🏽‍💻\n")
+    @Test func addToTodayAppendsAParagraphOrOneTaskPerLine() async throws {
+        let store = try DraftStore.open(inMemory: true)
+        var draft = try await store.newDraft(accountID: UUID(), githubUserID: 42, text: "# Today\n\nA thought")
+        draft = try await store.apply(.addToToday("A second thought", asTask: false, to: draft))
+        draft = try await store.apply(.addToToday("First task\n  \t\n日本語 👩🏽‍💻\n", asTask: true, to: draft))
+        #expect(draft.text == "# Today\n\nA thought\n\nA second thought\n- [ ] First task\n- [ ] 日本語 👩🏽‍💻\n")
     }
 
     @Test func todayAndItsTasksFollowTheWeb() throws {

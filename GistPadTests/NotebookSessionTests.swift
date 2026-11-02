@@ -449,14 +449,12 @@ struct NotebookSessionTests {
     let window = try EditorContinuityTests().host(controller.session)
     defer { window.isHidden = true }
     let identity = ObjectIdentifier(controller.session.textView)
-    let command = SharedDraftCommand(
-      accountID: controller.draft.accountID, draftID: controller.draft.id,
-      expectedGeneration: 0,
-      edit: .init(
-        location: 4, length: 0, expectedText: "",
-        replacement: "\n![Image](https://example.test/image.png)"))
-    try await controller.applyDurableEdit(command) {
-      try await provider.store.apply(command)
+    let insertion = DraftEdit(
+      draftID: controller.draft.id, accountID: controller.draft.accountID,
+      expectedGeneration: 0, range: NSRange(location: 4, length: 0),
+      expectedText: "", replacement: "\n![Image](https://example.test/image.png)")
+    try await controller.applyDurableEdit(insertion) {
+      try await provider.store.apply(insertion)
     }
     #expect(controller.session.text == "Base\n![Image](https://example.test/image.png)")
     #expect(controller.session.generation == 1)
@@ -473,12 +471,12 @@ struct NotebookSessionTests {
     let (controller, _) = try await makeController()
     controller.session.textView.selectedRange = NSRange(location: 2, length: 1)
     let selection = controller.session.textView.selectedRange
-    let command = SharedDraftCommand(
-      accountID: controller.draft.accountID, draftID: controller.draft.id,
-      expectedGeneration: 0,
-      edit: .init(location: 4, length: 0, expectedText: "", replacement: " changed"))
+    let insertion = DraftEdit(
+      draftID: controller.draft.id, accountID: controller.draft.accountID,
+      expectedGeneration: 0, range: NSRange(location: 4, length: 0),
+      expectedText: "", replacement: " changed")
     await #expect(throws: URLError.self) {
-      try await controller.applyDurableEdit(command) { throw URLError(.cannotWriteToFile) }
+      try await controller.applyDurableEdit(insertion) { throw URLError(.cannotWriteToFile) }
     }
     #expect(controller.session.text == "Base")
     #expect(controller.session.generation == 0)
@@ -488,15 +486,15 @@ struct NotebookSessionTests {
 
   @Test func staleDurableCommandsCannotReplaceNewerTyping() async throws {
     let (controller, provider) = try await makeController()
-    let command = SharedDraftCommand(
-      accountID: controller.draft.accountID, draftID: controller.draft.id,
-      expectedGeneration: 0,
-      edit: .init(location: 4, length: 0, expectedText: "", replacement: " changed"))
+    let insertion = DraftEdit(
+      draftID: controller.draft.id, accountID: controller.draft.accountID,
+      expectedGeneration: 0, range: NSRange(location: 4, length: 0),
+      expectedText: "", replacement: " changed")
     edit(controller, to: "Newer 日本語")
     #expect(await controller.waitForLocalSave())
     await #expect(throws: DraftError.staleGeneration) {
-      try await controller.applyDurableEdit(command) {
-        try await provider.store.apply(command)
+      try await controller.applyDurableEdit(insertion) {
+        try await provider.store.apply(insertion)
       }
     }
     #expect(controller.session.text == "Newer 日本語")
@@ -624,12 +622,12 @@ struct NotebookSessionTests {
     let (controller, provider) = try await makeController()
     controller.session.textViewWritingToolsWillBegin(controller.session.textView)
     defer { controller.session.textViewWritingToolsDidEnd(controller.session.textView) }
-    let command = SharedDraftCommand(
-      accountID: controller.draft.accountID, draftID: controller.draft.id,
-      expectedGeneration: 0,
-      edit: .init(location: 4, length: 0, expectedText: "", replacement: " image"))
+    let insertion = DraftEdit(
+      draftID: controller.draft.id, accountID: controller.draft.accountID,
+      expectedGeneration: 0, range: NSRange(location: 4, length: 0),
+      expectedText: "", replacement: " image")
     await #expect(throws: SourceMutation.MutationError.compositionActive) {
-      try await controller.applyDurableEdit(command) { try await provider.store.apply(command) }
+      try await controller.applyDurableEdit(insertion) { try await provider.store.apply(insertion) }
     }
     #expect(controller.session.text == "Base")
     #expect(try await provider.snapshot().generation == 0)

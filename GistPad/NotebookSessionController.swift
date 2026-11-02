@@ -305,17 +305,15 @@ final class NotebookSessionController {
   }
 
   func applyDurableEdit(
-    _ command: SharedDraftCommand,
+    _ edit: DraftEdit,
     commit: @MainActor () async throws -> DraftSnapshot
   ) async throws {
-    guard command.accountID == draft.accountID, command.draftID == draft.id else {
+    guard edit.accountID == draft.accountID, edit.draftID == draft.id else {
       throw AccountError.accountChanged
     }
     try await commitMutation(
-      SourceMutation(
-        range: NSRange(location: command.edit.location, length: command.edit.length),
-        expected: command.edit.expectedText, replacement: command.edit.replacement),
-      expectedGeneration: command.expectedGeneration, commit: commit)
+      SourceMutation(range: edit.range, expected: edit.expectedText, replacement: edit.replacement),
+      expectedGeneration: edit.expectedGeneration, commit: commit)
   }
 
   func commitMutation(

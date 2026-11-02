@@ -110,7 +110,7 @@ extension DraftStore {
             guard let gistID = $0.gistID, !keeping.contains(gistID) else { return false }
             return !ids.contains(gistID) && $0.attemptedGeneration == nil && sourceEqual($0.text, $0.baseContent)
         }
-        try delete(gone)
+        for draft in gone { modelContext.delete(draft) }
         let snapshot = CachedLibrarySnapshot(
             accountID: accountID, owned: owned, starred: starred,
             preferences: preferences, cachedAt: cachedAt,

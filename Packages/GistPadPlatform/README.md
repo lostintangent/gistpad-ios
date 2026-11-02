@@ -18,7 +18,7 @@ signed-in account and answers the system's reindex requests.
 Open Note, Open Today and Add to Today are App Shortcuts. The Add to Today control
 opens the capture sheet, and shortcut-provided text skips it. Captures start
 today the way the app does, append Sync's `addToToday` edit through the same
-`SharedDraftCommand` path as the editor, then leave publishing to autosave.
+`DraftEdit` path as the editor, then leave publishing to autosave.
 
 Both targets read `SharedNotebookStore`, one JSON snapshot in the
 `group.dev.gistpad.GistPad` container. It holds the active account, one entity

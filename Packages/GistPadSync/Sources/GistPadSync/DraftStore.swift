@@ -69,10 +69,52 @@ public enum DraftError: Error, Equatable, Sendable {
     case notFound
     case accountMismatch
     case staleGeneration
+    case invalidEdit
     case publishInProgress
     case unresolvedConflict
     case readOnly
     case remoteDidNotAcknowledge
+}
+
+/// One replacement in a draft's text from outside the editor, like a widget's task check or Add to
+/// Today. It lands only while the draft is still at `expectedGeneration` and `range` still holds
+/// `expectedText`, so a stale or repeated edit can't change newer text.
+public struct DraftEdit: Equatable, Sendable {
+    public let draftID: UUID
+    public let accountID: UUID
+    public let expectedGeneration: UInt64
+    public let range: NSRange
+    public let expectedText: String
+    public let replacement: String
+
+    public init(
+        draftID: UUID, accountID: UUID, expectedGeneration: UInt64,
+        range: NSRange, expectedText: String, replacement: String
+    ) {
+        self.draftID = draftID
+        self.accountID = accountID
+        self.expectedGeneration = expectedGeneration
+        self.range = range
+        self.expectedText = expectedText
+        self.replacement = replacement
+    }
+
+    func apply(to text: String) throws -> String {
+        let source = text as NSString
+        guard range.location >= 0, range.length >= 0, range.location <= source.length,
+              range.length <= source.length - range.location,
+              isScalarBoundary(range.location, in: source),
+              isScalarBoundary(NSMaxRange(range), in: source),
+              sourceEqual(source.substring(with: range), expectedText)
+        else { throw DraftError.invalidEdit }
+        return source.replacingCharacters(in: range, with: replacement)
+    }
+
+    private func isScalarBoundary(_ offset: Int, in source: NSString) -> Bool {
+        guard offset > 0, offset < source.length else { return true }
+        return !(0xD800...0xDBFF).contains(source.character(at: offset - 1))
+            || !(0xDC00...0xDFFF).contains(source.character(at: offset))
+    }
 }
 
 public enum DraftMetadataError: Error, Equatable, Sendable {
@@ -119,17 +161,6 @@ final class StoredDraft {
     }
 }
 
-@Model
-final class StoredCommandReceipt {
-    @Attribute(.unique) var id: UUID
-    var payload: Data
-
-    init(id: UUID, payload: Data) {
-        self.id = id
-        self.payload = payload
-    }
-}
-
 @ModelActor
 public actor DraftStore {
     public init(container: ModelContainer) throws {
@@ -147,9 +178,7 @@ public actor DraftStore {
     }
 
     public static func open(url: URL? = nil, inMemory: Bool = false) throws -> DraftStore {
-        let schema = Schema([
-            StoredDraft.self, StoredLibrary.self, StoredCommandReceipt.self
-        ])
+        let schema = Schema([StoredDraft.self, StoredLibrary.self])
         let configuration: ModelConfiguration
         if let url {
             configuration = ModelConfiguration(
@@ -251,9 +280,11 @@ public actor DraftStore {
     public func removeDrafts(
         gistID: String, filename: String? = nil, updated gist: Gist? = nil, accountID: UUID
     ) throws {
-        try delete(modelContext.fetch(FetchDescriptor<StoredDraft>(
+        for draft in try modelContext.fetch(FetchDescriptor<StoredDraft>(
             predicate: #Predicate { $0.accountID == accountID && $0.gistID == gistID }
-        )).filter { filename == nil || $0.filename == filename })
+        )) where filename == nil || draft.filename == filename {
+            modelContext.delete(draft)
+        }
         try updateLibrary(accountID) { cached in
             if let filename, let gist {
                 cached.owned = cached.owned.map { $0.id == gistID ? gist : $0 }
@@ -273,17 +304,8 @@ public actor DraftStore {
     public func discardLocalCopy(id: UUID, accountID: UUID, expectedGeneration: UInt64) throws {
         let draft = try find(id, accountID: accountID)
         guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
-        try delete([draft])
+        modelContext.delete(draft)
         try commit()
-    }
-
-    func delete(_ drafts: [StoredDraft]) throws {
-        let ids = Set(drafts.map(\.id))
-        for receipt in try modelContext.fetch(FetchDescriptor<StoredCommandReceipt>())
-        where ids.contains(try JSONDecoder().decode(SharedDraftCommand.self, from: receipt.payload).draftID) {
-            modelContext.delete(receipt)
-        }
-        for draft in drafts { modelContext.delete(draft) }
     }
 
     /// Your draft of a gist's file, made on first open from GitHub's `content`, or from your new text
@@ -373,28 +395,11 @@ public actor DraftStore {
         return try snapshot(draft)
     }
 
-    public func apply(_ command: SharedDraftCommand) throws -> DraftSnapshot {
-        let result = try applyCommand(command)
+    public func apply(_ edit: DraftEdit) throws -> DraftSnapshot {
+        let draft = try find(edit.draftID, accountID: edit.accountID)
+        guard draft.generation == edit.expectedGeneration else { throw DraftError.staleGeneration }
+        try replaceText(draft, text: edit.apply(to: draft.text), generation: draft.generation + 1)
         try commit()
-        return result
-    }
-
-    func applyCommand(_ command: SharedDraftCommand) throws -> DraftSnapshot {
-        let draft = try find(command.draftID, accountID: command.accountID)
-        let id = command.id
-        let payload = try encodedCommand(command)
-        if let receipt = try modelContext.fetch(FetchDescriptor<StoredCommandReceipt>(
-            predicate: #Predicate { $0.id == id }
-        )).first {
-            guard receipt.payload == payload else { throw SharedStoreError.duplicateCommand }
-            return try snapshot(draft)
-        }
-        guard draft.generation == command.expectedGeneration else {
-            throw DraftError.staleGeneration
-        }
-        let text = try command.edit.apply(to: draft.text)
-        try replaceText(draft, text: text, generation: draft.generation + 1)
-        modelContext.insert(StoredCommandReceipt(id: id, payload: payload))
         return try snapshot(draft)
     }
 

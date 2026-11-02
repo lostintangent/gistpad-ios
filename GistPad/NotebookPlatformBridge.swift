@@ -123,11 +123,10 @@ final class NotebookPlatformBridge: NotebookIntentServing {
         task.title == shown.title
       else { throw NotebookPlatformError.staleTask }
       guard task.isChecked != completed else { return }
-      try await self.apply(SharedDraftCommand(
-        accountID: accountID, draftID: draft.id, expectedGeneration: draft.generation,
-        edit: DraftSourceEdit(
-          location: task.markerRange.location + 1, length: 1,
-          expectedText: task.isChecked ? "x" : " ", replacement: completed ? "x" : " ")))
+      try await self.apply(DraftEdit(
+        draftID: draft.id, accountID: accountID, expectedGeneration: draft.generation,
+        range: NSRange(location: task.markerRange.location + 1, length: 1),
+        expectedText: task.isChecked ? "x" : " ", replacement: completed ? "x" : " "))
     }
   }
 
@@ -140,9 +139,7 @@ final class NotebookPlatformBridge: NotebookIntentServing {
         throw NotebookPlatformError.accountChanged
       }
       let draft = try await self.todayDraft(accountID: accountID, target: target)
-      try await self.apply(SharedDraftCommand(
-        accountID: accountID, draftID: draft.id, expectedGeneration: draft.generation,
-        edit: .addToToday(text, asTask: asTask, in: draft.text)))
+      try await self.apply(.addToToday(text, asTask: asTask, to: draft))
       return .draft(accountID: accountID, draftID: draft.id)
     }
   }
@@ -168,25 +165,25 @@ final class NotebookPlatformBridge: NotebookIntentServing {
     else { throw NotebookPlatformError.accountChanged }
   }
 
-  private func apply(_ command: SharedDraftCommand) async throws {
-    let draft = try await store.draft(id: command.draftID, accountID: command.accountID)
+  private func apply(_ edit: DraftEdit) async throws {
+    let draft = try await store.draft(id: edit.draftID, accountID: edit.accountID)
     guard draft.attemptedGeneration == nil else { throw NotebookPlatformError.editingInProgress }
     if case .conflict = draft.state { throw NotebookPlatformError.editingInProgress }
-    let controller = sessions[command.draftID]?.value
+    let controller = sessions[edit.draftID]?.value
     if let controller {
       guard !controller.document.isRecovery, controller.canMutate else {
         throw NotebookPlatformError.editingInProgress
       }
-      try await controller.applyDurableEdit(command) {
-        try await self.validateAccount(command.accountID)
-        return try await self.store.apply(command)
+      try await controller.applyDurableEdit(edit) {
+        try await self.validateAccount(edit.accountID)
+        return try await self.store.apply(edit)
       }
     } else {
-      _ = try await store.apply(command)
+      _ = try await store.apply(edit)
     }
     do {
-      if notebook?.account?.id == command.accountID {
-        try await notebook?.reloadPlatformState(accountID: command.accountID)
+      if notebook?.account?.id == edit.accountID {
+        try await notebook?.reloadPlatformState(accountID: edit.accountID)
       }
       try await refresh()
     } catch {
@@ -206,8 +203,8 @@ final class NotebookPlatformBridge: NotebookIntentServing {
           await controller.publish(reason: .background, shouldContinue: { lease.isActive })
         } else {
           _ = try await notebook?.publish(
-            draftID: command.draftID, accountID: command.accountID, reason: .background,
-            expectedGeneration: command.expectedGeneration + 1,
+            draftID: edit.draftID, accountID: edit.accountID, reason: .background,
+            expectedGeneration: edit.expectedGeneration + 1,
             shouldPublish: { await MainActor.run { lease.isActive } })
         }
         try await refresh()

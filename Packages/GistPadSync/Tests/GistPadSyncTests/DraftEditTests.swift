@@ -3,26 +3,26 @@ import SwiftData
 import Testing
 @testable import GistPadSync
 
-@Suite struct SharedStoreTests {
+@Suite struct DraftEditTests {
     @Test func invalidUTF16OffsetsAndStaleGenerationsNeverMutateTheDraft() async throws {
         let store = try DraftStore.open(inMemory: true)
         let account = UUID()
         let text = "\u{1F642} - [ ] Task"
         let draft = try await store.newDraft(accountID: account, githubUserID: 42, text: text)
-        let splitSurrogate = SharedDraftCommand(
-            accountID: account, draftID: draft.id, expectedGeneration: 0,
-            edit: DraftSourceEdit(location: 1, length: 0, expectedText: "", replacement: "broken")
+        let splitSurrogate = DraftEdit(
+            draftID: draft.id, accountID: account, expectedGeneration: 0,
+            range: NSRange(location: 1, length: 0), expectedText: "", replacement: "broken"
         )
-        await #expect(throws: SharedStoreError.invalidCommand) { try await store.apply(splitSurrogate) }
-        let stale = SharedDraftCommand(
-            accountID: account, draftID: draft.id, expectedGeneration: 3,
-            edit: DraftSourceEdit(location: 6, length: 1, expectedText: " ", replacement: "x")
+        await #expect(throws: DraftError.invalidEdit) { try await store.apply(splitSurrogate) }
+        let stale = DraftEdit(
+            draftID: draft.id, accountID: account, expectedGeneration: 3,
+            range: NSRange(location: 6, length: 1), expectedText: " ", replacement: "x"
         )
         await #expect(throws: DraftError.staleGeneration) { try await store.apply(stale) }
         #expect(try await store.draft(id: draft.id, accountID: account).text == text)
     }
 
-    @Test func schemaExpansionKeepsDraftsAndDropsRetiredRecoveryRows() async throws {
+    @Test func schemaChangesKeepDraftsAndDropRetiredRecoveryAndReceiptRows() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -30,12 +30,15 @@ import Testing
         let account = UUID()
         let id = UUID()
         do {
-            let schema = Schema([Build16Schema.StoredDraft.self, Build16Schema.StoredRecovery.self])
+            let schema = Schema([
+                RetiredSchema.StoredDraft.self, RetiredSchema.StoredRecovery.self,
+                RetiredSchema.StoredCommandReceipt.self
+            ])
             let configuration = ModelConfiguration("GistPadDrafts", schema: schema, url: url, cloudKitDatabase: .none)
             let container = try ModelContainer(for: schema, configurations: [configuration])
             let context = ModelContext(container)
             context.autosaveEnabled = false
-            let draft = Build16Schema.StoredDraft(
+            let draft = RetiredSchema.StoredDraft(
                 id: id, accountID: account, githubUserID: 42, gistID: "abc123",
                 filename: "README.md", description: "Note", text: "unsynced source",
                 baseContent: "remote base", baseRevision: "one",
@@ -44,9 +47,10 @@ import Testing
             draft.generation = 7
             draft.autosavePaused = true
             context.insert(draft)
-            context.insert(Build16Schema.StoredRecovery(
+            context.insert(RetiredSchema.StoredRecovery(
                 draft: draft, sent: "older source", generation: 6, remote: "remote base"
             ))
+            context.insert(RetiredSchema.StoredCommandReceipt(id: UUID(), payload: Data("{}".utf8)))
             try context.save()
         }
         let upgraded = try DraftStore.open(url: url)
@@ -58,18 +62,18 @@ import Testing
         try await upgraded.cacheLibrary(
             owned: [], starred: [], preferences: Preferences(metadata: [:]), accountID: account
         )
-        let command = SharedDraftCommand(
-            accountID: account, draftID: id, expectedGeneration: 7,
-            edit: DraftSourceEdit(location: 0, length: 8, expectedText: "unsynced", replacement: "accepted")
+        let edit = DraftEdit(
+            draftID: id, accountID: account, expectedGeneration: 7,
+            range: NSRange(location: 0, length: 8), expectedText: "unsynced", replacement: "accepted"
         )
-        #expect(try await upgraded.apply(command).text == "accepted source")
+        #expect(try await upgraded.apply(edit).text == "accepted source")
         #expect(try await upgraded.cachedLibrary(accountID: account) != nil)
     }
 }
 
-// Build 16's persisted schema. It exists only so the test can prove that stores written before the
-// recovery and autosave-pause removal still open with their drafts intact.
-enum Build16Schema {
+// The persisted schema before recovery history, the autosave pause and command receipts were removed.
+// It exists only so the test can prove those stores still open with their drafts intact.
+enum RetiredSchema {
     @Model
     final class StoredDraft {
         @Attribute(.unique) var id: UUID
@@ -130,6 +134,17 @@ enum Build16Schema {
             self.remote = remote
             self.sent = sent
             self.generation = generation
+        }
+    }
+
+    @Model
+    final class StoredCommandReceipt {
+        @Attribute(.unique) var id: UUID
+        var payload: Data
+
+        init(id: UUID, payload: Data) {
+            self.id = id
+            self.payload = payload
         }
     }
 }
