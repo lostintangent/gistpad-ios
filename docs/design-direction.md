@@ -66,7 +66,7 @@ The Library list is one native `List`, in this order: **Pinned**, date groups, t
 - Rows never move while you type. Edits and publishes reposition a row at the next Library refresh or when you return to the Library. Pin and unpin move a row between Pinned and its date group with native list motion, leaving the open document unchanged.
 - Rows are the ordinary rows defined below: same title line, tags, task state, selection, swipe and context actions, and the same `library-note-<id>` identifier. No cards, grid, thumbnails, excerpts or pin glyph. Pin state is conveyed by the section. Pin and Unpin stay in swipe, context and named accessibility actions.
 - Tag filters and text search keep this structure. Matching pinned rows reveal Pinned temporarily without writing its remembered collapse choice. Matching date groups expand temporarily in the same way, without writing their remembered choice. Empty-state and count rules stay as specified in Controls and Search.
-- Native acceptance must show Closed and Open in Light, Dark and AX3, with a collapsed and an expanded Pinned, long authored titles, tags with progress and Comments, and each date group present.
+- Native acceptance shows Closed and Open in Dark at Large, with a collapsed and an expanded Pinned, long authored titles, tags with progress and Comments, and each date group present.
 
 ### Controls and Search
 
@@ -142,9 +142,9 @@ The title cluster navigates files. For multi-file gists, list exact filenames di
 
 Show the current exact filename in the native subtitle, except case-insensitive `README.md`. Other filenames get a 4-pt Body-scaled title/subtitle gap. A single-file note needs no unnecessary title chevron; Files remains in More.
 
-More begins with compact Pin / Star / Share / Copy Link, then Rename Note, Tags, Files, Find and applicable sidebar commands. Open in GitHub is separate, Archive is nondestructive, and Delete is isolated last. Use native menu sections, not disabled headings or custom separators. Direct Edit/Split/Preview controls stay outside More. Preserve exact accessible names, selection and toggle state.
+More begins with compact Pin / Star / Share / Copy Link, then Rename Gist…, Tags, Files, Intelligence…, Find and Replace and applicable sidebar commands. Open in GitHub is separate, Archive is nondestructive, and Delete is isolated last. Use native menu sections, not disabled headings or custom separators. Direct Edit/Split/Preview controls stay outside More. Preserve exact accessible names, selection and toggle state.
 
-Delete uses one confirmation for every note row state, and its wording is true for all of them. Title **Delete “[title]”?** Message **This removes the note from this iPhone and from GitHub if it was saved there, including unsynced changes. This can’t be undone.** Buttons **Cancel** and destructive **Delete**. Phone-only drafts get no separate copy. A daily note’s delete removes only that day’s file, so the same copy applies, naming the note by its title (user, Nov 1). If that file is the last one in its backing gist, the delete removes the gist with no extra prompt. A daily note written offline that never published can go with it. That gap is accepted (user, Nov 1). Only an uncertain creation adds one line: **GitHub may already have received this note. Check your GitHub Gists page and delete any copy there.**
+Delete uses one confirmation per kind, and its wording is true for every row state, including a gist that only exists on this iPhone. The menu item is **Delete Gist…**, or **Delete Daily Note…** on a daily note. Title **Delete “[title]”?**, which names the day on a daily note. A gist's message is **This deletes the gist from this iPhone and GitHub, including changes that haven’t been published. This can’t be undone.** A daily note's message is the same with **the daily note** in place of **the gist**. Buttons **Cancel** and destructive **Delete**. A daily note's delete, from its row or its own screen, removes only that day's file (user, Nov 1). If that file is the last one in its backing gist, the delete removes the gist with no extra prompt. A daily note written offline that never published can go with it. That gap is accepted (user, Nov 1).
 
 Tags keep web-compatible names and saved colors, and apply to every file in a gist. Metadata labels fill with the exact saved color at full opacity, with black or white text, whichever has higher contrast. That keeps every fill at 4.58:1 or better and passes the 4.5:1 target. A missing color uses a neutral system fill with primary text. No internal dot, tinted overlay or whole-label opacity. Picker rows are untinted with one standalone swatch, neutral name and selected check. No duplicate chip shelf, All tags heading or enclosing group cards.
 
@@ -173,7 +173,7 @@ If the writing keyboard covers the nonblocking remote-status slot, remove it fro
 | Data risk | Required response |
 | --- | --- |
 | Local write failed | **Changes aren't saved. Keep this note open.** Try Again, no safe-offline claim |
-| Publication/creation uncertain | Check Status / Check GitHub before retrying. Never blindly duplicate a gist or write |
+| Publication/creation cut off | No separate state or button. The publisher checks GitHub before sending again, so it never duplicates a gist or write |
 | Changed remotely while this note has unsent edits | **Needs you**. Keep the local text. Nothing publishes until you choose in Review changes |
 | Truncated, unavailable or blocked source | Explain the actual reason and recovery. Never offer unsafe replacement |
 | First read failed without cache | Selected-identity page recovery, not a tiny status icon over emptiness |

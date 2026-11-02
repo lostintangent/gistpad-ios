@@ -150,11 +150,11 @@ Comment annotations follow the separate [quote contract](design-direction.md#quo
 
 ## 7. Review gate
 
-Designer signs off actual surfaces, with installed-device review required for final polish. A stock component, passing build, SVG or single Light screenshot is not whole-app approval. Award-caliber is an ambition, not an award claim. Lead can accept the delegated nightly outcome without converting unobserved hardware behavior into evidence.
+Designer signs off actual surfaces, with installed-device review required for final polish. A stock component, passing build, SVG or single screenshot is not whole-app approval. Award-caliber is an ambition, not an award claim. Lead can accept the delegated nightly outcome without converting unobserved hardware behavior into evidence.
 
-For an implemented app surface, supply the same build/fixture at Closed/Open × Light/Dark × Large/AX3. Large is native default Dynamic Type; AX3 is `.accessibility3` / `.accessibilityExtraLarge`. Include actual keyboard, sheets and relevant empty/loading/offline/failed/read-only/permission states. Name build/runtime, pose, contrast, type and state; attach images to the channel handoff.
+For an implemented app surface, supply Dark captures from one build at Closed and Open, at the default Large text size (user, Nov 2). Include actual keyboard, sheets and relevant empty/loading/offline/failed/read-only/permission states. Name the build, pose and state, and attach images to the channel handoff. Any visible change, even inside a cleanup, shows the user a before and after capture before it merges.
 
-Inspect Increased Contrast, Reduce Transparency, Reduce Motion, Bold Text, RTL/mixed script and AX5 reachability. Measure final content/affordance pairs, including selected surfaces and actual materials. Reusing component evidence does not waive review in a new context. [Accessibility][accessibility].
+Accessibility text sizes, Light, Increased Contrast, Reduce Transparency, Reduce Motion and Bold Text keep working through system styles and the `isAccessibilitySize` branches, but they aren't captured or validated (user, Nov 2). Measure final content/affordance pairs, including selected surfaces and actual materials. Reusing component evidence does not waive review in a new context. [Accessibility][accessibility].
 
 Connected review must establish:
 
