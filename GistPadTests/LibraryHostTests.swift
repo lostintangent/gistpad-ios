@@ -158,7 +158,9 @@ struct LibraryHostTests {
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.windows.first(where: \.isKeyWindow)
     let window = UIWindow(windowScene: scene)
-    window.frame = .init(x: 0, y: 0, width: 900, height: 800)
+    // The sidebar search pins to the scene's bottom edge, so the window spans the scene's height.
+    window.frame = .init(
+      x: 0, y: 0, width: 900, height: scene.effectiveGeometry.coordinateSpace.bounds.height)
     window.overrideUserInterfaceStyle = dark ? .dark : .light
     window.traitOverrides.preferredContentSizeCategory =
       size == .large ? .large : .accessibilityExtraLarge
@@ -186,6 +188,7 @@ struct LibraryHostTests {
       } detail: {
         Text("The retained document")
       }
+      .librarySearch(model: model, isSidebar: true)
       .environment(\.horizontalSizeClass, .regular)
       .environment(\.dynamicTypeSize, size)
       .environment(\.colorScheme, dark ? .dark : .light))
@@ -253,20 +256,15 @@ struct LibraryHostTests {
         window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
       }
       let bitmap = try #require(image.cgImage)
-      let count = try #require(descendants(window).first {
+      let count = descendants(window).first {
         $0.accessibilityIdentifier == "capture-frame-library-collection-\(collection.rawValue)-count"
           && !$0.bounds.isEmpty
-      })
+      }
       let title = try #require(descendants(window).first {
         $0.accessibilityIdentifier == "capture-frame-library-collection-\(collection.rawValue)-title"
           && !$0.bounds.isEmpty
       })
       let titleFrame = title.convert(title.bounds, to: window)
-      if size == .large {
-        #expect(abs(cellFrame.height - 44) <= 1 / image.scale)
-      } else {
-        #expect(count.convert(count.bounds, to: window).minX >= titleFrame.maxX)
-      }
       let crop = try #require(bitmap.cropping(to: CGRect(
         x: titleFrame.minX * image.scale, y: titleFrame.minY * image.scale,
         width: titleFrame.width * image.scale, height: titleFrame.height * image.scale)))
@@ -278,8 +276,17 @@ struct LibraryHostTests {
       let words = (request.results ?? []).compactMap {
         $0.topCandidates(1).first?.string
       }.joined(separator: " ").lowercased()
+      // A title that wraps mid-word reads back as broken words ("starre d gists").
       #expect(words.contains(collection.title.lowercased()), "Rendered header: \(words)")
-      let countFrame = count.convert(count.bounds, to: window)
+      guard size == .large else {
+        // At accessibility sizes the sidebar header is title-only so the title can wrap whole.
+        #expect(count == nil, "The AX sidebar header hides its count.")
+        continue
+      }
+      let countView = try #require(count)
+      #expect(abs(cellFrame.height - 44) <= 1 / image.scale)
+      let countFrame = countView.convert(countView.bounds, to: window)
+      #expect(countFrame.minX >= titleFrame.maxX)
       let countCrop = try #require(bitmap.cropping(to: CGRect(
         x: countFrame.minX * image.scale, y: countFrame.minY * image.scale,
         width: countFrame.width * image.scale, height: countFrame.height * image.scale)))

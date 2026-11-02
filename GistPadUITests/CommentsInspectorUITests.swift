@@ -784,7 +784,14 @@ final class CommentsInspectorUITests: XCTestCase {
 
   private func pullConversationToRefresh(in app: XCUIApplication) {
     let conversation = app.descendants(matching: .any)["comments-conversation"].firstMatch
-    conversation.swipeDown()
+    let content = conversation.children(matching: .any).firstMatch
+    var previousTop = CGFloat.nan
+    for _ in 0..<12 {
+      let top = content.frame.minY
+      if top == previousTop { break }
+      previousTop = top
+      conversation.swipeDown()
+    }
     let start = conversation.coordinate(withNormalizedOffset: .zero).withOffset(
       .init(
         dx: conversation.frame.width / 2,
@@ -861,14 +868,19 @@ final class CommentsInspectorUITests: XCTestCase {
     let webView = app.webViews.firstMatch
     let top = app.navigationBars["A place for good ideas"].frame.maxY
     let firstLine = top...(top + 16)
-    for _ in 0..<4 {
+    for _ in 0..<6 {
+      try waitForSettledFrame(passage)
       let original = passage.frame.minY
       if firstLine.contains(original) { return }
+      // The scroll view spends a drag's first points on touch slop before it moves the page.
+      let offset = top + 8 - original
       let start = webView.coordinate(withNormalizedOffset: .init(dx: 0.5, dy: 0.5))
       start.press(
-        forDuration: 0.05, thenDragTo: start.withOffset(.init(dx: 0, dy: top + 2 - original)),
+        forDuration: 0.05,
+        thenDragTo: start.withOffset(.init(dx: 0, dy: offset + (offset < 0 ? -10 : 10))),
         withVelocity: .slow, thenHoldForDuration: 0.3)
     }
+    try waitForSettledFrame(passage)
     XCTAssertTrue(firstLine.contains(passage.frame.minY))
   }
 

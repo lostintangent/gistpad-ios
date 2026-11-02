@@ -374,9 +374,12 @@ public struct LibraryView: View {
         expansion: Binding<Bool>, id: String
     ) -> some View {
         let isExpanded = expansion.wrappedValue
+        // At accessibility sizes the sidebar header keeps only its title, so it wraps between
+        // words. VoiceOver still reads the count from the header's value.
+        let titleOnly = isSidebar && dynamicTypeSize.isAccessibilitySize
         let label = HStack(alignment: .firstTextBaseline) {
             Group {
-                if let symbol {
+                if let symbol, !titleOnly {
                     Label { title } icon: { Image(systemName: symbol) }
                 } else {
                     title
@@ -384,7 +387,7 @@ public struct LibraryView: View {
             }
             .captureFrame("\(id)-title")
             Spacer(minLength: 8)
-            if let count {
+            if let count, !titleOnly {
                 let number = Text(count, format: .number).monospacedDigit()
                 // The sidebar already draws its headers in secondary ink, so the count shares it.
                 (isSidebar ? number : number.foregroundStyle(.secondary))

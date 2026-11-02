@@ -130,7 +130,7 @@ final class LibraryDeletionUITests: XCTestCase {
     if app.buttons["Hide Keyboard"].isHittable { app.buttons["Hide Keyboard"].tap() }
     if wide {
       let other = app.descendants(matching: .any).matching(
-        NSPredicate(format: "identifier BEGINSWITH %@ AND NOT label CONTAINS %@", "library-note-", "Parked thought")
+        NSPredicate(format: "identifier BEGINSWITH %@ AND NOT label BEGINSWITH %@", "library-note-", "Untitled")
       ).firstMatch
       try await waitUntil("another note to select, leaving the parked note") { other.isHittable }
       other.tap()
@@ -139,8 +139,9 @@ final class LibraryDeletionUITests: XCTestCase {
     }
     let parked = app.descendants(matching: .any)["publication-parked"]
     try await waitUntil("the leaving publication to park") { parked.exists }
+    // Rows show the title and date only, so the new note is the lone "Untitled" row.
     let row = app.descendants(matching: .any).matching(
-      NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "library-note-", "Parked thought")
+      NSPredicate(format: "identifier BEGINSWITH %@ AND label BEGINSWITH %@", "library-note-", "Untitled")
     ).firstMatch
     try await waitUntil("the parked note's row") { row.isHittable }
     row.swipeLeft()

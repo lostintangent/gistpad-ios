@@ -24,6 +24,7 @@ struct LibraryNoteRow: View {
             VStack(alignment: .leading, spacing: lineSpacing) {
                 if isStacked {
                     titleContent(relativeTo: context.date)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     metadata(relativeTo: context.date, count: count)
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
