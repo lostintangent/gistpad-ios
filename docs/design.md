@@ -183,7 +183,7 @@ No page-wide sideways scrolling, tap flash or hover-only controls.
 
 ## Apple Intelligence
 
-A medium and large sheet opens from the keyboard bar or **More → Intelligence…**, with an **Ask**, **Edit** and **Review** segmented control. Ask prompts "Ask about this file", Edit "What would you like to change?" and Review says "Find errors and unclear wording." One button named for the action becomes **Stop** while it runs, over a plain phase line. Ask answers with citations and **Show in File**. Edit shows a diff with **Apply Edit**. Review lists comments. A read-only gist says "This gist is read-only. You can ask and review, but not apply changes." An unsupported device says "This device doesn't support Apple Intelligence."
+A medium and large sheet opens from the keyboard bar or **More → Intelligence…**, with an **Ask**, **Edit** and **Review** segmented control. Ask prompts "Ask about this file", Edit "What would you like to change?" and Review says "Find errors and unclear wording." One button named for the action becomes **Stop** while it runs, over a plain phase line. Ask answers with citations and **Show in File**. Edit shows a diff with **Apply Edit**. Review lists comments. A read-only gist says "This gist is read-only. You can ask and review, but not apply changes." An unsupported device says "This device doesn't support Apple Intelligence." Edit on a file too long for one pass says "This file is too long to edit at once. Select a section and use Writing Tools." Failures show in the sheet with `exclamationmark.circle`.
 
 ## Comments
 
