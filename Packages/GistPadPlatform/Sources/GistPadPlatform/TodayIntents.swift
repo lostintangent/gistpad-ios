@@ -48,7 +48,7 @@ public struct AddToTodayIntent: AppIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        try await notebook.addToToday(text: text, asTask: asTask, target: DailyNoteTarget())
+        try await notebook.addToToday(text: text, asTask: asTask, target: DailyNote.Day())
         return .result(dialog: "Added to Today.")
     }
 }

@@ -13,7 +13,7 @@ import WebKit
 @MainActor
 struct NotebookModelTests {
   /// A pinned gist "a" tagged Ideas, like the web saves them.
-  static let ideas: [PreferenceOperation] = [
+  static let ideas: [Preferences.Change] = [
     .setPinned(gistID: "a", pinned: true),
     .upsertTag(id: "ideas", name: "Ideas", color: "#EBC85A"),
     .setTag(gistID: "a", tagID: "ideas", included: true),
@@ -163,7 +163,7 @@ struct NotebookModelTests {
     await model.start()
     #expect(model.loadedDocument?.gist?.id == "a")
     #expect(model.loadedDocument?.filename == "Ideas.md")
-    #expect(!model.localDrafts.contains { $0.description == GistConventions.dailyNotesDescription })
+    #expect(!model.localDrafts.contains { $0.description == DailyNote.gistDescription })
     await model.refresh()
     #expect(model.loadedDocument?.filename == "Ideas.md")
     #expect(fixture.publishes.isEmpty)
@@ -186,7 +186,7 @@ struct NotebookModelTests {
     #expect(session.showsFrontMatter)
     #expect(session.contentStart == 0)
     #expect(view.selectedRange == .init(location: 0, length: 0))
-    _ = try await fixture.accounts.apply(
+    _ = try await fixture.accounts.update(
       [.setBoolean(.showFrontmatter, false)], accountID: fixture.account.id)
     await model.refresh()
     try await controller.refreshMetadata()
@@ -224,9 +224,9 @@ struct NotebookModelTests {
   @Test func launchDiscardsAnAbandonedBlankDraftEvenWhenItWasRemembered() async throws {
     let fixture = try await NotebookFixture()
     let accountID = fixture.account.id
-    let blank = try await fixture.store.createGistDraft(
+    let blank = try await fixture.store.newGistDraft(
       accountID: accountID, githubUserID: FixtureServer.you.id)
-    let kept = try await fixture.store.createGistDraft(
+    let kept = try await fixture.store.newGistDraft(
       accountID: accountID, githubUserID: FixtureServer.you.id)
     let text = "Keep e\u{301}\r\n日本語 👩🏽‍💻"
     _ = try await fixture.store.persist(id: kept.id, accountID: accountID, text: text, generation: 1)
@@ -325,7 +325,7 @@ struct NotebookModelTests {
     let accountID = fixture.account.id
     let recovery = try await fixture.stageEdit(
       gistID: "missing", filename: "README.md", text: "Find my recovery")
-    let local = try await fixture.store.createGistDraft(
+    let local = try await fixture.store.newGistDraft(
       accountID: accountID, githubUserID: FixtureServer.you.id)
     _ = try await fixture.store.persist(
       id: local.id, accountID: accountID, text: "Find my local draft", generation: 1)
@@ -438,7 +438,7 @@ struct NotebookModelTests {
     await model.start()
     let document = try #require(model.loadedDocument)
     let draft = try #require(document.draft)
-    #expect(document.filename == DailyNoteTarget().filename)
+    #expect(document.filename == DailyNote.Day().filename)
     #expect(document.editingRequestID == nil)
     #expect(model.isTodaySelected)
     #expect(draft.isDiscardableBlank)
@@ -476,7 +476,7 @@ struct NotebookModelTests {
     await first.value
     await second.value
     let today = try #require(model.loadedDocument?.draft)
-    #expect(today.filename == DailyNoteTarget().filename)
+    #expect(today.filename == DailyNote.Day().filename)
     _ = try await model.persist(
       draftID: today.id, accountID: today.accountID, text: "- [ ] One task", generation: 1)
     _ = try await model.publish(draftID: today.id, accountID: today.accountID)
@@ -484,7 +484,7 @@ struct NotebookModelTests {
     await model.open(.today())
     #expect(model.loadedDocument?.draft?.id == today.id)
     let dailies = try await fixture.store.drafts(accountID: fixture.account.id).filter {
-      $0.description == GistConventions.dailyNotesDescription
+      $0.description == DailyNote.gistDescription
     }
     #expect(dailies.map(\.id) == [today.id])
     #expect(fixture.publishes == ["POST /gists"])
@@ -501,7 +501,7 @@ struct NotebookModelTests {
     let model = fixture.model
     await model.start()
     #expect(model.loadedDocument?.gist?.id == "a")
-    let target = DailyNoteTarget(
+    let target = DailyNote.Day(
       date: Date(timeIntervalSince1970: 1_790_208_000), timeZone: TimeZone(secondsFromGMT: 0)!)
     await model.open(.today(target))
     #expect(model.loadedDocument?.draft?.filename == target.filename)
@@ -509,17 +509,17 @@ struct NotebookModelTests {
   }
 
   @Test func aDailyRowShowsItsDayAndTaskProgress() async throws {
-    let filename = GistConventions.todayFilename()
+    let filename = DailyNote.filename()
     let fixture = try await NotebookFixture {
       $0.addGist(
-        id: "daily", description: GistConventions.dailyNotesDescription,
+        id: "daily", description: DailyNote.gistDescription,
         files: [filename: "- [x] One\n- [ ] Two\nA third line stays out of the excerpt."])
     }
     let model = fixture.model
     await model.start()
     let row = try #require(model.library.unfilteredNotes(in: .dailyNotes).first)
     #expect(row.id == "daily/\(filename)")
-    #expect(row.dailyDate == DailyNotesIndex.parseDateFilename(filename))
+    #expect(row.dailyDate == DailyNote.date(filename: filename))
     #expect(model.library.dailyNoteCount == 1)
     #expect(row.progress == .init(completed: 1, total: 2))
     #expect(model.library.today.progress == .init(completed: 1, total: 2))
@@ -531,7 +531,7 @@ struct NotebookModelTests {
   @Test func unfilteredDailyRowsResolveTheirGistAndRefreshOverdueOnCalendarChanges() async throws {
     let fixture = try await NotebookFixture {
       $0.addGist(
-        id: "daily", description: GistConventions.dailyNotesDescription,
+        id: "daily", description: DailyNote.gistDescription,
         files: ["2026-01-02.md": "- [ ] Carried over"])
     }
     let model = fixture.model
@@ -552,7 +552,7 @@ struct NotebookModelTests {
   @Test func dailyRowsOpenAndDeleteTheirExactFile() async throws {
     let fixture = try await NotebookFixture {
       $0.addGist(
-        id: "daily", description: GistConventions.dailyNotesDescription,
+        id: "daily", description: DailyNote.gistDescription,
         files: ["2026-10-23.md": "The alpha day", "2026-10-24.md": "The beta day"])
     }
     let model = fixture.model
@@ -569,7 +569,7 @@ struct NotebookModelTests {
     #expect(model.loadedDocument?.rowID == "daily/2026-10-24.md")
     let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
     #expect(deletion.id == "daily")
-    #expect(deletion.title == GistConventions.fileDisplayName("2026-10-24.md"))
+    #expect(deletion.title == GistFile.displayName("2026-10-24.md"))
     if case .deleteFile(let gistID, let filename) = deletion.action {
       #expect(gistID == "daily")
       #expect(filename == "2026-10-24.md")
@@ -583,7 +583,7 @@ struct NotebookModelTests {
       selection: .init(gistID: "daily", filename: "2026-10-23.md", draftID: nil)
     ) {
       $0.addGist(
-        id: "daily", description: GistConventions.dailyNotesDescription,
+        id: "daily", description: DailyNote.gistDescription,
         files: ["2026-10-23.md": "An earlier day"])
     }
     let draft = try await fixture.stageEdit(
@@ -614,7 +614,7 @@ struct NotebookModelTests {
       selection: .init(gistID: "daily", filename: "2026-10-23.md", draftID: nil)
     ) {
       $0.addGist(
-        id: "daily", description: GistConventions.dailyNotesDescription,
+        id: "daily", description: DailyNote.gistDescription,
         files: ["2026-10-23.md": "The alpha day", "2026-10-24.md": "The beta day"])
     }
     let model = fixture.model

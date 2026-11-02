@@ -46,12 +46,12 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
 
     @Test func createDraftUsesWebHeadingAndEmptyContentDefaults() async throws {
         let store = try DraftStore.open(inMemory: true)
-        let one = try await store.createGistDraft(accountID: UUID(), githubUserID: 42, description: "A title")
+        let one = try await store.newGistDraft(accountID: UUID(), githubUserID: 42, description: "A title")
         #expect(one.text == "# A title\n\n")
         #expect(one.filename == "README.md")
         #expect(one.gistID == nil)
         #expect(one.state == .savedLocally)
-        let empty = try await store.createGistDraft(accountID: UUID(), githubUserID: 42)
+        let empty = try await store.newGistDraft(accountID: UUID(), githubUserID: 42)
         #expect(empty.text == "")
     }
 
@@ -60,20 +60,20 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
         let gist = try decodeGist(gistData(filename: filename))
         let store = try DraftStore.open(inMemory: true)
         let account = UUID()
-        let draft = try await store.openDraft(
+        let draft = try await store.draft(
             accountID: account, githubUserID: 42, gistID: gist.id, filename: filename,
             description: "Note", content: "base", revision: gist.revision
         )
         let local = try await store.persist(
             id: draft.id, accountID: account, text: "unpublished", generation: 1
         )
-        let links = try DocumentLinks(gist: gist, filename: filename)
+        let links = try GistLinks(gist: gist, filename: filename)
         #expect(links.shareURL.absoluteString == "https://gistpad.dev/#/share/abc123/R%C3%A9sum%C3%A9%20%231%3F%20100%25.md")
         #expect(links.githubURL.absoluteString == "https://gist.github.com/abc123")
         #expect(links.isSecret)
-        #expect(try DocumentLinks(gist: gist).shareURL.absoluteString == "https://gistpad.dev/#/share/abc123")
-        #expect(throws: DocumentLinkError.invalidFilename) {
-            try DocumentLinks(gist: gist, filename: "not-published.md")
+        #expect(try GistLinks(gist: gist).shareURL.absoluteString == "https://gistpad.dev/#/share/abc123")
+        #expect(throws: GistLinks.Error.invalidFilename) {
+            try GistLinks(gist: gist, filename: "not-published.md")
         }
         #expect(try await store.draft(id: local.id, accountID: account).state == .savedLocally)
     }

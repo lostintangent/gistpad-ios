@@ -255,7 +255,7 @@ private extension NotebookFixture {
   }
 
   /// The editor's file as it's saved on this iPhone.
-  func saved(_ controller: NotebookSessionController) async throws -> DraftSnapshot {
+  func saved(_ controller: NotebookSessionController) async throws -> Draft {
     try await store.draft(id: controller.draft.id, accountID: account.id)
   }
 }

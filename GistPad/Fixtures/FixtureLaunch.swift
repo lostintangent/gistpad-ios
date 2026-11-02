@@ -54,7 +54,7 @@
       if fixture != .signedOut {
         let account = try await server.signIn(accounts)
         let seeded = fixture == .empty ? [] : FixtureLibrary.preferences
-        _ = try await accounts.apply(seeded + (accent.map { [.setAccentColor($0)] } ?? []), accountID: account.id)
+        _ = try await accounts.update(seeded + (accent.map { [.setAccentColor($0)] } ?? []), accountID: account.id)
       }
       let store = try DraftStore.open(inMemory: true)
       let provider = LiveNotebookProvider(accounts: accounts, drafts: store)

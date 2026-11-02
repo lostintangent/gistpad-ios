@@ -30,7 +30,7 @@ enum NotebookEditError: LocalizedError {
 final class NotebookSessionController {
   private(set) var document: NotebookDocument
   let session: Editor
-  private(set) var draft: DraftSnapshot
+  private(set) var draft: Draft
   private(set) var saveState: PublishState
   private(set) var isPublishing = false
   private(set) var isPerformingDestructiveAction = false
@@ -50,7 +50,7 @@ final class NotebookSessionController {
     subsystem: "dev.gistpad.GistPad", category: "Document")
 
   init(
-    document: NotebookDocument, draft: DraftSnapshot, notebook: NotebookModel,
+    document: NotebookDocument, draft: Draft, notebook: NotebookModel,
     autosaveDelay: Duration = .seconds(5)
   ) {
     self.document = document
@@ -312,7 +312,7 @@ final class NotebookSessionController {
 
   func applyDurableEdit(
     _ edit: DraftEdit,
-    commit: @MainActor () async throws -> DraftSnapshot
+    commit: @MainActor () async throws -> Draft
   ) async throws {
     guard edit.accountID == draft.accountID, edit.draftID == draft.id else {
       throw AccountError.accountChanged
@@ -324,7 +324,7 @@ final class NotebookSessionController {
 
   func commitMutation(
     _ edit: Edit, expectedGeneration: UInt64,
-    commit: @MainActor () async throws -> DraftSnapshot
+    commit: @MainActor () async throws -> Draft
   ) async throws {
     guard canMutate else { throw Edit.MutationError.compositionActive }
     guard session.generation == expectedGeneration else { throw DraftError.staleGeneration }
@@ -364,7 +364,7 @@ final class NotebookSessionController {
   // Library retries can save this note while it is open, so its persisted state is re-read.
   func refreshPersistedState() async {
     guard !isPublishing, !isDiscarded, !document.isRecovery else { return }
-    let persisted: DraftSnapshot
+    let persisted: Draft
     do {
       persisted = try await notebook.draftSnapshot(id: draft.id, accountID: draft.accountID)
     } catch {

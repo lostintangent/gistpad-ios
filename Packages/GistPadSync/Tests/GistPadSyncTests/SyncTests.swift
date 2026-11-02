@@ -31,7 +31,7 @@ import Testing
         let draft = try await fixture.open(gist)
         fixture.server.edit(gist.id, files: ["README.md": "two"])
 
-        let adopted = try await fixture.coordinator.inspect(id: draft.id, accountID: SyncFixture.account)
+        let adopted = try await fixture.publisher.inspect(id: draft.id, accountID: SyncFixture.account)
         #expect(adopted.text == "two")
         #expect(adopted.baseContent == "two")
         #expect(adopted.generation == 1)
@@ -114,7 +114,7 @@ import Testing
         await gate.waitForArrival()
         let newer = try await fixture.type("first and newer", in: first)
         let staleAutosave = Task {
-            try await fixture.coordinator.publish(
+            try await fixture.publisher.publish(
                 id: first.id, accountID: SyncFixture.account, reason: .autosave,
                 expectedGeneration: first.generation)
         }
@@ -184,10 +184,10 @@ import Testing
             throw URLError(.timedOut)
         }
         let draft = if daily {
-            try await DailyNotesService(
+            try await DailyNotes(
                 accountID: SyncFixture.account, githubUserID: SyncFixture.user, client: fixture.github,
-                store: fixture.store, coordinator: fixture.coordinator
-            ).stageToday(target: DailyNoteTarget(date: .now, timeZone: .gmt)).draft
+                store: fixture.store, publisher: fixture.publisher
+            ).stageToday(target: DailyNote.Day(date: .now, timeZone: .gmt)).draft
         } else {
             try await fixture.store.newDraft(
                 accountID: SyncFixture.account, githubUserID: SyncFixture.user, description: "Ideas",
@@ -218,7 +218,7 @@ import Testing
         if edited { draft = try await fixture.type("mine", in: draft) }
         fixture.server.edit(gist.id, files: ["README.md": decomposed])
 
-        let inspected = try await fixture.coordinator.inspect(id: draft.id, accountID: SyncFixture.account)
+        let inspected = try await fixture.publisher.inspect(id: draft.id, accountID: SyncFixture.account)
         if edited {
             guard case .conflict(let conflict) = inspected.state else {
                 Issue.record("A byte-different remote is a change, got \(inspected.state)")

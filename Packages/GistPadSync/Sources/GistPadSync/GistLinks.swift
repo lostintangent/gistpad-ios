@@ -1,18 +1,12 @@
 import Foundation
 
-public enum DocumentLinkError: Error, Equatable, Sendable {
-    case invalidGistID
-    case invalidFilename
-    case notPublished
-}
-
-extension DocumentLinkError: LocalizedError {
-    public var errorDescription: String? {
-        String(localized: "Publish this gist to get a link.")
+public struct GistLinks: Equatable, Sendable {
+    public enum Error: Swift.Error, Equatable, Sendable {
+        case invalidGistID
+        case invalidFilename
+        case notPublished
     }
-}
 
-public struct DocumentLinks: Equatable, Sendable {
     public let shareURL: URL
     public let githubURL: URL
     public let isSecret: Bool
@@ -20,9 +14,9 @@ public struct DocumentLinks: Equatable, Sendable {
     public init(gist: Gist, filename: String? = nil) throws {
         guard !gist.id.isEmpty,
               gist.id.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0)
-                  || (97...122).contains($0) }) else { throw DocumentLinkError.invalidGistID }
+                  || (97...122).contains($0) }) else { throw Error.invalidGistID }
         if let filename {
-            guard !filename.isEmpty, gist.files[filename] != nil else { throw DocumentLinkError.invalidFilename }
+            guard !filename.isEmpty, gist.files[filename] != nil else { throw Error.invalidFilename }
         }
         let suffix = filename.map { "/" + Self.encode($0) } ?? ""
         shareURL = URL(string: "https://gistpad.dev/#/share/\(gist.id)\(suffix)")!
@@ -38,5 +32,11 @@ public struct DocumentLinks: Equatable, Sendable {
             }
             return String(format: "%%%02X", byte)
         }.joined()
+    }
+}
+
+extension GistLinks.Error: LocalizedError {
+    public var errorDescription: String? {
+        String(localized: "Publish this gist to get a link.")
     }
 }

@@ -21,14 +21,14 @@ struct NotebookWriteFailure {
 
 /// GitHub, the account and the drafts on this iPhone, behind one actor the notebook talks to.
 actor LiveNotebookProvider {
-  let accounts: AccountService
+  let accounts: AccountStore
   let drafts: DraftStore
   let mutationQueue = NotebookMutationQueue()
   private var clients: [UUID: GitHubClient] = [:]
-  private var coordinators: [UUID: SyncCoordinator] = [:]
-  private var dailyServices: [UUID: DailyNotesService] = [:]
+  private var publishers: [UUID: DraftPublisher] = [:]
+  private var dailyServices: [UUID: DailyNotes] = [:]
 
-  init(accounts: AccountService, drafts: DraftStore) {
+  init(accounts: AccountStore, drafts: DraftStore) {
     self.accounts = accounts
     self.drafts = drafts
   }
@@ -81,13 +81,13 @@ actor LiveNotebookProvider {
     return text
   }
 
-  func openDraft(for document: NotebookDocument) async throws -> DraftSnapshot {
+  func draft(for document: NotebookDocument) async throws -> Draft {
     guard let gist = document.gist else { throw GitHubClientError.missingFile }
     guard let account = try await accounts.cachedAccount(), account.id == document.accountID else {
       throw AccountError.accountChanged
     }
     let githubUserID = try await verifiedUserID(accountID: document.accountID)
-    return try await drafts.openDraft(
+    return try await drafts.draft(
       accountID: document.accountID, githubUserID: githubUserID,
       gistID: gist.id, filename: document.filename,
       description: gist.description ?? "",
@@ -95,7 +95,7 @@ actor LiveNotebookProvider {
   }
 
   func persist(draftID: UUID, accountID: UUID, text: String, generation: UInt64) async throws
-    -> DraftSnapshot
+    -> Draft
   {
     try await drafts.persist(id: draftID, accountID: accountID, text: text, generation: generation)
   }
@@ -103,10 +103,10 @@ actor LiveNotebookProvider {
   func publish(
     draftID: UUID, accountID: UUID, reason: PublishReason,
     expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
-  ) async throws -> DraftSnapshot {
-    let coordinator = await coordinator(accountID: accountID)
+  ) async throws -> Draft {
+    let publisher = await publisher(accountID: accountID)
     return try await mutationQueue.run {
-      try await coordinator.publish(
+      try await publisher.publish(
         id: draftID, accountID: accountID, reason: reason,
         expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
     }
@@ -134,41 +134,41 @@ actor LiveNotebookProvider {
     return id
   }
 
-  func createDraft(accountID: UUID) async throws -> DraftSnapshot {
+  func createDraft(accountID: UUID) async throws -> Draft {
     let userID = try await verifiedUserID(accountID: accountID)
-    return try await drafts.createGistDraft(accountID: accountID, githubUserID: userID)
+    return try await drafts.newGistDraft(accountID: accountID, githubUserID: userID)
   }
 
-  func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
+  func discardBlankDraft(_ draft: Draft) async throws -> Bool {
     try await drafts.discardBlankDraft(
       id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation)
   }
 
-  func today(accountID: UUID, target: DailyNoteTarget) async throws -> TodayNote {
-    let service: DailyNotesService
+  func today(accountID: UUID, target: DailyNote.Day) async throws -> (gist: Gist?, draft: Draft) {
+    let service: DailyNotes
     if let existing = dailyServices[accountID] {
       service = existing
     } else {
       let userID = try await verifiedUserID(accountID: accountID)
       let client = await client(accountID: accountID)
-      let coordinator = await coordinator(accountID: accountID)
+      let publisher = await publisher(accountID: accountID)
       service =
         dailyServices[accountID]
-        ?? DailyNotesService(
+        ?? DailyNotes(
           accountID: accountID, githubUserID: userID, client: client,
-          store: drafts, coordinator: coordinator)
+          store: drafts, publisher: publisher)
       dailyServices[accountID] = service
     }
     return try await mutationQueue.run { try await service.stageToday(target: target) }
   }
 
-  private func coordinator(accountID: UUID) async -> SyncCoordinator {
-    if let coordinator = coordinators[accountID] { return coordinator }
+  private func publisher(accountID: UUID) async -> DraftPublisher {
+    if let publisher = publishers[accountID] { return publisher }
     let client = await client(accountID: accountID)
-    if let existing = coordinators[accountID] { return existing }
-    let coordinator = SyncCoordinator(client: client, store: drafts)
-    coordinators[accountID] = coordinator
-    return coordinator
+    if let existing = publishers[accountID] { return existing }
+    let publisher = DraftPublisher(client: client, store: drafts)
+    publishers[accountID] = publisher
+    return publisher
   }
 }
 
@@ -177,7 +177,7 @@ struct NotebookDocument: Equatable, Sendable, Identifiable {
   var gist: Gist?
   var filename: String
   let text: String
-  var draft: DraftSnapshot?
+  var draft: Draft?
   var isRecovery: Bool
   var libraryRowID: String?
   var editingRequestID: UUID?
@@ -195,7 +195,7 @@ struct NotebookDocument: Equatable, Sendable, Identifiable {
     id = "\(accountID.uuidString)/\(gist.id)/\(filename)"
   }
 
-  init(draft: DraftSnapshot, gist: Gist? = nil, isRecovery: Bool = false) {
+  init(draft: Draft, gist: Gist? = nil, isRecovery: Bool = false) {
     accountID = draft.accountID
     self.gist = gist
     filename = draft.filename
@@ -230,7 +230,7 @@ struct NotebookOpening: Equatable {
   enum Request: Equatable {
     case gist(id: String, filename: String? = nil, rowID: String? = nil)
     case draft(id: UUID, rowID: String? = nil)
-    case today(DailyNoteTarget = DailyNoteTarget(), focusesEditor: Bool = true)
+    case today(DailyNote.Day = DailyNote.Day(), focusesEditor: Bool = true)
     case new
 
     /// Creating a note or starting the day puts the caret in it.
@@ -277,10 +277,10 @@ final class NotebookModel {
   private(set) var isStarting = false
   /// The note opening in the detail column, until it's presented or fails.
   private(set) var opening: NotebookOpening?
-  private(set) var localDrafts: [DraftSnapshot] = []
+  private(set) var localDrafts: [Draft] = []
   /// Counts drafts recorded in memory, so a local read that started earlier knows it's stale.
   private var localDraftRecords = 0
-  private(set) var cachedLibrary: CachedLibrarySnapshot?
+  private(set) var cachedLibrary: CachedLibrary?
   private(set) var isCreating = false
   /// The one message the app shows in an alert, such as a failed open or action.
   var documentError: String?
@@ -366,10 +366,10 @@ final class NotebookModel {
   var isTodaySelected: Bool {
     if let opening { return if case .today = opening.request { true } else { false } }
     guard let document = presentedDocument,
-      document.filename == GistConventions.todayFilename()
+      document.filename == DailyNote.filename()
     else { return false }
     return document.gist?.isDailyNote == true
-      || document.draft?.description == GistConventions.dailyNotesDescription
+      || document.draft?.description == DailyNote.gistDescription
   }
 
   @discardableResult
@@ -417,7 +417,7 @@ final class NotebookModel {
     if gist.isDailyNote, let filename = target?.filename {
       return .init(
         id: gist.id, accountID: account.id,
-        title: GistConventions.fileDisplayName(filename), filename: filename)
+        title: GistFile.displayName(filename), filename: filename)
     }
     return .init(id: gist.id, accountID: account.id, title: gist.displayName)
   }
@@ -462,7 +462,7 @@ final class NotebookModel {
       selectedFilename = filename
     } else if let gist {
       guard gist.truncated != true || gist.isDailyNote else { return nil }
-      selectedFilename = gist.isDailyNote ? GistConventions.todayFilename() : gist.defaultMarkdownFilename
+      selectedFilename = gist.isDailyNote ? DailyNote.filename() : gist.defaultMarkdownFilename
     } else {
       let candidates = localDrafts.filter { $0.gistID == gistID }
       selectedFilename = candidates.count == 1 ? candidates.first?.filename : nil
@@ -482,7 +482,7 @@ final class NotebookModel {
     return document
   }
 
-  private func localDocument(_ draft: DraftSnapshot, rowID: String?) -> NotebookDocument {
+  private func localDocument(_ draft: Draft, rowID: String?) -> NotebookDocument {
     let gist = cachedLibrary?.gists.first { $0.id == draft.gistID }
     var document = NotebookDocument(
       draft: draft, gist: gist,
@@ -543,7 +543,7 @@ final class NotebookModel {
     }?.id
   }
 
-  private func recordLocalDraft(_ draft: DraftSnapshot) {
+  private func recordLocalDraft(_ draft: Draft) {
     localDraftRecords += 1
     localDrafts.removeAll { $0.id == draft.id }
     localDrafts.append(draft)
@@ -551,11 +551,11 @@ final class NotebookModel {
     updateToday()
   }
 
-  private func updateLibraryExcerpt(for draft: DraftSnapshot) {
+  private func updateLibraryExcerpt(for draft: Draft) {
     let gist = cachedLibrary?.gists.first { $0.id == draft.gistID }
     let isDaily = gist?.isDailyNote == true
-      || draft.description == GistConventions.dailyNotesDescription
-    if isDaily, DailyNotesIndex.parseDateFilename(draft.filename) == nil { return }
+      || draft.description == DailyNote.gistDescription
+    if isDaily, DailyNote.date(filename: draft.filename) == nil { return }
     if let gist, !gist.isDailyNote, draft.filename != gist.defaultMarkdownFilename { return }
     let rowID =
       if let gist, gist.isDailyNote, owns(gist) {
@@ -763,7 +763,7 @@ final class NotebookModel {
     do {
       var opened = try await document(for: request, account: account)
       if opened.draft == nil {
-        let draft = try await provider.openDraft(for: opened)
+        let draft = try await provider.draft(for: opened)
         // Recorded, so selecting this note again presents it at once.
         if self.account?.id == account.id { recordLocalDraft(draft) }
         opened.draft = draft
@@ -800,7 +800,7 @@ final class NotebookModel {
         if let filename {
           filenames.contains(filename) ? filename : nil
         } else if gist.isDailyNote {
-          filenames.first { $0 == GistConventions.todayFilename() }
+          filenames.first { $0 == DailyNote.filename() }
         } else {
           gist.defaultMarkdownFilename
         }
@@ -927,8 +927,8 @@ final class NotebookModel {
   }
 
   private static func libraryDrafts(
-    _ drafts: [DraftSnapshot], owned: [Gist], accountID: UUID
-  ) -> [DraftSnapshot] {
+    _ drafts: [Draft], owned: [Gist], accountID: UUID
+  ) -> [Draft] {
     drafts.filter { draft in
       guard draft.accountID == accountID else { return false }
       guard let gist = owned.first(where: { $0.id == draft.gistID }),
@@ -938,7 +938,7 @@ final class NotebookModel {
     }
   }
 
-  private static func librarySource(draft: DraftSnapshot?, cached: String?) -> String? {
+  private static func librarySource(draft: Draft?, cached: String?) -> String? {
     if let draft, draft.state != .savedToGitHub || draft.attemptedGeneration != nil {
       return draft.text
     }
@@ -957,7 +957,7 @@ final class NotebookModel {
     localized:
       "The GitHub note is unavailable. Your local draft is safe and can still be read or exported.")
 
-  func draftSnapshot(id: UUID, accountID: UUID) async throws -> DraftSnapshot {
+  func draftSnapshot(id: UUID, accountID: UUID) async throws -> Draft {
     guard
       let draft = try await provider.localState(accountID: accountID).drafts.first(where: {
         $0.id == id
@@ -987,7 +987,7 @@ final class NotebookModel {
     library.selectedNoteID != nil && presentedDocument?.draft?.id == id
   }
 
-  func discardBlankDraft(_ draft: DraftSnapshot) async throws -> Bool {
+  func discardBlankDraft(_ draft: Draft) async throws -> Bool {
     guard account?.id == draft.accountID, pendingAccount == nil,
       draft.isDiscardableBlank, !isDraftSelected(draft.id)
     else { return false }
@@ -1322,10 +1322,10 @@ final class NotebookModel {
       isAutoSaveEnabled: account.preferences.isAutoSaveEnabled,
       commentCount: gist.isDailyNote ? nil : gist.commentCount,
       shareURL: document.isRecovery || gist.files[document.filename] == nil
-        ? nil : try? DocumentLinks(gist: gist, filename: document.filename).shareURL)
+        ? nil : try? GistLinks(gist: gist, filename: document.filename).shareURL)
   }
 
-  func adoptPublication(_ saved: DraftSnapshot) async throws -> Gist? {
+  func adoptPublication(_ saved: Draft) async throws -> Gist? {
     guard let account, account.id == saved.accountID, let id = saved.gistID else { return nil }
     let gist: Gist
     if let acknowledged = cachedLibrary?.details[id],
@@ -1350,7 +1350,7 @@ final class NotebookModel {
   }
 
   /// Points the open document at the gist it published to, keeping it selected under its new row.
-  private func apply(published saved: DraftSnapshot, gist: Gist) {
+  private func apply(published saved: Draft, gist: Gist) {
     guard
       loadedDocument?.draft?.id == saved.id
         || (loadedDocument?.gist?.id == gist.id && loadedDocument?.filename == saved.filename)
@@ -1366,7 +1366,7 @@ final class NotebookModel {
   }
 
   func persist(draftID: UUID, accountID: UUID, text: String, generation: UInt64) async throws
-    -> DraftSnapshot
+    -> Draft
   {
     let saved = try await provider.persist(
       draftID: draftID, accountID: accountID, text: text, generation: generation)
@@ -1404,11 +1404,11 @@ final class NotebookModel {
     draftID: UUID, accountID: UUID, reason: PublishReason = .manual,
     expectedGeneration: UInt64? = nil,
     shouldPublish: @escaping @Sendable () async -> Bool = { true }
-  ) async throws -> DraftSnapshot {
+  ) async throws -> Draft {
     guard account?.id == accountID || reason == .manual, pendingAccount == nil else {
       throw AccountError.accountChanged
     }
-    let saved: DraftSnapshot
+    let saved: Draft
     do {
       saved = try await provider.publish(
         draftID: draftID, accountID: accountID, reason: reason,
@@ -1435,8 +1435,8 @@ final class NotebookModel {
   }
 
   static func librarySnapshot(
-    owned: [Gist], starred: [Gist], account: Account, drafts: [DraftSnapshot] = [],
-    cached: CachedLibrarySnapshot? = nil
+    owned: [Gist], starred: [Gist], account: Account, drafts: [Draft] = [],
+    cached: CachedLibrary? = nil
   )
     -> LibrarySnapshot
   {
@@ -1454,7 +1454,7 @@ final class NotebookModel {
       let days: [(filename: String, date: Date)?]
       if gist.isDailyNote, ownedIDs.contains(gist.id) {
         days = Set(gist.files.keys).union(gistDrafts.map(\.filename)).compactMap { filename in
-          DailyNotesIndex.parseDateFilename(filename).map { (filename: filename, date: $0) }
+          DailyNote.date(filename: filename).map { (filename: filename, date: $0) }
         }.map(Optional.some)
       } else {
         days = [nil]
@@ -1462,7 +1462,7 @@ final class NotebookModel {
       return days.map { day in
         var note = LibraryNote(
           id: day.map { "\(gist.id)/\($0.filename)" } ?? gist.id,
-          title: day.map { GistConventions.fileDisplayName($0.filename) } ?? gist.displayName,
+          title: day.map { GistFile.displayName($0.filename) } ?? gist.displayName,
           updatedAt: gist.updatedAt, gistID: gist.id,
           owner: gist.owner?.login, isOwned: ownedIDs.contains(gist.id),
           isSecret: !gist.isPublic, isPinned: preferences.pinnedGists.contains(gist.id),
@@ -1474,10 +1474,10 @@ final class NotebookModel {
         )
         // Only daily rows read note content, for their task progress.
         if gist.isDailyNote {
-          let filename = day?.filename ?? GistConventions.todayFilename()
+          let filename = day?.filename ?? DailyNote.filename()
           let inline = gist.files[filename].flatMap {
             $0.truncated == true ? nil : $0.content
-          }.map(GistConventions.decodeContent)
+          }.map(GistFile.decodeContent)
           updateLibraryContent(&note, text: librarySource(
             draft: gistDrafts.first { $0.filename == filename },
             cached: cached?.content(gist: gist, filename: filename) ?? inline))
@@ -1486,12 +1486,12 @@ final class NotebookModel {
       }
     }
     notes += drafts.filter { $0.gistID.map { unique[$0] == nil } ?? true }.compactMap { draft in
-      let daily = draft.description == GistConventions.dailyNotesDescription
-      let day = daily ? DailyNotesIndex.parseDateFilename(draft.filename) : nil
+      let daily = draft.description == DailyNote.gistDescription
+      let day = daily ? DailyNote.date(filename: draft.filename) : nil
       if daily, day == nil { return nil }
       var note = LibraryNote(
         id: draft.id.uuidString,
-        title: daily ? GistConventions.fileDisplayName(draft.filename)
+        title: daily ? GistFile.displayName(draft.filename)
           : (draft.description.isEmpty ? String(localized: "Untitled") : draft.description),
         updatedAt: draft.updatedAt, isRecovery: draft.gistID != nil,
         isSecret: true, isDailyNote: daily, filename: draft.filename,
@@ -1509,7 +1509,7 @@ final class NotebookModel {
         }
         return $0.id < $1.id
       },
-      tags: preferences.tagDefinitions.map { tag in
+      tags: preferences.tags.map { tag in
         LibraryTag(id: tag.id, name: tag.name, colorHex: tag.colorHex)
       }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
       dailyNoteCount: hasIncompleteDaily ? nil : notes.filter {

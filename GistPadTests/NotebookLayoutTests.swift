@@ -83,7 +83,7 @@ struct NotebookLayoutTests {
       separator: "\n\n")
     let draft = try await store.newDraft(accountID: accountID, githubUserID: 42, text: original)
     let session = Editor(fileID: draft.id.uuidString, text: draft.text)
-    var persistence: Task<DraftSnapshot, any Error>?
+    var persistence: Task<Draft, any Error>?
     session.onEdit = { text, generation in
       persistence = Task {
         try await store.persist(

@@ -53,9 +53,9 @@ final class NotebookPhotoController {
     defer { isUploading = false }
     do {
       guard let data = try await photo.loadTransferable(type: Data.self) else {
-        throw PhotoImageError.invalidImage
+        throw PhotoStorage.Failure.invalidImage
       }
-      await add(png: try await Task.detached { try PhotoImage.pngData(from: data) }.value)
+      await add(png: try await Task.detached { try PhotoStorage.png(from: data) }.value)
     } catch {
       failure = Failure(message: Self.message(for: error), png: nil)
     }
@@ -71,7 +71,7 @@ final class NotebookPhotoController {
       return
     }
     do {
-      let markdown = ImageStorageClient.markdown(try await upload(png, gistID))
+      let markdown = PhotoStorage.markdown(try await upload(png, gistID))
       let session = note.session
       try session.apply(
         Edit(
@@ -85,9 +85,9 @@ final class NotebookPhotoController {
 
   private static func message(for error: any Error) -> String {
     switch error {
-    case PhotoImageError.imageTooLarge: String(localized: "Choose a photo under 50 MB and 100 megapixels.")
-    case is PhotoImageError: String(localized: "This item couldn't be read as an image. Choose another photo.")
-    case ImageStorageError.http: String(localized: "GistPad's image storage didn't accept the photo.")
+    case PhotoStorage.Failure.imageTooLarge: String(localized: "Choose a photo under 50 MB and 100 megapixels.")
+    case PhotoStorage.Failure.http: String(localized: "GistPad's image storage didn't accept the photo.")
+    case is PhotoStorage.Failure: String(localized: "This item couldn't be read as an image. Choose another photo.")
     default: error.localizedDescription
     }
   }
@@ -95,7 +95,7 @@ final class NotebookPhotoController {
 
 extension LiveNotebookProvider {
   func uploadPhoto(_ png: Data, gistID: String, accountID: UUID) async throws -> URL {
-    let storage = try await accounts.imageStorageClient(accountID: accountID)
+    let storage = try await accounts.photoStorage(accountID: accountID)
     return try await storage.upload(png, gistID: gistID)
   }
 }

@@ -30,10 +30,10 @@ struct PreferencesTests {
         #expect(saved.profileDisplayName == "Octavia")
         #expect(saved.pinnedGists == ["one"])
         #expect(saved.tagNames(gistID: "one") == ["Ideas"])
-        let ideas = try #require(saved.tagDefinitions.first { $0.id == "ideas" })
+        let ideas = try #require(saved.tags.first { $0.id == "ideas" })
         #expect(ideas.name == "Ideas")
         #expect(ideas.colorHex == "#EBC85A")
-        let unnamed = try #require(saved.tagDefinitions.first { $0.id == "unnamed" })
+        let unnamed = try #require(saved.tags.first { $0.id == "unnamed" })
         #expect(unnamed.name == "unnamed")
         #expect(unnamed.colorHex == nil)
     }
@@ -48,32 +48,32 @@ struct PreferencesTests {
             "gistTags": .object(["one": .array([.string("a")]), "other": .array([.string("a")])]),
             "pinnedGists": .array([.string("other")]),
         ]
-        let renamed = try PreferenceOperation.upsertTag(id: "a", name: "Renamed", color: nil).changes(in: metadata)
+        let renamed = try Preferences.Change.upsertTag(id: "a", name: "Renamed", color: nil).changes(in: metadata)
         #expect(Set(renamed.keys) == ["tags"])
         let tag = renamed["tags"]?.objectValue?["a"]?.objectValue
         #expect(tag?["name"] == .string("Renamed"))
         #expect(tag?["color"] == nil)
         #expect(tag?["future"] == .bool(true))
 
-        #expect(try PreferenceOperation.setPinned(gistID: "one", pinned: true).changes(in: metadata)
+        #expect(try Preferences.Change.setPinned(gistID: "one", pinned: true).changes(in: metadata)
             == ["pinnedGists": .array([.string("other"), .string("one")])])
-        let untagged = try PreferenceOperation.setTag(gistID: "one", tagID: "a", included: false).changes(in: metadata)
+        let untagged = try Preferences.Change.setTag(gistID: "one", tagID: "a", included: false).changes(in: metadata)
         #expect(untagged == ["gistTags": .object(["other": .array([.string("a")])])])
         #expect(throws: PreferenceError.unknownTag) {
-            try PreferenceOperation.setTag(gistID: "one", tagID: "missing", included: true).changes(in: metadata)
+            try Preferences.Change.setTag(gistID: "one", tagID: "missing", included: true).changes(in: metadata)
         }
-        let deleted = try PreferenceOperation.deleteTag(id: "a").changes(in: metadata)
+        let deleted = try Preferences.Change.deleteTag(id: "a").changes(in: metadata)
         #expect(deleted == ["tags": .object([:]), "gistTags": .object([:])])
 
-        #expect(try PreferenceOperation.setAccentColor("#0EA5E9").changes(in: metadata)
+        #expect(try Preferences.Change.setAccentColor("#0EA5E9").changes(in: metadata)
             == ["accentColor": .string("#0EA5E9")])
         for invalid in ["", "#123", "#12345678", "yellow", "#+12345"] {
             #expect(throws: PreferenceError.invalidShape("accentColor")) {
-                try PreferenceOperation.setAccentColor(invalid).changes(in: metadata)
+                try Preferences.Change.setAccentColor(invalid).changes(in: metadata)
             }
         }
         #expect(throws: PreferenceError.invalidShape("pinnedGists")) {
-            try PreferenceOperation.setPinned(gistID: "one", pinned: true)
+            try Preferences.Change.setPinned(gistID: "one", pinned: true)
                 .changes(in: ["pinnedGists": .string("legacy-value")])
         }
 

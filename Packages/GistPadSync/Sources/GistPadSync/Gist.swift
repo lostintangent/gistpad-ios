@@ -49,7 +49,7 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
         case commentCount = "comments"
     }
 
-    public var isDailyNote: Bool { description == GistConventions.dailyNotesDescription }
+    public var isDailyNote: Bool { description == DailyNote.gistDescription }
     public var isArchived: Bool {
         (description ?? "").range(of: #"\s*\[Archived\]$"#, options: .regularExpression) != nil
     }
@@ -85,7 +85,7 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
     }
     public var displayName: String {
         let name = displayDescription.isEmpty
-            ? (files.keys.sorted().first.map(GistConventions.fileDisplayName) ?? "Empty")
+            ? (files.keys.sorted().first.map(GistFile.displayName) ?? "Empty")
             : displayDescription
         return name == "README" ? "Untitled" : name
     }
@@ -131,9 +131,8 @@ enum FilenameDateFormat: CaseIterable {
     }
 }
 
-public enum GistConventions {
-    public static let dailyNotesDescription = "\u{1F4C6} Daily notes"
-    public static let templateFilename = "template.md"
+extension GistFile {
+    /// What GitHub stores for an empty file, since a gist can't hold one.
     public static let emptyContent = "\u{2064}"
 
     public static func decodeContent(_ content: String) -> String {
@@ -144,22 +143,8 @@ public enum GistConventions {
         content.isEmpty ? emptyContent : content
     }
 
-    public static func fileDisplayName(_ filename: String) -> String {
+    public static func displayName(_ filename: String) -> String {
         filename.hasSuffix(".md") ? String(filename.dropLast(3)) : filename
-    }
-
-    public static func todayFilename(date: Date = .now, timeZone: TimeZone = .current) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let parts = calendar.dateComponents([.year, .month, .day], from: date)
-        return String(format: "%04d-%02d-%02d.md", parts.year!, parts.month!, parts.day!)
-    }
-
-    public static func dailyContent(template: String?, dateFilename: String) -> String {
-        guard let template, !template.isEmpty else { return "# \(fileDisplayName(dateFilename))\n\n" }
-        return decodeContent(template).replacingOccurrences(
-            of: "{{date}}", with: fileDisplayName(dateFilename)
-        )
     }
 
     static func initialContent(description: String, content: String?) -> String {
@@ -179,7 +164,7 @@ public enum FileChange: Encodable, Sendable {
         switch self {
         case .content(let content):
             var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(GistConventions.encodeContent(content), forKey: .content)
+            try container.encode(GistFile.encodeContent(content), forKey: .content)
         case .rename(let filename):
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encode(filename, forKey: .filename)

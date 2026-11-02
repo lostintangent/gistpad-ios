@@ -27,7 +27,7 @@ enum NotebookPlatformBootstrap {
     if let services { return services.model }
     let store = try DraftStore.open()
     let provider = LiveNotebookProvider(
-      accounts: try AccountService(publishableKey: publishableKey), drafts: store)
+      accounts: try AccountStore(publishableKey: publishableKey), drafts: store)
     return connect(provider, store: store, selections: NotebookSelectionStore(defaults: .standard))
   }
 
@@ -125,7 +125,7 @@ final class NotebookPlatformBridge: NotebookIntentServing {
   func setTask(id: Int, completed: Bool) async throws {
     try await serially {
       guard let snapshot = try SharedNotebookStore().read(), let accountID = snapshot.accountID,
-        snapshot.today.day.filename == GistConventions.todayFilename(),
+        snapshot.today.day.filename == DailyNote.filename(),
         let shown = snapshot.today.tasks.first(where: { $0.id == id })
       else { throw NotebookPlatformError.staleTask }
       let draft = try await self.todayDraft(accountID: accountID)
@@ -143,7 +143,7 @@ final class NotebookPlatformBridge: NotebookIntentServing {
 
   @discardableResult
   func addToToday(
-    text: String, asTask: Bool, target: DailyNoteTarget
+    text: String, asTask: Bool, target: DailyNote.Day
   ) async throws -> NotebookRoute {
     try await serially {
       guard let accountID = try await self.provider.cachedAccount()?.id else {
@@ -157,8 +157,8 @@ final class NotebookPlatformBridge: NotebookIntentServing {
 
   /// Today's file as you last saved it, started the same way the app starts today.
   private func todayDraft(
-    accountID: UUID, target: DailyNoteTarget = DailyNoteTarget()
-  ) async throws -> DraftSnapshot {
+    accountID: UUID, target: DailyNote.Day = DailyNote.Day()
+  ) async throws -> Draft {
     try await validateAccount(accountID)
     let today = try await provider.today(accountID: accountID, target: target)
     if let session = sessions[today.draft.id]?.value {

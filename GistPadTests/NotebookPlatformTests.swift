@@ -119,9 +119,9 @@ private struct PlatformFixture {
   static func make() async throws -> Self {
     let notebook = try await NotebookFixture { server in
       server.addGist(
-        id: "daily123", description: GistConventions.dailyNotesDescription,
+        id: "daily123", description: DailyNote.gistDescription,
         files: [
-          DailyNoteTarget().filename: "# Today\n\n- [ ] A real task\n",
+          DailyNote.Day().filename: "# Today\n\n- [ ] A real task\n",
           "another.md": "Another note\n",
         ])
     }
@@ -140,8 +140,8 @@ private struct PlatformFixture {
   var store: DraftStore { notebook.store }
   var publishes: [String] { notebook.publishes }
 
-  func today() async throws -> TodayNote {
-    try await provider.today(accountID: account.id, target: DailyNoteTarget())
+  func today() async throws -> (gist: Gist?, draft: Draft) {
+    try await provider.today(accountID: account.id, target: DailyNote.Day())
   }
 
   func controller() async throws -> NotebookSessionController {

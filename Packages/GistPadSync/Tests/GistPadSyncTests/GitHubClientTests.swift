@@ -55,9 +55,9 @@ import Testing
         let client = GitHubClient(session: server.session) { "fixture-github" }
         let created = try await client.createGist()
         #expect(created.isPublic == false)
-        #expect(server.gists[0].files["README.md"]?.content == GistConventions.emptyContent)
+        #expect(server.gists[0].files["README.md"]?.content == GistFile.emptyContent)
         let saved = try await client.updateGist(id: created.id, files: ["README.md": .content("")])
-        #expect(server.gists[0].files["README.md"]?.content == GistConventions.emptyContent)
+        #expect(server.gists[0].files["README.md"]?.content == GistFile.emptyContent)
         #expect(try await client.content(gist: saved, filename: "README.md") == "")
     }
 

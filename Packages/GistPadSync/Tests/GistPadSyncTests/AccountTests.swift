@@ -19,7 +19,7 @@ import Testing
 
         let account = try await accounts.signIn { url in
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-            #expect(url.host == AccountService.projectURL.host)
+            #expect(url.host == AccountStore.projectURL.host)
             #expect(query.first { $0.name == "provider" }?.value == "github")
             #expect(query.first { $0.name == "scopes" }?.value == "gist")
             #expect(query.first { $0.name == "redirect_to" }?.value == "gistpad://auth-callback")
@@ -115,7 +115,7 @@ import Testing
         }
         let before = server.requests.count
 
-        let updated = try await accounts.apply(
+        let updated = try await accounts.update(
             [.setPinned(gistID: "native-pin", pinned: true), .setTag(gistID: "native-pin", tagID: "a", included: true)],
             accountID: id)
         #expect(updated.preferences.pinnedGists == ["web-pin", "native-pin"])
@@ -126,7 +126,7 @@ import Testing
 
         server.intercept { request in request.httpMethod == "PUT" ? .init(status: 500) : nil }
         await #expect(throws: (any Error).self) {
-            try await accounts.apply([.setAccentColor("#ff0000")], accountID: id)
+            try await accounts.update([.setAccentColor("#ff0000")], accountID: id)
         }
         try server.credentials.remove(key: sessionKey)
         let relaunched = try #require(try await server.accounts().connectedAccount())

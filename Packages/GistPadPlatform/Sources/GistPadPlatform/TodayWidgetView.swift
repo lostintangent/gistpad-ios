@@ -31,7 +31,7 @@ public struct TodayWidgetView: View {
     private var today: DailyNote? {
         guard let today = snapshot?.today else { return nil }
         let timeZone = TimeZone(identifier: today.day.timeZoneIdentifier) ?? .current
-        return today.day == DailyNoteTarget(date: date, timeZone: timeZone) ? today : nil
+        return today.day == DailyNote.Day(date: date, timeZone: timeZone) ? today : nil
     }
     private var tasks: [FileTask] { today?.tasks ?? [] }
     private var remaining: Int { today?.progress?.remaining ?? 0 }

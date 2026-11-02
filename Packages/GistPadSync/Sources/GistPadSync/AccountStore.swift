@@ -47,7 +47,8 @@ public struct Account: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-public struct CredentialStore: AuthLocalStorage {
+/// Where the GitHub token and Supabase session live, on this device only.
+public struct Keychain: AuthLocalStorage {
     private let service: String
 
     public init(service: String = "dev.gistpad.GistPad.credentials") {
@@ -97,7 +98,7 @@ public struct CredentialStore: AuthLocalStorage {
     }
 }
 
-public actor AccountService {
+public actor AccountStore {
     public static let projectURL = URL(string: "https://upnfachynwuwialgybvf.supabase.co")!
     public static let callbackURL = URL(string: "gistpad://auth-callback")!
     private static let sessionKey = "gistpad-supabase-session"
@@ -120,7 +121,7 @@ public actor AccountService {
 
     public init(
         publishableKey: String,
-        credentials: any AuthLocalStorage = CredentialStore(),
+        credentials: any AuthLocalStorage = Keychain(),
         session: URLSession? = nil,
         automaticallyRefreshesToken: Bool = true
     ) throws {
@@ -228,8 +229,8 @@ public actor AccountService {
         GitHubClient(session: httpSession) { [self] in try await githubToken(accountID: accountID) }
     }
 
-    public func imageStorageClient(accountID: UUID) throws -> ImageStorageClient {
-        try ImageStorageClient(publishableKey: publishableKey, session: httpSession) { [self] in
+    public func photoStorage(accountID: UUID) throws -> PhotoStorage {
+        try PhotoStorage(publishableKey: publishableKey, session: httpSession) { [self] in
             try await storageToken(accountID: accountID)
         }
     }
@@ -256,8 +257,8 @@ public actor AccountService {
         return token
     }
 
-    /// Folds `operations` over the web's latest metadata and writes the changed keys once, so a batch lands whole or not at all.
-    public func apply(_ operations: [PreferenceOperation], accountID: UUID) async throws -> Account {
+    /// Folds `changes` over the web's latest metadata and writes the changed keys once, so a batch lands whole or not at all.
+    public func update(_ changes: [Preferences.Change], accountID: UUID) async throws -> Account {
         guard !updatingPreferences, !signingIn, !signingOut else { throw PreferenceError.operationInProgress }
         updatingPreferences = true
         defer { updatingPreferences = false }
@@ -269,13 +270,13 @@ public actor AccountService {
             throw AccountError.accountChanged
         }
         var metadata = user.userMetadata
-        var changes: [String: MetadataValue] = [:]
-        for operation in operations {
-            let change = try operation.changes(in: metadata)
-            metadata.merge(change) { _, new in new }
-            changes.merge(change) { _, new in new }
+        var written: [String: MetadataValue] = [:]
+        for change in changes {
+            let values = try change.changes(in: metadata)
+            metadata.merge(values) { _, new in new }
+            written.merge(values) { _, new in new }
         }
-        let updated = try await auth.update(user: UserAttributes(data: changes))
+        let updated = try await auth.update(user: UserAttributes(data: written))
         guard updated.id == accountID, try persistedSession()?.user.id == accountID else {
             throw AccountError.accountChanged
         }

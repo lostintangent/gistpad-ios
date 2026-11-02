@@ -89,7 +89,7 @@ struct AddToTodaySheet: View {
     Task {
       do {
         if let destination = try await NotebookPlatformBootstrap.bridge?.addToToday(
-          text: text, asTask: asTask, target: DailyNoteTarget(date: day))
+          text: text, asTask: asTask, target: DailyNote.Day(date: day))
         {
           NotebookRouteInbox.shared.submit(destination)
         }

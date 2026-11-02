@@ -12,19 +12,19 @@ import Testing
         let one = try await sync.type("local", in: sync.open(gist, "One.md"))
         _ = try await sync.open(gist, "Two.md")
         func rename(_ expected: String, to filename: String, account: UUID = SyncFixture.account) async throws
-            -> DraftSnapshot {
+            -> Draft {
             try await sync.store.updateDraftMetadata(
                 id: one.id, accountID: account, expectedFilename: expected, filename: filename, description: "After")
         }
 
-        await #expect(throws: DraftMetadataError.filenameInUse) { try await rename("One.md", to: "Two.md") }
-        await #expect(throws: DraftMetadataError.staleMetadata) { try await rename("Gone.md", to: "Three.md") }
+        await #expect(throws: DraftError.filenameInUse) { try await rename("One.md", to: "Two.md") }
+        await #expect(throws: DraftError.staleMetadata) { try await rename("Gone.md", to: "Three.md") }
         await #expect(throws: DraftError.accountMismatch) { try await rename("One.md", to: "Three.md", account: UUID()) }
         for filename in ["", "folder/file.md", "bad\nname.md"] {
-            await #expect(throws: DraftMetadataError.invalidFilename) { try await rename("One.md", to: filename) }
+            await #expect(throws: DraftError.invalidFilename) { try await rename("One.md", to: filename) }
         }
         try await sync.store.beginAttempt(id: one.id, accountID: account, content: "local", generation: 1)
-        await #expect(throws: DraftMetadataError.publicationPending) { try await rename("One.md", to: "New.md") }
+        await #expect(throws: DraftError.publicationPending) { try await rename("One.md", to: "New.md") }
         try await sync.store.clearAttempt(id: one.id, accountID: account)
 
         let renamed = try await rename("One.md", to: "New.md")
@@ -35,7 +35,7 @@ import Testing
         #expect(renamed.baseContent == one.baseContent)
         #expect(renamed.baseRevision == one.baseRevision)
         #expect(renamed.state == one.state)
-        #expect(try await sync.store.openDraft(
+        #expect(try await sync.store.draft(
             accountID: account, githubUserID: SyncFixture.user, gistID: gist.id, filename: "New.md",
             description: "After", content: "remote", revision: "two").id == one.id)
     }
@@ -48,7 +48,7 @@ import Testing
         let dirty = try await sync.type("unsynced", in: sync.open(doomed, "Dirty.md"))
         let keptDraft = try await sync.type("kept", in: sync.open(kept))
         let otherAccount = UUID()
-        let foreign = try await sync.store.openDraft(
+        let foreign = try await sync.store.draft(
             accountID: otherAccount, githubUserID: 9, gistID: doomed.id, filename: "Clean.md",
             description: "Doomed", content: "base", revision: "one")
         let listed = try await sync.github.listGists()
@@ -77,7 +77,7 @@ import Testing
     @Test func deletedFileDropsOnlyItsOwnDraftsAndKeepsTheRestOfTheGist() async throws {
         let sync = try SyncFixture()
         let gist = sync.server.addGist(
-            description: GistConventions.dailyNotesDescription,
+            description: DailyNote.gistDescription,
             files: ["2026-10-23.md": "yesterday", "2026-10-24.md": "today"])
         _ = try await sync.type("unsynced", in: sync.open(gist, "2026-10-24.md"))
         let sibling = try await sync.open(gist, "2026-10-23.md")
@@ -101,7 +101,7 @@ import Testing
 
     @Test func aPhoneOnlyGistCanBeDeleted() async throws {
         let sync = try SyncFixture()
-        let local = try await sync.store.createGistDraft(
+        let local = try await sync.store.newGistDraft(
             accountID: account, githubUserID: SyncFixture.user, content: "Only on this iPhone")
         let edited = try await sync.type("Edited only on this iPhone", in: local)
         await #expect(throws: DraftError.staleGeneration) {

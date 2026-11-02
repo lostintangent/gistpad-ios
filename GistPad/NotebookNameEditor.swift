@@ -99,7 +99,7 @@ struct NotebookDeletionTarget: Identifiable {
   let id: String
   let accountID: UUID
   let title: String
-  var localDraft: DraftSnapshot? = nil
+  var localDraft: Draft? = nil
   // Daily notes delete one day's file; nil deletes the whole gist.
   var filename: String? = nil
 

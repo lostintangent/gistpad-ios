@@ -41,6 +41,6 @@ final class NotebookSelectionStore {
 }
 
 struct NotebookLocalState: Sendable {
-  let library: CachedLibrarySnapshot?
-  let drafts: [DraftSnapshot]
+  let library: CachedLibrary?
+  let drafts: [Draft]
 }

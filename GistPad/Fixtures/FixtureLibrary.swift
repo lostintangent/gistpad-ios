@@ -43,7 +43,7 @@
         files: ["weekend.md": "# A slower weekend\n\n- [x] Farmers market\n- [ ] Long walk\n- [ ] Call home\n"],
         updatedAt: now - hour)
       server.addGist(
-        id: "daily", description: GistConventions.dailyNotesDescription,
+        id: "daily", description: DailyNote.gistDescription,
         files: [
           dailyFile(now - 3 * day): "# Notes\n\nNo tasks today.\n",
           dailyFile(now - 2 * day): "- [ ] Renew the passport\n- [ ] Book the dentist\n",
@@ -61,19 +61,19 @@
     }
 
     /// Pins and tags, written through the account's real preference path once the fixture signs in.
-    static let preferences: [PreferenceOperation] =
+    static let preferences: [Preferences.Change] =
       [.setPinned(gistID: "shape", pinned: true), .setPinned(gistID: "words", pinned: true)]
       + [
         ("ideas", "Ideas", "#EBC85A"), ("design", "Design", "#548C80"), ("personal", "Personal", "#A88EB5"),
         ("reading", "Reading list for the long winter evenings", "#FFFFFF"), ("ink", "Ink", "#000000"),
         ("someday", "Someday", nil),
-      ].map { PreferenceOperation.upsertTag(id: $0.0, name: $0.1, color: $0.2) }
+      ].map { Preferences.Change.upsertTag(id: $0.0, name: $0.1, color: $0.2) }
       + [
         ("shape", ["ideas", "design"]), ("weekend", ["personal", "someday"]), ("words", ["ideas", "reading"]),
         ("mixed", ["personal", "ink"]), ("longtitle", ["reading", "ink", "someday", "design"]),
-      ].flatMap { gist, tags in tags.map { PreferenceOperation.setTag(gistID: gist, tagID: $0, included: true) } }
+      ].flatMap { gist, tags in tags.map { Preferences.Change.setTag(gistID: gist, tagID: $0, included: true) } }
 
-    private static func dailyFile(_ date: Date) -> String { GistConventions.todayFilename(date: date) }
+    private static func dailyFile(_ date: Date) -> String { DailyNote.filename(date: date) }
 
     private static let highlightMarkdown =
       """

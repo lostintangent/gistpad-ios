@@ -5,7 +5,7 @@ Swift 6 actors and Sendable values for the native app's account, Gists, preferen
 ## Account and reads
 
 ```swift
-let accounts = try AccountService(publishableKey: configuredPublicKey)
+let accounts = try AccountStore(publishableKey: configuredPublicKey)
 let account = try await accounts.signIn()
 let client = await accounts.githubClient(accountID: account.id)
 let library = try await client.listGists()
@@ -32,7 +32,7 @@ Bodies remain exact Markdown, including hidden quote/reply prefixes. Use the Fou
 ## Preferences
 
 ```swift
-let updated = try await accounts.apply(
+let updated = try await accounts.update(
     .setTag(gistID: gist.id, tagID: existingTagID, included: true),
     accountID: account.id
 )
@@ -44,7 +44,7 @@ Operations include `setPinned`, `setTag`, `upsertTag`, `deleteTag` and `setBoole
 
 ```swift
 let store = try DraftStore.open()
-let draft = try await store.openDraft(
+let draft = try await store.draft(
     accountID: account.id, githubUserID: verifiedGitHubUserID,
     gistID: gist.id, filename: selectedFilename,
     description: gist.displayDescription, content: text, revision: gist.revision
@@ -53,19 +53,19 @@ let draft = try await store.openDraft(
 let durable = try await store.persist(
     id: draft.id, accountID: account.id, text: sessionText, generation: sessionGeneration
 )
-let sync = SyncCoordinator(client: client, store: store)
+let sync = DraftPublisher(client: client, store: store)
 let result = try await sync.publish(id: durable.id, accountID: account.id)
 ```
 
-Use one store for the app and one coordinator for the active account, shared across scenes. Replace the coordinator when switching accounts. `openDraft` returns an existing account/file draft instead of overwriting it with a network response. Generation must increase for every content edit, including undo. SwiftData's automatic saving and CloudKit are disabled. Every successful persistence operation explicitly commits before returning. Never display "Saved on this iPhone" before `persist` succeeds.
+Use one store for the app and one publisher for the active account, shared across scenes. Replace the publisher when switching accounts. `draft` returns an existing account/file draft instead of overwriting it with a network response. Generation must increase for every content edit, including undo. SwiftData's automatic saving and CloudKit are disabled. Every successful persistence operation explicitly commits before returning. Never display "Saved on this iPhone" before `persist` succeeds.
 
 On reopen, capture the stored generation **before** requesting fresh remote content, then call `refreshCleanDraft(id:accountID:expectedGeneration:content:revision:)`. It updates only an unchanged clean baseline with no uncertain write. Its result explicitly reports refreshed, unchanged or preserved local changes. A newer generation rejects a stale response. Restore that snapshot into an inactive/new document session, never an actively composing editor.
 
-The coordinator serializes publication, freshly reads the remote file, validates ownership/completeness, and persists the attempted content and generation before sending. Acknowledging one generation never clears newer local typing. The draft keeps the user's text until GitHub acknowledges that generation. On restart, an interrupted operation becomes uncertain rather than remaining labelled "Saving".
+The publisher serializes publication, freshly reads the remote file, validates ownership/completeness, and persists the attempted content and generation before sending. Acknowledging one generation never clears newer local typing. The draft keeps the user's text until GitHub acknowledges that generation. On restart, an interrupted operation becomes uncertain rather than remaining labelled "Saving".
 
 `PublishState` distinguishes local durability, an in-flight generation, GitHub acknowledgement, reconnect, typed failures and conflicts. A network failure is `.failed(.network)` and retries on the next publish. A failure is persisted and thrown. The UI should reload the snapshot to show its state. A `404` retains the draft. A `403` is not sign-out. Rate-limit reset and `Retry-After` deadlines are honored.
 
-The document session owns the web's five-second autosave delay and account/input eligibility. The coordinator only publishes accepted durable generations. Disabling autosave or changing accounts cancels the session's pending request. Leaving a note publishes when autosave is enabled. Leaving the app always attempts publication. Folding itself never requests publication. Pending AI proposals, marked text and temporary Writing Tools edits are not accepted draft generations.
+The document session owns the web's five-second autosave delay and account/input eligibility. The publisher only publishes accepted durable generations. Disabling autosave or changing accounts cancels the session's pending request. Leaving a note publishes when autosave is enabled. Leaving the app always attempts publication. Folding itself never requests publication. Pending AI proposals, marked text and temporary Writing Tools edits are not accepted draft generations.
 
 ## Conflicts and uncertain writes
 
@@ -106,13 +106,13 @@ API choices were checked against [Supabase OAuth](https://supabase.com/docs/refe
 
 The package supports iOS 27.2 and later. It has no Duo-only UI dependency.
 
-`DailyNotesService(accountID:githubUserID:client:store:coordinator:)` shares the active account's existing coordinator. Create a `DailyNoteTarget(date:timeZone:)` at the start of an action, then call `openToday(target:)`. The target pins the local Gregorian date even if midnight or the time zone changes while the request runs. It freshly lists owned gists and selects the first exact `📆 Daily notes` match in the same stable updated-date order as the web.
+`DailyNotes(accountID:githubUserID:client:store:publisher:)` shares the active account's existing publisher. Create a `DailyNote.Day(date:timeZone:)` at the start of an action, then call `stageToday(target:)`. The target pins the local Gregorian date even if midnight or the time zone changes while the request runs. It freshly lists owned gists and selects the first exact `📆 Daily notes` match in the same stable updated-date order as the web.
 
 If today's file exists, opening it is read-only and preserves dirty drafts. If missing, it stages a durable new-file draft, expands every `{{date}}` in `template.md`, and publishes a targeted file change through the ordinary conflict protocol. Missing/empty templates use `# YYYY-MM-DD\n\n`. No old daily files are deleted, carried over or rewritten. `publishIfMissing: false` stages locally instead.
 
 If no daily gist exists, the service stages one secret gist with today's file and publishes it through the uncertain-create path. The durable daily-creation intent is reused across requests and relaunches. A timeout cannot lead to another POST. If the created gist appears in a later fresh list with matching source, the original draft is reconciled rather than abandoned. A pending first creation from an earlier date requires resolution before creating another daily gist. GitHub still offers no atomic cross-client create-if-absent guarantee, so simultaneous first creation on the web can race.
 
-`DailyNotesIndex.notes(gist:localContent:date:timeZone:)` gives task progress and overdue-first, newest-first ordering using the web's exact task-marker convention. Uncached/truncated file contents have unknown progress, not a misleading zero. `DraftStore.createGistDraft(...)` stages a new ordinary note with the web's `README.md`, description-heading and empty-content defaults. Publication remains secret by default.
+`DailyNotesIndex.notes(gist:localContent:date:timeZone:)` gives task progress and overdue-first, newest-first ordering using the web's exact task-marker convention. Uncached/truncated file contents have unknown progress, not a misleading zero. `DraftStore.newGistDraft(...)` stages a new ordinary note with the web's `README.md`, description-heading and empty-content defaults. Publication remains secret by default.
 
 Cache a complete list refresh with `cacheLibrary(owned:starred:preferences:accountID:)`, detail reads with `cacheGist(_:accountID:)`, and resolved raw content with `cacheContent(_:gist:filename:accountID:)`. The persisted `cachedLibrary(accountID:)` is account-isolated and survives relaunch. An unsuccessful network refresh must not replace it with an empty library.
 
@@ -122,7 +122,7 @@ The app uses one `.all` query across the Library. Daily rows represent real Greg
 
 Retained drafts whose gist has disappeared from the cache remain searchable by body and tags with `isRecovery == true`. They preserve their real draft ID and original gist ID, without fabricating a remote Gist value. Open their local draft directly. Absence from a cache is not proof of remote deletion, and their remote privacy/access cannot be inferred from local-only presentation defaults.
 
-`DocumentLinks(gist:filename:draft:)` returns a read-only `/#/share/` URL, an explicit editor URL, and a GitHub URL, with correct UTF-8 filename escaping. It reports `isSecret` and `hasUnpublishedChanges`. It never publishes. A new, unpublished gist/file cannot yield a saved-file share URL. The UI must explain that secret gists are unlisted and links expose the saved revision.
+`GistLinks(gist:filename:draft:)` returns a read-only `/#/share/` URL, an explicit editor URL, and a GitHub URL, with correct UTF-8 filename escaping. It reports `isSecret` and `hasUnpublishedChanges`. It never publishes. A new, unpublished gist/file cannot yield a saved-file share URL. The UI must explain that secret gists are unlisted and links expose the saved revision.
 
 ## App Group boundary
 
@@ -131,10 +131,10 @@ Only the widget snapshot lives in the App Group container, written by GistPadPla
 ## Photos
 
 ```swift
-let png = try PhotoImage.pngData(from: pickedData)
-let storage = try await accounts.imageStorageClient(accountID: account.id)
+let png = try PhotoStorage.png(from: pickedData)
+let storage = try await accounts.photoStorage(accountID: account.id)
 let url = try await storage.upload(png, gistID: gistID)
-let markdown = ImageStorageClient.markdown(url) // ![Image](url)
+let markdown = PhotoStorage.markdown(url) // ![Image](url)
 ```
 
 Use PhotosPicker in the app and load its transferable image data without requesting broad library access. Normalize off the main actor. `PhotoImage` converts the first image to upright PNG without carrying location/EXIF metadata. It rejects invalid images, inputs/outputs over 50 MB and decoded images over 100 megapixels. These are native safety limits, not claims about the server's configured bucket limit.

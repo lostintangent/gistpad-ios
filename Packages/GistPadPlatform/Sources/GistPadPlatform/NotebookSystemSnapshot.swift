@@ -25,7 +25,7 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
     public let today: DailyNote
 
     public static func make(
-        accountID: UUID?, cache: CachedLibrarySnapshot?, drafts: [DraftSnapshot],
+        accountID: UUID?, cache: CachedLibrary?, drafts: [Draft],
         date: Date = .now, timeZone: TimeZone = .current
     ) -> Self {
         var gists: [GistEntity] = []
@@ -53,14 +53,14 @@ public struct NotebookSystemSnapshot: Codable, Equatable, Sendable {
                 $0.updatedAt == $1.updatedAt
                     ? $0.id < $1.id : ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast)
             },
-            today: DailyNote(day: DailyNoteTarget(date: date, timeZone: timeZone), cache: cache, drafts: drafts))
+            today: DailyNote(day: DailyNote.Day(date: date, timeZone: timeZone), cache: cache, drafts: drafts))
     }
 
     public static func preview(date: Date = .now) -> Self {
         Self(
             accountID: UUID(), accentHex: nil, gists: [],
             today: DailyNote(
-                day: DailyNoteTarget(date: date),
+                day: DailyNote.Day(date: date),
                 text: "- [ ] Make room for a good idea\n- [x] Take the long way home\n"))
     }
 

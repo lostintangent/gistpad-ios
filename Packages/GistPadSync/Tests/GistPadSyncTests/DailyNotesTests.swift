@@ -3,18 +3,18 @@ import Testing
 @testable import GistPadSync
 
 private func dailyData() throws -> Data {
-    try gistData(id: "abc123", description: GistConventions.dailyNotesDescription)
+    try gistData(id: "abc123", description: DailyNote.gistDescription)
 }
 
-private func day(_ iso: String) throws -> DailyNoteTarget {
-    DailyNoteTarget(date: try Date.ISO8601FormatStyle().parse("\(iso)T12:00:00Z"), timeZone: .gmt)
+private func day(_ iso: String) throws -> DailyNote.Day {
+    DailyNote.Day(date: try Date.ISO8601FormatStyle().parse("\(iso)T12:00:00Z"), timeZone: .gmt)
 }
 
 /// Today's note, staged on the phone and published like any other file.
 @Suite struct DailyNotesTests {
     @Test func openingTodayNeverPublishesAndKeepsYourTyping() async throws {
         let sync = try SyncFixture()
-        let gist = sync.server.addGist(description: GistConventions.dailyNotesDescription, files: [
+        let gist = sync.server.addGist(description: DailyNote.gistDescription, files: [
             "2026-10-23.md": "- [ ] Yesterday", "template.md": "# {{date}}\n\n- [ ] Plan {{date}}\n",
         ])
         let today = try day("2026-10-24")
@@ -42,7 +42,7 @@ private func day(_ iso: String) throws -> DailyNoteTarget {
         let staged = try await sync.dailyNotes.stageToday(target: first)
         #expect(staged.gist == nil)
         #expect(staged.draft.gistID == nil)
-        #expect(staged.draft.description == GistConventions.dailyNotesDescription)
+        #expect(staged.draft.description == DailyNote.gistDescription)
         #expect(staged.draft.text == "# 2026-10-24\n\n")
         #expect(try await sync.dailyNotes.stageToday(target: first).draft.id == staged.draft.id)
         _ = try await sync.type("# 2026-10-24\n\n- [ ] Ship", in: staged.draft)
@@ -77,9 +77,9 @@ private func day(_ iso: String) throws -> DailyNoteTarget {
         let instant = try Date.ISO8601FormatStyle().parse("2026-10-24T01:00:00Z")
         let la = try #require(TimeZone(identifier: "America/Los_Angeles"))
         let utc = try #require(TimeZone(secondsFromGMT: 0))
-        #expect(DailyNoteTarget(date: instant, timeZone: la).filename == "2026-10-23.md")
-        #expect(DailyNoteTarget(date: instant, timeZone: utc).filename == "2026-10-24.md")
-        #expect(DailyNotesIndex.parseDateFilename("2026-02-30.md") == nil)
+        #expect(DailyNote.Day(date: instant, timeZone: la).filename == "2026-10-23.md")
+        #expect(DailyNote.Day(date: instant, timeZone: utc).filename == "2026-10-24.md")
+        #expect(DailyNote.date(filename: "2026-02-30.md") == nil)
 
         let markdown = "🌅 - [ ] Wake up \r\n- [x] Done\n- [X] Shouting\n```\n- [ ] Fenced\n```"
         let tasks = FileTask.tasks(in: markdown)
@@ -90,12 +90,12 @@ private func day(_ iso: String) throws -> DailyNoteTarget {
         #expect((markdown as NSString).substring(with: tasks[1].markerRange) == "[x]")
         #expect(TaskProgress(markdown: markdown) == TaskProgress(completed: 1, total: 3))
 
-        let day = DailyNoteTarget(date: instant, timeZone: utc)
+        let day = DailyNote.Day(date: instant, timeZone: utc)
         let cache = { (truncated: Bool) in
             var object = try #require(try JSONSerialization.jsonObject(with: dailyData()) as? [String: Any])
             object["files"] = [day.filename: [
                 "filename": day.filename, "language": "Markdown", "content": "- [ ] Partial", "truncated": truncated]]
-            return CachedLibrarySnapshot(
+            return CachedLibrary(
                 accountID: UUID(), owned: [try decodeGist(JSONSerialization.data(withJSONObject: object))],
                 starred: [], preferences: Preferences(metadata: [:]))
         }
@@ -103,12 +103,12 @@ private func day(_ iso: String) throws -> DailyNoteTarget {
         let today = DailyNote(day: day, cache: try cache(false), drafts: [])
         #expect(today.gistID == "abc123")
         #expect(today.progress?.remaining == 1)
-        #expect(today.date == DailyNotesIndex.parseDateFilename(day.filename, timeZone: utc))
+        #expect(today.date == DailyNote.date(filename: day.filename, timeZone: utc))
         #expect(DailyNote(day: day, cache: nil, drafts: []).progress == nil)
-        #expect(GistConventions.dailyContent(template: nil, dateFilename: "2026-10-24.md")
+        #expect(DailyNote.content(template: nil, filename: "2026-10-24.md")
             == "# 2026-10-24\n\n")
-        #expect(GistConventions.dailyContent(
-            template: GistConventions.emptyContent, dateFilename: "2026-10-24.md"
+        #expect(DailyNote.content(
+            template: GistFile.emptyContent, filename: "2026-10-24.md"
         ) == "")
     }
 }

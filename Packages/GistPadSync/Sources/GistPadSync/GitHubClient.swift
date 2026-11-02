@@ -77,7 +77,7 @@ public actor GitHubClient {
         guard gist.truncated != true else { throw GitHubClientError.incompleteGist }
         guard let file = gist.files[filename] else { throw GitHubClientError.missingFile }
         if file.truncated != true, let content = file.content {
-            return GistConventions.decodeContent(content)
+            return GistFile.decodeContent(content)
         }
         guard let url = file.rawURL, url.scheme == "https",
               url.host == "gist.githubusercontent.com", url.user == nil, url.password == nil,
@@ -91,7 +91,7 @@ public actor GitHubClient {
         }
         guard data.count <= 10_000_000 else { throw GitHubClientError.fileTooLarge }
         guard let content = String(data: data, encoding: .utf8) else { throw GitHubClientError.invalidUTF8 }
-        return GistConventions.decodeContent(content)
+        return GistFile.decodeContent(content)
     }
 
     /// Fetches a gist and one file, enforcing ownership and completeness. `content` is nil when the file is gone.
@@ -112,7 +112,7 @@ public actor GitHubClient {
             let files: [String: FileChange]
             let `public`: Bool
         }
-        let initial = GistConventions.initialContent(description: description, content: content)
+        let initial = GistFile.initialContent(description: description, content: content)
         return try await decoded(
             path: "/gists", method: "POST",
             body: JSONEncoder().encode(Create(
@@ -302,3 +302,15 @@ private final class NoRedirects: NSObject, URLSessionTaskDelegate {
 }
 
 extension GitHubClient: CommentsRemote {}
+
+extension HTTPURLResponse {
+    var retryAfterDate: Date? {
+        guard let value = value(forHTTPHeaderField: "Retry-After") else { return nil }
+        if let seconds = TimeInterval(value) { return .now.addingTimeInterval(max(0, seconds)) }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter.date(from: value)
+    }
+}

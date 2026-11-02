@@ -10,8 +10,8 @@ import Testing
     func anUntouchedDailyTemplateIsDiscardedButItsGistStays(gistExists: Bool) async throws {
         let sync = try SyncFixture()
         let daily = gistExists ? sync.server.addGist(
-            description: GistConventions.dailyNotesDescription, files: ["2026-10-01.md": "Keep yesterday."]) : nil
-        let today = DailyNoteTarget(date: try Date.ISO8601FormatStyle().parse("2026-10-24T12:00:00Z"), timeZone: .gmt)
+            description: DailyNote.gistDescription, files: ["2026-10-01.md": "Keep yesterday."]) : nil
+        let today = DailyNote.Day(date: try Date.ISO8601FormatStyle().parse("2026-10-24T12:00:00Z"), timeZone: .gmt)
 
         let untouched = try await sync.dailyNotes.stageToday(target: today).draft
         #expect(untouched.isDiscardableBlank)
@@ -25,9 +25,9 @@ import Testing
         let staged = try await sync.dailyNotes.stageToday(target: today).draft
         let touched = try await sync.type(staged.text, in: staged)
         let published = try await sync.publish(touched)
-        let custom = try await sync.store.createGistDraft(
+        let custom = try await sync.store.newGistDraft(
             accountID: account, githubUserID: SyncFixture.user, filename: "2026-10-25.md",
-            description: GistConventions.dailyNotesDescription, content: "- [ ] A custom template")
+            description: DailyNote.gistDescription, content: "- [ ] A custom template")
         for kept in [touched, published, custom] {
             #expect(!kept.isDiscardableBlank)
             #expect(try await !sync.store.discardBlankDraft(
@@ -47,7 +47,7 @@ import Testing
         ]
         var kept = [
             try await store.newDraft(accountID: account, githubUserID: user, description: "A title"),
-            try await store.openDraft(
+            try await store.draft(
                 accountID: account, githubUserID: user, gistID: "existing", filename: "README.md",
                 description: "", content: "", revision: "one"),
         ]

@@ -634,7 +634,7 @@ struct LiveNotebookWorkspace: View {
     actions.intelligence = { presentIntelligence(controller) }
     if !controller.document.isRecovery, let gist = controller.document.gist {
       actions.openInGitHub = {
-        do { openURL(try DocumentLinks(gist: gist).githubURL) } catch {
+        do { openURL(try GistLinks(gist: gist).githubURL) } catch {
           notebook.documentError = error.localizedDescription
         }
       }
@@ -734,10 +734,10 @@ struct LiveNotebookWorkspace: View {
           action = .renameLocal(draftID: target.draftID, title: value)
         }
       case .filename:
-        guard let gistID = target.gistID else { throw DocumentLinkError.notPublished }
+        guard let gistID = target.gistID else { throw GistLinks.Error.notPublished }
         action = .renameFile(gistID: gistID, filename: target.filename, newFilename: value)
       case .addFile:
-        guard let gistID = target.gistID else { throw DocumentLinkError.notPublished }
+        guard let gistID = target.gistID else { throw GistLinks.Error.notPublished }
         action = .addFile(gistID: gistID, filename: value)
       }
       _ = try await notebook.apply(action, accountID: target.accountID)
@@ -748,7 +748,7 @@ struct LiveNotebookWorkspace: View {
     let save: (@MainActor @Sendable ([TagEdit]) async throws -> Void)?
     if target.canEdit {
       save = { edits in
-        let operations = edits.map { edit -> PreferenceOperation in
+        let operations = edits.map { edit -> Preferences.Change in
           switch edit {
           case .setMembership(let id, let included):
             .setTag(gistID: target.gistID, tagID: id, included: included)
@@ -789,7 +789,7 @@ struct LiveNotebookWorkspace: View {
 
   private func startToday() {
     compactColumn = .detail
-    let target = DailyNoteTarget()
+    let target = DailyNote.Day()
     Task { await notebook.open(.today(target)) }
   }
 

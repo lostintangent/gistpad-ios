@@ -10,7 +10,7 @@ import Testing
 @MainActor
 struct NotebookFixture {
   let server = FixtureServer()
-  let accounts: AccountService
+  let accounts: AccountStore
   let store: DraftStore
   let selections = NotebookSelectionStore()
   let account: Account
@@ -19,14 +19,14 @@ struct NotebookFixture {
   /// Seeds GitHub, signs in and saves `preferences`, like a web account. Autosave is on unless
   /// `autosave` turns it off. A remembered `selection` reopens at launch instead of Today.
   init(
-    autosave: Bool = true, preferences: [PreferenceOperation] = [],
+    autosave: Bool = true, preferences: [Preferences.Change] = [],
     selection: NotebookSelection? = nil, seed: (FixtureServer) throws -> Void = { _ in }
   ) async throws {
     try seed(server)
     accounts = try server.accounts()
     var account = try await server.signIn(accounts)
     let operations = preferences + (autosave ? [] : [.setBoolean(.isAutoSaveEnabled, false)])
-    if !operations.isEmpty { account = try await accounts.apply(operations, accountID: account.id) }
+    if !operations.isEmpty { account = try await accounts.update(operations, accountID: account.id) }
     self.account = account
     store = try DraftStore.open(inMemory: true)
     if let selection { selections.save(selection, accountID: account.id) }
@@ -51,9 +51,9 @@ struct NotebookFixture {
   }
 
   /// A local edit made before this launch, of a gist that's on GitHub or that used to be.
-  func stageEdit(gistID: String, filename: String, text: String) async throws -> DraftSnapshot {
+  func stageEdit(gistID: String, filename: String, text: String) async throws -> Draft {
     let gist = server.gists.first { $0.id == gistID }
-    let draft = try await store.openDraft(
+    let draft = try await store.draft(
       accountID: account.id, githubUserID: FixtureServer.you.id, gistID: gistID,
       filename: filename, description: gist?.description ?? "",
       content: gist?.files[filename]?.content ?? "", revision: gist?.revision,

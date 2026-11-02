@@ -42,40 +42,40 @@ func requestData(_ request: URLRequest) throws -> Data {
     FixtureServer.body(of: request)
 }
 
-/// The fixture GitHub with a draft store and coordinator, signed in as `FixtureServer.you`.
+/// The fixture GitHub with a draft store and publisher, signed in as `FixtureServer.you`.
 struct SyncFixture {
     static let account = FixtureServer.accountID
     static let user = FixtureServer.you.id
     let server: FixtureServer
     let store: DraftStore
     let github: GitHubClient
-    let coordinator: SyncCoordinator
+    let publisher: DraftPublisher
 
     init(store: DraftStore? = nil, server: FixtureServer = FixtureServer()) throws {
         self.server = server
         self.store = try store ?? DraftStore.open(inMemory: true)
         github = GitHubClient(session: server.session) { "fixture-github" }
-        coordinator = SyncCoordinator(client: github, store: self.store)
+        publisher = DraftPublisher(client: github, store: self.store)
     }
 
     /// Your draft of a gist's file, opened from what GitHub has now.
-    func open(_ gist: Gist, _ filename: String = "README.md") async throws -> DraftSnapshot {
+    func open(_ gist: Gist, _ filename: String = "README.md") async throws -> Draft {
         let current = try #require(server.gists.first { $0.id == gist.id })
-        return try await store.openDraft(
+        return try await store.draft(
             accountID: Self.account, githubUserID: Self.user, gistID: gist.id, filename: filename,
             description: current.description ?? "", content: current.files[filename]?.content ?? "",
             revision: current.revision, isNewFile: current.files[filename] == nil)
     }
 
-    func type(_ text: String, in draft: DraftSnapshot) async throws -> DraftSnapshot {
+    func type(_ text: String, in draft: Draft) async throws -> Draft {
         try await store.persist(id: draft.id, accountID: Self.account, text: text, generation: draft.generation + 1)
     }
 
-    func publish(_ draft: DraftSnapshot) async throws -> DraftSnapshot {
-        try await coordinator.publish(id: draft.id, accountID: Self.account)
+    func publish(_ draft: Draft) async throws -> Draft {
+        try await publisher.publish(id: draft.id, accountID: Self.account)
     }
 
-    func reload(_ draft: DraftSnapshot) async throws -> DraftSnapshot {
+    func reload(_ draft: Draft) async throws -> Draft {
         try await store.draft(id: draft.id, accountID: Self.account)
     }
 
@@ -88,9 +88,9 @@ struct SyncFixture {
         server.requests.filter { $0 == request }.count
     }
 
-    var dailyNotes: DailyNotesService {
-        DailyNotesService(
-            accountID: Self.account, githubUserID: Self.user, client: github, store: store, coordinator: coordinator)
+    var dailyNotes: DailyNotes {
+        DailyNotes(
+            accountID: Self.account, githubUserID: Self.user, client: github, store: store, publisher: publisher)
     }
 }
 

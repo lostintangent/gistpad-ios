@@ -3,8 +3,8 @@ import GistPadSync
 
 enum NotebookAction: Sendable {
   case signOut
-  case preference(PreferenceOperation)
-  case saveTags([PreferenceOperation])
+  case preference(Preferences.Change)
+  case saveTags([Preferences.Change])
   case star(gistID: String, starred: Bool)
   case archive(gistID: String, archived: Bool)
   case rename(gistID: String, title: String)
@@ -24,11 +24,11 @@ enum NotebookActionResult: Sendable {
   case signedOut
   case account(Account)
   case gist(Gist, starred: Bool? = nil)
-  case draft(DraftSnapshot, gist: Gist? = nil)
+  case draft(Draft, gist: Gist? = nil)
   case deleted(gistID: String)
   case deletedFile(gistID: String, filename: String, gist: Gist)
-  case review(DraftSnapshot)
-  case remoteRead(DraftSnapshot, RemoteFile?)
+  case review(Draft)
+  case remoteRead(Draft, RemoteFile?)
   case discardedDraft(UUID)
 }
 
@@ -87,9 +87,9 @@ extension LiveNotebookProvider {
     }
     switch action {
     case .preference(let operation):
-      return .account(try await accounts.apply([operation], accountID: accountID))
+      return .account(try await accounts.update([operation], accountID: accountID))
     case .saveTags(let operations):
-      return .account(try await accounts.apply(operations, accountID: accountID))
+      return .account(try await accounts.update(operations, accountID: accountID))
     case .signOut:
       try await accounts.signOut(accountID: accountID)
       return .signedOut
@@ -180,7 +180,7 @@ extension LiveNotebookProvider {
       let (_, gist, userID) = try await ownedGist(id: id, account: account)
       try Self.validateFilename(filename)
       guard gist.files[filename] == nil else { throw NotebookActionError.filenameExists }
-      let draft = try await drafts.openDraft(
+      let draft = try await drafts.draft(
         accountID: accountID, githubUserID: userID, gistID: id, filename: filename,
         description: gist.description ?? "", content: "", isNewFile: true)
       return .draft(draft, gist: gist)
@@ -236,12 +236,12 @@ extension LiveNotebookProvider {
 
 struct NotebookReviewContext: Equatable, Sendable, Identifiable {
   var id: UUID { draft.id }
-  let draft: DraftSnapshot
+  let draft: Draft
   let conflict: DraftConflict
 
   static func == (left: Self, right: Self) -> Bool { left.matches(right.draft) }
 
-  init(draft: DraftSnapshot) throws {
+  init(draft: Draft) throws {
     guard case .conflict(let conflict) = draft.state, conflict.generation == draft.generation else {
       throw NotebookActionError.staleReview
     }
@@ -249,7 +249,7 @@ struct NotebookReviewContext: Equatable, Sendable, Identifiable {
     self.conflict = conflict
   }
 
-  func matches(_ current: DraftSnapshot) -> Bool {
+  func matches(_ current: Draft) -> Bool {
     guard current.id == draft.id, current.accountID == draft.accountID,
       current.gistID == draft.gistID, current.filename.utf8.elementsEqual(draft.filename.utf8),
       current.generation == draft.generation, case .conflict(let conflict) = current.state

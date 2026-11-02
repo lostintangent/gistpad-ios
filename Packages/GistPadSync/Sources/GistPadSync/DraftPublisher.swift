@@ -7,7 +7,7 @@ public enum PublishReason: Equatable, Sendable {
     case leaving
 }
 
-public actor SyncCoordinator {
+public actor DraftPublisher {
     private let client: GitHubClient
     private let store: DraftStore
     private var busy = false
@@ -25,7 +25,7 @@ public actor SyncCoordinator {
     public func publish(
         id: UUID, accountID: UUID, reason: PublishReason = .manual, expectedGeneration: UInt64? = nil,
         shouldPublish: @escaping @Sendable () async -> Bool = { true }
-    ) async throws -> DraftSnapshot {
+    ) async throws -> Draft {
         await acquire()
         defer { release() }
         try Task.checkCancellation()
@@ -94,7 +94,7 @@ public actor SyncCoordinator {
             } else {
                 result = try await client.createGist(
                     description: draft.description, filename: draft.filename,
-                    content: GistConventions.encodeContent(draft.text)
+                    content: GistFile.encodeContent(draft.text)
                 )
             }
             let acknowledged = try await client.content(gist: result, filename: draft.filename)
@@ -134,7 +134,7 @@ public actor SyncCoordinator {
 
     /// Reads GitHub's copy of the file once. A clean draft takes it on, and edits on both sides become
     /// a conflict that shows the diff.
-    public func inspect(id: UUID, accountID: UUID) async throws -> DraftSnapshot {
+    public func inspect(id: UUID, accountID: UUID) async throws -> Draft {
         await acquire()
         defer { release() }
         try Task.checkCancellation()
@@ -150,8 +150,8 @@ public actor SyncCoordinator {
 
     /// The gist a cut-off create made, found by its description and a same-named file with the same
     /// bytes, so a create is never posted twice.
-    private func createdGist(for draft: DraftSnapshot, content: String) async throws -> Gist? {
-        let size = GistConventions.encodeContent(content).utf8.count
+    private func createdGist(for draft: Draft, content: String) async throws -> Gist? {
+        let size = GistFile.encodeContent(content).utf8.count
         for gist in try await client.listGists()
         where (gist.description ?? "") == draft.description && gist.files[draft.filename]?.size == size {
             let remote = try await client.remoteFile(
@@ -161,7 +161,7 @@ public actor SyncCoordinator {
         return nil
     }
 
-    private func isCleanDraft(_ draft: DraftSnapshot) -> Bool {
+    private func isCleanDraft(_ draft: Draft) -> Bool {
         draft.attemptedContent == nil && draft.attemptedGeneration == nil
             && sourceEqual(draft.text, draft.baseContent)
     }
