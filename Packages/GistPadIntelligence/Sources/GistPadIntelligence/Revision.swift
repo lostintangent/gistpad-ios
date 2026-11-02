@@ -26,7 +26,7 @@ enum Revision {
         (
           ModelReplacement(
             inserting: (needsBreak ? newline : "") + new.joined(separator: newline) + newline,
-            reason: Kind.insert.reason),
+            reason: ""),
           NSRange(location: visible.location, length: 0)
         )
       ]
@@ -55,7 +55,7 @@ enum Revision {
       }
     }
     // Runs of changed lines, as old lines a..<b becoming new lines c..<d.
-    var runs: [(a: Int, b: Int, c: Int, d: Int, kind: Kind)] = []
+    var runs: [(a: Int, b: Int, c: Int, d: Int)] = []
     i = 0
     j = 0
     while i < old.count || j < new.count {
@@ -78,14 +78,14 @@ enum Revision {
           advanced = true
         }
       }
-      var run = (a: a, b: i, c: c, d: j, kind: a == i ? Kind.insert : c == j ? .remove : .change)
+      var run = (a: a, b: i, c: c, d: j)
       // A quote needs existing text and a replacement needs a line to keep its line breaks, so a
       // run takes in unchanged lines before it, or after it at the top, until it quotes text.
       while run.a == run.b || run.c == run.d
         || old[run.a..<run.b].allSatisfy({ $0.text.allSatisfy(\.isWhitespace) })
       {
         if let last = runs.last, run.a == last.b {
-          run = (last.a, run.b, last.c, run.d, last.kind == run.kind ? run.kind : .change)
+          run = (last.a, run.b, last.c, run.d)
           runs.removeLast()
         } else if run.a > 0 {
           run.a -= 1
@@ -100,10 +100,7 @@ enum Revision {
       i = run.b
       j = run.d
       if let last = runs.last, run.a <= last.b {
-        runs[runs.count - 1] = (
-          last.a, max(last.b, run.b), last.c, max(last.d, run.d),
-          last.kind == run.kind ? run.kind : .change
-        )
+        runs[runs.count - 1] = (last.a, max(last.b, run.b), last.c, max(last.d, run.d))
       } else {
         runs.append(run)
       }
@@ -115,21 +112,9 @@ enum Revision {
       return (
         ModelReplacement(
           quote: (source as NSString).substring(with: range),
-          replacement: new[run.c..<run.d].joined(separator: newline), reason: run.kind.reason),
+          replacement: new[run.c..<run.d].joined(separator: newline), reason: ""),
         range
       )
-    }
-  }
-
-  private enum Kind {
-    case insert, remove, change
-
-    var reason: String {
-      switch self {
-      case .insert: String(localized: "Add this text.", bundle: .module)
-      case .remove: String(localized: "Remove this text.", bundle: .module)
-      case .change: String(localized: "Change this text.", bundle: .module)
-      }
     }
   }
 

@@ -53,6 +53,8 @@ public final class OnDeviceModel: IntelligenceModel {
 
   public func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
     try await perform(pass: pass) {
+      // A whole note without tasks can't need a task edit, so it goes straight to the rewrite.
+      if !pass.isPart, pass.tasks.isEmpty { return try await editOperations(.text, for: pass) }
       let intent = try await editIntent(pass.instruction)
       guard intent.changesOtherText, intent.kind != .text else {
         return try await editOperations(intent.changesOtherText ? .text : intent.kind, for: pass)

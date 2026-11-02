@@ -279,18 +279,16 @@ struct EditTests {
     }
   }
 
-  @Test func aRevisionNamesEachChangeAndNeverSeesFrontMatter() async throws {
+  @Test func aRevisionLetsItsDiffSpeakAndNeverSeesFrontMatter() async throws {
     func reasons(_ source: String, _ revision: String) async throws -> [String] {
       let fixture = FixtureModel()
       fixture.changes = { _ in [.rewrite(revision)] }
       return try await Intelligence(backend: fixture).edit(request(source, .edit, "Edit"))
         .comments.map(\.reason)
     }
-    #expect(
-      try await reasons("A\n\nB\n\nC\n\nD", "A2\n\nB\n\nC\n\nD2")
-        == ["Change this text.", "Change this text."])
-    #expect(try await reasons("A", "A\n\nB") == ["Add this text."])
-    #expect(try await reasons("A\n\nB\n\nC", "A\n\nC") == ["Remove this text."])
+    #expect(try await reasons("A\n\nB\n\nC\n\nD", "A2\n\nB\n\nC\n\nD2") == ["", ""])
+    #expect(try await reasons("A", "A\n\nB") == [""])
+    #expect(try await reasons("A\n\nB\n\nC", "A\n\nC") == [""])
 
     let fixture = FixtureModel()
     fixture.changes = { _ in [.rewrite("# Today")] }

@@ -267,7 +267,8 @@
     @ViewBuilder
     private func change(_ comment: Review.Comment) -> some View {
       let comparison = comment.replacement.map { TextDiff(before: comment.quote, after: $0) }
-      Text(comment.reason).font(.headline)
+      // A rewrite's Before and After say what changes, so only task changes carry a headline.
+      if !comment.reason.isEmpty { Text(comment.reason).font(.headline) }
       VStack(alignment: .leading, spacing: 6) {
         Text(
           comment.rejection != nil
