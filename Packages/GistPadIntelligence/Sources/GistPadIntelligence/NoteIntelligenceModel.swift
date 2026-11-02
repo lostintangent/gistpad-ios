@@ -117,7 +117,7 @@
             self.proposal = try await self.engine.propose(request, progress: { self.progress = $0 })
           }
         } catch is CancellationError {
-          self.notice = String(localized: "Cancelled. Your note is unchanged.", bundle: .module)
+          self.notice = String(localized: "Cancelled. Your file is unchanged.", bundle: .module)
         } catch {
           self.errorMessage = Self.message(for: error)
           let failure =
@@ -134,7 +134,7 @@
       return message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         ? String(
           localized:
-            "Apple Intelligence couldn't complete this request. Try again. Your note is unchanged.",
+            "Apple Intelligence couldn't complete this request. Try again. Your file is unchanged.",
           bundle: .module) : message
     }
 

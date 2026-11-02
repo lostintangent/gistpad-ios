@@ -162,7 +162,7 @@
     private var progressLabel: String {
       if model.isCancelling { return String(localized: "Stopping…", bundle: .module) }
       guard let progress = model.progress else {
-        return String(localized: "Preparing this note…", bundle: .module)
+        return String(localized: "Preparing this file…", bundle: .module)
       }
       switch progress.phase {
       case .answering:
@@ -194,12 +194,12 @@
             Text(citation.quote).textSelection(.enabled)
             if ranges.count == 1, let range = ranges.first {
               Button(
-                String(localized: "Show in Note", bundle: .module), systemImage: "arrow.up.forward"
+                String(localized: "Show in File", bundle: .module), systemImage: "arrow.up.forward"
               ) { reveal(range) }
               .disabled(!model.canReveal(range))
             } else if ranges.count > 1 {
               Menu(
-                String(localized: "Show in Note", bundle: .module), systemImage: "arrow.up.forward"
+                String(localized: "Show in File", bundle: .module), systemImage: "arrow.up.forward"
               ) {
                 ForEach(Array(ranges.enumerated()), id: \.offset) { index, range in
                   Button(String(localized: "Match \(index + 1)", bundle: .module)) {
@@ -276,7 +276,7 @@
         )
         .font(.caption).fontWeight(.semibold)
         if comment.quote.isEmpty {
-          Text("Empty note", bundle: .module).foregroundStyle(.secondary)
+          Text("Empty file", bundle: .module).foregroundStyle(.secondary)
         } else if let comparison {
           Text(NoteIntelligenceDiffText.attributed(comparison.before)).textSelection(.enabled)
         } else {

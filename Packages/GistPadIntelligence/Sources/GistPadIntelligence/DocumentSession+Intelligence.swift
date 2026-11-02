@@ -35,7 +35,7 @@ extension NoteSnapshot {
       guard textView.isEditable else {
         throw NoteIntelligenceError.unavailable(
           String(
-            localized: "This note is read-only. Suggested changes can't be applied.",
+            localized: "This gist is read-only, so changes can't be applied.",
             bundle: .module))
       }
       let snapshot = try intelligenceSnapshot()

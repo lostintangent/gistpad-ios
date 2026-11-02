@@ -74,17 +74,17 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
     case .insufficientContext:
       String(
         localized:
-          "This request needs more context than the on-device model can safely combine. Your note is unchanged.",
+          "This request needs more context than the on-device model can safely combine. Your file is unchanged.",
         bundle: .module)
     case .invalidResponse:
       String(
         localized:
-          "Apple Intelligence returned a response the app couldn't read. Your note is unchanged.",
+          "Apple Intelligence returned a response the app couldn't read. Your file is unchanged.",
         bundle: .module)
     case .responseTooLarge:
       String(
         localized:
-          "Apple Intelligence reached the response limit before finishing. Your note is unchanged.",
+          "Apple Intelligence reached the response limit before finishing. Your file is unchanged.",
         bundle: .module)
     case .invalidEdit:
       String(
@@ -106,22 +106,22 @@ public enum NoteIntelligenceError: Error, LocalizedError, Sendable, Equatable {
         bundle: .module)
     case .unverifiedQuotation:
       String(
-        localized: "A quoted passage didn't match your note.", bundle: .module)
+        localized: "A quoted passage didn't match your file.", bundle: .module)
     case .noEvidence:
-      String(localized: "I couldn't find information about that in this note.", bundle: .module)
+      String(localized: "I couldn't find that in this file.", bundle: .module)
     case .staleSnapshot:
       String(
-        localized: "Your note changed. Generate a fresh result before applying changes.",
+        localized: "This file has changed since this result.",
         bundle: .module)
     case .noApplicableChanges:
       String(localized: "There are no verified changes to apply.", bundle: .module)
     case .invalidSelection:
       String(
-        localized: "The editor selection is no longer valid. Your note is unchanged.",
+        localized: "The editor selection is no longer valid. Your file is unchanged.",
         bundle: .module)
     case .refused:
       String(
-        localized: "Apple Intelligence couldn't complete this request. Your note is unchanged.",
+        localized: "Apple Intelligence couldn't complete this request. Your file is unchanged.",
         bundle: .module)
     case .rateLimited:
       String(localized: "Apple Intelligence is busy. Try again in a moment.", bundle: .module)
