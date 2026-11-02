@@ -9,6 +9,8 @@ SCREEN=""
 STATE="populated"
 POSE="both"
 CONTRAST="standard"
+APPEARANCE="both"
+ACCENT=""
 OUTPUT=""
 POSTURE_HOOK=""
 POSTURE_READY=false
@@ -20,6 +22,7 @@ usage() {
 Usage: scripts/capture-matrix.sh --screen NAME [options]
 
 Installs the current build and captures cover/open x light/dark x Large/AX3.
+Use --pose and --appearance to capture a subset.
 The app receives --capture-screen NAME --capture-state STATE.
 Use only synthetic capture fixtures, never an active account or document.
 
@@ -31,6 +34,8 @@ Use only synthetic capture fixtures, never an active account or document.
   --output PATH          Evidence directory (default: DerivedData/Captures/...)
   --pose both|cover|open  Presentations to capture (default: both)
   --contrast standard|increased|both
+  --appearance light|dark|both  Appearances to capture (default: both)
+  --capture-accent HEX   Saved accent passed to the app, such as '#FACC15'
   --posture-hook PATH    Executable called with DEVICE and cover/open
   --posture-ready        Single pose only: caller has already set posture
   --settle SECONDS       Render settling time after launch (default: 10)
@@ -52,7 +57,7 @@ while [ "$#" -gt 0 ]; do
         --help) usage; exit 0 ;;
         --posture-ready) POSTURE_READY=true; shift ;;
         --capture-reading-fixture) READING_FIXTURE=true; shift ;;
-        --app|--device|--screen|--state|--output|--pose|--contrast|--posture-hook|--settle)
+        --app|--device|--screen|--state|--output|--pose|--contrast|--appearance|--capture-accent|--posture-hook|--settle)
             [ "$#" -ge 2 ] || fail "Missing value for $1"
             case "$1" in
                 --app) APP="$2" ;;
@@ -62,6 +67,8 @@ while [ "$#" -gt 0 ]; do
                 --output) OUTPUT="$2" ;;
                 --pose) POSE="$2" ;;
                 --contrast) CONTRAST="$2" ;;
+                --appearance) APPEARANCE="$2" ;;
+                --capture-accent) ACCENT="$2" ;;
                 --posture-hook) POSTURE_HOOK="$2" ;;
                 --settle) SETTLE="$2" ;;
             esac
@@ -82,6 +89,8 @@ case "$CONTRAST" in
     both) CONTRASTS=(disabled enabled) ;;
     *) fail "Invalid --contrast" ;;
 esac
+case "$APPEARANCE" in both) APPEARANCES=(light dark) ;; light|dark) APPEARANCES=("$APPEARANCE") ;; *) fail "Invalid --appearance" ;; esac
+[ -z "$ACCENT" ] || [[ "$ACCENT" =~ ^#[0-9A-Fa-f]{6}$ ]] || fail "--capture-accent must be a #RRGGBB color"
 [ "$POSTURE_READY" = false ] || [ "$POSE" != both ] || fail "--posture-ready requires one --pose"
 [ -d "$APP" ] || fail "Build the simulator app first. Not found: $APP"
 if [ -n "$POSTURE_HOOK" ]; then
@@ -152,7 +161,7 @@ for pose in "${POSES[@]}"; do
     if [ "$pose" = cover ]; then display=primary; else display=primary-1; fi
     for increased in "${CONTRASTS[@]}"; do
         xcrun simctl ui "$DEVICE" increase_contrast "$increased"
-        for appearance in light dark; do
+        for appearance in "${APPEARANCES[@]}"; do
             xcrun simctl ui "$DEVICE" appearance "$appearance"
             for size in large accessibility-extra-large; do
                 xcrun simctl ui "$DEVICE" content_size "$size"
@@ -160,6 +169,9 @@ for pose in "${POSES[@]}"; do
                 launch_arguments=(--capture-screen "$SCREEN" --capture-state "$STATE" --capture-ready-token "$token")
                 if [ "$READING_FIXTURE" = true ]; then
                     launch_arguments+=(--capture-reading-fixture)
+                fi
+                if [ -n "$ACCENT" ]; then
+                    launch_arguments+=(--capture-accent "$ACCENT")
                 fi
                 xcrun simctl launch --terminate-running-process "$DEVICE" "$BUNDLE_ID" \
                     "${launch_arguments[@]}"
