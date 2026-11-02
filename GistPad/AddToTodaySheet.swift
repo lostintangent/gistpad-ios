@@ -2,7 +2,6 @@ import GistPadInterface
 import GistPadPlatform
 import GistPadSync
 import SwiftUI
-import UIKit
 
 struct AddToTodaySheet: View {
   let target: DailyNoteTarget
@@ -55,8 +54,6 @@ struct AddToTodaySheet: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button(role: .cancel) { dismiss() }
-            .accessibilityLabel("Cancel")
-            .tint(.primary)
             .disabled(isAdding)
         }
         ToolbarItem(placement: .confirmationAction) {
@@ -64,11 +61,7 @@ struct AddToTodaySheet: View {
             ProgressView()
               .accessibilityLabel("Adding to Today")
           } else {
-            Button(role: .confirm, action: add) {
-              Image(systemName: "checkmark")
-            }
-              .buttonStyle(.glassProminent)
-              .tint(Color(uiColor: .label))
+            Button(role: .confirm, action: add)
               .accessibilityLabel("Add")
               .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
               .accessibilityIdentifier("today-capture-add")
@@ -89,7 +82,6 @@ struct AddToTodaySheet: View {
       Text("Task").tag(true)
     }
     .pickerStyle(.segmented)
-    .tint(.primary)
     .accessibilityIdentifier("today-capture-kind")
   }
 

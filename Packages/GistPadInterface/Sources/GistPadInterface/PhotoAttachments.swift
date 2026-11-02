@@ -31,12 +31,10 @@ public struct PhotoPrivacyNotice: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "Cancel", bundle: .module), action: cancel)
-                        .tint(.primary)
+                    Button(role: .cancel, action: cancel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(String(localized: "Continue", bundle: .module), action: proceed)
-                        .tint(.primary)
                 }
             }
         }
