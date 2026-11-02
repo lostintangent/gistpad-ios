@@ -665,10 +665,7 @@ struct LiveNotebookWorkspace: View {
         localized: "Finish composition or Writing Tools before saving to GitHub.")
       return
     }
-    Task {
-      await controller.publish()
-      if let error = controller.metadataError { notebook.documentError = error }
-    }
+    Task { await controller.publish() }
   }
 
   private func presentIntelligence(_ controller: NotebookSessionController) {

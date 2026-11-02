@@ -34,7 +34,6 @@ final class NotebookSessionController {
   private(set) var saveState: PublishState
   private(set) var isPublishing = false
   private(set) var isPerformingDestructiveAction = false
-  private(set) var metadataError: String?
   private(set) var isApplyingDurableEdit = false
   private(set) var remoteInspectionProblem: NotebookRemoteReadProblem?
   var mode: NoteMode = .reading
@@ -464,7 +463,6 @@ final class NotebookSessionController {
             document.gist = gist
             document.draft = saved
           }
-          metadataError = nil
         } catch is CancellationError {
           do {
             draft = try await notebook.draftSnapshot(id: draft.id, accountID: draft.accountID)
@@ -473,12 +471,9 @@ final class NotebookSessionController {
             logger.error("Cancelled save state couldn't be read: \(String(reflecting: type(of: error)), privacy: .public)")
           }
         } catch {
+          // The text reached GitHub, and the next refresh catches its details up.
           logger.error(
             "Saved-note metadata refresh failed: \(String(reflecting: type(of: error)), privacy: .public)"
-          )
-          metadataError = String(
-            localized:
-              "Your text was saved to GitHub, but its details couldn't be refreshed. Retry before sharing its link."
           )
         }
       }
