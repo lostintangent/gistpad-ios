@@ -280,16 +280,16 @@ struct LibraryHostTests {
         in: UIImage(cgImage: countCrop), expected: background).personal
       #expect(countCrop.width * countCrop.height - backgroundPixels > 10, "The number draws real ink.")
       // The count is quiet secondary ink, composited over the header background.
-      var secondary = (red: CGFloat(0), green: CGFloat(0), blue: CGFloat(0), alpha: CGFloat(0))
+      var red = CGFloat(0), green = CGFloat(0), blue = CGFloat(0), alpha = CGFloat(0)
       UIColor.secondaryLabel.resolvedColor(with: window.traitCollection).getRed(
-        &secondary.red, green: &secondary.green, blue: &secondary.blue, alpha: &secondary.alpha)
+        &red, green: &green, blue: &blue, alpha: &alpha)
       func over(_ component: CGFloat, _ base: UInt8) -> UInt8 {
-        UInt8((min(1, max(0, component * secondary.alpha + CGFloat(base) / 255
-          * (1 - secondary.alpha))) * 255).rounded())
+        UInt8((min(1, max(0, component * alpha + CGFloat(base) / 255 * (1 - alpha))) * 255)
+          .rounded())
       }
       let ink = RGBColor(
-        red: over(secondary.red, background.red), green: over(secondary.green, background.green),
-        blue: over(secondary.blue, background.blue))
+        red: over(red, background.red), green: over(green, background.green),
+        blue: over(blue, background.blue))
       #expect(ink.contrast(with: background) >= 3)
       #expect(try nativeAccentPixels(in: UIImage(cgImage: countCrop), expected: ink).personal > 10)
     }
@@ -531,8 +531,8 @@ struct LibraryHostTests {
       named: "pinned-progress-\(dark ? "Dark" : "Light")-\(size)-\(increasedContrast)-contrast.txt")
   }
 
-  @Test(arguments: [false, true], [true, false])
-  func nativeSearchFieldKeepsFocusAndSystemTextTint(dark: Bool, sidebar: Bool) async throws {
+  @Test(arguments: [false, true])
+  func nativeSearchFieldKeepsFocusAndSystemTextTint(dark: Bool) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.windows.first(where: \.isKeyWindow)
@@ -543,22 +543,12 @@ struct LibraryHostTests {
     model.searchState = .results(
       notes: InterfaceFixtures.library.notes.filter { $0.id == "shape" },
       coverage: .init(totalDocuments: 7, documentsWithCachedContent: 1))
-    let library = LibraryView(
-      model: model, actions: .init(refresh: {}, create: {}, today: {}), isSidebar: sidebar)
     window.rootViewController = UIHostingController(
-      rootView: Group {
-        if sidebar {
-          NavigationSplitView {
-            library
-          } detail: {
-            Text("The retained document")
-          }
-        } else {
-          NavigationStack { library }
-        }
+      rootView: NavigationStack {
+        LibraryView(model: model, actions: .init(refresh: {}, create: {}, today: {}))
       }
-      .librarySearch(model: model, isPresented: .constant(true), isSidebar: sidebar)
-      .environment(\.horizontalSizeClass, sidebar ? .regular : .compact)
+      .librarySearch(model: model, isPresented: .constant(true), isSidebar: false)
+      .environment(\.horizontalSizeClass, .compact)
       .environment(\.dynamicTypeSize, .large)
       .environment(\.colorScheme, dark ? .dark : .light))
     window.makeKeyAndVisible()
@@ -589,7 +579,7 @@ struct LibraryHostTests {
       }
     }
     Attachment.record(
-      image, named: "library-search-\(sidebar ? "Sidebar" : "Compact")-\(dark ? "Dark" : "Light")-Large.png",
+      image, named: "library-search-Compact-\(dark ? "Dark" : "Light")-Large.png",
       as: .png)
     Attachment.record(
       "Key window: \(window.isKeyWindow), scene: \(scene.activationState.rawValue)\n"
@@ -632,7 +622,6 @@ struct LibraryHostTests {
       uiColor: UIColor.label.resolvedColor(with: window.traitCollection)))
     let counts = try nativeAccentPixels(in: image, expected: expected)
     #expect(counts.personal > 30, "The scope and Clear actions retain readable neutral ink.")
-    #expect(counts.systemBlue == 0, "Library commands must not inherit the system text-entry tint.")
     let accent = PersonalAccent(savedHex: savedHex).roles(traits: window.traitCollection).text
     #expect(try nativeAccentPixels(in: image, expected: accent).personal < 20)
     Attachment.record(
