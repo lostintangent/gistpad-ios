@@ -229,9 +229,14 @@ struct LiveNotebookWorkspace: View {
       finishLeavingNote(outgoing)
     }
     .onChange(of: compactColumn) { previous, current in
-      guard previous != current, current == .sidebar, let outgoing = active else { return }
-      if horizontalSizeClass == .compact { comments.hide() }
-      finishLeavingNote(outgoing)
+      guard previous != current, current == .sidebar else { return }
+      if horizontalSizeClass == .compact {
+        comments.hide()
+        openRequest = UUID()
+        notebook.showLibrary()
+        active?.session.textView.resignFirstResponder()
+      }
+      if let outgoing = active { finishLeavingNote(outgoing) }
     }
   }
 
