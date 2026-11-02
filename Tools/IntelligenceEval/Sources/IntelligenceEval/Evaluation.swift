@@ -48,6 +48,7 @@ struct NoteEvaluationResult: Codable, Sendable {
   let answer: String?
   let proposedSource: String?
   let rejectedAnswers: [String]?
+  let editOperations: [String]?
   let modelGrade: Bool?
   let modelGradeError: String?
 }
@@ -138,6 +139,7 @@ enum NoteIntelligenceEvaluation {
             answer: retainPrivateOutput ? answer : nil,
             proposedSource: retainPrivateOutput ? proposed : nil,
             rejectedAnswers: retainPrivateOutput ? backend.rejectedAnswers : nil,
+            editOperations: retainPrivateOutput ? backend.operations : nil,
             modelGrade: modelGrade, modelGradeError: modelGradeError)
         } catch {
           let code = (error as? NoteIntelligenceError).map { String(describing: $0) } ?? "unexpected"
@@ -151,6 +153,7 @@ enum NoteIntelligenceEvaluation {
             qualityRetryCount: max(0, backend.answerCalls - 1),
             errorCode: code, errorType: type, answer: nil, proposedSource: nil,
             rejectedAnswers: retainPrivateOutput ? backend.rejectedAnswers : nil,
+            editOperations: retainPrivateOutput ? backend.operations : nil,
             modelGrade: nil, modelGradeError: nil)
         }
         results.append(result)
@@ -298,12 +301,14 @@ private struct FavoriteGrade {
   var passes: Bool
 }
 
-/// Counts answer generations and the prose the engine's quality gate rejects.
+/// Counts answer generations and records the prose the engine's quality gate rejects and the
+/// model's raw edit operations, so a failing case shows what the model actually proposed.
 @MainActor
 final class RecordingModel: NoteModelBackend {
   private let model = AppleNoteModel()
   private(set) var answerCalls = 0
   private(set) var rejectedAnswers: [String] = []
+  private(set) var operations: [String] = []
 
   func modelInfo() async throws -> NoteModelInfo { try await model.modelInfo() }
   func tokenCount(for pass: NoteModelPass) async throws -> Int {
@@ -313,7 +318,9 @@ final class RecordingModel: NoteModelBackend {
     try await model.replacements(for: pass)
   }
   func editOperations(for pass: NoteModelPass) async throws -> [NoteEditOperation] {
-    try await model.editOperations(for: pass)
+    let operations = try await model.editOperations(for: pass)
+    self.operations += operations.map { String(reflecting: $0) }
+    return operations
   }
   func excerpts(for pass: NoteModelPass) async throws -> [String] {
     try await model.excerpts(for: pass)
