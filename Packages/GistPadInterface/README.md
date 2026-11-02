@@ -3,8 +3,7 @@
 The Library, the gist screen and their sheets, in SwiftUI for iOS 27.2. Screens
 take Sendable values and closures. The app owns navigation, sign-in, the editor,
 Preview and sync, and nothing here writes to GitHub. Visual rules live in
-[the design system](../../docs/design-system.md) and
-[design direction](../../docs/design-direction.md).
+[design.md](../../docs/design.md).
 
 ## Library
 
