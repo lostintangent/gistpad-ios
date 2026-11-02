@@ -156,10 +156,6 @@ public actor AccountService {
         return snapshot(session.user)
     }
 
-    public func hasSupabaseSession() throws -> Bool {
-        try persistedSession() != nil
-    }
-
     /// The connected GitHub account for launch. It doesn't need a live Supabase session.
     public func connectedAccount() async throws -> Account? {
         if try persistedSession() != nil { return try await cachedAccount() }
