@@ -206,7 +206,9 @@ In the gist, a commented passage gets a 50% accent highlight and no underline. S
 
 ## Widgets and shortcuts
 
-The Today widget comes in small, medium and the inline and rectangular Lock Screen sizes. Small and medium lead with the date alone, like Calendar's icon: the abbreviated weekday in `.caption2` semibold over the day in SF Rounded semibold Large Title, both in the accent, with no "Today" or count beside it. Medium puts the tasks or the note to the date's right, and small puts them below it. Tasks check off in place, and the widget is redacted when locked. **Add to Today** captures Text or a Task into today's note, and failure says **Couldn't Add to Today**. Open Today is a shortcut. Spotlight finds gists, and `gistpad://today` and gist links open through the normal opening states.
+The Today widget comes in small, medium and the inline and rectangular Lock Screen sizes. Small and medium lead with the date alone, like Calendar's icon: the abbreviated weekday in `.caption2` semibold over the day in SF Rounded semibold Large Title, both in the accent, with no "Today" or count beside it. Medium puts the tasks or the note to the date's right, and small puts them below it. Tasks check off in place, and the widget is redacted when locked.
+
+Two controls work in Control Center, on the Lock Screen and from the Action button, using the system control style with no accent. **Add to Today** (`square.and.pencil`, "Capture a thought or task in today's note.") opens the capture sheet, which adds Text or a Task to today's note. Its failure says **Couldn't Add to Today**. **Open Today** (`calendar`, the Today button's symbol, "Open today's note.") opens today's note in Edit. Both are also Siri and Shortcuts actions. Spotlight finds gists, and `gistpad://today` and gist links open through the normal opening states.
 
 ## Motion
 
