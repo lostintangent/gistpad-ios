@@ -30,10 +30,11 @@ public struct TagEditor: View {
                 if let saveError {
                     Section {
                         Label(String(localized: "Couldn't save your tags.", bundle: .module), systemImage: "exclamationmark.circle")
-                        Text(verbatim: saveError).font(.subheadline)
+                            .foregroundStyle(.primary)
                         Button(String(localized: "Try Again", bundle: .module), action: commit)
+                    } footer: {
+                        Text(verbatim: saveError)
                     }
-                    .foregroundStyle(.primary)
                 }
                 Section {
                     ForEach(save == nil ? selectedTags : matchingTags) { tag in
