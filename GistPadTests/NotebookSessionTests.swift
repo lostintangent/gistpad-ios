@@ -105,7 +105,7 @@ struct NotebookSessionTests {
     #expect(controller.saveState.isConflict)
     let review = try controller.reviewContext()
     #expect(review.conflict.remote == "Changed in the web app")
-    #expect(controller.updateAutosave(isForeground: true) == nil)
+    #expect(controller.autosave(foreground: true) == nil)
     #expect(await provider.publishCount == 0)
     edit(controller, to: "Typing continues safely")
     #expect(await controller.waitForLocalSave())
@@ -133,7 +133,7 @@ struct NotebookSessionTests {
     #expect(controller.document.draft?.state == controller.draft.state)
     #expect(controller.draft.attemptedGeneration == (matches ? nil : 1))
     #expect(controller.remoteInspectionProblem == nil)
-    #expect(controller.updateAutosave(isForeground: true) == nil)
+    #expect(controller.autosave(foreground: true) == nil)
     #expect(await provider.publishCount == 0)
   }
 
@@ -141,7 +141,7 @@ struct NotebookSessionTests {
     let (controller, provider) = try await makeController(autosave: true)
     edit(controller, to: "Quiet accepted draft")
     #expect(await controller.waitForLocalSave())
-    let task = try #require(controller.updateAutosave(isForeground: true))
+    let task = try #require(controller.autosave(foreground: true))
     await task.value
     #expect(await provider.publishCount == 1)
     #expect(await provider.publicationReasons == [.autosave])
@@ -152,15 +152,15 @@ struct NotebookSessionTests {
     let (disabled, disabledProvider) = try await makeController(autosave: false)
     edit(disabled, to: "Keep local")
     #expect(await disabled.waitForLocalSave())
-    #expect(disabled.updateAutosave(isForeground: true) == nil)
-    #expect(disabled.updateAutosave(isForeground: false) == nil)
+    #expect(disabled.autosave(foreground: true) == nil)
+    #expect(disabled.autosave(foreground: false) == nil)
     #expect(await disabledProvider.publishCount == 0)
 
     let (controller, provider) = try await makeController(autosave: true)
     edit(controller, to: "Background local draft")
     #expect(await controller.waitForLocalSave())
-    let pending = try #require(controller.updateAutosave(isForeground: true))
-    #expect(controller.updateAutosave(isForeground: false) == nil)
+    let pending = try #require(controller.autosave(foreground: true))
+    #expect(controller.autosave(foreground: false) == nil)
     await pending.value
     #expect(await provider.publishCount == 0)
     #expect(try await provider.snapshot().text == "Background local draft")
@@ -188,7 +188,7 @@ struct NotebookSessionTests {
     let (enabled, provider) = try await makeController(autosave: true)
     edit(enabled, to: "Leaving this note")
     #expect(await enabled.waitForLocalSave())
-    let timer = try #require(enabled.updateAutosave(isForeground: true))
+    let timer = try #require(enabled.autosave(foreground: true))
     await enabled.finishLeavingNote()
     await timer.value
     #expect(timer.isCancelled)
@@ -200,7 +200,7 @@ struct NotebookSessionTests {
     let (disabled, disabledProvider) = try await makeController(autosave: false)
     edit(disabled, to: "Publish this note on leave")
     #expect(await disabled.waitForLocalSave())
-    disabled.updateAutosave(isForeground: true)
+    disabled.autosave(foreground: true)
     await disabled.finishLeavingNote()
     #expect(await disabledProvider.publishCount == 1)
     #expect(await disabledProvider.publicationReasons == [.leaving])
@@ -317,15 +317,15 @@ struct NotebookSessionTests {
     controller.session.textView.setMarkedText(
       "にほんご", selectedRange: NSRange(location: 4, length: 0))
     controller.session.textViewDidChangeSelection(controller.session.textView)
-    #expect(controller.updateAutosave(isForeground: true) == nil)
+    #expect(controller.autosave(foreground: true) == nil)
     controller.session.textView.unmarkText()
     controller.session.textViewDidChangeSelection(controller.session.textView)
     controller.session.textViewWritingToolsWillBegin(controller.session.textView)
-    #expect(controller.updateAutosave(isForeground: true) == nil)
+    #expect(controller.autosave(foreground: true) == nil)
     controller.session.textViewWritingToolsDidEnd(controller.session.textView)
     #expect(await controller.waitForLocalSave())
     controller.markRecovery()
-    #expect(controller.updateAutosave(isForeground: true) == nil)
+    #expect(controller.autosave(foreground: true) == nil)
     #expect(await provider.publishCount == 0)
   }
 
@@ -333,10 +333,10 @@ struct NotebookSessionTests {
     let (controller, provider) = try await makeController(autosave: true)
     edit(controller, to: "First draft")
     #expect(await controller.waitForLocalSave())
-    let old = try #require(controller.updateAutosave(isForeground: true))
+    let old = try #require(controller.autosave(foreground: true))
     edit(controller, to: "Latest draft")
     #expect(await controller.waitForLocalSave())
-    let latest = try #require(controller.updateAutosave(isForeground: true))
+    let latest = try #require(controller.autosave(foreground: true))
     await old.value
     await latest.value
     #expect(await provider.publishCount == 1)
@@ -691,6 +691,15 @@ struct NotebookSessionTests {
         document: document, draft: draft, notebook: model, autosaveDelay: .milliseconds(30)),
       provider
     )
+  }
+}
+
+extension NotebookSessionController {
+  /// Moves the app in or out of the foreground, then schedules autosave as the app would.
+  @discardableResult
+  func autosave(foreground: Bool) -> Task<Void, Never>? {
+    notebook.isForeground = foreground
+    return updateAutosave()
   }
 }
 

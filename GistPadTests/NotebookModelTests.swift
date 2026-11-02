@@ -97,7 +97,7 @@ struct NotebookModelTests {
     _ = try await provider.stageDailyDraft(filename: "2026-10-25.md", text: "- [ ] Two")
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.publishUnsyncedEdits(accountID: fixtureAccount.id) { _ in nil }
+    await model.publishUnsyncedEdits()
     #expect(await provider.publicationReasons == [.background, .background])
     #expect(model.localDrafts.allSatisfy { !$0.hasUnpublishedEdits })
   }
@@ -160,8 +160,7 @@ struct NotebookModelTests {
     await model.start()
     await model.open(.gist(id: "active"))
     let document = try #require(model.loadedDocument)
-    #expect(document.draft == nil)
-    let draft = try await model.openDraft(for: document)
+    let draft = try #require(document.draft)
     await provider.setGists([])
     await model.refresh()
     #expect(model.localDrafts.contains { $0.id == draft.id })
@@ -265,7 +264,6 @@ struct NotebookModelTests {
     let model = NotebookModel(provider: provider)
     await model.start()
     await model.open(.gist(id: "a"))
-    _ = try await model.openDraft(for: #require(model.loadedDocument))
     let target = try #require(model.libraryDeletionTarget(for: "a"))
     #expect(await provider.deletedIDs.isEmpty)
     _ = try await model.perform(.delete(gistID: target.id))
@@ -284,7 +282,7 @@ struct NotebookModelTests {
     let model = NotebookModel(provider: provider)
     await model.start()
     await model.open(.gist(id: "a"))
-    let draft = try await model.openDraft(for: #require(model.loadedDocument))
+    let draft = try #require(model.loadedDocument?.draft)
     _ = try await model.persist(
       draftID: draft.id, accountID: draft.accountID, text: "An accepted edit", generation: 1)
     _ = try await model.publish(draftID: draft.id, accountID: draft.accountID)
@@ -344,7 +342,7 @@ struct NotebookModelTests {
     await model.start()
     await model.open(.gist(id: "frontmatter"))
     let document = try #require(model.loadedDocument)
-    let draft = try await model.openDraft(for: document)
+    let draft = try #require(document.draft)
     let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
     #expect(controller.session.showsFrontMatter == (shown ?? false))
     #expect(controller.session.contentStart == (shown == true ? 0 : prefix.utf16.count))
@@ -551,7 +549,7 @@ struct NotebookModelTests {
     await model.start()
     await model.open(.gist(id: "a"))
     let document = try #require(model.loadedDocument)
-    let draft = try await model.openDraft(for: document)
+    let draft = try #require(document.draft)
     let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
     let editor = controller.session.textView
     #expect(editor.spellCheckingType == .no)
@@ -593,7 +591,7 @@ struct NotebookModelTests {
     let controller = NotebookSessionController(
       document: document, draft: draft, notebook: model, autosaveDelay: .milliseconds(1))
     #expect(!controller.hasUnpublishedChanges)
-    #expect(controller.updateAutosave(isForeground: true) == nil)
+    #expect(controller.autosave(foreground: true) == nil)
     await controller.publish(reason: .background)
     #expect(await provider.publicationReasons.isEmpty)
     await model.open(.today())
@@ -842,11 +840,13 @@ struct NotebookModelTests {
     await model.open(.gist(id: "a"))
     let first = try #require(model.loadedDocument)
     let reads = await provider.readIDs
-    #expect(model.beginOpeningRow(id: "b"))
+    #expect(!model.beginOpeningRow(id: "b"))
     #expect(model.presentedDocument.map(model.chrome(for:))?.title == "Second")
     #expect(model.presentedDocument?.text == "Second source")
     #expect(model.presentedDocument?.refersToSameFile(as: first) == false)
+    await model.openRow(id: "b")
     #expect(model.opening == nil)
+    #expect(model.activeFile?.document.gist?.id == "b")
     #expect(await provider.readIDs == reads)
   }
 
@@ -1270,7 +1270,7 @@ struct NotebookModelTests {
     await provider.failToday(true)
     let model = NotebookModel(provider: provider)
     await model.start()
-    #expect(model.beginOpeningRow(id: "daily/2026-10-24.md"))
+    await model.openRow(id: "daily/2026-10-24.md")
     #expect(model.loadedDocument?.filename == "2026-10-24.md")
     #expect(model.loadedDocument?.text == "The beta day")
     #expect(model.library.selectedNoteID == "daily/2026-10-24.md")
@@ -1446,7 +1446,7 @@ struct NotebookNavigationHostTests {
     var checkedWidthChange = false
     for id in ["reading", "other", "reading", "other", "reading"] {
       let text = id == "reading" ? source : other
-      host.model.library.selectedNoteID = id
+      host.model.select(rowID: id)
       try await host.waitUntil {
         host.model.presentedDocument?.gist?.id == id && host.editor(text: text) != nil
           && host.descendants.contains { $0 is UISegmentedControl }
@@ -1910,7 +1910,7 @@ struct NotebookNavigationHostTests {
       ])
     let host = try await NavigationHost(provider: provider)
     defer { await host.close() }
-    #expect(host.model.beginOpeningRow(id: "a"))
+    host.model.select(rowID: "a")
     try await host.waitUntil { host.editor(text: "First note source") != nil }
     let first = try #require(host.editor(text: "First note source"))
     first.becomeFirstResponder()
@@ -1920,10 +1920,10 @@ struct NotebookNavigationHostTests {
     first.undoManager?.endUndoGrouping()
     let selection = first.selectedRange
     let reads = await provider.readIDs
-    #expect(host.model.beginOpeningRow(id: "b"))
+    host.model.select(rowID: "b")
     #expect(host.model.presentedDocument?.text == "Second note source")
-    #expect(host.model.opening == nil)
     try await host.waitUntil { host.editor(text: "Second note source") != nil }
+    #expect(host.model.opening == nil)
     #expect(first.window == nil)
     #expect(await provider.readIDs == reads)
     #expect(host.model.beginOpeningRow(id: "a"))

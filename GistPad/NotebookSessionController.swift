@@ -38,11 +38,10 @@ final class NotebookSessionController {
   private(set) var isApplyingDurableEdit = false
   private(set) var remoteInspectionProblem: NotebookRemoteReadProblem?
   var mode: NoteMode = .reading
-  @ObservationIgnored private let notebook: NotebookModel
+  @ObservationIgnored let notebook: NotebookModel
   @ObservationIgnored private var persistence: Task<Bool, Never>?
   @ObservationIgnored private var autosaveTask: Task<Void, Never>?
   @ObservationIgnored private var scheduledAutosave: AutosaveRequest?
-  @ObservationIgnored private var isForeground = false
   @ObservationIgnored private var lastEditingRequestID: UUID?
   @ObservationIgnored private var isDiscarded = false
   @ObservationIgnored private var publicationWaiters: [CheckedContinuation<Void, Never>] = []
@@ -70,6 +69,13 @@ final class NotebookSessionController {
       self?.persist(text: text, generation: generation)
     }
     NotebookPlatformBootstrap.register(self, notebook: notebook)
+    observeAutosave()
+  }
+
+  /// Adds photos at the caret, uploading them to the notebook's account.
+  @ObservationIgnored private(set) lazy var photos = NotebookPhotoController(note: self) {
+    [notebook = self.notebook, accountID = self.draft.accountID] png, gistID in
+    try await notebook.uploadPhoto(png, gistID: gistID, accountID: accountID)
   }
 
   /// The note's header and actions, always current with the notebook.
@@ -119,7 +125,7 @@ final class NotebookSessionController {
   }
 
   private var autosaveAllowed: Bool {
-    isForeground && notebook.account?.id == draft.accountID && notebook.pendingAccount == nil
+    notebook.isForeground && notebook.account?.id == draft.accountID && notebook.pendingAccount == nil
       && notebook.library.loadState == .ready
       && notebook.account?.preferences.isAutoSaveEnabled == true
       && canMutate && session.textView.markedTextRange == nil
@@ -137,9 +143,17 @@ final class NotebookSessionController {
     }
   }
 
+  /// Schedules autosave now and again whenever its request changes, such as with each keystroke.
+  private func observeAutosave() {
+    withObservationTracking {
+      _ = updateAutosave()
+    } onChange: { [weak self] in
+      Task { @MainActor in self?.observeAutosave() }
+    }
+  }
+
   @discardableResult
-  func updateAutosave(isForeground: Bool) -> Task<Void, Never>? {
-    self.isForeground = isForeground
+  func updateAutosave() -> Task<Void, Never>? {
     let request = autosaveRequest
     guard request != scheduledAutosave else { return autosaveTask }
     scheduledAutosave = request

@@ -121,16 +121,6 @@ actor LiveNotebookProvider: NotebookProviding {
   }
 
   func openDraft(for document: NotebookDocument) async throws -> DraftSnapshot {
-    if let draft = document.draft {
-      let coordinator = await coordinator(accountID: document.accountID)
-      // A failed read shows the stored note, so opening still works offline.
-      if let inspected = try? await mutationQueue.run({
-        try await coordinator.inspect(id: draft.id, accountID: document.accountID)
-      }) {
-        return inspected
-      }
-      return try await drafts.draft(id: draft.id, accountID: document.accountID)
-    }
     guard let gist = document.gist else { throw GitHubClientError.missingFile }
     guard let account = try await accounts.cachedAccount(), account.id == document.accountID else {
       throw AccountError.accountChanged
@@ -335,6 +325,11 @@ final class NotebookModel {
   private(set) var remoteRefreshProblem: NotebookRemoteReadProblem?
   private(set) var isRefreshingRemote = false
   private(set) var writeFailure: NotebookWriteFailure?
+  /// The notes opened this session, by draft. Returning to one keeps its caret, scroll and undo.
+  private(set) var files: [UUID: NotebookSessionController] = [:]
+  /// Autosave runs only while the app is in the foreground.
+  var isForeground = false
+  private(set) var isApplying = false
 
   @ObservationIgnored private let provider: any NotebookProviding
   @ObservationIgnored private let selections: NotebookSelectionStore
@@ -388,6 +383,12 @@ final class NotebookModel {
     return cachedDocument(rowID: selected)
   }
 
+  /// The editor for the note in the detail column.
+  var activeFile: NotebookSessionController? {
+    guard let document = presentedDocument else { return nil }
+    return files.values.first { $0.document.refersToSameFile(as: document) }
+  }
+
   var openingTitle: String? {
     if let opening { return opening.title }
     guard let selected = library.selectedNoteID, selected != loadedDocument?.rowID else {
@@ -413,13 +414,23 @@ final class NotebookModel {
     }
     documentRequest = UUID()
     documentError = nil
-    if let document = cachedDocument(rowID: id) {
+    if let document = cachedDocument(rowID: id), document.draft != nil {
       present(document)
       return true
     }
     opening = placeholder(for: request(forRow: id))
     library.selectedNoteID = id
     return false
+  }
+
+  /// Opens a library row, at once when its note is already on this iPhone.
+  func select(rowID id: String) {
+    guard !beginOpeningRow(id: id), opening?.rowID == id else { return }
+    let request = documentRequest
+    Task {
+      guard request == documentRequest else { return }
+      await openRow(id: id)
+    }
   }
 
   func libraryDeletionTarget(for rowID: String) -> NotebookDeletionTarget? {
@@ -550,6 +561,12 @@ final class NotebookModel {
     library.selectedNoteID = document.rowID
     if document.isRecovery { documentError = Self.recoveryMessage }
     remember(document.selection)
+    guard let draft = document.draft else { return }
+    if let file = files.values.first(where: { $0.document.refersToSameFile(as: document) }) {
+      file.adoptPresentation(document)
+    } else {
+      files[draft.id] = NotebookSessionController(document: document, draft: draft, notebook: self)
+    }
   }
 
   private func unfilteredRowID(for document: NotebookDocument) -> String? {
@@ -659,9 +676,17 @@ final class NotebookModel {
     }
   }
 
-  // The app calls this only after resolving the previous account's local work.
-  func acceptPendingAccount() async {
+  /// Switches to the account that just signed in, once every open note is saved on this iPhone.
+  func acceptPendingAccount() async throws {
     guard let pendingAccount else { return }
+    for file in files.values {
+      guard !file.isPublishing, !file.isApplyingDurableEdit else {
+        throw NotebookActionError.publicationInProgress
+      }
+      guard file.session.isSettled else { throw SourceEdit.MutationError.compositionActive }
+      guard await file.waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
+    }
+    guard self.pendingAccount == pendingAccount else { return }
     reset(to: pendingAccount)
     do {
       try await reloadLocalState(accountID: pendingAccount.id, discardAbandonedBlanks: true)
@@ -770,7 +795,8 @@ final class NotebookModel {
       if token == documentRequest, opening?.failure == nil { opening = nil }
     }
     do {
-      let opened = try await document(for: request, account: account)
+      var opened = try await document(for: request, account: account)
+      if opened.draft == nil { opened.draft = try await provider.openDraft(for: opened) }
       guard token == documentRequest else { return }
       present(opened)
     } catch is CancellationError {
@@ -960,10 +986,6 @@ final class NotebookModel {
     localized:
       "The GitHub note is unavailable. Your local draft is safe and can still be read or exported.")
 
-  func openDraft(for document: NotebookDocument) async throws -> DraftSnapshot {
-    try await provider.openDraft(for: document)
-  }
-
   func draftSnapshot(id: UUID, accountID: UUID) async throws -> DraftSnapshot {
     guard
       let draft = try await provider.localState(accountID: accountID).drafts.first(where: {
@@ -1006,6 +1028,7 @@ final class NotebookModel {
       selections.clear(accountID: draft.accountID)
     }
     guard account?.id == draft.accountID else { return true }
+    files[draft.id] = nil
     localDrafts.removeAll { $0.id == draft.id }
     library.snapshot.notes.removeAll { $0.id == draft.id.uuidString }
     if loadedDocument?.draft?.id == draft.id, !isDraftSelected(draft.id) {
@@ -1084,6 +1107,88 @@ final class NotebookModel {
     return NotebookRemoteRead.problem(for: error)?.recovery
   }
 
+  /// Applies an action once the notes it touches are saved on this iPhone, holding off typing in
+  /// a note it deletes, then brings every open note's details up to date.
+  func apply(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
+    guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
+    guard !isApplying else { throw NotebookActionError.publicationInProgress }
+    isApplying = true
+    var locked: [NotebookSessionController] = []
+    defer {
+      for file in locked { file.endDestructiveAction() }
+      isApplying = false
+    }
+    let confirmedWithoutGist: Bool =
+      switch action {
+      case .discardLocalCopy(let draftID, _): localDrafts.first { $0.id == draftID }?.gistID == nil
+      default: false
+      }
+    do {
+      for file in files.values {
+        let requiresLock: Bool =
+          switch action {
+          case .delete(let gistID), .deleteFile(let gistID, _):
+            file.draft.gistID == gistID
+              || localDrafts.contains { $0.id == file.draft.id && $0.gistID == gistID }
+          case .discardLocalCopy(let draftID, _): file.draft.id == draftID
+          case .signOut: true
+          default: false
+          }
+        guard requiresLock else { continue }
+        switch action {
+        case .delete, .deleteFile, .discardLocalCopy:
+          await file.waitForPublication()
+          try Task.checkCancellation()
+          guard account?.id == accountID, pendingAccount == nil else {
+            throw AccountError.accountChanged
+          }
+        default: break
+        }
+        try file.beginDestructiveAction()
+        locked.append(file)
+      }
+      for file in files.values {
+        guard await file.waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
+      }
+      guard account?.id == accountID, pendingAccount == nil else {
+        throw AccountError.accountChanged
+      }
+      let result = try await perform(
+        try await settledDeletionAction(
+          action, confirmedWithoutGist: confirmedWithoutGist, accountID: accountID))
+      switch result {
+      case .gist(let gist, _):
+        for file in files.values where file.draft.gistID == gist.id {
+          try await file.refreshMetadata(gist: gist)
+        }
+      case .account:
+        for file in files.values { try await file.refreshMetadata() }
+      case .draft(let draft, let gist):
+        try await files[draft.id]?.refreshMetadata(gist: gist)
+      case .deletedFile(let gistID, _, let gist):
+        for file in files.values where file.draft.gistID == gistID {
+          try await file.refreshMetadata(gist: gist)
+        }
+      case .signedOut, .deleted, .discardedDraft, .review, .remoteRead:
+        break
+      }
+      return result
+    } catch {
+      report(error, operation: "action")
+      throw error
+    }
+  }
+
+  /// Applies an action from a tap. A failure the status control can retry isn't also an alert.
+  func run(_ action: NotebookAction, accountID: UUID) {
+    Task {
+      do { _ = try await apply(action, accountID: accountID) } catch {
+        guard Self.writeRecovery(for: .action(action), error) == nil else { return }
+        documentError = error.localizedDescription
+      }
+    }
+  }
+
   func perform(_ action: NotebookAction) async throws -> NotebookActionResult {
     guard let account, pendingAccount == nil else { throw AccountError.accountChanged }
     guard !isSigningOut else { throw NotebookActionError.publicationInProgress }
@@ -1136,10 +1241,7 @@ final class NotebookModel {
           owned: cache.owned, starred: cache.starred, account: account)
       }
     case .draft(let draft, let gist):
-      let document = NotebookDocument(draft: draft, gist: gist)
-      loadedDocument = document
-      library.selectedNoteID = document.rowID
-      selections.save(document.selection, accountID: account.id)
+      present(NotebookDocument(draft: draft, gist: gist))
     case .deleted(let id):
       let draftIDs = Set(localDrafts.filter { $0.gistID == id }.map(\.id))
       forget(accountID: account.id) {
@@ -1186,6 +1288,7 @@ final class NotebookModel {
     if let selection = selections.selection(accountID: accountID), gone(selection) {
       selections.clear(accountID: accountID)
     }
+    files = files.filter { !gone($0.value.document.selection) }
   }
 
   /// Drops everything shown for the current account and switches to `account`, or signs out.
@@ -1196,6 +1299,7 @@ final class NotebookModel {
     pendingAccount = nil
     loadedDocument = nil
     opening = nil
+    files = [:]
     localDrafts = []
     cachedLibrary = nil
     documentError = nil
@@ -1306,18 +1410,17 @@ final class NotebookModel {
     return saved
   }
 
-  /// Publishes each note with unpublished edits, in order. `openEditorState` publishes a note that
-  /// has a live editor and returns its state, or returns nil for a closed note. The first offline
-  /// result stops the sweep, and the next launch or return to the app retries it.
-  func publishUnsyncedEdits(
-    accountID: UUID, openEditorState: (UUID) async -> PublishState?
-  ) async {
+  /// Publishes each note with unpublished edits, in order, through its editor when it's open. The
+  /// first offline result stops the sweep, and the next launch or return to the app retries it.
+  func publishUnsyncedEdits() async {
+    guard let accountID = account?.id, pendingAccount == nil else { return }
     let ids = localDrafts.filter { $0.accountID == accountID && $0.hasUnpublishedEdits }.map(\.id)
     for id in ids {
       guard !Task.isCancelled else { break }
       let state: PublishState?
-      if let open = await openEditorState(id) {
-        state = open
+      if let file = files[id] {
+        await file.publish(reason: .background)
+        state = file.draft.state
       } else {
         _ = try? await publish(draftID: id, accountID: accountID, reason: .background)
         state = (try? await draftSnapshot(id: id, accountID: accountID))?.state

@@ -10,10 +10,6 @@ import SwiftUI
 struct LiveNotebookWorkspace: View {
   @Bindable var notebook: NotebookModel
   private let routes: NotebookRouteInbox
-  @State private var sessions: [String: NotebookSessionController] = [:]
-  @State private var photoControllers: [String: NotebookPhotoController] = [:]
-  @State private var activity = NotebookWorkspaceActivity()
-  @State private var openRequest = UUID()
   @State private var compactColumn: NavigationSplitViewColumn = .sidebar
   @State private var actionMessage: String?
   @State private var shareURL: URL?
@@ -22,7 +18,6 @@ struct LiveNotebookWorkspace: View {
   @State private var tagTarget: NotebookTagTarget?
   @State private var nameTarget: NotebookNameTarget?
   @State private var reviewTarget: NotebookConflictTarget?
-  @State private var isPerformingAction = false
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
   @State private var layout = NotebookLayoutPreferences()
   @State private var showingSettings = false
@@ -46,9 +41,7 @@ struct LiveNotebookWorkspace: View {
     _comments = State(initialValue: NotebookCommentsPresentation(notebook: notebook))
   }
 
-  private var active: NotebookSessionController? {
-    activeID.flatMap { sessions[$0] }
-  }
+  private var active: NotebookSessionController? { notebook.activeFile }
 
   private var libraryCollections: Binding<Set<LibraryCollection>> {
     guard let accountID = notebook.account?.id else { return .constant([]) }
@@ -62,11 +55,6 @@ struct LiveNotebookWorkspace: View {
     return Binding(
       get: { layout.isPinnedExpanded(accountID: accountID) },
       set: { layout.setPinnedExpanded($0, accountID: accountID) })
-  }
-
-  private var activeID: String? {
-    get { activity.activeID }
-    nonmutating set { activity.activeID = newValue }
   }
 
   var body: some View {
@@ -114,13 +102,11 @@ struct LiveNotebookWorkspace: View {
             NotebookFailedOpeningView(opening: opening, message: failure) {
               Task { await notebook.open(opening.request) }
             }
+          } else if let active {
+            note(active, availableWidth: geometry.size.width)
           } else if let document = notebook.presentedDocument {
-            if let active, active.document.refersToSameFile(as: document) {
-              note(active, availableWidth: geometry.size.width)
-            } else {
-              NotebookOpeningView(title: notebook.chrome(for: document).title, document: document)
-                .id(document.id)
-            }
+            NotebookOpeningView(title: notebook.chrome(for: document).title, document: document)
+              .id(document.id)
           } else if let title = notebook.openingTitle {
             NotebookOpeningView(title: title)
               .id(notebook.opening?.rowID ?? notebook.library.selectedNoteID)
@@ -194,55 +180,63 @@ struct LiveNotebookWorkspace: View {
     navigation
     .task {
       await notebook.start()
-      publishUnsyncedEdits()
-    }
-    .task(id: notebook.loadedDocument?.activationID) {
-      if notebook.loadedDocument == nil { activeID = nil } else { await activateLoadedDocument() }
+      await notebook.publishUnsyncedEdits()
     }
     .task(id: routeReadiness) { await receivePendingRoute() }
     #if DEBUG
-    .onChange(of: [activeID, routes.pending?.url.absoluteString], initial: true) { presentFixtureSheet() }
+    .onChange(of: [active?.draft.id.uuidString, routes.pending?.url.absoluteString], initial: true) {
+      presentFixtureSheet()
+    }
     #endif
-    .onChange(of: autosaveInput, initial: true) {
-      for controller in sessions.values {
-        controller.updateAutosave(isForeground: scenePhase == .active)
+    .onChange(of: active?.document.activationID, initial: true) { didActivate() }
+    .onChange(of: active?.draft.id) { previous, _ in
+      if let previous, let outgoing = notebook.files[previous] {
+        Task { await outgoing.finishLeavingNote() }
       }
     }
     .onChange(of: notebook.library.selectedNoteID) { _, selected in
-      guard let selected, selected == notebook.library.selectedNoteID,
-        selected != notebook.loadedDocument?.rowID,
-        selected != notebook.opening?.rowID
-      else { return }
-      selectRow(selected)
-    }
-    .onChange(of: notebook.library.selectedNoteID) { previous, selected in
-      guard previous != selected, let previous,
-        let outgoing = sessions.values.first(where: { $0.document.rowID == previous })
-      else { return }
-      finishLeavingNote(outgoing)
-    }
-    .onChange(of: activeID) { previous, current in
-      guard previous != current, let previous, let outgoing = sessions[previous] else { return }
-      finishLeavingNote(outgoing)
+      if selected == nil, notebook.opening == nil { compactColumn = .sidebar }
     }
     .onChange(of: compactColumn) { previous, current in
       guard previous != current, current == .sidebar else { return }
       if horizontalSizeClass == .compact {
         comments.hide()
-        openRequest = UUID()
         notebook.showLibrary()
         active?.session.textView.resignFirstResponder()
       }
-      if let outgoing = active { finishLeavingNote(outgoing) }
+      if let outgoing = active { Task { await outgoing.finishLeavingNote() } }
     }
+  }
+
+  /// Prepares a note as it comes into the detail column.
+  private func didActivate() {
+    guard let active else { return }
+    active.mode = layout.initialMode(isUnpublished: active.draft.baseContent == nil)
+    comments.activate(active)
+    active.requestCreationFocus()
+    openRequestedComments()
+    // A completed restoration must not reopen detail after returning to Library.
+    if notebook.library.selectedNoteID != nil, active.document.revealsDetail {
+      compactColumn = .detail
+    }
+  }
+
+  /// Opens the comments a library row asked for, once its note is the active one.
+  private func openRequestedComments() {
+    guard let active, comments.requestedRowID == active.document.rowID,
+      comments.sessionID == active.session.viewIdentity
+    else { return }
+    comments.requestedRowID = nil
+    comments.open(for: active)
   }
 
   private var workspaceLifecycle: some View {
     workspaceNavigationLifecycle
+    .onChange(of: scenePhase, initial: true) { notebook.isForeground = scenePhase == .active }
     .onChange(of: scenePhase) { _, phase in
       if phase == .background { finishBackgroundSaves() }
       if phase == .active {
-        publishUnsyncedEdits()
+        Task { await notebook.publishUnsyncedEdits() }
         notebook.updateCalendar()
         Task { await active?.inspectRemoteChanges() }
       }
@@ -260,12 +254,8 @@ struct LiveNotebookWorkspace: View {
     .onChange(of: notebook.account?.id) { _, accountID in
       comments.reset()
       intelligence.target = nil
-      if accountID == nil {
-        sessions.removeAll()
-        photoControllers.removeAll()
-        activeID = nil
-        showingSettings = false
-      }
+      columnVisibility = .all
+      if accountID == nil { showingSettings = false }
     }
     .onChange(of: notebook.isSigningIn) { _, signingIn in
       if signingIn {
@@ -332,7 +322,7 @@ struct LiveNotebookWorkspace: View {
       account: account,
       savePreference: { key, value in
         guard let account else { throw AccountError.signedOut }
-        _ = try await execute(.preference(.setBoolean(key, value)), accountID: account.id)
+        _ = try await notebook.apply(.preference(.setBoolean(key, value)), accountID: account.id)
       },
       connect: {
         showingSettings = false
@@ -347,13 +337,13 @@ struct LiveNotebookWorkspace: View {
       },
       signOut: {
         guard let account else { throw AccountError.signedOut }
-        _ = try await execute(.signOut, accountID: account.id)
+        _ = try await notebook.apply(.signOut, accountID: account.id)
         showingSettings = false
       }
     ) {
       PersonalAccentColorRow(savedHex: account?.preferences.accentColor) { hex in
         guard let account else { throw AccountError.signedOut }
-        _ = try await execute(.preference(.setAccentColor(hex)), accountID: account.id)
+        _ = try await notebook.apply(.preference(.setAccentColor(hex)), accountID: account.id)
       }
     }
     .id(account?.id)
@@ -372,12 +362,7 @@ struct LiveNotebookWorkspace: View {
     if let account = notebook.account, let pending = notebook.pendingAccount {
       NotebookAccountSwitchSheet(
         current: account.login, replacement: pending.login,
-        switchAccount: {
-          try await finishAccountPersistence(account.id)
-          activeID = nil
-          columnVisibility = .all
-          await notebook.acceptPendingAccount()
-        },
+        switchAccount: { try await notebook.acceptPendingAccount() },
         keepCurrent: { notebook.keepCurrentNotebook() })
     }
   }
@@ -392,6 +377,7 @@ struct LiveNotebookWorkspace: View {
       guard canSwitchDocument else { return }
       comments.requestedRowID = rowID
       selectRow(rowID)
+      openRequestedComments()
     }
     actions.account = { showingSettings = true }
     let reconnect: @MainActor () -> Void = {
@@ -422,7 +408,7 @@ struct LiveNotebookWorkspace: View {
         actionMessage = String(localized: "Save this local draft to GitHub before pinning it.")
         return
       }
-      run(
+      notebook.run(
         .preference(.setPinned(gistID: id, pinned: !account.preferences.pinnedGists.contains(id))),
         accountID: account.id)
     }
@@ -441,7 +427,7 @@ struct LiveNotebookWorkspace: View {
         actionMessage = String(localized: "This note is no longer available to delete.")
         return
       }
-      run(target.action, accountID: target.accountID)
+      notebook.run(target.action, accountID: target.accountID)
     }
     return actions
   }
@@ -449,17 +435,8 @@ struct LiveNotebookWorkspace: View {
   private func note(
     _ controller: NotebookSessionController, availableWidth: CGFloat
   ) -> some View {
-    Group {
-      if let photos = photoControllers[controller.draft.id.uuidString] {
-        NotebookPhotoHost(photos: photos) {
-          noteScreen(controller, photos: photos, availableWidth: availableWidth)
-        }
-      } else {
-        ContentUnavailableView(
-          "This note couldn't be prepared", systemImage: "exclamationmark.circle",
-          description: Text(
-            "Return to the Library and open it again. Your local draft is unchanged."))
-      }
+    NotebookPhotoHost(photos: controller.photos) {
+      noteScreen(controller, photos: controller.photos, availableWidth: availableWidth)
     }
   }
 
@@ -732,17 +709,6 @@ struct LiveNotebookWorkspace: View {
     return .init(scope: scope, total: total)
   }
 
-  private struct AutosaveInput: Equatable {
-    let foreground: Bool
-    let requests: [String: NotebookSessionController.AutosaveRequest]
-  }
-
-  private var autosaveInput: AutosaveInput {
-    AutosaveInput(
-      foreground: scenePhase == .active,
-      requests: sessions.mapValues(\.autosaveRequest))
-  }
-
   private func noteActions(_ controller: NotebookSessionController) -> NoteActions {
     var actions = NoteActions()
     actions.focus = {
@@ -789,14 +755,14 @@ struct LiveNotebookWorkspace: View {
       }
       if !controller.document.isRecovery {
         actions.togglePin = {
-          run(
+          notebook.run(
             .preference(
               .setPinned(
                 gistID: gistID, pinned: !controller.chrome.isPinned)),
             accountID: controller.draft.accountID)
         }
         actions.toggleStar = {
-          run(
+          notebook.run(
             .star(gistID: gistID, starred: !controller.chrome.isStarred),
             accountID: controller.draft.accountID)
         }
@@ -807,7 +773,7 @@ struct LiveNotebookWorkspace: View {
               accountID: controller.draft.accountID)
           }
           actions.delete = {
-            run(.delete(gistID: gistID), accountID: controller.draft.accountID)
+            notebook.run(.delete(gistID: gistID), accountID: controller.draft.accountID)
           }
           actions.addFile = { requestName(.addFile, controller: controller) }
           actions.renameFile = { requestName(.filename, controller: controller) }
@@ -822,7 +788,7 @@ struct LiveNotebookWorkspace: View {
         let target = NotebookDeletionTarget(
           id: controller.draft.id.uuidString, accountID: controller.draft.accountID,
           title: controller.chrome.title, localDraft: controller.draft)
-        run(target.action, accountID: target.accountID)
+        notebook.run(target.action, accountID: target.accountID)
       }
     }
     actions.find = {
@@ -859,10 +825,7 @@ struct LiveNotebookWorkspace: View {
         localized: "Finish composition or Writing Tools before switching notes.")
       return
     }
-    openRequest = UUID()
-    Task {
-      await notebook.open(.gist(id: gistID, filename: filename))
-    }
+    Task { await notebook.open(.gist(id: gistID, filename: filename)) }
   }
 
   private func selectRow(_ id: String) {
@@ -870,78 +833,8 @@ struct LiveNotebookWorkspace: View {
       notebook.library.selectedNoteID = active?.document.rowID
       return
     }
-    let request = UUID()
-    openRequest = request
-    let isPrepared = notebook.beginOpeningRow(id: id)
+    notebook.select(rowID: id)
     compactColumn = .detail
-    if isPrepared {
-      if let document = notebook.loadedDocument { _ = activatePreparedDocument(document) }
-      return
-    }
-    Task {
-      guard request == openRequest, notebook.library.selectedNoteID == id else { return }
-      await notebook.openRow(id: id)
-    }
-  }
-
-  private func activateLoadedDocument() async {
-    guard let document = notebook.loadedDocument else { return }
-    if activatePreparedDocument(document) { return }
-    do {
-      let draft = try await notebook.openDraft(for: document)
-      guard !Task.isCancelled, notebook.loadedDocument?.id == document.id,
-        notebook.account?.id == document.accountID,
-        notebook.presentedDocument?.refersToSameFile(as: document) == true
-      else { return }
-      var prepared = document
-      prepared.draft = draft
-      _ = activatePreparedDocument(prepared)
-    } catch is CancellationError {
-      return
-    } catch {
-      Logger(subsystem: "dev.gistpad.GistPad", category: "Document")
-        .error("Draft open failed: \(String(reflecting: type(of: error)), privacy: .public)")
-      actionMessage = String(
-        localized:
-          "This note couldn't be opened with durable local storage. Editing has not started.")
-      notebook.library.selectedNoteID = active?.document.rowID
-    }
-  }
-
-  @discardableResult
-  private func activatePreparedDocument(_ document: NotebookDocument) -> Bool {
-    guard notebook.account?.id == document.accountID,
-      notebook.presentedDocument?.refersToSameFile(as: document) == true
-    else { return false }
-    let controller: NotebookSessionController
-    if let existing = sessions.values.first(where: {
-      $0.document.refersToSameFile(as: document)
-    }) {
-      existing.adoptPresentation(document)
-      controller = existing
-    } else if let draft = document.draft {
-      controller = NotebookSessionController(
-        document: document, draft: draft, notebook: notebook)
-      sessions[draft.id.uuidString] = controller
-    } else {
-      return false
-    }
-    controller.mode = layout.initialMode(isUnpublished: controller.draft.baseContent == nil)
-    comments.activate(controller)
-    controller.requestCreationFocus()
-    preparePhotos(for: controller)
-    activeID = controller.draft.id.uuidString
-    if comments.requestedRowID == document.rowID {
-      comments.requestedRowID = nil
-      comments.open(for: controller)
-    }
-    // A completed restoration must not reopen detail after returning to Library.
-    if notebook.library.selectedNoteID != nil, document.revealsDetail { compactColumn = .detail }
-    notebook.remember(
-      NotebookSelection(
-        gistID: controller.draft.gistID, filename: controller.draft.filename,
-        draftID: controller.draft.id))
-    return true
   }
 
   private func publish(_ controller: NotebookSessionController) {
@@ -953,27 +846,6 @@ struct LiveNotebookWorkspace: View {
     Task {
       await controller.publish()
       if let error = controller.metadataError { actionMessage = error }
-    }
-  }
-
-  private func publishUnsyncedEdits() {
-    guard let accountID = notebook.account?.id, notebook.pendingAccount == nil else { return }
-    Task {
-      await notebook.publishUnsyncedEdits(accountID: accountID) { id in
-        guard let controller = sessions[id.uuidString] else { return nil }
-        await controller.publish(reason: .background)
-        return controller.draft.state
-      }
-    }
-  }
-
-  private func finishLeavingNote(_ controller: NotebookSessionController) {
-    Task {
-      guard await controller.finishLeavingNote() else { return }
-      let id = controller.draft.id.uuidString
-      sessions[id] = nil
-      if activeID == id { activeID = nil }
-      photoControllers[id] = nil
     }
   }
 
@@ -1048,7 +920,7 @@ struct LiveNotebookWorkspace: View {
         guard let gistID = target.gistID else { throw DocumentLinkError.notPublished }
         action = .addFile(gistID: gistID, filename: value)
       }
-      _ = try await execute(action, accountID: target.accountID)
+      _ = try await notebook.apply(action, accountID: target.accountID)
     }
   }
 
@@ -1064,7 +936,7 @@ struct LiveNotebookWorkspace: View {
           case .delete(let id): .deleteTag(id: id)
           }
         }
-        _ = try await execute(.saveTags(operations), accountID: target.accountID)
+        _ = try await notebook.apply(.saveTags(operations), accountID: target.accountID)
       }
     } else {
       save = nil
@@ -1083,146 +955,12 @@ struct LiveNotebookWorkspace: View {
   /// Archiving is absolute, so its undo is the opposite archive, registered with the scene so
   /// shake to undo and the undo gesture reverse it.
   private func setArchived(_ archived: Bool, gistID: String, accountID: UUID) {
-    run(.archive(gistID: gistID, archived: archived), accountID: accountID)
+    notebook.run(.archive(gistID: gistID, archived: archived), accountID: accountID)
     undoManager?.registerUndo(withTarget: notebook) { _ in
       setArchived(!archived, gistID: gistID, accountID: accountID)
     }
     undoManager?.setActionName(
       archived ? String(localized: "Archive") : String(localized: "Unarchive"))
-  }
-
-  private func run(_ action: NotebookAction, accountID: UUID) {
-    Task {
-      do { _ = try await execute(action, accountID: accountID) } catch {
-        guard NotebookModel.writeRecovery(for: .action(action), error) == nil else { return }
-        actionMessage = error.localizedDescription
-      }
-    }
-  }
-
-  private func execute(_ action: NotebookAction, accountID: UUID) async throws
-    -> NotebookActionResult
-  {
-    guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
-      throw AccountError.accountChanged
-    }
-    guard !isPerformingAction else { throw NotebookActionError.publicationInProgress }
-    isPerformingAction = true
-    var locked: [NotebookSessionController] = []
-    defer {
-      for controller in locked { controller.endDestructiveAction() }
-      isPerformingAction = false
-    }
-    let confirmedWithoutGist: Bool = switch action {
-    case .discardLocalCopy(let draftID, _):
-      notebook.localDrafts.first { $0.id == draftID }?.gistID == nil
-    default: false
-    }
-    do {
-      for controller in sessions.values {
-        let requiresLock: Bool = switch action {
-        case .delete(let gistID), .deleteFile(let gistID, _):
-          controller.draft.gistID == gistID
-            || notebook.localDrafts.contains {
-              $0.id == controller.draft.id && $0.gistID == gistID
-            }
-        case .discardLocalCopy(let draftID, _):
-          controller.draft.id == draftID
-        case .signOut: controller.draft.accountID == accountID
-        default: false
-        }
-        if requiresLock {
-          switch action {
-          case .delete, .deleteFile, .discardLocalCopy:
-            await controller.waitForPublication()
-            try Task.checkCancellation()
-            guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
-              throw AccountError.accountChanged
-            }
-          default: break
-          }
-          try controller.beginDestructiveAction()
-          locked.append(controller)
-        }
-      }
-      for controller in sessions.values {
-        guard await controller.waitForLocalSave() else {
-          throw NotebookEditError.localPersistenceFailed
-        }
-      }
-      guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
-        throw AccountError.accountChanged
-      }
-      let effectiveAction = try await notebook.settledDeletionAction(
-        action, confirmedWithoutGist: confirmedWithoutGist, accountID: accountID)
-      let result = try await notebook.perform(effectiveAction)
-      switch result {
-      case .signedOut:
-        let keys = sessions.filter { $0.value.draft.accountID == accountID }.map(\.key)
-        for key in keys {
-          sessions[key] = nil
-          photoControllers[key] = nil
-        }
-        activeID = nil
-        compactColumn = .sidebar
-      case .gist(let gist, _):
-        for controller in sessions.values where controller.draft.gistID == gist.id {
-          try await controller.refreshMetadata(gist: gist)
-        }
-      case .account:
-        for controller in sessions.values where controller.draft.accountID == accountID {
-          try await controller.refreshMetadata()
-        }
-      case .draft(let draft, let gist):
-        if let controller = sessions[draft.id.uuidString] {
-          try await controller.refreshMetadata(gist: gist)
-        }
-      case .deleted(let gistID):
-        closeSessions { $0.draft.accountID == accountID && $0.draft.gistID == gistID }
-        comments.discard(gistID: gistID, accountID: accountID)
-      case .deletedFile(let gistID, let filename, let gist):
-        closeSessions {
-          $0.draft.accountID == accountID && $0.draft.gistID == gistID
-            && $0.draft.filename == filename
-        }
-        for controller in sessions.values
-        where controller.draft.accountID == accountID && controller.draft.gistID == gistID {
-          try await controller.refreshMetadata(gist: gist)
-        }
-      case .review, .remoteRead:
-        break
-      case .discardedDraft(let id):
-        sessions[id.uuidString] = nil
-        photoControllers[id.uuidString] = nil
-        if activeID == id.uuidString { activeID = nil }
-      }
-      return result
-    } catch {
-      Logger(subsystem: "dev.gistpad.GistPad", category: "Notebook")
-        .error("Note action failed: \(String(reflecting: type(of: error)), privacy: .public)")
-      throw error
-    }
-  }
-
-  private func closeSessions(where matches: (NotebookSessionController) -> Bool) {
-    let keys = sessions.filter { matches($0.value) }.map(\.key)
-    for key in keys {
-      sessions[key] = nil
-      photoControllers[key] = nil
-      if activeID == key {
-        activeID = nil
-        compactColumn = .sidebar
-      }
-    }
-  }
-
-  private func preparePhotos(for controller: NotebookSessionController) {
-    let key = controller.draft.id.uuidString
-    let accountID = controller.draft.accountID
-    guard photoControllers[key] == nil else { return }
-    photoControllers[key] = NotebookPhotoController(note: controller) { [notebook] png, gistID in
-      try await notebook.uploadPhoto(png, gistID: gistID, accountID: accountID)
-    }
   }
 
   private func createNote() {
@@ -1248,7 +986,7 @@ struct LiveNotebookWorkspace: View {
     RouteReadiness(
       route: routes.pending,
       accountID: notebook.account?.id,
-      isReady: !notebook.isStarting && !notebook.isSigningIn && !isPerformingAction
+      isReady: !notebook.isStarting && !notebook.isSigningIn && !notebook.isApplying
         && notebook.library.loadState != .loading && notebook.pendingAccount == nil
         && !showingSettings && !showingShare && !showingAddToToday
         && sharingTarget == nil && tagTarget == nil && nameTarget == nil
@@ -1285,8 +1023,6 @@ struct LiveNotebookWorkspace: View {
       showingAddToToday = true
     case .note(let gistID, let filename):
       await notebook.open(.gist(id: gistID, filename: filename))
-      guard !Task.isCancelled, routes.pending == route else { return }
-      await activateLoadedDocument()
     case .draft(let accountID, let draftID):
       guard accountID == account.id else {
         actionMessage = "This draft belongs to another GitHub account. Switch accounts to open it."
@@ -1294,8 +1030,6 @@ struct LiveNotebookWorkspace: View {
         return
       }
       await notebook.open(.draft(id: draftID))
-      guard !Task.isCancelled, routes.pending == route else { return }
-      await activateLoadedDocument()
     }
     guard !Task.isCancelled, routes.pending == route else { return }
     if notebook.presentedDocument != nil || notebook.opening?.failure != nil {
@@ -1342,32 +1076,13 @@ struct LiveNotebookWorkspace: View {
 
   private func finishBackgroundSaves() {
     let lease = NotebookBackgroundLease()
-    let documents = Array(sessions.values)
+    let documents = Array(notebook.files.values)
     let saving = Task {
       await NotebookLifecycle.saveOnBackground(documents, shouldContinue: { lease.isActive })
       lease.end()
     }
     lease.onExpiration = { saving.cancel() }
   }
-
-  private func finishAccountPersistence(_ accountID: UUID) async throws {
-    for controller in sessions.values where controller.draft.accountID == accountID {
-      guard !controller.isPublishing, !controller.isApplyingDurableEdit else {
-        throw NotebookActionError.publicationInProgress
-      }
-      guard controller.session.isSettled else {
-        throw SourceEdit.MutationError.compositionActive
-      }
-      guard await controller.waitForLocalSave() else {
-        throw NotebookEditError.localPersistenceFailed
-      }
-    }
-  }
-}
-
-@MainActor @Observable
-private final class NotebookWorkspaceActivity {
-  var activeID: String?
 }
 
 @MainActor
@@ -1376,7 +1091,6 @@ enum NotebookLifecycle {
     _ documents: [NotebookSessionController],
     shouldContinue: @escaping @MainActor @Sendable () -> Bool
   ) async {
-    for document in documents { document.updateAutosave(isForeground: false) }
     for document in documents { _ = await document.waitForLocalSave() }
     for document in documents {
       guard !Task.isCancelled, shouldContinue() else { return }

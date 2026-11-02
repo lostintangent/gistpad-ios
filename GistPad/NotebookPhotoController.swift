@@ -19,7 +19,7 @@ final class NotebookPhotoController {
   var isShowingPicker = false
   var failure: Failure?
   private(set) var isUploading = false
-  @ObservationIgnored private let note: NotebookSessionController
+  @ObservationIgnored private weak var note: NotebookSessionController?
   @ObservationIgnored private let upload: @MainActor (Data, String) async throws -> URL
   @ObservationIgnored private let defaults: UserDefaults
 
@@ -32,11 +32,14 @@ final class NotebookPhotoController {
     self.upload = upload
   }
 
-  var canChoosePhoto: Bool { !isUploading && note.canMutate && !note.document.isRecovery }
+  var canChoosePhoto: Bool {
+    guard let note else { return false }
+    return !isUploading && note.canMutate && !note.document.isRecovery
+  }
 
   func choosePhoto() {
     guard canChoosePhoto else { return }
-    note.session.textView.resignFirstResponder()
+    note?.session.textView.resignFirstResponder()
     if defaults.bool(forKey: Self.noticeKey) { isShowingPicker = true } else { isShowingNotice = true }
   }
 
@@ -59,6 +62,7 @@ final class NotebookPhotoController {
   }
 
   func add(png: Data) async {
+    guard let note else { return }
     isUploading = true
     defer { isUploading = false }
     if note.draft.gistID == nil { await note.publish() }
