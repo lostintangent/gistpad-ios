@@ -65,7 +65,7 @@ Swipe trailing for **Delete** (red, confirmed) and **Archive** or **Unarchive** 
 
 Search is `.searchable` with `.searchToolbarBehavior(.minimize)`: a magnifier that expands in place, matching titles. Tags filter separately. While tags are selected, a strip above Pinned shows them as chips, the matching count in secondary ("3 gists") and an `xmark.circle.fill` **Clear Tag Filter** button. No tags, no strip. No matches shows `ContentUnavailableView.search`.
 
-The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and **Search** and **Tags** at the bottom, like Notes. Tags hides while searching, is disabled without tags and fills (`tag.fill`) while filtering. In the Open sidebar, New Gist and Today sit in the rail, and Tags and Settings in secondary actions. Pull to refresh.
+The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and **Search** and **Tags** at the bottom, like Notes. Tags hides while searching, is disabled without tags and turns the accent while filtering, keeping the outline `tag`. In the Open sidebar, New Gist and Today sit in the rail, and Tags and Settings in secondary actions. Pull to refresh.
 
 | State | Title, message and action |
 | --- | --- |
@@ -195,9 +195,9 @@ In compact width, Comments is a sheet at medium and large (large at accessibilit
 
 Threads show newest first. Each comment has an avatar, a semibold author, a relative date and a selectable Markdown body with system links. Replies are disclosures indented 12 pt. The selected thread gets a 12-pt rounded tertiary surface and scrolls into view. **Reply**, **Show Passage**, **Show Full Quote** and **Show Less** are borderless secondary buttons with 44-pt targets. Your comments offer Edit and Delete, which confirms with **Delete [author]'s comment from GitHub?** / **Delete Comment**.
 
-The composer sits in the bottom safe-area bar, like Messages: a growing interactive glass field with 22-pt corners and the reply or quote context inside it, beside a circular **Post** button. Post is `arrow.up`, `.glassProminent` in the accent, large, with Command-Return. The thread's bottom scroll edge is hard.
+The composer sits in the bottom safe-area bar, like Messages: a growing interactive glass field with 22-pt corners and the reply or quote context inside it, beside a circular **Post** button. Post is `arrow.up`, `.glassProminent` in the accent, large, with Command-Return. The thread's bottom scroll edge is soft, so the field and Post float over the thread with no band or divider.
 
-States: "Loading comments", then pull to refresh with "Updating comments". Failures say "Comments couldn't be loaded" or "Couldn't reach GitHub. Check your connection and try again." with Try Again. An empty conversation is just the composer, with no message.
+States: "Loading comments" shows only on a first load with nothing cached. Reopening Comments shows the loaded thread straight away and refreshes quietly, and pull to refresh uses the system spinner. Failures say "Comments couldn't be loaded" or "Couldn't reach GitHub. Check your connection and try again." with Try Again. An empty conversation is just the composer, with no message.
 
 In the gist, a commented passage gets a 50% accent highlight and no underline. Selected text offers **Add Comment** in the edit menu. Tapping a highlight, or **View Comment**, opens its thread.
 
