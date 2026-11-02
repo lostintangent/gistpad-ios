@@ -35,7 +35,7 @@ struct PreviewAppearance: Equatable {
             "--gp-accent-text": accent.text.hex,
             "--gp-accent-fill": accent.fill.hex,
             "--gp-on-accent": accent.onFill.hex,
-            "--gp-selected-surface": accent.selectedSurface.hex
+            "--gp-selected-surface": Self.css(UIColor.tertiarySystemFill.resolvedColor(with: traits))
         ]
         let styles: [(String, UIFont.TextStyle)] = [
             ("body", .body), ("headline", .headline), ("footnote", .footnote)

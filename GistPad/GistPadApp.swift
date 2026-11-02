@@ -138,7 +138,6 @@ struct GistPadApp: App {
         NotebookSceneAccent(savedHex: sceneAccent)
           .frame(width: 0, height: 0)
       }
-      .gitHubStatusKeyboardPolicy()
       #if DEBUG
         .preferredColorScheme(LaunchArguments.captureColorScheme)
         .background {

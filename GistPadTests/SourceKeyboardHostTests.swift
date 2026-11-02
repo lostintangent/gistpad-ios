@@ -361,7 +361,7 @@ private final class SourceKeyboardFixture {
                         files: [.init(id: "README.md", filename: "README.md")],
                         selectedFileID: "README.md"
                     ),
-                    mode: .constant(.source), saveState: .inMemoryFixture
+                    mode: .constant(.source), saveState: .savedToGitHub
                 ) {
                     MarkdownEditorView(session: session)
                 } preview: {

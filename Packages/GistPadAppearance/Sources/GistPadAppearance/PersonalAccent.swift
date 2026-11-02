@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 public struct RGBColor: Hashable, Sendable {
     public let red: UInt8
@@ -22,6 +22,16 @@ public struct RGBColor: Hashable, Sendable {
         self.init(red: UInt8((value >> 16) & 255), green: UInt8((value >> 8) & 255), blue: UInt8(value & 255))
     }
 
+    /// A picked color, saved as the web's sRGB hex.
+    public init(_ color: Color.Resolved) {
+        func component(_ value: Float) -> UInt8 { UInt8((min(1, max(0, value)) * 255).rounded()) }
+        self.init(red: component(color.red), green: component(color.green), blue: component(color.blue))
+    }
+
+    public var color: Color {
+        Color(.sRGB, red: Double(red) / 255, green: Double(green) / 255, blue: Double(blue) / 255)
+    }
+
     public static let black = RGBColor(red: 0, green: 0, blue: 0)
     public static let white = RGBColor(red: 255, green: 255, blue: 255)
     public static let sky = RGBColor(red: 14, green: 165, blue: 233)
@@ -30,7 +40,7 @@ public struct RGBColor: Hashable, Sendable {
         String(format: "#%02X%02X%02X", Int(red), Int(green), Int(blue))
     }
 
-    private var luminance: Double {
+    public var luminance: Double {
         func linear(_ component: UInt8) -> Double {
             let value = Double(component) / 255
             return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
@@ -55,23 +65,18 @@ public struct AccentRoles: Equatable, Sendable {
     public let text: RGBColor
     public let fill: RGBColor
     public let onFill: RGBColor
-    public let selectedSurface: RGBColor
 }
 
 public struct PersonalAccent: Hashable, Sendable {
     public let savedHex: String?
     public let color: RGBColor
-    public var isInvalid: Bool { savedHex.map { RGBColor(hex: $0) == nil } ?? false }
 
     public init(savedHex: String? = nil) {
         self.savedHex = savedHex
         color = savedHex.flatMap(RGBColor.init(hex:)) ?? .sky
     }
 
-    func roles(
-        dark: Bool, increasedContrast: Bool, surfaces: [RGBColor],
-        selectionSurface: RGBColor, ink: RGBColor
-    ) -> AccentRoles {
+    func roles(dark: Bool, increasedContrast: Bool, surfaces: [RGBColor]) -> AccentRoles {
         precondition(!surfaces.isEmpty)
         let target = increasedContrast ? 7.0 : 4.5
         let endpoint: RGBColor = dark ? .white : .black
@@ -90,14 +95,7 @@ public struct PersonalAccent: Hashable, Sendable {
             fill = darker.amount <= lighter.amount ? darker.color : lighter.color
             onFill = darker.amount <= lighter.amount ? .white : .black
         }
-        var tint = increasedContrast ? 0.20 : 0.12
-        var selected = selectionSurface.mixed(toward: color, amount: tint)
-        while ink.contrast(with: selected) < target && tint > 0 {
-            tint = max(0, tint - 0.01)
-            selected = selectionSurface.mixed(toward: color, amount: tint)
-        }
-        precondition(ink.contrast(with: selected) >= target)
-        return AccentRoles(text: text, fill: fill, onFill: onFill, selectedSurface: selected)
+        return AccentRoles(text: text, fill: fill, onFill: onFill)
     }
 
     private func passingMix(toward endpoint: RGBColor, passes: (RGBColor) -> Bool) -> (color: RGBColor, amount: Double) {

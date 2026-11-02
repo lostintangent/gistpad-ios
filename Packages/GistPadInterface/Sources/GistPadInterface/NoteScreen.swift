@@ -13,8 +13,8 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     private let allowsSplit: Bool
     private let isSidebarHidden: Bool
     private let areCommentsPresented: Bool
-    @State private var showingTags = false
     @State private var showingOfflineExplanation = false
+    @State private var confirmingDeletion = false
     @State private var saveDetails: String?
     // Match the native toolbar's settled segment size on its first layout.
     @ScaledMetric(relativeTo: .body) private var minimumModeSegmentWidth = 48
@@ -74,7 +74,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
         .navigationSubtitle(document.headerFilename ?? "")
-        .background { NoteFileSubtitle(filename: document.headerFilename) }
         .modifier(NoteTitleMenu(isEnabled: document.files.count > 1) { fileChoices })
         .toolbar {
             primaryToolbar
@@ -88,14 +87,9 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .sheet(isPresented: $showingTags) {
-            TagEditor(tags: document.tags, selectedTagIDs: Set(document.tags.map(\.id)))
-        }
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .alert(String(localized: "Offline changes", bundle: .module), isPresented: $showingOfflineExplanation) {
-            if let retry = actions.retry {
-                Button(String(localized: "Retry", bundle: .module), action: retry)
-            }
+            Button(String(localized: "Retry", bundle: .module), action: actions.retry)
             Button(String(localized: "Close", bundle: .module), role: .cancel) {}
         } message: {
             Text("Changes are saved on this iPhone but haven't synced to GitHub. Reconnect, then try saving again.", bundle: .module)
@@ -132,15 +126,13 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                     .frame(minWidth: minimumModeSegmentWidth * CGFloat(allowsSplit ? 3 : 2))
                     .fixedSize(horizontal: true, vertical: false)
                     .layoutPriority(1)
-                    .tint(.primary)
             }
             .sharedBackgroundVisibility(.hidden)
         }
-        if let save = actions.save, document.access.canEdit,
+        if document.access.canEdit,
            saveState.showsManualSave(isAutoSaveEnabled: document.isAutoSaveEnabled) {
             ToolbarItem(placement: .primaryAction) {
-                Button(String(localized: "Save to GitHub", bundle: .module), systemImage: "arrow.up.doc", action: save)
-                    .tint(.primary)
+                Button(String(localized: "Save to GitHub", bundle: .module), systemImage: "arrow.up.doc", action: actions.save)
                     .disabled(!saveState.canPublish)
                     .accessibilityIdentifier("note-save")
             }
@@ -153,7 +145,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                     Label(String(localized: "Offline changes haven't synced", bundle: .module), systemImage: "icloud.slash")
                 }
                 .accessibilityIdentifier("note-offline")
-                .tint(.primary)
             }
         }
     }
@@ -163,10 +154,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             String(localized: "Note mode", bundle: .module),
             selection: Binding(
                 get: { mode == .split && !allowsSplit ? .source : mode },
-                set: {
-                    mode = $0
-                    actions.didChangeMode?($0)
-                }
+                set: { mode = $0 }
             )
         ) {
             Label(String(localized: "Edit", bundle: .module), systemImage: "square.and.pencil").tag(NoteMode.source)
@@ -189,108 +177,92 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                         get: { areCommentsPresented },
                         set: { _ in comments() })
                 ) {
-                    NoteCommentsLabel(count: document.commentCount, isSelected: areCommentsPresented)
+                    Label(String(localized: "Comments", bundle: .module), systemImage: "text.bubble")
                 }
                 .toggleStyle(.button)
-                .labelStyle(.iconOnly)
                 .symbolVariant(.none)
-                .tint(.primary)
+                .badge(document.commentCount ?? 0)
                 .accessibilityLabel(commentsLabel)
                 .accessibilityAddTraits(areCommentsPresented ? .isSelected : [])
                 .accessibilityIdentifier("note-comments")
             }
         }
-        if hasMoreActions {
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    if actions.togglePin != nil || actions.toggleStar != nil || actions.share != nil || actions.copyLink != nil {
-                        ControlGroup {
-                            if let pin = actions.togglePin {
-                                Button(
-                                    document.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
-                                    systemImage: document.isPinned ? "pin.fill" : "pin", action: pin
-                                )
-                            }
-                            if let star = actions.toggleStar {
-                                Button(
-                                    document.isStarred ? String(localized: "Unstar", bundle: .module) : String(localized: "Star", bundle: .module),
-                                    systemImage: document.isStarred ? "star.fill" : "star", action: star
-                                )
-                            }
-                            if let share = actions.share {
-                                Button(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up", action: share)
-                            }
-                            if let copy = actions.copyLink {
-                                Button(String(localized: "Copy Link", bundle: .module), systemImage: "link", action: copy)
-                            }
-                        }
-                        .controlGroupStyle(.compactMenu)
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                ControlGroup {
+                    if let pin = actions.togglePin {
+                        Button(
+                            document.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
+                            systemImage: document.isPinned ? "pin.fill" : "pin", action: pin
+                        )
                     }
-                    if showsFiles || actions.rename != nil || actions.focus != nil || actions.find != nil
-                        || actions.tags != nil || !document.tags.isEmpty || actions.intelligence != nil {
-                        Section {
-                            if let rename = actions.rename, document.access.canEdit {
-                                Button(
-                                    String(localized: "Rename Note…", bundle: .module),
-                                    systemImage: "pencil", action: rename
-                                )
-                                .accessibilityIdentifier("note-rename")
-                            }
-                            if let tags = actions.tags {
-                                Button(String(localized: "Tags", bundle: .module), systemImage: "tag", action: tags)
-                            } else if !document.tags.isEmpty {
-                                Button(String(localized: "Tags", bundle: .module), systemImage: "tag") { showingTags = true }
-                            }
-                            if showsFiles {
-                                Menu {
-                                    fileChoices
-                                } label: {
-                                    Label(String(localized: "Files", bundle: .module), systemImage: "doc.on.doc")
-                                }
-                            }
-                            if let intelligence = actions.intelligence {
-                                Button(
-                                    String(localized: "Intelligence…", bundle: .module),
-                                    systemImage: "sparkles", action: intelligence
-                                )
-                                .accessibilityIdentifier("note-intelligence")
-                            }
-                            if let find = actions.find, document.access.canEdit {
-                                Button(String(localized: "Find and Replace", bundle: .module), systemImage: "text.magnifyingglass", action: find)
-                            }
-                            if let focus = actions.focus, document.access.canEdit {
-                                Button(
-                                    isSidebarHidden ? String(localized: "Show Library", bundle: .module) : String(localized: "Hide Library", bundle: .module),
-                                    systemImage: "sidebar.left", action: focus
-                                )
-                            }
-                        }
+                    if let star = actions.toggleStar {
+                        Button(
+                            document.isStarred ? String(localized: "Unstar", bundle: .module) : String(localized: "Star", bundle: .module),
+                            systemImage: document.isStarred ? "star.fill" : "star", action: star
+                        )
                     }
-                    if let open = actions.openInGitHub {
-                        Section {
-                            Button(String(localized: "Open in GitHub", bundle: .module), systemImage: "arrow.up.right", action: open)
-                        }
-                    }
-                    if let archive = actions.toggleArchive {
-                        Section {
-                            Button(
-                                document.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
-                                systemImage: "archivebox", action: archive
-                            )
-                        }
-                    }
-                    if let delete = actions.delete, document.access.canEdit {
-                        Section {
-                            Button(String(localized: "Delete Note…", bundle: .module), systemImage: "trash", role: .destructive, action: delete)
-                                .tint(.red)
-                                .foregroundStyle(.red)
-                        }
-                    }
-                } label: {
-                    Label(String(localized: "Note actions", bundle: .module), systemImage: "ellipsis")
+                    Button(String(localized: "Share", bundle: .module), systemImage: "square.and.arrow.up", action: actions.share)
+                    Button(String(localized: "Copy Link", bundle: .module), systemImage: "link", action: actions.copyLink)
                 }
-                .accessibilityIdentifier("note-actions")
-                .tint(.primary)
+                .controlGroupStyle(.compactMenu)
+                Section {
+                    if let rename = actions.rename, document.access.canEdit {
+                        Button(
+                            String(localized: "Rename Note…", bundle: .module),
+                            systemImage: "pencil", action: rename
+                        )
+                        .accessibilityIdentifier("note-rename")
+                    }
+                    if let tags = actions.tags {
+                        Button(String(localized: "Tags", bundle: .module), systemImage: "tag", action: tags)
+                    }
+                    if showsFiles {
+                        Menu {
+                            fileChoices
+                        } label: {
+                            Label(String(localized: "Files", bundle: .module), systemImage: "doc.on.doc")
+                        }
+                    }
+                    Button(
+                        String(localized: "Intelligence…", bundle: .module),
+                        systemImage: "sparkles", action: actions.intelligence
+                    )
+                    .accessibilityIdentifier("note-intelligence")
+                    if document.access.canEdit {
+                        Button(String(localized: "Find and Replace", bundle: .module), systemImage: "text.magnifyingglass", action: actions.find)
+                        Button(
+                            isSidebarHidden ? String(localized: "Show Library", bundle: .module) : String(localized: "Hide Library", bundle: .module),
+                            systemImage: "sidebar.left", action: actions.focus
+                        )
+                    }
+                }
+                if let open = actions.openInGitHub {
+                    Section {
+                        Button(String(localized: "Open in GitHub", bundle: .module), systemImage: "arrow.up.right", action: open)
+                    }
+                }
+                if let archive = actions.toggleArchive {
+                    Section {
+                        Button(
+                            document.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
+                            systemImage: "archivebox", action: archive
+                        )
+                    }
+                }
+                if actions.delete != nil, document.access.canEdit {
+                    Section {
+                        Button(String(localized: "Delete Note…", bundle: .module), systemImage: "trash", role: .destructive) {
+                            confirmingDeletion = true
+                        }
+                    }
+                }
+            } label: {
+                Label(String(localized: "Note actions", bundle: .module), systemImage: "ellipsis")
+            }
+            .accessibilityIdentifier("note-actions")
+            .deletionConfirmation(title: document.title, isPresented: $confirmingDeletion) {
+                actions.delete?()
             }
         }
     }
@@ -299,13 +271,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         let title = String(localized: "Comments", bundle: .module)
         guard let count = document.commentCount else { return title }
         return title + ", " + String(localized: "\(count) comments", bundle: .module)
-    }
-
-    private var hasMoreActions: Bool {
-        showsFiles || actions.focus != nil || actions.find != nil || actions.tags != nil || !document.tags.isEmpty
-            || (actions.rename != nil && document.access.canEdit) || actions.intelligence != nil
-            || actions.togglePin != nil || actions.toggleStar != nil || actions.share != nil || actions.copyLink != nil
-            || actions.openInGitHub != nil || actions.toggleArchive != nil || (actions.delete != nil && document.access.canEdit)
     }
 
     private var status: some View {
@@ -330,8 +295,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             }
         }
         .font(.footnote)
-        .tint(.primary)
-        .foregroundStyle(InterfaceTheme.text)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("note-save-state")
         .contentTransition(.opacity)
@@ -352,26 +315,18 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     private var recoveryButton: some View {
         switch saveState {
         case .cloudFailure, .localFailure:
-            if let retry = actions.retry {
-                Button(String(localized: "Retry", bundle: .module), action: retry).frame(minHeight: 44)
-                    .accessibilityIdentifier("note-save-retry")
-            }
+            Button(String(localized: "Retry", bundle: .module), action: actions.retry).frame(minHeight: 44)
+                .accessibilityIdentifier("note-save-retry")
         case .remoteChange:
-            if let review = actions.reviewChanges {
-                Button(String(localized: "Review", bundle: .module), action: review).frame(minHeight: 44)
-            }
+            Button(String(localized: "Review", bundle: .module), action: actions.reviewChanges).frame(minHeight: 44)
         case .reconnectRequired:
-            if let reconnect = actions.reconnect {
-                Button(String(localized: "Reconnect", bundle: .module), action: reconnect).frame(minHeight: 44)
-            }
+            Button(String(localized: "Reconnect", bundle: .module), action: actions.reconnect).frame(minHeight: 44)
         case .creationUncertain:
             if let open = actions.openInGitHub {
                 Button(String(localized: "Check GitHub", bundle: .module), action: open).frame(minHeight: 44)
             }
         case .publicationUncertain:
-            if let retry = actions.retry {
-                Button(String(localized: "Check Status", bundle: .module), action: retry).frame(minHeight: 44)
-            }
+            Button(String(localized: "Check Status", bundle: .module), action: actions.retry).frame(minHeight: 44)
         default:
             if document.access == .truncated, let open = actions.openInGitHub {
                 Button(String(localized: "Open in GitHub", bundle: .module), action: open).frame(minHeight: 44)
@@ -395,23 +350,16 @@ public struct NoteScreen<Source: View, Preview: View>: View {
 
     @ViewBuilder
     private var fileChoices: some View {
-        let menu = NoteFileMenu(files: document.files)
-        Section(String(localized: "Files", bundle: .module)) {
-            ForEach(menu.years) { year in
-                Menu {
-                    ForEach(year.months) { month in
-                        Menu {
-                            ForEach(month.files) { fileChoice($0) }
-                        } label: {
-                            fileGroupLabel(Text(month.date, format: fileMonthFormat), files: month.files)
-                        }
-                    }
-                } label: {
-                    fileGroupLabel(Text(verbatim: String(year.id)), files: year.files)
-                }
-            }
-            ForEach(menu.otherFiles) { fileChoice($0) }
+        Picker(
+            String(localized: "Files", bundle: .module),
+            selection: Binding(
+                get: { document.selectedFileID },
+                set: { if $0 != document.selectedFileID { actions.selectFile?($0) } })
+        ) {
+            ForEach(document.files) { Text(verbatim: $0.filename).tag($0.id) }
         }
+        .pickerStyle(.inline)
+        .disabled(actions.selectFile == nil)
         if document.access.canEdit && (actions.renameFile != nil || actions.addFile != nil) {
             Section {
                 if let rename = actions.renameFile {
@@ -428,41 +376,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             }
         }
     }
-
-    private func fileChoice(_ file: NoteFile) -> some View {
-        Button {
-            if file.id != document.selectedFileID {
-                actions.selectFile?(file.id)
-            }
-        } label: {
-            if file.id == document.selectedFileID {
-                Label(file.filename, systemImage: "checkmark")
-            } else {
-                Text(verbatim: file.filename)
-            }
-        }
-        .disabled(actions.selectFile == nil && file.id != document.selectedFileID)
-        .accessibilityAddTraits(file.id == document.selectedFileID ? .isSelected : [])
-        .accessibilityIdentifier("note-file-\(file.id)")
-    }
-
-    private func fileGroupLabel(_ title: Text, files: [NoteFile]) -> some View {
-        HStack {
-            title
-            if files.contains(where: { $0.id == document.selectedFileID }) {
-                Image(systemName: "checkmark")
-            }
-        }
-        .accessibilityAddTraits(files.contains(where: { $0.id == document.selectedFileID }) ? .isSelected : [])
-    }
-
-    private var fileMonthFormat: Date.FormatStyle {
-        var format = Date.FormatStyle().month(.wide)
-        format.calendar = Calendar(identifier: .gregorian)
-        format.timeZone = .gmt
-        return format
-    }
-
 }
 
 private struct NoteTitleMenu<Items: View>: ViewModifier {

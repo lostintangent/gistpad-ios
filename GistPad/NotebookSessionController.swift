@@ -90,8 +90,7 @@ final class NotebookSessionController {
     if let problem = remoteInspectionProblem {
       return problem.status(
         heading: String(localized: "Couldn't check for updates"),
-        detail: String(localized: "Your notes on this iPhone are unchanged."),
-        isRecovering: isInspectingRemote)
+        detail: String(localized: "Your notes on this iPhone are unchanged."))
     }
     return isInspectingRemote
       ? .checking(operation: String(localized: "Checking GitHub for changes")) : .idle

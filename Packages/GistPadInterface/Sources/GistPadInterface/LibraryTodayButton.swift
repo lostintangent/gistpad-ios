@@ -1,28 +1,17 @@
 #if os(iOS)
 import SwiftUI
 
-public struct LibraryTodayButton: View {
-    private let summary: LibraryTodaySummary
-    private let isSelected: Bool
-    private let action: @MainActor () -> Void
+struct LibraryTodayButton: View {
+    let summary: LibraryTodaySummary
+    var isSelected = false
+    let action: @MainActor () -> Void
 
-    public init(
-        summary: LibraryTodaySummary, isSelected: Bool = false,
-        action: @escaping @MainActor () -> Void
-    ) {
-        self.summary = summary
-        self.isSelected = isSelected
-        self.action = action
-    }
-
-    public var body: some View {
+    var body: some View {
         Toggle(isOn: Binding(get: { isSelected }, set: { _ in action() })) {
-            ToolbarBadgeLabel(
-                title: "Today", systemImage: "calendar",
-                count: summary.unfinishedTaskCount, isSelected: isSelected)
+            Label(String(localized: "Today", bundle: .module), systemImage: "calendar")
         }
         .toggleStyle(.button)
-        .tint(.primary)
+        .badge(summary.unfinishedTaskCount ?? 0)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier("library-today")
     }

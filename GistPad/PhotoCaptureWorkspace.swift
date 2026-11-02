@@ -18,7 +18,7 @@
             NavigationStack {
               NoteScreen(
                 document: session.document.chrome, mode: $session.mode,
-                saveState: .inMemoryFixture, actions: fixture.actions
+                saveState: .savedToGitHub, actions: fixture.actions
               ) {
                 NotebookPhotoSurface(controller: fixture.photos, isSource: true) {
                   MarkdownEditorView(
@@ -349,13 +349,6 @@
 
     var actions: NoteActions {
       var value = NoteActions()
-      value.didChangeMode = { [session] mode in
-        if mode == .source {
-          session.session.requestFocusAtContentStart()
-        } else {
-          session.session.textView.resignFirstResponder()
-        }
-      }
       value.find = { [session] in
         session.mode = .source
         session.session.presentFind(replacing: true)

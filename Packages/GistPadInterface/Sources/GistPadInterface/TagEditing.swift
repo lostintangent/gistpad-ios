@@ -21,9 +21,6 @@ enum TagEditingError: LocalizedError {
 struct TagEditorDraft {
     private let originalTags: [LibraryTag]
     private let originalSelection: Set<String>
-    private var attemptedUpserts: Set<String> = []
-    private var attemptedMemberships: Set<String> = []
-    private var attemptedDeletions: Set<String> = []
     private(set) var tags: [LibraryTag]
     var selectedTagIDs: Set<String>
 
@@ -54,32 +51,15 @@ struct TagEditorDraft {
         selectedTagIDs.remove(tag.id)
     }
 
-    mutating func recordAttempt(_ edits: [TagEdit]) {
-        for edit in edits {
-            switch edit {
-            case .upsert(let tag): attemptedUpserts.insert(tag.id)
-            case .setMembership(let id, _): attemptedMemberships.insert(id)
-            case .delete(let id): attemptedDeletions.insert(id)
-            }
-        }
-    }
-
-    var hasAttemptedChanges: Bool {
-        !attemptedUpserts.isEmpty || !attemptedMemberships.isEmpty || !attemptedDeletions.isEmpty
-    }
-
+    /// Every save sends the whole difference from the original, so a retry resends it as is.
     var edits: [TagEdit] {
         let remaining = Set(tags.map(\.id))
-        var result = tags.filter { tag in
-            !originalTags.contains(tag) || attemptedUpserts.contains(tag.id) || attemptedDeletions.contains(tag.id)
-        }
+        var result = tags.filter { !originalTags.contains($0) }
             .sorted { $0.id < $1.id }.map(TagEdit.upsert)
-        for id in remaining.sorted() where originalSelection.contains(id) != selectedTagIDs.contains(id)
-            || attemptedMemberships.contains(id) || attemptedDeletions.contains(id) {
+        for id in remaining.sorted() where originalSelection.contains(id) != selectedTagIDs.contains(id) {
             result.append(.setMembership(tagID: id, included: selectedTagIDs.contains(id)))
         }
-        result += Set(originalTags.map(\.id)).union(attemptedUpserts).union(attemptedDeletions)
-            .subtracting(remaining).sorted().map { .delete(tagID: $0) }
+        result += Set(originalTags.map(\.id)).subtracting(remaining).sorted().map { .delete(tagID: $0) }
         return result
     }
 }

@@ -294,11 +294,7 @@ struct NotebookDocument: Equatable, Sendable, Identifiable {
       title: gist?.displayName
         ?? (draft.description.isEmpty
           ? String(localized: "Untitled") : draft.description),
-      files: [
-        .init(
-          id: draft.filename, filename: draft.filename,
-          date: gist?.fileDatesForGrouping[draft.filename])
-      ],
+      files: [.init(id: draft.filename, filename: draft.filename)],
       selectedFileID: draft.filename, access: access)
   }
 
@@ -386,20 +382,17 @@ final class NotebookModel {
 
   var writeAttentionStatus: GitHubStatusState? {
     guard let failure = writeFailure, account?.id == failure.accountID else { return nil }
-    return Self.attentionStatus(writeFailures, isRetrying: isRetryingWrite)
+    return Self.attentionStatus(writeFailures)
   }
 
-  static func attentionStatus(
-    _ failures: [NotebookWriteFailure], isRetrying: Bool
-  ) -> GitHubStatusState {
+  static func attentionStatus(_ failures: [NotebookWriteFailure]) -> GitHubStatusState {
     if let reconnect = failures.last(where: { $0.problem.recovery == .reconnect }) {
       return reconnect.problem.status(
-        heading: String(localized: "Couldn't reconnect GitHub."), detail: nil,
-        isRecovering: isRetrying)
+        heading: String(localized: "Couldn't reconnect GitHub."), detail: nil)
     }
     if let blocked = blockedNoteFailure(in: failures) {
       return blocked.problem.status(
-        heading: String(localized: "Couldn't save to GitHub."), detail: nil, isRecovering: false)
+        heading: String(localized: "Couldn't save to GitHub."), detail: nil)
     }
     let retryable = failures.filter { $0.problem.recovery == .retry }
     return .problem(
@@ -407,8 +400,7 @@ final class NotebookModel {
         heading: String(localized: "Couldn't save to GitHub."),
         message: unsentChangesMessage(retryable),
         recoveryTitle: String(localized: "Retry"),
-        detail: unsentChangesDetail(retryable),
-        isRecovering: isRetrying, retryAfter: retryable.last?.problem.retryAfter))
+        detail: unsentChangesDetail(retryable)))
   }
 
   // A blocked note can't succeed by retrying, so Show Note waits until no retryable change is left.
@@ -434,8 +426,7 @@ final class NotebookModel {
     if let problem = remoteRefreshProblem, cachedLibrary != nil || !localDrafts.isEmpty {
       return problem.status(
         heading: String(localized: "Couldn't update your gists"),
-        detail: String(localized: "Your notes on this iPhone are unchanged."),
-        isRecovering: isRefreshingRemote)
+        detail: String(localized: "Your notes on this iPhone are unchanged."))
     }
     return isRefreshingRemote
       ? .checking(operation: String(localized: "Checking GitHub for changes")) : .idle
@@ -579,12 +570,11 @@ final class NotebookModel {
     guard let gist, let text = cachedLibrary?.content(gist: gist, filename: selectedFilename) else {
       return nil
     }
-    let fileDates = gist.fileDatesForGrouping
     var document = NotebookDocument(
       accountID: account.id, gist: gist, filename: selectedFilename, text: text,
       chrome: NoteChrome(
         title: gist.displayName,
-        files: gist.markdownFilenames.map { .init(id: $0, filename: $0, date: fileDates[$0]) },
+        files: gist.markdownFilenames.map { .init(id: $0, filename: $0) },
         selectedFileID: selectedFilename,
         access: ownedGistIDs.contains(gistID) ? .editable : .readOnly,
         isPinned: account.preferences.pinnedGists.contains(gistID),
@@ -960,7 +950,6 @@ final class NotebookModel {
         return
       }
       let filenames = gist.markdownFilenames
-      let fileDates = gist.fileDatesForGrouping
       let selectedFilename: String?
       if let filename {
         selectedFilename = filenames.contains(filename) ? filename : nil
@@ -985,9 +974,7 @@ final class NotebookModel {
         accountID: account.id, gist: gist, filename: selectedFilename, text: text,
         chrome: NoteChrome(
           title: gist.displayName,
-          files: filenames.map {
-            NoteFile(id: $0, filename: $0, date: fileDates[$0])
-          },
+          files: filenames.map { NoteFile(id: $0, filename: $0) },
           selectedFileID: selectedFilename, access: owned ? .editable : .readOnly,
           isPinned: account.preferences.pinnedGists.contains(gist.id),
           isStarred: library.snapshot.notes.first { $0.id == gist.id }?.isStarred ?? false,
@@ -1154,12 +1141,10 @@ final class NotebookModel {
           id: rowID, title: match.title, updatedAt: match.updatedAt,
           gistID: match.isRecovery ? nil : match.gistID, owner: gist?.owner?.login,
           isOwned: match.isRecovery || (match.gistID.map { ownedGistIDs.contains($0) } ?? true),
-          canDeleteFromGitHub: !match.isRecovery
-            && (match.gistID.map { ownedGistIDs.contains($0) } ?? false),
           isRecovery: match.isRecovery,
           isSecret: match.isSecret, isPinned: match.isPinned, isStarred: match.isStarred,
           isArchived: match.isArchived, isDailyNote: match.isDailyNote, tagIDs: match.tagIDs,
-          filename: match.filename, fileCount: gist?.truncated == true ? nil : gist?.files.count,
+          filename: match.filename,
           progress: match.progress.map { .init(completed: $0.completed, total: $0.total) },
           isOverdue: match.isOverdue,
           dailyDate: match.isDailyNote
@@ -1168,13 +1153,7 @@ final class NotebookModel {
       }
       searchTargets = targets
       recoverySearchRows = recoveries
-      library.searchState = .results(
-        notes: notes,
-        coverage: .init(
-          totalDocuments: result.totalDocuments,
-          documentsWithCachedContent: result.documentsWithCachedContent,
-          incompleteGistCount: result.incompleteGistIDs.count,
-          staleResultCount: result.matches.filter { $0.text != nil && !$0.contentIsCurrent }.count))
+      library.searchState = .results(notes: notes)
     } catch {
       report(error, operation: "search")
       library.searchState = .failed(message: Self.searchMessage(error))
@@ -1390,7 +1369,6 @@ final class NotebookModel {
     }
     let text = local?.text ?? daily.flatMap { cachedLibrary?.content(gist: $0, filename: filename) }
     var summary = LibraryTodaySummary(
-      date: .now,
       progress: text.map {
         let tasks = TaskProgress(markdown: $0)
         return LibraryTaskProgress(completed: tasks.completed, total: tasks.total)
@@ -1399,11 +1377,6 @@ final class NotebookModel {
       summary.availability = .existing
     } else if cachedLibrary != nil, library.loadState == .ready, daily?.truncated != true {
       summary.availability = .missing
-    }
-    summary.excerpt = text.flatMap { NotebookExcerpt.text(from: $0) }.flatMap {
-      let lines = $0.split(whereSeparator: \.isNewline).prefix(2).joined(separator: "\n")
-      let excerpt = String(lines.prefix(280)).trimmingCharacters(in: .whitespacesAndNewlines)
-      return excerpt.isEmpty ? nil : excerpt
     }
     library.today = summary
   }
@@ -1517,8 +1490,8 @@ final class NotebookModel {
       return note
     }
     library.snapshot.notes = library.snapshot.notes.map(updateNote)
-    if case .results(let notes, let coverage) = library.searchState {
-      library.searchState = .results(notes: notes.map(updateNote), coverage: coverage)
+    if case .results(let notes) = library.searchState {
+      library.searchState = .results(notes: notes.map(updateNote))
     }
     if var document = loadedDocument, document.accountID == accountID, document.gist?.id == gistID {
       document.gist = document.gist.map(updateGist)
@@ -1796,10 +1769,9 @@ final class NotebookModel {
     localDrafts.removeAll { $0.id == id }
     projectLibrary()
     searchRequest = UUID()
-    if case .results(let notes, let coverage) = library.searchState {
+    if case .results(let notes) = library.searchState {
       library.searchState = .results(
-        notes: notes.filter { searchTargets[$0.id]?.draftID != id && $0.id != id.uuidString },
-        coverage: coverage)
+        notes: notes.filter { searchTargets[$0.id]?.draftID != id && $0.id != id.uuidString })
     }
     searchTargets = searchTargets.filter { $0.value.draftID != id }
   }
@@ -1836,10 +1808,9 @@ final class NotebookModel {
     }
     searchRequest = UUID()
     searchTargets = searchTargets.filter { !isDeletedFile($0.value) }
-    if case .results(let notes, let coverage) = library.searchState {
+    if case .results(let notes) = library.searchState {
       library.searchState = .results(
-        notes: notes.filter { !($0.gistID == gistID && $0.filename == filename) },
-        coverage: coverage)
+        notes: notes.filter { !($0.gistID == gistID && $0.filename == filename) })
     }
   }
 
@@ -1874,10 +1845,9 @@ final class NotebookModel {
       report(error, operation: "clear-deleted-selection")
     }
     searchRequest = UUID()
-    if case .results(let notes, let coverage) = library.searchState {
+    if case .results(let notes) = library.searchState {
       library.searchState = .results(
-        notes: notes.filter { $0.gistID != id && searchTargets[$0.id]?.gistID != id },
-        coverage: coverage)
+        notes: notes.filter { $0.gistID != id && searchTargets[$0.id]?.gistID != id })
     }
     searchTargets = searchTargets.filter { $0.value.gistID != id }
     library.gitHubStatus = remoteRefreshStatus
@@ -1918,7 +1888,6 @@ final class NotebookModel {
       return chrome
     }
     let owned = ownedGistIDs.contains(gist.id) || gist.owner?.id == draft.githubUserID
-    let fileDates = gist.fileDatesForGrouping
     let files = Set(
       gist.markdownFilenames
         + localDrafts.filter {
@@ -1928,9 +1897,7 @@ final class NotebookModel {
     ).sorted()
     return NoteChrome(
       title: gist.displayName,
-      files: files.map {
-        .init(id: $0, filename: $0, date: fileDates[$0])
-      }, selectedFileID: draft.filename,
+      files: files.map { .init(id: $0, filename: $0) }, selectedFileID: draft.filename,
       access: owned ? .editable : .readOnly,
       isPinned: account.preferences.pinnedGists.contains(gist.id),
       isStarred: cachedLibrary?.starred.contains(where: { $0.id == gist.id }) ?? false,
@@ -2101,12 +2068,10 @@ final class NotebookModel {
           title: day.map { GistConventions.fileDisplayName($0.filename) } ?? gist.displayName,
           updatedAt: gist.updatedAt, gistID: gist.id,
           owner: gist.owner?.login, isOwned: ownedIDs.contains(gist.id),
-          canDeleteFromGitHub: ownedIDs.contains(gist.id),
           isSecret: !gist.isPublic, isPinned: preferences.pinnedGists.contains(gist.id),
           isStarred: starredIDs.contains(gist.id), isArchived: gist.isArchived,
           isDailyNote: gist.isDailyNote, tagIDs: Set(preferences.gistTags[gist.id] ?? []),
           filename: day?.filename,
-          fileCount: gist.truncated == true ? nil : gist.files.count,
           dailyDate: day?.date,
           commentCount: gist.isDailyNote ? nil : gist.commentCount
         )

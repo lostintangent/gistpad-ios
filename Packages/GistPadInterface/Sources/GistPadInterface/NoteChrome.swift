@@ -7,17 +7,14 @@ public enum NoteMode: String, Sendable {
 public struct NoteFile: Equatable, Identifiable, Sendable {
     public let id: String
     public let filename: String
-    public let date: Date?
 
-    public init(id: String, filename: String, date: Date? = nil) {
+    public init(id: String, filename: String) {
         self.id = id
         self.filename = filename
-        self.date = date
     }
 }
 
 public enum NoteSaveState: Equatable, Sendable {
-    case inMemoryFixture
     case unsaved
     case savedLocally
     case offline
@@ -62,7 +59,7 @@ public enum NoteSaveState: Equatable, Sendable {
             return (String(localized: "GitHub couldn't confirm the last save.", bundle: .module), "exclamationmark.circle", nil)
         case .publicationBlocked(let message):
             return (String(localized: "Publishing is unavailable.", bundle: .module), "exclamationmark.shield", message)
-        case .inMemoryFixture, .unsaved, .savedLocally, .offline, .savingToGitHub, .savedToGitHub:
+        case .unsaved, .savedLocally, .offline, .savingToGitHub, .savedToGitHub:
             return nil
         }
     }
@@ -114,20 +111,21 @@ public struct NoteChrome: Equatable, Sendable {
     }
 }
 
+/// Actions every note has. Optional members are capabilities only some gists have.
 @MainActor
 public struct NoteActions {
-    public var save: (() -> Void)?
-    public var retry: (() -> Void)?
-    public var reconnect: (() -> Void)?
-    public var reviewChanges: (() -> Void)?
+    public var save: () -> Void = {}
+    public var retry: () -> Void = {}
+    public var reconnect: () -> Void = {}
+    public var reviewChanges: () -> Void = {}
+    public var share: () -> Void = {}
+    public var copyLink: () -> Void = {}
+    public var focus: () -> Void = {}
+    public var find: () -> Void = {}
+    public var intelligence: () -> Void = {}
     public var publishAsNew: (() -> Void)?
     public var discardLocalCopy: (() -> Void)?
-    public var share: (() -> Void)?
-    public var copyLink: (() -> Void)?
     public var openInGitHub: (() -> Void)?
-    public var focus: (() -> Void)?
-    public var find: (() -> Void)?
-    public var intelligence: (() -> Void)?
     public var comments: (() -> Void)?
     public var tags: (() -> Void)?
     public var rename: (() -> Void)?
@@ -138,7 +136,6 @@ public struct NoteActions {
     public var delete: (() -> Void)?
     public var selectFile: ((String) -> Void)?
     public var addFile: (() -> Void)?
-    public var didChangeMode: ((NoteMode) -> Void)?
 
     public init() {}
 }

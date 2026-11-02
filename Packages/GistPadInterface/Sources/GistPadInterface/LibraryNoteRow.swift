@@ -4,6 +4,7 @@ import SwiftUI
 struct LibraryNoteRow: View {
     let note: LibraryNote
     let tags: [LibraryTag]
+    let now: Date
     var showsStar = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.locale) private var locale
@@ -14,52 +15,47 @@ struct LibraryNoteRow: View {
     @ScaledMetric(relativeTo: .footnote) private var metadataSpacing = 8
 
     var body: some View {
-        TimelineView(.everyMinute) { context in
-            let count = note.visibleCommentCount
-            // Daily notes stay one line, and only tagged notes earn a tag line.
-            let rowTags = note.isDailyNote ? [] : tags
-            // At accessibility sizes the row stacks, so the count joins the date
-            // and the tag line holds only tags.
-            let isStacked = dynamicTypeSize.isAccessibilitySize
-            let countOnTitleLine = isStacked || rowTags.isEmpty
-            VStack(alignment: .leading, spacing: lineSpacing) {
-                if isStacked {
-                    titleContent(relativeTo: context.date)
+        let count = note.visibleCommentCount
+        // Daily notes stay one line, and only tagged notes earn a tag line.
+        let rowTags = note.isDailyNote ? [] : tags
+        // At accessibility sizes the row stacks, so the count joins the date
+        // and the tag line holds only tags.
+        let isStacked = dynamicTypeSize.isAccessibilitySize
+        let countOnTitleLine = isStacked || rowTags.isEmpty
+        VStack(alignment: .leading, spacing: lineSpacing) {
+            if isStacked {
+                titleContent
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                metadata(count: count)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    titleContent
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    metadata(relativeTo: context.date, count: count)
-                } else {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        titleContent(relativeTo: context.date)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        metadata(relativeTo: context.date, count: countOnTitleLine ? count : nil)
-                    }
+                    metadata(count: countOnTitleLine ? count : nil)
                 }
-                if !rowTags.isEmpty {
-                    HStack(spacing: 8) {
-                        TagLabels(tags: rowTags, limit: 2)
-                            .captureFrame("note-tags-\(note.id)")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        if let count, !countOnTitleLine {
-                            LibraryCommentCount(count: count, noteID: note.id)
-                                .font(.footnote)
-                        }
+            }
+            if !rowTags.isEmpty {
+                HStack(spacing: 8) {
+                    TagLabels(tags: rowTags, limit: 2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let count, !countOnTitleLine {
+                        LibraryCommentCount(count: count)
+                            .font(.footnote)
                     }
                 }
             }
-            .padding(.vertical, verticalPadding)
-            .accessibilityElement(children: .combine)
-            .accessibilityValue(Text(verbatim: note.accessibilityDetail))
-            .captureFrame("note-content-\(note.id)")
         }
+        .padding(.vertical, verticalPadding)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(Text(verbatim: note.accessibilityDetail))
     }
 
-    private func titleContent(relativeTo now: Date) -> some View {
+    private var titleContent: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(verbatim: displayTitle(relativeTo: now))
+            Text(verbatim: displayTitle)
                 .font(.headline)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .accessibilityLabel(Text(verbatim: spokenTitle))
-                .captureFrame("note-title-\(note.id)")
             if note.isStarred && showsStar {
                 Image(systemName: "star.fill")
                     .font(.footnote)
@@ -70,23 +66,20 @@ struct LibraryNoteRow: View {
     }
 
     @ViewBuilder
-    private func metadata(relativeTo now: Date, count: Int?) -> some View {
-        let updated = updateLabel(relativeTo: now)
+    private func metadata(count: Int?) -> some View {
         if note.isDailyNote {
             if let progress = note.progress, progress.total > 0 {
                 TaskProgressLabel(progress: progress, isOverdue: note.isOverdue)
                     .fixedSize()
-                    .captureFrame("note-progress-\(note.id)")
             }
-        } else if count != nil || updated != nil {
+        } else if count != nil || updateLabel != nil {
             HStack(alignment: .firstTextBaseline, spacing: metadataSpacing) {
                 if let count {
-                    LibraryCommentCount(count: count, noteID: note.id)
+                    LibraryCommentCount(count: count)
                 }
-                if let updated {
-                    Text(verbatim: updated)
+                if let updateLabel {
+                    Text(verbatim: updateLabel)
                         .foregroundStyle(.secondary)
-                        .captureFrame("note-date-\(note.id)")
                 }
             }
             .font(.footnote)
@@ -94,13 +87,13 @@ struct LibraryNoteRow: View {
         }
     }
 
-    private func updateLabel(relativeTo now: Date) -> String? {
+    private var updateLabel: String? {
         guard !note.isDailyNote, let updatedAt = note.updatedAt else { return nil }
         return LibraryDatePresentation.updateLabel(
             for: updatedAt, relativeTo: now, locale: locale, calendar: displayCalendar)
     }
 
-    private func displayTitle(relativeTo now: Date) -> String {
+    private var displayTitle: String {
         guard note.isDailyNote, let dailyDate = note.dailyDate else { return note.title }
         return LibraryDatePresentation.dailyTitle(
             for: dailyDate, relativeTo: now, locale: locale, calendar: displayCalendar)
@@ -122,7 +115,6 @@ struct LibraryNoteRow: View {
 
 struct LibraryCommentCount: View {
     let count: Int
-    let noteID: String
 
     var body: some View {
         // Inline text keeps the glyph on the row's baseline. A Label here takes
@@ -131,7 +123,6 @@ struct LibraryCommentCount: View {
             .foregroundStyle(.secondary)
             .fixedSize()
             .accessibilityLabel(Text("\(count) comments", bundle: .module))
-            .captureFrame("note-comment-count-\(noteID)")
     }
 }
 

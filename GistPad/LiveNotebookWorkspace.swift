@@ -13,7 +13,6 @@ struct LiveNotebookWorkspace: View {
   @State private var sessions: [String: NotebookSessionController] = [:]
   @State private var photoControllers: [String: NotebookPhotoController] = [:]
   @State private var activity = NotebookWorkspaceActivity()
-  @State private var sourceDiagnostics = NotebookSourceDiagnostics()
   @State private var openRequest = UUID()
   @State private var compactColumn: NavigationSplitViewColumn = .sidebar
   @State private var actionMessage: String?
@@ -22,8 +21,6 @@ struct LiveNotebookWorkspace: View {
   @State private var sharingTarget: NotebookSharingTarget?
   @State private var tagTarget: NotebookTagTarget?
   @State private var nameTarget: NotebookNameTarget?
-  @State private var deletionTarget: NotebookDeletionTarget?
-  @State private var libraryDeletionRowID: String?
   @State private var creationChoiceTarget: NotebookCreationChoiceTarget?
   @State private var reviewTarget: NotebookConflictTarget?
   @State private var isPerformingAction = false
@@ -40,7 +37,6 @@ struct LiveNotebookWorkspace: View {
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-  @Environment(\.isGitHubStatusVisible) private var isGitHubStatusVisible
 
   init(
     notebook: NotebookModel, layout: NotebookLayoutPreferences = NotebookLayoutPreferences(),
@@ -97,29 +93,6 @@ struct LiveNotebookWorkspace: View {
           .personalAccent(savedHex: notebook.account?.preferences.accentColor)
       }
       .confirmationDialog(
-        String(localized: "Delete “\(deletionTarget?.title ?? "")”?"),
-        isPresented: Binding(
-          get: { deletionTarget != nil && libraryDeletionRowID == nil },
-          set: { if !$0, libraryDeletionRowID == nil { deletionTarget = nil } }),
-        titleVisibility: .visible
-      ) {
-        if let target = deletionTarget {
-          Button(String(localized: "Delete"), role: .destructive) {
-            run(target.action, accountID: target.accountID)
-          }
-        }
-        Button("Cancel", role: .cancel) {}
-      } message: {
-        Text(
-          "This removes the note from this iPhone and from GitHub if it was saved there, including unsynced changes. This can’t be undone."
-        )
-        if deletionTarget?.isUncertainCreation == true {
-          Text(
-            "GitHub may already have received this note. Check your GitHub Gists page and delete any copy there."
-          )
-        }
-      }
-      .confirmationDialog(
         creationChoiceTarget?.choice == .discard
           ? String(localized: "Discard this local copy?")
           : String(localized: "Publish as a new note?"),
@@ -151,7 +124,9 @@ struct LiveNotebookWorkspace: View {
     Group {
       if notebook.account == nil {
         NavigationStack {
-          LibraryView(model: notebook.library, actions: libraryActions, isSidebar: false)
+          LibraryView(
+            model: notebook.library, actions: libraryActions,
+            expandedCollections: libraryCollections, isPinnedExpanded: pinnedExpanded)
         }
       } else {
         notebookNavigation
@@ -166,9 +141,8 @@ struct LiveNotebookWorkspace: View {
       LibraryView(
         model: notebook.library, actions: libraryActions,
         isTodaySelected: notebook.isTodaySelected,
-        isSidebar: horizontalSizeClass == .regular,
         expandedCollections: libraryCollections,
-        pinnedExpanded: pinnedExpanded)
+        isPinnedExpanded: pinnedExpanded)
         .id(notebook.account?.id)
     } detail: {
       NavigationStack {
@@ -199,7 +173,7 @@ struct LiveNotebookWorkspace: View {
       .frame(minWidth: comments.isPresented && horizontalSizeClass == .regular ? 320 : 0)
     }
     .navigationSplitViewStyle(.balanced)
-    .librarySearch(model: notebook.library, isSidebar: horizontalSizeClass == .regular)
+    .librarySearch(model: notebook.library)
     .toolbar(removing: comments.isPresented && horizontalSizeClass == .regular ? .sidebarToggle : nil)
     .inspector(isPresented: $comments.isPresented) {
       commentsPanel
@@ -464,10 +438,7 @@ struct LiveNotebookWorkspace: View {
         }
       }
     ) {
-      PersonalAccentColorRow(
-        savedHex: account?.preferences.accentColor,
-        hasInvalidStoredValue: account?.preferences.hasMalformedAccentColor ?? false
-      ) { hex in
+      PersonalAccentColorRow(savedHex: account?.preferences.accentColor) { hex in
         guard let account else { throw AccountError.signedOut }
         _ = try await execute(.preference(.setAccentColor(hex)), accountID: account.id)
       }
@@ -602,25 +573,14 @@ struct LiveNotebookWorkspace: View {
         actionMessage = String(localized: "This note is no longer available to delete.")
         return
       }
-      libraryDeletionRowID = rowID
-      deletionTarget = target
-    }
-    if let rowID = libraryDeletionRowID, let target = deletionTarget {
-      actions.deletionConfirmation = .init(
-        rowID: rowID, title: target.title, isUncertainCreation: target.isUncertainCreation,
-        confirm: { run(target.action, accountID: target.accountID) },
-        dismiss: {
-          deletionTarget = nil
-          libraryDeletionRowID = nil
-        })
+      run(target.action, accountID: target.accountID)
     }
     return actions
   }
 
   private var searchInput: SearchInput {
     SearchInput(
-      query: notebook.library.query, tags: notebook.library.selectedTagIDs,
-      collection: notebook.library.collection)
+      query: notebook.library.query, tags: notebook.library.selectedTagIDs)
   }
 
   private func note(
@@ -665,6 +625,11 @@ struct LiveNotebookWorkspace: View {
           layout.select($0)
           if $0 != .split { controller.mode = $0 }
         }
+        if $0 == .source {
+          controller.session.requestFocusAtContentStart()
+        } else if $0 == .reading {
+          controller.session.textView.resignFirstResponder()
+        }
       })
     var chrome = controller.document.chrome
     if comments.matches(controller.document) {
@@ -699,8 +664,7 @@ struct LiveNotebookWorkspace: View {
       }
     }
     .toolbar {
-      if isGitHubStatusVisible,
-        (notebook.writeAttentionStatus ?? controller.remoteInspectionStatus) != .idle
+      if (notebook.writeAttentionStatus ?? controller.remoteInspectionStatus) != .idle
       {
         ToolbarSpacer(.flexible, placement: .bottomBar)
         ToolbarItem(placement: .bottomBar) {
@@ -742,31 +706,6 @@ struct LiveNotebookWorkspace: View {
       await comments.prepareAnnotations(
         for: controller,
         showsInline: notebook.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true)
-    }
-    .task(id: SourcePresentation(
-      session: controller.session.viewIdentity, mode: mode.wrappedValue,
-      phase: scenePhase, width: availableWidth)
-    ) {
-      sourceDiagnostics.record(
-        controller.session, mode: mode.wrappedValue, phase: String(describing: scenePhase),
-        stage: .requested)
-      do {
-        try await Task.sleep(for: .milliseconds(650))
-      } catch is CancellationError {
-        return
-      } catch {
-        Logger(subsystem: "dev.gistpad.GistPad", category: "SourcePresentation")
-          .error("Source diagnostic timing failed: \(String(reflecting: type(of: error)), privacy: .public)")
-        return
-      }
-      sourceDiagnostics.record(
-        controller.session, mode: mode.wrappedValue, phase: String(describing: scenePhase),
-        stage: .settled)
-    }
-    .onDisappear {
-      sourceDiagnostics.record(
-        controller.session, mode: mode.wrappedValue, phase: String(describing: scenePhase),
-        stage: .disappeared)
     }
     .onChange(of: NotebookLayoutPreferences.allowsSplit(availableWidth: availableWidth)) { _, allows in
       if !allows, layout.preferredMode == .split, controller.session.isEditing {
@@ -934,15 +873,16 @@ struct LiveNotebookWorkspace: View {
   }
 
   private func afterCommentsClose(_ action: (() -> Void)?) -> (() -> Void)? {
-    action.map { action in
-      { comments.performAfterClosing(action) }
-    }
+    action.map(afterCommentsClose)
+  }
+
+  private func afterCommentsClose(_ action: @escaping () -> Void) -> () -> Void {
+    { comments.performAfterClosing(action) }
   }
 
   private struct SearchInput: Equatable {
     let query: String
     let tags: Set<String>
-    let collection: LibraryCollection
   }
 
   private struct CommentReadInput: Hashable {
@@ -962,13 +902,6 @@ struct LiveNotebookWorkspace: View {
   private var commentCount: CommentCount? {
     guard let conversation = comments.conversation, let total = conversation.knownTotal else { return nil }
     return .init(scope: conversation.scope, total: total)
-  }
-
-  private struct SourcePresentation: Hashable {
-    let session: UUID
-    let mode: NoteMode
-    let phase: ScenePhase
-    let width: CGFloat
   }
 
   private struct AutosaveInput: Equatable {
@@ -1055,10 +988,7 @@ struct LiveNotebookWorkspace: View {
               accountID: controller.draft.accountID)
           }
           actions.delete = {
-            libraryDeletionRowID = nil
-            deletionTarget = .init(
-              id: gistID, accountID: controller.draft.accountID,
-              title: controller.document.chrome.title)
+            run(.delete(gistID: gistID), accountID: controller.draft.accountID)
           }
           actions.addFile = { requestName(.addFile, controller: controller) }
           actions.renameFile = { requestName(.filename, controller: controller) }
@@ -1070,17 +1000,10 @@ struct LiveNotebookWorkspace: View {
     }
     if controller.document.isRecovery || controller.draft.gistID == nil {
       actions.delete = {
-        libraryDeletionRowID = nil
-        deletionTarget = .init(
+        let target = NotebookDeletionTarget(
           id: controller.draft.id.uuidString, accountID: controller.draft.accountID,
           title: controller.document.chrome.title, localDraft: controller.draft)
-      }
-    }
-    actions.didChangeMode = { mode in
-      if mode == .source {
-        controller.session.requestFocusAtContentStart()
-      } else if mode == .reading {
-        controller.session.textView.resignFirstResponder()
+        run(target.action, accountID: target.accountID)
       }
     }
     actions.find = {
@@ -1597,7 +1520,7 @@ struct LiveNotebookWorkspace: View {
         && notebook.library.loadState != .loading && notebook.pendingAccount == nil
         && !showingSettings && !showingShare && !showingAddToToday
         && sharingTarget == nil && tagTarget == nil && nameTarget == nil
-        && deletionTarget == nil && reviewTarget == nil
+        && reviewTarget == nil
         && creationChoiceTarget == nil
         && intelligence.target == nil
         && actionMessage == nil && notebook.documentError == nil,

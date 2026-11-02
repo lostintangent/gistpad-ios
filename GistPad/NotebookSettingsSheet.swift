@@ -69,12 +69,10 @@ struct NotebookSettingsSheet<Appearance: View>: View {
           Section("Writing") {
             Toggle("Autosave While Writing", isOn: preference(.isAutoSaveEnabled, default: true))
               .accessibilityIdentifier("settings-autosave")
-              .captureFrame("settings-autosave")
             Toggle("Check Spelling", isOn: preference(.isSpellcheckEnabled, default: true))
               .accessibilityIdentifier("settings-spelling")
             Toggle("Show Front Matter", isOn: preference(.showFrontmatter, default: false))
               .accessibilityIdentifier("settings-front-matter")
-              .captureFrame("settings-front-matter")
           }
           Section("Appearance") { appearance() }
         }
@@ -92,7 +90,6 @@ struct NotebookSettingsSheet<Appearance: View>: View {
             } else {
               Button("Sign Out", role: .destructive) { confirmingSignOut = true }
                 .accessibilityIdentifier("settings-sign-out")
-                .captureFrame("settings-sign-out")
             }
           }
         }

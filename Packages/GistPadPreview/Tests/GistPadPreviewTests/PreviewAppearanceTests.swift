@@ -26,7 +26,7 @@ struct PreviewAppearanceTests {
                 #expect(appearance.variables["--gp-accent-text"] == shared.text.hex)
                 #expect(appearance.variables["--gp-accent-fill"] == shared.fill.hex)
                 #expect(appearance.variables["--gp-on-accent"] == shared.onFill.hex)
-                #expect(appearance.variables["--gp-selected-surface"] == shared.selectedSurface.hex)
+                #expect(appearance.variables["--gp-selected-surface"]?.hasPrefix("rgba(") == true)
                 #expect(appearance.variables["--gp-link"]?.hasPrefix("rgba(") == true)
             }
         }

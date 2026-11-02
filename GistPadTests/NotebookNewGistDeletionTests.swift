@@ -38,7 +38,6 @@ struct NotebookNewGistDeletionTests {
     let gistID = try #require(saved.gistID)
     #expect(controller.document.gist?.id == gistID)
     let row = try #require(notebook.library.snapshot.notes.first { $0.id == gistID })
-    #expect(row.canDeleteFromGitHub)
     #expect(row.isOwned)
     #expect(!row.isRecovery)
     #expect(notebook.library.snapshot.notes.allSatisfy { $0.id != draft.id.uuidString })

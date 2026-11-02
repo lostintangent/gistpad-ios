@@ -387,7 +387,6 @@ struct NotebookModelTests {
     #expect(row.updatedAt == draft.updatedAt)
     #expect(row.updatedAt != nil)
     #expect(row.isRecovery)
-    #expect(!row.canDeleteFromGitHub)
     let target = try #require(model.libraryDeletionTarget(for: row.id))
     #expect(target.localDraft?.id == draft.id)
     await model.refresh()
@@ -486,7 +485,6 @@ struct NotebookModelTests {
     let published = try await model.publish(draftID: draft.id, accountID: draft.accountID)
     let gistID = try #require(published.gistID)
     let row = try #require(model.library.snapshot.notes.first { $0.id == gistID })
-    #expect(row.canDeleteFromGitHub)
     #expect(!row.isRecovery)
     #expect(model.library.snapshot.notes.allSatisfy { $0.id != draft.id.uuidString })
     #expect(model.libraryDeletionTarget(for: row.id)?.id == gistID)
@@ -497,7 +495,6 @@ struct NotebookModelTests {
     #expect(await provider.readIDs.isEmpty)
     model.library.query = "new published"
     await model.search()
-    #expect(model.library.matchingNotes.first?.canDeleteFromGitHub == true)
     let searchRow = try #require(model.library.matchingNotes.first)
     #expect(model.libraryDeletionTarget(for: searchRow.id)?.id == gistID)
   }
@@ -617,34 +614,25 @@ struct NotebookModelTests {
     #expect(target.id == "a")
     #expect(target.title == owned.displayName)
     #expect(target.accountID == fixtureAccount.id)
-    #expect(model.library.snapshot.notes.first(where: { $0.id == "a" })?.canDeleteFromGitHub == true)
     #expect(model.libraryDeletionTarget(for: recovery.id.uuidString)?.localDraft?.id == recovery.id)
-    #expect(model.library.snapshot.notes.first(where: { $0.id == recovery.id.uuidString })?.canDeleteFromGitHub == false)
     #expect(model.libraryDeletionTarget(for: local.id.uuidString)?.localDraft?.id == local.id)
-    #expect(model.library.snapshot.notes.first(where: { $0.id == local.id.uuidString })?.canDeleteFromGitHub == false)
     for id in ["missing", "unknown", "shared"] {
       #expect(model.libraryDeletionTarget(for: id) == nil)
-      #expect(model.library.snapshot.notes.first(where: { $0.id == id })?.canDeleteFromGitHub != true)
     }
     model.library.query = "Find"
     await model.search()
     for note in model.library.matchingNotes {
       if model.searchTargets[note.id]?.gistID == owned.id {
-        #expect(note.canDeleteFromGitHub)
         #expect(model.libraryDeletionTarget(for: note.id)?.id == owned.id)
         #expect(model.libraryDeletionTarget(for: note.id)?.title == owned.displayName)
       } else if note.isRecovery {
-        #expect(!note.canDeleteFromGitHub)
         #expect(model.libraryDeletionTarget(for: note.id)?.localDraft?.id == recovery.id)
       } else if note.id == local.id.uuidString {
-        #expect(!note.canDeleteFromGitHub)
         #expect(model.libraryDeletionTarget(for: note.id)?.localDraft?.id == local.id)
       } else {
-        #expect(!note.canDeleteFromGitHub)
         #expect(model.libraryDeletionTarget(for: note.id) == nil)
       }
     }
-    #expect(model.library.matchingNotes.filter(\.canDeleteFromGitHub).count == 2)
     #expect(await provider.deletedIDs.isEmpty)
     #expect(model.localDrafts.first(where: { $0.id == local.id })?.text == "Find my local draft")
     #expect(model.localDrafts.first(where: { $0.id == recovery.id })?.text == "Find my recovery")
@@ -684,7 +672,7 @@ struct NotebookModelTests {
     #expect(model.library.matchingNotes.count == 1)
     _ = try await model.perform(.delete(gistID: "a"))
     #expect(await provider.deletedIDs == ["a"])
-    #expect(model.library.collectionGistCount == 0)
+    #expect(model.library.mainGistCount == 0)
     #expect(model.library.matchingNotes.isEmpty)
     #expect(model.localDrafts.count == 1)
     #expect(model.localDrafts.first?.isDiscardableBlank == true)
@@ -723,10 +711,8 @@ struct NotebookModelTests {
     await provider.setListResponses(owned: [deleted, kept], starred: [deleted])
     await model.refresh()
     for collection in LibraryCollection.allCases {
-      model.library.collection = collection
-      #expect(model.library.matchingNotes.allSatisfy { $0.id != deleted.id })
+      #expect(model.library.unfilteredNotes(in: collection).allSatisfy { $0.id != deleted.id })
     }
-    #expect(model.library.pinnedNotes.allSatisfy { $0.id != deleted.id })
     #expect(model.cachedLibrary?.gists.map(\.id) == [kept.id])
     #expect(try await provider.localState(accountID: fixtureAccount.id).library?.gists.map(\.id)
       == [kept.id])
@@ -1191,7 +1177,6 @@ struct NotebookModelTests {
     #expect(model.library.today.availability == .unknown)
     await model.start()
     #expect(model.library.today.availability == .existing)
-    #expect(model.library.today.excerpt == nil)
     #expect(model.library.today.progress == .init(completed: 0, total: 0))
     let reads = await provider.readIDs
     await model.updateCalendar()
@@ -1203,7 +1188,6 @@ struct NotebookModelTests {
     let missing = NotebookModel(provider: missingProvider)
     await missing.start()
     #expect(missing.library.today.availability == .existing)
-    #expect(missing.library.today.excerpt == nil)
     #expect(missing.loadedDocument?.draft?.isDiscardableBlank == true)
     #expect(await missingProvider.readIDs.isEmpty)
     #expect(await missingProvider.creationCount == 0)
@@ -1217,7 +1201,6 @@ struct NotebookModelTests {
     let daily = try #require(model.loadedDocument?.draft)
     #expect(daily.gistID == nil)
     #expect(model.library.today.availability == .existing)
-    #expect(model.library.today.excerpt == nil, "A date-only template is not excerpt prose.")
     await model.createNote()
     #expect(model.loadedDocument?.draft?.id != daily.id)
     await model.startToday()
@@ -1296,34 +1279,12 @@ struct NotebookModelTests {
     #expect(snapshot.notes.count == 2)
     let note = try #require(snapshot.notes.first { $0.id == "a" })
     #expect(note.isOwned)
-    #expect(note.canDeleteFromGitHub)
     #expect(note.isStarred)
     #expect(note.isPinned)
     #expect(note.isSecret)
     #expect(note.tagIDs == ["ideas"])
-    #expect(note.fileCount == 1)
     #expect(snapshot.tags == [.init(id: "ideas", name: "Ideas", colorHex: "#EBC85A")])
     #expect(snapshot.notes.first { $0.id == "b" }?.isOwned == false)
-    #expect(snapshot.notes.first { $0.id == "b" }?.canDeleteFromGitHub == false)
-  }
-
-  @Test func fileCountsUseKnownMetadataAndDoNotInventCompleteness() async throws {
-    let provider = StubNotebookProvider(
-      account: fixtureAccount,
-      gists: [
-        try makeGist(
-          id: "complete", title: "Complete", additionalFiles: ["Second.md": "Other source"]),
-        try makeGist(id: "incomplete", title: "Incomplete", truncated: true),
-      ])
-    let model = NotebookModel(provider: provider)
-    await model.start()
-    #expect(model.library.snapshot.notes.first(where: { $0.id == "complete" })?.fileCount == 2)
-    #expect(model.library.snapshot.notes.first(where: { $0.id == "incomplete" })?.fileCount == nil)
-    model.library.query = "Synthetic"
-    await model.search()
-    #expect(model.library.matchingNotes.first(where: { $0.id == "complete/README.md" })?.fileCount == 2)
-    #expect(model.library.matchingNotes.first(where: { $0.id == "incomplete" })?.fileCount == nil)
-    #expect(await provider.readIDs.isEmpty)
   }
 
   @Test func refreshDoesNotReplaceAnOpenedDocumentOrFilters() async throws {
@@ -1668,14 +1629,12 @@ struct NotebookModelTests {
       ])
     let model = NotebookModel(provider: provider)
     await model.start()
-    model.library.collection = .dailyNotes
     await model.search()
     let row = try #require(model.library.matchingNotes.first)
     #expect(row.id == "daily/\(filename)")
     #expect(row.dailyDate == DailyNotesIndex.parseDateFilename(filename))
     #expect(model.library.dailyNoteCount == 1)
     #expect(row.progress == .init(completed: 1, total: 2))
-    #expect(model.library.today.excerpt == "One\nTwo")
     await model.openRow(id: row.id)
     #expect(model.loadedDocument?.filename == filename)
     #expect(model.library.selectedNoteID == row.id)
@@ -1835,7 +1794,7 @@ struct NotebookModelTests {
     #expect(model.library.snapshot.notes.map(\.id) == [draft.id.uuidString])
     #expect(!model.library.hasKnownGistSnapshot)
     #expect(model.library.dailyNoteCount == nil)
-    #expect(model.library.collectionGistCount == nil)
+    #expect(model.library.mainGistCount == nil)
   }
 
   @Test func aCleanDeletedTodayDoesNotSupplyRailProgressButNewLocalEditsDo() async throws {

@@ -24,20 +24,6 @@ public struct TagEditor: View {
         _draft = State(initialValue: TagEditorDraft(tags: tags, selectedTagIDs: selectedTagIDs))
     }
 
-    #if DEBUG
-    public func captureQuery(_ value: String) -> Self {
-        var editor = self
-        editor._query = State(initialValue: value)
-        return editor
-    }
-
-    public func captureEditingTag(_ tag: LibraryTag?) -> Self {
-        var editor = self
-        editor._editingTag = State(initialValue: tag)
-        return editor
-    }
-    #endif
-
     public var body: some View {
         NavigationStack {
             List {
@@ -48,7 +34,6 @@ public struct TagEditor: View {
                         Text("Some changes may already be saved. Retry to finish applying your choices.", bundle: .module)
                             .font(.footnote)
                         Button(String(localized: "Retry", bundle: .module), action: commit)
-                            .tint(.primary)
                     }
                     .foregroundStyle(.primary)
                 }
@@ -67,7 +52,6 @@ public struct TagEditor: View {
                                 : String(localized: "No matching tags.", bundle: .module))
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("tag-empty")
-                            .captureFrame("tag-empty")
                     }
                     if save != nil {
                         Button {
@@ -85,7 +69,6 @@ public struct TagEditor: View {
                         }
                         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
                         .accessibilityIdentifier("tag-create")
-                        .captureFrame("tag-create")
                     }
                 }
                 .listSectionSeparator(.hidden)
@@ -108,22 +91,11 @@ public struct TagEditor: View {
             .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
             .presentationDragIndicator(.visible)
             .confirmationDialog(
-                draft.hasAttemptedChanges
-                    ? String(localized: "Close without retrying?", bundle: .module)
-                    : String(localized: "Discard tag changes?", bundle: .module),
+                String(localized: "Discard tag changes?", bundle: .module),
                 isPresented: $confirmingDiscard, titleVisibility: .visible
             ) {
-                Button(
-                    draft.hasAttemptedChanges
-                        ? String(localized: "Close", bundle: .module)
-                        : String(localized: "Discard Changes", bundle: .module),
-                    role: .destructive
-                ) { dismiss() }
+                Button(String(localized: "Discard Changes", bundle: .module), role: .destructive) { dismiss() }
                 Button(String(localized: "Keep Editing", bundle: .module), role: .cancel) {}
-            } message: {
-                if draft.hasAttemptedChanges {
-                    Text("Some changes may already be saved. Closing does not undo saved changes.", bundle: .module)
-                }
             }
         }
     }
@@ -155,7 +127,6 @@ public struct TagEditor: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("tag-choice-\(tag.id)")
-        .captureFrame("tag-choice-\(tag.id)")
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
         .accessibilityAddTraits(draft.selectedTagIDs.contains(tag.id) ? .isSelected : [])
         .accessibilityAction(named: Text("Edit Tag \(tag.name)", bundle: .module)) { editingTag = tag }
@@ -165,7 +136,6 @@ public struct TagEditor: View {
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(String(localized: "Edit Tag…", bundle: .module), systemImage: "pencil") { editingTag = tag }
-                .tint(Color(uiColor: .darkGray))
         }
     }
 
@@ -219,7 +189,6 @@ public struct TagEditor: View {
         guard let save, !draft.edits.isEmpty else { dismiss(); return }
         guard !isSaving else { return }
         let edits = draft.edits
-        draft.recordAttempt(edits)
         isSaving = true
         saveError = nil
         Task {
@@ -246,6 +215,7 @@ private struct TagEditForm: View {
     @State private var confirmingDelete = false
     @FocusState private var nameFocused: Bool
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.self) private var environment
 
     init(
         tag: LibraryTag, isNew: Bool, update: @escaping (LibraryTag) throws -> Void,
@@ -270,7 +240,6 @@ private struct TagEditForm: View {
                     ColorPicker(String(localized: "Color", bundle: .module), selection: color, supportsOpacity: false)
                     if colorHex != nil {
                         Button(String(localized: "Use Default Color", bundle: .module)) { colorHex = nil }
-                            .tint(.primary)
                     }
                     if let error {
                         Label(error, systemImage: "exclamationmark.circle")
@@ -281,7 +250,7 @@ private struct TagEditForm: View {
                     Section {
                         TagLabel(tag: LibraryTag(id: tag.id, name: name, colorHex: colorHex))
                     } header: {
-                        Text("Preview", bundle: .module).foregroundStyle(InterfaceTheme.text)
+                        Text("Preview", bundle: .module)
                     }
                 }
                 if !isNew {
@@ -291,7 +260,6 @@ private struct TagEditForm: View {
                         }
                     } footer: {
                         Text("Deleting a tag removes it from every note. Note content is unchanged.", bundle: .module)
-                            .foregroundStyle(InterfaceTheme.text)
                     }
                 }
             }
@@ -331,22 +299,8 @@ private struct TagEditForm: View {
 
     private var color: Binding<Color> {
         Binding(
-            get: { TagSwatch.color(hex: colorHex) },
-            set: { value in
-                var red: CGFloat = 0
-                var green: CGFloat = 0
-                var blue: CGFloat = 0
-                var alpha: CGFloat = 0
-                guard UIColor(value).getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
-                    error = String(localized: "This color couldn't be read. Choose another color.", bundle: .module)
-                    return
-                }
-                colorHex = String(
-                    format: "#%02X%02X%02X", Int((min(1, max(0, red)) * 255).rounded()),
-                    Int((min(1, max(0, green)) * 255).rounded()), Int((min(1, max(0, blue)) * 255).rounded())
-                )
-            }
-        )
+            get: { RGBColor(tagHex: colorHex)?.color ?? .secondary },
+            set: { colorHex = RGBColor($0.resolve(in: environment)).hex })
     }
 }
 #endif

@@ -397,7 +397,7 @@ private struct ReidentifiedSourceFixture: View {
         title: "A visible source",
         files: [.init(id: "README.md", filename: "README.md")],
         selectedFileID: "README.md"),
-      mode: $state.mode, saveState: .inMemoryFixture
+      mode: $state.mode, saveState: .savedToGitHub
     ) {
       MarkdownEditorView(session: session)
         .id(state.identity)

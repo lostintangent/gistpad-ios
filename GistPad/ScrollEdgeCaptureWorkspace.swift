@@ -72,7 +72,7 @@ struct ScrollEdgeCaptureWorkspace: View {
                                 files: [.init(id: "README.md", filename: "README.md")],
                                 selectedFileID: "README.md"
                             ),
-                            mode: $mode, saveState: .inMemoryFixture, actions: actions
+                            mode: $mode, saveState: .savedToGitHub, actions: actions
                         ) {
                             MarkdownEditorView(session: session)
                         } preview: {

@@ -5,6 +5,24 @@ public enum LibraryCollection: String, CaseIterable, Identifiable, Sendable {
     case gists, dailyNotes, starred, archive
 
     public var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .gists: String(localized: "Your Gists", bundle: .module)
+        case .dailyNotes: String(localized: "Daily Notes", bundle: .module)
+        case .starred: String(localized: "Starred Gists", bundle: .module)
+        case .archive: String(localized: "Archived Gists", bundle: .module)
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .gists: "doc.text"
+        case .dailyNotes: "calendar"
+        case .starred: "star"
+        case .archive: "archivebox"
+        }
+    }
 }
 
 public struct LibraryTag: Equatable, Identifiable, Sendable {
@@ -26,7 +44,6 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
     public var updatedAt: Date?
     public var owner: String?
     public var isOwned: Bool
-    public var canDeleteFromGitHub: Bool
     public var isRecovery: Bool
     public var isSecret: Bool
     public var isPinned: Bool
@@ -35,15 +52,12 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
     public var isDailyNote: Bool
     public var tagIDs: Set<String>
     public var filename: String?
-    public var fileCount: Int?
     public var progress: LibraryTaskProgress?
     public var isOverdue: Bool
     public var dailyDate: Date?
     public var commentCount: Int?
 
     public var supportsComments: Bool { gistID != nil && !isDailyNote }
-
-    public var isLocalOnly: Bool { isRecovery || gistID == nil }
 
     public var visibleCommentCount: Int? {
         guard supportsComments, let commentCount, commentCount > 0 else { return nil }
@@ -52,10 +66,10 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
 
     public init(
         id: String, title: String, updatedAt: Date?, gistID: String? = nil, owner: String? = nil,
-        isOwned: Bool = true, canDeleteFromGitHub: Bool = false, isRecovery: Bool = false,
+        isOwned: Bool = true, isRecovery: Bool = false,
         isSecret: Bool = true, isPinned: Bool = false,
         isStarred: Bool = false, isArchived: Bool = false, isDailyNote: Bool = false,
-        tagIDs: Set<String> = [], filename: String? = nil, fileCount: Int? = nil,
+        tagIDs: Set<String> = [], filename: String? = nil,
         progress: LibraryTaskProgress? = nil, isOverdue: Bool = false, dailyDate: Date? = nil,
         commentCount: Int? = nil
     ) {
@@ -65,7 +79,6 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
         self.updatedAt = updatedAt
         self.owner = owner
         self.isOwned = isOwned
-        self.canDeleteFromGitHub = canDeleteFromGitHub
         self.isRecovery = isRecovery
         self.isSecret = isSecret
         self.isPinned = isPinned
@@ -74,7 +87,6 @@ public struct LibraryNote: Equatable, Identifiable, Sendable {
         self.isDailyNote = isDailyNote
         self.tagIDs = tagIDs
         self.filename = filename
-        self.fileCount = fileCount
         self.progress = progress
         self.isOverdue = isOverdue
         self.dailyDate = dailyDate
@@ -99,7 +111,6 @@ public struct LibrarySnapshot: Equatable, Sendable {
 public enum LibraryLoadState: Equatable, Sendable {
     case loading
     case ready
-    case offline
     case failed(message: String)
     case reconnectRequired(message: String)
     case signedOut
@@ -111,7 +122,6 @@ public final class LibraryModel {
     public private(set) var hasKnownGistSnapshot: Bool
     public var loadState: LibraryLoadState
     public var gitHubStatus: GitHubStatusState?
-    public var collection: LibraryCollection = .gists
     public var query = ""
     public var selectedTagIDs: Set<String> = []
     public var selectedNoteID: String?
@@ -120,7 +130,7 @@ public final class LibraryModel {
 
     public init(
         snapshot: LibrarySnapshot? = nil, loadState: LibraryLoadState = .loading,
-        today: LibraryTodaySummary = .init(date: .now)
+        today: LibraryTodaySummary = .init()
     ) {
         self.snapshot = snapshot ?? .init(notes: [])
         hasKnownGistSnapshot = snapshot != nil
@@ -132,34 +142,16 @@ public final class LibraryModel {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedTagIDs.isEmpty
     }
 
-    public var visibleCollections: [LibraryCollection] {
-        LibraryCollection.allCases.filter { candidate in
-            switch candidate {
-            case .gists, .dailyNotes:
-                true
-            case .starred, .archive:
-                candidate == collection
-                    || (hasKnownGistSnapshot && snapshot.notes.contains {
-                        $0.gistID != nil && Self.includes($0, in: candidate)
-                    })
-            }
-        }
-    }
-
-    var showsSearchScope: Bool {
-        hasFilters && (collection != .gists || !selectedTagIDs.isEmpty)
-    }
-
     public var matchingNotes: [LibraryNote] {
         switch searchState {
-        case .results(let notes, _): return notes
+        case .results(let notes): return notes
         case .searching, .failed: return []
         case .inactive: break
         }
         let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return snapshot.notes.filter { note in
             let isIncluded = hasFilters
-                ? Self.primaryCollection(for: note) != nil : Self.includes(note, in: collection)
+                ? Self.primaryCollection(for: note) != nil : Self.includes(note, in: .gists)
             return isIncluded && selectedTagIDs.isSubset(of: note.tagIDs)
                 && (search.isEmpty || note.title.localizedStandardContains(search))
         }.sorted {
@@ -226,14 +218,9 @@ public final class LibraryModel {
         }
     }
 
-    public var collectionGistCount: Int? {
-        guard hasKnownGistSnapshot else { return nil }
-        return Self.gistCount(in: snapshot.notes.filter { Self.includes($0, in: collection) })
-    }
-
     public var resultGistCount: Int? {
         switch searchState {
-        case .results(let notes, _): Self.gistCount(in: notes)
+        case .results(let notes): Self.gistCount(in: notes)
         case .inactive: hasFilters && hasKnownGistSnapshot ? Self.gistCount(in: matchingNotes) : nil
         case .searching, .failed: nil
         }
@@ -266,32 +253,9 @@ public final class LibraryModel {
         switch collection {
         case .gists: !note.isArchived && !note.isDailyNote && note.isOwned
         case .dailyNotes: note.isDailyNote && !note.isArchived && note.isOwned
-        case .starred: note.isStarred && !note.isArchived
+        case .starred: note.isStarred && !note.isOwned
         case .archive: note.isArchived && note.isOwned
         }
-    }
-
-    public var pinnedNotes: [LibraryNote] { matchingNotes.filter(\.isPinned) }
-    public var unpinnedNotes: [LibraryNote] { matchingNotes.filter { !$0.isPinned } }
-
-    var showsFeaturedNotes: Bool {
-        guard collection == .gists, !hasFilters else { return false }
-        if case .inactive = searchState { return true }
-        return false
-    }
-
-    var featuredNotes: [LibraryNote] { showsFeaturedNotes ? pinnedNotes : [] }
-    var listedNotes: [LibraryNote] { showsFeaturedNotes ? unpinnedNotes : matchingNotes }
-    var showsListedNotesHeading: Bool {
-        collection == .gists || hasFilters
-    }
-
-    public var visibleSelectedNoteID: String? {
-        guard let selectedNoteID,
-              (hasFilters ? matchingNotes : snapshot.notes).contains(where: {
-                  $0.id == selectedNoteID && Self.primaryCollection(for: $0) != nil
-              }) else { return nil }
-        return selectedNoteID
     }
 
     public func clearFilters() {

@@ -19,20 +19,14 @@ private struct PersonalAccentEnvironmentKey: UITraitBridgedEnvironmentKey {
     }
 }
 
-private struct NotebookPaneVisibilityKey: EnvironmentKey {
-    static let defaultValue = true
-}
-
 extension EnvironmentValues {
     public var personalAccent: PersonalAccent {
         get { self[PersonalAccentEnvironmentKey.self] }
         set { self[PersonalAccentEnvironmentKey.self] = newValue }
     }
 
-    public var isNotebookPaneVisible: Bool {
-        get { self[NotebookPaneVisibilityKey.self] }
-        set { self[NotebookPaneVisibilityKey.self] = newValue }
-    }
+    /// Whether the editor or preview pane is the one on screen.
+    @Entry public var isNotebookPaneVisible = true
 }
 
 extension RGBColor {
@@ -66,29 +60,15 @@ extension PersonalAccent {
             }
             return rgb
         }
-        let ink = dark
-            ? (increased ? RGBColor(red: 248, green: 250, blue: 252) : RGBColor(red: 226, green: 232, blue: 240))
-            : (increased ? RGBColor(red: 15, green: 23, blue: 42) : RGBColor(red: 30, green: 41, blue: 59))
-        return roles(
-            dark: dark, increasedContrast: increased, surfaces: surfaces,
-            selectionSurface: surfaces[1], ink: ink
-        )
+        return roles(dark: dark, increasedContrast: increased, surfaces: surfaces)
     }
 }
 
 public enum AccentRole: Sendable {
-    case text, fill, onFill, selectedSurface
+    case text
 
     public var uiColor: UIColor {
-        UIColor { traits in
-            let roles = traits[PersonalAccentTrait.self].roles(traits: traits)
-            switch self {
-            case .text: return roles.text.uiColor
-            case .fill: return roles.fill.uiColor
-            case .onFill: return roles.onFill.uiColor
-            case .selectedSurface: return roles.selectedSurface.uiColor
-            }
-        }
+        UIColor { traits in traits[PersonalAccentTrait.self].roles(traits: traits).text.uiColor }
     }
 }
 #endif

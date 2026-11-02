@@ -83,10 +83,6 @@ struct NotebookSurfaceCaptureWorkspace: View {
               }
             }
           }
-          .captureQuery(tagCaptureQuery)
-          .captureEditingTag(
-            captureState == "new-tag" ? .init(id: "capture-new-tag", name: "")
-              : captureState == "edit-tag" ? Self.tags[0] : nil)
         case .account:
           NotebookAccountSwitchSheet(
             current: "octavia", replacement: "mira", export: { Data("[]".utf8) },
@@ -326,20 +322,12 @@ struct NotebookSurfaceCaptureWorkspace: View {
       connect: { presentedSheet = .account },
       signOut: { presentedSheet = nil }
     ) {
-      let row = PersonalAccentColorRow(savedHex: preferences.accentColor) {
+      PersonalAccentColorRow(savedHex: preferences.accentColor) {
         if captureState == "error" {
           throw NotebookSurfaceCaptureFailure(
             message: NotebookModel.message(for: URLError(.notConnectedToInternet)))
         }
         preferences = try preferences.applying(.setAccentColor($0))
-      }
-      if ["error", "accent-save"].contains(captureState ?? "") {
-        row.capturePendingColor(PersonalAccent(savedHex: "#DB9E47").color)
-          .captureError(
-            captureState == "error"
-              ? NotebookModel.message(for: URLError(.notConnectedToInternet)) : nil)
-      } else {
-        row
       }
     }
     .captureSignOutConfirmation(captureState == "sign-out")

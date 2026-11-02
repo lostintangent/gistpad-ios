@@ -14,9 +14,7 @@ struct NotebookRemoteReadProblem: Equatable {
   var recovery: Recovery = .retry
   var retryAfter: Date?
 
-  func status(
-    heading: String, detail: String?, isRecovering: Bool
-  ) -> GitHubStatusState {
+  func status(heading: String, detail: String?) -> GitHubStatusState {
     let recoveryTitle: String
     switch recovery {
     case .retry: recoveryTitle = String(localized: "Retry")
@@ -25,8 +23,7 @@ struct NotebookRemoteReadProblem: Equatable {
     }
     return .problem(
       .init(
-        heading: heading, message: message, recoveryTitle: recoveryTitle,
-        detail: detail, isRecovering: isRecovering, retryAfter: retryAfter))
+        heading: heading, message: message, recoveryTitle: recoveryTitle, detail: detail))
   }
 }
 

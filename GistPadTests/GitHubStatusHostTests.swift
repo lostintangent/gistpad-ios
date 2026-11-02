@@ -8,64 +8,6 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct GitHubStatusHostTests {
-  @Test func backgroundProgressWaitsAtLeast350MillisecondsAndEndsImmediately() async throws {
-    let host = try await StatusHost()
-    defer { host.close() }
-    let started = ContinuousClock.now
-    host.model.state = .checking(operation: "Checking GitHub")
-    try await Task.sleep(for: .milliseconds(200))
-    #expect(!host.hasSpinner)
-    try await host.waitUntil { host.hasSpinner }
-    #expect(started.duration(to: .now) >= .milliseconds(350))
-    host.model.state = .idle
-    try await host.waitUntil { !host.hasSpinner && !host.model.statusMounted }
-    #expect(host.model.recoveries == 0)
-  }
-
-  @Test func quickAndSupersededChecksCannotLeaveDelayedProgress() async throws {
-    let host = try await StatusHost()
-    defer { host.close() }
-    host.model.state = .checking(operation: "Checking GitHub")
-    try await Task.sleep(for: .milliseconds(150))
-    host.model.state = .idle
-    try await Task.sleep(for: .milliseconds(300))
-    #expect(!host.hasSpinner)
-    host.model.state = .checking(operation: "Checking GitHub")
-    try await Task.sleep(for: .milliseconds(200))
-    host.model.state = .checking(operation: "Updating from GitHub")
-    try await Task.sleep(for: .milliseconds(200))
-    #expect(!host.hasSpinner)
-    try await host.waitUntil { host.hasSpinner }
-    #expect(host.model.recoveries == 0)
-    host.model.state = .idle
-  }
-
-  @Test(arguments: [false, true], [UIContentSizeCategory.large, .accessibilityExtraLarge])
-  func problemLayoutRemainsMountedAcrossRecoveryStatesAndLeavesOnlyWhenIdle(
-    dark: Bool, category: UIContentSizeCategory
-  ) async throws {
-    let host = try await StatusHost(dark: dark, category: category)
-    defer { host.close() }
-    host.model.state = .problem(problem())
-    try await host.waitUntil { host.model.statusMounted && !host.model.statusFrame.isEmpty }
-    #expect(host.window.bounds.intersects(host.model.statusFrame))
-    host.model.state = .problem(problem(isRecovering: true))
-    try await Task.sleep(for: .milliseconds(100))
-    #expect(host.model.statusMounted)
-    host.model.state = .problem(problem())
-    try await Task.sleep(for: .milliseconds(100))
-    #expect(host.model.statusMounted)
-    #expect(!host.model.statusFrame.isEmpty)
-    #expect(host.model.recoveries == 0)
-    let image = UIGraphicsImageRenderer(bounds: host.window.bounds).image { _ in
-      host.window.drawHierarchy(in: host.window.bounds, afterScreenUpdates: true)
-    }
-    Attachment.record(
-      image, named: "github-status-problem-\(dark ? "Dark" : "Light")-\(category.rawValue).png", as: .png)
-    host.model.state = .idle
-    try await host.waitUntil { !host.model.statusMounted }
-  }
-
   @Test func statusUpdatesPreserveAScrolledEditorsSourceSelectionAndViewport() async throws {
     let source = (1...180).map {
       "Paragraph \($0) leaves enough room for a useful thought and a retained writing position."
@@ -115,7 +57,7 @@ struct GitHubStatusHostTests {
     let generation = session.generation
     let states: [(String, GitHubStatusState)] = [
       ("attention", .problem(problem())),
-      ("recovering", .problem(problem(isRecovering: true))),
+      ("checking", .checking(operation: "Checking GitHub for changes")),
       ("unresolved", .problem(problem())),
       ("idle", .idle),
     ]
@@ -140,12 +82,11 @@ struct GitHubStatusHostTests {
     #expect(host.model.recoveries == 0)
   }
 
-  private func problem(isRecovering: Bool = false) -> GitHubStatusProblem {
+  private func problem() -> GitHubStatusProblem {
     .init(
       heading: "Couldn't check for updates",
       message: "A connection could not be established after retrying.",
-      recoveryTitle: "Retry", detail: "Your notes on this iPhone are unchanged.",
-      isRecovering: isRecovering)
+      recoveryTitle: "Retry", detail: "Your notes on this iPhone are unchanged.")
   }
 }
 
@@ -154,20 +95,9 @@ struct GitHubStatusHostTests {
 private final class StatusModel {
   var state: GitHubStatusState = .idle
   var recoveries = 0
-  var statusMounted = false
-  var statusFrame = CGRect.zero
   var renderedState: GitHubStatusState = .idle
 
-  func recover() {
-    guard case .problem(let problem) = state else {
-      Issue.record("Recovery requires a presented problem.")
-      return
-    }
-    recoveries += 1
-    state = .problem(.init(
-      heading: problem.heading, message: problem.message, recoveryTitle: problem.recoveryTitle,
-      detail: problem.detail, isRecovering: true))
-  }
+  func recover() { recoveries += 1 }
 }
 
 @MainActor
@@ -190,14 +120,6 @@ private struct StatusFixture: View {
             ToolbarSpacer(.flexible, placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) {
               GitHubStatusControl(state: model.state, recover: model.recover)
-                .onAppear { model.statusMounted = true }
-                .onDisappear {
-                  model.statusMounted = false
-                  model.statusFrame = .zero
-                }
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
-                  model.statusFrame = $0
-                }
             }
             .sharedBackgroundVisibility(.hidden)
           }
@@ -216,16 +138,12 @@ private final class StatusHost {
   private let previous: UIWindow?
   private var keyboardObserver: NSObjectProtocol?
 
-  init(
-    dark: Bool = false, category: UIContentSizeCategory = .large, source: String? = nil
-  ) async throws {
+  init(source: String) async throws {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     previous = scene.windows.first(where: \.isKeyWindow)
-    session = source.map { DocumentSession(documentID: "github-status-source", text: $0) }
+    session = DocumentSession(documentID: "github-status-source", text: source)
     window = UIWindow(windowScene: scene)
-    window.overrideUserInterfaceStyle = dark ? .dark : .light
-    window.traitOverrides.preferredContentSizeCategory = category
     window.rootViewController = UIHostingController(
       rootView: StatusFixture(model: model, session: session).personalAccent(savedHex: "#FACC15"))
     keyboardObserver = NotificationCenter.default.addObserver(
@@ -243,11 +161,6 @@ private final class StatusHost {
   }
 
   var presented: UIViewController? { window.rootViewController?.presentedViewController }
-
-  var hasSpinner: Bool {
-    descendants(window).compactMap { $0 as? UIActivityIndicatorView }
-      .contains { $0.isAnimating && !$0.isHidden && $0.alpha > 0 }
-  }
 
   func waitUntil(
     sourceLocation: SourceLocation = #_sourceLocation,
@@ -271,10 +184,6 @@ private final class StatusHost {
     window.isHidden = true
     window.rootViewController = nil
     previous?.makeKeyAndVisible()
-  }
-
-  private func descendants(_ view: UIView) -> [UIView] {
-    [view] + view.subviews.flatMap(descendants)
   }
 }
 

@@ -51,20 +51,22 @@ public enum InterfaceFixtures {
 import SwiftUI
 
 #Preview("Library") {
+    @Previewable @State var model = LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready)
     NavigationSplitView {
         LibraryView(
-            model: LibraryModel(snapshot: InterfaceFixtures.library, loadState: .ready),
-            actions: .init(refresh: {}, create: {}, today: {})
+            model: model, actions: .init(refresh: {}, create: {}, today: {}),
+            expandedCollections: .constant(Set(LibraryCollection.allCases)), isPinnedExpanded: .constant(true)
         )
     } detail: {
         ContentUnavailableView("Select a gist", systemImage: "doc.text")
     }
+    .librarySearch(model: model)
 }
 
 #Preview("Note chrome") {
     NavigationStack {
         NoteScreen(
-            document: InterfaceFixtures.note, mode: .constant(.reading), saveState: .inMemoryFixture
+            document: InterfaceFixtures.note, mode: .constant(.reading), saveState: .savedToGitHub
         ) {
             TextEditor(text: .constant("# The shape of a notebook\n\nA quiet place to think."))
         } preview: {
