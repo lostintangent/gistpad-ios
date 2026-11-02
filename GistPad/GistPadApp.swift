@@ -13,9 +13,8 @@ struct GistPadApp: App {
   }
 
   /// Host tests run inside the app, so it stays out of their way.
-  private static let isHostingTests = ["GISTPAD_TESTING", "GISTPAD_FOLD_PROBE"].contains {
-    ProcessInfo.processInfo.environment[$0] == "1"
-  }
+  private static let isHostingTests =
+    ProcessInfo.processInfo.environment["GISTPAD_TESTING"] == "1"
 
   private func load() async {
     loadError = nil

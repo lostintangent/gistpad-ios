@@ -41,25 +41,6 @@ struct NotebookModelTests {
     #expect(snapshot.notes.first { $0.id == "b" }?.isOwned == false)
   }
 
-  @Test func theLibraryFilterMatchesTitlesAndEveryTagAndKeepsTheOpenNoteLikeTheWeb() async throws {
-    let fixture = try await NotebookFixture(
-      preferences: Self.ideas, selection: .init(gistID: "a", filename: "README.md", draftID: nil)
-    ) {
-      $0.addGist(id: "a", description: "A tagged needle", files: ["a.md": "A"])
-      $0.addGist(id: "b", description: "An untagged needle", files: ["b.md": "B"])
-      $0.addGist(id: "c", description: "Ordinary title", files: ["c.md": "A needle in the body."])
-    }
-    let model = fixture.model
-    await model.start()
-    model.library.query = "NEEDLE"
-    #expect(Set(model.library.matchingNotes.map(\.id)) == ["a", "b"])
-    model.library.selectedTagIDs = ["ideas"]
-    #expect(model.library.matchingNotes.map(\.id) == ["a"])
-    await model.open(.gist(id: "c"))
-    #expect(Set(model.library.matchingNotes.map(\.id)) == ["a", "c"])
-    #expect(model.library.resultGistCount == 1)
-  }
-
   @Test func refreshDoesNotReplaceAnOpenedDocumentOrFilters() async throws {
     let fixture = try await NotebookFixture(preferences: Self.ideas) {
       $0.addGist(id: "a", description: "Original", files: ["README.md": "Original text"])

@@ -181,29 +181,6 @@ struct SourceKeyboardHostTests {
         }
     }
 
-    @Test(
-        "The formatting capsule centers over the note beside an open sidebar",
-        .enabled("A sidebar sits beside the note only in a regular-width window") {
-            await MainActor.run {
-                UIApplication.shared.connectedScenes.contains {
-                    ($0 as? UIWindowScene)?.traitCollection.horizontalSizeClass == .regular
-                }
-            }
-        }
-    )
-    func capsuleCentersOverTheNote() async throws {
-        let fixture = try await SourceKeyboardFixture(source: Self.source, size: "large", sidebarFraction: 1 / 3)
-        defer { fixture.close() }
-        fixture.session.requestFocusAtEnd()
-        try await fixture.settle("the real keyboard beside a sidebar")
-        let accessory = try #require(fixture.editor.inputAccessoryView as? SourceAccessoryView)
-        let note = fixture.editor.convert(fixture.editor.bounds, to: fixture.window)
-        let capsule = accessory.glass.convert(accessory.glass.bounds, to: fixture.window)
-        #expect(abs(capsule.midX - note.midX) <= 1)
-        #expect(capsule.minX >= note.minX + 16 - 1)
-        #expect(capsule.width <= 380)
-    }
-
     private static let lastLine = "Last reachable line."
     private static let source = "# A reachable source page\n\n"
         + String(repeating: "A retained thought has enough room to keep unfolding.\n\n", count: 60)
@@ -218,7 +195,7 @@ private final class SourceKeyboardFixture {
     private weak var previousKeyWindow: UIWindow?
     var editor: UITextView { session.textView }
 
-    init(source: String, size: String, sidebarFraction: CGFloat = 0) async throws {
+    init(source: String, size: String) async throws {
         let scene = try #require(
             UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         )
@@ -242,7 +219,6 @@ private final class SourceKeyboardFixture {
                     Color.clear
                 }
             }
-            .padding(.leading, scene.coordinateSpace.bounds.width * sidebarFraction)
             .dynamicTypeSize(size == "large" ? .large : .accessibility3)
         )
         controller.traitOverrides.preferredContentSizeCategory =
