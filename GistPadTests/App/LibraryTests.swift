@@ -607,9 +607,11 @@ struct LibraryTests {
     }
     let accountID = fixture.account.id
     // An earlier day written offline, before there was a daily notes gist.
-    let earlier = try await fixture.store.newGistDraft(
+    let staged = try await fixture.store.newGistDraft(
       accountID: accountID, githubUserID: FixtureServer.you.id, filename: "2026-10-23.md",
-      description: DailyNote.gistDescription, content: "The alpha day")
+      description: DailyNote.gistDescription)
+    let earlier = try await fixture.store.persist(
+      id: staged.id, accountID: accountID, text: "The alpha day", generation: staged.generation + 1)
     let library = fixture.library
     await library.start()
     // Its deletion is confirmed, then Today publishes it and joins the gist it creates.
