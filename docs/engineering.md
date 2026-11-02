@@ -4,7 +4,7 @@ Checked against current Apple documentation on October 23, 2026. The editor/rend
 
 | Choice | Reason and primary reference |
 |---|---|
-| Xcode 27.1 SDK, iOS 27.1 minimum | The user confirmed 27.1+ as the product floor. No 27.0 compatibility layout or acceptance gate is required. Standard iPhones remain in scope when running a supported OS. [Duo preparation](https://developer.apple.com/iphone-duo/prepare/) |
+| Xcode 27.2 SDK, iOS 27.2 minimum | The user confirmed 27.2+ as the product floor, since 27.2 is a security update every device gets. No 27.0 or 27.1 compatibility layout or acceptance gate is required. Standard iPhones remain in scope when running a supported OS. [Duo preparation](https://developer.apple.com/iphone-duo/prepare/) |
 | Swift 6 language mode | Strict concurrency is enabled by the language mode. UI state and input stay `@MainActor`. Cross-module edit payloads are value types and `Sendable`. No unchecked concurrency bypasses. [Swift 6 adoption](https://developer.apple.com/documentation/swift/adoptingswift6) |
 | `@Observable` document sessions | SwiftUI observes only the state it reads. A session, not a transient view, owns canonical Markdown, generation and the source text view. [Observation in SwiftUI](https://developer.apple.com/documentation/swiftui/managing-model-data-in-your-app) |
 | SwiftUI app/navigation/toolbars | Prefer system components and their automatic Liquid Glass, accessibility and Duo behavior. Glass belongs to controls/navigation, not a translucent writing canvas. [Liquid Glass adoption](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass) |

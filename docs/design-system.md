@@ -4,7 +4,7 @@ Owner: Designer. This document owns visual tokens, native/rendered presentation 
 
 ## 1. Identity and platform
 
-Target iOS 27.1+, installed directly with the user's developer account. No marketing onboarding, subscription UI or App Store work. Use supported native components before custom styling. A reliable TextKit editor is not replaced merely because a newer wrapper exists.
+Target iOS 27.2+, installed directly with the user's developer account. No marketing onboarding, subscription UI or App Store work. Use supported native components before custom styling. A reliable TextKit editor is not replaced merely because a newer wrapper exists.
 
 Keep the original `gistpad.dev/public/icon.svg` artwork: blue gradient spine, pale outlined cover, coral/amber/teal tabs, strokes, proportions and shadow. System appearance variants may adapt packaging, not redesign the master. Empty/first-run illustrations can use that original art at 48-64 pt, never fake per-note covers or error-state decoration.
 
