@@ -173,7 +173,7 @@ private func arrayData(_ data: [Data]) -> Data {
         let store = try DraftStore.open(inMemory: true)
         let service = DailyNotesService(
             accountID: UUID(), githubUserID: 42, client: client, store: store,
-            coordinator: SyncCoordinator(client: client, store: store, mutationInterval: .zero)
+            coordinator: SyncCoordinator(client: client, store: store)
         )
         async let one = service.openToday(target: target)
         async let two = service.openToday(target: target)
@@ -213,7 +213,7 @@ private func arrayData(_ data: [Data]) -> Data {
         let store = try DraftStore.open(inMemory: true)
         let service = DailyNotesService(
             accountID: UUID(), githubUserID: 42, client: client, store: store,
-            coordinator: SyncCoordinator(client: client, store: store, mutationInterval: .zero)
+            coordinator: SyncCoordinator(client: client, store: store)
         )
         let first = try await service.openToday(target: target)
         let next = try await service.openToday(target: target)
@@ -315,7 +315,7 @@ private func arrayData(_ data: [Data]) -> Data {
         let store = try DraftStore.open(inMemory: true)
         let original = try await store.dailyGistDraft(accountID: account, githubUserID: 42, target: target)
         try await store.beginAttempt(
-            id: original.id, accountID: account, content: original.text, generation: 0, remote: nil
+            id: original.id, accountID: account, content: original.text, generation: 0
         )
         let next = DailyNoteTarget(
             date: try #require(DailyNotesIndex.parseDateFilename(

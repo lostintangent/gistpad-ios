@@ -65,7 +65,7 @@ import Testing
         let same = try await store.persist(id: draft.id, accountID: account, text: "edit", generation: 1)
         #expect(same.updatedAt == edited.updatedAt)
         try await store.beginAttempt(
-            id: draft.id, accountID: account, content: "edit", generation: 1, remote: "base")
+            id: draft.id, accountID: account, content: "edit", generation: 1)
         let published = try await store.acknowledge(
             id: draft.id, accountID: account, gistID: "abc123", content: "edit",
             revision: "two", generation: 1)
@@ -84,7 +84,7 @@ import Testing
         }
         let clean = try await make("clean")
         try await store.beginAttempt(
-            id: clean.id, accountID: account, content: clean.text, generation: 0, remote: clean.text)
+            id: clean.id, accountID: account, content: clean.text, generation: 0)
         _ = try await store.acknowledge(
             id: clean.id, accountID: account, gistID: "clean", content: clean.text,
             revision: "two", generation: 0)
@@ -96,7 +96,7 @@ import Testing
             id: dirty.id, accountID: account, expectedGeneration: 1, onlyIfClean: true)))
         let uncertain = try await make("uncertain")
         try await store.beginAttempt(
-            id: uncertain.id, accountID: account, content: uncertain.text, generation: 0, remote: uncertain.text)
+            id: uncertain.id, accountID: account, content: uncertain.text, generation: 0)
         try await store.setState(.failed(.publicationUncertain), id: uncertain.id, accountID: account)
         #expect(!(try await store.discardLocalCopy(
             id: uncertain.id, accountID: account, expectedGeneration: 0, onlyIfClean: true)))
@@ -123,7 +123,7 @@ import Testing
         let uncertain = try await store.newDraft(
             accountID: account, githubUserID: 42, text: "Maybe on GitHub")
         try await store.beginAttempt(
-            id: uncertain.id, accountID: account, content: uncertain.text, generation: 0, remote: nil)
+            id: uncertain.id, accountID: account, content: uncertain.text, generation: 0)
         try await store.setState(.failed(.creationUncertain), id: uncertain.id, accountID: account)
         await #expect(throws: DraftError.ambiguousCreation) {
             try await store.discardLocalCopy(id: uncertain.id, accountID: account, expectedGeneration: 0)
@@ -144,7 +144,7 @@ import Testing
             description: "Gone", content: "other file", revision: "one")
         _ = try await store.persist(id: first.id, accountID: account, text: "unpublished", generation: 1)
         try await store.beginAttempt(
-            id: first.id, accountID: account, content: "unpublished", generation: 1, remote: "base")
+            id: first.id, accountID: account, content: "unpublished", generation: 1)
         try await store.setState(.failed(.publicationUncertain), id: first.id, accountID: account)
         _ = try await store.enqueueImage(
             pngData: testPNG(), draftID: first.id, accountID: account,
@@ -159,11 +159,9 @@ import Testing
             id: first.id, accountID: account, expectedGeneration: 1))
         #expect(try await store.drafts(accountID: account).map(\.id) == [second.id])
         #expect(try await store.imageUploads(accountID: account).isEmpty)
-        let context = ModelContext(store.modelContainer)
-        #expect(try context.fetchCount(FetchDescriptor<StoredRecovery>()) == 0)
     }
 
-    @Test func metadataChangesRetainSourceGenerationAndRecoveryHistory() async throws {
+    @Test func metadataChangesRetainSourceAndGeneration() async throws {
         let account = UUID()
         let store = try DraftStore.open(inMemory: true)
         let draft = try await store.openDraft(
@@ -171,7 +169,7 @@ import Testing
             description: "Before", content: "base", revision: "one"
         )
         _ = try await store.persist(id: draft.id, accountID: account, text: "local", generation: 1)
-        try await store.beginAttempt(id: draft.id, accountID: account, content: "local", generation: 1, remote: "base")
+        try await store.beginAttempt(id: draft.id, accountID: account, content: "local", generation: 1)
         await #expect(throws: DraftMetadataError.publicationPending) {
             try await store.updateDraftMetadata(
                 id: draft.id, accountID: account, expectedFilename: "README.md", filename: "New.md", description: "After"
@@ -190,7 +188,6 @@ import Testing
         #expect(changed.baseContent == before.baseContent)
         #expect(changed.baseRevision == before.baseRevision)
         #expect(changed.state == before.state)
-        #expect(try await store.recoveries(id: draft.id, accountID: account).first?.local == "local")
         #expect(try await store.openDraft(
             accountID: account, githubUserID: 42, gistID: "abc123", filename: "New.md",
             description: "After", content: "remote", revision: "two"
@@ -245,14 +242,14 @@ import Testing
         _ = try await store.persist(id: dirty.id, accountID: account, text: "unsynced", generation: 1)
         let historical = try await open("History.md", accountID: account)
         try await store.beginAttempt(
-            id: historical.id, accountID: account, content: "base", generation: 0, remote: "base"
+            id: historical.id, accountID: account, content: "base", generation: 0
         )
         _ = try await store.acknowledge(
             id: historical.id, accountID: account, gistID: "abc123", content: "base", revision: "two", generation: 0
         )
         let foreign = try await open("Foreign.md", accountID: UUID())
         try await store.beginAttempt(
-            id: foreign.id, accountID: foreign.accountID, content: "base", generation: 0, remote: "base")
+            id: foreign.id, accountID: foreign.accountID, content: "base", generation: 0)
         _ = try await store.acknowledge(
             id: foreign.id, accountID: foreign.accountID, gistID: "abc123",
             content: "base", revision: "two", generation: 0)
@@ -283,12 +280,10 @@ import Testing
         try await store.cacheContent("untouched", gist: otherGist, filename: "README.md", accountID: account)
         try await store.cacheLibrary(
             owned: [gist], starred: [gist], preferences: .init(metadata: [:]), accountID: foreign.accountID)
-        let result = try await store.removeDraftsForDeletedGist(gistID: "abc123", accountID: account)
-        #expect(result.removedDraftIDs == [clean.id, dirty.id, historical.id])
+        try await store.removeDraftsForDeletedGist(gistID: "abc123", accountID: account)
         #expect(try await store.drafts(accountID: account).map(\.id) == [kept.id])
         #expect(try await store.draft(id: foreign.id, accountID: foreign.accountID).text == "base")
         #expect(try await store.imageUploads(accountID: account).map(\.id) == [keptImage.id])
-        #expect(try await store.recoveries(id: foreign.id, accountID: foreign.accountID).count == 1)
         #expect(try await store.apply(keptCommand).generation == 1)
         #expect(try await store.cachedLibrary(accountID: foreign.accountID)?.owned.map(\.id) == ["abc123"])
         let cached = try #require(await store.cachedLibrary(accountID: account))
@@ -298,7 +293,6 @@ import Testing
         #expect(cached.details["other"] != nil)
         #expect(cached.fileContent.map(\.key) == ["other/README.md"])
         let context = ModelContext(store.modelContainer)
-        #expect(try context.fetchCount(FetchDescriptor<StoredRecovery>()) == 1)
         #expect(try context.fetchCount(FetchDescriptor<StoredCommandReceipt>()) == 1)
         #expect(try context.fetchCount(FetchDescriptor<StoredImageUpload>()) == 1)
         await #expect(throws: ImageUploadError.notFound) {

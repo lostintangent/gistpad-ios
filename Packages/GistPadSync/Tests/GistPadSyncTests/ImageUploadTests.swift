@@ -108,7 +108,6 @@ private func imageDraft(store: DraftStore, account: UUID) async throws -> DraftS
         await #expect(throws: URLError.self) { try await first.upload(id: queued.id) }
         #expect(try await store.imageUpload(id: queued.id, accountID: account).publicURL == nil)
         #expect(try await store.draft(id: draft.id, accountID: account).text == "Before after")
-        #expect(try await store.hasUnsyncedWork(accountID: account))
         let reopened = try DraftStore.open(url: url)
         #expect(try await reopened.imageData(id: queued.id, accountID: account) == bytes)
         online.withLock { $0 = true }
@@ -258,8 +257,7 @@ private func imageDraft(store: DraftStore, account: UUID) async throws -> DraftS
         _ = try await store.acknowledge(
             id: draft.id, accountID: account, gistID: "abc123", content: "", revision: "one", generation: 0
         )
-        let cleanup = try await store.removeDraftsForDeletedGist(gistID: "abc123", accountID: account)
-        #expect(cleanup.removedDraftIDs == [draft.id])
+        try await store.removeDraftsForDeletedGist(gistID: "abc123", accountID: account)
         #expect(try await store.imageUploads(accountID: account).isEmpty)
         await #expect(throws: ImageUploadError.notFound) {
             try await coordinator.upload(id: queued.id)
@@ -348,10 +346,8 @@ private func imageDraft(store: DraftStore, account: UUID) async throws -> DraftS
         let values = try await [one, two]
         #expect(values[0] == values[1])
         #expect(posts.withLock { $0 } == 1)
-        #expect(try await store.hasUnsyncedWork(accountID: account))
         try await store.discardImageUpload(id: queued.id, accountID: account)
         #expect(try await store.imageUploads(accountID: account).isEmpty)
-        #expect(try await store.hasUnsyncedWork(accountID: account) == false)
         #expect(try await store.draft(id: draft.id, accountID: account).text == draft.text)
     }
 

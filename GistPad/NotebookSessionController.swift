@@ -226,27 +226,53 @@ final class NotebookSessionController {
     defer { isInspectingRemote = false }
     guard await waitForLocalSave() else { return }
     do {
-      let current = try await NotebookRemoteRead.run(
+      let (current, remote) = try await NotebookRemoteRead.run(
         retryDelays: remoteInspectionRetryDelays,
         while: {
           self.notebook.account?.id == self.draft.accountID && self.notebook.pendingAccount == nil
             && !self.notebook.isSigningOut && !self.isPublishing && self.canMutate
             && !self.document.isRecovery
         }
-      ) {
+      ) { () async throws -> (DraftSnapshot, RemoteFile?) in
         guard await self.waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
         let generation = self.session.generation
-        let result = try await self.notebook.perform(
-          .inspectRemote(draftID: self.draft.id, generation: generation))
-        guard case .review(let current) = result,
+        let result = try await self.notebook.perform(.fetchRemote(draftID: self.draft.id))
+        guard case .remoteRead(let current, let remote) = result,
           current.id == self.draft.id, current.accountID == self.draft.accountID
         else { throw NotebookRemoteReadError.invalidResult }
-        guard current.generation == self.session.generation else { throw DraftError.staleGeneration }
-        return current
+        guard current.generation == generation, self.session.generation == generation else {
+          throw DraftError.staleGeneration
+        }
+        return (current, remote)
       }
-      draft = current
-      document.draft = current
-      saveState = NotebookModel.interfaceSaveState(current.state)
+      if let remote, let content = remote.content, current.adoptsRemote(content) {
+        // Every text change bumps the generation, so this commit is refused if any edit or publish
+        // landed after the fetch. Adoption can't overwrite unpublished text.
+        try await commitMutation(
+          SourceMutation(
+            range: NSRange(location: 0, length: session.text.utf16.count),
+            expected: session.text, replacement: content),
+          expectedGeneration: current.generation
+        ) {
+          guard
+            case .review(let adopted) = try await notebook.perform(
+              .adoptRemote(
+                draftID: draft.id, generation: current.generation, remote: content,
+                revision: remote.gist.revision))
+          else { throw NotebookActionError.staleReview }
+          return adopted
+        }
+      } else {
+        guard
+          case .review(let recorded) = try await notebook.perform(
+            .recordRemote(
+              draftID: draft.id, generation: current.generation, remote: remote?.content,
+              revision: remote?.gist.revision))
+        else { throw NotebookRemoteReadError.invalidResult }
+        draft = recorded
+        document.draft = recorded
+        saveState = NotebookModel.interfaceSaveState(recorded.state)
+      }
       remoteInspectionProblem = nil
     } catch is CancellationError {
       return
@@ -311,7 +337,7 @@ final class NotebookSessionController {
     return try NotebookReviewContext(draft: refreshed)
   }
 
-  func applyReview(_ review: NotebookReviewContext, text: String) async throws {
+  func applyReview(_ review: NotebookReviewContext, text: String, publishes: Bool) async throws {
     guard review.matches(draft), session.generation == review.draft.generation else {
       throw NotebookActionError.staleReview
     }
@@ -332,6 +358,7 @@ final class NotebookSessionController {
       }
       return resolved
     }
+    if publishes { await publish() }
   }
 
   func beginDestructiveAction() throws {
@@ -393,16 +420,7 @@ final class NotebookSessionController {
       throw NotebookEditError.invalidCommittedEdit
     }
     if changed {
-      do {
-        try session.apply(mutation, documentID: session.documentID, generation: expectedGeneration)
-      } catch {
-        saveState = .localFailure(
-          message: String(
-            localized:
-              "The accepted edit is on this iPhone, but couldn't be applied to the editor. Keep it open to recover both versions."
-          ))
-        throw error
-      }
+      try session.apply(mutation, documentID: session.documentID, generation: expectedGeneration)
     }
     draft = committed
     document.draft = committed

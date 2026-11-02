@@ -393,17 +393,29 @@ actor NotebookCommentsCaptureProvider: NotebookProviding, NotebookCommentProvidi
 
   func today(accountID: UUID, target: DailyNoteTarget) throws -> TodayNote { throw CaptureError.unsupported }
   func perform(_ action: NotebookAction, accountID: UUID) async throws -> NotebookActionResult {
-    guard case .inspectRemote(let id, let generation) = action else {
+    let store = try draftStore()
+    switch action {
+    case .fetchRemote(let id):
+      let current = try await store.draft(id: id, accountID: accountID)
+      guard let gistID = current.gistID else { return .remoteRead(current, nil) }
+      let fixture = try gist(id: gistID, accountID: accountID)
+      return .remoteRead(
+        current, RemoteFile(gist: fixture, content: fixture.files[current.filename]?.content))
+    case .recordRemote(let id, let generation, let remote, let revision):
+      return .review(
+        try await store.inspectRemoteChange(
+          id: id, accountID: accountID, expectedGeneration: generation,
+          remote: remote, revision: revision))
+    case .adoptRemote(let id, let generation, let remote, let revision):
+      guard
+        case .refreshed(let adopted) = try await store.refreshCleanDraft(
+          id: id, accountID: accountID, expectedGeneration: generation,
+          content: remote, revision: revision)
+      else { throw NotebookActionError.staleReview }
+      return .review(adopted)
+    default:
       throw CaptureError.unsupported
     }
-    let store = try draftStore()
-    let current = try await store.draft(id: id, accountID: accountID)
-    guard let gistID = current.gistID else { return .review(current) }
-    let gist = try gist(id: gistID, accountID: accountID)
-    return .review(
-      try await store.inspectRemoteChange(
-        id: id, accountID: accountID, expectedGeneration: generation,
-        remote: gist.files[current.filename]?.content, revision: gist.revision))
   }
 
   private func draftStore() throws -> DraftStore {

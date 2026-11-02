@@ -60,7 +60,7 @@ import Testing
     }
 
     @Test(arguments: [false, true])
-    func preservesDailyRecoveryAndPhotos(photo: Bool) async throws {
+    func keepsDailyPhotosAndDiscardsAnUntouchedTemplate(photo: Bool) async throws {
         let store = try DraftStore.open(inMemory: true)
         let account = UUID()
         let draft = try await store.dailyGistDraft(
@@ -72,12 +72,15 @@ import Testing
         } else {
             try await store.beginAttempt(
                 id: draft.id, accountID: account, content: draft.text,
-                generation: draft.generation, remote: nil)
+                generation: draft.generation)
             try await store.clearAttempt(id: draft.id, accountID: account)
         }
-        #expect(try await !store.discardBlankDraft(
-            id: draft.id, accountID: account, expectedGeneration: draft.generation))
-        #expect(try await store.draft(id: draft.id, accountID: account).text == draft.text)
+        let discarded = try await store.discardBlankDraft(
+            id: draft.id, accountID: account, expectedGeneration: draft.generation)
+        #expect(discarded == !photo)
+        if photo {
+            #expect(try await store.draft(id: draft.id, accountID: account).text == draft.text)
+        }
     }
 
     @Test(arguments: ["", " \t\r\n\u{2003}"])
@@ -145,12 +148,14 @@ import Testing
         let account = UUID()
         let uncertain = try await store.newDraft(accountID: account, githubUserID: 42)
         try await store.beginAttempt(
-            id: uncertain.id, accountID: account, content: "", generation: 0, remote: nil
+            id: uncertain.id, accountID: account, content: "", generation: 0
         )
         try await store.setState(.failed(.creationUncertain), id: uncertain.id, accountID: account)
-        let historical = try await store.newDraft(accountID: account, githubUserID: 42)
+        let historical = try await store.newDraft(
+            accountID: account, githubUserID: 42, text: "Recover this"
+        )
         try await store.beginAttempt(
-            id: historical.id, accountID: account, content: "Recover this", generation: 0, remote: nil
+            id: historical.id, accountID: account, content: "Recover this", generation: 0
         )
         try await store.clearAttempt(id: historical.id, accountID: account)
         let photo = try await store.newDraft(accountID: account, githubUserID: 42)
@@ -163,7 +168,9 @@ import Testing
                 id: draft.id, accountID: account, expectedGeneration: draft.generation
             ))
         }
-        #expect(try await store.recoveries(id: historical.id, accountID: account).first?.sent == "Recover this")
+        let retained = try await store.draft(id: historical.id, accountID: account)
+        #expect(retained.text == "Recover this")
+        #expect(retained.attemptedContent == nil)
         #expect(try await store.imageUploads(accountID: account).count == 1)
     }
 

@@ -32,7 +32,7 @@ import Testing
             }
             return "fake"
         }
-        let coordinator = SyncCoordinator(client: client, store: store, mutationInterval: .zero)
+        let coordinator = SyncCoordinator(client: client, store: store)
         await #expect(throws: CancellationError.self) {
             try await coordinator.publish(id: draft.id, accountID: account, reason: reason)
         }
@@ -55,7 +55,7 @@ import Testing
             description: "Note", content: "base", revision: "one")
         try await store.setState(.conflict(DraftConflict(
             generation: 0, base: "base", local: "base", remote: "remote",
-            remoteRevision: "two", suggestedMerge: nil)), id: draft.id, accountID: account)
+            remoteRevision: "two")), id: draft.id, accountID: account)
         let resolved = try await store.resolveConflict(
             id: draft.id, accountID: account, expectedGeneration: 0, text: "base", generation: 0)
         #expect(resolved.autosavePaused)
@@ -106,14 +106,14 @@ import Testing
             description: "Note", content: "base", revision: "one")
         try await store.setState(.conflict(DraftConflict(
             generation: 0, base: "base", local: "base", remote: "remote",
-            remoteRevision: "two", suggestedMerge: nil)), id: draft.id, accountID: account)
+            remoteRevision: "two")), id: draft.id, accountID: account)
         _ = try await store.resolveConflict(
             id: draft.id, accountID: account, expectedGeneration: 0, text: "local", generation: 1)
         let client = GitHubClient(session: FakeURLProtocol.session { request in
             FakeResponse(data: try gistData(
                 content: request.httpMethod == "PATCH" ? "local" : "remote", revision: "two"))
         }) { "fake" }
-        let coordinator = SyncCoordinator(client: client, store: store, mutationInterval: .zero)
+        let coordinator = SyncCoordinator(client: client, store: store)
         let saved = try await coordinator.publish(id: draft.id, accountID: account, reason: reason)
         #expect(saved.state == .savedToGitHub)
         #expect(!saved.autosavePaused)

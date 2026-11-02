@@ -103,7 +103,7 @@ struct NotebookNewGistDeletionTests {
     await publication.value
     let result = try await deletion.value
 
-    guard case .deleted(let deletedID, _) = result else {
+    guard case .deleted(let deletedID) = result else {
       Issue.record("Expected the new gist to be deleted, got \(result)")
       return
     }

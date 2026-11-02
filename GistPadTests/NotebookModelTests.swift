@@ -194,6 +194,33 @@ struct NotebookModelTests {
     #expect(published?.baseContent == "- [ ] Second")
   }
 
+  @Test func returningToTheAppPublishesEveryLeftNoteWithUnpublishedEdits() async throws {
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-23.md")
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
+    _ = try await provider.stageDailyDraft(filename: "2026-10-24.md", text: "- [ ] One")
+    _ = try await provider.stageDailyDraft(filename: "2026-10-25.md", text: "- [ ] Two")
+    let model = NotebookModel(provider: provider, remoteReadRetryDelays: [])
+    await model.start()
+    await model.publishUnsyncedEdits(accountID: fixtureAccount.id) { _ in nil }
+    #expect(await provider.publicationReasons == [.background, .background])
+    #expect(model.localDrafts.allSatisfy { !$0.hasUnpublishedEdits })
+  }
+
+  @Test func theUnsyncedSweepStopsAtTheFirstOfflineNote() async throws {
+    let daily = try makeGist(
+      id: "daily", title: GistConventions.dailyNotesDescription, filename: "2026-10-23.md")
+    let provider = StubNotebookProvider(account: fixtureAccount, gists: [daily])
+    _ = try await provider.stageDailyDraft(filename: "2026-10-24.md", text: "- [ ] One")
+    _ = try await provider.stageDailyDraft(filename: "2026-10-25.md", text: "- [ ] Two")
+    let model = NotebookModel(provider: provider, remoteReadRetryDelays: [])
+    await model.start()
+    await provider.failWritesOffline()
+    await model.publishUnsyncedEdits(accountID: fixtureAccount.id) { _ in nil }
+    #expect(model.localDrafts.filter { $0.state == .offline }.count == 1)
+    #expect(model.localDrafts.allSatisfy { $0.hasUnpublishedEdits })
+  }
+
   @Test func aLaterSuccessfulNoteSaveClearsItsAttentionWithoutRetry() async throws {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let model = NotebookModel(provider: provider, remoteReadRetryDelays: [])
@@ -676,7 +703,6 @@ struct NotebookModelTests {
     _ = try await model.persist(
       draftID: draft.id, accountID: draft.accountID, text: "An accepted edit", generation: 1)
     _ = try await model.publish(draftID: draft.id, accountID: draft.accountID)
-    #expect(try await provider.recoveryCount(draftID: draft.id) == 1)
     model.library.query = "accepted edit"
     await model.search()
     #expect(model.library.matchingNotes.count == 1)
@@ -689,9 +715,6 @@ struct NotebookModelTests {
     #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.allSatisfy {
       $0.gistID != "a" && $0.isDiscardableBlank
     })
-    await #expect(throws: DraftError.notFound) {
-      try await provider.recoveryCount(draftID: draft.id)
-    }
     await model.refresh()
     await model.search()
     #expect(model.library.matchingNotes.isEmpty)
@@ -3102,6 +3125,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
   var shouldFail = false
   var heldID: String?
   var failsWrites = false
+  var failsWritesOffline = false
   var publishFailure: DraftError?
   var failsAccountRefresh = false
   var appliedPreferences: [PreferenceOperation] = []
@@ -3267,6 +3291,10 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
   ) async throws -> DraftSnapshot {
     if reason != .manual, !(await shouldPublish()) { throw CancellationError() }
     if let publishFailure { throw publishFailure }
+    if failsWritesOffline {
+      try await draftStore().setState(.offline, id: draftID, accountID: accountID)
+      throw URLError(.notConnectedToInternet)
+    }
     if failsWrites { throw URLError(.notConnectedToInternet) }
     let store = try draftStore()
     let current = try await store.draft(id: draftID, accountID: accountID)
@@ -3274,7 +3302,7 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
     publicationReasons.append(reason)
     try await store.beginAttempt(
       id: draftID, accountID: accountID, content: current.text,
-      generation: current.generation, remote: current.baseContent)
+      generation: current.generation)
     if let index = notes.firstIndex(where: { $0.id == current.gistID }) {
       let gist = notes[index]
       var files = gist.files
@@ -3342,10 +3370,8 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
       deletedIDs.append(id)
       notes.removeAll { $0.id == id }
       starredNotes.removeAll { $0.id == id }
-      return .deleted(
-        gistID: id,
-        drafts: try await draftStore().removeDraftsForDeletedGist(
-          gistID: id, accountID: accountID))
+      try await draftStore().removeDraftsForDeletedGist(gistID: id, accountID: accountID)
+      return .deleted(gistID: id)
     }
     if case .preference(let operation) = action {
       appliedPreferences.append(operation)
@@ -3367,15 +3393,29 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
       if failsSignOutAfterCleanup { throw URLError(.timedOut) }
       return .signedOut
     }
-    if case .inspectRemote(let id, let generation) = action {
+    if case .fetchRemote(let id) = action {
       inspectionCount += 1
       let store = try draftStore()
       let draft = try await store.draft(id: id, accountID: accountID)
-      let remote = notes.first(where: { $0.id == draft.gistID })?.files[draft.filename]?.content
+      guard let gist = notes.first(where: { $0.id == draft.gistID }) else {
+        return .remoteRead(draft, nil)
+      }
+      return .remoteRead(
+        draft, RemoteFile(gist: gist, content: gist.files[draft.filename]?.content))
+    }
+    if case .recordRemote(let id, let generation, let remote, let revision) = action {
       return .review(
-        try await store.inspectRemoteChange(
+        try await draftStore().inspectRemoteChange(
           id: id, accountID: accountID, expectedGeneration: generation,
-          remote: remote, revision: "synthetic-revision"))
+          remote: remote, revision: revision))
+    }
+    if case .adoptRemote(let id, let generation, let remote, let revision) = action {
+      guard
+        case .refreshed(let adopted) = try await draftStore().refreshCleanDraft(
+          id: id, accountID: accountID, expectedGeneration: generation,
+          content: remote, revision: revision)
+      else { throw NotebookActionError.staleReview }
+      return .review(adopted)
     }
     throw DraftError.notFound
   }
@@ -3453,15 +3493,13 @@ private actor StubNotebookProvider: NotebookProviding, NotebookPhotoProviding, N
       accountID: account.id, githubUserID: 1, gistID: "daily", filename: filename,
       description: GistConventions.dailyNotesDescription, text: text)
   }
-  func recoveryCount(draftID: UUID) async throws -> Int {
-    try await draftStore().recoveries(id: draftID, accountID: account.id).count
-  }
   func setGists(_ gists: [Gist]) { notes = gists }
   func setReadFailure(id: String, fails: Bool) {
     if fails { failingReadIDs.insert(id) } else { failingReadIDs.remove(id) }
   }
   func failRequests(_ fails: Bool = true) { shouldFail = fails }
   func failWrites(_ fails: Bool = true) { failsWrites = fails }
+  func failWritesOffline() { failsWritesOffline = true }
   func failPublishes(with error: DraftError?) { publishFailure = error }
   func failAccountRefresh(_ fails: Bool = true) { failsAccountRefresh = fails }
   func rejectArchiveChanges() { rejectsArchiveChanges = true }

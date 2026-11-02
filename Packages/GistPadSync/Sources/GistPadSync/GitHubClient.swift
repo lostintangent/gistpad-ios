@@ -12,6 +12,16 @@ public enum GitHubClientError: Error, Equatable, Sendable {
     case invalidUTF8
 }
 
+public struct RemoteFile: Sendable {
+    public let gist: Gist
+    public let content: String?
+
+    public init(gist: Gist, content: String?) {
+        self.gist = gist
+        self.content = content
+    }
+}
+
 public actor GitHubClient {
     public typealias TokenProvider = @Sendable () async throws -> String
     private let session: URLSession
@@ -74,6 +84,15 @@ public actor GitHubClient {
         guard data.count <= 10_000_000 else { throw GitHubClientError.fileTooLarge }
         guard let content = String(data: data, encoding: .utf8) else { throw GitHubClientError.invalidUTF8 }
         return GistConventions.decodeContent(content)
+    }
+
+    /// Fetches a gist and one file, enforcing ownership and completeness. `content` is nil when the file is gone.
+    public func remoteFile(gistID: String, ownerID: Int64, filename: String) async throws -> RemoteFile {
+        let gist = try await gist(id: gistID)
+        guard gist.owner?.id == ownerID else { throw DraftError.readOnly }
+        guard gist.truncated != true else { throw GitHubClientError.incompleteGist }
+        guard gist.files[filename] != nil else { return RemoteFile(gist: gist, content: nil) }
+        return RemoteFile(gist: gist, content: try await content(gist: gist, filename: filename))
     }
 
     public func createGist(

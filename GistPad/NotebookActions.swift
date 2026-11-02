@@ -12,7 +12,9 @@ enum NotebookAction: Sendable {
   case renameFile(gistID: String, filename: String, newFilename: String)
   case addFile(gistID: String, filename: String)
   case delete(gistID: String)
-  case inspectRemote(draftID: UUID, generation: UInt64)
+  case fetchRemote(draftID: UUID)
+  case recordRemote(draftID: UUID, generation: UInt64, remote: String?, revision: String?)
+  case adoptRemote(draftID: UUID, generation: UInt64, remote: String, revision: String?)
   case confirmNewCreation(draftID: UUID, generation: UInt64)
   case discardUncertainCreation(draftID: UUID, generation: UInt64)
   case discardLocalCopy(draftID: UUID, generation: UInt64)
@@ -28,8 +30,9 @@ enum NotebookActionResult: Sendable {
   case gist(Gist, starred: Bool? = nil)
   case archived(Gist, undo: NotebookArchiveUndo)
   case draft(DraftSnapshot, gist: Gist? = nil)
-  case deleted(gistID: String, drafts: DeletedGistDrafts)
+  case deleted(gistID: String)
   case review(DraftSnapshot)
+  case remoteRead(DraftSnapshot, RemoteFile?)
   case discardedDraft(UUID)
 }
 
@@ -141,21 +144,26 @@ extension LiveNotebookProvider {
         try await drafts.updateDraftMetadata(
           id: id, accountID: accountID, expectedFilename: draft.filename,
           filename: draft.filename, description: title))
-    case .inspectRemote(let id, let generation):
-      let client = await client(accountID: accountID)
+    case .fetchRemote(let id):
       let current = try await drafts.draft(id: id, accountID: accountID)
-      guard let gistID = current.gistID else { return .review(current) }
-      let gist = try await client.gist(id: gistID)
-      guard gist.owner?.id == current.githubUserID else { throw DraftError.readOnly }
-      guard gist.truncated != true else { throw GitHubClientError.incompleteGist }
-      let remote: String? =
-        if gist.files[current.filename] != nil {
-          try await client.content(gist: gist, filename: current.filename)
-        } else { String?.none }
+      guard let gistID = current.gistID else { return .remoteRead(current, nil) }
+      let client = await client(accountID: accountID)
+      return .remoteRead(
+        current,
+        try await client.remoteFile(
+          gistID: gistID, ownerID: current.githubUserID, filename: current.filename))
+    case .recordRemote(let id, let generation, let remote, let revision):
       return .review(
         try await drafts.inspectRemoteChange(
           id: id, accountID: accountID, expectedGeneration: generation,
-          remote: remote, revision: gist.revision))
+          remote: remote, revision: revision))
+    case .adoptRemote(let id, let generation, let remote, let revision):
+      guard
+        case .refreshed(let adopted) = try await drafts.refreshCleanDraft(
+          id: id, accountID: accountID, expectedGeneration: generation,
+          content: remote, revision: revision)
+      else { throw NotebookActionError.staleReview }
+      return .review(adopted)
     case .refreshConflict(let review), .resolveConflict(let review, _, _):
       let client = await client(accountID: accountID)
       guard review.draft.accountID == accountID, let gistID = review.draft.gistID else {
@@ -163,18 +171,11 @@ extension LiveNotebookProvider {
       }
       let current = try await drafts.draft(id: review.draft.id, accountID: accountID)
       guard review.matches(current) else { throw NotebookActionError.staleReview }
-      let gist = try await client.gist(id: gistID)
-      guard gist.owner?.id == current.githubUserID else { throw DraftError.readOnly }
-      guard gist.truncated != true else { throw GitHubClientError.incompleteGist }
-      let remote: String?
-      if gist.files[current.filename] != nil {
-        remote = try await client.content(gist: gist, filename: current.filename)
-      } else {
-        remote = nil
-      }
+      let remote = try await client.remoteFile(
+        gistID: gistID, ownerID: current.githubUserID, filename: current.filename)
       if case .resolveConflict(_, let text, let generation) = action {
-        guard review.conflict.remoteRevision == gist.revision,
-          NotebookReviewContext.exactlyEqual(review.conflict.remote, remote)
+        guard review.conflict.remoteRevision == remote.gist.revision,
+          NotebookReviewContext.exactlyEqual(review.conflict.remote, remote.content)
         else {
           throw NotebookActionError.remoteReviewChanged
         }
@@ -186,7 +187,8 @@ extension LiveNotebookProvider {
       return .review(
         try await drafts.refreshConflict(
           id: current.id, accountID: accountID, expectedGeneration: current.generation,
-          expectedConflict: review.conflict, remote: remote, revision: gist.revision))
+          expectedConflict: review.conflict, remote: remote.content,
+          revision: remote.gist.revision))
     case .star(let id, let starred):
       let client = await client(accountID: accountID)
       let gist = try await client.gist(id: id)
@@ -263,10 +265,8 @@ extension LiveNotebookProvider {
       do {
         try await CommentConversationDiskStore.applicationStore().removeDrafts(
           scope: .init(accountID: accountID, gistID: id))
-        return .deleted(
-          gistID: id,
-          drafts: try await drafts.removeDraftsForDeletedGist(gistID: id, accountID: accountID)
-        )
+        try await drafts.removeDraftsForDeletedGist(gistID: id, accountID: accountID)
+        return .deleted(gistID: id)
       } catch {
         throw NotebookActionError.remoteDeletedLocalCleanupFailed(gistID: id)
       }
@@ -322,7 +322,6 @@ struct NotebookReviewContext: Equatable, Sendable, Identifiable {
       && Self.exactlyEqual(conflict.base, self.conflict.base)
       && Self.exactlyEqual(conflict.local, self.conflict.local)
       && Self.exactlyEqual(conflict.remote, self.conflict.remote)
-      && Self.exactlyEqual(conflict.suggestedMerge, self.conflict.suggestedMerge)
   }
 
   static func exactlyEqual(_ left: String?, _ right: String?) -> Bool {

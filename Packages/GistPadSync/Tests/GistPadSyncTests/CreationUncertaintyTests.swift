@@ -19,7 +19,6 @@ import Testing
         #expect(allowed.state == .savedLocally)
         #expect(allowed.attemptedGeneration == nil)
         #expect(allowed.attemptedContent == nil)
-        #expect(try await store.recoveries(id: draft.id, accountID: account).count == 1)
         await #expect(throws: DraftError.ambiguousCreation) {
             try await store.confirmNewCreation(
                 id: draft.id, accountID: account, expectedGeneration: 0)
@@ -30,7 +29,7 @@ import Testing
             #expect(request.httpMethod == "POST")
             return FakeResponse(data: try gistData(content: text))
         }) { "fake" }
-        let coordinator = SyncCoordinator(client: client, store: store, mutationInterval: .zero)
+        let coordinator = SyncCoordinator(client: client, store: store)
         let published = try await coordinator.publish(id: draft.id, accountID: account)
         #expect(published.id == draft.id)
         #expect(published.state == .savedToGitHub)
@@ -72,7 +71,7 @@ import Testing
             pngData: testPNG(), draftID: draft.id, accountID: account,
             expectedGeneration: 1, insertionLocation: 0)
         try await store.beginAttempt(
-            id: draft.id, accountID: account, content: edited.text, generation: 1, remote: nil)
+            id: draft.id, accountID: account, content: edited.text, generation: 1)
         try await store.setState(.failed(.creationUncertain), id: draft.id, accountID: account)
         let other = try await uncertainDraft(store: store, account: account, text: "keep this")
         let otherImage = try await store.enqueueImage(
@@ -84,17 +83,16 @@ import Testing
         await #expect(throws: ImageUploadError.notFound) {
             try await store.imageUpload(id: image.id, accountID: account)
         }
-        #expect(try await store.recoveries(id: other.id, accountID: account).count == 1)
+        #expect(try await store.draft(id: other.id, accountID: account).text == "keep this")
         let context = ModelContext(store.modelContainer)
         #expect(try context.fetchCount(FetchDescriptor<StoredCommandReceipt>()) == 0)
-        #expect(try context.fetchCount(FetchDescriptor<StoredRecovery>()) == 1)
         #expect(try context.fetchCount(FetchDescriptor<StoredDraft>()) == 1)
         #expect(try context.fetchCount(FetchDescriptor<StoredImageUpload>()) == 1)
     }
 
     private func uncertainDraft(store: DraftStore, account: UUID, text: String) async throws -> DraftSnapshot {
         let draft = try await store.newDraft(accountID: account, githubUserID: 42, text: text)
-        try await store.beginAttempt(id: draft.id, accountID: account, content: text, generation: 0, remote: nil)
+        try await store.beginAttempt(id: draft.id, accountID: account, content: text, generation: 0)
         try await store.setState(.failed(.creationUncertain), id: draft.id, accountID: account)
         return try await store.draft(id: draft.id, accountID: account)
     }

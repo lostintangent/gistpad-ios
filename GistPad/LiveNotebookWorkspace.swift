@@ -262,7 +262,10 @@ struct LiveNotebookWorkspace: View {
 
   private var workspaceNavigationLifecycle: some View {
     navigation
-    .task { await notebook.start() }
+    .task {
+      await notebook.start()
+      publishUnsyncedEdits()
+    }
     .task(id: notebook.loadedDocument?.activationID) {
       if notebook.loadedDocument == nil { activeID = nil } else { await activateLoadedDocument() }
     }
@@ -302,6 +305,7 @@ struct LiveNotebookWorkspace: View {
     .onChange(of: scenePhase) { _, phase in
       if phase == .background { finishBackgroundSaves() }
       if phase == .active {
+        publishUnsyncedEdits()
         Task {
           await notebook.updateCalendar()
           await active?.inspectRemoteChanges()
@@ -1260,6 +1264,17 @@ struct LiveNotebookWorkspace: View {
     }
   }
 
+  private func publishUnsyncedEdits() {
+    guard let accountID = notebook.account?.id, notebook.pendingAccount == nil else { return }
+    Task {
+      await notebook.publishUnsyncedEdits(accountID: accountID) { id in
+        guard let controller = sessions[id.uuidString] else { return nil }
+        await controller.publish(reason: .background)
+        return controller.draft.state
+      }
+    }
+  }
+
   private func finishLeavingNote(
     _ controller: NotebookSessionController, preservingReview: Bool = false
   ) {
@@ -1495,9 +1510,9 @@ struct LiveNotebookWorkspace: View {
         if let controller = sessions[draft.id.uuidString] {
           try await controller.refreshMetadata(gist: gist)
         }
-      case .deleted(let gistID, _):
+      case .deleted(let gistID):
         try await discardDeletedGistSessions(gistID: gistID, accountID: accountID)
-      case .review:
+      case .review, .remoteRead:
         break
       case .discardedDraft(let id):
         sessions[id.uuidString]?.clearReview()
