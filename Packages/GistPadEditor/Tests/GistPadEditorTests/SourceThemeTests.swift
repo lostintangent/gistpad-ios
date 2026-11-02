@@ -40,7 +40,7 @@
             view.traitOverrides.legibilityWeight = .regular
             let selection = NSRange(location: 4, length: 3)
             view.selectedRange = selection
-            session.updateAppearanceIfNeeded()
+            session.highlight()
             let traits = view.traitCollection
             let bodySize = UIFont.preferredFont(
               forTextStyle: .body, compatibleWith: traits

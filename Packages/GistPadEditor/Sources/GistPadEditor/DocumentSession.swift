@@ -76,8 +76,8 @@
 
     /// Applies one change as an undoable step. A nil selection keeps the caret where it was.
     public func apply(_ edit: SourceEdit, generation: UInt64) throws {
-      guard self.generation == generation else { throw SourceEdit.MutationError.staleGeneration }
       guard isSettled else { throw SourceEdit.MutationError.compositionActive }
+      guard self.generation == generation else { throw SourceEdit.MutationError.staleGeneration }
       let result = try edit.applying(to: text)
       if let selection = edit.selection { _ = try SourceEdit.text(in: result, at: selection) }
       let previousSelection = textView.selectedRange
@@ -489,6 +489,13 @@
       selectedRange = NSRange(location: contentStart, length: text.utf16.count - contentStart)
     }
 
+    /// Behind hidden front matter, UIKit's backspace at the first visible character deletes it instead.
+    override func deleteBackward() {
+      guard contentStart == 0 || selectedRange.location > contentStart || selectedRange.length > 0
+      else { return }
+      super.deleteBackward()
+    }
+
     func resetReadingAnchor(to offset: Int) {
       readingOffset = offset
       anchorDelta = adjustedContentInset.top + textContainerInset.top
@@ -548,7 +555,7 @@
         }
       case .caret:
         super.layoutSubviews()
-        super.scrollRangeToVisible(selectedRange)
+        reveal(NSMaxRange(selectedRange))
         needsEditingCaretReveal = false
       }
     }
@@ -591,8 +598,25 @@
     }
 
     override func scrollRangeToVisible(_ range: NSRange) {
+      guard !sourceInteractionActive, markedTextRange == nil else {
+        super.scrollRangeToVisible(range)
+        return
+      }
       layoutDocument()
-      super.scrollRangeToVisible(range)
+      reveal(NSMaxRange(range))
+    }
+
+    /// TextKit 2's own reveal scrolls to estimated geometry, so long notes stop short of the caret.
+    private func reveal(_ offset: Int) {
+      guard let position = position(from: beginningOfDocument, offset: offset) else { return }
+      let caret = caretRect(for: position).insetBy(dx: 0, dy: -8)
+      let viewport = bounds.inset(by: adjustedContentInset)
+      guard viewport.height >= caret.height, caret.minY.isFinite, caret.maxY.isFinite else { return }
+      if caret.minY < viewport.minY {
+        setVerticalContentOffset(contentOffset.y + caret.minY - viewport.minY)
+      } else if caret.maxY > viewport.maxY {
+        setVerticalContentOffset(contentOffset.y + caret.maxY - viewport.maxY)
+      }
     }
 
     func revealPassage(_ range: NSRange) -> Bool {
