@@ -213,12 +213,13 @@ enum NoteIntelligenceEvaluation {
     guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       return "emptyAnswer"
     }
-    if let issue = NoteAnswerIssue.check(
-      answer, source: item.source, instruction: item.prompt,
-      maximumWords: item.maximumAnswerWords
-        ?? (item.favorite == nil ? NoteAnswerIssue.maximumWords : 60))
-    {
+    if let issue = NoteAnswerIssue.check(answer, source: item.source, instruction: item.prompt) {
       return issue.rawValue
+    }
+    if let maximum = item.maximumAnswerWords,
+      answer.split(whereSeparator: \.isWhitespace).count > maximum
+    {
+      return "answerTooLong"
     }
     if let favorite = item.favorite {
       return favoriteFailure(

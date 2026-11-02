@@ -5,6 +5,8 @@ import OSLog
 public final class NoteIntelligenceEngine {
   private let backend: any NoteModelBackend
   private let framingReserve = 96
+  /// Real answers use under 120 tokens. A runaway repeats itself until this limit stops it.
+  private let answerTokens = 384
   private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 
   public init(backend: any NoteModelBackend) {
@@ -180,7 +182,14 @@ public final class NoteIntelligenceEngine {
     var generated: [ModelAnswerPart] = []
     for attempt in 1...2 {
       try Task.checkCancellation()
-      generated = try await backend.answer(for: input)
+      do {
+        generated = try await backend.answer(for: input)
+      } catch NoteIntelligenceError.responseTooLarge where attempt == 1 {
+        logger.notice(
+          "request=\(request.id.uuidString, privacy: .public) answerRejected=responseTooLarge attempt=1"
+        )
+        continue
+      }
       let prose = generated.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
       guard
         let issue = NoteAnswerIssue.check(
@@ -359,7 +368,8 @@ public final class NoteIntelligenceEngine {
   ) -> NoteModelPass {
     NoteModelPass(
       purpose: purpose, instruction: request.instruction, source: source,
-      responseTokens: min(1_536, model.contextSize / 3), requestID: request.id,
+      responseTokens: min(purpose == .answer ? answerTokens : 1_536, model.contextSize / 3),
+      requestID: request.id,
       tasks: purpose == .edit
         ? request.snapshot.tasks.filter { task in
           guard let scope else { return true }

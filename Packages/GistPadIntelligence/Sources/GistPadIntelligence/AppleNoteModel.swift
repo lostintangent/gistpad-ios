@@ -215,6 +215,10 @@ public final class AppleNoteModel: NoteModelBackend {
       default:
         throw error
       }
+    } catch is GeneratedContent.ParsingError {
+      logger.error(
+        "request=\(pass.requestID.uuidString, privacy: .public) modelFailure=responseLimit")
+      throw NoteIntelligenceError.responseTooLarge
     }
   }
 

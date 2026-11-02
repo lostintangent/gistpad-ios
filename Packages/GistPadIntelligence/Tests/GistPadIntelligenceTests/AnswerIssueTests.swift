@@ -15,14 +15,14 @@ struct AnswerIssueTests {
     ("The creator prefers An Example.", .thirdPerson),
     ("The user prefers An Example.", .thirdPerson),
     ("An Example. }</span>", .markupLeak),
+    ("An Example is your favorite.}", .markupLeak),
     ("Ranking evidence: firstOrderedItem='An Example'", .internalIdentifier),
     ("It appears in block 1.", .internalIdentifier),
     ("It appears in the first block.", .internalIdentifier),
     ("Check blockIDs for the reference.", .internalIdentifier),
     ("The second block supports that.", .internalIdentifier),
-    (String(repeating: "You like An Example. ", count: 51), .answerTooLong),
   ])
-  func theGateRejectsInventedQuotesThirdPersonMarkupMetadataAndRunaways(
+  func theGateRejectsInventedQuotesThirdPersonMarkupAndMetadata(
     prose: String, issue: NoteAnswerIssue
   ) async {
     let fixture = NoteModelFixture()
@@ -33,7 +33,17 @@ struct AnswerIssueTests {
     }
   }
 
-  @Test func theGateAcceptsExactQuotesContractionsTechnicalTextAndCitationsUnderTheCap() {
+  @Test func aRunawayStopsAtTheResponseLimitAndIsRetriedOnce() async {
+    let fixture = NoteModelFixture()
+    fixture.failure = NoteIntelligenceError.responseTooLarge
+    await #expect(throws: NoteIntelligenceError.responseTooLarge) {
+      try await NoteIntelligenceEngine(backend: fixture).ask(
+        request(source, .ask, "What do I like?"))
+    }
+    #expect(fixture.passes.map(\.purpose) == [.answer, .answer])
+  }
+
+  @Test func theGateAcceptsExactQuotesContractionsTechnicalTextAndCitations() {
     for prose in [
       "An Example. It's #1 in your Incredible tier.",
       "You wrote “protagonists who reflect”.",
@@ -46,7 +56,8 @@ struct AnswerIssueTests {
         "The blockID parameter identifies your block.",
         source: "The blockID parameter identifies a block.",
         instruction: "What does blockID do?") == nil)
-    let longest = Array(repeating: "word", count: NoteAnswerIssue.maximumWords)
-    #expect(NoteAnswerIssue.check(longest.joined(separator: " "), source: "") == nil)
+    #expect(
+      NoteAnswerIssue.check(
+        "Write {name} where the greeting goes.", source: "Hello, {name}!") == nil)
   }
 }
