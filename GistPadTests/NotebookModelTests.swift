@@ -116,7 +116,7 @@ struct NotebookModelTests {
     #expect(target.localDraft?.id == draft.id)
     await model.refresh()
     #expect(model.library.snapshot.notes.first { $0.id == row.id }?.updatedAt == row.updatedAt)
-    await model.openLocalDraft(id: draft.id)
+    await model.open(.draft(id: draft.id))
     #expect(model.loadedDocument?.isRecovery == true)
     _ = try await model.perform(target.action)
     #expect(await provider.deletedIDs.isEmpty)
@@ -134,14 +134,14 @@ struct NotebookModelTests {
     let clean = try await provider.stageExistingDraft(gistID: "gone", text: "Base")
     let dirty = try await provider.stageExistingDraft(gistID: "also-gone", text: "An edit")
     let selections = NotebookSelectionStore()
-    try selections.save(
+    selections.save(
       .init(gistID: "gone", filename: "README.md", draftID: nil), accountID: fixtureAccount.id)
     let model = NotebookModel(provider: provider, selections: selections)
     await model.start()
     #expect(model.localDrafts.allSatisfy { $0.id != clean.id })
     #expect(model.localDrafts.contains { $0.id == dirty.id })
     #expect(await provider.deletedIDs.isEmpty)
-    #expect(try selections.selection(accountID: fixtureAccount.id) == nil)
+    #expect(selections.selection(accountID: fixtureAccount.id) == nil)
 
     let offline = StubNotebookProvider(account: fixtureAccount, gists: [])
     await offline.failToday(true)
@@ -158,7 +158,7 @@ struct NotebookModelTests {
     await provider.failToday(true)
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "active")
+    await model.open(.gist(id: "active"))
     let document = try #require(model.loadedDocument)
     #expect(document.draft == nil)
     let draft = try await model.openDraft(for: document)
@@ -177,7 +177,7 @@ struct NotebookModelTests {
     await provider.holdLibraryRead()
     let refresh = Task { await model.refresh() }
     await provider.waitForHeldLibraryRead()
-    await model.openLocalDraft(id: draft.id)
+    await model.open(.draft(id: draft.id))
     await provider.releaseLibraryRead()
     await refresh.value
     #expect(model.loadedDocument?.draft?.id == draft.id)
@@ -190,7 +190,7 @@ struct NotebookModelTests {
     await provider.failToday(true)
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.createNote()
+    await model.open(.new)
     let draft = try #require(model.loadedDocument?.draft)
     _ = try await model.persist(
       draftID: draft.id, accountID: draft.accountID, text: "A new published note", generation: 1)
@@ -213,7 +213,7 @@ struct NotebookModelTests {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [gist, other], starred: [gist])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: gist.id)
+    await model.open(.gist(id: gist.id))
     let document = try #require(model.loadedDocument)
     model.recordCommentCount(accountID: fixtureAccount.id, gistID: gist.id, total: 7)
     #expect(model.library.snapshot.notes.first(where: { $0.gistID == gist.id })?.commentCount == 7)
@@ -264,7 +264,7 @@ struct NotebookModelTests {
       account: fixtureAccount, gists: [try makeGist(id: "a", title: "A published note")])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "a")
+    await model.open(.gist(id: "a"))
     _ = try await model.openDraft(for: #require(model.loadedDocument))
     let target = try #require(model.libraryDeletionTarget(for: "a"))
     #expect(await provider.deletedIDs.isEmpty)
@@ -283,7 +283,7 @@ struct NotebookModelTests {
       account: fixtureAccount, gists: [try makeGist(id: "a", title: title)])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "a")
+    await model.open(.gist(id: "a"))
     let draft = try await model.openDraft(for: #require(model.loadedDocument))
     _ = try await model.persist(
       draftID: draft.id, accountID: draft.accountID, text: "An accepted edit", generation: 1)
@@ -342,7 +342,7 @@ struct NotebookModelTests {
       account: account, gists: [try makeGist(id: "frontmatter", title: "Content", content: source)])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "frontmatter")
+    await model.open(.gist(id: "frontmatter"))
     let document = try #require(model.loadedDocument)
     let draft = try await model.openDraft(for: document)
     let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
@@ -382,7 +382,7 @@ struct NotebookModelTests {
       draftID: kept.id, accountID: kept.accountID, text: text, generation: 1)
     let selections = NotebookSelectionStore()
     if remembered {
-      try selections.save(
+      selections.save(
         .init(gistID: nil, filename: blank.filename, draftID: blank.id),
         accountID: fixtureAccount.id)
     }
@@ -396,7 +396,7 @@ struct NotebookModelTests {
     #expect(model.isTodaySelected)
     #expect(today.isDiscardableBlank)
     #expect(model.documentError == nil)
-    #expect(try selections.selection(accountID: fixtureAccount.id)?.draftID == today.id)
+    #expect(selections.selection(accountID: fixtureAccount.id)?.draftID == today.id)
     #expect(try await provider.localState(accountID: fixtureAccount.id).drafts.first(where: {
       $0.id == kept.id
     })?.text.utf8
@@ -409,7 +409,7 @@ struct NotebookModelTests {
     let model = NotebookModel(provider: provider)
     await model.start()
     let today = try #require(model.loadedDocument?.draft)
-    await model.createNote()
+    await model.open(.new)
     let blank = try #require(model.loadedDocument?.draft)
     await model.refresh()
     #expect(model.loadedDocument?.draft?.id == blank.id)
@@ -425,7 +425,7 @@ struct NotebookModelTests {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.createNote()
+    await model.open(.new)
     let document = try #require(model.loadedDocument)
     let draft = try #require(document.draft)
     let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
@@ -450,7 +450,7 @@ struct NotebookModelTests {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.createNote()
+    await model.open(.new)
     let document = try #require(model.loadedDocument)
     let draft = try #require(document.draft)
     let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
@@ -503,8 +503,8 @@ struct NotebookModelTests {
     await model.start()
     let text = "Private e\u{301}\r\n日本語 👩🏽‍💻"
     let draft = try await provider.stageExistingDraft(gistID: "a", text: text)
-    await model.open(gistID: "a")
-    try model.remember(.init(gistID: "a", filename: draft.filename, draftID: draft.id))
+    await model.open(.gist(id: "a"))
+    model.remember(.init(gistID: "a", filename: draft.filename, draftID: draft.id))
     await provider.failSignOut(afterLocalCleanup: afterLocalCleanupFailure)
     if afterLocalCleanupFailure {
       await #expect(throws: URLError.self) { _ = try await model.perform(.signOut) }
@@ -516,7 +516,7 @@ struct NotebookModelTests {
     #expect(model.cachedLibrary == nil)
     #expect(model.library.snapshot.notes.isEmpty)
     #expect(model.library.loadState == .signedOut)
-    #expect(try selectionStore.selection(accountID: fixtureAccount.id)?.draftID == draft.id)
+    #expect(selectionStore.selection(accountID: fixtureAccount.id)?.draftID == draft.id)
     let kept = try await provider.localState(accountID: fixtureAccount.id).drafts
     #expect(kept.count == 1)
     #expect(kept.first?.text.utf8.elementsEqual(text.utf8) == true)
@@ -533,7 +533,7 @@ struct NotebookModelTests {
       account: fixtureAccount, gists: [try makeGist(id: "a", title: "Still open")])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "a")
+    await model.open(.gist(id: "a"))
     let document = try #require(model.loadedDocument)
     await provider.rejectSignOut()
     await #expect(throws: URLError.self) { _ = try await model.perform(.signOut) }
@@ -549,7 +549,7 @@ struct NotebookModelTests {
     await provider.setSpellingEnabled(false)
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "a")
+    await model.open(.gist(id: "a"))
     let document = try #require(model.loadedDocument)
     let draft = try await model.openDraft(for: document)
     let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
@@ -596,7 +596,7 @@ struct NotebookModelTests {
     #expect(controller.updateAutosave(isForeground: true) == nil)
     await controller.publish(reason: .background)
     #expect(await provider.publicationReasons.isEmpty)
-    await model.startToday()
+    await model.open(.today())
     #expect(model.loadedDocument?.draft?.id == draft.id)
     #expect(model.loadedDocument?.editingRequestID != nil)
     #expect(await provider.todayTargets.count == 1)
@@ -606,7 +606,7 @@ struct NotebookModelTests {
     controller.mode = .reading
     controller.requestCreationFocus()
     #expect(controller.mode == .reading, "A render does not repeat the same editing request.")
-    await model.startToday()
+    await model.open(.today())
     controller.adoptPresentation(try #require(model.loadedDocument))
     controller.requestCreationFocus()
     #expect(controller.mode == .source, "A fresh Today action focuses the retained editor again.")
@@ -617,15 +617,15 @@ struct NotebookModelTests {
     await provider.failToday(true)
     let model = NotebookModel(provider: provider)
     await model.start()
-    let failure = try #require(model.failedOpen)
-    #expect(failure.todayTarget == DailyNoteTarget())
-    #expect(!failure.focusesEditor)
+    let failed = try #require(model.opening)
+    #expect(failed.failure != nil)
+    #expect(failed.request == .today(DailyNoteTarget(), focusesEditor: false))
     #expect(model.documentError == nil)
     #expect(model.presentedDocument == nil)
     await provider.failToday(false)
-    await model.retryFailedOpen()
-    #expect(model.failedOpen == nil)
-    #expect(model.loadedDocument?.filename == failure.todayTarget?.filename)
+    await model.open(failed.request)
+    #expect(model.opening == nil)
+    #expect(model.loadedDocument?.filename == failed.filename)
     #expect(model.loadedDocument?.editingRequestID == nil)
     #expect(await provider.todayTargets.count == 2)
   }
@@ -665,7 +665,7 @@ struct NotebookModelTests {
     let document = try #require(model.loadedDocument)
     let draft = try #require(document.draft)
     let controller = NotebookSessionController(document: document, draft: draft, notebook: model)
-    await model.createNote()
+    await model.open(.new)
     #expect(await controller.finishLeavingNote())
     #expect(!model.localDrafts.contains(where: { $0.id == draft.id }))
     #expect(await provider.publicationReasons.isEmpty)
@@ -678,7 +678,7 @@ struct NotebookModelTests {
     let start = Task { await model.start() }
     await provider.waitForToday()
     #expect(model.openingTitle == "Today")
-    await model.createNote()
+    await model.open(.new)
     let chosen = try #require(model.loadedDocument)
     #expect(chosen.filename == "README.md")
     #expect(chosen.editingRequestID != nil)
@@ -723,13 +723,13 @@ struct NotebookModelTests {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.startToday()
+    await model.open(.today())
     let daily = try #require(model.loadedDocument?.draft)
     #expect(daily.gistID == nil)
     #expect(model.library.today.text != nil)
-    await model.createNote()
+    await model.open(.new)
     #expect(model.loadedDocument?.draft?.id != daily.id)
-    await model.startToday()
+    await model.open(.today())
     #expect(model.loadedDocument?.draft?.id == daily.id)
     #expect(model.loadedDocument?.text == daily.text)
     #expect(await provider.todayTargets.count == 1)
@@ -743,10 +743,10 @@ struct NotebookModelTests {
       additionalFiles: ["README.md": "The actual README", "Zebra.md": "Zebra source"])
     let model = NotebookModel(provider: StubNotebookProvider(account: fixtureAccount, gists: [gist]))
     await model.start()
-    await model.open(gistID: gist.id)
+    await model.open(.gist(id: gist.id))
     #expect(model.loadedDocument?.filename == "README.md")
     #expect(model.loadedDocument?.text == "The actual README")
-    await model.open(gistID: gist.id, filename: "Zebra.md")
+    await model.open(.gist(id: gist.id, filename: "Zebra.md"))
     #expect(model.loadedDocument?.filename == "Zebra.md")
     #expect(model.loadedDocument?.text == "Zebra source")
   }
@@ -755,7 +755,7 @@ struct NotebookModelTests {
     let provider = StubNotebookProvider(
       account: fixtureAccount, gists: [try makeGist(id: "a", title: "Original account")])
     let selections = NotebookSelectionStore()
-    try selections.save(
+    selections.save(
       .init(gistID: "a", filename: "README.md", draftID: nil), accountID: fixtureAccount.id)
     let model = NotebookModel(provider: provider, selections: selections)
     await model.start()
@@ -803,7 +803,7 @@ struct NotebookModelTests {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [original])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "a")
+    await model.open(.gist(id: "a"))
     model.library.query = "Original"
     model.library.selectedTagIDs = ["ideas"]
     await provider.setGists([
@@ -826,14 +826,14 @@ struct NotebookModelTests {
     let model = NotebookModel(provider: provider)
     await model.start()
     await provider.holdRead(id: "a")
-    let firstOpen = Task { await model.open(gistID: "a") }
+    let firstOpen = Task { await model.open(.gist(id: "a")) }
     await provider.waitForHeldRead()
-    await model.open(gistID: "b")
+    await model.open(.gist(id: "b"))
     await provider.releaseRead()
     await firstOpen.value
     #expect(model.loadedDocument?.gist?.id == "b")
     #expect(model.library.selectedNoteID == "b")
-    #expect(model.openingDocument == nil)
+    #expect(model.opening == nil)
   }
 
   @Test func cachedSelectionPresentsTheTargetSynchronouslyWithoutRemoteReads() async throws {
@@ -845,15 +845,14 @@ struct NotebookModelTests {
       ])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "a")
+    await model.open(.gist(id: "a"))
     let first = try #require(model.loadedDocument)
     let reads = await provider.readIDs
     #expect(model.beginOpeningRow(id: "b"))
     #expect(model.presentedDocument.map(model.chrome(for:))?.title == "Second")
     #expect(model.presentedDocument?.text == "Second source")
     #expect(model.presentedDocument?.refersToSameFile(as: first) == false)
-    #expect(model.openingDocument == nil)
-    #expect(model.openingDocument == nil)
+    #expect(model.opening == nil)
     #expect(await provider.readIDs == reads)
   }
 
@@ -866,7 +865,7 @@ struct NotebookModelTests {
       ])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "a")
+    await model.open(.gist(id: "a"))
     model.library.selectedNoteID = "b"
     #expect(model.loadedDocument?.gist?.id == "a")
     #expect(model.presentedDocument?.gist?.id == "b")
@@ -882,7 +881,7 @@ struct NotebookModelTests {
       ], cachesContent: false)
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "b")
+    await model.open(.gist(id: "b"))
     await provider.holdRead(id: "a")
     #expect(!model.beginOpeningRow(id: "a"))
     #expect(model.presentedDocument == nil)
@@ -896,7 +895,7 @@ struct NotebookModelTests {
     await provider.releaseRead()
     await first.value
     #expect(model.presentedDocument?.gist?.id == "b")
-    #expect(model.openingDocument == nil)
+    #expect(model.opening == nil)
   }
 
   @Test func failedOpenKeepsTheRequestedTitleAndRetriesTheExactFileWithoutShowingThePreviousNote() async throws {
@@ -909,20 +908,19 @@ struct NotebookModelTests {
       ], cachesContent: false)
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "a")
+    await model.open(.gist(id: "a"))
     await provider.setReadFailure(id: "b", fails: true)
-    await model.open(gistID: "b", filename: "Other.md", rowID: "b")
+    await model.open(.gist(id: "b", filename: "Other.md", rowID: "b"))
     #expect(model.loadedDocument?.gist?.id == "a")
     #expect(model.presentedDocument == nil)
-    #expect(model.failedOpen?.gistID == "b")
-    #expect(model.failedOpen?.filename == "Other.md")
-    #expect(model.failedOpen?.title == "Requested")
+    #expect(model.opening?.request == .gist(id: "b", filename: "Other.md", rowID: "b"))
+    #expect(model.opening?.title == "Requested")
+    #expect(model.opening?.failure != nil)
     #expect(model.library.selectedNoteID == "b")
     #expect(model.documentError == nil)
-    #expect(model.openingDocument == nil)
     await provider.setReadFailure(id: "b", fails: false)
-    await model.retryFailedOpen()
-    #expect(model.failedOpen == nil)
+    try await model.open(#require(model.opening).request)
+    #expect(model.opening == nil)
     #expect(model.presentedDocument?.text == "Exact selected file")
     #expect(model.presentedDocument?.rowID == "b")
   }
@@ -933,7 +931,7 @@ struct NotebookModelTests {
     await model.start()
     let reloads = await provider.localStateReads
     await provider.failRequests()
-    await model.createNote()
+    await model.open(.new)
     let document = try #require(model.presentedDocument)
     let draft = try #require(document.draft)
     #expect(document.editingRequestID != nil)
@@ -950,7 +948,7 @@ struct NotebookModelTests {
     )
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "a")
+    await model.open(.gist(id: "a"))
     await provider.failRequests()
     await model.refresh()
     #expect(model.library.snapshot.notes.filter { !$0.isDailyNote }.count == 1)
@@ -968,7 +966,7 @@ struct NotebookModelTests {
     )
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.open(gistID: "a")
+    await model.open(.gist(id: "a"))
     let replacement = Account(
       id: UUID(), login: "another-person", preferences: .init(metadata: [:]))
     await provider.setSignInAccount(replacement)
@@ -995,9 +993,9 @@ struct NotebookModelTests {
     let provider = StubNotebookProvider(
       account: fixtureAccount, gists: [try makeGist(id: "a", title: "Last chosen")])
     let selections = NotebookSelectionStore()
-    try selections.save(
+    selections.save(
       .init(gistID: "a", filename: "README.md", draftID: nil), accountID: fixtureAccount.id)
-    try selections.save(
+    selections.save(
       .init(gistID: "someone-elses-note", filename: "private.md", draftID: nil),
       accountID: UUID())
     let model = NotebookModel(provider: provider, selections: selections)
@@ -1014,7 +1012,7 @@ struct NotebookModelTests {
     let provider = StubNotebookProvider(
       account: fixtureAccount, gists: [try makeGist(id: "a", title: "Last chosen")])
     let selections = NotebookSelectionStore()
-    try selections.save(
+    selections.save(
       .init(gistID: "a", filename: "README.md", draftID: nil), accountID: fixtureAccount.id)
     let model = NotebookModel(provider: provider, selections: selections)
     await model.start()
@@ -1023,7 +1021,7 @@ struct NotebookModelTests {
     #expect(await provider.todayTargets.isEmpty)
     let target = DailyNoteTarget(
       date: Date(timeIntervalSince1970: 1_790_208_000), timeZone: TimeZone(secondsFromGMT: 0)!)
-    await model.startToday(target: target)
+    await model.open(.today(target))
     #expect(await provider.todayTargets == [target])
     #expect(model.loadedDocument?.draft?.filename == target.filename)
     #expect(model.loadedDocument?.editingRequestID != nil)
@@ -1050,7 +1048,7 @@ struct NotebookModelTests {
     let draft = try await provider.stageExistingDraft(
       gistID: "deleted", text: "Keep my exact draft")
     let selections = NotebookSelectionStore()
-    try selections.save(
+    selections.save(
       .init(gistID: "deleted", filename: draft.filename, draftID: nil),
       accountID: fixtureAccount.id)
     let model = NotebookModel(provider: provider, selections: selections)
@@ -1067,7 +1065,7 @@ struct NotebookModelTests {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.createNote()
+    await model.open(.new)
     let document = try #require(model.loadedDocument)
     let draft = try #require(document.draft)
     #expect(document.gist == nil)
@@ -1085,7 +1083,7 @@ struct NotebookModelTests {
     let other = Account(id: UUID(), login: "other", preferences: .init(metadata: [:]))
     let provider = StubNotebookProvider(account: other, gists: [])
     let selections = NotebookSelectionStore()
-    try selections.save(
+    selections.save(
       .init(gistID: "a", filename: "README.md", draftID: nil), accountID: fixtureAccount.id)
     let model = NotebookModel(provider: provider, selections: selections)
     await model.start()
@@ -1109,7 +1107,7 @@ struct NotebookModelTests {
     #expect(Set(model.library.matchingNotes.map(\.id)) == ["a", "b"])
     model.library.selectedTagIDs = ["ideas"]
     #expect(model.library.matchingNotes.map(\.id) == ["a"])
-    await model.open(gistID: "c")
+    await model.open(.gist(id: "c"))
     #expect(Set(model.library.matchingNotes.map(\.id)) == ["a", "c"])
     #expect(model.library.resultGistCount == 1)
   }
@@ -1237,7 +1235,7 @@ struct NotebookModelTests {
     await provider.failToday(true)
     let model = NotebookModel(provider: provider)
     await model.start()
-    await model.createNote()
+    await model.open(.new)
     let draft = try #require(model.loadedDocument?.draft)
     #expect(model.library.snapshot.notes.map(\.id) == [draft.id.uuidString])
     #expect(!model.library.hasKnownGistSnapshot)
@@ -1285,7 +1283,7 @@ struct NotebookModelTests {
     await model.openRow(id: "daily/2026-10-23.md")
     #expect(model.loadedDocument?.text == "The alpha day")
     #expect(model.library.selectedNoteID == "daily/2026-10-23.md")
-    await model.open(gistID: daily.id, filename: "2026-10-24.md")
+    await model.open(.gist(id: daily.id, filename: "2026-10-24.md"))
     #expect(model.library.selectedNoteID == "daily/2026-10-24.md")
     #expect(model.loadedDocument?.rowID == "daily/2026-10-24.md")
     let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
@@ -1311,7 +1309,7 @@ struct NotebookModelTests {
     await model.start()
     #expect(model.library.snapshot.notes.map(\.id) == [starred.id])
     #expect(model.library.dailyNoteCount == 0)
-    await model.open(gistID: starred.id, filename: filename)
+    await model.open(.gist(id: starred.id, filename: filename))
     #expect(model.library.selectedNoteID == starred.id)
     #expect(model.loadedDocument.map(model.chrome(for:))?.access == .readOnly)
     #expect(model.loadedDocument?.filename == filename)
@@ -1384,12 +1382,12 @@ struct NotebookModelTests {
     await provider.holdRead(id: daily.id)
     let opening = Task { await model.openRow(id: "daily/2026-10-24.md") }
     await provider.waitForHeldRead()
-    #expect(model.openingDocument?.rowID == "daily/2026-10-24.md")
+    #expect(model.opening?.rowID == "daily/2026-10-24.md")
     let deletion = try #require(model.libraryDeletionTarget(for: "daily/2026-10-24.md"))
     _ = try await model.perform(deletion.action)
     await provider.releaseRead()
     await opening.value
-    #expect(model.openingDocument == nil)
+    #expect(model.opening == nil)
     #expect(model.loadedDocument?.gist?.id != daily.id)
     #expect(model.library.selectedNoteID != "daily/2026-10-24.md")
     #expect(model.library.snapshot.notes.allSatisfy { $0.gistID != daily.id })
@@ -1557,7 +1555,7 @@ struct NotebookNavigationHostTests {
     let host = try await NavigationHost(
       provider: provider, autosave: autosave, sizeClass: .compact)
     defer { await host.close() }
-    await host.model.createNote()
+    await host.model.open(.new)
     let blank = try #require(host.model.loadedDocument?.draft)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     try await host.waitForKeyboard(visible: true)
@@ -1584,7 +1582,7 @@ struct NotebookNavigationHostTests {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let host = try await NavigationHost(provider: provider, sizeClass: .compact)
     defer { await host.close() }
-    await host.model.createNote()
+    await host.model.open(.new)
     let draft = try #require(host.model.loadedDocument?.draft)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     try await host.waitForKeyboard(visible: true)
@@ -1606,7 +1604,7 @@ struct NotebookNavigationHostTests {
       gists: [try makeGist(id: "kept", title: "Kept", content: "A real note")])
     let host = try await NavigationHost(provider: provider, sizeClass: .compact)
     defer { await host.close() }
-    await host.model.createNote()
+    await host.model.open(.new)
     let blank = try #require(host.model.loadedDocument?.draft)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     try await host.waitForKeyboard(visible: true)
@@ -1629,7 +1627,7 @@ struct NotebookNavigationHostTests {
       gists: [try makeGist(id: "a", title: "A retained thought", content: "A little room to think.")])
     let host = try await NavigationHost(provider: provider)
     defer { await host.close() }
-    await host.model.open(gistID: "a")
+    await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "A little room to think.") != nil }
     let editor = try #require(host.editor(text: "A little room to think."))
     editor.becomeFirstResponder()
@@ -1664,10 +1662,10 @@ struct NotebookNavigationHostTests {
       ], cachesContent: false)
     let host = try await NavigationHost(provider: provider)
     defer { await host.close() }
-    await host.model.open(gistID: "a")
+    await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "Previous source") != nil }
     await provider.setReadFailure(id: "b", fails: true)
-    await host.model.open(gistID: "b", filename: "Other.md", rowID: "result-b")
+    await host.model.open(.gist(id: "b", filename: "Other.md", rowID: "result-b"))
     try await host.waitUntil {
       host.descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title }.contains("Requested")
     }
@@ -1678,7 +1676,7 @@ struct NotebookNavigationHostTests {
     }
     Attachment.record(image, named: "failed-open-complete-workspace.png", as: .png)
     await provider.setReadFailure(id: "b", fails: false)
-    await host.model.retryFailedOpen()
+    try await host.model.open(#require(host.model.opening).request)
     try await host.waitUntil { host.editor(text: "Retried source") != nil }
     #expect(notebookAccessibilityElement("note-open-retry", in: host.window) == nil)
     #expect(host.model.loadedDocument?.gist?.id == "b")
@@ -1692,7 +1690,7 @@ struct NotebookNavigationHostTests {
       gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
     let host = try await NavigationHost(provider: provider, autosave: true, sizeClass: .compact)
     defer { await host.close() }
-    await host.model.open(gistID: "a")
+    await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "Current source") != nil }
     let editor = try #require(host.editor(text: "Current source"))
     editor.becomeFirstResponder()
@@ -1727,7 +1725,7 @@ struct NotebookNavigationHostTests {
       gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
     let host = try await NavigationHost(provider: provider, sizeClass: .compact)
     defer { await host.close() }
-    await host.model.open(gistID: "a")
+    await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "Current source") != nil }
     let editor = try #require(host.editor(text: "Current source"))
     editor.becomeFirstResponder()
@@ -1762,7 +1760,7 @@ struct NotebookNavigationHostTests {
       gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
     let host = try await NavigationHost(provider: provider, sizeClass: .compact)
     defer { await host.close() }
-    await host.model.open(gistID: "a")
+    await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "Current source") != nil }
     let editor = try #require(host.editor(text: "Current source"))
     editor.selectedRange = .init(location: 2, length: 6)
@@ -1810,7 +1808,7 @@ struct NotebookNavigationHostTests {
       gists: [try makeGist(id: "a", title: "Current", content: "Current source")])
     let host = try await NavigationHost(provider: provider)
     defer { await host.close() }
-    await host.model.open(gistID: "a")
+    await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "Current source") != nil }
     let previous = host.model.loadedDocument?.id
     host.routes.submit(.draft(accountID: UUID(), draftID: UUID()))
@@ -1852,7 +1850,7 @@ struct NotebookNavigationHostTests {
       ], cachesContent: false)
     let host = try await NavigationHost(provider: provider, autosave: true)
     defer { await host.close() }
-    await host.model.open(gistID: "a")
+    await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "First note source") != nil }
     let editor = try #require(host.editor(text: "First note source"))
     editor.becomeFirstResponder()
@@ -1885,7 +1883,7 @@ struct NotebookNavigationHostTests {
       ], cachesContent: false)
     let host = try await NavigationHost(provider: provider)
     defer { await host.close() }
-    await host.model.open(gistID: "a")
+    await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "First note source") != nil }
     let original = try #require(host.editor(text: "First note source"))
     await provider.holdRead(id: "b")
@@ -1930,7 +1928,7 @@ struct NotebookNavigationHostTests {
     let reads = await provider.readIDs
     #expect(host.model.beginOpeningRow(id: "b"))
     #expect(host.model.presentedDocument?.text == "Second note source")
-    #expect(host.model.openingDocument == nil)
+    #expect(host.model.opening == nil)
     try await host.waitUntil { host.editor(text: "Second note source") != nil }
     #expect(first.window == nil)
     #expect(await provider.readIDs == reads)
@@ -1953,11 +1951,11 @@ struct NotebookNavigationHostTests {
       gists: [try makeGist(id: "a", title: "Previous note", content: "Previous source")])
     let host = try await NavigationHost(provider: provider)
     defer { await host.close() }
-    await host.model.open(gistID: "a")
+    await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "Previous source") != nil }
     let previous = try #require(host.editor(text: "Previous source"))
     await provider.failRequests()
-    await host.model.createNote()
+    await host.model.open(.new)
     let draft = try #require(host.model.presentedDocument?.draft)
     try await host.waitUntil { host.editor(text: draft.text)?.isFirstResponder == true }
     let editor = try #require(host.editor(text: draft.text))
@@ -1976,7 +1974,7 @@ struct NotebookNavigationHostTests {
     let provider = StubNotebookProvider(account: fixtureAccount, gists: [])
     let host = try await NavigationHost(provider: provider)
     defer { await host.close() }
-    await host.model.startToday()
+    await host.model.open(.today())
     let draft = try #require(host.model.presentedDocument?.draft)
     #expect(!draft.text.isEmpty)
     try await host.waitUntil { host.editor(text: draft.text)?.isFirstResponder == true }
@@ -2013,7 +2011,7 @@ private struct NavigationHost {
     layout.select(initialMode)
     let selections = NotebookSelectionStore()
     if let restoredSelection {
-      try selections.save(restoredSelection, accountID: fixtureAccount.id)
+      selections.save(restoredSelection, accountID: fixtureAccount.id)
     }
     model = NotebookModel(provider: provider, selections: selections)
     let scene = try #require(
@@ -2196,7 +2194,7 @@ private struct NavigationHost {
           loaded: \(String(describing: model.loadedDocument?.id))
           presented: \(String(describing: model.presentedDocument?.id))
           opening: \(String(describing: model.openingTitle))
-          failed: \(String(describing: model.failedOpen))
+          opening: \(String(describing: model.opening))
           error: \(String(describing: model.documentError))
           route: \(String(describing: routes.pending))
           library visible: \(isLibraryVisible)

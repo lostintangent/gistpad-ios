@@ -76,21 +76,22 @@ struct NotebookOpeningView: View {
 }
 
 struct NotebookFailedOpeningView: View {
-  let failure: NotebookFailedOpen
+  let opening: NotebookOpening
+  let message: String
   let retry: () -> Void
 
   var body: some View {
     ContentUnavailableView {
       Label("Couldn't Open Note", systemImage: "exclamationmark.circle")
     } description: {
-      Text(failure.message)
+      Text(message)
     } actions: {
       Button("Try Again", action: retry)
         .buttonStyle(.borderedProminent)
         .accessibilityIdentifier("note-open-retry")
     }
-    .navigationTitle(failure.title)
-    .navigationSubtitle(failure.filename ?? "")
+    .navigationTitle(opening.title)
+    .navigationSubtitle(opening.filename ?? "")
     .navigationBarTitleDisplayMode(.inline)
   }
 }

@@ -110,9 +110,9 @@ struct LiveNotebookWorkspace: View {
     } detail: {
       NavigationStack {
         GeometryReader { geometry in
-          if let failure = notebook.failedOpen {
-            NotebookFailedOpeningView(failure: failure) {
-              Task { await notebook.retryFailedOpen() }
+          if let opening = notebook.opening, let failure = opening.failure {
+            NotebookFailedOpeningView(opening: opening, message: failure) {
+              Task { await notebook.open(opening.request) }
             }
           } else if let document = notebook.presentedDocument {
             if let active, active.document.refersToSameFile(as: document) {
@@ -123,7 +123,7 @@ struct LiveNotebookWorkspace: View {
             }
           } else if let title = notebook.openingTitle {
             NotebookOpeningView(title: title)
-              .id(notebook.openingDocument?.rowID ?? notebook.library.selectedNoteID)
+              .id(notebook.opening?.rowID ?? notebook.library.selectedNoteID)
           } else {
             NotebookOpeningView(title: String(localized: "Today"))
           }
@@ -211,7 +211,7 @@ struct LiveNotebookWorkspace: View {
     .onChange(of: notebook.library.selectedNoteID) { _, selected in
       guard let selected, selected == notebook.library.selectedNoteID,
         selected != notebook.loadedDocument?.rowID,
-        selected != notebook.openingDocument?.rowID, selected != notebook.failedOpen?.rowID
+        selected != notebook.opening?.rowID
       else { return }
       selectRow(selected)
     }
@@ -882,7 +882,7 @@ struct LiveNotebookWorkspace: View {
     }
     openRequest = UUID()
     Task {
-      await notebook.open(gistID: gistID, filename: filename)
+      await notebook.open(.gist(id: gistID, filename: filename))
     }
   }
 
@@ -958,17 +958,10 @@ struct LiveNotebookWorkspace: View {
     }
     // A completed restoration must not reopen detail after returning to Library.
     if notebook.library.selectedNoteID != nil, document.revealsDetail { compactColumn = .detail }
-    do {
-      try notebook.remember(
-        NotebookSelection(
-          gistID: controller.draft.gistID, filename: controller.draft.filename,
-          draftID: controller.draft.id))
-    } catch {
-      Logger(subsystem: "dev.gistpad.GistPad", category: "Document")
-        .error("Remembering document failed: \(String(reflecting: type(of: error)), privacy: .public)")
-      actionMessage = String(
-        localized: "This note is open, but its selection couldn't be remembered for next time.")
-    }
+    notebook.remember(
+      NotebookSelection(
+        gistID: controller.draft.gistID, filename: controller.draft.filename,
+        draftID: controller.draft.id))
     return true
   }
 
@@ -1255,14 +1248,14 @@ struct LiveNotebookWorkspace: View {
 
   private func createNote() {
     guard canSwitchDocument else { return }
-    Task { await notebook.createNote() }
+    Task { await notebook.open(.new) }
   }
 
   private func startToday() {
     guard canSwitchDocument else { return }
     compactColumn = .detail
     let target = DailyNoteTarget()
-    Task { await notebook.startToday(target: target) }
+    Task { await notebook.open(.today(target)) }
   }
 
   private struct RouteReadiness: Hashable {
@@ -1308,11 +1301,11 @@ struct LiveNotebookWorkspace: View {
     else { return }
     switch route {
     case .today:
-      await notebook.startToday()
+      await notebook.open(.today())
     case .addToToday:
       showingAddToToday = true
     case .note(let gistID, let filename):
-      await notebook.open(gistID: gistID, filename: filename)
+      await notebook.open(.gist(id: gistID, filename: filename))
       guard !Task.isCancelled, routes.pending == route else { return }
       await activateLoadedDocument()
     case .draft(let accountID, let draftID):
@@ -1321,12 +1314,12 @@ struct LiveNotebookWorkspace: View {
         routes.clear()
         return
       }
-      await notebook.openLocalDraft(id: draftID)
+      await notebook.open(.draft(id: draftID))
       guard !Task.isCancelled, routes.pending == route else { return }
       await activateLoadedDocument()
     }
     guard !Task.isCancelled, routes.pending == route else { return }
-    if notebook.presentedDocument != nil || notebook.failedOpen != nil {
+    if notebook.presentedDocument != nil || notebook.opening?.failure != nil {
       compactColumn = .detail
     }
     routes.clear()

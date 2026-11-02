@@ -14,19 +14,20 @@ final class NotebookSelectionStore {
 
   init(defaults: UserDefaults? = nil) { self.defaults = defaults }
 
-  func selection(accountID: UUID) throws -> NotebookSelection? {
+  /// The note to reopen at launch. One that can't be read is simply forgotten.
+  func selection(accountID: UUID) -> NotebookSelection? {
     guard let defaults else { return memory[accountID] }
-    guard let data = defaults.data(forKey: key(accountID)) else { return nil }
-    return try JSONDecoder().decode(NotebookSelection.self, from: data)
+    return defaults.data(forKey: key(accountID)).flatMap {
+      try? JSONDecoder().decode(NotebookSelection.self, from: $0)
+    }
   }
 
-  func save(_ selection: NotebookSelection, accountID: UUID) throws {
-    let data = try JSONEncoder().encode(selection)
-    if let defaults {
-      defaults.set(data, forKey: key(accountID))
-    } else {
+  func save(_ selection: NotebookSelection, accountID: UUID) {
+    guard let defaults else {
       memory[accountID] = selection
+      return
     }
+    defaults.set(try? JSONEncoder().encode(selection), forKey: key(accountID))
   }
 
   func clear(accountID: UUID) {
