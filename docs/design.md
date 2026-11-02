@@ -65,7 +65,7 @@ Swipe trailing for **Delete** (red, confirmed) and **Archive** or **Unarchive** 
 
 Search is `.searchable` with `.searchToolbarBehavior(.minimize)`: a magnifier that expands in place, matching titles. Tags filter separately. While tags are selected, a strip above Pinned shows them as chips, the matching count in secondary ("3 gists") and an `xmark.circle.fill` **Clear Tag Filter** button. No tags, no strip. No matches shows `ContentUnavailableView.search`.
 
-The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and **Search** and **Tags** at the bottom, like Notes. Tags hides while searching, is disabled without tags and turns the accent while filtering, keeping the outline `tag`. In the Open sidebar, New Gist and Today sit in the rail, and Tags and Settings in secondary actions. Pull to refresh.
+The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and **Search** and **Tags** at the bottom, like Notes. Tags hides while searching, is disabled without tags and turns system blue while filtering, like a confirm button, keeping the outline `tag`. In the Open sidebar, New Gist and Today sit in the rail, and Tags and Settings in secondary actions. Pull to refresh.
 
 | State | Title, message and action |
 | --- | --- |
@@ -129,13 +129,13 @@ Settings is a small Form:
 | Page | `systemBackground`, opaque |
 | Ink | `label`, with `secondaryLabel` for metadata |
 | Chrome | Primary monochrome, never the accent |
-| Caret and selection | System blue |
+| Caret, selection, confirm buttons and the active Tags filter | System blue |
 | Destructive | System red |
 | Complete | System green |
 | Overdue | System orange |
 | Accent | The user's saved web accent, sky `#0EA5E9` by default |
 
-The accent appears only in the Today widget, Preview's accent details, comment highlights, the Comments Post button and its own Settings swatch. Text targets 4.5:1, and 7:1 with Increased Contrast.
+The accent appears only in the Today widget, Preview's accent details, comment highlights and its own Settings swatch. Text targets 4.5:1, and 7:1 with Increased Contrast.
 
 **Tag labels** fill with the exact saved color at full opacity, with black or white ink, whichever contrasts more. `.footnote` medium, 8 by 4 pt padding, 8-pt corners. No dot, overlay or opacity. A missing color uses the neutral system fill. Increased Contrast adds a primary outline.
 
@@ -195,7 +195,7 @@ In compact width, Comments is a sheet at medium and large (large at accessibilit
 
 Threads show newest first. Each comment has an avatar, a semibold author, a relative date and a selectable Markdown body with system links. Replies are disclosures indented 12 pt. The selected thread gets a 12-pt rounded tertiary surface and scrolls into view. **Reply**, **Show Passage**, **Show Full Quote** and **Show Less** are borderless secondary buttons with 44-pt targets. Your comments offer Edit and Delete, which confirms with **Delete [author]'s comment from GitHub?** / **Delete Comment**.
 
-The composer sits in the bottom safe-area bar, like Messages: a growing interactive glass field with 22-pt corners and the reply or quote context inside it, beside a circular **Post** button. Post is `arrow.up`, `.glassProminent` in the accent, large, with Command-Return. The thread's bottom scroll edge is soft, so the field and Post float over the thread with no band or divider.
+The composer sits in the bottom safe-area bar, like Messages: a growing interactive glass field with 22-pt corners and the reply or quote context inside it, beside a circular **Post** button. Post is `arrow.up`, `.glassProminent` in system blue, large, with Command-Return. The thread's bottom scroll edge is soft, so the field and Post float over the thread with no band or divider.
 
 States: "Loading comments" shows only on a first load with nothing cached. Reopening Comments shows the loaded thread straight away and refreshes quietly, and pull to refresh uses the system spinner. Failures say "Comments couldn't be loaded" or "Couldn't reach GitHub. Check your connection and try again." with Try Again. An empty conversation is just the composer, with no message.
 
