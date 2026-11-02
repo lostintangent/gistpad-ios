@@ -19,17 +19,15 @@ struct PlatformTests {
     defer { fixture.cleanUp() }
     let stale = try #require(try LibrarySnapshot.read()?.today.tasks.first)
     let typed = "# Today\n\nStill typing\n- [ ] A real task\n"
-    let draft = try await fixture.today().draft
-    _ = try await fixture.store.persist(
-      id: draft.id, accountID: fixture.account.id, text: typed, generation: draft.generation + 1)
+    let session = try await fixture.session()
+    try await fixture.type(typed, in: session)
     await #expect(throws: PlatformError.staleTask) {
       try await fixture.bridge.setTask(id: stale.id, completed: true)
     }
-    let kept = try await fixture.store.draft(id: draft.id, accountID: fixture.account.id)
+    let kept = try await fixture.store.draft(id: session.draft.id, accountID: fixture.account.id)
     #expect(kept.text == typed)
 
     try await fixture.bridge.refresh()
-    let session = try await fixture.session()
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)
@@ -71,24 +69,22 @@ struct PlatformTests {
   @Test func addToTodayLandsAfterTodaysPublishIsCutOffAndPublishesOnceOnline() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
-    let draft = try await fixture.today().draft
-    let typed = draft.text + "- [ ] Written offline\n"
-    _ = try await fixture.store.persist(
-      id: draft.id, accountID: fixture.account.id, text: typed, generation: draft.generation + 1)
+    let session = try await fixture.session()
+    let typed = session.editor.text + "- [ ] Written offline\n"
+    try await fixture.type(typed, in: session)
     // Today's publish goes out and is cut off, so GitHub may or may not have it.
     fixture.fixture.fail("PATCH")
-    _ = try? await fixture.library.publish(draftID: draft.id, accountID: fixture.account.id)
-    #expect(try await fixture.store.draft(id: draft.id, accountID: fixture.account.id)
+    await session.publish()
+    #expect(try await fixture.store.draft(id: session.draft.id, accountID: fixture.account.id)
       .attemptedContent == typed)
     fixture.fixture.restore()
 
-    let session = try await fixture.session()
     try await fixture.bridge.addToToday(text: "A thought", asTask: true, target: DailyNote.Day())
     #expect(session.editor.text == typed + "- [ ] A thought\n")
     #expect(session.saveState == .savedLocally)
     #expect(fixture.publishes.isEmpty)
 
-    await session.leave()
+    await fixture.library.publishUnsyncedEdits()
     #expect(fixture.publishes == ["PATCH /gists/daily123"])
     #expect(fixture.fixture.remote("daily123", DailyNote.Day().filename) == session.editor.text)
     #expect(session.saveState == .savedToGitHub)
@@ -150,11 +146,11 @@ private struct PlatformFixture {
           "another.md": "Another note\n",
         ])
     }
-    // The bridge and the fixture share one GitHubSync, as the app connects them at launch.
+    // Connected the way the app launches, so every file the library opens reaches the bridge.
     let sync = GitHubSync(accounts: fixture.accounts, drafts: fixture.store)
-    let library = Library(sync: sync, lastOpened: fixture.lastOpened)
+    let library = PlatformBridge.connect(sync, store: fixture.store, lastOpened: fixture.lastOpened)
     await library.start()
-    let bridge = PlatformBridge(sync: sync, store: fixture.store, library: library)
+    let bridge = try #require(PlatformBridge.shared)
     try await bridge.refresh()
     return Self(
       fixture: fixture, sync: sync, library: library, bridge: bridge)
@@ -168,13 +164,16 @@ private struct PlatformFixture {
     try await sync.today(accountID: account.id, target: DailyNote.Day())
   }
 
+  /// Today, open as the app opens it at launch.
   func session() async throws -> FileSession {
-    let today = try await today()
-    let file = File(draft: today.draft, gist: today.gist)
-    let session = FileSession(
-      file: file, draft: today.draft, library: library)
-    bridge.register(session)
-    return session
+    try #require(library.sessions[try await today().draft.id])
+  }
+
+  /// Typing in `session`, saved on this iPhone.
+  func type(_ text: String, in session: FileSession) async throws {
+    session.editor.textView.text = text
+    session.editor.textViewDidChange(session.editor.textView)
+    try #require(await session.waitForLocalSave())
   }
 
   func cleanUp() {
