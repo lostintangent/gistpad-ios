@@ -807,11 +807,12 @@ struct RootView: View {
   }
 
   #if DEBUG
-  /// Presents a fixture launch's `--sheet` once its file is open.
+  /// Presents a fixture launch's `--sheet` once its file is open and activated. The link can
+  /// clear before the file it opened activates, and Comments only opens for the activated file.
   private func presentFixtureSheet() {
-    guard let fixtureSheet = FixtureLaunch.pendingSheet, pending.link == nil, let active else {
-      return
-    }
+    guard let fixtureSheet = FixtureLaunch.pendingSheet, pending.link == nil, let active,
+      comments.sessionID == active.editor.id
+    else { return }
     FixtureLaunch.pendingSheet = nil
     let actions = gistActions(active)
     switch fixtureSheet {
