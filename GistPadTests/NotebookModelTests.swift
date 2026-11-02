@@ -1385,11 +1385,12 @@ struct NotebookModelTests {
   }
 
   @Test func blockedNotesAndReconnectsCannotPublish() {
-    #expect(NotebookModel.interfaceSaveState(.savedLocally) == .savedLocally)
-    #expect(NotebookModel.interfaceSaveState(.savedToGitHub) == .savedToGitHub)
-    #expect(NotebookModel.interfaceSaveState(.reconnect) == .reconnectRequired)
-    #expect(!NotebookModel.interfaceSaveState(.failed(.incompleteRemote)).canPublish)
-    #expect(!NotebookModel.interfaceSaveState(.failed(.readOnly)).canPublish)
+    #expect(PublishState.savedLocally.canPublish)
+    #expect(PublishState.failed(.network).canPublish)
+    #expect(!PublishState.savedToGitHub.canPublish)
+    #expect(!PublishState.reconnect.canPublish)
+    #expect(!PublishState.failed(.incompleteRemote).canPublish)
+    #expect(!PublishState.failed(.readOnly).canPublish)
   }
 
   @Test func launchRestoresTheAccountScopedFileWithoutCreatingAnything() async throws {

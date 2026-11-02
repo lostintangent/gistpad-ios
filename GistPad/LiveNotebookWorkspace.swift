@@ -48,14 +48,6 @@ struct LiveNotebookWorkspace: View {
       notebook: notebook, provider: commentsProvider))
   }
 
-  #if DEBUG
-  func captureColumnVisibility(_ visibility: NavigationSplitViewVisibility) -> Self {
-    var workspace = self
-    workspace._columnVisibility = State(initialValue: visibility)
-    return workspace
-  }
-  #endif
-
   private var active: NotebookSessionController? {
     activeID.flatMap { sessions[$0] }
   }
@@ -94,7 +86,7 @@ struct LiveNotebookWorkspace: View {
       if notebook.account == nil {
         NavigationStack {
           LibraryView(
-            model: notebook.library, actions: libraryActions,
+            model: notebook.library, actions: libraryActions, isSidebar: horizontalSizeClass == .regular,
             expandedCollections: libraryCollections, isPinnedExpanded: pinnedExpanded)
         }
       } else {
@@ -109,6 +101,7 @@ struct LiveNotebookWorkspace: View {
     ) {
       LibraryView(
         model: notebook.library, actions: libraryActions,
+        isSidebar: horizontalSizeClass == .regular,
         isTodaySelected: notebook.isTodaySelected,
         expandedCollections: libraryCollections,
         isPinnedExpanded: pinnedExpanded)
@@ -213,6 +206,9 @@ struct LiveNotebookWorkspace: View {
     }
     .task(id: searchInput) { await notebook.search() }
     .task(id: routeReadiness) { await receivePendingRoute() }
+    #if DEBUG
+    .onChange(of: [activeID, routes.pending?.id.uuidString], initial: true) { presentFixtureSheet() }
+    #endif
     .onChange(of: autosaveInput, initial: true) {
       for controller in sessions.values {
         controller.updateAutosave(isForeground: scenePhase == .active)
@@ -869,13 +865,6 @@ struct LiveNotebookWorkspace: View {
         reviewTarget = .init(controller: controller, review: try controller.reviewContext())
       } catch { actionMessage = NotebookModel.message(for: error) }
     }
-    actions.retry = {
-      if case .localFailure = controller.saveState {
-        controller.retryLocalSave()
-      } else {
-        publish(controller)
-      }
-    }
     actions.reconnect = {
       Task {
         await notebook.signIn()
@@ -1218,9 +1207,6 @@ struct LiveNotebookWorkspace: View {
   private func execute(_ action: NotebookAction, accountID: UUID) async throws
     -> NotebookActionResult
   {
-    #if DEBUG
-    LibraryPublicationHold.shared.releaseForDeletion(action)
-    #endif
     guard notebook.account?.id == accountID, notebook.pendingAccount == nil else {
       throw AccountError.accountChanged
     }
@@ -1412,6 +1398,22 @@ struct LiveNotebookWorkspace: View {
         && actionMessage == nil && notebook.documentError == nil,
       isEditing: active?.session.isComposing == true || active?.session.writingToolsActive == true)
   }
+
+  #if DEBUG
+  /// Presents a fixture launch's `--sheet` once its note is open.
+  private func presentFixtureSheet() {
+    guard let sheet = FixtureLaunch.pendingSheet, routes.pending == nil, let active else { return }
+    FixtureLaunch.pendingSheet = nil
+    let actions = noteActions(active)
+    switch sheet {
+    case .settings: showingSettings = true
+    case .tags: actions.tags?()
+    case .intelligence: actions.intelligence?()
+    case .comments: actions.comments?()
+    case .today: break
+    }
+  }
+  #endif
 
   private func receivePendingRoute() async {
     guard routeReadiness.isReady, !routeReadiness.isEditing,

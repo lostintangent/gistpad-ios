@@ -1,4 +1,5 @@
 import Foundation
+import GistPadSync
 
 public enum NoteMode: String, Sendable {
     case reading, source, split
@@ -14,54 +15,19 @@ public struct NoteFile: Equatable, Identifiable, Sendable {
     }
 }
 
-public enum NoteSaveState: Equatable, Sendable {
-    case unsaved
-    case savedLocally
-    case offline
-    case savingToGitHub
-    case savedToGitHub
-    case cloudFailure(message: String)
-    case localFailure(message: String)
-    case remoteChange
-    case reconnectRequired
-    case creationUncertain
-    case publicationUncertain
-    case publicationBlocked(message: String)
-
+extension PublishState {
+    /// The file hasn't reached GitHub, and nothing needs you before it can.
     public var canPublish: Bool {
         switch self {
-        case .unsaved, .savedLocally, .offline, .cloudFailure: true
+        case .savedLocally, .failed(.network), .failed(.http): true
         default: false
         }
     }
 
-    func showsManualSave(isAutoSaveEnabled: Bool) -> Bool {
-        if case .cloudFailure = self { return true }
+    /// Publish shows when autosave is off or a publish that can be retried didn't land.
+    func showsPublish(isAutoSaveEnabled: Bool) -> Bool {
+        if case .failed = self, canPublish { return true }
         return !isAutoSaveEnabled
-    }
-
-    var issue: (title: String, symbol: String, details: String?)? {
-        switch self {
-        case .cloudFailure(let message):
-            return (String(localized: "Couldn't sync to GitHub.", bundle: .module), "exclamationmark.circle", message)
-        case .localFailure(let message):
-            return (String(localized: "Changes aren't saved. Keep this note open.", bundle: .module), "exclamationmark.triangle", message)
-        case .remoteChange:
-            return (String(localized: "This note changed elsewhere.", bundle: .module), "exclamationmark.circle", nil)
-        case .reconnectRequired:
-            return (String(localized: "Reconnect GitHub to sync.", bundle: .module), "person.crop.circle", nil)
-        case .creationUncertain:
-            return (
-                String(localized: "GitHub couldn't confirm creation.", bundle: .module), "exclamationmark.circle",
-                String(localized: "GitHub may already have created this gist. Check GitHub before trying again.", bundle: .module)
-            )
-        case .publicationUncertain:
-            return (String(localized: "GitHub couldn't confirm the last save.", bundle: .module), "exclamationmark.circle", nil)
-        case .publicationBlocked(let message):
-            return (String(localized: "Publishing is unavailable.", bundle: .module), "exclamationmark.shield", message)
-        case .unsaved, .savedLocally, .offline, .savingToGitHub, .savedToGitHub:
-            return nil
-        }
     }
 }
 
@@ -115,7 +81,6 @@ public struct NoteChrome: Equatable, Sendable {
 @MainActor
 public struct NoteActions {
     public var save: () -> Void = {}
-    public var retry: () -> Void = {}
     public var reconnect: () -> Void = {}
     public var reviewChanges: () -> Void = {}
     public var share: () -> Void = {}
@@ -123,8 +88,6 @@ public struct NoteActions {
     public var focus: () -> Void = {}
     public var find: () -> Void = {}
     public var intelligence: () -> Void = {}
-    public var publishAsNew: (() -> Void)?
-    public var discardLocalCopy: (() -> Void)?
     public var openInGitHub: (() -> Void)?
     public var comments: (() -> Void)?
     public var tags: (() -> Void)?

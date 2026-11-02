@@ -17,7 +17,7 @@ final class NotebookSessionController {
   private(set) var document: NotebookDocument
   let session: DocumentSession
   private(set) var draft: DraftSnapshot
-  private(set) var saveState: NoteSaveState
+  private(set) var saveState: PublishState
   private(set) var isPublishing = false
   private(set) var isPerformingDestructiveAction = false
   private(set) var metadataError: String?
@@ -52,13 +52,7 @@ final class NotebookSessionController {
     session = DocumentSession(
       documentID: document.id, text: draft.text, generation: draft.generation,
       showsFrontMatter: notebook.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
-    saveState = NotebookModel.interfaceSaveState(draft.state)
-    if document.isRecovery {
-      saveState = .publicationBlocked(
-        message: String(
-          localized: "The original note is unavailable. This local copy is preserved for recovery.")
-      )
-    }
+    saveState = document.isRecovery ? .failed(.readOnly) : draft.state
     if draft.baseContent == nil { mode = .source }
     session.textView.isEditable = self.document.chrome.access.canEdit
     applyWritingPreferences()
@@ -79,7 +73,7 @@ final class NotebookSessionController {
       return .idle
     }
     switch saveState {
-    case .cloudFailure, .localFailure, .remoteChange, .reconnectRequired, .publicationBlocked:
+    case .failed, .conflict, .reconnect:
       return .idle
     default:
       return problem.status(
@@ -179,9 +173,7 @@ final class NotebookSessionController {
   func markRecovery() {
     document.isRecovery = true
     document.libraryRowID = draft.id.uuidString
-    saveState = .publicationBlocked(
-      message: String(
-        localized: "The original note is unavailable. This local copy is preserved for recovery."))
+    saveState = .failed(.readOnly)
   }
 
   func inspectRemoteChanges() async {
@@ -225,7 +217,7 @@ final class NotebookSessionController {
       {
         draft = recorded
         document.draft = recorded
-        saveState = NotebookModel.interfaceSaveState(recorded.state)
+        saveState = recorded.state
       }
       remoteInspectionProblem = nil
     } catch {
@@ -352,11 +344,6 @@ final class NotebookSessionController {
       committed.generation == (changed ? expectedGeneration + 1 : expectedGeneration),
       committed.text.utf8.elementsEqual(result.utf8)
     else {
-      saveState = .localFailure(
-        message: String(
-          localized:
-            "The accepted edit couldn't be matched to this editor. Keep it open to recover both versions."
-        ))
       throw NotebookEditError.invalidCommittedEdit
     }
     if changed {
@@ -365,16 +352,12 @@ final class NotebookSessionController {
     draft = committed
     document.draft = committed
     document.chrome = notebook.chrome(gist: document.gist, draft: committed)
-    saveState = NotebookModel.interfaceSaveState(committed.state)
+    saveState = committed.state
     guard await waitForLocalSave() else { throw NotebookEditError.localPersistenceFailed }
   }
 
-  func retryLocalSave() {
-    persist(text: session.text, generation: session.generation)
-  }
-
   func didReconnect() {
-    if saveState == .reconnectRequired { saveState = .savedLocally }
+    if saveState == .reconnect { saveState = .savedLocally }
   }
 
   // Library retries can save this note while it is open, so its persisted state is re-read.
@@ -391,9 +374,7 @@ final class NotebookSessionController {
     draft = persisted
     document.draft = persisted
     document.chrome = notebook.chrome(gist: document.gist, draft: persisted)
-    saveState =
-      session.generation == persisted.generation
-      ? NotebookModel.interfaceSaveState(persisted.state) : .unsaved
+    saveState = session.generation == persisted.generation ? persisted.state : .savedLocally
     guard persisted.state == .savedToGitHub,
       let gist = try? await notebook.adoptPublication(persisted)
     else { return }
@@ -427,7 +408,6 @@ final class NotebookSessionController {
       } catch {
         logger.error(
           "Blank draft cleanup failed: \(String(reflecting: type(of: error)), privacy: .public)")
-        saveState = .localFailure(message: NotebookModel.message(for: error))
         return false
       }
     }
@@ -459,7 +439,7 @@ final class NotebookSessionController {
       publicationAllowed(reason: reason)
     else { return }
     let expectedGeneration = session.generation
-    saveState = .savingToGitHub
+    saveState = .savingToGitHub(generation: expectedGeneration)
     do {
       let saved = try await notebook.publish(
         draftID: draft.id, accountID: draft.accountID, reason: reason,
@@ -475,9 +455,7 @@ final class NotebookSessionController {
       draft = saved
       document.draft = saved
       document.chrome = notebook.chrome(gist: document.gist, draft: saved)
-      saveState =
-        session.generation == saved.generation
-        ? NotebookModel.interfaceSaveState(saved.state) : .unsaved
+      saveState = session.generation == saved.generation ? saved.state : .savedLocally
       if saved.state == .savedToGitHub || saved.state == .savedLocally {
         if reason == .background || reason == .leaving, Task.isCancelled || !shouldContinue() { return }
         do {
@@ -491,10 +469,9 @@ final class NotebookSessionController {
         } catch is CancellationError {
           do {
             draft = try await notebook.draftSnapshot(id: draft.id, accountID: draft.accountID)
-            saveState = NotebookModel.interfaceSaveState(draft.state)
+            saveState = draft.state
           } catch {
             logger.error("Cancelled save state couldn't be read: \(String(reflecting: type(of: error)), privacy: .public)")
-            saveState = .localFailure(message: NotebookModel.message(for: error))
           }
         } catch {
           logger.error(
@@ -516,13 +493,11 @@ final class NotebookSessionController {
         draft = persisted
         switch persisted.state {
         case .failed, .conflict, .reconnect, .savingToGitHub:
-          saveState = NotebookModel.interfaceSaveState(persisted.state)
+          saveState = persisted.state
           return
         case .savedLocally, .savedToGitHub:
           if error is CancellationError {
-            saveState =
-              session.generation == persisted.generation
-              ? NotebookModel.interfaceSaveState(persisted.state) : .unsaved
+            saveState = session.generation == persisted.generation ? persisted.state : .savedLocally
             return
           }
           break
@@ -531,16 +506,9 @@ final class NotebookSessionController {
         logger.error(
           "Publication-state reload failed: \(String(reflecting: type(of: error)), privacy: .public)"
         )
-        saveState = .localFailure(
-          message: String(
-            localized:
-              "The save result couldn't be read from this iPhone. Keep the editor open and retry the local save."
-          ))
         return
       }
-      saveState =
-        error is AccountError
-        ? .reconnectRequired : .cloudFailure(message: NotebookModel.message(for: error))
+      saveState = error is AccountError ? .reconnect : .failed(.network)
     }
   }
 
@@ -549,7 +517,6 @@ final class NotebookSessionController {
   }
 
   private func persist(text: String, generation: UInt64) {
-    saveState = .unsaved
     let previous = persistence
     let draftID = draft.id
     let accountID = draft.accountID
@@ -560,26 +527,13 @@ final class NotebookSessionController {
         let saved = try await notebook.persist(
           draftID: draftID, accountID: accountID, text: text, generation: generation)
         draft = saved
-        if session.generation == saved.generation {
-          saveState =
-            document.isRecovery
-            ? .publicationBlocked(
-              message: String(
-                localized:
-                  "The original note is unavailable. This local copy is preserved for recovery."))
-            : NotebookModel.interfaceSaveState(saved.state)
+        if session.generation == saved.generation, !document.isRecovery {
+          saveState = saved.state
         }
         return true
       } catch {
         logger.error(
           "Local persistence failed: \(String(reflecting: type(of: error)), privacy: .public)")
-        if session.generation == generation {
-          saveState = .localFailure(
-            message: String(
-              localized:
-                "Your latest changes are still in the editor. Try saving on this iPhone again before closing it."
-            ))
-        }
         return false
       }
     }

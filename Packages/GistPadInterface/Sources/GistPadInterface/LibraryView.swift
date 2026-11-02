@@ -24,8 +24,7 @@ private struct LibrarySearchModifier: ViewModifier {
         } else {
             content.searchable(
                 text: $model.query, isPresented: $isPresented,
-                placement: horizontalSizeClass == .regular ? .sidebar : .automatic,
-                prompt: Text("Search notes", bundle: .module)
+                placement: horizontalSizeClass == .regular ? .sidebar : .automatic
             )
         }
     }
@@ -35,7 +34,7 @@ private struct LibraryCreateButton: View {
     let action: @MainActor () -> Void
 
     var body: some View {
-        Button(String(localized: "New note", bundle: .module), systemImage: "square.and.pencil", action: action)
+        Button(String(localized: "New Gist", bundle: .module), systemImage: "square.and.pencil", action: action)
             .accessibilityIdentifier("library-create")
     }
 }
@@ -104,6 +103,7 @@ public struct LibraryView: View {
     @Bindable private var model: LibraryModel
     private let actions: LibraryActions
     private let isTodaySelected: Bool
+    private let isSidebar: Bool
     @Binding private var expandedCollections: Set<LibraryCollection>
     @Binding private var isPinnedExpanded: Bool
     @State private var collapsedDateGroups: Set<LibraryDateGroup> = []
@@ -113,17 +113,18 @@ public struct LibraryView: View {
     @ScaledMetric(relativeTo: .body) private var compactRowInset: CGFloat = 16
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.isLibrarySearchPresented) private var isSearchPresented
 
+    /// `isSidebar` comes from the split view's owner, because a sidebar column always reads as compact.
     public init(
-        model: LibraryModel, actions: LibraryActions, isTodaySelected: Bool = false,
+        model: LibraryModel, actions: LibraryActions, isSidebar: Bool, isTodaySelected: Bool = false,
         expandedCollections: Binding<Set<LibraryCollection>>, isPinnedExpanded: Binding<Bool>
     ) {
         self.model = model
         self.actions = actions
+        self.isSidebar = isSidebar
         self.isTodaySelected = isTodaySelected
         _expandedCollections = expandedCollections
         _isPinnedExpanded = isPinnedExpanded
@@ -151,8 +152,6 @@ public struct LibraryView: View {
             libraryList.listStyle(.insetGrouped)
         }
     }
-
-    private var isSidebar: Bool { horizontalSizeClass == .regular }
 
     private var navigationTitle: String {
         if model.loadState == .signedOut { return "" }
@@ -400,7 +399,7 @@ public struct LibraryView: View {
             EmptyView()
         case .searching:
             Section {
-                ProgressView(String(localized: "Searching notes", bundle: .module))
+                ProgressView()
             }
         case .failed(let message):
             Section {
@@ -413,10 +412,10 @@ public struct LibraryView: View {
     private var signedOutInvitation: some View {
         ContentUnavailableView {
             NotebookArtwork()
-            Text("Your notebook, on GitHub", bundle: .module)
+            Text("Your gists, on GitHub", bundle: .module)
                 .font(.title2.weight(.semibold))
         } description: {
-            Text("Markdown notes, backed by your GitHub gists.", bundle: .module)
+            Text("Markdown and daily notes, kept in your GitHub gists.", bundle: .module)
         } actions: {
             Button(String(localized: "Continue with GitHub", bundle: .module), action: actions.reconnect)
                 .buttonStyle(.borderedProminent)
@@ -452,12 +451,12 @@ public struct LibraryView: View {
             default:
                 ContentUnavailableView {
                     NotebookArtwork()
-                    Text("A notebook of your own", bundle: .module)
+                    Text("No Gists Yet", bundle: .module)
                         .font(.title2.weight(.semibold))
                 } description: {
-                    Text("A thought, a list, a little thing worth keeping. Start with your first note.", bundle: .module)
+                    Text("A thought, a list, a little thing worth keeping. Start your first gist.", bundle: .module)
                 } actions: {
-                    Button(String(localized: "Create a note", bundle: .module), action: actions.create)
+                    Button(String(localized: "New Gist", bundle: .module), action: actions.create)
                         .buttonStyle(.borderedProminent)
                 }
             }
@@ -631,7 +630,7 @@ public struct LibraryView: View {
                                     .accessibilityHidden(true)
                                 // Reserves its width so the count never shifts when a tag is selected.
                                 Image(systemName: "checkmark")
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(.tint)
                                     .opacity(model.selectedTagIDs.contains(tag.id) ? 1 : 0)
                                     .accessibilityHidden(true)
                             }

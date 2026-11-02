@@ -1,4 +1,5 @@
 import Foundation
+import GistPadSync
 import Testing
 @testable import GistPadInterface
 
@@ -112,8 +113,10 @@ struct LibraryStateTests {
         #expect(!NoteAccess.truncated.canEdit)
     }
 
-    @Test func aFailedPublishOffersSaveEvenWithAutosaveOn() {
-        #expect(NoteSaveState.cloudFailure(message: "Offline").showsManualSave(isAutoSaveEnabled: true))
-        #expect(!NoteSaveState.savedLocally.showsManualSave(isAutoSaveEnabled: true))
+    @Test func aFailedPublishOffersPublishEvenWithAutosaveOn() {
+        #expect(PublishState.failed(.network).showsPublish(isAutoSaveEnabled: true))
+        #expect(!PublishState.failed(.readOnly).showsPublish(isAutoSaveEnabled: true))
+        #expect(!PublishState.savedLocally.showsPublish(isAutoSaveEnabled: true))
+        #expect(PublishState.savedToGitHub.showsPublish(isAutoSaveEnabled: false))
     }
 }

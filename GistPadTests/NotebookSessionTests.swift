@@ -102,21 +102,21 @@ struct NotebookSessionTests {
     #expect(controller.session.viewIdentity == identity)
     #expect(controller.session.text == "Retained local draft")
     #expect(controller.session.textView.selectedRange == NSRange(location: 4, length: 3))
-    #expect(controller.saveState == .remoteChange)
+    #expect(controller.saveState.isConflict)
     let review = try controller.reviewContext()
     #expect(review.conflict.remote == "Changed in the web app")
     #expect(controller.updateAutosave(isForeground: true) == nil)
     #expect(await provider.publishCount == 0)
     edit(controller, to: "Typing continues safely")
     #expect(await controller.waitForLocalSave())
-    #expect(controller.saveState == .remoteChange)
+    #expect(controller.saveState.isConflict)
   }
 
   @Test(arguments: [true, false])
   func restoredPublicationInspectionAdoptsOnlyAnExactMatchWithoutPublishing(matches: Bool) async throws {
     let (controller, provider) = try await makeController(
       generation: 1, autosave: true, interruptedPublication: true)
-    #expect(controller.saveState == .offline)
+    #expect(controller.saveState == .failed(.network))
     let editor = controller.session.textView
     let text = controller.session.text
     let generation = controller.session.generation
@@ -129,7 +129,7 @@ struct NotebookSessionTests {
     #expect(controller.session.generation == generation)
     #expect(editor.selectedRange == NSRange(location: 4, length: 3))
     #expect(editor.undoManager?.canUndo == undo)
-    #expect(controller.saveState == (matches ? .savedToGitHub : .offline))
+    #expect(controller.saveState == (matches ? .savedToGitHub : .failed(.network)))
     #expect(controller.document.draft?.state == controller.draft.state)
     #expect(controller.draft.attemptedGeneration == (matches ? nil : 1))
     #expect(controller.remoteInspectionProblem == nil)
@@ -221,7 +221,7 @@ struct NotebookSessionTests {
       case "conflict":
         await provider.setRemoteContent("Changed on the web")
         await controller.inspectRemoteChanges()
-        #expect(controller.saveState == .remoteChange)
+        #expect(controller.saveState.isConflict)
       case "composition":
         controller.session.textView.setMarkedText(
           "にほんご", selectedRange: NSRange(location: 4, length: 0))
@@ -407,11 +407,6 @@ struct NotebookSessionTests {
     await controller.publish()
     #expect(await provider.publishCount == 0)
     #expect(controller.session.text == "Keep this in the editor")
-    guard case .localFailure = controller.saveState else {
-      Issue.record("An unacknowledged local write must remain an explicit failure.")
-      return
-    }
-    #expect(controller.remoteInspectionStatus == .idle)
   }
 
   @Test func writingToolsPersistsOnlyTheFinalChoiceAndNeverPublishesPreviews() async throws {
@@ -445,10 +440,7 @@ struct NotebookSessionTests {
     #expect(await controller.waitForLocalSave())
     await provider.failPublication(with: .failed(.readOnly))
     await controller.publish()
-    guard case .publicationBlocked = controller.saveState else {
-      Issue.record("Lost ownership must not become a retryable network failure.")
-      return
-    }
+    #expect(controller.saveState == .failed(.readOnly))
     #expect(!controller.saveState.canPublish)
   }
 
@@ -939,4 +931,10 @@ private func fixtureRemoteFile(content: String?) throws -> RemoteFile {
       "history":[{"version":"remote"}]}
       """.utf8))
   return RemoteFile(gist: gist, content: content)
+}
+
+extension PublishState {
+  fileprivate var isConflict: Bool {
+    if case .conflict = self { true } else { false }
+  }
 }

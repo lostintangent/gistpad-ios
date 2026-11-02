@@ -53,23 +53,6 @@ public struct TagEditor: View {
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("tag-empty")
                     }
-                    if save != nil {
-                        Button {
-                            editingTag = LibraryTag(id: UUID().uuidString, name: "")
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "plus")
-                                    .foregroundStyle(.primary)
-                                    .frame(width: min(swatchSize, 24))
-                                Text("New Tag", bundle: .module)
-                                    .foregroundStyle(.primary)
-                            }
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        }
-                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
-                        .accessibilityIdentifier("tag-create")
-                    }
                 }
                 .listSectionSeparator(.hidden)
             }
@@ -149,7 +132,7 @@ public struct TagEditor: View {
             Spacer(minLength: 8)
             if draft.selectedTagIDs.contains(tag.id) {
                 Image(systemName: "checkmark")
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.tint)
                     .accessibilityHidden(true)
                     .transition(.opacity)
             }
@@ -174,6 +157,15 @@ public struct TagEditor: View {
             }
         }
         DefaultToolbarItem(kind: .search, placement: .bottomBar)
+        if save != nil {
+            ToolbarSpacer(.flexible, placement: .bottomBar)
+            ToolbarItem(placement: .bottomBar) {
+                Button(String(localized: "New Tag", bundle: .module), systemImage: "plus") {
+                    editingTag = LibraryTag(id: UUID().uuidString, name: "")
+                }
+                .accessibilityIdentifier("tag-create")
+            }
+        }
         ToolbarItem(placement: .confirmationAction) {
             if isSaving {
                 ProgressView(String(localized: "Saving tags", bundle: .module))
@@ -259,7 +251,7 @@ private struct TagEditForm: View {
                             confirmingDelete = true
                         }
                     } footer: {
-                        Text("Deleting a tag removes it from every note. Note content is unchanged.", bundle: .module)
+                        Text("Deleting a tag removes it from every gist. Files are unchanged.", bundle: .module)
                     }
                 }
             }
@@ -284,7 +276,7 @@ private struct TagEditForm: View {
                 }
             }
             .confirmationDialog(
-                String(localized: "Delete this tag from every note?", bundle: .module),
+                String(localized: "Delete this tag from every gist?", bundle: .module),
                 isPresented: $confirmingDelete, titleVisibility: .visible
             ) {
                 Button(String(localized: "Delete Tag", bundle: .module), role: .destructive) {

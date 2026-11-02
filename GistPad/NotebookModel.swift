@@ -1993,31 +1993,6 @@ final class NotebookModel {
     )
   }
 
-  static func interfaceSaveState(_ state: PublishState) -> NoteSaveState {
-    switch state {
-    case .savedLocally: .savedLocally
-    case .savingToGitHub: .savingToGitHub
-    case .savedToGitHub: .savedToGitHub
-    case .reconnect: .reconnectRequired
-    case .conflict: .remoteChange
-    case .failed(let failure):
-      switch failure {
-      case .readOnly:
-        .publicationBlocked(
-          message: String(localized: "This account no longer has permission to edit the gist."))
-      case .incompleteRemote:
-        .publicationBlocked(
-          message: String(
-            localized:
-              "GitHub returned an incomplete note. Publishing could overwrite missing content."))
-      case .network: .offline
-      case .http(let status, _):
-        .cloudFailure(
-          message: message(for: GitHubClientError.http(status: status, retryAfter: nil)))
-      }
-    }
-  }
-
   private func report(_ error: any Error, operation: String) {
     logger.error(
       "Notebook \(operation, privacy: .public) failed: \(String(reflecting: type(of: error)), privacy: .public)"

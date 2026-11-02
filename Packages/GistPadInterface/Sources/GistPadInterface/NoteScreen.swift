@@ -1,11 +1,12 @@
 #if os(iOS)
 import GistPadAppearance
+import GistPadSync
 import SwiftUI
 
 public struct NoteScreen<Source: View, Preview: View>: View {
     private let document: NoteChrome
     @Binding private var mode: NoteMode
-    private let saveState: NoteSaveState
+    private let saveState: PublishState
     private let actions: NoteActions
     private let source: Source
     private let preview: Preview
@@ -13,13 +14,9 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     private let allowsSplit: Bool
     private let isSidebarHidden: Bool
     private let areCommentsPresented: Bool
-    @State private var showingOfflineExplanation = false
     @State private var confirmingDeletion = false
-    @State private var saveDetails: String?
     // Match the native toolbar's settled segment size on its first layout.
     @ScaledMetric(relativeTo: .body) private var minimumModeSegmentWidth = 48
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var showingSplit: Bool { document.access.canEdit && (isFocused || (allowsSplit && mode == .split)) }
     private var showingSource: Bool { document.access.canEdit && (showingSplit || mode != .reading) }
@@ -31,7 +28,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
     }
 
     public init(
-        document: NoteChrome, mode: Binding<NoteMode>, saveState: NoteSaveState,
+        document: NoteChrome, mode: Binding<NoteMode>, saveState: PublishState,
         actions: NoteActions = .init(), isFocused: Bool = false,
         allowsSplit: Bool = false, isSidebarHidden: Bool = false,
         areCommentsPresented: Bool = false,
@@ -79,43 +76,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             primaryToolbar
             secondaryToolbar
         }
-        .safeAreaBar(edge: .bottom, spacing: 0) {
-            if issue != nil {
-                status
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .scrollEdgeEffectStyle(.soft, for: .bottom)
-        .alert(String(localized: "Offline changes", bundle: .module), isPresented: $showingOfflineExplanation) {
-            Button(String(localized: "Retry", bundle: .module), action: actions.retry)
-            Button(String(localized: "Close", bundle: .module), role: .cancel) {}
-        } message: {
-            Text("Changes are saved on this iPhone but haven't synced to GitHub. Reconnect, then try saving again.", bundle: .module)
-        }
-        .alert(
-            String(localized: "Save details", bundle: .module),
-            isPresented: Binding(get: { saveDetails != nil }, set: { if !$0 { saveDetails = nil } })
-        ) {
-            if saveState == .creationUncertain {
-                if let publish = actions.publishAsNew {
-                    Button(String(localized: "Publish as New Note…", bundle: .module)) {
-                        saveDetails = nil
-                        publish()
-                    }
-                }
-                if let discard = actions.discardLocalCopy {
-                    Button(String(localized: "Discard This Copy…", bundle: .module), role: .destructive) {
-                        saveDetails = nil
-                        discard()
-                    }
-                }
-            }
-            Button(String(localized: "Close", bundle: .module), role: .cancel) { saveDetails = nil }
-        } message: {
-            Text(verbatim: saveDetails ?? "")
-        }
     }
 
     @ToolbarContentBuilder
@@ -129,29 +89,33 @@ public struct NoteScreen<Source: View, Preview: View>: View {
             }
             .sharedBackgroundVisibility(.hidden)
         }
-        if document.access.canEdit,
-           saveState.showsManualSave(isAutoSaveEnabled: document.isAutoSaveEnabled) {
+        if document.access.canEdit, saveState.showsPublish(isAutoSaveEnabled: document.isAutoSaveEnabled) {
             ToolbarItem(placement: .primaryAction) {
-                Button(String(localized: "Save to GitHub", bundle: .module), systemImage: "arrow.up.doc", action: actions.save)
+                Button(String(localized: "Publish", bundle: .module), systemImage: "arrow.up.doc", action: actions.save)
                     .disabled(!saveState.canPublish)
-                    .accessibilityIdentifier("note-save")
+                    .accessibilityIdentifier("note-publish")
             }
         }
-        if document.access.canEdit, saveState == .offline {
+        if document.access.canEdit, let needsYou {
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingOfflineExplanation = true
-                } label: {
-                    Label(String(localized: "Offline changes haven't synced", bundle: .module), systemImage: "icloud.slash")
-                }
-                .accessibilityIdentifier("note-offline")
+                Button(String(localized: "GitHub needs attention", bundle: .module), systemImage: "exclamationmark", action: needsYou)
+                    .accessibilityIdentifier("note-needs-you")
             }
+        }
+    }
+
+    /// A conflict opens the diff, and a lost connection reconnects GitHub.
+    private var needsYou: (() -> Void)? {
+        switch saveState {
+        case .conflict: actions.reviewChanges
+        case .reconnect: actions.reconnect
+        default: nil
         }
     }
 
     private var modePicker: some View {
         Picker(
-            String(localized: "Note mode", bundle: .module),
+            String(localized: "View", bundle: .module),
             selection: Binding(
                 get: { mode == .split && !allowsSplit ? .source : mode },
                 set: { mode = $0 }
@@ -209,7 +173,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                 Section {
                     if let rename = actions.rename, document.access.canEdit {
                         Button(
-                            String(localized: "Rename Note…", bundle: .module),
+                            String(localized: "Rename Gist…", bundle: .module),
                             systemImage: "pencil", action: rename
                         )
                         .accessibilityIdentifier("note-rename")
@@ -258,7 +222,7 @@ public struct NoteScreen<Source: View, Preview: View>: View {
                     }
                 }
             } label: {
-                Label(String(localized: "Note actions", bundle: .module), systemImage: "ellipsis")
+                Label(String(localized: "More", bundle: .module), systemImage: "ellipsis")
             }
             .accessibilityIdentifier("note-actions")
             .deletionConfirmation(title: document.title, isPresented: $confirmingDeletion) {
@@ -271,81 +235,6 @@ public struct NoteScreen<Source: View, Preview: View>: View {
         let title = String(localized: "Comments", bundle: .module)
         guard let count = document.commentCount else { return title }
         return title + ", " + String(localized: "\(count) comments", bundle: .module)
-    }
-
-    private var status: some View {
-        Group {
-            if let issue {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label(issue.title, systemImage: issue.symbol)
-                            .accessibilityIdentifier("note-save-issue")
-                        HStack(spacing: 16) { recoveryButton; detailsButton(issue.details) }
-                    }
-                } else {
-                    HStack(spacing: 12) {
-                        Label(issue.title, systemImage: issue.symbol)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("note-save-issue")
-                        Spacer(minLength: 0)
-                        recoveryButton
-                        detailsButton(issue.details)
-                    }
-                }
-            }
-        }
-        .font(.footnote)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("note-save-state")
-        .contentTransition(.opacity)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: saveState)
-    }
-
-    private var issue: (title: String, symbol: String, details: String?)? {
-        if document.access == .truncated {
-            return (
-                String(localized: "Incomplete note. Editing is unavailable.", bundle: .module), "exclamationmark.shield",
-                String(localized: "GitHub returned an incomplete note. Editing is unavailable to protect the original.", bundle: .module)
-            )
-        }
-        return saveState.issue
-    }
-
-    @ViewBuilder
-    private var recoveryButton: some View {
-        switch saveState {
-        case .cloudFailure, .localFailure:
-            Button(String(localized: "Retry", bundle: .module), action: actions.retry).frame(minHeight: 44)
-                .accessibilityIdentifier("note-save-retry")
-        case .remoteChange:
-            Button(String(localized: "Review", bundle: .module), action: actions.reviewChanges).frame(minHeight: 44)
-        case .reconnectRequired:
-            Button(String(localized: "Reconnect", bundle: .module), action: actions.reconnect).frame(minHeight: 44)
-        case .creationUncertain:
-            if let open = actions.openInGitHub {
-                Button(String(localized: "Check GitHub", bundle: .module), action: open).frame(minHeight: 44)
-            }
-        case .publicationUncertain:
-            Button(String(localized: "Check Status", bundle: .module), action: actions.retry).frame(minHeight: 44)
-        default:
-            if document.access == .truncated, let open = actions.openInGitHub {
-                Button(String(localized: "Open in GitHub", bundle: .module), action: open).frame(minHeight: 44)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func detailsButton(_ details: String?) -> some View {
-        if let details, !details.isEmpty {
-            Button {
-                saveDetails = details
-            } label: {
-                Label(String(localized: "Details", bundle: .module), systemImage: "info.circle")
-            }
-            .labelStyle(.iconOnly)
-            .frame(minWidth: 44, minHeight: 44)
-            .accessibilityIdentifier("note-save-details")
-        }
     }
 
     @ViewBuilder
