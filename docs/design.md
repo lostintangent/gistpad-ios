@@ -138,11 +138,11 @@ Settings is a small Form:
 | Overdue | System orange |
 | Accent | The user's saved web accent, sky `#0EA5E9` by default |
 
-The accent appears only in the Today widget, Preview's accent details, comment highlights and its own Settings swatch. Text targets 4.5:1, and 7:1 with Increased Contrast.
+The accent appears only in the widget's weekday and New Gist, Preview's accent details, comment highlights and its own Settings swatch. Text targets 4.5:1, and 7:1 with Increased Contrast.
 
 **Tag labels** fill with the exact saved color at full opacity, with black or white ink, whichever contrasts more. `.footnote` medium, 8 by 4 pt padding, 8-pt corners. No dot, overlay or opacity. A missing color uses the neutral system fill. Increased Contrast adds a primary outline.
 
-**Type** is SF through text styles. Code uses scaled system monospace, and the widget date uses SF Rounded. No bundled fonts, tracking or fixed sizes. At accessibility sizes, wrap and stack before shrinking.
+**Type** is SF through text styles. Code uses scaled system monospace. No bundled fonts, tracking or fixed sizes. At accessibility sizes, wrap and stack before shrinking.
 
 ## Editor
 
@@ -206,9 +206,19 @@ In the gist, a commented passage gets a 50% accent highlight and no underline. S
 
 ## Widgets and shortcuts
 
-The Today widget comes in small, medium and the inline and rectangular Lock Screen sizes. Small and medium lead with the date alone, like Calendar's icon: the abbreviated weekday in `.caption2` semibold over the day in SF Rounded semibold Large Title, both in the accent, with no "Today" or count beside it. Medium puts the tasks or the note to the date's right, and small puts them below it. Tasks check off in place, and the widget is redacted when locked.
+The **GistPad** widget is the app's front door, a launcher with three ways in: today's note, a recent gist or a new one. It shows no note content, so it reads the same whether today is prose or tasks. It comes in small and medium only, described as "Open today's note, a recent gist or start a new one." There's no large size and no Lock Screen widget, because the controls cover the Lock Screen. Widgets don't scroll, and a short library never changes the layout.
 
-Two controls work in Control Center, on the Lock Screen and from the Action button, using the system control style with no accent. **Add to Today** (`square.and.pencil`, "Capture a thought or task in today's note.") opens the capture sheet, which adds Text or a Task to today's note. Its failure says **Couldn't Add to Today**. **Open Today** (`calendar`, the Today button's symbol, "Open today's note.") opens today's note in Edit. Both are also Siri and Shortcuts actions. Spotlight finds gists, and `gistpad://today` and gist links open through the normal opening states.
+| Part | Look |
+| --- | --- |
+| Date | Calendar's date, top left: the weekday spelled out in uppercase `.caption` semibold in the accent, over the day in regular `.largeTitle` in `label`. It opens today's note in Edit. In medium it's a link, and in small it's the `widgetURL`, so any tap that misses a button opens Today. VoiceOver reads "Today, Monday, November 2" |
+| New Gist | `square.and.pencil` in `.title3` and the accent, plain, like Notes' compose button. Top right in small, optically on the margins. At the bottom of the left column in medium. It starts a new gist in Edit |
+| Recent gists | Newest edit first, counting edits on the phone, so a gist you just started leads before it publishes. Never daily notes or archived gists. A `.subheadline` semibold title in `label` over its `.footnote` time in `secondaryLabel`, dated like the gist list. Medium shows three, one line each, in a column starting 100 pt in, with a `Divider` centered in 10 pt between them. Small shows the newest at the bottom, wrapping to two lines. Titles are privacy sensitive |
+| Few or none | Rows stay top-aligned at the same rhythm and leave space below. No gists shows "No recent gists" in `.subheadline` `secondaryLabel` where the first would sit, like Calendar's "No events today". Signed out shows the date and "Sign in with GitHub" there, with no New Gist |
+| Color | The system widget background, with `label` and `secondaryLabel` ink. The weekday and New Gist are the only accent pieces and the only `.widgetAccentable()` ones, so a tinted Home Screen tints just those two. Clear goes all white |
+
+At accessibility sizes, medium shows two gists and small drops the time rather than shrinking text.
+
+Two controls work in Control Center, on the Lock Screen and from the Action button, using the system control style with no accent. **Add to Today** (`calendar.badge.plus`, "Capture a thought or task in today's note.") opens the capture sheet, which adds Text or a Task to today's note. Its failure says **Couldn't Add to Today**. **Open Today** (`calendar`, the Today button's symbol, "Open today's note.") opens today's note in Edit. Each verb keeps one symbol across the widget, controls and Shortcuts: `calendar` opens Today, `calendar.badge.plus` adds to it and `square.and.pencil` starts a new gist. Open Today, Add to Today and New Gist are also Siri and Shortcuts actions. Spotlight finds gists, and `gistpad://today`, `gistpad://new` and gist links open through the normal opening states.
 
 ## Motion
 
