@@ -332,6 +332,8 @@ final class NotebookModel {
   private(set) var openingDocument: NotebookOpeningDocument?
   private(set) var failedOpen: NotebookFailedOpen?
   private(set) var localDrafts: [DraftSnapshot] = []
+  /// Counts drafts recorded in memory, so a local read that started earlier knows it's stale.
+  private var localDraftRecords = 0
   private(set) var cachedLibrary: CachedLibrarySnapshot?
   private(set) var isCreating = false
   var documentError: String?
@@ -600,6 +602,7 @@ final class NotebookModel {
   }
 
   private func recordLocalDraft(_ draft: DraftSnapshot) {
+    localDraftRecords += 1
     localDrafts.removeAll { $0.id == draft.id }
     localDrafts.append(draft)
     projectLibrary()
@@ -1139,6 +1142,7 @@ final class NotebookModel {
   private func reloadLocalState(
     accountID: UUID, discardAbandonedBlanks: Bool = false
   ) async throws {
+    let records = localDraftRecords
     let local = try await provider.localState(accountID: accountID)
     guard account?.id == accountID, pendingAccount == nil else { return }
     var removed: Set<UUID> = []
@@ -1149,6 +1153,8 @@ final class NotebookModel {
       if try await discardBlankDraft(draft) { removed.insert(draft.id) }
     }
     guard account?.id == accountID, pendingAccount == nil else { return }
+    // A draft created or saved while this read ran is newer than the read, so read again.
+    if localDraftRecords != records { return try await reloadLocalState(accountID: accountID) }
     let drafts = local.drafts.filter { $0.accountID == accountID && !removed.contains($0.id) }
     // A refresh drops clean copies of gists GitHub no longer lists, so don't reopen them at launch.
     let vanished = localDrafts.filter { old in !drafts.contains { $0.id == old.id } }
@@ -1722,6 +1728,7 @@ final class NotebookModel {
     let saved = try await provider.persist(
       draftID: draftID, accountID: accountID, text: text, generation: generation)
     if account?.id == accountID {
+      localDraftRecords += 1
       localDrafts.removeAll { $0.id == saved.id }
       localDrafts.append(saved)
       updateLibraryExcerpt(for: saved)
