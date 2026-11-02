@@ -112,6 +112,21 @@ struct LibraryTests {
     #expect(library.state.gists.first { $0.id == "a" }?.commentCount == 3)
   }
 
+  @Test func aRowCountsTheFilesItsGistShowsFromTwo() async throws {
+    let fixture = try await LibraryFixture {
+      $0.addGist(
+        id: "a", description: "Several", files: ["README.md": "A", "Ideas.md": "B", "diagram.png": "PNG"])
+      $0.addGist(id: "b", description: "One", files: ["README.md": "A"])
+    }
+    let library = fixture.library
+    await library.start()
+    let row = { id in library.state.gists.first { $0.id == id } }
+    #expect(row("a")?.visibleFileCount == 2)
+    #expect(row("b")?.visibleFileCount == nil)
+    _ = try await library.perform(.addFile(gistID: "b", filename: "More.md"))
+    #expect(row("b")?.visibleFileCount == 2)
+  }
+
   // MARK: Opening
 
   @Test func anOlderOpenCannotReplaceTheNewerSelection() async throws {

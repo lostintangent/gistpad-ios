@@ -674,6 +674,18 @@ final class Library {
     }
   }
 
+  /// The Markdown files a gist shows. A file added on this iPhone shows until it reaches GitHub or
+  /// is deleted.
+  private static func filenames(of gist: Gist, drafts: [Draft]) -> [String] {
+    Set(
+      gist.markdownFilenames
+        + drafts.filter {
+          $0.gistID == gist.id
+            && (gist.files[$0.filename] != nil || $0.state != .savedToGitHub)
+        }.map(\.filename)
+    ).sorted()
+  }
+
   private static func librarySource(draft: Draft?, cached: String?) -> String? {
     if let draft, draft.state != .savedToGitHub || draft.attemptedGeneration != nil {
       return draft.text
@@ -1040,14 +1052,7 @@ final class Library {
         isAutoSaveEnabled: account?.id == file.accountID
           && account?.preferences.isAutoSaveEnabled == true)
     }
-    // A file added on this iPhone shows until it reaches GitHub or is deleted.
-    let files = Set(
-      gist.markdownFilenames
-        + localDrafts.filter {
-          $0.gistID == gist.id
-            && (gist.files[$0.filename] != nil || $0.state != .savedToGitHub)
-        }.map(\.filename)
-    ).sorted()
+    let files = Self.filenames(of: gist, drafts: localDrafts)
     return GistDetails(
       title: title,
       files: files.map { .init(id: $0, filename: $0) }, selectedFileID: file.filename,
@@ -1190,6 +1195,7 @@ final class Library {
     let drafts = libraryDrafts(drafts, owned: owned, accountID: account.id)
     var items = unique.values.flatMap { gist -> [GistItem] in
       let gistDrafts = drafts.filter { $0.gistID == gist.id }
+      let fileCount = filenames(of: gist, drafts: gistDrafts).count
       let days: [(filename: String, date: Date)?]
       if gist.isDailyNote, ownedIDs.contains(gist.id) {
         days = Set(gist.files.keys).union(gistDrafts.map(\.filename)).compactMap { filename in
@@ -1209,6 +1215,7 @@ final class Library {
           isDailyNote: gist.isDailyNote, tagIDs: Set(preferences.gistTags[gist.id] ?? []),
           filename: day?.filename,
           dailyDate: day?.date,
+          fileCount: fileCount,
           commentCount: gist.isDailyNote ? nil : gist.commentCount
         )
         // Only daily rows read file content, for their task progress.

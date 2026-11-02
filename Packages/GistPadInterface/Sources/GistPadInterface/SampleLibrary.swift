@@ -6,7 +6,7 @@ public enum SampleLibrary {
     public static let gists: [GistItem] = [
         GistItem(
             id: "shape", title: "The shape of a gist", updatedAt: referenceDate, gistID: "shape",
-            isPinned: true, tagIDs: ["ideas", "design"]
+            isPinned: true, tagIDs: ["ideas", "design"], fileCount: 2
         ),
         GistItem(
             id: "weekend", title: "A slower weekend", updatedAt: referenceDate.addingTimeInterval(-3_600), gistID: "weekend",

@@ -15,7 +15,7 @@ struct GistRow: View {
     @ScaledMetric(relativeTo: .footnote) private var metadataSpacing = 8
 
     var body: some View {
-        let count = gist.visibleCommentCount
+        let counts = Counts(gist)
         // Daily notes stay one line, and only tagged gists earn a tag line.
         let rowTags = gist.isDailyNote ? [] : tags
         // At accessibility sizes the row stacks, so the count joins the date
@@ -26,20 +26,20 @@ struct GistRow: View {
             if isStacked {
                 titleContent
                     .frame(maxWidth: .infinity, alignment: .leading)
-                metadata(count: count)
+                metadata(counts: counts)
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     titleContent
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    metadata(count: countOnTitleLine ? count : nil)
+                    metadata(counts: countOnTitleLine ? counts : nil)
                 }
             }
             if !rowTags.isEmpty {
                 HStack(spacing: 8) {
                     TagLabels(tags: rowTags, limit: 2)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    if let count, !countOnTitleLine {
-                        CommentCount(count: count)
+                    if let counts, !countOnTitleLine {
+                        counts
                             .font(.footnote)
                     }
                 }
@@ -66,16 +66,16 @@ struct GistRow: View {
     }
 
     @ViewBuilder
-    private func metadata(count: Int?) -> some View {
+    private func metadata(counts: Counts?) -> some View {
         if gist.isDailyNote {
             if let progress = gist.progress, progress.total > 0 {
                 TaskProgressLabel(progress: progress, isOverdue: gist.isOverdue)
                     .fixedSize()
             }
-        } else if count != nil || updateLabel != nil {
+        } else if counts != nil || updateLabel != nil {
             HStack(alignment: .firstTextBaseline, spacing: metadataSpacing) {
-                if let count {
-                    CommentCount(count: count)
+                if let counts {
+                    counts
                 }
                 if let updateLabel {
                     Text(verbatim: updateLabel)
@@ -113,16 +113,33 @@ struct GistRow: View {
     }
 }
 
-struct CommentCount: View {
-    let count: Int
+/// A gist's file and comment counts, which always travel together. Nil when there's nothing to count.
+struct Counts: View {
+    let files: Int?
+    let comments: Int?
+    @ScaledMetric(relativeTo: .footnote) private var spacing = 8
+
+    init?(_ gist: GistItem) {
+        files = gist.visibleFileCount
+        comments = gist.visibleCommentCount
+        if files == nil && comments == nil { return nil }
+    }
 
     var body: some View {
-        // Inline text keeps the glyph on the row's baseline. A Label here takes
+        // Inline text keeps each glyph on the row's baseline. A Label here takes
         // List row icon layout, which hides the count and adds row height.
-        Text("\(Image(systemName: "text.bubble")) \(count)", bundle: .module)
-            .foregroundStyle(.secondary)
-            .fixedSize()
-            .accessibilityLabel(Text("\(count) comments", bundle: .module))
+        HStack(alignment: .firstTextBaseline, spacing: spacing) {
+            if let files {
+                Text("\(Image(systemName: "doc.text")) \(files)", bundle: .module)
+                    .accessibilityLabel(Text("\(files) files", bundle: .module))
+            }
+            if let comments {
+                Text("\(Image(systemName: "text.bubble")) \(comments)", bundle: .module)
+                    .accessibilityLabel(Text("\(comments) comments", bundle: .module))
+            }
+        }
+        .foregroundStyle(.secondary)
+        .fixedSize()
     }
 }
 

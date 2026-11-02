@@ -21,7 +21,11 @@
       server.addGist(
         id: "longtitle",
         description: "A long title that keeps going, to show how a row wraps when a gist has a lot to say",
-        files: ["notes.md": "# A long title\n\nShort body.\n"],
+        files: [
+          "notes.md": "# A long title\n\nShort body.\n",
+          "outline.md": "# Outline\n\n1. Start small\n2. Keep going\n",
+          "sources.md": "# Sources\n\n- The library\n",
+        ],
         updatedAt: now - 2 * day)
       server.addGist(
         id: "words", description: "Words worth keeping",
@@ -36,7 +40,8 @@
         ])
       server.addGist(
         id: "guide", description: "An excellent Markdown field guide",
-        files: ["guide.md": try PreviewFixtures.allSyntax], updatedAt: now - 3 * hour,
+        files: ["guide.md": try PreviewFixtures.allSyntax, "tips.md": "# Tips\n\nKeep headings short.\n"],
+        updatedAt: now - 3 * hour,
         owner: FixtureServer.someoneElse, isStarred: true, comments: ["Bookmarking this for later."])
       server.addGist(
         id: "weekend", description: "A slower weekend",

@@ -58,7 +58,10 @@ public struct GistItem: Equatable, Identifiable, Sendable {
     public var progress: TaskProgress?
     public var isOverdue: Bool
     public var dailyDate: Date?
+    public var fileCount: Int
     public var commentCount: Int?
+
+    public var visibleFileCount: Int? { fileCount > 1 ? fileCount : nil }
 
     public var supportsComments: Bool { gistID != nil && !isDailyNote }
 
@@ -74,7 +77,7 @@ public struct GistItem: Equatable, Identifiable, Sendable {
         isStarred: Bool = false, isArchived: Bool = false, isDailyNote: Bool = false,
         tagIDs: Set<String> = [], filename: String? = nil,
         progress: TaskProgress? = nil, isOverdue: Bool = false, dailyDate: Date? = nil,
-        commentCount: Int? = nil
+        fileCount: Int = 1, commentCount: Int? = nil
     ) {
         self.id = id
         self.gistID = gistID
@@ -93,6 +96,7 @@ public struct GistItem: Equatable, Identifiable, Sendable {
         self.progress = progress
         self.isOverdue = isOverdue
         self.dailyDate = dailyDate
+        self.fileCount = fileCount
         self.commentCount = commentCount
     }
 }
