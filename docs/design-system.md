@@ -143,7 +143,7 @@ Light quote green measures 4.63:1 on white but only 4.15:1 on the reference seco
 | URL | URL token and underline |
 | HTML | HTML token without misclassifying code/autolinks |
 | Strikethrough | Valid content span struck through, source markers intact |
-| Task delimiters | Existing `InterfaceTheme.syntaxMuted`, preserving checked bytes and full-opacity task text |
+| Task delimiters | `secondaryLabel`, preserving checked bytes and full-opacity task text |
 | Caret / selection / marked text | Native text-entry blue/behavior, independent of chrome/personal accent |
 | Proposed diff | Before/After labels. Added words primary semibold + underline; removed secondary + strikethrough. No new red/green palette |
 
