@@ -1,12 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "" : {
-
-    },
-    "%lld files" : {
-
-    },
     "%lld daily notes" : {
 
     },
@@ -32,8 +26,9 @@
         }
       }
     },
-    "No unfinished tasks" : {},
-    "No notes to show" : {},
+    "No unfinished tasks" : {
+
+    },
     "%lld comments" : {
       "localizations" : {
         "en" : {
@@ -78,77 +73,97 @@
         }
       }
     },
-    "Comments" : {},
-    "Comment actions" : {},
-    "Comments couldn’t be loaded" : {},
+    "Comments" : {
+
+    },
+    "Comment actions" : {
+
+    },
+    "Comments couldn’t be loaded" : {
+
+    },
     "Link copied" : {
 
     },
-    "Loading comments" : {},
-    "No comments yet" : {},
-    "Start a conversation about this gist." : {},
-    "Updating comments" : {},
-    "Unknown author" : {},
-    "this author" : {},
-    "Delete %@’s comment from GitHub?" : {},
-    "Delete Comment" : {},
-    "Delete Comment…" : {},
-    "Edit Comment" : {},
-    "“%@”\n\nOnly this comment is deleted. Its replies stay in the conversation." : {},
-    "Reply" : {},
-    "Reply to %@" : {},
-    "%@, reply to %@" : {},
-    "Show Passage" : {},
-    "Show Full Quote" : {},
-    "Show Less" : {},
-    "Not linked in this view" : {},
-    "Save Draft Again" : {},
-    "Write a reply" : {},
-    "Write a comment" : {},
-    "Edit your comment" : {},
-    "Post reply to GitHub" : {},
-    "Save comment to GitHub" : {},
-    "Post comment to GitHub" : {},
-    "On GitHub" : {},
-    "Replying to @%@" : {},
-    "Replying to a comment" : {},
-    "Selected from %@: %@" : {},
-    "Editing your comment" : {},
-    "Cancel editing comment" : {},
-    "Remove comment context" : {},
-    "Comments need an internet connection. Try again when you’re online." : {},
-    "Reconnect GitHub from your account in the Library, then refresh comments." : {},
-    "Your GitHub account doesn’t have permission to make this change." : {},
-    "This conversation is no longer available to your GitHub account." : {},
-    "GitHub couldn’t accept this comment. Check the text and try again." : {},
-    "GitHub is limiting requests. Try again after %@." : {},
-    "GitHub is limiting requests. Wait a moment, then try again." : {},
-    "GitHub couldn’t finish the request. Refresh comments and try again." : {},
-    "GitHub’s response couldn’t be read. Refresh comments before trying again." : {},
-    "Your draft isn’t saved on this device." : {},
-    "This comment is no longer available. Your draft has not been posted." : {},
-    "This reply is already at the deepest supported level. Reply to its parent instead." : {},
-    "Your GitHub account doesn’t have permission to change this comment." : {},
-    "This comment changed on GitHub. Your text is unchanged. Refresh before editing it again." : {},
-    "Write a comment before posting." : {},
-    "Select at least four characters to comment on a passage." : {},
-    "Wait for the current comment operation to finish." : {},
-    "Refresh comments to check the previous change before posting again." : {},
-    "GitHub hasn’t confirmed the change. Your draft is unchanged. You can try again." : {},
-    "You have an unfinished new comment. Choose New Comment to return to it." : {},
+    "Loading comments" : {
+
+    },
+    "Updating comments" : {
+
+    },
+    "Unknown author" : {
+
+    },
+    "this author" : {
+
+    },
+    "Delete %@’s comment from GitHub?" : {
+
+    },
+    "Delete Comment" : {
+
+    },
+    "Delete Comment…" : {
+
+    },
+    "Edit Comment" : {
+
+    },
+    "“%@”\n\nOnly this comment is deleted. Its replies stay in the conversation." : {
+
+    },
+    "Reply" : {
+
+    },
+    "Reply to %@" : {
+
+    },
+    "%@, reply to %@" : {
+
+    },
+    "Show Passage" : {
+
+    },
+    "Show Full Quote" : {
+
+    },
+    "Show Less" : {
+
+    },
+    "Not linked in this view" : {
+
+    },
+    "Write a reply" : {
+
+    },
+    "Write a comment" : {
+
+    },
+    "Edit your comment" : {
+
+    },
+    "Replying to @%@" : {
+
+    },
+    "Replying to a comment" : {
+
+    },
+    "Selected from %@: %@" : {
+
+    },
+    "Editing your comment" : {
+
+    },
+    "Cancel editing comment" : {
+
+    },
+    "Remove comment context" : {
+
+    },
     "%@, %@" : {
 
     },
-    "A fresh day" : {
-
-    },
-    "A notebook of your own" : {
-
-    },
-    "A place for your thoughts, backed by your GitHub gists. Sign in to open your notebook." : {
-
-    },
-    "A thought, a list, a little thing worth keeping. Start with your first note." : {
+    "A thought, a list, a little thing worth keeping. Start your first gist." : {
 
     },
     "1 daily note" : {
@@ -184,82 +199,43 @@
     "Add File…" : {
 
     },
-    "Choose an opaque RGB color." : {
-
-    },
     "Clear Tag Filter" : {
 
     },
-    "Delete Note…" : {
+    "Delete Gist…" : {
+
+    },
+    "Delete Daily Note…" : {
+
+    },
+    "This deletes the gist from this iPhone and GitHub, including changes that haven’t been published. This can’t be undone." : {
+
+    },
+    "This deletes the daily note from this iPhone and GitHub, including changes that haven’t been published. This can’t be undone." : {
 
     },
     "Files" : {
 
     },
-    "Finished notes stay here when you archive them. You can bring them back anytime." : {
-
-    },
-    "Keep a useful discovery" : {
-
-    },
     "Intelligence…" : {
 
     },
-    "Library" : {
-
-    },
-    "Markdown notes, backed by your GitHub gists." : {
-
-    },
-    "No notes are available offline yet. Connect to GitHub to load your notebook." : {
-
-    },
-    "Nothing in the archive" : {
+    "Markdown and daily notes, kept in your GitHub gists." : {
 
     },
     "No tags yet." : {
 
     },
-    "Results" : {
+    "Rename File…" : {
 
     },
-    "Rename Current File…" : {
-
-    },
-    "Rename Note…" : {
-
-    },
-    "Save Accent Color" : {
-
-    },
-    "Search All Notes" : {
-
-    },
-    "Searches note titles." : {
-
-    },
-    "Searches titles, filenames, tags and note text." : {
+    "Rename Gist…" : {
 
     },
     "Settings" : {
 
     },
-    "Star a gist on GitHub to find it here." : {
-
-    },
-    "Try another search or clear your filters." : {
-
-    },
-    "Your daily notes will gather here. Begin with today." : {
-
-    },
     "Your Gists" : {
-
-    },
-    "Your saved color couldn't be read. GistPad Sky is in use until you choose a new color." : {
-
-    },
-    "%lld gists have incomplete file lists." : {
 
     },
     "%lld of %lld tasks complete" : {
@@ -272,47 +248,13 @@
         }
       }
     },
-    "%lld of %lld tasks complete, %lld left" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld of %2$lld tasks complete, %3$lld left"
-          }
-        }
-      }
-    },
-    "%lld results have older cached content." : {
-
-    },
     "+%lld" : {
-
-    },
-    "A little space for today's thoughts." : {
 
     },
     "A quiet place to think. A precise engine beneath the page." : {
 
     },
     "A tag with this name already exists." : {
-
-    },
-    "Account" : {
-
-    },
-    "Add File" : {
-
-    },
-    "Add tag" : {
-
-    },
-    "All selected tags must match." : {
-
-    },
-    "All tags" : {
-
-    },
-    "All done" : {
 
     },
     "Archive" : {
@@ -324,48 +266,17 @@
     "Cancel" : {
 
     },
-    "Check GitHub" : {
-
-    },
-    "Check save status" : {
-
-    },
-    "Checking upload..." : {
-
-    },
-    "Choose Another Photo" : {
-
-    },
-    "Clear filters" : {
-
-    },
     "Clear tag filters" : {
 
     },
     "Close" : {
 
     },
-    "Close without retrying?" : {
-
-    },
     "Collapsed" : {
-
-    },
-    "Collection" : {
 
     },
     "Color" : {
 
-    },
-    "Searches titles, filenames and tags, plus text from %lld of %lld notes." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Searches titles, filenames and tags, plus text from %1$lld of %2$lld notes."
-          }
-        }
-      }
     },
     "Continue with GitHub" : {
 
@@ -376,46 +287,28 @@
     "Couldn't Load Your Gists" : {
 
     },
-    "Couldn't prepare this photo." : {
-
-    },
-    "Couldn't save on this iPhone. Keep the editor open." : {
-
-    },
-    "Couldn't save this photo on this iPhone" : {
-
-    },
     "Couldn't save your tags." : {
-
-    },
-    "Couldn't upload photo" : {
-
-    },
-    "Create a note" : {
 
     },
     "Daily Notes" : {
 
     },
-    "Delete gist" : {
+    "Delete" : {
 
     },
     "Delete Tag" : {
 
     },
-    "Delete this tag from every note?" : {
+    "Delete this tag from every gist?" : {
 
     },
-    "Deleting a tag removes it from every note. Note content is unchanged." : {
+    "Deleting a tag removes it from every gist. Files are unchanged." : {
 
     },
     "Discard Changes" : {
 
     },
     "Discard tag changes?" : {
-
-    },
-    "Done" : {
 
     },
     "Edit" : {
@@ -433,9 +326,6 @@
     "Expanded" : {
 
     },
-    "Files in this gist" : {
-
-    },
     "Filter by tags" : {
 
     },
@@ -445,61 +335,25 @@
     "GitHub needs attention" : {
 
     },
-    "GitHub status" : {
-
-    },
-    "GitHub returned an incomplete note. Editing is unavailable to protect the original." : {
-
-    },
     "Give this tag a name." : {
-
-    },
-    "In-memory fixture. Not saved." : {
-
-    },
-    "Insert Here" : {
 
     },
     "Keep Editing" : {
 
     },
-    "New note" : {
+    "New Gist" : {
 
     },
     "New Tag" : {
 
     },
-    "No matching notes" : {
-
-    },
     "No matching tags." : {
 
     },
-    "No notes here yet" : {
-
-    },
-    "No tags on this note." : {
-
-    },
-    "Not saved yet" : {
-
-    },
-    "Notes" : {
-
-    },
-    "Offline. Showing notes on this iPhone." : {
-
-    },
-    "On this note" : {
-
-    },
-    "Open document" : {
+    "No Gists Yet" : {
 
     },
     "Open in GitHub" : {
-
-    },
-    "Photo" : {
 
     },
     "Pin" : {
@@ -508,97 +362,25 @@
     "Pinned" : {
 
     },
-    "Pinned Gists" : {
-
-    },
-    "Preparing photo..." : {
-
-    },
     "Preview" : {
-
-    },
-    "Read-only note" : {
 
     },
     "Reconnect GitHub" : {
 
     },
-    "Reconnect to upload" : {
-
-    },
-    "Reconnect your account to see your notes, tags and pins. Local drafts stay on this iPhone." : {
-
-    },
-    "Remove Pending Photo" : {
-
-    },
-    "Rename" : {
-
-    },
-    "Rename File" : {
-
-    },
-    "Review changes" : {
-
-    },
     "Save Tag" : {
-
-    },
-    "Save Tags" : {
-
-    },
-    "Save this note to GitHub to upload the photo." : {
-
-    },
-    "Save to GitHub" : {
-
-    },
-    "Saved on this iPhone" : {
-
-    },
-    "Saved on this iPhone. Couldn't save to GitHub." : {
-
-    },
-    "Saved on this iPhone. GitHub couldn't confirm the last save." : {
-
-    },
-    "Saved on this iPhone. GitHub may already have created this gist. Check GitHub before trying again." : {
-
-    },
-    "Saved on this iPhone. Publishing is unavailable." : {
-
-    },
-    "Saved on this iPhone. Reconnect GitHub to publish changes." : {
-
-    },
-    "Saved on this iPhone. Waiting for connection." : {
-
-    },
-    "Saved to GitHub" : {
 
     },
     "Saving tags" : {
 
     },
-    "Saving to GitHub" : {
-
-    },
-    "Search notes" : {
-
-    },
     "Search tags" : {
-
-    },
-    "Searching notes" : {
 
     },
     "Select a gist" : {
 
     },
     "Shows details and recovery actions" : {
-
-    },
-    "Source & Preview" : {
 
     },
     "Star" : {
@@ -610,25 +392,10 @@
     "Starred Gists" : {
 
     },
-    "Start today's note" : {
-
-    },
-    "Start when you're ready. Nothing is created until you choose to begin." : {
-
-    },
-    "Tag filters applied" : {
-
-    },
     "Tag name" : {
 
     },
     "Tags" : {
-
-    },
-    "Tags apply to every file in this gist." : {
-
-    },
-    "Tags are read-only" : {
 
     },
     "Tags: %@" : {
@@ -640,25 +407,10 @@
     "These are synthetic screen fixtures. Nothing is connected to GitHub." : {
 
     },
-    "This color couldn't be read. Choose another color." : {
-
-    },
-    "This note changed elsewhere." : {
-
-    },
     "Today" : {
 
     },
     "Try Again" : {
-
-    },
-    "Try another title or clear your tag filters." : {
-
-    },
-    "Try again after %@." : {
-
-    },
-    "Trying again" : {
 
     },
     "Unarchive" : {
@@ -673,22 +425,64 @@
     "Unstar" : {
 
     },
-    "Updating from GitHub" : {
-
-    },
-    "Uploading photo..." : {
-
-    },
     "Use Default Color" : {
 
     },
-    "Your notebook, on GitHub" : {
+    "Your gists, on GitHub" : {
 
     },
-    "Your notes will appear in this collection." : {
+    "Post" : {
 
     },
-    "left" : {
+    "Couldn’t reach GitHub. Check your connection and try again." : {
+
+    },
+    "Your comment couldn’t be posted. Check your connection and try again." : {
+
+    },
+    "Your edit couldn’t be saved. Check your connection and try again." : {
+
+    },
+    "The comment couldn’t be deleted. Check your connection and try again." : {
+
+    },
+    "%@ %lld" : {
+
+    },
+    "View" : {
+
+    },
+    "Publish" : {
+
+    },
+    "Split" : {
+
+    },
+    "Find and Replace" : {
+
+    },
+    "Show Library" : {
+
+    },
+    "Hide Library" : {
+
+    },
+    "More" : {
+
+    },
+    "1 gist" : {
+
+    },
+    "%lld gists" : {
+
+    },
+    "Delete “%@”?" : {
+
+    },
+    "%lld selected" : {
+
+    },
+    "Save" : {
 
     }
   },
