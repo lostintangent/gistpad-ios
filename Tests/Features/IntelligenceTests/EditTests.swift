@@ -216,9 +216,6 @@ struct EditTests {
         #expect(operations.count == 2)
         let candidates: [(ModelReplacement, NSRange)] = try operations.map { operation in
           switch operation {
-          case .deleteRegion(let range, let replacement):
-            let quote = (source as NSString).substring(with: range)
-            return (ModelReplacement(quote: quote, replacement: replacement, reason: ""), range)
           case .replaceRegion(let range, let change):
             return (change, range)
           default:
@@ -282,12 +279,11 @@ struct EditTests {
       let blocks = EditBlock.indexed(in: pass.source)
       let source = blocks.first { $0.text == "- Paper Observatory" }!
       let destination = blocks.first { $0.text == "- River Engine" }!
+      let removed = NSRange(
+        location: source.range.location, length: destination.range.location - source.range.location)
       return [
-        .deleteRegion(
-          NSRange(
-            location: source.range.location,
-            length: destination.range.location - source.range.location),
-          replacement: ""),
+        .replaceRegion(
+          removed, change((pass.source as NSString).substring(with: removed), "")),
         .rewriteRegion(destination.range, revised: "- River Engine\n- Paper Observatory"),
       ]
     }

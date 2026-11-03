@@ -180,17 +180,6 @@ public final class Intelligence {
                 candidate,
                 NSRange(location: chunk.range.location + relative.location, length: relative.length)
               ))
-          case .deleteRegion(let relative, let replacement):
-            guard request.action == .edit,
-              relative.location >= 0, relative.length > 0,
-              NSMaxRange(relative) <= chunk.range.length,
-              replacement.isEmpty || replacement == "\n" || replacement == "\r\n"
-            else { throw IntelligenceError.invalidResponse }
-            let range = NSRange(
-              location: chunk.range.location + relative.location, length: relative.length)
-            let quote = (request.snapshot.source as NSString).substring(with: range)
-            candidates.append(
-              (ModelReplacement(quote: quote, replacement: replacement, reason: ""), range))
           }
         }
         completed += 1

@@ -225,7 +225,6 @@ public enum ModelEdit: Sendable {
   /// A selected body block, using a UTF-16 range relative to the model pass.
   case rewriteRegion(NSRange, revised: String)
   case replaceRegion(NSRange, ModelReplacement)
-  case deleteRegion(NSRange, replacement: String)
 }
 
 public struct ModelAnswerPart: Sendable, Equatable {

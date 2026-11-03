@@ -357,10 +357,10 @@ public final class OnDeviceModel: IntelligenceModel {
             return .rewriteRegion(
               NSRange(location: section.directRange.location + range.location, length: range.length),
               revised: revised)
-          case .deleteRegion(let range, let replacement):
-            return .deleteRegion(
+          case .replaceRegion(let range, let candidate):
+            return .replaceRegion(
               NSRange(location: section.directRange.location + range.location, length: range.length),
-              replacement: replacement)
+              candidate)
           default: throw IntelligenceError.invalidResponse
           }
         }
@@ -457,10 +457,13 @@ public final class OnDeviceModel: IntelligenceModel {
           previous == nil ? ""
           : pass.source.hasSuffix("\r\n") ? "\r\n"
           : pass.source.hasSuffix("\n") ? "\n" : ""
+        let range = NSRange(location: start, length: end - start)
         edits.append(
-          .deleteRegion(
-            NSRange(location: start, length: end - start),
-            replacement: next == nil ? trailing : ""))
+          .replaceRegion(
+            range,
+            ModelReplacement(
+              quote: (pass.source as NSString).substring(with: range),
+              replacement: next == nil ? trailing : "", reason: "")))
       } else if !revised.utf8.elementsEqual(block.text.utf8) {
         edits.append(.rewriteRegion(block.range, revised: revised))
       }
@@ -535,7 +538,9 @@ public final class OnDeviceModel: IntelligenceModel {
     let line = sourceText.lineRange(for: sourceItem.range)
     let prefix = destination == nil ? newline : ""
     return [
-      .deleteRegion(line, replacement: ""),
+      .replaceRegion(
+        line,
+        ModelReplacement(quote: sourceText.substring(with: line), replacement: "", reason: "")),
       .replaceRegion(
         target.range,
         ModelReplacement(
