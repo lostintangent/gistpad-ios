@@ -61,11 +61,13 @@ public struct LauncherWidgetView: View {
     }
 
     private var medium: some View {
-        HStack(alignment: .top, spacing: 0) {
-            Link(destination: GistPadLink.today.url) { dateBlock }
-                // A fixed column keeps titles their room at accessibility sizes, widening only for a long weekday.
-                .frame(minWidth: 100, alignment: .leading)
-                .frame(maxHeight: .infinity, alignment: .topLeading)
+        HStack(alignment: .top, spacing: dateGap) {
+            Link(destination: GistPadLink.today.url) {
+                dateBlock { Text(date, format: .dateTime.weekday(.wide)) }
+            }
+            // Spelled out and hugging today's weekday, so the gap to the list is the same every day.
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxHeight: .infinity, alignment: .topLeading)
             ZStack(alignment: .topLeading) {
                 rowSlots
                 VStack(alignment: .leading, spacing: 0) {
@@ -88,6 +90,8 @@ public struct LauncherWidgetView: View {
 
     private var rowCount: Int { dynamicTypeSize.isAccessibilitySize ? 2 : 3 }
     private let rowGap: CGFloat = 10
+    /// The widget's own margin, between medium's date column and its list.
+    private let dateGap: CGFloat = 20
 
     /// A full list's rows, unseen, so New Gist mirrors the date: its square sits on the last row's
     /// baseline as the weekday's cap top meets the first title's, however many gists there are.
@@ -110,15 +114,21 @@ public struct LauncherWidgetView: View {
     }
 
     private var dateBlock: some View {
-        VStack(alignment: .leading, spacing: -2) {
+        dateBlock {
             ViewThatFits(in: .horizontal) {
                 Text(date, format: .dateTime.weekday(.wide))
                 Text(date, format: .dateTime.weekday(.abbreviated))
             }
-            .textCase(.uppercase)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(accent)
-            .widgetAccentable()
+        }
+    }
+
+    private func dateBlock(@ViewBuilder weekday: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: -2) {
+            weekday()
+                .textCase(.uppercase)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(accent)
+                .widgetAccentable()
             Text(date, format: .dateTime.day())
                 .font(.largeTitle)
         }
