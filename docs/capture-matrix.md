@@ -6,7 +6,7 @@ Use one current simulator build and the fixture library for every surface review
 scripts/capture-matrix.sh --name shape-split -- --fixture standard --open shape --mode split
 ```
 
-The command installs `DerivedData/Build/Products/Debug-iphonesimulator/GistPad.app` and captures the cover and open displays in Dark at Large on the shared **GistPad 27.2** Duo (`9D572007-6DFF-4AE9-8EF8-742F1B5891D1`), which must already be booted. `--pose` captures one posture, and `--contrast` adds increased contrast. Each capture relaunches the app with the arguments after `--` and waits `--settle` seconds. The script restores the simulator's appearance, contrast and text size on exit.
+The command installs `DerivedData/Build/Products/Debug-iphonesimulator/GistPad.app` and captures the cover and open displays in Dark at the default text size on the shared **GistPad 27.2** Duo (`9D572007-6DFF-4AE9-8EF8-742F1B5891D1`), which must already be booted. `--pose` captures one posture. Each capture relaunches the app with the arguments after `--` and waits `--settle` seconds. The script restores the simulator's appearance, contrast and text size on exit.
 
 `simctl` has no fold command, so the script pauses for you to set the posture in Simulator before each group. For background runs, pass an absolute `--posture-hook` executable that takes the UDID and `cover`/`open`, or capture one posture that's already set with `--pose open --posture-ready`. The script maps cover and open to the Duo's two framebuffers by width.
 

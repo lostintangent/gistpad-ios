@@ -7,7 +7,6 @@ DEVICE="${CAPTURE_DEVICE:-9D572007-6DFF-4AE9-8EF8-742F1B5891D1}"
 APP="$ROOT/DerivedData/Build/Products/Debug-iphonesimulator/GistPad.app"
 NAME=""
 POSE="both"
-CONTRAST="standard"
 OUTPUT=""
 POSTURE_HOOK=""
 POSTURE_READY=false
@@ -17,7 +16,7 @@ usage() {
     cat <<'HELP'
 Usage: scripts/capture-matrix.sh --name NAME [options] [-- APP ARGUMENTS]
 
-Installs the current build and captures the cover and open displays, in Dark at Large.
+Installs the current build and captures the cover and open displays, in Dark at the default text size.
 Everything after -- goes to the app (default: --fixture standard), for example
   scripts/capture-matrix.sh --name shape-split -- --fixture standard --open shape --mode split
 
@@ -26,7 +25,6 @@ Everything after -- goes to the app (default: --fixture standard), for example
   --name NAME            File name prefix for this capture
   --output PATH          Evidence directory (default: DerivedData/Captures/...)
   --pose both|cover|open  Postures to capture (default: both)
-  --contrast standard|increased|both
   --posture-hook PATH    Executable called with DEVICE and cover/open
   --posture-ready        Single pose only: caller has already set posture
   --settle SECONDS       Time to settle after launch (default: 6)
@@ -48,7 +46,7 @@ while [ "$#" -gt 0 ]; do
         --help) usage; exit 0 ;;
         --posture-ready) POSTURE_READY=true; shift ;;
         --) shift; APP_ARGUMENTS=("$@"); break ;;
-        --app|--device|--name|--output|--pose|--contrast|--posture-hook|--settle)
+        --app|--device|--name|--output|--pose|--posture-hook|--settle)
             [ "$#" -ge 2 ] || fail "Missing value for $1"
             case "$1" in
                 --app) APP="$2" ;;
@@ -56,7 +54,6 @@ while [ "$#" -gt 0 ]; do
                 --name) NAME="$2" ;;
                 --output) OUTPUT="$2" ;;
                 --pose) POSE="$2" ;;
-                --contrast) CONTRAST="$2" ;;
                 --posture-hook) POSTURE_HOOK="$2" ;;
                 --settle) SETTLE="$2" ;;
             esac
@@ -69,12 +66,6 @@ done
 [[ "$NAME" =~ ^[a-zA-Z0-9_-]+$ ]] || fail "--name is required and must be a simple file name"
 [[ "$SETTLE" =~ ^[0-9]+$ ]] || fail "--settle must be a nonnegative integer"
 case "$POSE" in both) POSES=(cover open) ;; cover|open) POSES=("$POSE") ;; *) fail "Invalid --pose" ;; esac
-case "$CONTRAST" in
-    standard) CONTRASTS=(disabled) ;;
-    increased) CONTRASTS=(enabled) ;;
-    both) CONTRASTS=(disabled enabled) ;;
-    *) fail "Invalid --contrast" ;;
-esac
 [ "$POSTURE_READY" = false ] || [ "$POSE" != both ] || fail "--posture-ready requires one --pose"
 [ -d "$APP" ] || fail "Build the simulator app first. Not found: $APP"
 if [ -n "$POSTURE_HOOK" ]; then
@@ -114,6 +105,8 @@ restore_settings() {
 }
 trap restore_settings EXIT
 xcrun simctl ui "$DEVICE" appearance dark
+xcrun simctl ui "$DEVICE" increase_contrast disabled
+# Large is iOS's default text size.
 xcrun simctl ui "$DEVICE" content_size large
 
 for pose in "${POSES[@]}"; do
@@ -124,14 +117,9 @@ for pose in "${POSES[@]}"; do
         read -r
     fi
     if [ "$pose" = cover ]; then display="$COVER_DISPLAY"; else display="$OPEN_DISPLAY"; fi
-    for increased in "${CONTRASTS[@]}"; do
-        xcrun simctl ui "$DEVICE" increase_contrast "$increased"
-        xcrun simctl launch --terminate-running-process "$DEVICE" "$BUNDLE_ID" "${APP_ARGUMENTS[@]}" >/dev/null
-        sleep "$SETTLE"
-        suffix=""
-        [ "$increased" = disabled ] || suffix="-contrast"
-        xcrun simctl io "$DEVICE" screenshot --display="$display" "$OUTPUT/$NAME-$pose$suffix.png" >/dev/null
-    done
+    xcrun simctl launch --terminate-running-process "$DEVICE" "$BUNDLE_ID" "${APP_ARGUMENTS[@]}" >/dev/null
+    sleep "$SETTLE"
+    xcrun simctl io "$DEVICE" screenshot --display="$display" "$OUTPUT/$NAME-$pose.png" >/dev/null
 done
 
 printf '\nCaptured %s in %s\n' "$NAME" "$OUTPUT"
