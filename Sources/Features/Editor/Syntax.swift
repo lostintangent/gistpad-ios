@@ -19,7 +19,7 @@ public enum Syntax {
   }
 
   public struct Block: Sendable {
-    public enum Kind: Sendable {
+    public enum Kind: String, Sendable {
       case heading, paragraph, listItem, tableRow, code
     }
 
