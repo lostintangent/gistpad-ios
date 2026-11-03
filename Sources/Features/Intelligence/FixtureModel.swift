@@ -11,10 +11,12 @@
     public var unavailableReason: String?
     public var delay: Duration?
     public var failure: (any Error)?
+    public var nextFailure: (any Error)?
     public var answer = [
       ModelAnswerPart(kind: .prose, text: "You leave at 9am, an hour after the cafe opens."),
       ModelAnswerPart(kind: .quote, text: "Leave at 9am"),
     ]
+    public var partialAnswers: [String] = []
     public var changes: (ModelPass) -> [ModelEdit] = { _ in
       [
         .replace(
@@ -61,9 +63,24 @@
       return answer
     }
 
+    public func streamAnswer(
+      for pass: ModelPass, onUpdate: @MainActor (String) -> Void
+    ) async throws -> [ModelAnswerPart] {
+      try await record(pass)
+      let prose = answer.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
+      for partial in partialAnswers.isEmpty ? [prose] : partialAnswers {
+        onUpdate(partial)
+      }
+      return answer
+    }
+
     private func record(_ pass: ModelPass) async throws {
       passes.append(pass)
       if let delay { try await Task.sleep(for: delay) }
+      if let nextFailure {
+        self.nextFailure = nil
+        throw nextFailure
+      }
       if let failure { throw failure }
     }
   }

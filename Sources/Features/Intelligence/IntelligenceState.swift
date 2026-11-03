@@ -112,7 +112,10 @@
           switch selectedAction {
           case .ask:
             self.answerParts = try await self.engine.ask(
-              request, progress: { self.progress = $0 }
+              request, progress: { self.progress = $0 },
+              onPartialAnswer: { text in
+                self.answerParts = text.isEmpty ? [] : [.prose(text)]
+              }
             ).parts
           case .edit:
             self.review = try await self.engine.edit(request, progress: { self.progress = $0 })
@@ -120,8 +123,10 @@
             self.review = try await self.engine.review(request, progress: { self.progress = $0 })
           }
         } catch is CancellationError {
+          if selectedAction == .ask { self.answerParts = [] }
           self.notice = String(localized: "Cancelled. Your file is unchanged.", bundle: .module)
         } catch {
+          if selectedAction == .ask { self.answerParts = [] }
           self.errorMessage = Self.message(for: error)
           let failure =
             (error as? IntelligenceError).map { String(describing: $0) }

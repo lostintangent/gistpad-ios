@@ -266,10 +266,21 @@ public protocol IntelligenceModel {
   func editOperations(for pass: ModelPass) async throws -> [ModelEdit]
   func excerpts(for pass: ModelPass) async throws -> [String]
   func answer(for pass: ModelPass) async throws -> [ModelAnswerPart]
+  func streamAnswer(
+    for pass: ModelPass, onUpdate: @MainActor (String) -> Void
+  ) async throws -> [ModelAnswerPart]
 }
 
 extension IntelligenceModel {
   public func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
     try await replacements(for: pass).map(ModelEdit.replace)
+  }
+
+  public func streamAnswer(
+    for pass: ModelPass, onUpdate: @MainActor (String) -> Void
+  ) async throws -> [ModelAnswerPart] {
+    let parts = try await answer(for: pass)
+    onUpdate(parts.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n"))
+    return parts
   }
 }

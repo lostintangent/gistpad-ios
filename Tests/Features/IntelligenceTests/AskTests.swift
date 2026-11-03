@@ -1,5 +1,4 @@
 import Foundation
-import FoundationModels
 import Testing
 
 @testable import Intelligence
@@ -58,14 +57,102 @@ struct AskTests {
     let original = "# One\r\n\r\nFirst 👩🏽‍💻\r\n\r\n# Two\n\nSecond cafe\u{301}\n"
     let blocks = SourceBlock.blocks(in: original)
     #expect(blocks.map(\.text).joined().utf8.elementsEqual(original.utf8))
-    let parts = try OnDeviceModel.decodeAnswer(
-      GeneratedContent(json: #"{"blockIDs":[2],"answer":"The second section answers."}"#),
-      blocks: blocks)
+    let parts = try OnDeviceModel.parseAnswer(
+      "The second section answers.\n[Sources: 2]", blocks: blocks)
     #expect(parts.last == ModelAnswerPart(kind: .quote, text: blocks[1].text))
+    let plain = try OnDeviceModel.parseAnswer(
+      "The second section answers.\nSources: 2", blocks: blocks)
+    #expect(plain == parts)
+    #expect(
+      try OnDeviceModel.parseAnswer(
+        "The second section answers. [Sources: 2]", blocks: blocks) == parts)
+    #expect(OnDeviceModel.visibleAnswer("The answer.\nSources: 2") == "The answer.")
+    #expect(OnDeviceModel.visibleAnswer("The answer.\n[Sources:") == "The answer.")
+    #expect(OnDeviceModel.visibleAnswer("The answer.\nSou") == "The answer.")
+    #expect(OnDeviceModel.visibleAnswer("The answer. [Sou") == "The answer.")
+    #expect(OnDeviceModel.visibleAnswer("The answer. [Sources: 2]") == "The answer.")
     #expect(throws: IntelligenceError.unverifiedQuotation) {
-      try OnDeviceModel.decodeAnswer(
-        GeneratedContent(json: #"{"blockIDs":[99],"answer":"An answer"}"#), blocks: blocks)
+      try OnDeviceModel.parseAnswer("An answer\n[Sources: 99]", blocks: blocks)
     }
+    #expect(throws: IntelligenceError.invalidResponse) {
+      try OnDeviceModel.parseAnswer("An answer\n[Sources: nope]", blocks: blocks)
+    }
+    #expect(throws: IntelligenceError.invalidResponse) {
+      try OnDeviceModel.parseAnswer("An answer\nSources: nope", blocks: blocks)
+    }
+    #expect(throws: IntelligenceError.invalidResponse) {
+      try OnDeviceModel.parseAnswer("An answer [Sources: 2", blocks: blocks)
+    }
+  }
+
+  @Test func answerStreamsProseBeforeVerifiedCitations() async throws {
+    let fixture = FixtureModel()
+    fixture.partialAnswers = ["Your", "Your note says"]
+    fixture.answer = [
+      ModelAnswerPart(kind: .prose, text: "Your note says the route is south."),
+      ModelAnswerPart(kind: .quote, text: "The route is south."),
+    ]
+    var updates: [String] = []
+    let response = try await Intelligence(backend: fixture).ask(
+      request("The route is south.", .ask, "Which route?"),
+      onPartialAnswer: { updates.append($0) })
+    #expect(updates == ["", "Your", "Your note says"])
+    #expect(response.parts.count == 2)
+    #expect(response.parts.last == .quotation(
+      Citation(
+        quote: "The route is south.",
+        ranges: [NSRange(location: 0, length: "The route is south.".utf16.count)])))
+  }
+
+  @Test func anUnverifiedSourceIDGetsOneCleanRetry() async throws {
+    let fixture = FixtureModel()
+    fixture.nextFailure = IntelligenceError.unverifiedQuotation
+    fixture.answer = [ModelAnswerPart(kind: .prose, text: "The route is south.")]
+    var updates: [String] = []
+    let answer = try await Intelligence(backend: fixture).ask(
+      request("The route is south.", .ask, "Which route?"),
+      onPartialAnswer: { updates.append($0) })
+    #expect(fixture.passes.map(\.purpose) == [.answer, .answer])
+    #expect(updates == ["", "", "The route is south."])
+    #expect(answer.parts == [.prose("The route is south.")])
+  }
+
+  @Test func askNeverReadsOrCitesFrontMatter() async throws {
+    let prefix = "---\r\nprivate: A hidden fact 👩🏽‍💻\r\n---\r\n\r\n"
+    let body = "# Content\r\n\r\nA visible fact 👩🏽‍💻.\r\n"
+    let fixture = FixtureModel()
+    fixture.answer = [ModelAnswerPart(kind: .quote, text: "A visible fact 👩🏽‍💻.")]
+    let input = request(prefix + body, .ask, "What is visible?")
+    let answer = try await Intelligence(backend: fixture).ask(input)
+    #expect(fixture.passes.map(\.source) == [body])
+    #expect(
+      answer.parts == [
+        .quotation(
+          Citation(
+            quote: "A visible fact 👩🏽‍💻.",
+            ranges: [
+              NSRange(
+                location: prefix.utf16.count + "# Content\r\n\r\n".utf16.count,
+                length: "A visible fact 👩🏽‍💻.".utf16.count)
+            ]))
+      ])
+
+    fixture.answer = [ModelAnswerPart(kind: .quote, text: "A hidden fact 👩🏽‍💻")]
+    await #expect(throws: IntelligenceError.unverifiedQuotation) {
+      try await Intelligence(backend: fixture).ask(input)
+    }
+
+    let longBody = String(repeating: "# Part\nA visible paragraph.\n\n", count: 100) + "needle"
+    let reader = FixtureModel()
+    reader.contextSize = 1_536
+    reader.excerpts = { $0.source.contains("needle") ? ["needle"] : [] }
+    reader.answer = [ModelAnswerPart(kind: .quote, text: "needle")]
+    _ = try await Intelligence(backend: reader).ask(
+      request(prefix + longBody, .ask, "Find needle"))
+    #expect(
+      reader.passes.filter { $0.purpose == .extract }
+        .map(\.source).joined().utf8.elementsEqual(longBody.utf8))
+    #expect(!reader.passes.contains { $0.source.contains("private:") })
   }
 
   @Test func withNoEvidenceInTheFileAskSaysWhy() async {

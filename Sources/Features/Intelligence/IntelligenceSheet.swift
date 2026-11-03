@@ -209,11 +209,6 @@
                 }
               }
             }
-          } footer: {
-            if !citation.ranges.isEmpty, ranges.isEmpty {
-              Text("Front matter", bundle: .module)
-                .accessibilityIdentifier("intelligence-front-matter-reference")
-            }
           }
         }
       }
