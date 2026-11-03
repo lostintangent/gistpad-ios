@@ -24,7 +24,7 @@ For the Siri notes prototype, each Markdown file is a note in its gist's
 the iOS 27 notes schema. The editor text view, preview and foreground
 `NSUserActivity` identify the displayed file. Only a query for that visible
 note while GistPad is active receives its live body from the editor, with
-front matter stripped by `FrontMatter.contentStart(in:)`. Spotlight and the
+front matter stripped by `Syntax.contentStart(in:)`. Spotlight and the
 shared snapshot keep titles and snippets but **never full bodies**. The
 schema creates a named note through the existing new-gist draft, appends
 text, and renames or pins an existing gist. It does not support arbitrary

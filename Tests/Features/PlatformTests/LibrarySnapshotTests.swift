@@ -79,7 +79,7 @@ struct LibrarySnapshotTests {
                 preferences: Preferences(metadata: [:])),
             drafts: [edited, unpublishedFile],
             visibleText: { text in
-                (text as NSString).substring(from: FrontMatter.contentStart(in: text))
+                (text as NSString).substring(from: Syntax.contentStart(in: text))
             })
 
         #expect(snapshot.gists.count == 3)
