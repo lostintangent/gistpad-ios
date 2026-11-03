@@ -1,6 +1,6 @@
 # Engineering rules
 
-These rules aren't obvious from reading the code. The toolchain, the iOS 27.2 floor and the test frameworks are in [AGENTS.md](../AGENTS.md). Sync behavior is in [sync.md](sync.md), and how the package keeps it is in the [GistPadSync README](../Sources/GistPadSync/README.md). Visual and interaction rules are in [design.md](design.md). The module map is in [AGENTS.md](../AGENTS.md#module-map).
+These rules aren't obvious from reading the code. The toolchain, the iOS 27.2 floor and the test frameworks are in [AGENTS.md](../AGENTS.md). Sync behavior is in [sync.md](sync.md), and how the module keeps it is in the [Sync README](../Sources/Shared/Sync/README.md). Visual and interaction rules are in [design.md](design.md). The module map is in [AGENTS.md](../AGENTS.md#module-map).
 
 | Rule | What and why |
 |---|---|
@@ -21,7 +21,7 @@ These rules aren't obvious from reading the code. The toolchain, the iOS 27.2 fl
 | Background publishing is best effort | Leaving the app publishes inside a `BackgroundLease`. The draft store uses complete file protection, so it closes soon after the phone locks. When the lease expires, publishing stops and the drafts wait on the phone for the next launch. |
 | Sign-out is local | `Library` locks every open file and waits for local saves before `AccountStore.signOut(accountID:)` runs. Sign-out never publishes, and drafts stay on the phone. |
 | Host tests stay out of the way | The `GistPad` scheme sets `GISTPAD_TESTING=1`, so `GistPadApp` doesn't load a library under app-hosted tests. Suites that drive UIKit are `@MainActor` and `.serialized`. |
-| Strings live in String Catalogs | User-facing text goes in `GistPad/Localizable.xcstrings` or a package's `Resources/Localizable.xcstrings` with `bundle: .module`. Don't build sentences by concatenation. [String Catalogs](https://developer.apple.com/documentation/xcode/localizing-and-varying-text-with-a-string-catalog) |
+| Strings live in String Catalogs | User-facing text goes in `Sources/App/Localizable.xcstrings` or a module's `Resources/Localizable.xcstrings` with `bundle: .module`. Don't build sentences by concatenation. [String Catalogs](https://developer.apple.com/documentation/xcode/localizing-and-varying-text-with-a-string-catalog) |
 
 ## Whole-note on-device intelligence
 

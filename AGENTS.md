@@ -77,7 +77,7 @@ xcrun simctl launch booted dev.gistpad.GistPad
 
 Debug builds take fixture launch arguments, such as `--fixture standard --open shape --mode split`. A fixture runs against an in-memory GitHub, with no account. `docs/capture-matrix.md` is the contract for these flags.
 
-**Package tests** run on macOS from the repo root and don't need the slot. `swift test` runs every module's tests. Add `--filter GistPadEditorTests` to run one module's.
+**Package tests** run on macOS from the repo root and don't need the slot. `swift test` runs every module's tests. Add `--filter EditorTests` to run one module's.
 
 ```sh
 swift test
@@ -92,7 +92,7 @@ xcodebuild -project GistPad.xcodeproj -scheme GistPad \
   CODE_SIGNING_ALLOWED=NO test
 ```
 
-- UI tests drive the real app against the DEBUG fixture GitHub (`FixtureServer` in GistPadSync), never a live account.
+- UI tests drive the real app against the DEBUG fixture GitHub (`FixtureServer` in Sync), never a live account.
 - `simctl` can't fold the Duo, so tests and captures run in whatever posture is set. Physical fold transitions are left to the manual pass on the phone.
 - The Intelligence eval runs synthetic notes, and live gists you name, through the on-device model on the Mac: `bash scripts/evaluate-intelligence.sh 10`. See `Tools/IntelligenceEval/README.md`.
 - `PreviewRenderer` builds Preview's web bundle from `../gistpad.dev` and has its own typecheck, tests and build. See `PreviewRenderer/README.md`.
@@ -121,34 +121,40 @@ xcodebuild -project GistPad.xcodeproj -scheme GistPad \
 
 ## Module map
 
-Feature code lives in modules of the root `Package.swift`, with sources in `Sources/<Module>` and tests in `Tests/<Module>Tests`. Each area has a compiler-enforced public API, and `swift test` runs every module's tests on macOS without the simulator or the slot. The app and the widget extension link the same modules. The app target owns signing and wires the modules together.
+Code lives in three groups. This is the house style for our Apple projects.
 
-| Module | What it does |
+- **App and Extensions** are the Xcode targets that ship: `Sources/App` and `Sources/Extensions/<Name>`. They own signing, entitlements and Info.plist, and wire the modules together.
+- **Features** are the user-facing slices, in `Sources/Features/<Domain>`. A feature builds on Shared, and on another feature only when it extends it, as Intelligence extends Editor.
+- **Shared** is the core every feature builds on, in `Sources/Shared/<Domain>`. Shared never imports a feature.
+
+Features and Shared are modules of the root `Package.swift`, named by domain, so a folder, its module and its `import` share one name. Each has a compiler-enforced public API. Tests mirror the sources in `Tests/App`, `Tests/UI`, `Tests/Features/<Domain>Tests` and `Tests/Shared/<Domain>Tests`, and `swift test` runs every module's tests on macOS without the simulator or the slot.
+
+| Folder | What it does |
 |---|---|
-| `Sources/GistPadAccent` | The personal accent color, its trait and the `isPaneVisible` environment value. |
-| `Sources/GistPadComments` | Comment bodies, threads, quote matching and `CommentsModel`. |
-| `Sources/GistPadEditor` | `Editor` and its TextKit 2 text view, `EditorView`, `KeyboardBar`, formatting, smart typing, highlighting, front matter and comment highlights. |
-| `Sources/GistPadIntelligence` | The Ask, Edit and Review sheet and the on-device model. |
-| `Sources/GistPadInterface` | `LibraryView`, `GistScreen`, comments, tags and the Today button. |
-| `Sources/GistPadPlatform` | App Intents, Spotlight, the widget view and `gistpad://` links. |
-| `Sources/GistPadPreview` | The offline WebKit Markdown preview and its bridge. |
-| `Sources/GistPadSync` | The account, the GitHub client, drafts, publishing, daily notes, the library cache, photo storage, preferences and the DEBUG fixture GitHub. |
-| `GistPad/App` | `GistPadApp`, `RootView` and `Library`, the model behind the whole app. |
-| `GistPad/Library` | `GitHubSync`, the library's one actor for GitHub and drafts, plus ordered `Change`s, remote read problems and the last opened file. |
-| `GistPad/Gist` | `File`, `FileSession`, Preview hosting, opening, renaming and conflict review. |
-| `GistPad/DailyNotes` | The Add to Today sheet. |
-| `GistPad/Comments` | The comments inspector and the services behind `CommentsModel`. |
-| `GistPad/Intelligence` | Presents the Intelligence sheet. |
-| `GistPad/Photos` | The photo picker and upload. |
-| `GistPad/Settings` | Settings, account switching and layout preferences. |
-| `GistPad/System` | `PlatformBridge` and App Shortcuts, which connect the library to intents, widgets and Spotlight. |
-| `GistPad/Captures` | DEBUG fixture launch arguments and the fixture library. |
-| `GistPadWidgets` | The GistPad widget and the Add to Today, Open Today and New Gist controls. |
-| `GistPadTests` | App-hosted tests, in folders that mirror `GistPad`. |
-| `GistPadUITests` | UI tests for the Library, a gist, daily notes and comments. |
-| `PreviewRenderer` | Builds Preview's web bundle from `../gistpad.dev` into `GistPadPreview`. |
+| `Sources/App/Root` | `GistPadApp`, `RootView` and `Library`, the model behind the whole app. |
+| `Sources/App/Library` | `GitHubSync`, the library's one actor for GitHub and drafts, plus ordered `Change`s, remote read problems and the last opened file. |
+| `Sources/App/Gist` | `File`, `FileSession`, Preview hosting, opening, renaming and conflict review. |
+| `Sources/App/DailyNotes` | The Add to Today sheet. |
+| `Sources/App/Comments` | The comments inspector and the services behind `CommentsModel`. |
+| `Sources/App/Intelligence` | Presents the Intelligence sheet. |
+| `Sources/App/Images` | The image picker and upload. |
+| `Sources/App/Settings` | Settings, account switching and layout preferences. |
+| `Sources/App/System` | `PlatformBridge` and App Shortcuts, which connect the library to intents, widgets and Spotlight. |
+| `Sources/App/Captures` | DEBUG fixture launch arguments and the fixture library. |
+| `Sources/Extensions/Widgets` | The GistPad widgets and the Add to Today, Open Today and New Gist controls. |
+| `Sources/Features/Editor` | `Editor` and its TextKit 2 text view, `EditorView`, `KeyboardBar`, formatting, smart typing, highlighting, front matter and comment highlights. |
+| `Sources/Features/Intelligence` | The Ask, Edit and Review sheet and the on-device model. |
+| `Sources/Features/Interface` | `LibraryView`, `GistScreen`, comments, tags and the Today button. |
+| `Sources/Features/Platform` | App Intents, Spotlight, the widget view and `gistpad://` links. |
+| `Sources/Features/Preview` | The offline WebKit Markdown preview and its bridge. |
+| `Sources/Shared/Accent` | The personal accent color, its trait and the `isPaneVisible` environment value. |
+| `Sources/Shared/Comments` | Comment bodies, threads, quote matching and `CommentsModel`. |
+| `Sources/Shared/Sync` | The account, the GitHub client, drafts, publishing, daily notes, the library cache, photo storage, preferences and the DEBUG fixture GitHub. |
+| `Tests/App` | App-hosted tests, in folders that mirror `Sources/App`. |
+| `Tests/UI` | UI tests for the Library, a gist, daily notes and comments. |
+| `PreviewRenderer` | Builds Preview's web bundle from `../gistpad.dev` into `Sources/Features/Preview`. |
 | `Tools/IntelligenceEval` | The on-device Intelligence eval. |
 | `scripts` | `capture-matrix.sh`, `evaluate-intelligence.sh` and `sync-public-config.mjs`. |
 | `Configuration` | `Public.xcconfig`. |
 
-Modules with their own README (GistPadComments, GistPadInterface, GistPadPlatform, GistPadSync) document their APIs in `Sources/<Module>/README.md`.
+Comments, Interface, Platform and Sync document their APIs in a README beside their sources.

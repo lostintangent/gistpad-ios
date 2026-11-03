@@ -1,6 +1,6 @@
 import Foundation
 import FoundationModels
-import GistPadIntelligence
+import Intelligence
 
 struct EvalCase: Codable, Sendable {
   let id: String

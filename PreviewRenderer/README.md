@@ -1,6 +1,6 @@
 # Offline Markdown preview
 
-`GistPadPreview` ships a local WebKit document renderer, not the GistPad website. `PreviewRenderer` builds it from the sibling `../../gistpad.dev` repository.
+Preview ships a local WebKit document renderer, not the GistPad website. `PreviewRenderer` builds it from the sibling `../../gistpad.dev` repository.
 
 The native host supports iOS 27.2 and later. Its resource scheme, bridge and rendering do not require Duo-only APIs.
 
@@ -31,7 +31,7 @@ MarkdownPreviewView(markdown: markdown, fileID: fileID, generation: generation,
 
 Every actionable message includes the document identity and generation, and the host drops messages from an older generation. Tasks carry an NSRange-compatible UTF-16 range, the exact `[ ]` / `[x]` / `[X]` marker and its replacement. Source offsets come from the parsed task's position, not task text, so duplicate labels are unambiguous. The host checks the frame and origin, task ranges and markers, and link schemes. Everything else crossing the bridge is trusted, because both sides ship in one bundle. No credentials or auth/session objects enter WebKit.
 
-Both `MarkdownPreviewView` and `EditorView` accept `comments: CommentHighlightConfiguration`, plus optional `onOpenCommentThreads` and `onLinkedCommentIDsChange` callbacks. Supply root-thread `CommentQuote` values from `GistPadComments`, the selected root ID and the inline-visibility preference. Each surface reports its own verified IDs. Historical revisions must receive an empty configuration. Hiding idle annotations does not hide an explicitly selected verified quote.
+Both `MarkdownPreviewView` and `EditorView` accept `comments: CommentHighlightConfiguration`, plus optional `onOpenCommentThreads` and `onLinkedCommentIDsChange` callbacks. Supply root-thread `CommentQuote` values from `Comments`, the selected root ID and the inline-visibility preference. Each surface reports its own verified IDs. Historical revisions must receive an empty configuration. Hiding idle annotations does not hide an explicitly selected verified quote.
 
 Increment `revealRevision` to reveal the same selected root again after the reader scrolls away. Both modes resolve only the current verified quote. Ordinary updates with an unchanged selection/revision do not request another jump.
 
@@ -57,7 +57,7 @@ The transparent WebKit host uses automatic native content insets, vertical bounc
 
 The first rendered document waits for WebKit's initial CSS layout to settle, then positions the native scroll origin at the adjusted inset, keeping its first heading below the navigation bar. Later generations of that document retain the reading position. When native viewport insets change, the host preserves the scrolled content's distance from the safe reading edge, not just the document's first line. Native tracking and deceleration retain control of scrolling. Viewport messages set the root scroll-padding, so Contents anchors and focus scrolling respect the unobscured native viewport. This is scroll geometry, not duplicate document padding or a web gradient mask.
 
-The host resolves semantic colors and text-style metrics from native traits and updates CSS variables separately from Markdown. Appearance changes do not reparse source or replace selection. Dynamic Type, Bold Text, light/dark and increased contrast follow the approved design direction. `GistPadAccent` derives personal-accent text/fill/selection roles once for native and preview consumers, using final quantized sRGB contrast against the resolved semantic surfaces. Text targets 4.5:1, or 7:1 with Increased Contrast. The stored profile hex is never changed by adaptation.
+The host resolves semantic colors and text-style metrics from native traits and updates CSS variables separately from Markdown. Appearance changes do not reparse source or replace selection. Dynamic Type, Bold Text, light/dark and increased contrast follow the approved design direction. `Accent` derives personal-accent text/fill/selection roles once for native and preview consumers, using final quantized sRGB contrast against the resolved semantic surfaces. Text targets 4.5:1, or 7:1 with Increased Contrast. The stored profile hex is never changed by adaptation.
 
 The containing workspace applies `.accent(savedHex:)` from Interface. Its public SwiftUI-to-UIKit trait bridge carries the same profile choice into native controls, caret/accessory colors and preview appearance. Missing values use sky, including when the preview is hosted on its own. Invalid values keep that fallback and are explained in Settings. The web page's fallback colors are only for standalone browser checks. `WKWebView` is intentionally isolated behind one representable to expose its local resource-scheme handler and validated message/frame boundary. SwiftUI owns the surrounding UI.
 
@@ -82,7 +82,7 @@ Calculation results retain the original exact values and selection/copy exclusio
 ```sh
 (cd PreviewRenderer && bun test && npm run typecheck && npm run build)
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-  swift test --filter GistPadPreviewTests
+  swift test --filter PreviewTests
 ```
 
 `bun test` covers task source ranges (including duplicate labels and raw HTML that tries to forge a task), comment overlap runs and the comment text catalog. The iOS package test loads the all-syntax fixture through the actual resource scheme. It checks that read-only checkboxes never emit edits, that an editable rerender toggles the exact `[x]` range of the clicked task, that Mermaid renders an SVG and that wikilinks reach native. A second test checks reading character and the top inset across viewport resizes.

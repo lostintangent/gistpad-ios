@@ -1,5 +1,5 @@
 import Foundation
-import GistPadIntelligence
+import Intelligence
 
 @main
 @MainActor
