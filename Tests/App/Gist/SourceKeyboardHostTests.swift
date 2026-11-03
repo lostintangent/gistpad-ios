@@ -120,16 +120,25 @@ struct SourceKeyboardHostTests {
         fixture.session.requestFocusAtEnd()
         try await fixture.settle("the focused final caret before a deliberate scroll")
         try fixture.expectVisibleCaret()
-        fixture.editor.delegate?.scrollViewWillBeginDragging?(fixture.editor)
-        fixture.editor.setContentOffset(
-            CGPoint(x: 0, y: fixture.editor.contentSize.height / 4), animated: false
-        )
-        try await fixture.settle("the deliberate keyboard-up reading position")
+        var keyboardInsets = fixture.editor.adjustedContentInset
+        var caretIsVisible = true
+        for _ in 0..<2 where caretIsVisible {
+            fixture.editor.delegate?.scrollViewWillBeginDragging?(fixture.editor)
+            fixture.editor.setContentOffset(
+                CGPoint(x: 0, y: fixture.editor.contentSize.height / 4), animated: false
+            )
+            try await fixture.settle("the deliberate keyboard-up reading position")
+            caretIsVisible = fixture.editor.bounds.inset(by: fixture.editor.adjustedContentInset)
+                .intersects(fixture.editor.caretRect(for: fixture.editor.endOfDocument))
+            // A late keyboard resize reveals the caret by design, so scroll away once more after one.
+            if caretIsVisible {
+                try #require(fixture.editor.adjustedContentInset != keyboardInsets)
+                keyboardInsets = fixture.editor.adjustedContentInset
+            }
+        }
+        try #require(!caretIsVisible)
         let offset = fixture.editor.contentOffset
         let selection = fixture.editor.selectedRange
-        let startingViewport = fixture.editor.bounds.inset(by: fixture.editor.adjustedContentInset)
-        let startingCaret = fixture.editor.caretRect(for: fixture.editor.endOfDocument)
-        try #require(!startingViewport.intersects(startingCaret))
         for _ in 0..<3 {
             fixture.session.highlight()
             try await fixture.settle("a restyle at the deliberate reading position")
