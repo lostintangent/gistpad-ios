@@ -10,6 +10,8 @@ struct EditBlock {
   let text: String
   let heading: String
   let level: Int
+  let marker: NSRange?
+  let taskMarker: NSRange?
 
   static func moveTarget(in instruction: String) -> String? {
     instruction.firstMatch(of: /(?i)\b(?:move|relocate)\s+(.+?)\s+from\s+.+?\s+to\s+/)
@@ -24,7 +26,8 @@ struct EditBlock {
       if block.kind == .heading { heading = value }
       return Self(
         id: index + 1, kind: block.kind, range: block.range,
-        text: value, heading: heading, level: block.level ?? 0)
+        text: value, heading: heading, level: block.level ?? 0,
+        marker: block.marker, taskMarker: block.taskMarker)
     }
   }
 }

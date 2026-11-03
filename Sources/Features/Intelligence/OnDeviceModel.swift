@@ -522,15 +522,17 @@ public final class OnDeviceModel: IntelligenceModel {
     }
     guard let target else { return nil }
     let sourceItem = matchingItems[0]
+    let sourceText = source as NSString
     if let destination {
-      let marker = /^(?:\s*)([-*+]|\d+[.)])\s/
-      guard let old = sourceItem.text.firstMatch(of: marker),
-        let new = destination.text.firstMatch(of: marker),
-        (Int(old.1.dropLast()) != nil) == (Int(new.1.dropLast()) != nil)
-      else { return nil }
+      guard let old = sourceItem.marker, let new = destination.marker else { return nil }
+      let oldOrdered = sourceText.substring(with: old).trimmingCharacters(in: .whitespaces)
+        .first?.isNumber == true
+      let newOrdered = sourceText.substring(with: new).trimmingCharacters(in: .whitespaces)
+        .first?.isNumber == true
+      guard oldOrdered == newOrdered else { return nil }
     }
     let newline = source.contains("\r\n") ? "\r\n" : "\n"
-    let line = (source as NSString).lineRange(for: sourceItem.range)
+    let line = sourceText.lineRange(for: sourceItem.range)
     let prefix = destination == nil ? newline : ""
     return [
       .deleteRegion(line, replacement: ""),

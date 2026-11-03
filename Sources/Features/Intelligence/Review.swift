@@ -154,9 +154,10 @@ public struct Review: Sendable {
         let matching = result.filter {
           $0.kind == .listItem && $0.text.localizedCaseInsensitiveContains(target)
         }
-        guard matching.count == 1,
-          Self.listItemBody(matching[0].text).utf8.elementsEqual(
-            Self.listItemBody(original[0].text).utf8),
+        guard matching.count == 1 else { throw IntelligenceError.invalidEdit }
+        let originalBody = try Self.listItemBody(original[0])
+        let revisedBody = try Self.listItemBody(matching[0])
+        guard revisedBody.utf8.elementsEqual(originalBody.utf8),
           !matching[0].heading.utf8.elementsEqual(original[0].heading.utf8),
           result.contains(where: {
             $0.kind == .heading && $0.text.utf8.elementsEqual(original[0].heading.utf8)
@@ -190,9 +191,10 @@ public struct Review: Sendable {
       .trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines))
   }
 
-  private static func listItemBody(_ item: String) -> String {
-    item.replacingOccurrences(
-      of: #"^\s*(?:[-*+]|\d+[.)])\s+"#, with: "", options: .regularExpression)
+  private static func listItemBody(_ item: EditBlock) throws -> String {
+    guard let marker = item.marker else { throw IntelligenceError.invalidEdit }
+    let start = (item.taskMarker?.location ?? NSMaxRange(marker)) - item.range.location
+    return (item.text as NSString).substring(from: start)
   }
 }
 
