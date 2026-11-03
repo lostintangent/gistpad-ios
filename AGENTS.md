@@ -151,7 +151,7 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 | `Sources/Shared/Sync` | The account, the GitHub client, drafts, publishing, daily notes, the library cache, photo storage, preferences and the DEBUG fixture GitHub. |
 | `Tests/App` | App-hosted tests, in folders that mirror `Sources/App`. |
 | `Tests/UI` | UI tests for the Library, a gist, daily notes and comments. |
-| `scripts` | Developer tools: `capture-matrix.sh`, `evaluate-intelligence.sh`, which runs the on-device Intelligence eval in `intelligence-eval`, and `preview-renderer`, which builds Preview's web bundle from the sibling `gistpad.dev` checkout into `Sources/Features/Preview`. |
+| `scripts` | Developer tools: `capture-matrix.sh`, `evaluate-intelligence.sh`, which runs the on-device Intelligence eval, the root package's `IntelligenceEval` target in `intelligence-eval`, and `preview-renderer`, which builds Preview's web bundle from the sibling `gistpad.dev` checkout into `Sources/Features/Preview`. |
 | `Configuration` | `Public.xcconfig`. |
 
 Comments, Interface, Platform and Sync document their APIs in a README beside their sources.
