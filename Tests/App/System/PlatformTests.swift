@@ -53,6 +53,71 @@ struct PlatformTests {
     #expect(session.saveState == .savedToGitHub)
   }
 
+  @Test func siriCreatesANamedNoteThroughTheExistingNewGistDraft() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    let previousLink = PendingLink.shared.link
+    defer { PendingLink.shared.link = previousLink }
+    let intent = CreateGistNoteIntent()
+    intent.dailyNotes = fixture.bridge
+    intent.name = AttributedString("Groceries")
+    intent.attachments = []
+    intent.isPinned = false
+
+    _ = try await intent.perform()
+
+    let local = try await fixture.sync.localState(accountID: fixture.account.id)
+    let draft = try #require(local.drafts.first {
+      $0.gistID == nil && $0.description == "Groceries"
+    })
+    #expect(draft.text == "# Groceries\n\n")
+    #expect(PendingLink.shared.link == .unpublishedGist(
+      accountID: fixture.account.id, draftID: draft.id))
+    let note = try #require(try LibrarySnapshot.read()?.gists.first {
+      $0.link == .unpublishedGist(accountID: fixture.account.id, draftID: draft.id)
+    })
+    #expect(note.content == nil)
+    #expect(fixture.publishes.isEmpty)
+    await fixture.library.open(.draft(id: draft.id))
+    #expect(fixture.library.activeSession?.draft.id == draft.id)
+  }
+
+  @Test func siriCreatesANoteWithContentAndRejectsUnsupportedOptions() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    let previousLink = PendingLink.shared.link
+    defer { PendingLink.shared.link = previousLink }
+    let intent = CreateGistNoteIntent()
+    intent.dailyNotes = fixture.bridge
+    intent.name = AttributedString("Test Reading List")
+    intent.content = AttributedString("# Ranked\n1. Vagabond\n")
+    intent.attachments = []
+    intent.isPinned = true
+    await #expect(throws: PlatformError.unsupportedNoteCreation) {
+      _ = try await intent.perform()
+    }
+    intent.isPinned = false
+    intent.name = AttributedString("   ")
+    await #expect(throws: PlatformError.emptyNoteName) {
+      _ = try await intent.perform()
+    }
+    intent.name = AttributedString("Test Reading List")
+
+    _ = try await intent.perform()
+
+    let local = try await fixture.sync.localState(accountID: fixture.account.id)
+    let draft = try #require(local.drafts.first {
+      $0.gistID == nil && $0.description == "Test Reading List"
+    })
+    #expect(local.drafts.filter { $0.description == "Test Reading List" }.count == 1)
+    #expect(draft.text == "# Ranked\n1. Vagabond\n")
+    let note = try #require(try LibrarySnapshot.read()?.gists.first {
+      $0.link == .unpublishedGist(accountID: fixture.account.id, draftID: draft.id)
+    })
+    #expect(note.content == nil)
+    #expect(fixture.publishes.isEmpty)
+  }
+
   @Test func siriAppendPreservesFrontMatterAndUsesTheOpenEditorsDurableEdit() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }

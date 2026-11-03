@@ -1,6 +1,32 @@
 import AppIntents
 import Foundation
 
+@AppIntent(schema: .notes.createNote)
+public struct CreateGistNoteIntent {
+    public static var allowedExecutionTargets: IntentExecutionTargets { .main }
+    public static var supportedModes: IntentModes { .foreground(.immediate) }
+    public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
+
+    public var name: AttributedString
+    public var content: AttributedString?
+    public var attachments: [IntentFile]
+    public var isPinned: Bool
+    public var folder: GistFolderEntity?
+    @Dependency var dailyNotes: any DailyNoteActions
+
+    public init() {}
+
+    @MainActor
+    public func perform() async throws -> some IntentResult & ReturnsValue<GistEntity> {
+        guard attachments.isEmpty, !isPinned, folder == nil else {
+            throw PlatformError.unsupportedNoteCreation
+        }
+        let note = try await dailyNotes.createNote(
+            name: String(name.characters), content: content.map { String($0.characters) })
+        return .result(value: note)
+    }
+}
+
 @AppIntent(schema: .notes.appendText)
 public struct AppendToGistIntent {
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }

@@ -26,9 +26,10 @@ the iOS 27 notes schema. The editor text view, preview and foreground
 note while GistPad is active receives its live body from the editor, with
 front matter stripped by `FrontMatter.contentStart(in:)`. Spotlight and the
 shared snapshot keep titles and snippets but **never full bodies**. The
-schema supports appending text, renaming and pinning, not arbitrary body
-rewrites or Q&A. Siri answering questions from the displayed body remains
-unproven until a phone test.
+schema creates a named note through the existing new-gist draft, appends
+text, and renames or pins an existing gist. It does not support arbitrary
+body rewrites or Q&A. Siri answering questions from the displayed body
+remains unproven until a phone test.
 
 Open Gist, Open Today, Add to Today and New Gist are App Shortcuts. Add to Today,
 Open Today and New Gist are also controls. The Open Today control opens today's
@@ -36,10 +37,13 @@ note and the New Gist control opens a blank gist. The Add to Today control opens
 the capture sheet, and shortcut-provided text skips it. Captures start
 today the way the app does, append Sync's `addToToday` edit through the same
 `DraftEdit` path as the editor, then leave publishing to autosave.
-The notes-schema append uses that same durable edit path. Updating a gist's
-name or pin uses the library's existing metadata actions. A move between gists,
-an attachment update or a combined rename-plus-pin is refused, rather than
-silently ignored.
+The notes-schema create uses the same local draft as New Gist and opens it
+through its saved link. Its content can be supplied when creating; adding
+attachments, pinning immediately or placing it in an existing gist is
+explicitly unsupported. Append uses the same durable edit path. Updating
+a gist's name or pin uses the library's existing metadata actions. A move
+between gists, an attachment update or a combined rename-plus-pin is
+refused, rather than silently ignored.
 
 Both targets read `LibrarySnapshot`, one JSON file in the
 `group.dev.gistpad.GistPad` container. It holds the active account, note
@@ -65,8 +69,8 @@ as before first unlock, it asks you to open GistPad.
 `swift test` covers link round-trips, per-file note identities and front-matter
 stripping, and the widget's recent gists counting your unpublished edits.
 `PlatformTests` in the app host covers Add to Today from a Shortcut, Siri
-append on open and closed files, metadata updates, and photo upload at the
-cursor. Installed widgets, Control Center, Siri on the phone, Spotlight
+create and append on open and closed files, metadata updates, and photo upload
+at the cursor. Installed widgets, Control Center, Siri on the phone, Spotlight
 launches and provisioning need device checks.
 Widget and control intents only run from a plain build. `build-for-testing` links
 the packages as shared frameworks, which the system can't find intents in.

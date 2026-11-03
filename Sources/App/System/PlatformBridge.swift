@@ -201,6 +201,33 @@ final class PlatformBridge: DailyNoteActions {
     }
   }
 
+  func createNote(name: String, content: String?) async throws -> GistEntity {
+    try await serially {
+      let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !name.isEmpty else { throw PlatformError.emptyNoteName }
+      guard let accountID = try await self.sync.cachedAccount()?.id,
+        let library = self.library
+      else { throw PlatformError.accountChanged }
+      try await self.validateAccount(accountID)
+      let draft = try await self.sync.createDraft(
+        accountID: accountID, description: name, content: content)
+      try await library.reloadPlatformState(accountID: accountID)
+      do {
+        try await self.refresh()
+      } catch {
+        self.logger.error(
+          "Created note needs presentation refresh: \(String(reflecting: type(of: error)), privacy: .public)")
+        self.scheduleRefresh()
+      }
+      let link = GistPadLink.unpublishedGist(accountID: accountID, draftID: draft.id)
+      guard let entity = try await self.noteEntities(for: [link.url.absoluteString]).first else {
+        throw DraftError.notFound
+      }
+      PendingLink.shared.link = link
+      return entity
+    }
+  }
+
   func appendToNote(_ note: GistEntity, text: String) async throws -> GistEntity {
     try await serially {
       guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

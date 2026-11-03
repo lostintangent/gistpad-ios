@@ -116,9 +116,12 @@ actor GitHubSync {
     return id
   }
 
-  func createDraft(accountID: UUID) async throws -> Draft {
+  func createDraft(
+    accountID: UUID, description: String = "", content: String? = nil
+  ) async throws -> Draft {
     let userID = try await verifiedUserID(accountID: accountID)
-    return try await drafts.newGistDraft(accountID: accountID, githubUserID: userID)
+    return try await drafts.newGistDraft(
+      accountID: accountID, githubUserID: userID, description: description, content: content)
   }
 
   func discardBlankDraft(_ draft: Draft) async throws -> Bool {
