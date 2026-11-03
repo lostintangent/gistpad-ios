@@ -32,6 +32,7 @@ import Testing
 
     - [x] Finished
       continued
+    > - [ ] Quoted task
     | table |
     ```md
     ## Not a heading
@@ -42,12 +43,13 @@ import Testing
   let outline = Syntax.outline(in: source)
   let text = source as NSString
   #expect(outline.blocks.map(\.kind) == [
-    .heading, .paragraph, .listItem, .tableRow, .code, .paragraph,
+    .heading, .paragraph, .listItem, .paragraph, .tableRow, .code, .paragraph,
   ])
   #expect(outline.blocks.map { text.substring(with: $0.range) } == [
     "## 日本語 👩🏽‍💻",
     "First line\nsecond line",
     "- [x] Finished\n  continued",
+    "> - [ ] Quoted task",
     "| table |",
     "```md\n## Not a heading\n- [ ] Not a task\n```",
     "Last `code` line",
@@ -56,7 +58,9 @@ import Testing
   #expect(text.substring(with: try #require(outline.blocks[2].marker)) == "- [x] ")
   #expect(text.substring(with: try #require(outline.blocks[2].taskMarker)) == "[x]")
   #expect(outline.headings == [outline.blocks[0].range])
-  #expect(outline.taskMarkers == [try #require(outline.blocks[2].taskMarker)])
+  #expect(outline.taskMarkers == [
+    try #require(outline.blocks[2].taskMarker), text.range(of: "[ ]"),
+  ])
   #expect(outline.frontMatterRanges.map { text.substring(with: $0) } == [
     "---\ntitle: Notebook\n---\n",
   ])
