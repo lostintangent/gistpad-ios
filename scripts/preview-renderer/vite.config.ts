@@ -6,7 +6,7 @@ import { defineConfig, type Plugin } from "vite";
 import { adaptCalculations } from "./src/calculatorAdapter";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
-const web = realpathSync(resolve(root, "../../gistpad.dev"));
+const web = realpathSync(resolve(root, "../../../gistpad.dev"));
 const sourceFiles = [
   "features/markdown/MarkdownPreview.tsx",
   "features/markdown/remarkInlineSyntax.ts",
@@ -70,7 +70,7 @@ export default defineConfig({
   },
   build: {
     target: "safari18",
-    outDir: "../Sources/Features/Preview/Resources/Web",
+    outDir: "../../Sources/Features/Preview/Resources/Web",
     emptyOutDir: true,
     cssCodeSplit: false,
     sourcemap: false,

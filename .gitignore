@@ -6,5 +6,5 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 *.xcresult/
-PreviewRenderer/node_modules/
+scripts/preview-renderer/node_modules/
 scripts/intelligence-eval/Package.resolved

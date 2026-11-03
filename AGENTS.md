@@ -38,7 +38,7 @@ Simple, high-confidence changes don't wait for steps 4 and 5. When the user asks
 - Run `export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` first, because `xcode-select` points at the Command Line Tools. Never change `xcode-select`, and never use `sudo`.
 - We use the Xcode 27.2 SDK with an iOS 27.2 minimum and the Swift 6 language mode. Unit and package tests use Swift Testing. UI tests use XCUITest.
 - Device builds need Apple Developer team `RHFNBL7EG4`.
-- Node.js runs `PreviewRenderer`. The Intelligence eval needs Apple Intelligence on the Mac.
+- Node.js runs `scripts/preview-renderer`. The Intelligence eval needs Apple Intelligence on the Mac.
 - Check API names against the installed SDK and developer.apple.com, not memory.
 
 ## The build slot
@@ -95,7 +95,7 @@ xcodebuild -project GistPad.xcodeproj -scheme GistPad \
 - UI tests drive the real app against the DEBUG fixture GitHub (`FixtureServer` in Sync), never a live account.
 - `simctl` can't fold the Duo, so tests and captures run in whatever posture is set. Physical fold transitions are left to the manual pass on the phone.
 - The Intelligence eval runs synthetic notes, and live gists you name, through the on-device model on the Mac: `bash scripts/evaluate-intelligence.sh 10`. See `scripts/intelligence-eval/README.md`.
-- `PreviewRenderer` builds Preview's web bundle from `../gistpad.dev` and has its own typecheck, tests and build. See `PreviewRenderer/README.md`.
+- `scripts/preview-renderer` builds Preview's web bundle from the sibling `gistpad.dev` checkout and has its own typecheck, tests and build. See its README.
 - Device builds use Release, `generic/platform=iOS`, team `RHFNBL7EG4` and `-allowProvisioningUpdates`. Install with `xcrun devicectl device install app --device 00008160-00041D6C0A200036 <path to GistPad.app>`. The bundle ID is `dev.gistpad.GistPad`.
 
 ## Data and secrets
@@ -152,8 +152,7 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 | `Sources/Shared/Sync` | The account, the GitHub client, drafts, publishing, daily notes, the library cache, photo storage, preferences and the DEBUG fixture GitHub. |
 | `Tests/App` | App-hosted tests, in folders that mirror `Sources/App`. |
 | `Tests/UI` | UI tests for the Library, a gist, daily notes and comments. |
-| `PreviewRenderer` | Builds Preview's web bundle from `../gistpad.dev` into `Sources/Features/Preview`. |
-| `scripts` | Developer tools: `capture-matrix.sh`, and `evaluate-intelligence.sh`, which runs the on-device Intelligence eval in `scripts/intelligence-eval`. |
+| `scripts` | Developer tools: `capture-matrix.sh`, `evaluate-intelligence.sh`, which runs the on-device Intelligence eval in `intelligence-eval`, and `preview-renderer`, which builds Preview's web bundle from the sibling `gistpad.dev` checkout into `Sources/Features/Preview`. |
 | `Configuration` | `Public.xcconfig`. |
 
 Comments, Interface, Platform and Sync document their APIs in a README beside their sources.

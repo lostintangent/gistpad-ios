@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { evaluateMathExpression as webEvaluate, extractVariableAssignments as webAssignments } from "../../../gistpad.dev/src/shared/calculations";
+import { evaluateMathExpression as webEvaluate, extractVariableAssignments as webAssignments } from "../../../../gistpad.dev/src/shared/calculations";
 import { adaptCalculations } from "../src/calculatorAdapter";
 
-const source = readFileSync(new URL("../../../gistpad.dev/src/shared/calculations.ts", import.meta.url), "utf8");
+const source = readFileSync(new URL("../../../../gistpad.dev/src/shared/calculations.ts", import.meta.url), "utf8");
 const transformed = new Bun.Transpiler({ loader: "ts" }).transformSync(
   adaptCalculations(source, fileURLToPath(new URL("../src/arithmetic.ts", import.meta.url))),
 );

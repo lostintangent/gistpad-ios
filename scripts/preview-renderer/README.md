@@ -1,13 +1,13 @@
 # Offline Markdown preview
 
-Preview ships a local WebKit document renderer, not the GistPad website. `PreviewRenderer` builds it from the sibling `../../gistpad.dev` repository.
+Preview ships a local WebKit document renderer, not the GistPad website. `scripts/preview-renderer` builds it from the sibling `gistpad.dev` checkout, next to this repository.
 
 The native host supports iOS 27.2 and later. Its resource scheme, bridge and rendering do not require Duo-only APIs.
 
 ## Build
 
 ```sh
-cd PreviewRenderer
+cd scripts/preview-renderer
 npm ci --ignore-scripts
 npm run typecheck
 npm test
@@ -80,7 +80,7 @@ Calculation results retain the original exact values and selection/copy exclusio
 ## Evidence
 
 ```sh
-(cd PreviewRenderer && bun test && npm run typecheck && npm run build)
+(cd scripts/preview-renderer && bun test && npm run typecheck && npm run build)
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   swift test --filter PreviewTests
 ```

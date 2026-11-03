@@ -11,7 +11,7 @@
     "skipLibCheck": true,
     "types": ["bun"],
     "paths": {
-      "@/*": ["../../gistpad.dev/src/*"]
+      "@/*": ["../../../gistpad.dev/src/*"]
     }
   },
   "include": ["src", "tests", "vite.config.ts"]

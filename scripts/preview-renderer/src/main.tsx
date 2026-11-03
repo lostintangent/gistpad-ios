@@ -5,7 +5,7 @@ import type { RenderRequest } from "./protocol";
 import { setAppearance } from "./appearance";
 import { setViewportInsets } from "./viewport";
 import { CommentHighlightController } from "./commentHighlights";
-import "../../../gistpad.dev/src/features/markdown/index.css";
+import "../../../../gistpad.dev/src/features/markdown/index.css";
 import "./style.css";
 
 const root = createRoot(document.getElementById("root")!);
