@@ -2,18 +2,18 @@ import Foundation
 import NaturalLanguage
 import SwiftUI
 
-public struct TextDiff: Sendable {
-  public enum Kind: Sendable { case unchanged, removed, added }
+struct TextDiff: Sendable {
+  enum Kind: Sendable { case unchanged, removed, added }
 
-  public struct Run: Sendable {
-    public let kind: Kind
-    public let text: String
+  struct Run: Sendable {
+    let kind: Kind
+    let text: String
   }
 
-  public let before: [Run]
-  public let after: [Run]
+  let before: [Run]
+  let after: [Run]
 
-  public init(before: String, after: String) {
+  init(before: String, after: String) {
     let old = Self.tokens(before)
     let new = Self.tokens(after)
     let difference = new.difference(from: old) { $0.utf8.elementsEqual($1.utf8) }

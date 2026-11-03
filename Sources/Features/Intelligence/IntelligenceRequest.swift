@@ -195,7 +195,7 @@ public struct ModelTask: Sendable {
     self.listTitle = listTitle
   }
 
-  public static func indexed(
+  static func indexed(
     in source: String, markers: [NSRange], headings: [NSRange]
   ) -> [ModelTask] {
     let text = source as NSString

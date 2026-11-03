@@ -6,7 +6,7 @@ public enum AnswerIssue: String, Sendable {
   case thirdPerson
   case markupLeak
 
-  public static func check(_ answer: String, source: String, instruction: String = "") -> Self? {
+  static func check(_ answer: String, source: String, instruction: String = "") -> Self? {
     func isSupportedQuote(_ quote: String) -> Bool {
       guard quote.first?.isLetter == true, quote.last?.isLetter == true else {
         return !Anchors.matches(quote, in: source).isEmpty
