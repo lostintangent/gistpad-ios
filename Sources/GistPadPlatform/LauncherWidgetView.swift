@@ -90,7 +90,7 @@ public struct LauncherWidgetView: View {
 
     private var rowCount: Int { dynamicTypeSize.isAccessibilitySize ? 2 : 3 }
     private let rowGap: CGFloat = 10
-    /// The widget's own margin, between medium's date column and its list.
+    /// Between medium's date column and its list, a little roomier than the widget's margin.
     private let dateGap: CGFloat = 20
 
     /// A full list's rows, unseen, so New Gist mirrors the date: its square sits on the last row's
