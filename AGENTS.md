@@ -83,13 +83,12 @@ Debug builds take fixture launch arguments, such as `--fixture standard --open s
 swift test
 ```
 
-**App and UI tests** run on the slot simulator. Add `-only-testing:GistPadTests` or `-only-testing:GistPadUITests` to run one target.
+**App and UI tests** run on the slot simulator. Add `-only-testing:GistPadTests` or `-only-testing:GistPadUITests` to run one target. Leave signing on, because the app group comes from the signed entitlements and `PlatformTests` fail without it.
 
 ```sh
 xcodebuild -project GistPad.xcodeproj -scheme GistPad \
   -destination 'platform=iOS Simulator,id=DEVICE_ID' \
-  -derivedDataPath DerivedData -parallel-testing-enabled NO \
-  CODE_SIGNING_ALLOWED=NO test
+  -derivedDataPath DerivedData -parallel-testing-enabled NO test
 ```
 
 - UI tests drive the real app against the DEBUG fixture GitHub (`FixtureServer` in Sync), never a live account.

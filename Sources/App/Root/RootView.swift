@@ -125,7 +125,11 @@ struct RootView: View {
     #if DEBUG
     .onChange(of: pending.link) { presentFixtureSheet() }
     #endif
-    .onChange(of: active?.file.activationID, initial: true) { didActivate() }
+    .background {
+      // Keyed by activation instead of onChange, because SwiftUI drops onChange actions past a
+      // few per frame. A launch link can restore today, open, and present a new note in one.
+      Color.clear.onAppear(perform: didActivate).id(active?.file.activationID)
+    }
     .onChange(of: active?.draft.id) { previous, _ in
       if let previous, let outgoing = library.sessions[previous] {
         Task { await outgoing.leave() }
