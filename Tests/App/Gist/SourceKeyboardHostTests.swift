@@ -122,11 +122,14 @@ struct SourceKeyboardHostTests {
         try fixture.expectVisibleCaret()
         fixture.editor.delegate?.scrollViewWillBeginDragging?(fixture.editor)
         fixture.editor.setContentOffset(
-            CGPoint(x: 0, y: fixture.editor.contentSize.height / 2), animated: false
+            CGPoint(x: 0, y: fixture.editor.contentSize.height / 4), animated: false
         )
         try await fixture.settle("the deliberate keyboard-up reading position")
         let offset = fixture.editor.contentOffset
         let selection = fixture.editor.selectedRange
+        let startingViewport = fixture.editor.bounds.inset(by: fixture.editor.adjustedContentInset)
+        let startingCaret = fixture.editor.caretRect(for: fixture.editor.endOfDocument)
+        try #require(!startingViewport.intersects(startingCaret))
         for _ in 0..<3 {
             fixture.session.highlight()
             try await fixture.settle("a restyle at the deliberate reading position")
@@ -134,9 +137,8 @@ struct SourceKeyboardHostTests {
             #expect(fixture.editor.selectedRange == selection)
             #expect(fixture.editor.isFirstResponder)
             let caret = fixture.editor.caretRect(for: fixture.editor.endOfDocument)
-            #expect(!fixture.editor.bounds.inset(
-                by: fixture.editor.adjustedContentInset
-            ).intersects(caret))
+            let viewport = fixture.editor.bounds.inset(by: fixture.editor.adjustedContentInset)
+            #expect(!viewport.intersects(caret))
         }
         #expect(fixture.session.text.utf8.elementsEqual(Self.source.utf8))
         #expect(fixture.session.generation == 0)
