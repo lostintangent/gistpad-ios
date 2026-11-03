@@ -142,7 +142,7 @@ final class PlatformBridge: DailyNoteActions {
   }
 
   nonisolated private static func noteBody(_ source: String) -> String {
-    (source as NSString).substring(from: FrontMatter.contentStart(in: source))
+    (source as NSString).substring(from: Syntax.contentStart(in: source))
   }
 
   func noteEntities(for identifiers: [String]) async throws -> [GistEntity] {
