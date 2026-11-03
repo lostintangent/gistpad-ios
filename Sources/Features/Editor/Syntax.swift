@@ -141,10 +141,7 @@ public enum Syntax {
       (span.kind == .task || span.kind == .checkedTask)
         && !protected.contains { NSIntersectionRange($0.range, span.range).length > 0 }
     }.map(\.range)
-    let headings = spans.filter { span in
-      span.kind == .heading
-        && !protected.contains { NSIntersectionRange($0.range, span.range).length > 0 }
-    }.map(\.range)
+    let headings = spans.filter { $0.kind == .heading }.map(\.range)
     let byLine = Dictionary(grouping: spans.filter {
       $0.kind == .heading || $0.kind == .orderedMarker || $0.kind == .punctuation
         || $0.kind == .task || $0.kind == .checkedTask || $0.kind == .frontmatter
@@ -196,9 +193,7 @@ public enum Syntax {
           level: value.trimmingCharacters(in: .whitespaces).prefix { $0 == "#" }.count)
         finish()
       } else if let marker = markers.first(where: { span in
-        guard span.kind == .punctuation || span.kind == .orderedMarker,
-          !codeRanges.contains(where: { NSIntersectionRange($0, span.range).length > 0 })
-        else { return false }
+        guard span.kind == .punctuation || span.kind == .orderedMarker else { return false }
         let indent = source.substring(
           with: NSRange(location: offset, length: span.range.location - offset))
         return indent.allSatisfy { $0 == " " || $0 == "\t" }

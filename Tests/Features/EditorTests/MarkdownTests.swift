@@ -65,6 +65,16 @@ import Testing
   ])
 }
 
+@Test func headingsWithInlineCodeStillMarkTheirEntireLine() {
+  let source = "## Install `tool`\n```md\n## Hidden\n```\n"
+  let outline = Syntax.outline(in: source)
+  let heading = (source as NSString).range(of: "## Install `tool`")
+  #expect(outline.headings == [heading])
+  #expect(outline.blocks.first?.kind == .heading)
+  #expect(outline.blocks.first?.range == heading)
+  #expect(outline.blocks.first?.level == 2)
+}
+
 @Test func invalidOrStaleSourceIsRejected() {
   let source = "📝 - [ ] task"
   #expect(throws: Edit.MutationError.invalidRange) {
