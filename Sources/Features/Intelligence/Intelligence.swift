@@ -177,15 +177,24 @@ public final class Intelligence {
 
   public func ask(
     _ request: IntelligenceRequest,
-    progress: @MainActor (IntelligenceProgress) -> Void = { _ in }
+    progress: @MainActor (IntelligenceProgress) -> Void = { _ in },
+    onPartialAnswer: @MainActor (String) -> Void = { _ in }
   ) async throws -> Answer {
     guard request.action == .ask else { throw IntelligenceError.invalidResponse }
     try validate(request)
     try Task.checkCancellation()
     let model = try await backend.modelInfo()
-    let whole = pass(request, purpose: .answer, source: request.snapshot.source, model: model)
+    logger.notice(
+      "request=\(request.id.uuidString, privacy: .public) action=ask model=\(model.variant, privacy: .public) context=\(model.contextSize)"
+    )
+    let body = content(in: request)
+    let whole = pass(request, purpose: .answer, source: body.source, model: model)
     let input: ModelPass
-    if try await fits(whole, model: model) {
+    let wholeFits = try await fits(whole, model: model)
+    logger.notice(
+      "request=\(request.id.uuidString, privacy: .public) action=ask path=\(wholeFits ? "whole" : "extract", privacy: .public) bodyUTF16=\(body.range.length) frontMatterUTF16=\(body.range.location)"
+    )
+    if wholeFits {
       input = whole
     } else {
       let chunks = try await chunks(for: request, purpose: .extract, model: model)
@@ -195,6 +204,9 @@ public final class Intelligence {
         progress(IntelligenceProgress(phase: .reading, current: index + 1, total: chunks.count))
         let excerpts = try await backend.excerpts(
           for: pass(request, purpose: .extract, source: chunk.source, model: model))
+        logger.notice(
+          "request=\(request.id.uuidString, privacy: .public) action=ask chunk=\(index + 1)/\(chunks.count) range=\(chunk.range.location):\(chunk.range.length) excerpts=\(excerpts.count)"
+        )
         for excerpt in excerpts {
           guard !Anchors.matches(excerpt, in: chunk.source).isEmpty else {
             throw IntelligenceError.unverifiedQuotation
@@ -203,6 +215,9 @@ public final class Intelligence {
         evidence.append(contentsOf: excerpts)
       }
       evidence = unique(evidence)
+      logger.notice(
+        "request=\(request.id.uuidString, privacy: .public) action=ask selectedExcerpts=\(evidence.count)"
+      )
       guard !evidence.isEmpty else { throw IntelligenceError.noEvidence }
       input = try await combine(evidence, request: request, model: model, progress: progress)
     }
@@ -210,11 +225,17 @@ public final class Intelligence {
     var generated: [ModelAnswerPart] = []
     for attempt in 1...2 {
       try Task.checkCancellation()
+      onPartialAnswer("")
       do {
-        generated = try await backend.answer(for: input)
+        generated = try await backend.streamAnswer(for: input, onUpdate: onPartialAnswer)
       } catch IntelligenceError.responseTooLarge where attempt == 1 {
         logger.notice(
           "request=\(request.id.uuidString, privacy: .public) answerRejected=responseTooLarge attempt=1"
+        )
+        continue
+      } catch IntelligenceError.unverifiedQuotation where attempt == 1 {
+        logger.notice(
+          "request=\(request.id.uuidString, privacy: .public) answerRejected=unverifiedQuotation attempt=1"
         )
         continue
       }
@@ -237,7 +258,10 @@ public final class Intelligence {
       switch part.kind {
       case .prose: return .prose(part.text)
       case .quote:
-        let ranges = Anchors.matches(part.text, in: request.snapshot.source)
+        let bodyStart = FrontMatter.contentStart(in: request.snapshot.source)
+        let ranges = Anchors.matches(part.text, in: request.snapshot.source).filter {
+          $0.location >= bodyStart
+        }
         guard !ranges.isEmpty else { throw IntelligenceError.unverifiedQuotation }
         return .quotation(Citation(quote: part.text, ranges: ranges))
       }
@@ -309,12 +333,18 @@ public final class Intelligence {
     let range: NSRange
   }
 
+  private func content(in request: IntelligenceRequest) -> Chunk {
+    let source = request.snapshot.source as NSString
+    let start = FrontMatter.contentStart(in: request.snapshot.source)
+    return Chunk(
+      source: source.substring(from: start),
+      range: NSRange(location: start, length: source.length - start))
+  }
+
   private func chunks(
     for request: IntelligenceRequest, purpose: ModelPass.Purpose, model: ModelInfo
   ) async throws -> [Chunk] {
-    let source = request.snapshot.source
-    let whole = Chunk(source: source, range: NSRange(location: 0, length: source.utf16.count))
-    return try await split(whole, request: request, purpose: purpose, model: model)
+    try await split(content(in: request), request: request, purpose: purpose, model: model)
   }
 
   private func split(
@@ -383,10 +413,11 @@ public final class Intelligence {
     }
     let count = try await backend.tokenCount(for: pass)
     guard count >= 0 else { throw IntelligenceError.invalidResponse }
+    let fits = count <= model.contextSize - pass.responseTokens - framingReserve
     logger.notice(
-      "request=\(pass.requestID.uuidString, privacy: .public) phase=\(pass.purpose.rawValue, privacy: .public) inputTokens=\(count) responseTokens=\(pass.responseTokens) context=\(model.contextSize)"
+      "request=\(pass.requestID.uuidString, privacy: .public) phase=\(pass.purpose.rawValue, privacy: .public) inputTokens=\(count) responseTokens=\(pass.responseTokens) context=\(model.contextSize) fits=\(fits)"
     )
-    return count <= model.contextSize - pass.responseTokens - framingReserve
+    return fits
   }
 
   private func pass(
@@ -394,15 +425,10 @@ public final class Intelligence {
     source: String, model: ModelInfo, scope: NSRange? = nil,
     evidenceBlocks: [String]? = nil
   ) -> ModelPass {
-    var shown = source
-    // Edit never shows the model front matter, so a rewrite can't change it.
-    if purpose == .edit, let scope {
-      let hidden = min(
-        FrontMatter.contentStart(in: request.snapshot.source) - scope.location, scope.length)
-      if hidden > 0 { shown = (source as NSString).substring(from: hidden) }
-    }
+    let bodyLength =
+      request.snapshot.source.utf16.count - FrontMatter.contentStart(in: request.snapshot.source)
     return ModelPass(
-      purpose: purpose, instruction: request.instruction, source: shown,
+      purpose: purpose, instruction: request.instruction, source: source,
       responseTokens: min(purpose == .answer ? answerTokens : 1_536, model.contextSize / 3),
       requestID: request.id,
       tasks: purpose == .edit
@@ -411,7 +437,7 @@ public final class Intelligence {
           return task.range.location >= scope.location
             && NSMaxRange(task.range) <= NSMaxRange(scope)
         } : [], evidenceBlocks: evidenceBlocks,
-      isPart: scope.map { $0.length < request.snapshot.source.utf16.count } ?? false)
+      isPart: scope.map { $0.length < bodyLength } ?? false)
   }
 
   private func validate(_ request: IntelligenceRequest) throws {

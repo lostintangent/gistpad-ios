@@ -3,19 +3,10 @@ import Foundation
 struct SourceBlock: Encodable {
   let id: Int
   let text: String
-  let firstOrderedItem: String?
 
   init(id: Int, text: String) {
     self.id = id
     self.text = text
-    firstOrderedItem =
-      text.components(separatedBy: .newlines).compactMap { line in
-        guard let marker = line.range(of: #"^[ \t]*[0-9]+[.)][ \t]+"#, options: .regularExpression)
-        else {
-          return nil
-        }
-        return String(line[marker.upperBound...])
-      }.first
   }
 
   static func blocks(in source: String) -> [Self] {

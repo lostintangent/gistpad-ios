@@ -59,4 +59,17 @@ struct ReviewTests {
         IntelligenceRequest(snapshot: snapshot, action: .edit, instruction: "Fix it"))
     }
   }
+
+  @Test func reviewUsesOnlyTheBodyAndCannotChangeMatchingMetadata() async throws {
+    let prefix = "---\r\nkey: shared 👩🏽‍💻\r\n---\r\n\r\n"
+    let body = "# Content\r\n\r\nThe shared 👩🏽‍💻 detail is here.\r\n"
+    let fixture = FixtureModel()
+    fixture.changes = { _ in [.replace(change("shared 👩🏽‍💻", "retained"))] }
+    let input = request(prefix + body, .review)
+    let review = try await Intelligence(backend: fixture).review(input)
+    #expect(fixture.passes.map(\.source) == [body])
+    #expect(
+      try review.application(to: input.snapshot).source
+        == prefix + "# Content\r\n\r\nThe retained detail is here.\r\n")
+  }
 }

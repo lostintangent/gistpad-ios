@@ -17,6 +17,7 @@ struct AnswerIssueTests {
     ("An Example. }</span>", .markupLeak),
     ("An Example is your favorite.}", .markupLeak),
     ("Ranking evidence: firstOrderedItem='An Example'", .internalIdentifier),
+    ("Your favorite is <title>Example</title>.", .markupLeak),
     ("It appears in block 1.", .internalIdentifier),
     ("It appears in the first block.", .internalIdentifier),
     ("Check blockIDs for the reference.", .internalIdentifier),
@@ -48,6 +49,8 @@ struct AnswerIssueTests {
       "An Example. It's #1 in your Incredible tier.",
       "You wrote “protagonists who reflect”.",
       "You wrote 'protagonists who reflect'.",
+      "You called the top tier \"incredible\".",
+      "The ranking evidence puts An Example first.",
     ] {
       #expect(AnswerIssue.check(prose, source: source) == nil)
     }
@@ -59,5 +62,9 @@ struct AnswerIssueTests {
     #expect(
       AnswerIssue.check(
         "Write {name} where the greeting goes.", source: "Hello, {name}!") == nil)
+    #expect(
+      AnswerIssue.check(
+        "You called it \"real\".", source: "This was realistic.")
+        == .unverifiedProseQuote)
   }
 }

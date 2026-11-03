@@ -140,6 +140,21 @@ struct EditTests {
     }
   }
 
+  @Test func taskEditsDoNotShowTheModelFrontMatter() async throws {
+    let prefix = "---\r\nexample: '- [ ] hidden'\r\n---\r\n\r\n"
+    let body = "# Today\r\n\r\n- [ ] Visible 👩🏽‍💻\r\n"
+    let fixture = FixtureModel()
+    fixture.changes = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
+    let input = request(prefix + body, .edit, "Mark every task complete")
+    let review = try await Intelligence(backend: fixture).edit(input)
+    #expect(input.snapshot.tasks.count == 1)
+    #expect(fixture.passes.map(\.source) == [body])
+    #expect(fixture.passes.flatMap(\.tasks).map(\.text) == ["- [ ] Visible 👩🏽‍💻"])
+    #expect(
+      try review.application(to: input.snapshot).source
+        == prefix + "# Today\r\n\r\n- [x] Visible 👩🏽‍💻\r\n")
+  }
+
   @Test func editChecksUnchecksAndCompletesTheRightTasks() async throws {
     let fixture = FixtureModel()
     let engine = Intelligence(backend: fixture)

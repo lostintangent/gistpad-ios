@@ -146,18 +146,18 @@
     }
 
     @Test(arguments: [false, true])
-    func aCitationIntoHiddenFrontMatterShowsItsQuoteWithoutShowInFile(shown: Bool) async throws {
+    func citationsOnlyLinkToVisibleBodyEvenWhenMetadataRepeatsTheQuote(shown: Bool) async throws {
       let prefix = "---\nkey: e\u{301} 👩🏽‍💻\n---\n\n"
-      let text = prefix + "# Content\n\nA retained thought."
+      let text = prefix + "# Content\n\nA retained thought about e\u{301} 👩🏽‍💻."
       let editor = Editor(
         fileID: "front-matter", text: text, generation: 8, showsFrontMatter: shown)
       let fixture = FixtureModel()
       fixture.answer = [
-        ModelAnswerPart(kind: .prose, text: "Your key is set."),
-        ModelAnswerPart(kind: .quote, text: "key: e\u{301} 👩🏽‍💻"),
+        ModelAnswerPart(kind: .prose, text: "You retained this thought."),
+        ModelAnswerPart(kind: .quote, text: "e\u{301} 👩🏽‍💻"),
       ]
       let model = IntelligenceState(editor: editor, backend: fixture)
-      model.askPrompt = "What is my key?"
+      model.askPrompt = "What thought did I retain?"
       await model.checkAvailability()
       model.generate()
       await model.task?.value
@@ -165,12 +165,13 @@
         Issue.record("Expected a verified quotation")
         return
       }
-      let metadata = try #require(citation.ranges.first)
-      #expect(model.canReveal(metadata) == shown)
+      let reference = try #require(citation.ranges.first)
+      #expect(citation.ranges.count == 1)
+      #expect(reference.location >= prefix.utf16.count)
+      #expect(model.canReveal(reference))
       editor.setShowsFrontMatter(!shown)
-      #expect(model.canReveal(metadata) == !shown)
+      #expect(model.canReveal(reference))
       editor.setShowsFrontMatter(shown)
-      #expect(model.canReveal((text as NSString).range(of: "retained")))
       #expect(editor.text.utf8.elementsEqual(text.utf8))
       #expect(editor.generation == 8)
     }

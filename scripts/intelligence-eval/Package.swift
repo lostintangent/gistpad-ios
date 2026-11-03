@@ -10,6 +10,9 @@ let package = Package(
   targets: [
     .executableTarget(
       name: "IntelligenceEval",
-      dependencies: [.product(name: "Intelligence", package: "GistPad")])
+      dependencies: [.product(name: "Intelligence", package: "GistPad")]),
+    .testTarget(
+      name: "IntelligenceEvalTests",
+      dependencies: ["IntelligenceEval"]),
   ]
 )
