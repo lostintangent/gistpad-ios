@@ -94,7 +94,7 @@ xcodebuild -project GistPad.xcodeproj -scheme GistPad \
 
 - UI tests drive the real app against the DEBUG fixture GitHub (`FixtureServer` in Sync), never a live account.
 - `simctl` can't fold the Duo, so tests and captures run in whatever posture is set. Physical fold transitions are left to the manual pass on the phone.
-- The Intelligence eval runs synthetic notes, and live gists you name, through the on-device model on the Mac: `bash scripts/evaluate-intelligence.sh 10`. See `Tools/IntelligenceEval/README.md`.
+- The Intelligence eval runs synthetic notes, and live gists you name, through the on-device model on the Mac: `bash scripts/evaluate-intelligence.sh 10`. See `scripts/intelligence-eval/README.md`.
 - `PreviewRenderer` builds Preview's web bundle from `../gistpad.dev` and has its own typecheck, tests and build. See `PreviewRenderer/README.md`.
 - Device builds use Release, `generic/platform=iOS`, team `RHFNBL7EG4` and `-allowProvisioningUpdates`. Install with `xcrun devicectl device install app --device 00008160-00041D6C0A200036 <path to GistPad.app>`. The bundle ID is `dev.gistpad.GistPad`.
 
@@ -153,8 +153,7 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 | `Tests/App` | App-hosted tests, in folders that mirror `Sources/App`. |
 | `Tests/UI` | UI tests for the Library, a gist, daily notes and comments. |
 | `PreviewRenderer` | Builds Preview's web bundle from `../gistpad.dev` into `Sources/Features/Preview`. |
-| `Tools/IntelligenceEval` | The on-device Intelligence eval. |
-| `scripts` | `capture-matrix.sh` and `evaluate-intelligence.sh`. |
+| `scripts` | Developer tools: `capture-matrix.sh`, and `evaluate-intelligence.sh`, which runs the on-device Intelligence eval in `scripts/intelligence-eval`. |
 | `Configuration` | `Public.xcconfig`. |
 
 Comments, Interface, Platform and Sync document their APIs in a README beside their sources.
