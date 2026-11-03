@@ -1,42 +1,30 @@
 import Foundation
 
-public struct FileSnapshot: Sendable, Equatable {
-  public let fileID: String
-  public let sessionID: UUID
-  public let generation: UInt64
-  public let source: String
-  public let headingOffsets: [Int]
-  public let tasks: [ModelTask]
+package struct FileSnapshot: Sendable, Equatable {
+  let fileID: String
+  let sessionID: UUID
+  let generation: UInt64
+  package let source: String
+  var headingOffsets: [Int] = []
+  package var tasks: [ModelTask] = []
 
-  public init(
-    fileID: String, sessionID: UUID, generation: UInt64, source: String,
-    headingOffsets: [Int] = [], tasks: [ModelTask] = []
-  ) {
-    self.fileID = fileID
-    self.sessionID = sessionID
-    self.generation = generation
-    self.source = source
-    self.headingOffsets = headingOffsets
-    self.tasks = tasks
-  }
-
-  public static func == (lhs: Self, rhs: Self) -> Bool {
+  package static func == (lhs: Self, rhs: Self) -> Bool {
     lhs.fileID == rhs.fileID && lhs.sessionID == rhs.sessionID
       && lhs.generation == rhs.generation && lhs.source.utf8.elementsEqual(rhs.source.utf8)
   }
 }
 
-public enum IntelligenceAction: String, CaseIterable, Sendable {
+package enum IntelligenceAction: String, CaseIterable, Sendable {
   case ask, edit, review
 }
 
-public struct IntelligenceRequest: Sendable {
-  public let id: UUID
-  public let snapshot: FileSnapshot
-  public let action: IntelligenceAction
-  public let instruction: String
+package struct IntelligenceRequest: Sendable {
+  package let id: UUID
+  package let snapshot: FileSnapshot
+  package let action: IntelligenceAction
+  let instruction: String
 
-  public init(
+  package init(
     snapshot: FileSnapshot, action: IntelligenceAction, instruction: String = "",
     id: UUID = UUID()
   ) {
@@ -47,7 +35,7 @@ public struct IntelligenceRequest: Sendable {
   }
 }
 
-public enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
+package enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
   case unavailable(String)
   case emptyInstruction
   case insufficientContext
@@ -67,7 +55,7 @@ public enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
   case rateLimited
   case timedOut
 
-  public var errorDescription: String? {
+  package var errorDescription: String? {
     switch self {
     case .unavailable(let reason): reason
     case .emptyInstruction:
@@ -137,63 +125,31 @@ public enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
   }
 }
 
-public struct ModelInfo: Sendable {
-  public let variant: String
-  public let contextSize: Int
-
-  public init(variant: String, contextSize: Int) {
-    self.variant = variant
-    self.contextSize = contextSize
-  }
+package struct ModelInfo: Sendable {
+  package let variant: String
+  package let contextSize: Int
 }
 
-public struct ModelPass: Sendable {
-  public enum Purpose: String, Sendable { case answer, extract, edit, review }
-  public let purpose: Purpose
-  public let instruction: String
-  public let source: String
-  public let responseTokens: Int
-  public let requestID: UUID
-  public let tasks: [ModelTask]
-  public let evidenceBlocks: [String]?
+package struct ModelPass: Sendable {
+  enum Purpose: String, Sendable { case answer, extract, edit, review }
+  let purpose: Purpose
+  package let instruction: String
+  package let source: String
+  let responseTokens: Int
+  var requestID = UUID()
+  var tasks: [ModelTask] = []
+  var evidenceBlocks: [String]?
   /// Whether the source is one part of a note too long for one pass.
-  public let isPart: Bool
-
-  public init(
-    purpose: Purpose, instruction: String, source: String, responseTokens: Int,
-    requestID: UUID = UUID(), tasks: [ModelTask] = [],
-    evidenceBlocks: [String]? = nil, isPart: Bool = false
-  ) {
-    self.purpose = purpose
-    self.instruction = instruction
-    self.source = source
-    self.responseTokens = responseTokens
-    self.requestID = requestID
-    self.tasks = tasks
-    self.evidenceBlocks = evidenceBlocks
-    self.isPart = isPart
-  }
+  var isPart = false
 }
 
-public struct ModelTask: Sendable {
-  public let id: Int
-  public let range: NSRange
-  public let text: String
-  public let isComplete: Bool
-  public let listID: Int
-  public let listTitle: String
-
-  public init(
-    id: Int, range: NSRange, text: String, isComplete: Bool,
-    listID: Int = 1, listTitle: String = ""
-  ) {
-    self.id = id
-    self.range = range
-    self.text = text
-    self.isComplete = isComplete
-    self.listID = listID
-    self.listTitle = listTitle
-  }
+package struct ModelTask: Sendable {
+  let id: Int
+  package let range: NSRange
+  package let text: String
+  package let isComplete: Bool
+  var listID = 1
+  package var listTitle = ""
 
   static func indexed(
     in source: String, markers: [NSRange], headings: [NSRange]
@@ -215,7 +171,7 @@ public struct ModelTask: Sendable {
   }
 }
 
-public enum ModelEdit: Sendable {
+package enum ModelEdit: Sendable {
   case replace(ModelReplacement)
   case setTaskStates(ids: [Int]?, isComplete: Bool)
   case insertTask(listID: Int, text: String)
@@ -227,42 +183,27 @@ public enum ModelEdit: Sendable {
   case replaceRegion(NSRange, ModelReplacement)
 }
 
-public struct ModelAnswerPart: Sendable, Equatable {
-  public enum Kind: Sendable { case prose, quote }
-  public let kind: Kind
-  public let text: String
-
-  public init(kind: Kind, text: String) {
-    self.kind = kind
-    self.text = text
-  }
+package struct ModelAnswerPart: Sendable, Equatable {
+  package enum Kind: Sendable { case prose, quote }
+  package let kind: Kind
+  package let text: String
 }
 
-public struct Citation: Sendable, Equatable {
-  public let quote: String
-  public let ranges: [NSRange]
+/// An answer's prose, or a quotation verified at its ranges in the note.
+package enum AnswerPart: Sendable, Equatable {
+  case prose(String)
+  case quotation(String, ranges: [NSRange])
 }
 
-public struct Answer: Sendable {
-  public let parts: [Part]
-}
-
-extension Answer {
-  public enum Part: Sendable, Equatable {
-    case prose(String)
-    case quotation(Citation)
-  }
-}
-
-public struct IntelligenceProgress: Sendable {
-  public enum Phase: Sendable { case reading, editing, reviewing, combining, answering }
-  public let phase: Phase
-  public let current: Int
-  public let total: Int
+package struct IntelligenceProgress: Sendable {
+  package enum Phase: Sendable { case reading, editing, reviewing, combining, answering }
+  package let phase: Phase
+  let current: Int
+  let total: Int
 }
 
 @MainActor
-public protocol IntelligenceModel {
+package protocol IntelligenceModel {
   func modelInfo() async throws -> ModelInfo
   func tokenCount(for pass: ModelPass) async throws -> Int
   func replacements(for pass: ModelPass) async throws -> [ModelReplacement]
@@ -275,11 +216,11 @@ public protocol IntelligenceModel {
 }
 
 extension IntelligenceModel {
-  public func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
+  package func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
     try await replacements(for: pass).map(ModelEdit.replace)
   }
 
-  public func streamAnswer(
+  package func streamAnswer(
     for pass: ModelPass, onUpdate: @MainActor (String) -> Void
   ) async throws -> [ModelAnswerPart] {
     let parts = try await answer(for: pass)

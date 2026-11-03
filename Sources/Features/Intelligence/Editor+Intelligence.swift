@@ -2,7 +2,7 @@ import Foundation
 import Editor
 
 extension FileSnapshot {
-  public init(parsing source: String, fileID: String, sessionID: UUID, generation: UInt64) {
+  package init(parsing source: String, fileID: String, sessionID: UUID, generation: UInt64) {
     let outline = Syntax.outline(in: source)
     let text = source as NSString
     let headings = outline.blocks.filter { $0.kind == .heading }

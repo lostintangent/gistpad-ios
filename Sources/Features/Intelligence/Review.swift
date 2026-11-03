@@ -1,47 +1,33 @@
 import Foundation
 
-public struct ModelReplacement: Sendable {
-  public let quote: String
-  public let replacement: String?
-  public let reason: String
-  public let before: String
-  public let after: String
-  let isInsertion: Bool
+package struct ModelReplacement: Sendable {
+  let quote: String
+  let replacement: String?
+  let reason: String
+  var before = ""
+  var after = ""
+  var isInsertion = false
+}
 
-  public init(
-    quote: String, replacement: String?, reason: String, before: String = "", after: String = ""
-  ) {
-    self.quote = quote
-    self.replacement = replacement
-    self.reason = reason
-    self.before = before
-    self.after = after
-    self.isInsertion = false
-  }
-
+extension ModelReplacement {
   init(inserting text: String, reason: String) {
-    quote = ""
-    replacement = text
-    self.reason = reason
-    before = ""
-    after = ""
-    isInsertion = true
+    self.init(quote: "", replacement: text, reason: reason, isInsertion: true)
   }
 }
 
-public enum AnchorRejection: Sendable, Equatable {
+enum AnchorRejection: Sendable, Equatable {
   case notFound, ambiguous, overlapping, invalidRange
 }
 
-public struct Review: Sendable {
-  public let snapshot: FileSnapshot
-  public let comments: [Comment]
+package struct Review: Sendable {
+  let snapshot: FileSnapshot
+  let comments: [Comment]
   fileprivate let safetyInstruction: String?
 
-  public var omittedCount: Int { comments.filter { $0.rejection != nil }.count }
-  public var canApply: Bool { comments.contains { $0.canApply } }
+  package var omittedCount: Int { comments.filter { $0.rejection != nil }.count }
+  var canApply: Bool { comments.contains { $0.canApply } }
 
-  public init(snapshot: FileSnapshot, candidates: [ModelReplacement]) {
+  init(snapshot: FileSnapshot, candidates: [ModelReplacement]) {
     self.init(
       snapshot: snapshot,
       scopedCandidates: candidates.map {
@@ -112,7 +98,7 @@ public struct Review: Sendable {
     self.safetyInstruction = safetyInstruction
   }
 
-  public func dismissing(commentID: UUID) throws -> Review {
+  func dismissing(commentID: UUID) throws -> Review {
     guard comments.contains(where: { $0.id == commentID }) else {
       throw IntelligenceError.noApplicableChanges
     }
@@ -121,7 +107,7 @@ public struct Review: Sendable {
       safetyInstruction: safetyInstruction)
   }
 
-  public func application(
+  package func application(
     to current: FileSnapshot, commentID: UUID? = nil
   ) throws -> Applied {
     guard current == snapshot else { throw IntelligenceError.staleSnapshot }
@@ -199,15 +185,15 @@ public struct Review: Sendable {
 }
 
 extension Review {
-  public struct Comment: Identifiable, Sendable {
-    public let id: UUID
-    public let quote: String
-    public let replacement: String?
-    public let reason: String
-    public let range: NSRange?
-    public let rejection: AnchorRejection?
+  package struct Comment: Identifiable, Sendable {
+    package let id: UUID
+    let quote: String
+    let replacement: String?
+    let reason: String
+    let range: NSRange?
+    let rejection: AnchorRejection?
 
-    public var canApply: Bool {
+    var canApply: Bool {
       range != nil && rejection == nil
         && replacement.map { !quote.utf8.elementsEqual($0.utf8) } == true
     }
@@ -215,12 +201,12 @@ extension Review {
 }
 
 extension Review {
-  public struct Applied: Sendable {
-    public let review: Review
-    public let source: String
-    public let applied: [Comment]
+  package struct Applied: Sendable {
+    package let review: Review
+    package let source: String
+    package let applied: [Comment]
 
-    public func mappedSelection(_ selection: NSRange) throws -> NSRange {
+    func mappedSelection(_ selection: NSRange) throws -> NSRange {
       guard Range(selection, in: review.snapshot.source) != nil else {
         throw IntelligenceError.invalidSelection
       }
@@ -229,7 +215,7 @@ extension Review {
       return NSRange(location: start, length: max(0, end - start))
     }
 
-    public func remainingReview(on snapshot: FileSnapshot) throws -> Review {
+    func remainingReview(on snapshot: FileSnapshot) throws -> Review {
       let original = review.snapshot
       guard snapshot.fileID == original.fileID, snapshot.sessionID == original.sessionID,
         snapshot.generation == original.generation &+ 1,

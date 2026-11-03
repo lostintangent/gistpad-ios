@@ -3,18 +3,18 @@ import Editor
 import OSLog
 
 @MainActor
-public final class Intelligence {
-  private let backend: any IntelligenceModel
+package final class Intelligence {
+  let backend: any IntelligenceModel
   private let framingReserve = 96
   /// Real answers use under 120 tokens. A runaway repeats itself until this limit stops it.
   private let answerTokens = 384
   private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 
-  public init(backend: any IntelligenceModel) {
+  package init(backend: any IntelligenceModel) {
     self.backend = backend
   }
 
-  public func edit(
+  package func edit(
     _ request: IntelligenceRequest,
     progress: @MainActor (IntelligenceProgress) -> Void = { _ in }
   ) async throws -> Review {
@@ -22,7 +22,7 @@ public final class Intelligence {
     return try await generate(request, progress: progress)
   }
 
-  public func review(
+  package func review(
     _ request: IntelligenceRequest,
     progress: @MainActor (IntelligenceProgress) -> Void = { _ in }
   ) async throws -> Review {
@@ -201,11 +201,11 @@ public final class Intelligence {
     return review
   }
 
-  public func ask(
+  package func ask(
     _ request: IntelligenceRequest,
     progress: @MainActor (IntelligenceProgress) -> Void = { _ in },
     onPartialAnswer: @MainActor (String) -> Void = { _ in }
-  ) async throws -> Answer {
+  ) async throws -> [AnswerPart] {
     guard request.action == .ask else { throw IntelligenceError.invalidResponse }
     try validate(request)
     try Task.checkCancellation()
@@ -280,7 +280,7 @@ public final class Intelligence {
       !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     guard !visible.isEmpty else { throw IntelligenceError.emptyAnswer }
-    let parts = try visible.map { part -> Answer.Part in
+    return try visible.map { part -> AnswerPart in
       switch part.kind {
       case .prose: return .prose(part.text)
       case .quote:
@@ -289,10 +289,9 @@ public final class Intelligence {
           $0.location >= bodyStart
         }
         guard !ranges.isEmpty else { throw IntelligenceError.unverifiedQuotation }
-        return .quotation(Citation(quote: part.text, ranges: ranges))
+        return .quotation(part.text, ranges: ranges)
       }
     }
-    return Answer(parts: parts)
   }
 
   private func combine(

@@ -3,21 +3,21 @@
 
   /// A scripted model for tests and capture fixtures. It never calls Apple Intelligence.
   @MainActor
-  public final class FixtureModel: IntelligenceModel {
-    public static let source =
+  final class FixtureModel: IntelligenceModel {
+    static let source =
       "# Saturday walk\n\nTake teh river path.\nLeave at 9am, before the cafe opens at 8am."
 
-    public var contextSize = 4_096
-    public var unavailableReason: String?
-    public var delay: Duration?
-    public var failure: (any Error)?
-    public var nextFailure: (any Error)?
-    public var answer = [
+    var contextSize = 4_096
+    var unavailableReason: String?
+    var delay: Duration?
+    var failure: (any Error)?
+    var nextFailure: (any Error)?
+    var answer = [
       ModelAnswerPart(kind: .prose, text: "You leave at 9am, an hour after the cafe opens."),
       ModelAnswerPart(kind: .quote, text: "Leave at 9am"),
     ]
-    public var partialAnswers: [String] = []
-    public var changes: (ModelPass) -> [ModelEdit] = { _ in
+    var partialAnswers: [String] = []
+    var changes: (ModelPass) -> [ModelEdit] = { _ in
       [
         .replace(
           ModelReplacement(
@@ -28,42 +28,42 @@
             reason: "9am is after the cafe opens at 8am.")),
       ]
     }
-    public var excerpts: (ModelPass) -> [String] = { _ in [] }
-    public private(set) var passes: [ModelPass] = []
+    var excerpts: (ModelPass) -> [String] = { _ in [] }
+    private(set) var passes: [ModelPass] = []
 
-    public init() {}
+    init() {}
 
-    public func modelInfo() async throws -> ModelInfo {
+    func modelInfo() async throws -> ModelInfo {
       if let unavailableReason { throw IntelligenceError.unavailable(unavailableReason) }
       return ModelInfo(variant: "Fixture", contextSize: contextSize)
     }
 
-    public func tokenCount(for pass: ModelPass) async throws -> Int {
+    func tokenCount(for pass: ModelPass) async throws -> Int {
       64 + pass.source.utf16.count + pass.instruction.utf16.count
     }
 
-    public func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
+    func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
       try await record(pass)
       return changes(pass)
     }
 
-    public func replacements(for pass: ModelPass) async throws -> [ModelReplacement] {
+    func replacements(for pass: ModelPass) async throws -> [ModelReplacement] {
       try await editOperations(for: pass).compactMap {
         if case .replace(let candidate) = $0 { candidate } else { nil }
       }
     }
 
-    public func excerpts(for pass: ModelPass) async throws -> [String] {
+    func excerpts(for pass: ModelPass) async throws -> [String] {
       try await record(pass)
       return excerpts(pass)
     }
 
-    public func answer(for pass: ModelPass) async throws -> [ModelAnswerPart] {
+    func answer(for pass: ModelPass) async throws -> [ModelAnswerPart] {
       try await record(pass)
       return answer
     }
 
-    public func streamAnswer(
+    func streamAnswer(
       for pass: ModelPass, onUpdate: @MainActor (String) -> Void
     ) async throws -> [ModelAnswerPart] {
       try await record(pass)

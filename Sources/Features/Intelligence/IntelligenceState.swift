@@ -18,20 +18,18 @@
     var errorMessage: String?
     var notice: String?
     var progress: IntelligenceProgress?
-    var answerParts: [Answer.Part] = []
+    var answerParts: [AnswerPart] = []
     var review: Review?
     var appliedEdit: Review?
     var appliedCount = 0
     var applyFeedback = 0
     private(set) var snapshot: FileSnapshot?
-    private let backend: any IntelligenceModel
     private let engine: Intelligence
     private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
     @ObservationIgnored private(set) var task: Task<Void, Never>?
 
-    init(editor: Editor, backend: any IntelligenceModel) {
+    init(editor: Editor, backend: any IntelligenceModel = OnDeviceModel()) {
       self.editor = editor
-      self.backend = backend
       engine = Intelligence(backend: backend)
     }
 
@@ -65,7 +63,7 @@
 
     func checkAvailability() async {
       do {
-        _ = try await backend.modelInfo()
+        _ = try await engine.backend.modelInfo()
         available = true
         availabilityReason = nil
       } catch {
@@ -115,8 +113,7 @@
               request, progress: { self.progress = $0 },
               onPartialAnswer: { text in
                 self.answerParts = text.isEmpty ? [] : [.prose(text)]
-              }
-            ).parts
+              })
           case .edit:
             self.review = try await self.engine.edit(request, progress: { self.progress = $0 })
           case .review:

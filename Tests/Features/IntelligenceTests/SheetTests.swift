@@ -161,12 +161,12 @@
       await model.checkAvailability()
       model.generate()
       await model.task?.value
-      guard case .quotation(let citation) = try #require(model.answerParts.last) else {
+      guard case .quotation(_, let ranges) = try #require(model.answerParts.last) else {
         Issue.record("Expected a verified quotation")
         return
       }
-      let reference = try #require(citation.ranges.first)
-      #expect(citation.ranges.count == 1)
+      let reference = try #require(ranges.first)
+      #expect(ranges.count == 1)
       #expect(reference.location >= prefix.utf16.count)
       #expect(model.canReveal(reference))
       editor.setShowsFrontMatter(!shown)

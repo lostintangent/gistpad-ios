@@ -1,6 +1,5 @@
 #if canImport(UIKit)
   import Editor
-  import Intelligence
   import SwiftUI
   import Testing
   import UIKit
@@ -12,7 +11,8 @@
   struct IntelligenceSurfaceTests {
     @Test func closingIntelligenceRestoresSourceSelectionFocusAndUndo() async throws {
       let source =
-        FixtureModel.source + "\n" + (1...120).map { "Stop \($0) on the river path." }.joined(separator: "\n")
+        "# Saturday walk\n\nTake teh river path.\n"
+        + (1...120).map { "Stop \($0) on the river path." }.joined(separator: "\n")
       let session = Editor(fileID: "intelligence-return", text: source)
       let editor = session.textView
       let selection = (source as NSString).range(of: "Stop 60 ")

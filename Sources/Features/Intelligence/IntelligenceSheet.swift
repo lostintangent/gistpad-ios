@@ -14,13 +14,11 @@
     @FocusState private var promptFocused: Bool
 
     public init(
-      editor: Editor, title: String,
-      backend: any IntelligenceModel = OnDeviceModel(),
-      revealSource: @escaping @MainActor (NSRange) -> Void
+      editor: Editor, title: String, revealSource: @escaping @MainActor (NSRange) -> Void
     ) {
       self.title = title
       self.revealSource = revealSource
-      _model = State(initialValue: IntelligenceState(editor: editor, backend: backend))
+      _model = State(initialValue: IntelligenceState(editor: editor))
     }
 
     public var body: some View {
@@ -188,10 +186,10 @@
         switch part {
         case .prose(let text):
           Section { Text(text).textSelection(.enabled) }
-        case .quotation(let citation):
-          let ranges = citation.ranges.filter { !model.isHiddenFrontMatterReference($0) }
+        case .quotation(let quote, let ranges):
+          let ranges = ranges.filter { !model.isHiddenFrontMatterReference($0) }
           Section {
-            Text(citation.quote).textSelection(.enabled)
+            Text(quote).textSelection(.enabled)
             if ranges.count == 1, let range = ranges.first {
               Button(
                 String(localized: "Show in File", bundle: .module), systemImage: "arrow.up.forward"

@@ -125,7 +125,7 @@ enum Evaluator {
                 }
               })
             answerSeconds = elapsed()
-            let text = response.parts.compactMap { part -> String? in
+            let text = response.compactMap { part -> String? in
               if case .prose(let text) = part { return text }
               return nil
             }.joined(separator: "\n\n")

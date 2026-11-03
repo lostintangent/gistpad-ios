@@ -3,14 +3,14 @@ import FoundationModels
 import OSLog
 
 @MainActor
-public final class OnDeviceModel: IntelligenceModel {
+package final class OnDeviceModel: IntelligenceModel {
   private let model = SystemLanguageModel.default
   private var loggedModel = false
   private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 
-  public init() {}
+  package init() {}
 
-  public func modelInfo() async throws -> ModelInfo {
+  package func modelInfo() async throws -> ModelInfo {
     switch model.availability {
     case .available:
       break
@@ -41,7 +41,7 @@ public final class OnDeviceModel: IntelligenceModel {
     return info
   }
 
-  public func tokenCount(for pass: ModelPass) async throws -> Int {
+  package func tokenCount(for pass: ModelPass) async throws -> Int {
     let instructionTokens = try await model.tokenCount(
       for: Instructions(Self.instructions(for: pass)))
     let promptTokens = try await model.tokenCount(for: try Self.prompt(for: pass))
@@ -51,7 +51,7 @@ public final class OnDeviceModel: IntelligenceModel {
     return try await instructionTokens + promptTokens + model.tokenCount(for: schema)
   }
 
-  public func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
+  package func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
     try await perform(pass: pass) {
       if let move = Self.anchoredListMove(in: pass.source, instruction: pass.instruction) {
         return move
@@ -530,7 +530,7 @@ public final class OnDeviceModel: IntelligenceModel {
     return ids
   }
 
-  public func replacements(for pass: ModelPass) async throws -> [ModelReplacement] {
+  package func replacements(for pass: ModelPass) async throws -> [ModelReplacement] {
     try await perform(pass: pass) {
       let session = Self.session(model: model, pass: pass)
       let response = try await session.respond(
@@ -544,7 +544,7 @@ public final class OnDeviceModel: IntelligenceModel {
     }
   }
 
-  public func excerpts(for pass: ModelPass) async throws -> [String] {
+  package func excerpts(for pass: ModelPass) async throws -> [String] {
     try await perform(pass: pass) {
       let blocks = Self.blocks(for: pass)
       guard !blocks.isEmpty, let schema = try Self.schema(for: pass) else {
@@ -562,11 +562,11 @@ public final class OnDeviceModel: IntelligenceModel {
     }
   }
 
-  public func answer(for pass: ModelPass) async throws -> [ModelAnswerPart] {
+  package func answer(for pass: ModelPass) async throws -> [ModelAnswerPart] {
     try await streamAnswer(for: pass, onUpdate: { _ in })
   }
 
-  public func streamAnswer(
+  package func streamAnswer(
     for pass: ModelPass, onUpdate: @MainActor (String) -> Void
   ) async throws -> [ModelAnswerPart] {
     try await perform(pass: pass) {

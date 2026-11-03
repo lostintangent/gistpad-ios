@@ -1,12 +1,12 @@
 import Foundation
 
-public enum AnswerIssue: String, Sendable {
+package enum AnswerIssue: String, Sendable {
   case unverifiedProseQuote
   case internalIdentifier
   case thirdPerson
   case markupLeak
 
-  public static func check(_ answer: String, source: String, instruction: String = "") -> Self? {
+  package static func check(_ answer: String, source: String, instruction: String = "") -> Self? {
     func isSupportedQuote(_ quote: String) -> Bool {
       guard quote.first?.isLetter == true, quote.last?.isLetter == true else {
         return !Anchors.matches(quote, in: source).isEmpty

@@ -25,7 +25,7 @@ struct AskTests {
     ]
     let short = request(manga, .ask, "Summarize my reading list")
     let answer = try await Intelligence(backend: fixture).ask(short)
-    #expect(answer.parts.count == 2)
+    #expect(answer.count == 2)
     #expect(fixture.passes.map(\.source) == [manga])
     #expect(fixture.passes.map(\.requestID) == [short.id])
 
@@ -39,7 +39,7 @@ struct AskTests {
     let reads = reader.passes.filter { $0.purpose == .extract }
     #expect(reads.map(\.source).joined().utf8.elementsEqual(long.utf8))
     #expect(reader.passes.filter { $0.purpose == .answer }.map(\.evidenceBlocks) == [["needle"]])
-    #expect(found.parts.count == 1)
+    #expect(found.count == 1)
   }
 
   @Test func aCitationCarriesTheExactPassageForShowInFile() async throws {
@@ -48,11 +48,7 @@ struct AskTests {
     let answer = try await Intelligence(backend: fixture).ask(
       request("Hello 👩🏽‍💻\r\n", .ask, "Quote the emoji"))
     #expect(
-      answer.parts == [
-        .quotation(
-          Citation(
-            quote: "👩🏽‍💻", ranges: [NSRange(location: 6, length: "👩🏽‍💻".utf16.count)]))
-      ])
+      answer == [.quotation("👩🏽‍💻", ranges: [NSRange(location: 6, length: "👩🏽‍💻".utf16.count)])])
 
     let original = "# One\r\n\r\nFirst 👩🏽‍💻\r\n\r\n# Two\n\nSecond cafe\u{301}\n"
     let blocks = SourceBlock.blocks(in: original)
@@ -97,11 +93,12 @@ struct AskTests {
       request("The route is south.", .ask, "Which route?"),
       onPartialAnswer: { updates.append($0) })
     #expect(updates == ["", "Your", "Your note says"])
-    #expect(response.parts.count == 2)
-    #expect(response.parts.last == .quotation(
-      Citation(
-        quote: "The route is south.",
-        ranges: [NSRange(location: 0, length: "The route is south.".utf16.count)])))
+    #expect(response.count == 2)
+    #expect(
+      response.last
+        == .quotation(
+          "The route is south.",
+          ranges: [NSRange(location: 0, length: "The route is south.".utf16.count)]))
   }
 
   @Test func anUnverifiedSourceIDGetsOneCleanRetry() async throws {
@@ -114,7 +111,7 @@ struct AskTests {
       onPartialAnswer: { updates.append($0) })
     #expect(fixture.passes.map(\.purpose) == [.answer, .answer])
     #expect(updates == ["", "", "The route is south."])
-    #expect(answer.parts == [.prose("The route is south.")])
+    #expect(answer == [.prose("The route is south.")])
   }
 
   @Test func askNeverReadsOrCitesFrontMatter() async throws {
@@ -126,15 +123,14 @@ struct AskTests {
     let answer = try await Intelligence(backend: fixture).ask(input)
     #expect(fixture.passes.map(\.source) == [body])
     #expect(
-      answer.parts == [
+      answer == [
         .quotation(
-          Citation(
-            quote: "A visible fact 👩🏽‍💻.",
-            ranges: [
-              NSRange(
-                location: prefix.utf16.count + "# Content\r\n\r\n".utf16.count,
-                length: "A visible fact 👩🏽‍💻.".utf16.count)
-            ]))
+          "A visible fact 👩🏽‍💻.",
+          ranges: [
+            NSRange(
+              location: prefix.utf16.count + "# Content\r\n\r\n".utf16.count,
+              length: "A visible fact 👩🏽‍💻.".utf16.count)
+          ])
       ])
 
     fixture.answer = [ModelAnswerPart(kind: .quote, text: "A hidden fact 👩🏽‍💻")]

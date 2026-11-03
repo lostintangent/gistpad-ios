@@ -5,7 +5,8 @@ The Mac must have Apple Intelligence enabled and the local model available.
 This uses `SystemLanguageModel.default`, never a fake backend or cloud service.
 Honor the shared `/tmp/gistpad-slot.lock` before running builds or inference.
 The evaluation uses the same `Intelligence.ask`, `.edit`, and `.review` paths
-as the app. A baseline can exit unsuccessfully when it misses the acceptance
+as the app. It's the root package's `IntelligenceEval` target, so it reaches
+them through `package` access, and `swift test` runs its tests. A baseline can exit unsuccessfully when it misses the acceptance
 floor; its result files still contain the measured cases.
 
 To include live notes, use:

@@ -56,5 +56,13 @@ let package = Package(
     .testTarget(
       name: "PreviewTests", dependencies: ["Preview", "Accent", "Comments"],
       path: "Tests/Features/PreviewTests"),
+
+    // The on-device Intelligence eval, which reaches the pipeline through `package` access.
+    .executableTarget(
+      name: "IntelligenceEval", dependencies: ["Intelligence"],
+      path: "scripts/intelligence-eval/Sources/IntelligenceEval"),
+    .testTarget(
+      name: "IntelligenceEvalTests", dependencies: ["IntelligenceEval"],
+      path: "scripts/intelligence-eval/Tests/IntelligenceEvalTests"),
   ]
 )
