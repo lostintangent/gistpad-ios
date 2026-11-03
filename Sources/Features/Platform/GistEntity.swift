@@ -78,25 +78,21 @@ public struct GistEntityQuery: EntityStringQuery, IndexedEntityQuery {
 }
 
 public actor GistSpotlightIndex {
-    public static let shared = GistSpotlightIndex()
+    /// The gists Spotlight may hold, or nil when only clearing it is safe.
     private var indexedIDs: Set<String>?
-    private var operation: Task<Void, any Error>?
     /// Spotlight keeps this index across updates, so it keeps its first name.
     static var index: CSSearchableIndex {
         CSSearchableIndex(name: "GistPadNotes", protectionClass: .complete)
     }
 
-    public func update(_ current: LibrarySnapshot) async throws {
-        let previousOperation = operation
-        let task = Task {
-            if let previousOperation { _ = await previousOperation.result }
-            try await replaceIndex(with: current)
-        }
-        operation = task
-        try await task.value
+    /// Spotlight still holds the gists of the snapshot GistPad launched with, so launch deletes
+    /// just the ones that went away instead of clearing the index.
+    public init(launchedWith snapshot: LibrarySnapshot?) {
+        indexedIDs = snapshot.map { Set($0.gists.map(\.id)) }
     }
 
-    private func replaceIndex(with current: LibrarySnapshot) async throws {
+    /// Brings Spotlight to `current`. Callers update one snapshot at a time.
+    public func update(_ current: LibrarySnapshot) async throws {
         guard CSSearchableIndex.isIndexingAvailable() else { return }
         let currentIDs = Set(current.gists.map(\.id))
         if let indexedIDs {
@@ -108,9 +104,9 @@ public actor GistSpotlightIndex {
         } else {
             try await Self.index.deleteAllSearchableItems()
         }
-        indexedIDs = nil
-        try await Self.index.indexAppEntities(current.gists)
+        // Spotlight now holds no gist outside this snapshot, even if indexing stops partway.
         indexedIDs = currentIDs
+        try await Self.index.indexAppEntities(current.gists)
     }
 }
 

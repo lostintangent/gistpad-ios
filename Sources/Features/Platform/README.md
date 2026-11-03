@@ -14,7 +14,10 @@ needs the web's `apple-app-site-association` file deployed first.
 `GistEntity` is an `IndexedEntity`, one per gist, with its title, tags and a
 snippet, indexed with complete file protection. Opening one opens the gist the
 way the Library does. `GistEntityQuery` resolves identifiers and strings for the
-signed-in account and answers the system's reindex requests.
+signed-in account and answers the system's reindex requests. The app updates the
+index in the background after each snapshot, so nothing waits on Spotlight, and
+deletes just the gists that went away since the last one, including while the
+app wasn't running.
 
 Open Gist, Open Today, Add to Today and New Gist are App Shortcuts. Add to Today,
 Open Today and New Gist are also controls. The Open Today control opens today's

@@ -58,6 +58,10 @@ final class PlatformBridge: DailyNoteActions {
   private var sessions: [UUID: WeakSession] = [:]
   private var refreshTask: Task<Void, Never>?
   private var operation: Task<Void, Never>?
+  /// Starts from the snapshot GistPad launched with, read before the first refresh rewrites it.
+  private let spotlight = GistSpotlightIndex(launchedWith: try? LibrarySnapshot.read())
+  private var spotlightSnapshot: LibrarySnapshot?
+  private var spotlightTask: Task<Void, Never>?
   private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "SystemIntegration")
 
   init(sync: GitHubSync, store: DraftStore, library: Library) {
@@ -120,7 +124,25 @@ final class PlatformBridge: DailyNoteActions {
     guard current?.id == account?.id else { throw PlatformError.accountChanged }
     try snapshot.write()
     WidgetCenter.shared.reloadTimelines(ofKind: LauncherWidgetView.kind)
-    try await GistSpotlightIndex.shared.update(snapshot)
+    indexInSpotlight(snapshot)
+  }
+
+  /// Spotlight catches up with the newest snapshot in the background, so nothing waits on it.
+  private func indexInSpotlight(_ snapshot: LibrarySnapshot) {
+    spotlightSnapshot = snapshot
+    guard spotlightTask == nil else { return }
+    spotlightTask = Task {
+      while let snapshot = spotlightSnapshot {
+        spotlightSnapshot = nil
+        do {
+          try await spotlight.update(snapshot)
+        } catch {
+          logger.error(
+            "Spotlight update failed: \(String(reflecting: type(of: error)), privacy: .public)")
+        }
+      }
+      spotlightTask = nil
+    }
   }
 
   @discardableResult
