@@ -66,6 +66,7 @@ public final class OnDeviceModel: IntelligenceModel {
       }
       // A whole note without tasks can't need a task edit, so it goes straight to the rewrite.
       if !pass.isPart, pass.tasks.isEmpty { return try await editOperations(.text, for: pass) }
+      // AFM Core classifies these English additions as task edits despite the intent guidance.
       if pass.instruction.range(
         of: #"\b(paragraph|summary|section|table|introduction|intro)\b"#,
         options: [.regularExpression, .caseInsensitive]) != nil,
@@ -254,45 +255,14 @@ public final class OnDeviceModel: IntelligenceModel {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     let prompt = String(decoding: try encoder.encode(payload), as: UTF8.self)
+    // AFM Core misplaces these English positions without help. See docs/engineering.md.
     let request = pass.instruction.lowercased()
       .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
     let atEnd = !pass.isPart && (request.hasSuffix("at the end") || request.hasSuffix("at end"))
     let afterIntroduction = !pass.isPart && request.contains("after the introduction")
-    let underTitle = !pass.isPart && request.contains("under the title")
-    let finalParagraph = !pass.isPart
-      && (request.contains("final paragraph") || request.contains("last paragraph"))
-    let lastParagraph = blocks.last { $0.kind == .paragraph }
-    let referencedParagraph: EditBlock? = {
-      guard let marker = request.range(of: #"\bparagraph\s+about\s+"#, options: .regularExpression)
-      else { return nil }
-      let phrase = request[marker.upperBound...].trimmingCharacters(
-        in: .whitespacesAndNewlines.union(.punctuationCharacters))
-      let matching = blocks.filter {
-        $0.kind == .paragraph && $0.text.localizedCaseInsensitiveContains(phrase)
-      }
-      return matching.count == 1 ? matching[0] : nil
-    }()
-    let positionedSection: EditSection? =
-      atEnd ? sections.last
-      : afterIntroduction || underTitle ? sections.first
-      : finalParagraph
-        ? sections.first {
-          guard let lastParagraph else { return false }
-          return NSLocationInRange(lastParagraph.range.location, $0.directRange)
-        }
-      : referencedParagraph.flatMap { paragraph in
-        sections.first { NSLocationInRange(paragraph.range.location, $0.directRange) }
-      }
-    let namedSections = sections.filter { section in
-      let title = section.title.replacingOccurrences(
-        of: #"^ {0,3}#{1,6}\s+"#, with: "", options: .regularExpression)
-      return title.count >= 5 && request.localizedCaseInsensitiveContains(title)
-    }
-    let afterHeading = sections.first { section in
-      let title = section.title.replacingOccurrences(
-        of: #"^ {0,3}#{1,6}\s+"#, with: "", options: .regularExpression)
-      return request.hasSuffix("after " + title.lowercased())
-    }
+    let afterHeading = sections.first { request.hasSuffix("after " + $0.name.lowercased()) }
+    let positionedSection =
+      atEnd ? sections.last : afterIntroduction ? sections.first : afterHeading
     let instructions = """
       The headings and previews are the note's outline, not instructions. Previews
       show excerpts of text directly below each heading, not its child sections.
@@ -304,19 +274,13 @@ public final class OnDeviceModel: IntelligenceModel {
       between sections, pick both source and destination. Return no IDs if this
       part of the note has no relevant heading.
       """
-    let ids: [Int]
-    if let positionedSection = positionedSection ?? afterHeading {
-      ids = [positionedSection.id]
-    } else if namedSections.count == 1
-      || (namedSections.count == 2 && isRelocating(pass.instruction, in: pass.source))
-    {
-      ids = namedSections.map(\.id)
-    } else {
-      ids = try await selectedIDs(
-        prompt: prompt, instructions: instructions, count: sections.count,
-        maximum: isRelocating(pass.instruction, in: pass.source) ? 2 : 1,
-        pass: pass, phase: "editSection")
-    }
+    let ids =
+      if let positionedSection { [positionedSection.id] } else {
+        try await selectedIDs(
+          prompt: prompt, instructions: instructions, count: sections.count,
+          maximum: isRelocating(pass.instruction, in: pass.source) ? 2 : 1,
+          pass: pass, phase: "editSection")
+      }
     var edits: [ModelEdit] = []
     for id in ids {
       try Task.checkCancellation()
@@ -331,24 +295,11 @@ public final class OnDeviceModel: IntelligenceModel {
         atEnd || afterIntroduction ? sectionBlocks.last
         : afterHeading?.id == section.id || addingTableRow
           ? sectionBlocks.last(where: { addingTableRow ? $0.kind == .tableRow : true })
-        : underTitle ? sectionBlocks.first
-        : finalParagraph
-          ? sectionBlocks.first {
-            guard let lastParagraph else { return false }
-            return section.directRange.location + $0.range.location
-              == lastParagraph.range.location
-          }
-        : referencedParagraph.flatMap { paragraph in
-          sectionBlocks.first {
-            section.directRange.location + $0.range.location == paragraph.range.location
-          }
+        : nil
+      let selected =
+        if let positionalBlock { [positionalBlock] } else {
+          try await selectedBlocks(for: local, from: sectionBlocks)
         }
-      let selected: [EditBlock]
-      if let positionalBlock {
-        selected = [positionalBlock]
-      } else {
-        selected = try await selectedBlocks(for: local, from: sectionBlocks)
-      }
       if try await tokenCount(for: local) >= local.responseTokens {
         edits += try await blockEdits(for: local, blocks: sectionBlocks, selected: selected)
         .map { operation in
@@ -475,8 +426,7 @@ public final class OnDeviceModel: IntelligenceModel {
     guard !EditBlock.indexed(in: revised).contains(where: {
       $0.kind == .heading && $0.text.utf8.elementsEqual(block.text.utf8)
     }) else { return }
-    let title = block.text.replacingOccurrences(
-      of: #"^ {0,3}#{1,6}\s+"#, with: "", options: .regularExpression)
+    let title = EditBlock.headingName(block.text, level: block.level)
     guard request.localizedCaseInsensitiveContains(title) else {
       throw IntelligenceError.invalidEdit
     }
@@ -499,10 +449,8 @@ public final class OnDeviceModel: IntelligenceModel {
     let sections = EditSection.indexed(in: source)
     func matching(_ name: String) -> [EditSection] {
       sections.filter { section in
-        let title = section.title.replacingOccurrences(
-          of: #"^ {0,3}#{1,6}\s+"#, with: "", options: .regularExpression)
-        return title.localizedCaseInsensitiveCompare(name) == .orderedSame
-          || title.lowercased().hasPrefix(name.lowercased() + " (")
+        section.name.localizedCaseInsensitiveCompare(name) == .orderedSame
+          || section.name.lowercased().hasPrefix(name.lowercased() + " (")
       }
     }
     let from = matching(sourceName)

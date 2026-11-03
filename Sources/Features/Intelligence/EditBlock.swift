@@ -18,6 +18,12 @@ struct EditBlock {
       .map { String($0.1) }
   }
 
+  static func headingName(_ heading: String, level: Int) -> String {
+    let content = heading.drop(while: { $0 == " " }).dropFirst(level)
+    guard content.first?.isWhitespace == true else { return heading }
+    return String(content.drop(while: \.isWhitespace))
+  }
+
   static func indexed(in source: String) -> [Self] {
     let text = source as NSString
     var heading = ""
@@ -39,6 +45,7 @@ struct EditSection {
   let range: NSRange
   let text: String
   let directRange: NSRange
+  var name: String { EditBlock.headingName(title, level: level) }
 
   static func indexed(in source: String) -> [Self] {
     let headings = EditBlock.indexed(in: source).filter { $0.kind == .heading }
