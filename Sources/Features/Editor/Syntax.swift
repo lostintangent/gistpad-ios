@@ -127,10 +127,10 @@ public enum Syntax {
     return 0
   }
 
-  /// Source blocks and markers with UTF-16 ranges, excluding fenced code and front matter.
+  /// UTF-16 source blocks and task markers, with markers outside code and front matter.
   public static func outline(in text: String) -> (
-    headings: [NSRange], taskMarkers: [NSRange], blocks: [Block],
-    codeRanges: [NSRange], frontMatterRanges: [NSRange]
+    blocks: [Block], taskMarkers: [NSRange], codeRanges: [NSRange],
+    frontMatterRanges: [NSRange]
   ) {
     let source = text as NSString
     let spans = spans(in: text)
@@ -141,7 +141,6 @@ public enum Syntax {
       (span.kind == .task || span.kind == .checkedTask)
         && !protected.contains { NSIntersectionRange($0.range, span.range).length > 0 }
     }.map(\.range)
-    let headings = spans.filter { $0.kind == .heading }.map(\.range)
     let byLine = Dictionary(grouping: spans.filter {
       $0.kind == .heading || $0.kind == .orderedMarker || $0.kind == .punctuation
         || $0.kind == .task || $0.kind == .checkedTask || $0.kind == .frontmatter
@@ -187,7 +186,7 @@ public enum Syntax {
         || value.trimmingCharacters(in: .whitespaces).isEmpty
       {
         finish()
-      } else if markers.contains(where: { $0.kind == .heading && headings.contains($0.range) }) {
+      } else if markers.contains(where: { $0.kind == .heading }) {
         append(
           range, kind: .heading,
           level: value.trimmingCharacters(in: .whitespaces).prefix { $0 == "#" }.count)
@@ -221,7 +220,7 @@ public enum Syntax {
       offset = NSMaxRange(line)
     }
     finish()
-    return (headings, taskMarkers, blocks, codeRanges, frontMatterRanges)
+    return (blocks, taskMarkers, codeRanges, frontMatterRanges)
   }
 
   static func spans(in text: String) -> [Span] {

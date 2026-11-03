@@ -713,7 +713,7 @@ struct RootViewTests {
           #expect(editor.text.utf8.elementsEqual(text.utf8))
           #expect(
             editor.selectedRange
-              == NSRange(location: FrontMatter.contentStart(in: text), length: 0))
+              == NSRange(location: Syntax.contentStart(in: text), length: 0))
           #expect(caret.minY >= top - 1 && caret.minY < top + 40)
           editor.resignFirstResponder()
           try await host.waitForKeyboard(visible: false)

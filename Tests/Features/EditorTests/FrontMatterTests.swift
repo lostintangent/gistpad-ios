@@ -17,7 +17,7 @@ struct FrontMatterRangeTests {
     ("", ""),
   ])
   func hiddenPrefixMatchesTheWebBoundary(source: String, prefix: String) {
-    #expect(FrontMatter.contentStart(in: source) == prefix.utf16.count)
+    #expect(Syntax.contentStart(in: source) == prefix.utf16.count)
   }
 }
 

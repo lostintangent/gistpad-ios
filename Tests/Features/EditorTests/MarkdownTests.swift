@@ -57,7 +57,7 @@ import Testing
   #expect(outline.blocks[0].level == 2)
   #expect(text.substring(with: try #require(outline.blocks[2].marker)) == "- [x] ")
   #expect(text.substring(with: try #require(outline.blocks[2].taskMarker)) == "[x]")
-  #expect(outline.headings == [outline.blocks[0].range])
+  #expect(outline.blocks.filter { $0.kind == .heading }.map(\.range) == [outline.blocks[0].range])
   #expect(outline.taskMarkers == [
     try #require(outline.blocks[2].taskMarker), text.range(of: "[ ]"),
   ])
@@ -73,10 +73,9 @@ import Testing
   let source = "## Install `tool`\n```md\n## Hidden\n```\n"
   let outline = Syntax.outline(in: source)
   let heading = (source as NSString).range(of: "## Install `tool`")
-  #expect(outline.headings == [heading])
-  #expect(outline.blocks.first?.kind == .heading)
-  #expect(outline.blocks.first?.range == heading)
-  #expect(outline.blocks.first?.level == 2)
+  let headings = outline.blocks.filter { $0.kind == .heading }
+  #expect(headings.map(\.range) == [heading])
+  #expect(headings.first?.level == 2)
 }
 
 @Test func invalidOrStaleSourceIsRejected() {
