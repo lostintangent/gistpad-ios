@@ -1,4 +1,5 @@
 import Foundation
+import Editor
 
 struct SourceBlock: Encodable {
   let id: Int
@@ -11,17 +12,9 @@ struct SourceBlock: Encodable {
 
   static func blocks(in source: String) -> [Self] {
     let text = source as NSString
-    var offsets = [0]
-    var offset = 0
-    while offset < text.length {
-      let line = text.lineRange(for: NSRange(location: offset, length: 0))
-      let value = text.substring(with: line)
-      if offset > 0, value.range(of: #"^ {0,3}#{1,6}[ \t]"#, options: .regularExpression) != nil {
-        offsets.append(offset)
-      }
-      offset = NSMaxRange(line)
-    }
-    offsets.append(text.length)
+    let offsets = [0] + Syntax.outline(in: source).blocks
+      .filter { $0.kind == .heading && $0.range.location > 0 }
+      .map(\.range.location) + [text.length]
     return zip(offsets, offsets.dropFirst()).enumerated().compactMap { index, pair in
       guard pair.1 > pair.0 else { return nil }
       return Self(

@@ -4,11 +4,14 @@ import Editor
 extension FileSnapshot {
   public init(parsing source: String, fileID: String, sessionID: UUID, generation: UInt64) {
     let outline = Syntax.outline(in: source)
+    let text = source as NSString
+    let headings = outline.blocks.filter { $0.kind == .heading }
+      .map { text.lineRange(for: $0.range) }
     self.init(
       fileID: fileID, sessionID: sessionID, generation: generation, source: source,
-      headingOffsets: outline.headings.map(\.location),
+      headingOffsets: headings.map(\.location),
       tasks: ModelTask.indexed(
-        in: source, markers: outline.taskMarkers, headings: outline.headings))
+        in: source, markers: outline.taskMarkers, headings: headings))
   }
 }
 

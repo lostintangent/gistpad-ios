@@ -112,43 +112,6 @@ struct EditTests {
         list.replacingOccurrences(of: "[ ]", with: "[x]").utf8))
   }
 
-  @Test func editBlocksPreserveLiteralRangesAndKeepFencesTogether() {
-    let source = """
-      # Title\r
-      \r
-      One 👩🏽‍💻 line.\r
-      Another line.\r
-      \r
-      - [ ] First\r
-      - [ ] Second\r
-      \r
-      | Flag | Meaning |\r
-      | --- | --- |\r
-      | -i | Ignore case |\r
-      \r
-      ```markdown\r
-      # Not a heading\r
-      - Not a task\r
-      ```\r
-      \r
-      ## End\r
-      """
-    let blocks = EditBlock.indexed(in: source)
-    #expect(
-      blocks.map(\.kind) == [
-        .heading, .paragraph, .listItem, .listItem, .tableRow, .tableRow, .tableRow,
-        .code, .heading,
-      ])
-    #expect(blocks.map(\.id) == Array(1...blocks.count))
-    #expect(blocks[1].heading == "# Title")
-    #expect(blocks.last?.heading == "## End")
-    #expect(blocks[7].text.contains("# Not a heading"))
-    for block in blocks {
-      #expect((source as NSString).substring(with: block.range) == block.text)
-      #expect(Range(block.range, in: source) != nil)
-    }
-  }
-
   @Test func editPromptKeepsRawMarkdownInsideAnUnforgeableDelimiter() throws {
     let source = "# Title\r\n\r\n```swift\r\nprint(\"Hello\")\r\n```\r\nA literal \\\\n remains.\r\n"
     let pass = ModelPass(

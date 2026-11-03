@@ -151,7 +151,7 @@ public final class Intelligence {
           case .rewrite(let revised):
             guard request.action == .edit else { throw IntelligenceError.invalidResponse }
             let start = min(
-              max(chunk.range.location, FrontMatter.contentStart(in: request.snapshot.source)),
+              max(chunk.range.location, Syntax.contentStart(in: request.snapshot.source)),
               NSMaxRange(chunk.range))
             candidates += try Revision.candidates(
               in: request.snapshot.source,
@@ -295,7 +295,7 @@ public final class Intelligence {
       switch part.kind {
       case .prose: return .prose(part.text)
       case .quote:
-        let bodyStart = FrontMatter.contentStart(in: request.snapshot.source)
+        let bodyStart = Syntax.contentStart(in: request.snapshot.source)
         let ranges = Anchors.matches(part.text, in: request.snapshot.source).filter {
           $0.location >= bodyStart
         }
@@ -372,7 +372,7 @@ public final class Intelligence {
 
   private func content(in request: IntelligenceRequest) -> Chunk {
     let source = request.snapshot.source as NSString
-    let start = FrontMatter.contentStart(in: request.snapshot.source)
+    let start = Syntax.contentStart(in: request.snapshot.source)
     return Chunk(
       source: source.substring(from: start),
       range: NSRange(location: start, length: source.length - start))
@@ -463,7 +463,7 @@ public final class Intelligence {
     evidenceBlocks: [String]? = nil
   ) -> ModelPass {
     let bodyLength =
-      request.snapshot.source.utf16.count - FrontMatter.contentStart(in: request.snapshot.source)
+      request.snapshot.source.utf16.count - Syntax.contentStart(in: request.snapshot.source)
     return ModelPass(
       purpose: purpose, instruction: request.instruction, source: source,
       responseTokens: min(purpose == .answer ? answerTokens : 1_536, model.contextSize / 3),
