@@ -18,51 +18,91 @@ def fixture(name):
     return (fixtures / name).read_text()
 
 
-daily = fixture("daily.md")
-cases = [
-    dict(
-        id="synthetic-favorite",
-        action="ask",
-        source=fixture("manga.md"),
-        prompt="what is my favorite series?",
-        favorite="The Glass Orchard",
-        maximumAnswerWords=60,
-        alternativeFavorites=["Mountain Trails", "The Clockmaker", "City of Paper",
-                              "Winter Lantern", "Summer Postcards", "The Second Train",
-                              "Midnight Elevator"],
-    ),
-    dict(
-        id="daily-add",
-        action="edit",
-        source=daily,
-        prompt="add an item to clean the kitchen",
-        addedTaskText="clean the kitchen",
-        addedTaskListTitle="Housework",
-    ),
-]
+reading = fixture("reading-list.md")
+daily = fixture("daily-log.md")
+essay = fixture("strategy-essay.md")
+dogfood = fixture("dogfooding-log.md")
+home = fixture("home-project.md")
+cases = []
+
+
+def ask(name, source, prompt, mentions=None, avoids=None, favorite=None,
+        alternatives=None, words=60, exact_answers=None):
+    cases.append(dict(id=name, action="ask", source=source, prompt=prompt,
+                      mentions=mentions, avoids=avoids, favorite=favorite,
+                      alternativeFavorites=alternatives, maximumAnswerWords=words,
+                      exactAnswers=exact_answers))
+
+
+def exact(name, source, prompt, expected):
+    cases.append(dict(id=name, action="edit", source=source, prompt=prompt,
+                      expectedSource=expected))
+
+
+def replacement(source, old, new):
+    assert source.count(old) == 1, old
+    return source.replace(old, new)
+
+
+def passage(source, start, end=None):
+    first = source.index(start)
+    last = source.index(end, first) if end else source.find("\n\n", first)
+    if last < 0:
+        last = len(source.rstrip("\n"))
+    return source[first:last]
+
+
+# The live note puts currently-reading titles and front matter before the ranked list.
+# This synthetic note has the same traps without copying anyone's private reading data.
+ask("synthetic-favorite", reading, "what is my favorite series?",
+    favorite="The Cedar Compass",
+    alternatives=["Harbor Signal", "Glass Loom", "Night Orchard", "A Quiet Harbor",
+                  "Lantern Makers", "Orchard Tram", "Cloud Cartographer"])
+ask("reading-higher", reading,
+    "Which did I rank higher, Night Orchard or Lantern Makers? Name only the higher-ranked one.",
+    [["Night Orchard"]], ["Lantern Makers"], exact_answers=["Night Orchard"])
+ask("reading-volume", reading, "Which volume of Harbor Signal am I currently reading?",
+    [["7", "seven"]])
+ask("reading-stopped", reading, "Which volume of Cloud Cartographer did I stop at?",
+    [["4", "four"]])
+ask("reading-taste", reading, "What kind of stories do I like?",
+    [["character", "people", "decisions carry", "choices", "relationships"],
+     ["consequence", "stillness", "quiet", "gesture", "ending",
+      "conclusion", "art creates space"]])
+ask("reading-count", reading, "How many series are in the Exceptional tier?",
+    [["four", "4"]])
+ask("reading-end", reading, "Which series do I plan to reread in December?",
+    [["The Cedar Compass"], ["December"]])
+ask("reading-unknown", reading, "What is my purchase budget for next year?",
+    [["not ", "no ", "n't", "unspecified"]], ["$"])
+
+# The original daily task operations now run against a real-sized daily note.
+cases.append(dict(id="daily-add", action="edit", source=daily,
+                  prompt="add an item to clean the kitchen",
+                  addedTaskText="clean the kitchen", addedTaskListTitle="Housework"))
+done_chapter = replacement(daily, "- [ ] Read a chapter", "- [x] Read a chapter")
+chores = replacement(daily, "## Housework", "## Chores")
 for name, prompt, expected in [
-    ("complete", "mark Read a chapter complete", "daily-complete.md"),
-    ("all", "mark everything complete", "daily-all.md"),
-    ("delete", "delete Take out the recycling", "daily-delete.md"),
-    ("partial", "mark the first two tasks done", "daily-partial.md"),
-    ("uncheck", "uncheck all tasks", "daily-uncheck.md"),
-    ("japanese", "Read a chapter のタスクを完了にしてください", "daily-complete.md"),
-    ("text", "rename the Housework heading to Chores", "daily-text.md"),
+    ("complete", "mark Read a chapter complete", done_chapter),
+    ("all", "mark everything complete", daily.replace("- [ ] ", "- [x] ")),
+    ("delete", "delete Take out the recycling",
+     replacement(daily, "- [ ] Take out the recycling\n", "")),
+    ("partial", "mark the first two tasks done",
+     done_chapter.replace("- [ ] Make coffee", "- [x] Make coffee")),
+    ("uncheck", "uncheck all tasks", daily.replace("- [x] ", "- [ ] ")),
+    ("japanese", "Read a chapter のタスクを完了にしてください", done_chapter),
+    ("text", "rename the Housework heading to Chores", chores),
     ("mixed", "mark Read a chapter complete and rename the Housework heading to Chores",
-     "daily-mixed.md"),
-    ("rename-task", "change Make coffee to Make tea", "daily-rename-task.md"),
+     replacement(done_chapter, "## Housework", "## Chores")),
+    ("rename-task", "change Make coffee to Make tea",
+     replacement(daily, "Make coffee", "Make tea")),
     ("mixed-add", "add Water the plants to Housework and rename that heading to Home",
-     "daily-mixed-add.md"),
+     replacement(
+         replacement(daily, "## Housework\n\n", "## Home\n\n"),
+         "- [ ] Take out the recycling\n",
+         "- [ ] Take out the recycling\n- [ ] Water the plants\n")),
 ]:
-    cases.append(
-        dict(
-            id=f"daily-{name}",
-            action="edit",
-            source=daily,
-            prompt=prompt,
-            expectedSource=fixture(expected),
-        )
-    )
+    exact(f"daily-{name}", daily, prompt, expected)
 
 
 def unique(source, text):
@@ -81,57 +121,86 @@ def inserting(source, after, before=None, **checks):
     return dict(prefix=source[:end], suffix=suffix, **checks)
 
 
-draft = fixture("draft.md")
-meeting = fixture("meeting.md")
-readme = fixture("readme.md")
-first_loaves = ("The first loaves were dense and flat. I followed recipes exactly, but I "
-                "didn't understand why each step mattered, so every mistake felt random.")
-notebook = next(p for p in draft.split("\n\n") if p.startswith("Things changed"))
-saturday = next(p for p in draft.split("\n\n") if p.startswith("Now I bake")).rstrip("\n")
-debate = next(p for p in meeting.split("\n\n") if p.startswith("Marco wants"))
-next_steps = meeting[unique(meeting, "## Next steps"):].rstrip("\n")
+exact("reading-rename", reading, "rename Started but stopped to Paused reading",
+      replacement(reading, "## Started but stopped", "## Paused reading"))
+exact("reading-move", reading,
+      "move Paper Observatory from Currently reading to Started but stopped",
+      replacement(
+          replacement(reading, "4. Paper Observatory (2)\n", ""),
+          "3. River Engine (6)\n", "3. River Engine (6)\n4. Paper Observatory (2)\n"))
+cedar_paragraph = passage(reading, "The Cedar Compass stays first.")
+cases.append(dict(
+    id="reading-shorter", action="edit", source=reading,
+    prompt="shorten the paragraph explaining why The Cedar Compass ranks first",
+    editedRegion=rewriting(
+        reading, cedar_paragraph, shape="paragraph", language="en",
+        shorterThan=len(cedar_paragraph))))
+cases.append(dict(
+    id="reading-new-section", action="edit", source=reading,
+    prompt="add a Favorite cover art section at the end",
+    editedRegion=inserting(
+        reading, "its current volume as an opinion.", shape="section",
+        mustContain=["## Favorite cover art"])))
+
+early_prototypes = passage(essay, "Early prototypes tried")
+last_essay = passage(essay, "The first principle is still")
+meeting_debate = passage(daily, "Attendees: Priya")
 for name, source, prompt, region in [
-    ("draft-add-paragraph", draft, "add a paragraph about choosing flour after the intro",
-     inserting(draft, "a weekly habit.", "The first loaves", shape="paragraph",
-               language="en", mustContain=["flour"])),
-    ("draft-shorter", draft, "rewrite the paragraph about the first loaves to be shorter",
-     rewriting(draft, first_loaves, shape="paragraph", language="en",
-               shorterThan=len(first_loaves))),
-    ("draft-grammar", draft, "fix the grammar",
-     rewriting(draft, notebook, shape="paragraph", language="en",
-               mustNotContain=["patterns was", "loafs", "they was"])),
-    ("draft-tone", draft, "make the last paragraph sound more formal",
-     rewriting(draft, saturday, shape="paragraph", language="en")),
-    ("meeting-summary", meeting, "add a one-sentence summary under the title",
-     inserting(meeting, "# Launch sync", "Attendees:", shape="paragraph", language="en")),
-    ("meeting-list", meeting, "turn the paragraph about delaying the launch into a list",
-     rewriting(meeting, debate, shape="list")),
-    ("meeting-translate", meeting, "translate the Next steps section into Spanish",
-     rewriting(meeting, next_steps, language="es",
-               mustContain=["- [ ] ", "- [x] ", "Priya", "Marco", "Dana"])),
-    ("meeting-section", meeting, "add a Risks section at the end",
-     inserting(meeting, "launch review", shape="section", mustContain=["## Risks"])),
-    ("readme-intro", readme, "write an intro",
-     inserting(readme, "# tidy", "## Install", shape="paragraph", language="en")),
-    ("readme-section", readme, "add a section about uninstalling after Install",
-     inserting(readme, "brew install tidy\n```", "## Options", shape="section",
-               mustContain=["## ", "uninstall"])),
-    ("readme-table-row", readme, 
-     "add a row to the end of the table for a -n option that numbers each line",
-     inserting(readme, "| Ignore case when comparing |", "\n\n## Usage", shape="tableRow",
-               mustContain=["-n"])),
-    ("readme-japanese", readme, "最後にライセンスについての短い段落を追加してください",
-     inserting(readme, "standard input instead.", shape="paragraph", language="ja")),
+    ("draft-add-paragraph", essay, "add a paragraph about evidence after the introduction",
+     inserting(essay, "excited first minute.", "## What changed",
+               shape="paragraph", language="en", mustContain=["evidence"])),
+    ("draft-shorter", essay, "shorten the paragraph about early prototypes",
+     rewriting(essay, early_prototypes, shape="paragraph", language="en",
+               shorterThan=len(early_prototypes))),
+    ("draft-grammar", essay, "fix the grammar in the paragraph about early prototypes",
+     rewriting(essay, early_prototypes, shape="paragraph", language="en",
+               mustNotContain=["patterns was", "team keep"])),
+    ("draft-tone", essay, "make the final paragraph more formal",
+     rewriting(essay, last_essay, shape="paragraph", language="en")),
+    ("meeting-summary", daily, "add a one-sentence summary under the Launch sync heading",
+     inserting(daily, "### Launch sync", "Attendees:", shape="paragraph", language="en")),
+    ("meeting-list", daily, "turn the launch debate into a list",
+     rewriting(daily, meeting_debate, shape="list")),
+    ("meeting-translate", daily, "translate the Launch sync paragraph into Spanish",
+     rewriting(daily, meeting_debate, language="es",
+               mustContain=["Priya", "Marco", "Dana"])),
+    ("meeting-section", daily, "add a Risks section at the end",
+     inserting(daily, "changes in the morning.", shape="section", mustContain=["## Risks"])),
+    ("readme-intro", dogfood, "write a short intro under the title",
+     inserting(dogfood, "# Tide CLI dogfooding log", "I keep this note",
+               shape="paragraph", language="en")),
+    ("readme-section", dogfood, "add an Uninstall section after Install",
+     inserting(dogfood, "output on my comparison fixture.", "### Options", shape="section",
+               mustContain=["### Uninstall", "brew uninstall tide"])),
+    ("readme-table-row", dogfood,
+     "add a row to the Options table for a -n flag that numbers each line",
+     inserting(dogfood, "| `-i` | Ignore case when comparing |", "\n\n### Usage",
+               shape="tableRow", mustContain=["-n"])),
+    ("readme-japanese", dogfood, "最後にライセンスについての短い段落を追加してください",
+     inserting(dogfood, "Those questions cannot be answered from this log.",
+               shape="paragraph", language="ja")),
 ]:
     cases.append(dict(id=name, action="edit", source=source, prompt=prompt,
                       editedRegion=region))
-cases.append(dict(id="draft-delete", action="edit", source=draft,
-                  prompt="delete the paragraph about the first loaves",
-                  expectedSource=fixture("draft-delete.md")))
-# One typo in a long, otherwise clean paragraph, which a block rewrite must not drift around.
-cases.append(dict(id="meeting-typo", action="edit",
-                  source=meeting.replace("400 testers", "400 tetsers"),
-                  prompt="fix the typo", expectedSource=meeting))
+exact("draft-delete", essay, "delete the paragraph about early prototypes",
+      replacement(essay, early_prototypes + "\n\n", ""))
+exact("meeting-typo", replacement(daily, "400 testers", "400 tetsers"),
+      "fix the typo in the Launch sync paragraph", daily)
+exact("home-heading", home, "rename the Entry heading to Hallway",
+      replacement(home, "## Entry", "## Hallway"))
+exact("home-move", home, "move Paint the window trim from Kitchen to Entry",
+      replacement(
+          replacement(home, "- [ ] Paint the window trim\n", ""),
+          "- [ ] Patch the wall by the coat hooks",
+          "- [ ] Paint the window trim\n- [ ] Patch the wall by the coat hooks"))
+cases.append(dict(id="home-add-task", action="edit", source=home,
+                  prompt="add a task to check the kitchen tap under Kitchen",
+                  addedTaskText="check the kitchen tap", addedTaskListTitle="Kitchen"))
+cases.append(dict(id="home-cost-row", action="edit", source=home,
+                  prompt="add a $75 cabinet-handle row to the cost estimate table",
+                  editedRegion=inserting(home, "| Contingency | $300 | Mara | Reserved |",
+                                          "\n\nThe seven lines", shape="tableRow",
+                                          mustContain=["cabinet", "$75"])))
 
 
 def gist(gist_id):
@@ -152,27 +221,29 @@ if args.manga_gist:
         parser.error("--favorite is required with --manga-gist")
     files = gist(args.manga_gist)
     source = files["README.md"]["content"]
-    cases += [
-        dict(
-            id="live-manga-favorite",
-            action="ask",
-            source=source,
-            prompt="what is my favorite series?",
-            favorite=args.favorite,
-            maximumAnswerWords=60,
-            alternativeFavorites=[
-                re.sub(r"\s*\([^)]*\)\s*$", "", match.strip())
-                for match in re.findall(r"^\s*\d+[.)]\s+(.+)$", source, re.MULTILINE)
-                if not match.strip().startswith(args.favorite)
-            ],
-        ),
-        dict(
-            id="live-manga-summary",
-            action="ask",
-            source=source,
-            prompt="what's the summary of the manga reading list",
-        ),
+    alternatives = [
+        re.sub(r"\s*\([^)]*\)\s*$", "", match.strip())
+        for match in re.findall(r"^\s*\d+[.)]\s+(.+)$", source, re.MULTILINE)
+        if not match.strip().startswith(args.favorite)
     ]
+    for name, question in [
+        ("live-manga-favorite", "What is my favorite series"),
+        ("live-manga-whats", "what's my favorite series"),
+        ("live-manga-like", "which manga do I like most?"),
+        ("live-manga-top", "what's my top manga?"),
+    ]:
+        ask(name, source, question, favorite=args.favorite, alternatives=alternatives)
+    ask("live-manga-summary", source, "what's the summary of the manga reading list",
+        [["reading", "manga"], ["rank", "finished", "completed"]], words=None)
+    padding = (
+        "A future update will track availability, editions, binding, language, "
+        "publication dates and prices. These are planning details, not a ranking "
+        "or completed reading. "
+    )
+    ask("live-manga-padded",
+        source + "\n\n## Future reference\n\n" + padding * 7,
+        "What is my favorite series", favorite=args.favorite,
+        alternatives=alternatives)
 if args.daily_gist:
     if not args.daily_file:
         parser.error("--daily-file is required with --daily-gist")
@@ -187,54 +258,93 @@ if args.daily_gist:
         )
     )
 
-# General Ask: one fact or list per question, each fact matched by any of its phrasings.
-meeting = fixture("meeting.md")
-readme = fixture("readme.md")
-draft = fixture("draft.md")
-people = ["Priya", "Marco", "Dana", "Sam", "Lee", "Ana"]
-areas = ["the onboarding flow", "the settings screen", "search", "the widget", "sync errors",
-         "the share sheet", "offline mode", "the empty state"]
-weeks = []
-for week in range(80):
-    first, second = people[week % 6], people[(week + 2) % 6]
-    area = areas[week % 8]
-    entry = (f"## Week {week + 1}\n\nWe reviewed {area}. {first} shared progress and {second} "
-             f"raised two questions about scope. We agreed to look at {area} again next week "
-             f"once the numbers are in.\n\n- [x] {first} updates the tracker\n"
-             f"- [ ] {second} follows up on {area}\n")
-    if week == 52:
-        entry += "\nThe team offsite will be in the Harbor Room on June 3.\n"
-    weeks.append(entry)
-long_notes = "# Team notes\n\n" + "\n".join(weeks)
-# A note longer than one rewrite: a text edit asks for a selection, and a task edit still works.
-cases.append(dict(id="long-room", action="edit", source=long_notes,
-                  prompt="move the team offsite to the Lighthouse Room",
+# A long text request may fail safely, but task changes must still work at that length.
+cases.append(dict(id="long-room", action="edit", source=dogfood,
+                  prompt="move the offline-pipe retest to November 9",
                   expectedError="noteTooLong"))
-cases.append(dict(id="long-all-done", action="edit", source=long_notes,
-                  prompt="mark everything done",
-                  expectedSource=long_notes.replace("- [ ] ", "- [x] ")))
-for name, source, prompt, mentions, avoids, words in [
-    ("meeting-date", meeting, "when is the launch?", [["May 12"]], None, 60),
-    ("meeting-delay", meeting, "who wanted to delay the launch, and why?",
-     [["Marco"], ["sign-in", "sign in"]], None, 60),
-    ("meeting-fix", meeting, "which release has the sign-in fix?", [["1.0.1"]], None, 60),
-    ("meeting-open", meeting, "what's still left to do?",
-     [["release notes"], ["workaround"]], None, 60),
-    ("meeting-unknown", meeting, "what's the launch budget?",
-     [["n't", "not ", "no "]], ["$", "dollar"], 60),
-    ("readme-install", readme, "how do I install tidy?", [["brew install tidy"]], None, 60),
-    ("readme-unique", readme, "what does -u do?", [["unique"]], None, 60),
-    ("readme-case", readme, "which flag ignores case?", [["-i"]], None, 60),
-    ("draft-why", draft, "why did I start baking?", [["quiet"]], None, 60),
-    ("draft-now", draft, "how often do I bake now?", [["Saturday"]], None, 60),
-    ("draft-summary", draft, "summarize this note",
-     [["bread", "bak"], ["notebook", "notes", "recorded", "wrote down"]], None, None),
-    ("daily-left", daily, "what's left on my list today?",
-     [["coffee"], ["chapter"], ["dishes"], ["recycling"]], None, None),
-    ("daily-done", daily, "what have I finished?", [["curtains"]], None, 60),
-    ("long-offsite", long_notes, "where is the team offsite?", [["Harbor Room"]], None, 60),
+exact("long-all-done", daily, "mark everything done",
+      daily.replace("- [ ] ", "- [x] "))
+
+ask("ask-meeting-date", daily, "When is the launch?", [["May 12"]])
+ask("ask-meeting-delay", daily, "Who wanted to delay the launch, and why?",
+    [["Marco"], ["sign-in", "sign in"]])
+ask("ask-meeting-fix", daily, "Which release has the sign-in fix?", [["1.0.1"]])
+ask("ask-meeting-open", daily, "What is still left to do for the launch?",
+    [["release notes"], ["workaround"]])
+ask("ask-meeting-unknown", daily, "What launch budget did we agree on?",
+    [["not ", "no ", "n't", "unspecified"]], ["17 million", "$"])
+ask("ask-daily-left", daily, "What's left on my Morning and Housework lists?",
+    [["coffee"], ["chapter"], ["dishes"], ["recycling"]], words=None)
+ask("ask-daily-done", daily, "Which Morning task is done?", [["curtains"]])
+ask("ask-daily-end", daily, "When does the library hold expire?",
+    [["Friday"], ["6 p.m.", "6pm", "six"]])
+ask("ask-daily-summary", daily, "Summarize my Launch sync discussion.",
+    [["Marco"], ["Dana"], ["May 12"], ["1.0.1"]], words=None)
+
+ask("ask-readme-install", dogfood, "How do I install Tide?", [["brew install tide"]])
+ask("ask-readme-unique", dogfood, "What does -u do?", [["unique"]])
+ask("ask-readme-case", dogfood, "Which flag ignores case?", [["-i"]])
+ask("ask-dogfood-high", dogfood, "Which High issue remains open?",
+    [["T-18", "offline retry"]], ["T-23", "T-25"])
+ask("ask-dogfood-count", dogfood, "How many issues are still open?",
+    [["three open", "3 open", "three issues", "3 issues",
+      "three remain", "3 remain"]])
+ask("ask-dogfood-end", dogfood, "When is the next offline-pipe retest?",
+    [["November 6"]])
+ask("ask-dogfood-summary", dogfood, "Summarize the October 18 issue.",
+    [["duplicate"], ["boundary", "chunk"], ["-u"]], words=None)
+ask("ask-dogfood-unknown", dogfood, "What is the release date?",
+    [["not ", "no ", "n't", "unknown"]])
+
+ask("ask-draft-why", essay, "Why does durability rank first?",
+    [["lost", "survive", "safe", "keep"], ["draft", "work", "paragraph"]])
+ask("ask-draft-now", essay, "When does the writer trial end?", [["June 18"]])
+ask("ask-draft-summary", essay, "Summarize the principles.",
+    [["durab", "save"], ["evidence", "review"], ["system", "native"]], words=None)
+ask("ask-strategy-higher", essay,
+    "Which principle ranks higher, evidence or automation? Name only the higher one.",
+    [["evidence"]], ["automation"], exact_answers=["Evidence"])
+ask("ask-strategy-native", essay, "Summarize the Third: native habits section.",
+    [["platform", "system"], ["selection", "navigation", "control"]], words=None)
+ask("ask-strategy-count", essay, "How many ranked principles are there?",
+    [["five", "5"]])
+ask("ask-strategy-unknown", essay, "What licensing price was set for the experiment?",
+    [["not ", "no ", "n't", "unspecified"]], ["$"])
+
+ask("ask-home-total", home, "What is the total cost estimate?",
+    [["$2,300", "2300", "2,300"]])
+ask("ask-home-higher", home,
+    "Which estimate is higher, the sink or plumbing labor? Name only the higher item.",
+    [["sink"]], ["plumbing labor"], exact_answers=["Sink", "Sink and fittings"])
+ask("ask-home-floor", home, "Who is inspecting the loose floorboard?",
+    [["Noor"]], ["You are the one inspecting", "You inspect"])
+ask("ask-home-count", home, "How many cost lines are in the estimate?",
+    [["seven", "7"]])
+ask("ask-home-end", home, "When will the kitchen measurements be sent?",
+    [["November 10"]])
+ask("ask-home-summary", home, "Summarize the decisions about the door and the rug.",
+    [["door"], ["rug"], ["keep", "stays"]], words=None)
+ask("ask-home-unknown", home, "What is the quoted cost of a new door?",
+    [["not ", "no ", "n't", "unknown"]], ["$"])
+
+# The live question remains separate from the committed synthetic sources.
+for note, minimum, maximum in [
+    (reading, 1500, 2000),
+    (daily, 900, 1200),
+    (essay, 1700, 2200),
+    (dogfood, 1300, 1700),
+    (home, 1050, 1350),
 ]:
-    cases.append(dict(id=f"ask-{name}", action="ask", source=source, prompt=prompt,
-                      mentions=mentions, avoids=avoids, maximumAnswerWords=words))
+    assert minimum <= len(note.split()) <= maximum
+    assert sum(case["action"] == "ask" and case["source"] == note for case in cases) >= 5
+    assert sum(case["action"] == "edit" and case["source"] == note for case in cases) >= 4
+assert len({case["id"] for case in cases}) == len(cases)
+for case in cases:
+    if "editedRegion" in case:
+        region = case["editedRegion"]
+        source = case["source"]
+        assert source.startswith(region["prefix"])
+        assert source.endswith(region["suffix"])
+        assert len(source) >= len(region["prefix"]) + len(region["suffix"]), case["id"]
 args.output.mkdir(parents=True, exist_ok=True)
 (args.output / "cases.json").write_text(json.dumps(cases, indent=2))

@@ -13,6 +13,8 @@ struct EvalCase: Codable, Sendable {
   let addedTaskText: String?
   let addedTaskListTitle: String?
   let maximumAnswerWords: Int?
+  /// The acceptable short replies when a question explicitly says "Name only".
+  let exactAnswers: [String]?
   /// Facts an answer must state: each group passes when the answer contains any of its phrases.
   let mentions: [[String]]?
   /// Phrases a grounded answer can't contain, like a number the note never gives.
@@ -25,7 +27,8 @@ struct EvalCase: Codable, Sendable {
     id: String, action: String, source: String, prompt: String, favorite: String? = nil,
     expectedSource: String? = nil, addedTaskText: String? = nil,
     addedTaskListTitle: String? = nil, alternativeFavorites: [String]? = nil,
-    maximumAnswerWords: Int? = nil, mentions: [[String]]? = nil, avoids: [String]? = nil,
+    maximumAnswerWords: Int? = nil, exactAnswers: [String]? = nil,
+    mentions: [[String]]? = nil, avoids: [String]? = nil,
     editedRegion: EditedRegion? = nil, expectedError: String? = nil
   ) {
     self.id = id
@@ -38,6 +41,7 @@ struct EvalCase: Codable, Sendable {
     self.addedTaskText = addedTaskText
     self.addedTaskListTitle = addedTaskListTitle
     self.maximumAnswerWords = maximumAnswerWords
+    self.exactAnswers = exactAnswers
     self.mentions = mentions
     self.avoids = avoids
     self.editedRegion = editedRegion
@@ -53,6 +57,7 @@ struct EvalResult: Codable, Sendable {
   let elapsedSeconds: Double
   let answerCompletionSeconds: Double?
   let answerPreparationSeconds: Double?
+  let firstVisibleSeconds: Double?
   let qualityRejectionCount: Int?
   let qualityRetryCount: Int?
   let errorCode: String?
@@ -95,6 +100,7 @@ enum Evaluator {
         let engine = Intelligence(backend: backend)
         var answerSeconds: Double?
         var preparationSeconds: Double?
+        var firstVisibleSeconds: Double?
         let result: EvalResult
         do {
           var answer: String?
@@ -109,6 +115,13 @@ enum Evaluator {
               progress: { progress in
                 if progress.phase == .answering, preparationSeconds == nil {
                   preparationSeconds = elapsed()
+                }
+              },
+              onPartialAnswer: { text in
+                if firstVisibleSeconds == nil,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                {
+                  firstVisibleSeconds = elapsed()
                 }
               })
             answerSeconds = elapsed()
@@ -166,6 +179,7 @@ enum Evaluator {
             passed: passed, elapsedSeconds: elapsed(),
             answerCompletionSeconds: answerSeconds,
             answerPreparationSeconds: preparationSeconds,
+            firstVisibleSeconds: firstVisibleSeconds,
             qualityRejectionCount: backend.rejectedAnswers.count,
             qualityRetryCount: max(0, backend.answerCalls - 1),
             errorCode: passed ? nil : expectationFailure ?? "expectationMismatch", errorType: nil,
@@ -183,6 +197,7 @@ enum Evaluator {
             passed: item.expectedError == code, elapsedSeconds: elapsed(),
             answerCompletionSeconds: answerSeconds,
             answerPreparationSeconds: preparationSeconds,
+            firstVisibleSeconds: firstVisibleSeconds,
             qualityRejectionCount: backend.rejectedAnswers.count,
             qualityRetryCount: max(0, backend.answerCalls - 1),
             errorCode: code, errorType: type, answer: nil, proposedSource: nil,
@@ -263,6 +278,14 @@ enum Evaluator {
     {
       return "answerTooLong"
     }
+    if let exact = item.exactAnswers {
+      let bare = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        .trimmingCharacters(in: .punctuationCharacters)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      if !exact.contains(where: { $0.caseInsensitiveCompare(bare) == .orderedSame }) {
+        return "answerNotExact"
+      }
+    }
     if item.mentions?.contains(where: { group in
       !group.contains { answer.localizedCaseInsensitiveContains($0) }
     }) == true {
@@ -282,27 +305,53 @@ enum Evaluator {
     answer: String, expected: String, alternatives: [String]
   ) -> String? {
     guard answer.localizedCaseInsensitiveContains(expected) else { return "favoriteNameMissing" }
-    let assertions = answer.components(separatedBy: CharacterSet(charactersIn: ".!?\n")).filter {
-      let lower = $0.lowercased()
+    let clauses = answer.components(separatedBy: CharacterSet(charactersIn: ".!?\n"))
+    let assertions = clauses.enumerated().filter { _, clause in
+      let lower = clause.lowercased()
+      if lower.contains("#1"), lower.contains("ranked completed") { return true }
+      if lower.contains("#1"), lower.contains("tier"),
+        ["incredible", "exceptional", "highest", "top", "best"].contains(where: {
+          lower.contains($0)
+        })
+      {
+        return true
+      }
       return [
         "favorite", "favourite", "top choice", "number one", "highest-ranked",
-        "best-supported", "top-ranked",
+        "best-supported", "top-ranked", "top-rated", "highest-rated", "top manga",
       ].contains { lower.contains($0) }
     }
     guard
-      assertions.contains(where: { clause in
+      assertions.contains(where: { index, clause in
         let lower = clause.lowercased()
-        return clause.localizedCaseInsensitiveContains(expected)
-          && ![
+        guard ![
             "not your favorite", "isn't your favorite", "not your favourite",
             "isn't your favourite",
-          ].contains { lower.contains($0) }
+          ].contains(where: { lower.contains($0) })
+        else { return false }
+        if clause.localizedCaseInsensitiveContains(expected) { return true }
+        guard index + 1 < clauses.count,
+          !alternatives.contains(where: { clause.localizedCaseInsensitiveContains($0) })
+        else { return false }
+        let next = clauses[index + 1].trimmingCharacters(in: .whitespaces)
+        return next.range(
+          of: #"(?i)^(?:this (?:series|title|one|manga|work|pick)|it) is\s+"#
+            + NSRegularExpression.escapedPattern(for: expected)
+            + #"(?:\s|$)"#,
+          options: .regularExpression) != nil
       })
     else { return "favoriteNotIdentified" }
-    if assertions.contains(where: { clause in
+    if assertions.contains(where: { _, clause in
       alternatives.contains { title in
-        title.caseInsensitiveCompare(expected) != .orderedSame && !title.isEmpty
-          && clause.localizedCaseInsensitiveContains(title)
+        guard title.caseInsensitiveCompare(expected) != .orderedSame, !title.isEmpty,
+          let match = clause.range(
+            of: "(?<![\\p{L}\\p{N}])"
+              + NSRegularExpression.escapedPattern(for: title)
+              + "(?![\\p{L}\\p{N}])",
+            options: [.regularExpression, .caseInsensitive])
+        else { return false }
+        let before = clause[..<match.lowerBound].trimmingCharacters(in: .whitespaces).lowercased()
+        return !["not", "rather than", "instead of"].contains { before.hasSuffix($0) }
       }
     }) {
       return "competingFavorite"
@@ -312,19 +361,22 @@ enum Evaluator {
 
   static func table(_ results: [EvalResult]) -> String {
     var lines = [
-      "| Case | Pass rate | Meaning | Complete p50/p90 | Input tokens | Retried | Failures |",
-      "|---|---:|---:|---:|---:|---:|---|",
+      "| Case | Pass rate | Meaning | First visible p50/p90 | Prepare p50/p90 | Complete p50/p90 | Total p50/p90 | Input tokens | Retried | Failures |",
+      "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for id in Set(results.map(\.caseID)).sorted() {
       let group = results.filter { $0.caseID == id }
       let failures = Set(group.compactMap(\.errorCode)).sorted().joined(separator: ", ")
+      let firstVisible = latencyText(group.compactMap(\.firstVisibleSeconds))
+      let preparation = latencyText(group.compactMap(\.answerPreparationSeconds))
       let complete = latencyText(group.compactMap(\.answerCompletionSeconds))
+      let total = latencyText(group.map(\.elapsedSeconds))
       let retried = group.filter { ($0.qualityRetryCount ?? 0) > 0 }.count
       let grades = group.compactMap(\.modelGrade)
       let meaning = grades.isEmpty ? "-" : "\(grades.filter { $0 }.count)/\(grades.count)"
       let tokens = group.compactMap(\.inputTokens).max().map(String.init) ?? "-"
       lines.append(
-        "| \(id) | \(group.filter(\.passed).count)/\(group.count) | \(meaning) | \(complete) | \(tokens) | \(retried) | \(failures.isEmpty ? "None" : failures) |"
+        "| \(id) | \(group.filter(\.passed).count)/\(group.count) | \(meaning) | \(firstVisible) | \(preparation) | \(complete) | \(total) | \(tokens) | \(retried) | \(failures.isEmpty ? "None" : failures) |"
       )
     }
     return lines.joined(separator: "\n")
@@ -385,6 +437,18 @@ final class RecordingModel: IntelligenceModel {
   func answer(for pass: ModelPass) async throws -> [ModelAnswerPart] {
     answerCalls += 1
     let parts = try await model.answer(for: pass)
+    let prose = parts.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
+    if AnswerIssue.check(prose, source: pass.source, instruction: pass.instruction) != nil {
+      rejectedAnswers.append(prose)
+    }
+    return parts
+  }
+
+  func streamAnswer(
+    for pass: ModelPass, onUpdate: @MainActor (String) -> Void
+  ) async throws -> [ModelAnswerPart] {
+    answerCalls += 1
+    let parts = try await model.streamAnswer(for: pass, onUpdate: onUpdate)
     let prose = parts.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
     if AnswerIssue.check(prose, source: pass.source, instruction: pass.instruction) != nil {
       rejectedAnswers.append(prose)
