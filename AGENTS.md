@@ -17,13 +17,13 @@ The channel purpose is the charter: what GistPad Native is and the bar it has to
 3. Work in small compiling commits. Package tests run on macOS at any time.
 4. When you need the simulator, take the build slot, rebase onto the integration branch, and do one build, one test run and one capture pass. Merge as soon as it's green, then release the slot.
 5. Designer signs off every visible surface from Dark captures.
-6. Lead batches the merged work into one build, bumps the build number, installs it on the user's phone, tags `main` as `v<version>-<build>` and merges the integration branch into it.
+6. Lead batches the merged work into one build, bumps the build number, installs it on the user's phone, tags `main` as `v<version>-<build>`, merges the integration branch into it and pushes `main` and the tag to `origin`.
 
 Simple, high-confidence changes don't wait for steps 4 and 5. When the user asks for a build, Lead builds from the finished branches and installs it right away. Tests, captures and sign-off follow as a check, and anything they catch goes in the next build.
 
 ## Where things are
 
-- This repo is `~/Desktop/gistpad-ios`.
+- This repo is `~/Desktop/gistpad-ios`, public at [lostintangent/gistpad-ios](https://github.com/lostintangent/gistpad-ios). Only `main` and build tags are pushed, and working branches stay local.
 - The web app at `~/Desktop/gistpad.dev` is the reference for behavior and the source of the Markdown renderer. Read it freely. Never commit to it, and propose any change to it in the channel first.
 - `README.md` tells the product story for people. Keep development detail here instead.
 - The [module map](#module-map) below shows where code lives.
