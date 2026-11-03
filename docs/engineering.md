@@ -25,7 +25,7 @@ These rules aren't obvious from reading the code. The toolchain, the iOS 27.2 fl
 
 ## Whole-note on-device intelligence
 
-Siri leads for questions about the open note; GistPad Ask remains a private offline option with verified citations and is frozen for feature work. Ask, Edit and Review use only `SystemLanguageModel.default`, with no cloud or third-party model. They see the body, never front matter, even when the note is split. The app preserves original UTF-16 source ranges for citations and exact edit quotes. [Foundation Models](https://developer.apple.com/documentation/foundationmodels), [Context management](https://developer.apple.com/documentation/foundationmodels/managing-the-context-window).
+Siri leads for questions about the open note; GistPad Ask remains a private offline option with verified citations and is frozen for feature work. Ask, Edit and Review use only `SystemLanguageModel.default`, with no cloud or third-party model. They see the body, never front matter, even when the note is split. `Syntax.outline(in:)` supplies shared UTF-16 blocks and task markers for Ask citations, Edit scope and Review's move check. The app preserves original source ranges for citations and exact edit quotes. [Foundation Models](https://developer.apple.com/documentation/foundationmodels), [Context management](https://developer.apple.com/documentation/foundationmodels/managing-the-context-window).
 
 | Observed platform gap | Smallest added step | Evidence and remaining limit |
 |---|---|---|
