@@ -53,6 +53,135 @@ struct PlatformTests {
     #expect(session.saveState == .savedToGitHub)
   }
 
+  @Test func siriAppendPreservesFrontMatterAndUsesTheOpenEditorsDurableEdit() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    let session = try await fixture.session()
+    let snapshot = try #require(try LibrarySnapshot.read())
+    let note = try #require(snapshot.gists.first {
+      $0.link == GistPadLink.gist(id: "daily123", filename: nil)
+    })
+    let other = try #require(snapshot.gists.first {
+      $0.link == GistPadLink.gist(id: "daily123", filename: "another.md")
+    })
+    #expect(other.content == nil)
+    #expect(other.excerpt == nil)
+    let closed = try #require(try await fixture.bridge.noteEntities(for: [other.id]).first)
+    #expect(closed.content == nil)
+    fixture.library.isForeground = true
+    fixture.bridge.setVisibleNote(note.id, session: session)
+    defer { fixture.bridge.setVisibleNote(nil, session: session) }
+    let visible = try #require(try await fixture.bridge.noteEntities(for: [note.id]).first)
+    #expect(String(try #require(visible.content).characters) == session.editor.text)
+    #expect(visible.attributeSet.textContent == nil)
+    let original = session.editor.text
+    let intent = AppendToGistIntent()
+    intent.dailyNotes = fixture.bridge
+    intent.target = note
+    intent.content = AttributedString("Pick up the dry cleaning")
+
+    _ = try await intent.perform()
+
+    #expect(session.editor.text == original + "Pick up the dry cleaning\n")
+    #expect(await session.waitForLocalSave())
+    #expect(fixture.publishes.isEmpty)
+    #expect(try await fixture.store.draft(id: session.draft.id, accountID: fixture.account.id).text
+      == session.editor.text)
+  }
+
+  @Test func siriAppendToAClosedFileKeepsItsFrontMatterAndDoesNotExposeTheBody() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    let snapshot = try #require(try LibrarySnapshot.read())
+    let note = try #require(snapshot.gists.first {
+      $0.link == GistPadLink.gist(id: "daily123", filename: "another.md")
+    })
+
+    let updated = try await fixture.bridge.appendToNote(note, text: "A new line")
+
+    #expect(updated.content == nil)
+    let local = try await fixture.sync.localState(accountID: fixture.account.id)
+    let draft = try #require(local.drafts.first { $0.filename == "another.md" })
+    #expect(draft.text == "---\nsecret: hide this from Siri\n---\n\nAnother note\nA new line\n")
+    #expect(fixture.publishes.isEmpty)
+  }
+
+  @Test func siriOnlyReadsTheVisibleEditorsLiveBodyWithoutFrontMatter() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    let snapshot = try #require(try LibrarySnapshot.read())
+    let note = try #require(snapshot.gists.first {
+      $0.link == .gist(id: "daily123", filename: "another.md")
+    })
+    await fixture.library.open(.gist(id: "daily123", filename: "another.md"))
+    let session = try #require(fixture.library.activeSession)
+    fixture.library.isForeground = true
+    fixture.bridge.setVisibleNote(note.id, session: session)
+    defer { fixture.bridge.setVisibleNote(nil, session: session) }
+
+    let open = try #require(try await fixture.bridge.noteEntities(for: [note.id]).first)
+    #expect(String(try #require(open.content).characters) == "Another note\n")
+    #expect(open.attributeSet.textContent == nil)
+    session.editor.textView.text += "Vagabond is first.\n"
+    session.editor.textViewDidChange(session.editor.textView)
+    let typing = try #require(try await fixture.bridge.noteEntities(for: [note.id]).first)
+    #expect(String(try #require(typing.content).characters)
+      == "Another note\nVagabond is first.\n")
+
+    fixture.library.isForeground = false
+    #expect(try await fixture.bridge.noteEntities(for: [note.id]).first?.content == nil)
+    fixture.library.isForeground = true
+    fixture.bridge.setVisibleNote(nil, session: session)
+    #expect(try await fixture.bridge.noteEntities(for: [note.id]).first?.content == nil)
+  }
+
+  @Test func returningToLibraryClearsTheEditorsOnscreenEntity() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    await fixture.library.open(.today())
+    let session = try #require(fixture.library.activeSession)
+    let note = try #require(try LibrarySnapshot.read()?.gists.first {
+      $0.link == .gist(id: "daily123", filename: nil)
+    })
+    let scene = try #require(
+      UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = UIWindow(windowScene: scene)
+    window.rootViewController = UIHostingController(
+      rootView: RootView(library: fixture.library).environment(\.scenePhase, .active))
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    try await Task.sleep(for: .milliseconds(500))
+    #expect(scene.activationState == .foregroundActive)
+    #expect(fixture.library.state.selectedID != nil)
+    #expect(fixture.library.isForeground)
+    #expect(session.editor.textView.window != nil)
+    #expect(session.editor.textView.appEntityIdentifier?.identifier == note.id)
+
+    fixture.library.showLibrary()
+    try await Task.sleep(for: .milliseconds(500))
+    #expect(session.editor.textView.appEntityIdentifier == nil)
+    #expect(try await fixture.bridge.noteEntities(for: [note.id]).first?.content == nil)
+  }
+
+  @Test func siriUpdateRenamesTheOwnedGistThroughTheLibrary() async throws {
+    let fixture = try await PlatformFixture.make()
+    defer { fixture.cleanUp() }
+    let snapshot = try #require(try LibrarySnapshot.read())
+    let note = try #require(snapshot.gists.first {
+      $0.link == GistPadLink.gist(id: "manga", filename: nil)
+    })
+    let intent = UpdateGistNoteIntent()
+    intent.dailyNotes = fixture.bridge
+    intent.target = note
+    intent.name = AttributedString("Reading Library")
+
+    _ = try await intent.perform()
+
+    #expect(try await fixture.sync.localState(accountID: fixture.account.id)
+      .cache?.owned.first(where: { $0.id == "manga" })?.description == "Reading Library")
+    #expect(fixture.publishes == ["PATCH /gists/manga"])
+  }
+
   @Test func aPickedImageUploadsThenInsertsItsMarkdownAtTheCursorAsOneUndo() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
@@ -102,8 +231,11 @@ private struct PlatformFixture {
         id: "daily123", description: DailyNote.gistDescription,
         files: [
           DailyNote.Day().filename: "# Today\n\n- [ ] A real task\n",
-          "another.md": "Another note\n",
+          "another.md": "---\nsecret: hide this from Siri\n---\n\nAnother note\n",
         ])
+      server.addGist(
+        id: "manga", description: "Manga reading list",
+        files: ["README.md": "# Ranked\n1. Vagabond\n"])
     }
     // Connected the way the app launches, so every file the library opens reaches the bridge.
     let sync = GitHubSync(accounts: fixture.accounts, drafts: fixture.store)

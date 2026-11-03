@@ -1,3 +1,4 @@
+import AppIntents
 import Comments
 import Editor
 import Interface
@@ -355,8 +356,42 @@ struct RootView: View {
   private func fileScreen(
     _ session: FileSession, availableWidth: CGFloat
   ) -> some View {
-    gistScreen(session, images: session.images, availableWidth: availableWidth)
+    let identifier = onScreenNote(for: session).map {
+      EntityIdentifier(for: GistEntity.self, identifier: $0.url.absoluteString)
+    }
+    return gistScreen(session, images: session.images, availableWidth: availableWidth)
       .imagePicker(session.images)
+      .userActivity("dev.gistpad.GistPad.note", isActive: identifier != nil) { activity in
+        activity.title = session.details.title
+        activity.isEligibleForSearch = false
+        activity.isEligibleForHandoff = false
+        activity.appEntityIdentifier = identifier
+      }
+      .onChange(of: identifier, initial: true) { _, value in
+        session.editor.textView.appEntityIdentifier = value
+        PlatformBridge.shared?.setVisibleNote(value?.identifier, session: session)
+      }
+      .onDisappear {
+        session.editor.textView.appEntityIdentifier = nil
+        PlatformBridge.shared?.setVisibleNote(nil, session: session)
+      }
+  }
+
+  private func onScreenNote(for session: FileSession) -> GistPadLink? {
+    guard scenePhase == .active,
+      horizontalSizeClass != .compact || compactColumn == .detail,
+      library.state.selectedID != nil, sheet == nil,
+      library.account?.id == session.draft.accountID, library.pendingAccount == nil,
+      !session.file.isRecovery
+    else { return nil }
+    if let gist = session.file.gist {
+      return .gist(
+        id: gist.id,
+        filename: session.file.filename == gist.defaultMarkdownFilename
+          ? nil : session.file.filename)
+    }
+    guard session.draft.gistID == nil else { return nil }
+    return .unpublishedGist(accountID: session.draft.accountID, draftID: session.draft.id)
   }
 
   private func gistScreen(
@@ -462,7 +497,10 @@ struct RootView: View {
   }
 
   private func preview(_ session: FileSession) -> some View {
-    FilePreview(
+    let identifier = onScreenNote(for: session).map {
+      EntityIdentifier(for: GistEntity.self, identifier: $0.url.absoluteString)
+    }
+    return FilePreview(
       editor: session.editor, allowsMutations: session.details.access.canEdit,
       comments: commentConfiguration(session),
       onOpenCommentThreads: commentOpener(session, origin: .preview),
@@ -481,6 +519,7 @@ struct RootView: View {
         }
       })
       .id(session.editor.id)
+      .appEntityIdentifier(identifier)
   }
 
   private func commentConfiguration(

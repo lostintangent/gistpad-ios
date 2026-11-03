@@ -11,13 +11,24 @@ needs the web's `apple-app-site-association` file deployed first.
 
 ## System surfaces
 
-`GistEntity` is an `IndexedEntity`, one per gist, with its title, tags and a
-snippet, indexed with complete file protection. Opening one opens the gist the
-way the Library does. `GistEntityQuery` resolves identifiers and strings for the
-signed-in account and answers the system's reindex requests. The app updates the
-index in the background after each snapshot, so nothing waits on Spotlight, and
-deletes just the gists that went away since the last one, including while the
-app wasn't running.
+`GistEntity` is an `IndexedEntity`, one per Markdown file, with its title, tags
+and a snippet, indexed with complete file protection. Opening one opens the
+gist the way the Library does. `GistEntityQuery` resolves identifiers and
+strings for the signed-in account and answers the system's reindex requests.
+The app updates the index in the background after each snapshot, so nothing
+waits on Spotlight, and deletes just the files that went away since the last
+one, including while the app wasn't running.
+
+For the Siri notes prototype, each Markdown file is a note in its gist's
+`GistFolderEntity`, under the active `GistAccountEntity`. `GistEntity` adopts
+the iOS 27 notes schema. The editor text view, preview and foreground
+`NSUserActivity` identify the displayed file. Only a query for that visible
+note while GistPad is active receives its live body from the editor, with
+front matter stripped by `FrontMatter.contentStart(in:)`. Spotlight and the
+shared snapshot keep titles and snippets but **never full bodies**. The
+schema supports appending text, renaming and pinning, not arbitrary body
+rewrites or Q&A. Siri answering questions from the displayed body remains
+unproven until a phone test.
 
 Open Gist, Open Today, Add to Today and New Gist are App Shortcuts. Add to Today,
 Open Today and New Gist are also controls. The Open Today control opens today's
@@ -25,13 +36,18 @@ note and the New Gist control opens a blank gist. The Add to Today control opens
 the capture sheet, and shortcut-provided text skips it. Captures start
 today the way the app does, append Sync's `addToToday` edit through the same
 `DraftEdit` path as the editor, then leave publishing to autosave.
+The notes-schema append uses that same durable edit path. Updating a gist's
+name or pin uses the library's existing metadata actions. A move between gists,
+an attachment update or a combined rename-plus-pin is refused, rather than
+silently ignored.
 
 Both targets read `LibrarySnapshot`, one JSON file in the
-`group.dev.gistpad.GistPad` container. It holds the active account, one entity
-per gist, and the three recent gists the widget shows: your own, newest edit
-first, counting unpublished edits on the phone, without daily notes or archived
-gists. It's written atomically with protection until first unlock so StandBy
-can read it. No credentials are shared.
+`group.dev.gistpad.GistPad` container. It holds the active account, note
+identities and snippets but **not full note bodies**, and the three recent
+gists the widget shows: your own, newest edit first, counting unpublished
+edits on the phone, without daily notes or archived gists. It's written
+atomically with protection until first unlock so StandBy can read it.
+No credentials are shared.
 
 Intents run in the main app (`allowedExecutionTargets = .main`), which provides
 `DailyNoteActions` through `AppDependencyManager`. An edit from an intent reaches
@@ -46,9 +62,11 @@ as before first unlock, it asks you to open GistPad.
 
 ## Validation
 
-`swift test` covers link round-trips and the widget's recent gists counting
-your unpublished edits. `PlatformTests` in the app host covers Add to Today from
-a Shortcut, and a photo upload inserting its Markdown at the cursor. Installed
-widgets, Control Center, Spotlight launches and provisioning are checked on device.
+`swift test` covers link round-trips, per-file note identities and front-matter
+stripping, and the widget's recent gists counting your unpublished edits.
+`PlatformTests` in the app host covers Add to Today from a Shortcut, Siri
+append on open and closed files, metadata updates, and photo upload at the
+cursor. Installed widgets, Control Center, Siri on the phone, Spotlight
+launches and provisioning need device checks.
 Widget and control intents only run from a plain build. `build-for-testing` links
 the packages as shared frameworks, which the system can't find intents in.

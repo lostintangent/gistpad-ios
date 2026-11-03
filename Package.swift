@@ -51,7 +51,8 @@ let package = Package(
     .testTarget(
       name: "InterfaceTests", dependencies: ["Interface"], path: "Tests/Features/InterfaceTests"),
     .testTarget(
-      name: "PlatformTests", dependencies: ["Platform", "Sync"], path: "Tests/Features/PlatformTests"),
+      name: "PlatformTests", dependencies: ["Platform", "Sync", "Editor"],
+      path: "Tests/Features/PlatformTests"),
     .testTarget(
       name: "PreviewTests", dependencies: ["Preview", "Accent", "Comments"],
       path: "Tests/Features/PreviewTests"),

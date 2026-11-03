@@ -1,4 +1,5 @@
 import AppIntents
+import Editor
 import Foundation
 import Platform
 import Sync
@@ -56,6 +57,8 @@ final class PlatformBridge: DailyNoteActions {
   private let store: DraftStore
   private weak var library: Library?
   private var sessions: [UUID: WeakSession] = [:]
+  private var visibleSession: WeakSession?
+  private var visibleNoteID: String?
   private var refreshTask: Task<Void, Never>?
   private var operation: Task<Void, Never>?
   /// Starts from the snapshot GistPad launched with, read before the first refresh rewrites it.
@@ -90,6 +93,16 @@ final class PlatformBridge: DailyNoteActions {
     sessions[session.draft.id] = WeakSession(value: session)
   }
 
+  func setVisibleNote(_ id: String?, session: FileSession) {
+    if let id {
+      visibleSession = WeakSession(value: session)
+      visibleNoteID = id
+    } else if visibleSession?.value === session {
+      visibleSession = nil
+      visibleNoteID = nil
+    }
+  }
+
   func scheduleRefresh() {
     refreshTask?.cancel()
     refreshTask = Task { [weak self] in
@@ -118,13 +131,42 @@ final class PlatformBridge: DailyNoteActions {
       local = nil
     }
     let snapshot = LibrarySnapshot.make(
-      accountID: accountID, cache: local?.cache, drafts: local?.drafts ?? [])
+      accountID: accountID, cache: local?.cache, drafts: local?.drafts ?? [],
+      visibleText: Self.noteBody)
     try Task.checkCancellation()
     let current = try await sync.cachedAccount()
     guard current?.id == account?.id else { throw PlatformError.accountChanged }
     try snapshot.write()
     WidgetCenter.shared.reloadTimelines(ofKind: LauncherWidgetView.kind)
     indexInSpotlight(snapshot)
+  }
+
+  nonisolated private static func noteBody(_ source: String) -> String {
+    (source as NSString).substring(from: FrontMatter.contentStart(in: source))
+  }
+
+  func noteEntities(for identifiers: [String]) async throws -> [GistEntity] {
+    guard let accountID = try await sync.cachedAccount()?.id else {
+      throw PlatformError.accountChanged
+    }
+    try await validateAccount(accountID)
+    let local = try await sync.localState(accountID: accountID)
+    let snapshot = LibrarySnapshot.make(
+      accountID: accountID, cache: local.cache, drafts: local.drafts,
+      visibleText: Self.noteBody)
+    return snapshot.gists.filter { identifiers.contains($0.id) }.map { entity in
+      guard let body = visibleBody(for: entity, accountID: accountID) else { return entity }
+      return entity.withBody(body)
+    }
+  }
+
+  private func visibleBody(for note: GistEntity, accountID: UUID) -> String? {
+    guard note.id == visibleNoteID, let session = visibleSession?.value,
+      library?.isForeground == true, library?.activeSession === session,
+      library?.state.selectedID != nil,
+      session.draft.accountID == accountID
+    else { return nil }
+    return Self.noteBody(session.editor.text)
   }
 
   /// Spotlight catches up with the newest snapshot in the background, so nothing waits on it.
@@ -157,6 +199,110 @@ final class PlatformBridge: DailyNoteActions {
       try await self.apply(.addToToday(text, asTask: asTask, to: draft))
       return .unpublishedGist(accountID: accountID, draftID: draft.id)
     }
+  }
+
+  func appendToNote(_ note: GistEntity, text: String) async throws -> GistEntity {
+    try await serially {
+      guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        throw PlatformError.emptyNoteText
+      }
+      let draft = try await self.noteDraft(for: note)
+      let newline = draft.text.contains("\r\n") ? "\r\n" : "\n"
+      let addition = (draft.text.isEmpty || draft.text.last?.isNewline == true ? "" : newline)
+        + text + (text.last?.isNewline == true ? "" : newline)
+      try await self.apply(
+        DraftEdit(
+          draftID: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation,
+          range: NSRange(location: draft.text.utf16.count, length: 0),
+          expectedText: "", replacement: addition))
+      guard let body = self.visibleBody(for: note, accountID: draft.accountID) else {
+        return note.withoutBody()
+      }
+      return note.withBody(body)
+    }
+  }
+
+  func updateNote(
+    _ note: GistEntity, name: String?, isPinned: Bool?
+  ) async throws -> GistEntity {
+    try await serially {
+      let draft = try await self.noteDraft(for: note)
+      guard let library = self.library else { throw PlatformError.accountChanged }
+      let name = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let renames = name != nil && name != String(note.name.characters)
+      let changesPin = isPinned != nil && isPinned != note.isPinned
+      guard !(renames && changesPin) else { throw PlatformError.unsupportedNoteUpdate }
+      if renames {
+        guard let name else { throw PlatformError.unsupportedNoteUpdate }
+        guard !name.isEmpty else { throw PlatformError.unsupportedNoteUpdate }
+        switch note.link {
+        case .gist(let id, nil):
+          guard draft.description != DailyNote.gistDescription else {
+            throw PlatformError.unsupportedNoteUpdate
+          }
+          _ = try await library.apply(.rename(gistID: id, title: name), accountID: draft.accountID)
+        case .unpublishedGist(_, let id):
+          _ = try await library.apply(.renameLocal(draftID: id, title: name), accountID: draft.accountID)
+        case .gist, .today, .addToToday, .newGist:
+          throw PlatformError.unsupportedNoteUpdate
+        }
+      }
+      if changesPin {
+        guard let isPinned else { throw PlatformError.unsupportedNoteUpdate }
+        guard case .gist(let id, _) = note.link else {
+          throw PlatformError.unsupportedNoteUpdate
+        }
+        _ = try await library.apply(
+          .preference(.setPinned(gistID: id, pinned: isPinned)), accountID: draft.accountID)
+      }
+      do {
+        try await self.refresh()
+      } catch {
+        self.logger.error(
+          "Updated note needs presentation refresh: \(String(reflecting: type(of: error)), privacy: .public)")
+        self.scheduleRefresh()
+      }
+      return note.withMetadata(
+        name: renames ? name : nil, isPinned: changesPin ? isPinned : nil)
+    }
+  }
+
+  private func noteDraft(for note: GistEntity) async throws -> Draft {
+    guard let accountID = try await sync.cachedAccount()?.id, note.accountID == accountID else {
+      throw PlatformError.accountChanged
+    }
+    try await validateAccount(accountID)
+    let draft: Draft
+    switch note.link {
+    case .gist(let id, let filename):
+      let local = try await sync.localState(accountID: accountID)
+      guard let gist = local.cache?.owned.first(where: { $0.id == id }),
+        let filename = filename ?? gist.defaultMarkdownFilename,
+        filename.hasSuffix(".md")
+      else { throw DraftError.readOnly }
+      if let existing = local.drafts.first(where: {
+        $0.gistID == id && $0.filename == filename
+      }) {
+        draft = try await store.draft(id: existing.id, accountID: accountID)
+      } else {
+        guard gist.markdownFilenames.contains(filename) else { throw DraftError.notFound }
+        let text = try await sync.content(gist: gist, filename: filename, accountID: accountID)
+        draft = try await sync.draft(for: File(
+          accountID: accountID, gist: gist, filename: filename, text: text))
+      }
+    case .unpublishedGist(let owner, let id):
+      guard owner == accountID else { throw PlatformError.accountChanged }
+      draft = try await store.draft(id: id, accountID: accountID)
+      guard draft.gistID == nil else { throw DraftError.staleGeneration }
+    case .today, .addToToday, .newGist:
+      throw DraftError.notFound
+    }
+    if let session = sessions[draft.id]?.value {
+      guard session.canMutate, await session.waitForLocalSave() else {
+        throw PlatformError.editingInProgress
+      }
+    }
+    return try await store.draft(id: draft.id, accountID: accountID)
   }
 
   /// Today's file as you last saved it, started the same way the app starts today.
