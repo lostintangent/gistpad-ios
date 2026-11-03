@@ -52,10 +52,22 @@ lenient and has accepted a shortened paragraph that changed a detail. Keep a
 separate held-out set of general cases outside the repository, write it before
 measuring and never tune on it.
 
-General Edit on these longer notes may produce `noteTooLong` when a whole-note
-rewrite cannot fit in one response. That is a measured limitation, not a
-passing edit unless the case explicitly names `expectedError`. Task operations
-should still work on those notes without rewriting them.
+General Edit on these longer notes selects from an outline with direct-content
+previews, then selects one block under that heading. The model rewrites the
+section's own content, but only changed hunks entirely within the selected block
+are proposed. An oversized section falls back to rewriting that block alone.
+An unchanged section does not get a block-only retry: that produced extra
+headings and fences outside the requested content in the measured run.
+The review is still required: a wrong selection can propose an unrelated change,
+and the eval checks every byte outside the requested region. Short notes retain
+their existing JSON input and whole-note rewrite; scoped content uses raw
+Markdown so model output does not echo JSON-escaped newlines. The `long-room`
+case now requires the exact retest-date change instead of accepting `noteTooLong`;
+all 35 cases expect an actual edit. Named list-item moves also require their
+exact expected insertion position, even when the request names only the
+destination heading. Task operations still work without rewriting
+the note. If even one selected block cannot fit, report the error rather than
+silently truncating the source.
 
 Favorite answers are graded on generated prose, not cited text or exact sentence
 equality. Deterministic checks require the expected work's name, a preference
@@ -87,5 +99,7 @@ their p50/p90 plus retry counts and failures.
 The output contains a per-case pass-rate table and content-free failure categories.
 The acceptance floor is 100% for every Edit case and at least 90% for favorite
 cases across at least 10 repetitions. Below-floor runs exit unsuccessfully.
+The 24/35 single-pass Edit path is a Build 34 field candidate by product decision,
+not a passing evaluation. The user must review every proposed diff before Apply.
 Record the runtime model variant and context alongside results. A Mac Core result
 is not proof of Advanced-model behavior on the Duo.

@@ -258,10 +258,9 @@ if args.daily_gist:
         )
     )
 
-# A long text request may fail safely, but task changes must still work at that length.
-cases.append(dict(id="long-room", action="edit", source=dogfood,
-                  prompt="move the offline-pipe retest to November 9",
-                  expectedError="noteTooLong"))
+# Long text and task requests both need to work at realistic note length.
+exact("long-room", dogfood, "move the offline-pipe retest to November 9",
+      replacement(dogfood, "November 6", "November 9"))
 exact("long-all-done", daily, "mark everything done",
       daily.replace("- [ ] ", "- [x] "))
 

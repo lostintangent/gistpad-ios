@@ -222,6 +222,10 @@ public enum ModelEdit: Sendable {
   case deleteTasks(ids: [Int])
   /// The whole note as the model revised it, which the app compares line by line.
   case rewrite(String)
+  /// A selected body block, using a UTF-16 range relative to the model pass.
+  case rewriteRegion(NSRange, revised: String)
+  case replaceRegion(NSRange, ModelReplacement)
+  case deleteRegion(NSRange, replacement: String)
 }
 
 public struct ModelAnswerPart: Sendable, Equatable {

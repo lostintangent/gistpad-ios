@@ -144,6 +144,26 @@ public struct Review: Sendable {
   private func validateApplication(_ replacement: String, changes: [Comment]) throws {
     let source = snapshot.source
     guard let safetyInstruction, !source.isEmpty else { return }
+    if let target = EditBlock.moveTarget(in: safetyInstruction) {
+      let original = EditBlock.indexed(in: source).filter {
+        $0.kind == .listItem && $0.text.localizedCaseInsensitiveContains(target)
+      }
+      if !original.isEmpty {
+        guard original.count == 1 else { throw IntelligenceError.invalidEdit }
+        let result = EditBlock.indexed(in: replacement)
+        let matching = result.filter {
+          $0.kind == .listItem && $0.text.localizedCaseInsensitiveContains(target)
+        }
+        guard matching.count == 1,
+          Self.listItemBody(matching[0].text).utf8.elementsEqual(
+            Self.listItemBody(original[0].text).utf8),
+          !matching[0].heading.utf8.elementsEqual(original[0].heading.utf8),
+          result.contains(where: {
+            $0.kind == .heading && $0.text.utf8.elementsEqual(original[0].heading.utf8)
+          })
+        else { throw IntelligenceError.invalidEdit }
+      }
+    }
     let request = Self.normalized(safetyInstruction)
     for change in changes {
       if let replacement = change.replacement, !request.isEmpty,
@@ -168,6 +188,11 @@ public struct Review: Sendable {
   private static func normalized(_ text: String) -> String {
     text.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
       .trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines))
+  }
+
+  private static func listItemBody(_ item: String) -> String {
+    item.replacingOccurrences(
+      of: #"^\s*(?:[-*+]|\d+[.)])\s+"#, with: "", options: .regularExpression)
   }
 }
 

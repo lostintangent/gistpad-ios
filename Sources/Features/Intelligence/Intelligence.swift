@@ -30,7 +30,7 @@ public final class Intelligence {
     return try await generate(request, progress: progress)
   }
 
-  /// Edit and Review share one chunked pass. They differ in the model's purpose and in which changes it may return.
+  /// Review starts chunked; Edit starts with the whole body and splits only on context failure.
   private func generate(
     _ request: IntelligenceRequest, progress: @MainActor (IntelligenceProgress) -> Void
   ) async throws -> Review {
@@ -38,7 +38,10 @@ public final class Intelligence {
     try Task.checkCancellation()
     let model = try await backend.modelInfo()
     let purpose: ModelPass.Purpose = request.action == .edit ? .edit : .review
-    let chunks = try await chunks(for: request, purpose: purpose, model: model)
+    let chunks =
+      purpose == .edit
+      ? [content(in: request)]
+      : try await chunks(for: request, purpose: purpose, model: model)
     var candidates: [(ModelReplacement, NSRange)] = []
     var pending = Array(chunks.reversed())
     var completed = 0
@@ -154,10 +157,44 @@ public final class Intelligence {
               in: request.snapshot.source,
               visible: NSRange(location: start, length: NSMaxRange(chunk.range) - start),
               revised: revised)
+          case .rewriteRegion(let relative, let revised):
+            guard request.action == .edit,
+              relative.location >= 0, relative.length > 0,
+              NSMaxRange(relative) <= chunk.range.length
+            else { throw IntelligenceError.invalidResponse }
+            candidates += try Revision.candidates(
+              in: request.snapshot.source,
+              visible: NSRange(
+                location: chunk.range.location + relative.location, length: relative.length),
+              revised: revised)
+          case .replaceRegion(let relative, let candidate):
+            guard request.action == .edit,
+              relative.location >= 0, relative.length > 0,
+              NSMaxRange(relative) <= chunk.range.length,
+              candidate.replacement != nil,
+              candidate.quote.utf8.elementsEqual(
+                (chunk.source as NSString).substring(with: relative).utf8)
+            else { throw IntelligenceError.invalidResponse }
+            candidates.append(
+              (
+                candidate,
+                NSRange(location: chunk.range.location + relative.location, length: relative.length)
+              ))
+          case .deleteRegion(let relative, let replacement):
+            guard request.action == .edit,
+              relative.location >= 0, relative.length > 0,
+              NSMaxRange(relative) <= chunk.range.length,
+              replacement.isEmpty || replacement == "\n" || replacement == "\r\n"
+            else { throw IntelligenceError.invalidResponse }
+            let range = NSRange(
+              location: chunk.range.location + relative.location, length: relative.length)
+            let quote = (request.snapshot.source as NSString).substring(with: range)
+            candidates.append(
+              (ModelReplacement(quote: quote, replacement: replacement, reason: ""), range))
           }
         }
         completed += 1
-        // Reading less doesn't shorten a rewrite of the whole note, so only Review retries smaller.
+        // Selection needs a smaller part when the response or context cannot fit.
       } catch IntelligenceError.responseTooLarge where purpose == .review,
         IntelligenceError.insufficientContext
       {

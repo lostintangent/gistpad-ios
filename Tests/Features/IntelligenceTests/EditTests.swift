@@ -85,13 +85,15 @@ struct EditTests {
     let prose = String(repeating: "# Section\nbad 👩🏽‍💻\r\n", count: 180)
     let editor = FixtureModel()
     editor.contextSize = 1_536
+    editor.nextFailure = IntelligenceError.insufficientContext
     editor.changes = { pass in
       [.replace(change(pass.source, pass.source.replacingOccurrences(of: "bad", with: "good")))]
     }
     let fix = request(prose, .edit, "Fix bad")
     let fixed = try await Intelligence(backend: editor).edit(fix)
     #expect(editor.passes.count > 1)
-    #expect(editor.passes.map(\.source).joined().utf8.elementsEqual(prose.utf8))
+    #expect(editor.passes.first?.source.utf8.elementsEqual(prose.utf8) == true)
+    #expect(editor.passes.dropFirst().map(\.source).joined().utf8.elementsEqual(prose.utf8))
     #expect(
       try fixed.application(to: fix.snapshot).source
         == prose.replacingOccurrences(of: "bad", with: "good"))
@@ -99,14 +101,274 @@ struct EditTests {
     let list = (1...80).map { "- [ ] Task \($0) 👩🏽‍💻\r\n" }.joined()
     let checker = FixtureModel()
     checker.contextSize = 512
+    checker.nextFailure = IntelligenceError.insufficientContext
     checker.changes = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
     let all = request(list, .edit, "Check off everything")
     let checked = try await Intelligence(backend: checker).edit(all)
     #expect(checker.passes.count > 1)
-    #expect(checker.passes.flatMap(\.tasks).map(\.id) == Array(1...80))
+    #expect(checker.passes.dropFirst().flatMap(\.tasks).map(\.id) == Array(1...80))
     #expect(
       try checked.application(to: all.snapshot).source.utf8.elementsEqual(
         list.replacingOccurrences(of: "[ ]", with: "[x]").utf8))
+  }
+
+  @Test func editBlocksPreserveLiteralRangesAndKeepFencesTogether() {
+    let source = """
+      # Title\r
+      \r
+      One 👩🏽‍💻 line.\r
+      Another line.\r
+      \r
+      - [ ] First\r
+      - [ ] Second\r
+      \r
+      | Flag | Meaning |\r
+      | --- | --- |\r
+      | -i | Ignore case |\r
+      \r
+      ```markdown\r
+      # Not a heading\r
+      - Not a task\r
+      ```\r
+      \r
+      ## End\r
+      """
+    let blocks = EditBlock.indexed(in: source)
+    #expect(
+      blocks.map(\.kind) == [
+        .heading, .paragraph, .listItem, .listItem, .tableRow, .tableRow, .tableRow,
+        .code, .heading,
+      ])
+    #expect(blocks.map(\.id) == Array(1...blocks.count))
+    #expect(blocks[1].heading == "# Title")
+    #expect(blocks.last?.heading == "## End")
+    #expect(blocks[7].text.contains("# Not a heading"))
+    for block in blocks {
+      #expect((source as NSString).substring(with: block.range) == block.text)
+      #expect(Range(block.range, in: source) != nil)
+    }
+  }
+
+  @Test func editPromptKeepsRawMarkdownInsideAnUnforgeableDelimiter() throws {
+    let source = "# Title\r\n\r\n```swift\r\nprint(\"Hello\")\r\n```\r\nA literal \\\\n remains.\r\n"
+    let pass = ModelPass(
+      purpose: .edit, instruction: "Fix the title", source: source, responseTokens: 512,
+      isPart: true)
+    let prompt = try OnDeviceModel.prompt(for: pass)
+    #expect(prompt.contains("Request:\nFix the title"))
+    #expect(prompt.contains("Note:\n````\n" + source + "\n````"))
+    #expect(!prompt.contains(#"\"note\":"#))
+
+    let whole = ModelPass(
+      purpose: .edit, instruction: "Fix the title", source: source, responseTokens: 512)
+    let payload = try #require(
+      JSONSerialization.jsonObject(with: Data(OnDeviceModel.prompt(for: whole).utf8))
+        as? [String: String])
+    #expect(payload == ["note": source, "request": "Fix the title"])
+  }
+
+  @Test func moveRequiresOneIntactItemInADifferentSection() throws {
+    let source = """
+      ## Kitchen
+
+      - [ ] Paint the window trim
+      - [ ] Replace the trap
+
+      ## Entry
+
+      - [ ] Patch the wall
+      """
+    let snapshot = note(source)
+    let moved = Review(
+      snapshot: snapshot,
+      scopedCandidates: [
+        (change("- [ ] Paint the window trim\n", ""), NSRange(location: 0, length: source.utf16.count)),
+        (change("- [ ] Patch the wall", "- [ ] Paint the window trim\n- [ ] Patch the wall"),
+          NSRange(location: 0, length: source.utf16.count)),
+      ],
+      safetyInstruction: "move Paint the window trim from Kitchen to Entry")
+    #expect(
+      try moved.application(to: snapshot).source
+        == source.replacingOccurrences(of: "- [ ] Paint the window trim\n", with: "")
+          .replacingOccurrences(
+            of: "- [ ] Patch the wall", with: "- [ ] Paint the window trim\n- [ ] Patch the wall"))
+
+    for edits in [
+      [change("- [ ] Paint the window trim\n", "")],
+      [change("- [ ] Patch the wall", "- [ ] Paint the window trim\n- [ ] Patch the wall")],
+      [change("- [ ] Replace the trap", "- [ ] Replace the trap\n- [ ] Paint the window trim"),
+        change("- [ ] Paint the window trim\n", "")],
+    ] {
+      let review = Review(
+        snapshot: note(source),
+        scopedCandidates: edits.map {
+          ($0, NSRange(location: 0, length: source.utf16.count))
+        },
+        safetyInstruction: "move Paint the window trim from Kitchen to Entry")
+      #expect(throws: IntelligenceError.invalidEdit) {
+        try review.application(to: review.snapshot)
+      }
+    }
+  }
+
+  @Test func movingADateDoesNotRequireAListItem() throws {
+    let snapshot = note("## Next check\n\nThe offline-pipe retest is scheduled for November 6.\n")
+    let review = Review(
+      snapshot: snapshot,
+      scopedCandidates: [
+        (change("November 6", "November 9"),
+          NSRange(location: 0, length: snapshot.source.utf16.count))
+      ],
+      safetyInstruction: "move the offline-pipe retest from November 6 to November 9")
+    #expect(
+      try review.application(to: snapshot).source
+        == "## Next check\n\nThe offline-pipe retest is scheduled for November 9.\n")
+  }
+
+  @Test func anchoredListMovePreservesTheItemAndEveryOtherLine() throws {
+    let cases: [(String, String, String)] = [
+      (
+        "## Kitchen\n\n- [ ] Paint the window trim\n- [ ] Replace the trap\n\n"
+          + "## Entry\n\n- [ ] Patch the wall\n",
+        "move Paint the window trim from Kitchen to Entry",
+        "## Kitchen\n\n- [ ] Replace the trap\n\n"
+          + "## Entry\n\n- [ ] Patch the wall\n- [ ] Paint the window trim\n"
+      ),
+      (
+        "## Currently reading (volume)\n\n### In progress\n\n"
+          + "1. Harbor Signal (7)\n2. Paper Observatory (2)\n\n"
+          + "## Started but stopped\n\n1. Tin Compass (2)\n",
+        "move Paper Observatory from Currently reading to Started but stopped",
+        "## Currently reading (volume)\n\n### In progress\n\n"
+          + "1. Harbor Signal (7)\n\n"
+          + "## Started but stopped\n\n1. Tin Compass (2)\n2. Paper Observatory (2)\n"
+      ),
+    ]
+    for (original, instruction, revised) in cases {
+      for newline in ["\n", "\r\n"] {
+        let source = original.replacingOccurrences(of: "\n", with: newline)
+        let expected = revised.replacingOccurrences(of: "\n", with: newline)
+        let operations = try #require(
+          OnDeviceModel.anchoredListMove(in: source, instruction: instruction))
+        #expect(operations.count == 2)
+        let candidates: [(ModelReplacement, NSRange)] = try operations.map { operation in
+          switch operation {
+          case .deleteRegion(let range, let replacement):
+            let quote = (source as NSString).substring(with: range)
+            return (ModelReplacement(quote: quote, replacement: replacement, reason: ""), range)
+          case .replaceRegion(let range, let change):
+            return (change, range)
+          default:
+            throw IntelligenceError.invalidResponse
+          }
+        }
+        let snapshot = note(source)
+        let review = Review(
+          snapshot: snapshot, scopedCandidates: candidates, safetyInstruction: instruction)
+        #expect(try review.application(to: snapshot).source == expected)
+      }
+    }
+  }
+
+  @Test func editSectionsIncludeDescendantsButStopAtPeerHeadings() {
+    let source = """
+      # Project
+
+      Intro.
+
+      ## Setup
+
+      Setup notes.
+
+      ### Install
+
+      Install steps.
+
+      ### Options
+
+      | Flag | Meaning |
+      | -i | Ignore case |
+
+      ## Next check
+
+      Retest in November.
+      """
+    let sections = EditSection.indexed(in: source)
+    #expect(sections.map(\.title) == [
+      "# Project", "## Setup", "### Install", "### Options", "## Next check",
+    ])
+    #expect(sections.map(\.level) == [1, 2, 3, 3, 2])
+    #expect(sections[0].text.contains("Retest in November."))
+    #expect((source as NSString).substring(with: sections[0].directRange) == "# Project\n\nIntro.")
+    #expect(sections[1].text.contains("### Options"))
+    #expect((source as NSString).substring(with: sections[1].directRange) == "## Setup\n\nSetup notes.")
+    #expect(!sections[1].text.contains("## Next check"))
+    #expect(!sections[2].text.contains("### Options"))
+    for section in sections {
+      #expect((source as NSString).substring(with: section.range) == section.text)
+      #expect(Range(section.range, in: source) != nil)
+    }
+  }
+
+  @Test func scopedEditsSpliceOnlyVerifiedBodyRanges() async throws {
+    let prefix = "---\r\nsecret: 👩🏽‍💻\r\n---\r\n"
+    let body = "# Reading\r\n\r\n- Paper Observatory\r\n- River Engine\r\n\r\n## Notes\r\n\r\nKeep this.\r\n"
+    let input = request(prefix + body, .edit, "Move Paper Observatory after River Engine")
+    let fixture = FixtureModel()
+    fixture.changes = { pass in
+      let blocks = EditBlock.indexed(in: pass.source)
+      let source = blocks.first { $0.text == "- Paper Observatory" }!
+      let destination = blocks.first { $0.text == "- River Engine" }!
+      return [
+        .deleteRegion(
+          NSRange(
+            location: source.range.location,
+            length: destination.range.location - source.range.location),
+          replacement: ""),
+        .rewriteRegion(destination.range, revised: "- River Engine\n- Paper Observatory"),
+      ]
+    }
+    let review = try await Intelligence(backend: fixture).edit(input)
+    #expect(fixture.passes.map(\.source) == [body])
+    #expect(review.comments.count == 2)
+    #expect(review.omittedCount == 0)
+    #expect(
+      try review.application(to: input.snapshot).source
+        == prefix + "# Reading\r\n\r\n- River Engine\r\n- Paper Observatory\r\n\r\n## Notes\r\n\r\nKeep this.\r\n")
+
+    fixture.changes = { pass in
+      let heading = EditBlock.indexed(in: pass.source).first { $0.text == "## Notes" }!
+      return [
+        .rewriteRegion(
+          heading.range, revised: "## Notes\n\nA new introduction for the section.")
+      ]
+    }
+    let inserted = try await Intelligence(backend: fixture).edit(input)
+    #expect(
+      try inserted.application(to: input.snapshot).source
+        == prefix + body.replacingOccurrences(
+          of: "## Notes\r\n\r\n", with: "## Notes\r\n\r\nA new introduction for the section.\r\n\r\n"))
+  }
+
+  @Test func aScopedHunkKeepsRepeatedTextOutsideTheSelectedBlock() async throws {
+    let input = request("# First\n\nKeep this.\n\n# Second\n\nKeep this.\n", .edit, "Change the second note")
+    let target = (input.snapshot.source as NSString).range(of: "Keep this.", options: .backwards)
+    let fixture = FixtureModel()
+    fixture.changes = { _ in
+      [.replaceRegion(target, change("Keep this.", "Change this."))]
+    }
+    let review = try await Intelligence(backend: fixture).edit(input)
+    #expect(review.omittedCount == 0)
+    #expect(
+      try review.application(to: input.snapshot).source
+        == "# First\n\nKeep this.\n\n# Second\n\nChange this.\n")
+
+    fixture.changes = { _ in
+      [.replaceRegion(target, change("Other text.", "Change this."))]
+    }
+    await #expect(throws: IntelligenceError.invalidResponse) {
+      try await Intelligence(backend: fixture).edit(input)
+    }
   }
 
   @Test(arguments: ["\n", "\r\n"])
