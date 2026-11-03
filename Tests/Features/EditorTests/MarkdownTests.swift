@@ -21,6 +21,50 @@ import Testing
   #expect(try mutation.applying(to: source) == "👩🏽‍💻\n- [ ] Duplicate\n- [x] Duplicate\n")
 }
 
+@Test func outlineKeepsMarkdownBlocksAndMarkersOutOfProtectedContent() throws {
+  let source = """
+    ---
+    title: Notebook
+    ---
+    ## 日本語 👩🏽‍💻
+    First line
+    second line
+
+    - [x] Finished
+      continued
+    | table |
+    ```md
+    ## Not a heading
+    - [ ] Not a task
+    ```
+    Last `code` line
+    """
+  let outline = Syntax.outline(in: source)
+  let text = source as NSString
+  #expect(outline.blocks.map(\.kind) == [
+    .heading, .paragraph, .listItem, .tableRow, .code, .paragraph,
+  ])
+  #expect(outline.blocks.map { text.substring(with: $0.range) } == [
+    "## 日本語 👩🏽‍💻",
+    "First line\nsecond line",
+    "- [x] Finished\n  continued",
+    "| table |",
+    "```md\n## Not a heading\n- [ ] Not a task\n```",
+    "Last `code` line",
+  ])
+  #expect(outline.blocks[0].level == 2)
+  #expect(text.substring(with: try #require(outline.blocks[2].marker)) == "- [x] ")
+  #expect(text.substring(with: try #require(outline.blocks[2].taskMarker)) == "[x]")
+  #expect(outline.headings == [outline.blocks[0].range])
+  #expect(outline.taskMarkers == [try #require(outline.blocks[2].taskMarker)])
+  #expect(outline.frontMatterRanges.map { text.substring(with: $0) } == [
+    "---\ntitle: Notebook\n---\n",
+  ])
+  #expect(outline.codeRanges.map { text.substring(with: $0) } == [
+    "```md\n## Not a heading\n- [ ] Not a task\n```\n", "`code`",
+  ])
+}
+
 @Test func invalidOrStaleSourceIsRejected() {
   let source = "📝 - [ ] task"
   #expect(throws: Edit.MutationError.invalidRange) {

@@ -148,16 +148,9 @@ enum Typing {
     }
     let end = max(NSMaxRange(selection), changes.map { NSMaxRange($0.range) }.max() ?? 0)
     let range = NSRange(location: selection.location, length: end - selection.location)
-    let expected = text.substring(with: range)
-    let result = NSMutableString(string: expected)
-    for change in changes.reversed() {
-      result.replaceCharacters(
-        in: NSRange(location: change.range.location - range.location, length: change.range.length),
-        with: change.replacement)
-    }
     return Edit(
-      range: range, expected: expected, replacement: result as String,
-      selection: NSRange(location: selection.location + replacement.utf16.count, length: 0))
+      range: range, expected: text.substring(with: range), replacements: changes,
+      selection: selection)
   }
 
   private static func protectedRanges(in source: String) -> [NSRange] {

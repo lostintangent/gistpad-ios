@@ -9,6 +9,25 @@ public enum Syntax {
   struct Span: Sendable {
     let range: NSRange
     let kind: Kind
+    let isFencedCode: Bool
+
+    init(range: NSRange, kind: Kind, isFencedCode: Bool = false) {
+      self.range = range
+      self.kind = kind
+      self.isFencedCode = isFencedCode
+    }
+  }
+
+  public struct Block: Sendable {
+    public enum Kind: Sendable {
+      case heading, paragraph, listItem, tableRow, code
+    }
+
+    public let kind: Kind
+    public let range: NSRange
+    public let level: Int?
+    public let marker: NSRange?
+    public let taskMarker: NSRange?
   }
 
   private static let inlinePatterns: [(NSRegularExpression, [(Int, Kind)])] = {
@@ -72,15 +91,142 @@ public enum Syntax {
     }
   }()
 
-  /// Heading ranges and task-marker ranges outside code and front matter.
-  public static func outline(in text: String) -> (headings: [NSRange], taskMarkers: [NSRange]) {
+  public static func contentStart(in text: String) -> Int {
+    let source = text as NSString
+    guard source.length > 0 else { return 0 }
+    func line(at offset: Int) -> (text: String, end: Int) {
+      var end = 0
+      var contentsEnd = 0
+      source.getLineStart(
+        nil, end: &end, contentsEnd: &contentsEnd,
+        for: NSRange(location: offset, length: 0))
+      return (source.substring(with: NSRange(location: offset, length: contentsEnd - offset)), end)
+    }
+    func isFence(_ value: String) -> Bool {
+      value.hasPrefix("---") && value.dropFirst(3).allSatisfy(\.isWhitespace)
+    }
+    let opening = line(at: 0)
+    guard isFence(opening.text) else { return 0 }
+    var offset = opening.end
+    while offset < source.length {
+      let current = line(at: offset)
+      if isFence(current.text) {
+        guard current.end > offset + current.text.utf16.count else { return 0 }
+        var content = current.end
+        while content < source.length {
+          let next = line(at: content)
+          guard next.text.allSatisfy(\.isWhitespace),
+            next.end > content + next.text.utf16.count
+          else { break }
+          content = next.end
+        }
+        return content
+      }
+      offset = current.end
+    }
+    return 0
+  }
+
+  /// Source blocks and markers with UTF-16 ranges, excluding fenced code and front matter.
+  public static func outline(in text: String) -> (
+    headings: [NSRange], taskMarkers: [NSRange], blocks: [Block],
+    codeRanges: [NSRange], frontMatterRanges: [NSRange]
+  ) {
+    let source = text as NSString
     let spans = spans(in: text)
     let protected = spans.filter { $0.kind == .code || $0.kind == .frontmatter }
+    let codeRanges = mergedRanges(spans.filter { $0.kind == .code }.map(\.range))
+    let frontMatterRanges = mergedRanges(spans.filter { $0.kind == .frontmatter }.map(\.range))
     let taskMarkers = spans.filter { span in
       (span.kind == .task || span.kind == .checkedTask)
         && !protected.contains { NSIntersectionRange($0.range, span.range).length > 0 }
     }.map(\.range)
-    return (spans.filter { $0.kind == .heading }.map(\.range), taskMarkers)
+    let headings = spans.filter { span in
+      span.kind == .heading
+        && !protected.contains { NSIntersectionRange($0.range, span.range).length > 0 }
+    }.map(\.range)
+    let byLine = Dictionary(grouping: spans.filter {
+      $0.kind == .heading || $0.kind == .orderedMarker || $0.kind == .punctuation
+        || $0.kind == .task || $0.kind == .checkedTask || $0.kind == .frontmatter
+        || $0.isFencedCode
+    }) { source.lineRange(for: NSRange(location: $0.range.location, length: 0)).location }
+    var blocks: [Block] = []
+    var current: Block?
+    func finish() {
+      if let current { blocks.append(current) }
+      current = nil
+    }
+    func append(
+      _ range: NSRange, kind: Block.Kind, continuing: Bool = false,
+      level: Int? = nil, marker: NSRange? = nil, taskMarker: NSRange? = nil
+    ) {
+      if continuing, let previous = current, previous.kind == kind {
+        current = Block(
+          kind: kind,
+          range: NSRange(
+            location: previous.range.location, length: NSMaxRange(range) - previous.range.location),
+          level: previous.level, marker: previous.marker, taskMarker: previous.taskMarker)
+      } else {
+        finish()
+        current = Block(
+          kind: kind, range: range, level: level, marker: marker, taskMarker: taskMarker)
+      }
+    }
+    var offset = 0
+    while offset < source.length {
+      let line = source.lineRange(for: NSRange(location: offset, length: 0))
+      var end = NSMaxRange(line)
+      while end > offset
+        && (source.character(at: end - 1) == 10 || source.character(at: end - 1) == 13)
+      {
+        end -= 1
+      }
+      let range = NSRange(location: offset, length: end - offset)
+      let value = source.substring(with: range)
+      let markers = byLine[offset] ?? []
+      if markers.contains(where: \.isFencedCode) {
+        append(range, kind: .code, continuing: true)
+      } else if markers.contains(where: { $0.kind == .frontmatter })
+        || value.trimmingCharacters(in: .whitespaces).isEmpty
+      {
+        finish()
+      } else if markers.contains(where: { $0.kind == .heading && headings.contains($0.range) }) {
+        append(
+          range, kind: .heading,
+          level: value.trimmingCharacters(in: .whitespaces).prefix { $0 == "#" }.count)
+        finish()
+      } else if let marker = markers.first(where: { span in
+        guard span.kind == .punctuation || span.kind == .orderedMarker,
+          !codeRanges.contains(where: { NSIntersectionRange($0, span.range).length > 0 })
+        else { return false }
+        let indent = source.substring(
+          with: NSRange(location: offset, length: span.range.location - offset))
+        return indent.allSatisfy { $0 == " " || $0 == "\t" }
+      }) {
+        let task = markers.first { $0.kind == .task || $0.kind == .checkedTask }
+        var prefixEnd = NSMaxRange(task?.range ?? marker.range)
+        while prefixEnd < end,
+          source.character(at: prefixEnd) == 32 || source.character(at: prefixEnd) == 9
+        {
+          prefixEnd += 1
+        }
+        append(
+          range, kind: .listItem,
+          marker: NSRange(location: offset, length: prefixEnd - offset),
+          taskMarker: task?.range)
+      } else if value.trimmingCharacters(in: .whitespaces).hasPrefix("|") {
+        append(range, kind: .tableRow)
+      } else if let current,
+        current.kind == .paragraph || (current.kind == .listItem && value.first?.isWhitespace == true)
+      {
+        append(range, kind: current.kind, continuing: true)
+      } else {
+        append(range, kind: .paragraph)
+      }
+      offset = NSMaxRange(line)
+    }
+    finish()
+    return (headings, taskMarkers, blocks, codeRanges, frontMatterRanges)
   }
 
   static func spans(in text: String) -> [Span] {
@@ -135,7 +281,7 @@ public enum Syntax {
         proseStart = offset
       }
       if let protectedKind {
-        result.append(Span(range: range, kind: protectedKind))
+        result.append(Span(range: range, kind: protectedKind, isFencedCode: protectedKind == .code))
         // A fence line is markup, so it paints like other line-leading markers.
         if isFenceLine { result.append(Span(range: range, kind: .punctuation)) }
       } else {
@@ -177,8 +323,12 @@ public enum Syntax {
       guard span.kind == .code || span.kind == .frontmatter else { return nil }
       let intersection = NSIntersectionRange(span.range, range)
       return intersection.length > 0 ? intersection : nil
-    }.sorted { $0.location < $1.location }
-    return protected.reduce(into: []) { result, next in
+    }
+    return mergedRanges(protected)
+  }
+
+  private static func mergedRanges(_ ranges: [NSRange]) -> [NSRange] {
+    ranges.sorted { $0.location < $1.location }.reduce(into: []) { result, next in
       if let previous = result.last, NSMaxRange(previous) >= next.location {
         result[result.count - 1] = NSUnionRange(previous, next)
       } else {

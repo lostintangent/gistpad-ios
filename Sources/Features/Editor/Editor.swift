@@ -176,7 +176,7 @@
 
     private func updateHiddenFrontMatter(in source: String? = nil) {
       let source = source ?? text
-      let start = showsFrontMatter ? 0 : FrontMatter.contentStart(in: source)
+      let start = showsFrontMatter ? 0 : Syntax.contentStart(in: source)
       textView.accessibilityValue = start > 0 ? (source as NSString).substring(from: start) : nil
       guard start != contentStart else { return }
       contentStart = start
