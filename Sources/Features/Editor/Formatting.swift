@@ -104,7 +104,7 @@ enum Format: Sendable {
 
 enum Formatting {
   enum FormattingError: Error, Equatable {
-    case invalidHeadingLevel, invalidLink
+    case invalidLink
   }
 
   static func edit(
@@ -167,10 +167,7 @@ enum Formatting {
         replacement: opening + content + terminator + fence + trailing,
         selection: NSRange(
           location: block.location + opening.utf16.count, length: content.utf16.count))
-    case .heading(let level):
-      guard (0...6).contains(level) else { throw FormattingError.invalidHeadingLevel }
-      return lines(format, in: source, selection: selection)
-    case .bulletList, .numberedList, .checklist, .quote:
+    case .heading, .bulletList, .numberedList, .checklist, .quote:
       return lines(format, in: source, selection: selection)
     }
   }

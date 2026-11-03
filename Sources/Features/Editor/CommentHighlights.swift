@@ -7,11 +7,6 @@
   @MainActor
   final class CommentHighlights: NSObject, UIGestureRecognizerDelegate {
     static let annotationKey = NSAttributedString.Key("dev.gistpad.comment.highlight")
-    private struct Passage {
-      let highlight: CommentQuoteHighlight
-      let fill: UIColor
-      let selected: Bool
-    }
     private unowned let editor: Editor
     private let backgroundLayer = CALayer()
     private var configuration = CommentHighlightConfiguration()
@@ -19,7 +14,7 @@
     private var onLinkedIDs: (@MainActor (Set<Int64>) -> Void)?
     private var onAdd: (@MainActor (String) -> Void)?
     private var linkedIDs: Set<Int64>?
-    private var passages: [Passage] = []
+    private var passages: [(highlight: CommentQuoteHighlight, fill: UIColor, selected: Bool)] = []
     private var verifiedHighlights: [CommentQuoteHighlight] = []
     private var originalInk: [(range: NSRange, color: Any)] = []
     private var paintedGeneration: UInt64?
@@ -84,11 +79,9 @@
       editor.textView.setNeedsLayout()
       originalInk = []
       paintedGeneration = editor.generation
-      let highlights =
-        configuration.quotes.isEmpty
-        ? []
-        : CommentQuoteMatcher.highlights(quotes: configuration.quotes, segments: [editor.text])
-          .filter { $0.start >= editor.contentStart }
+      let highlights = CommentQuoteMatcher.highlights(
+        quotes: configuration.quotes, segments: [editor.text]
+      ).filter { $0.start >= editor.contentStart }
       verifiedHighlights = highlights
       publish(Set(highlights.flatMap(\.commentIDs)))
       updateAccessibility()
@@ -129,7 +122,7 @@
               target: traits.accessibilityContrast == .high ? 7 : 4.5
             ).uiColor
         }
-        passages.append(Passage(highlight: highlight, fill: fill, selected: selected))
+        passages.append((highlight, fill, selected))
         storage.addAttributes(
           [
             Self.annotationKey: highlight.commentIDs.map(String.init).joined(separator: ","),
@@ -241,10 +234,9 @@
     }
 
     func editMenu(ranges: [NSRange], suggestedActions: [UIMenuElement]) -> UIMenu? {
-      let ids = threadIDs(intersecting: ranges)
-      var actions: [UIMenuElement] = []
-      if let action = openAction(ids: ids) { actions.append(action) }
-      if let action = addAction(ranges: ranges) { actions.append(action) }
+      let actions: [UIMenuElement] = [
+        openAction(ids: threadIDs(intersecting: ranges)), addAction(ranges: ranges),
+      ].compactMap { $0 }
       guard !actions.isEmpty else { return nil }
       return UIMenu(
         children: suggestedActions + [UIMenu(options: .displayInline, children: actions)])

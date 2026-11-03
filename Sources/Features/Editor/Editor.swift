@@ -91,7 +91,7 @@
       // Source transactions bypass input substitutions and restore the exact source and selection.
       undo?.disableUndoRegistration()
       textView.textStorage.replaceCharacters(in: edit.range, with: edit.replacement)
-      updateHiddenFrontMatter(in: textView.text)
+      updateHiddenFrontMatter()
       let delta = edit.replacement.utf16.count - edit.range.length
       if let selection = edit.selection {
         textView.selectedRange = selection
@@ -130,24 +130,21 @@
     }
 
     public func requestFocusAtEnd() {
-      guard canFormat else {
-        inputError = String(
-          localized: "Finish the current text edit before moving the caret.", bundle: .module)
-        return
-      }
-      textView.selectedRange = NSRange(location: text.utf16.count, length: 0)
-      pendingFocusRequest = true
-      completeFocusRequestIfAttached()
+      requestFocus(at: text.utf16.count)
     }
 
     public func requestFocusAtContentStart() {
+      requestFocus(at: contentStart, resetReadingAnchor: true)
+    }
+
+    private func requestFocus(at offset: Int, resetReadingAnchor: Bool = false) {
       guard canFormat else {
         inputError = String(
           localized: "Finish the current text edit before moving the caret.", bundle: .module)
         return
       }
-      textView.selectedRange = NSRange(location: contentStart, length: 0)
-      view.resetReadingAnchor(to: contentStart)
+      textView.selectedRange = NSRange(location: offset, length: 0)
+      if resetReadingAnchor { view.resetReadingAnchor(to: offset) }
       pendingFocusRequest = true
       completeFocusRequestIfAttached()
     }
@@ -174,8 +171,8 @@
       return start == NSNotFound || start >= contentStart
     }
 
-    private func updateHiddenFrontMatter(in source: String? = nil) {
-      let source = source ?? text
+    private func updateHiddenFrontMatter() {
+      let source: String = textView.text
       let start = showsFrontMatter ? 0 : Syntax.contentStart(in: source)
       textView.accessibilityValue = start > 0 ? (source as NSString).substring(from: start) : nil
       guard start != contentStart else { return }

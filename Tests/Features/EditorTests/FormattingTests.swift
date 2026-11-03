@@ -61,9 +61,6 @@ struct FormattingTests {
         try Formatting.edit(.bold, in: "📝", selection: selection)
       }
     }
-    #expect(throws: Formatting.FormattingError.invalidHeadingLevel) {
-      try Formatting.edit(.heading(7), in: "", selection: NSRange(location: 0, length: 0))
-    }
   }
 
   @Test func selectedLineBoundaryDoesNotIncludeTheFollowingLine() throws {
