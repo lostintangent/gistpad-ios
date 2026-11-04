@@ -54,7 +54,6 @@
       onAdd: (@MainActor (String) -> Void)?
     ) {
       let needsInitialReport = self.onLinkedIDs == nil && onLinkedIDs != nil
-      let changesInteraction = (self.onOpen == nil) != (onOpen == nil)
       if self.configuration.selectedCommentID != configuration.selectedCommentID
         || self.configuration.revealRevision != configuration.revealRevision
       {
@@ -65,7 +64,7 @@
       self.onOpen = onOpen
       self.onLinkedIDs = onLinkedIDs
       self.onAdd = onAdd
-      if self.configuration != configuration || changesInteraction {
+      if self.configuration != configuration {
         self.configuration = configuration
         editor.highlight()
       }
@@ -146,15 +145,14 @@
       defer { updatingSelection = false }
       let storage = editor.textView.textStorage
       let undo = editor.textView.undoManager
-      let undoEnabled = undo?.isUndoRegistrationEnabled == true
-      if undoEnabled { undo?.disableUndoRegistration() }
+      undo?.disableUndoRegistration()
       storage.beginEditing()
       for original in originalInk {
         storage.addAttribute(.foregroundColor, value: original.color, range: original.range)
       }
       applySelectedInk(in: storage)
       storage.endEditing()
-      if undoEnabled { undo?.enableUndoRegistration() }
+      undo?.enableUndoRegistration()
       editor.textView.setNeedsDisplay()
     }
 
@@ -245,7 +243,6 @@
     private func addAction(ranges: [NSRange]) -> UIAction? {
       guard onAdd != nil, !suspendsForFind, !suspendsForWritingTools,
         ranges.count == 1, let range = ranges.first, editor.isSettled,
-        range.location >= editor.contentStart,
         let quote = try? Edit.text(in: editor.text, at: range),
         CommentQuoteMatcher.isEligibleSelection(quote)
       else { return nil }
@@ -263,13 +260,7 @@
         title: String(localized: "View Comment", bundle: .module),
         image: UIImage(systemName: "text.bubble")
       ) { [weak self] _ in
-        guard let self else { return }
-        let currentIDs = Set(self.threadIDs(intersecting: self.verifiedHighlights.map(\.range)))
-        guard ids.allSatisfy(currentIDs.contains) else {
-          self.reportChangedQuote()
-          return
-        }
-        self.onOpen?(ids)
+        self?.onOpen?(ids)
       }
     }
 
@@ -344,11 +335,6 @@
     @objc private func openTappedPassage() {
       guard let pendingTap else { return }
       self.pendingTap = nil
-      let currentIDs = Set(passages.flatMap(\.highlight.commentIDs))
-      guard pendingTap.allSatisfy(currentIDs.contains) else {
-        reportChangedQuote()
-        return
-      }
       onOpen?(pendingTap)
     }
 
@@ -362,12 +348,6 @@
       view.selectedTextRange = caret
       view.becomeFirstResponder()
       view.select(nil)
-    }
-
-    private func reportChangedQuote() {
-      editor.inputError = String(
-        localized: "This comment is no longer linked here. Select the quote again.", bundle: .module
-      )
     }
 
     func scrollSelectedCommentIfNeeded() {
@@ -389,11 +369,7 @@
           self.editor.textView.window != nil, !self.editor.textView.isHidden
         else { return }
         self.needsSelectedScroll = false
-        guard self.editor.view.revealPassage(highlight.range) else {
-          self.editor.inputError = String(
-            localized: "The comment passage could not be revealed.", bundle: .module)
-          return
-        }
+        self.editor.view.revealPassage(highlight.range)
       }
     }
 
@@ -495,7 +471,7 @@
       linkedIDs = ids
       publication?.cancel()
       publication = Task { @MainActor [weak self] in
-        guard !Task.isCancelled, let self, self.linkedIDs == ids else { return }
+        guard !Task.isCancelled, let self else { return }
         self.publication = nil
         self.onLinkedIDs?(ids)
       }
