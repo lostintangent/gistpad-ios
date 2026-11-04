@@ -3,6 +3,20 @@ import Foundation
 /// The model's revised note, compared line by line with the part of the note it read. Each run of
 /// changed lines becomes one candidate, so the review shows exactly what the model changed.
 enum Revision {
+  /// The text a candidate only adds, when it leaves everything it quotes in place.
+  static func insertedText(in candidate: ModelReplacement) -> String? {
+    guard let replacement = candidate.replacement else { return nil }
+    let original = Array(candidate.quote)
+    let revised = Array(replacement)
+    let prefix = zip(original, revised).prefix { $0.0 == $0.1 }.count
+    let suffix = zip(original.dropFirst(prefix).reversed(), revised.dropFirst(prefix).reversed())
+      .prefix { $0.0 == $0.1 }.count
+    guard prefix + suffix == original.count, prefix + suffix < revised.count else { return nil }
+    let insertion = String(revised[prefix..<(revised.count - suffix)])
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return insertion.isEmpty ? nil : insertion
+  }
+
   static func candidates(
     in source: String, visible: NSRange, revised: String
   ) throws -> [(ModelReplacement, NSRange)] {

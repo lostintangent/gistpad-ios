@@ -188,6 +188,95 @@ struct EditTests {
         == "## Next check\n\nThe offline-pipe retest is scheduled for November 9.\n")
   }
 
+  @Test(arguments: ["\n", "\r\n"])
+  func deletingAUniquelyNamedParagraphLeavesAdjacentContentUntouched(newline: String)
+    async throws
+  {
+    let original = "# Draft\n\nEarly prototypes changed citations.\nThey also moved tasks."
+      + "\n\nLeave this paragraph untouched.\n\n## Next\n\nKeep this section.\n"
+    let source = original.replacingOccurrences(of: "\n", with: newline)
+    let instruction = "delete the paragraph about early prototypes"
+    let fixture = FixtureModel()
+    let deletion = try #require(OnDeviceModel.anchoredParagraphDeletion(
+      in: source, instruction: instruction))
+    fixture.changes = { _ in [deletion] }
+    let input = request(source, .edit, instruction)
+    let result = try await Intelligence(backend: fixture).edit(input)
+      .application(to: input.snapshot).source
+    let expected = "# Draft\n\nLeave this paragraph untouched.\n\n## Next\n\nKeep this section.\n"
+      .replacingOccurrences(of: "\n", with: newline)
+    #expect(result == expected)
+
+    let ambiguous = "# Draft\n\nEarly prototypes changed citations.\n\n"
+      + "Early prototypes also moved tasks.\n"
+    #expect(OnDeviceModel.anchoredParagraphDeletion(
+      in: ambiguous, instruction: instruction) == nil)
+  }
+
+  @Test(arguments: ["\n", "\r\n"])
+  func misplacedPureInsertionsMoveToTheRequestedMarkdownAnchor(newline: String) throws {
+    let cases: [(String, String, String, String)] = [
+      (
+        "### Launch sync\n\nOriginal discussion.\n\nFinal note.",
+        "### Launch sync\n\nOriginal discussion.\n\nFinal note.\n\nThe team agreed to ship.",
+        "add a one-sentence summary under the Launch sync heading",
+        "### Launch sync\n\nThe team agreed to ship.\n\nOriginal discussion.\n\nFinal note."
+      ),
+      (
+        "### Options\n\n| Flag | Meaning |\n| --- | --- |\n"
+          + "| `-r` | Reverse order |\n| `-i` | Ignore case |",
+        "### Options\n\n| Flag | Meaning |\n| --- | --- |\n"
+          + "| `-n` | Number lines |\n| `-r` | Reverse order |\n| `-i` | Ignore case |",
+        "add a row to the Options table for a -n flag that numbers each line",
+        "### Options\n\n| Flag | Meaning |\n| --- | --- |\n"
+          + "| `-r` | Reverse order |\n| `-i` | Ignore case |\n| `-n` | Number lines |"
+      ),
+    ]
+    for (before, misplaced, instruction, expected) in cases {
+      let source = before.replacingOccurrences(of: "\n", with: newline)
+      let revised = misplaced.replacingOccurrences(of: "\n", with: newline)
+      let candidates = try Revision.candidates(
+        in: source, visible: NSRange(location: 0, length: source.utf16.count),
+        revised: revised)
+      let blocks = EditBlock.indexed(in: source)
+      let anchor = try #require(
+        instruction.contains("summary")
+          ? blocks.first { $0.kind == .heading }
+          : blocks.last { $0.kind == .tableRow })
+      let insertion = try #require(OnDeviceModel.relocatedInsertion(
+        from: candidates, for: anchor, instruction: instruction, section: source))
+      let snapshot = note(source)
+      let review = Review(
+        snapshot: snapshot, scopedCandidates: [(insertion, anchor.range)])
+      #expect(
+        try review.application(to: snapshot).source
+          == expected.replacingOccurrences(of: "\n", with: newline))
+      #expect(Revision.insertedText(in: change("Keep", "Kept\n\nNew")) == nil)
+    }
+  }
+
+  @Test func aRequestedAmountStaysInTheTablesAmountColumn() {
+    let table = """
+      ## Costs
+
+      | Item | Estimate | Owner | Status |
+      | --- | ---: | --- | --- |
+      | Contingency | $300 | Mara | Reserved |
+      """
+    let request = "add a $75 cabinet-handle row to the cost estimate table"
+    #expect(
+      OnDeviceModel.placedTableAmount(
+        "| $75 cabinet-handle | | | |", instruction: request, section: table)
+        == "| cabinet-handle | $75 |  |  |")
+    #expect(
+      OnDeviceModel.placedTableAmount(
+        "| cabinet-handle | $75 | | |", instruction: request, section: table)
+        == "| cabinet-handle | $75 |  |  |")
+    #expect(
+      OnDeviceModel.placedTableAmount(
+        "| cabinet-handle | | | |", instruction: request, section: table) == nil)
+  }
+
   @Test func anchoredListMovePreservesTheItemAndEveryOtherLine() throws {
     let cases: [(String, String, String)] = [
       (
