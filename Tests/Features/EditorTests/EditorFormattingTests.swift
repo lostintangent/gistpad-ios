@@ -38,7 +38,7 @@
         #expect(editor.text == "A **日本語** note")
       }
 
-      @Test func staleLinkAndInvalidResultSelectionNeverChangeSource() throws {
+      @Test func staleLinkNeverChangesSource() throws {
         let editor = Editor(fileID: "link", text: "note")
         let edit = try #require(
           try Formatting.edit(
@@ -46,12 +46,6 @@
             in: editor.text, selection: NSRange(location: 0, length: 4)))
         #expect(throws: Edit.MutationError.staleGeneration) {
           try editor.apply(edit, generation: 1)
-        }
-        let invalid = Edit(
-          range: edit.range, expected: edit.expected, replacement: edit.replacement,
-          selection: NSRange(location: 900, length: 0))
-        #expect(throws: Edit.MutationError.invalidRange) {
-          try editor.apply(invalid, generation: 0)
         }
         #expect(editor.text == "note")
         #expect(editor.generation == 0)

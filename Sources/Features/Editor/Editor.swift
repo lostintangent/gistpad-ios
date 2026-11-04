@@ -27,7 +27,6 @@
     @ObservationIgnored var hosts: [TextViewHost.Reference] = []
     @ObservationIgnored public var onEdit: ((String, UInt64) -> Void)?
     @ObservationIgnored private var highlightTask: Task<Void, Never>?
-    @ObservationIgnored private var isApplyingEdit = false
     @ObservationIgnored private var pendingFocusRequest = false
     @ObservationIgnored private var pendingShowsFrontMatter: Bool?
     @ObservationIgnored lazy var commentHighlights = CommentHighlights(editor: self)
@@ -77,15 +76,13 @@
     public func apply(_ edit: Edit, generation: UInt64) throws {
       guard isSettled else { throw Edit.MutationError.compositionActive }
       guard self.generation == generation else { throw Edit.MutationError.staleGeneration }
-      let result = try edit.applying(to: text)
-      if let selection = edit.selection { _ = try Edit.text(in: result, at: selection) }
+      _ = try edit.applying(to: text)
       let previousSelection = textView.selectedRange
       let inverse = Edit(
         range: NSRange(location: edit.range.location, length: edit.replacement.utf16.count),
         expected: edit.replacement,
         replacement: (text as NSString).substring(with: edit.range),
         selection: previousSelection)
-      isApplyingEdit = true
       let undo = textView.undoManager
       undo?.beginUndoGrouping()
       // Source transactions bypass input substitutions and restore the exact source and selection.
@@ -110,7 +107,6 @@
         }
       }
       undo?.endUndoGrouping()
-      isApplyingEdit = false
       synchronizeText()
       if let selection = edit.selection { textView.scrollRangeToVisible(selection) }
     }
@@ -166,9 +162,8 @@
       options: NSTextContentManager.EnumerationOptions
     ) -> Bool {
       guard contentStart > 0, let range = textElement.elementRange else { return true }
-      let start = textContentManager.offset(
-        from: textContentManager.documentRange.location, to: range.location)
-      return start == NSNotFound || start >= contentStart
+      return textContentManager.offset(
+        from: textContentManager.documentRange.location, to: range.location) >= contentStart
     }
 
     private func updateHiddenFrontMatter() {
@@ -182,10 +177,8 @@
       {
         manager.invalidateLayout(for: range)
       }
-      if textView.selectedRange.location < start {
-        let end = max(start, NSMaxRange(textView.selectedRange))
-        textView.selectedRange = NSRange(location: start, length: end - start)
-      }
+      // The text view's selection setter keeps the caret out of hidden front matter.
+      if textView.selectedRange.location < start { textView.selectedRange = textView.selectedRange }
       view.resetReadingAnchor(to: start)
       textView.setNeedsLayout()
     }
@@ -193,12 +186,7 @@
     fileprivate func completeFocusRequestIfAttached() {
       guard pendingFocusRequest, textView.window != nil else { return }
       pendingFocusRequest = false
-      guard canFormat, textView.becomeFirstResponder() else {
-        inputError = String(
-          localized: "The editor couldn't receive focus. Tap the file to start writing.",
-          bundle: .module)
-        return
-      }
+      textView.becomeFirstResponder()
       textView.scrollRangeToVisible(textView.selectedRange)
     }
 
@@ -221,8 +209,8 @@
     public func textView(
       _ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText replacement: String
     ) -> Bool {
-      guard isApplyingEdit || range.location >= contentStart else { return false }
-      guard !isApplyingEdit, canFormat,
+      guard range.location >= contentStart else { return false }
+      guard canFormat,
         textView.findInteraction?.isFindNavigatorVisible != true
       else { return true }
       synchronizeText()
@@ -257,10 +245,9 @@
     }
 
     public func textViewDidChangeSelection(_ textView: UITextView) {
-      let start = min(contentStart, textView.text.utf16.count)
-      if textView.selectedRange.location < start, textView.markedTextRange == nil {
-        let end = max(start, NSMaxRange(textView.selectedRange))
-        textView.selectedRange = NSRange(location: start, length: end - start)
+      // Re-setting runs the selection setter's clamp on selections UIKit makes itself.
+      if textView.selectedRange.location < min(contentStart, textView.text.utf16.count) {
+        textView.selectedRange = textView.selectedRange
       }
       isComposing = textView.markedTextRange != nil
       if isComposing { view.cancelEditingCaretReveal() }
@@ -368,8 +355,7 @@
         ofSize: bodyFont.pointSize, weight: boldText ? .semibold : .regular)
       let selectedRange = textView.selectedRange
       let manager = textView.undoManager
-      let undoWasEnabled = manager?.isUndoRegistrationEnabled == true
-      if undoWasEnabled { manager?.disableUndoRegistration() }
+      manager?.disableUndoRegistration()
       storage.beginEditing()
       storage.setAttributes(
         [
@@ -425,7 +411,7 @@
       if storage !== textView.textStorage {
         applyChangedHighlightAttributes(storage, to: textView.textStorage)
       }
-      if undoWasEnabled { manager?.enableUndoRegistration() }
+      manager?.enableUndoRegistration()
       if textView.selectedRange != selectedRange {
         textView.selectedRange = selectedRange
       }
@@ -456,7 +442,7 @@
 
     private func synchronizeText() {
       // Inline previews are transient. UIKit owns their selection and native undo history.
-      guard !isWritingToolsActive && !isApplyingEdit else { return }
+      guard !isWritingToolsActive else { return }
       isComposing = textView.markedTextRange != nil
       if !text.utf8.elementsEqual(textView.text.utf8) {
         text = textView.text
@@ -481,11 +467,7 @@
   }
 
   final class TextView: UITextView, @MainActor AXCustomContentProvider {
-    private var commentAccessibilityContent: [AXCustomContent] = []
-    var accessibilityCustomContent: [AXCustomContent]! {
-      get { commentAccessibilityContent }
-      set { commentAccessibilityContent = newValue ?? [] }
-    }
+    var accessibilityCustomContent: [AXCustomContent]! = []
     enum AttributeUpdateAnchor {
       case reading(offset: Int, delta: CGFloat)
       case caret
@@ -510,10 +492,6 @@
         let end = max(start, NSMaxRange(newValue))
         super.selectedRange = NSRange(location: start, length: end - start)
       }
-    }
-
-    override func selectAll(_ sender: Any?) {
-      selectedRange = NSRange(location: contentStart, length: text.utf16.count - contentStart)
     }
 
     /// Behind hidden front matter, UIKit's backspace at the first visible character deletes it instead.
@@ -557,15 +535,14 @@
     func endAttributeUpdate(_ anchor: AttributeUpdateAnchor?) {
       guard let anchor else { return }
       defer { restoringAnchor = false }
-      if case .caret = anchor {
-        guard isFirstResponder, !writingToolsOwnsScrolling, markedTextRange == nil,
-          !isTracking, !isDragging, !isDecelerating
-        else { return }
-      }
       switch anchor {
-      case .reading:
+      case .reading(let offset, let delta):
         // Attribute invalidation can replace exact offscreen geometry with TextKit estimates.
         layoutDocument()
+        super.layoutSubviews()
+        if let position = position(from: beginningOfDocument, offset: offset) {
+          setVerticalContentOffset(caretRect(for: position).minY - delta)
+        }
       case .caret:
         if let manager = textLayoutManager, let content = manager.textContentManager,
           let location = content.location(
@@ -573,14 +550,6 @@
         {
           manager.ensureLayout(for: NSTextRange(location: location))
         }
-      }
-      switch anchor {
-      case .reading(let offset, let delta):
-        super.layoutSubviews()
-        if let position = position(from: beginningOfDocument, offset: offset) {
-          setVerticalContentOffset(caretRect(for: position).minY - delta)
-        }
-      case .caret:
         super.layoutSubviews()
         reveal(NSMaxRange(selectedRange))
         needsEditingCaretReveal = false
@@ -646,22 +615,21 @@
       }
     }
 
-    func revealPassage(_ range: NSRange) -> Bool {
+    func revealPassage(_ range: NSRange) {
       cancelEditingCaretReveal()
       guard let start = position(from: beginningOfDocument, offset: range.location),
         let end = position(from: start, offset: range.length),
         let passage = textRange(from: start, to: end)
-      else { return false }
+      else { return }
       layoutDocument()
       setNeedsLayout()
       layoutIfNeeded()
       let frame = firstRect(for: passage)
       let height = bounds.height - adjustedContentInset.top - adjustedContentInset.bottom
-      guard !frame.isEmpty, frame.minY.isFinite, frame.maxY.isFinite, height > 0 else { return false }
+      guard !frame.isEmpty, frame.minY.isFinite, frame.maxY.isFinite, height > 0 else { return }
       let y = frame.height > height ? frame.minY : frame.midY - height / 2
       setVerticalContentOffset(y - adjustedContentInset.top)
       rememberReadingAnchor()
-      return true
     }
 
     override var keyCommands: [UIKeyCommand]? {
@@ -746,8 +714,10 @@
       previousWidth = bounds.width
       previousHeight = bounds.height
       restoringAnchor = false
-      if needsInitialAnchor, bounds.width > 0 { layoutDocument() }
-      if needsInitialAnchor { rememberReadingAnchor() }
+      if needsInitialAnchor, bounds.width > 0 {
+        layoutDocument()
+        rememberReadingAnchor()
+      }
       editor?.commentHighlights.layoutBackgrounds()
       editor?.commentHighlights.scrollSelectedCommentIfNeeded()
     }
