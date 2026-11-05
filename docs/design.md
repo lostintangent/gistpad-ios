@@ -66,9 +66,9 @@ Swipe trailing for **Delete** (red, confirmed) and **Archive** or **Unarchive** 
 
 ### Search, filters and toolbars
 
-Search is `.searchable` with `.searchToolbarBehavior(.minimize)`: a magnifier that expands in place, matching titles. Tags filter separately. While tags are selected, a strip above Pinned shows them as chips, the matching count in secondary ("3 gists") and an `xmark.circle.fill` **Clear Tag Filter** button. No tags, no strip. No matches shows `ContentUnavailableView.search`.
+Search is `.searchable`, matching titles. In compact width it uses `.searchToolbarBehavior(.minimize)`: a magnifier that expands in place. In the Open sidebar it's a full field at the bottom of the column, at rest and while searching, because a minimized button lands past the overlay sidebar's edge. Tags filter separately. While tags are selected, a strip above Pinned shows them as chips, the matching count in secondary ("3 gists") and an `xmark.circle.fill` **Clear Tag Filter** button. No tags, no strip. No matches shows `ContentUnavailableView.search`.
 
-The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and **Search** and **Tags** at the bottom, like Notes. Tags hides while searching, is disabled without tags and turns system blue while filtering, like a confirm button, keeping the outline `tag`. In the Open sidebar, New Gist and Today sit in the rail, and Tags and Settings in secondary actions. Pull to refresh.
+The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and **Search** and **Tags** at the bottom, like Notes. Tags hides while searching, is disabled without tags and turns system blue while filtering, like a confirm button, keeping the outline `tag`. The Open sidebar keeps the same bottom: the Search field fills the column with **Tags** beside it, and **GitHub needs attention** sits between them when there's a problem. New Gist and Today sit in the rail, so **Settings** is the one button at the top, beside the sidebar toggle. Signed out, Settings is the only toolbar button. The library has no More menu. Pull to refresh.
 
 | State | Title, message and action |
 | --- | --- |
