@@ -38,7 +38,8 @@ public struct LauncherWidgetView: View {
             if family == .systemMedium { medium } else { small }
         }
         .environment(\.accent, Accent(savedHex: snapshot?.accentHex))
-        .widgetURL(family == .systemMedium ? nil : GistPadLink.today.url)
+        // Any tap that misses a gist or New Gist opens Today, not just one on the date's glyphs.
+        .widgetURL(GistPadLink.today.url)
         .redacted(reason: state == .placeholder ? .placeholder : [])
     }
 
@@ -62,9 +63,7 @@ public struct LauncherWidgetView: View {
 
     private var medium: some View {
         HStack(alignment: .top, spacing: dateGap) {
-            Link(destination: GistPadLink.today.url) {
-                dateBlock { Text(date, format: .dateTime.weekday(.wide)) }
-            }
+            dateBlock { Text(date, format: .dateTime.weekday(.wide)) }
             // Spelled out and hugging today's weekday, so the gap to the list is the same every day.
             .fixedSize(horizontal: true, vertical: false)
             .frame(maxHeight: .infinity, alignment: .topLeading)
