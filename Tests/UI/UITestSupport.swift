@@ -35,20 +35,6 @@ extension XCUIElement {
 extension XCUIApplication {
   var isRegularWidth: Bool { windows.firstMatch.frame.width > 600 }
 
-  /// The sidebar keeps secondary actions in its More menu. A compact Library shows them directly.
-  func tapToolbarButton(_ identifier: String, label: String) {
-    let button = buttons[identifier].firstMatch
-    let more = navigationBars["GistPad"].buttons["More"].firstMatch
-    if !button.isHittable, more.isHittable {
-      more.tap()
-      let item = buttons[label].firstMatch
-      XCTAssertTrue(item.waitForExistence(timeout: 5))
-      item.tap()
-    } else {
-      button.tap()
-    }
-  }
-
   /// Opens Library search and types `text`.
   func search(_ text: String) {
     let field = searchFields.firstMatch

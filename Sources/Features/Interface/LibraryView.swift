@@ -13,7 +13,9 @@ private struct LibrarySearchModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         searchableContent(content)
-            .searchToolbarBehavior(.minimize)
+            // UIKit places a minimized button past the overlay sidebar's trailing edge, so the
+            // sidebar keeps the full field.
+            .searchToolbarBehavior(horizontalSizeClass == .regular ? .automatic : .minimize)
             .environment(\.isLibrarySearchPresented, isPresented)
     }
 
@@ -544,11 +546,9 @@ public struct LibraryView: View {
                     .axisBehavior(.verticalPreferred)
                     .sharedBackgroundVisibility(.hidden)
                 }
-                if !isSidebar {
-                    ToolbarSpacer(.flexible, placement: .bottomBar)
-                    ToolbarItem(placement: .bottomBar) {
-                        tagFilterButton
-                    }
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+                ToolbarItem(placement: .bottomBar) {
+                    tagFilterButton
                 }
             }
             if !isSidebar {
@@ -558,14 +558,9 @@ public struct LibraryView: View {
                     settingsButton
                 }
             }
-            if isSidebar {
-                ToolbarItem(placement: .secondaryAction) {
-                    tagFilterButton
-                }
-            }
         }
         if isSidebar || state.loadState == .signedOut {
-            ToolbarItem(placement: .secondaryAction) {
+            ToolbarItem(placement: .primaryAction) {
                 settingsButton
             }
         }

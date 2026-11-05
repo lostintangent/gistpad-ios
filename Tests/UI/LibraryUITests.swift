@@ -51,7 +51,7 @@ final class LibraryUITests: XCTestCase {
   func testTagFilterNarrowsTheListAndSearchKeepsIt() throws {
     let app = launchGistPad()
     try waitUntil("the Library") { app.element("library-note-weekend").exists }
-    app.tapToolbarButton("library-filter-tags", label: "Filter by tags")
+    app.buttons["library-filter-tags"].tap()
     let ideas = app.buttons["library-tag-filter-ideas"]
     try waitUntil("the tag filter") { ideas.isHittable }
     ideas.tap()
