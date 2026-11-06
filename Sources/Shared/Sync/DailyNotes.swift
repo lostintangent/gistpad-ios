@@ -159,14 +159,20 @@ public actor DailyNotes {
         return (gist: gist, draft: draft)
     }
 
+    /// The daily gist as GitHub has it now, because the web may have started today since the
+    /// library was cached. Offline, the library on this iPhone decides.
     private func dailyGist() async throws -> Gist? {
         let cached = try await store.cachedLibrary(accountID: accountID)
-        if let daily = cached?.owned.first(where: \.isDailyNote) { return daily }
+        let daily = cached?.owned.first(where: \.isDailyNote)
         do {
+            if let daily {
+                do { return try await client.gist(id: daily.id) }
+                // Deleting its last day on the web deleted it, so look for the one today joins.
+                catch GitHubClientError.http(status: 404, _) {}
+            }
             return try await client.listGists().first(where: \.isDailyNote)
         } catch let error as URLError where cached != nil && error.code != .cancelled {
-            // Offline, the library on this iPhone has no daily notes gist, so today starts one.
-            return nil
+            return daily
         }
     }
 

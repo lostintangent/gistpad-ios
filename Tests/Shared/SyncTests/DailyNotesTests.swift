@@ -65,6 +65,32 @@ private func day(_ iso: String) throws -> DailyNote.Day {
         #expect(sync.count("POST /gists") == 1)
     }
 
+    /// The library on this iPhone can predate what the web did to the daily gist since.
+    @Test func todayIsDecidedByGitHubNotAStaleLibrary() async throws {
+        let sync = try SyncFixture()
+        let cached = sync.server.addGist(
+            description: DailyNote.gistDescription, files: ["2026-10-23.md": "Yesterday"])
+        try await sync.store.cacheLibrary(
+            owned: [cached], starred: [], preferences: .init(metadata: [:]), accountID: SyncFixture.account)
+
+        sync.server.edit(cached.id, files: ["2026-10-24.md": "Started on the web"])
+        let started = try await sync.dailyNotes.stageToday(target: day("2026-10-24"))
+        #expect(started.draft.text == "Started on the web")
+        #expect(started.draft.baseContent == "Started on the web")
+
+        try await sync.github.deleteGist(id: cached.id)
+        let replacement = sync.server.addGist(
+            description: DailyNote.gistDescription, files: ["2026-10-25.md": "A fresh daily gist"])
+        let moved = try await sync.dailyNotes.stageToday(target: day("2026-10-25"))
+        #expect(moved.gist?.id == replacement.id)
+        #expect(moved.draft.text == "A fresh daily gist")
+
+        sync.server.intercept { _ in throw URLError(.notConnectedToInternet) }
+        let offline = try await sync.dailyNotes.stageToday(target: day("2026-10-26"))
+        #expect(offline.gist?.id == cached.id)
+        #expect(offline.draft.text == "# 2026-10-26\n\n")
+    }
+
     @Test func addToTodayAppendsAParagraphOrOneTaskPerLine() async throws {
         let store = try DraftStore.open(inMemory: true)
         var draft = try await store.newDraft(accountID: UUID(), githubUserID: 42, text: "# Today\n\nA thought")
