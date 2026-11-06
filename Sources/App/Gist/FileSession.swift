@@ -31,8 +31,9 @@ final class FileSession {
   private(set) var file: File
   let editor: Editor
   private(set) var draft: Draft
-  private(set) var saveState: PublishState
-  private(set) var isPublishing = false
+  private var publishing: Task<Void, Never>?
+  /// Reconnecting GitHub lets a note that's waiting on it publish again.
+  private var hasReconnected = false
   private(set) var isPerformingDestructiveAction = false
   private(set) var isApplyingDurableEdit = false
   private(set) var remoteInspectionProblem: RemoteReadProblem?
@@ -43,7 +44,6 @@ final class FileSession {
   @ObservationIgnored private var scheduledAutosave: AutosaveRequest?
   @ObservationIgnored private var lastEditingRequestID: UUID?
   @ObservationIgnored private var isDiscarded = false
-  @ObservationIgnored private var publicationWaiters: [CheckedContinuation<Void, Never>] = []
   @ObservationIgnored private let autosaveDelay: Duration
   @ObservationIgnored private var isInspectingRemote = false
   @ObservationIgnored private let logger = Logger(
@@ -60,7 +60,6 @@ final class FileSession {
     editor = Editor(
       fileID: file.id, text: draft.text, generation: draft.generation,
       showsFrontMatter: library.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
-    saveState = file.isRecovery ? .failed(.readOnly) : draft.state
     if draft.baseContent == nil { mode = .edit }
     editor.textView.isEditable = details.access.canEdit
     applyWritingPreferences()
@@ -79,6 +78,17 @@ final class FileSession {
 
   /// The gist's header and actions, always current with the library.
   var details: GistDetails { library.details(for: file) }
+
+  /// Where this note stands with GitHub: read-only for a recovery copy, Saving while a publish
+  /// runs, and otherwise the draft's state.
+  var saveState: PublishState {
+    if file.isRecovery { return .failed(.readOnly) }
+    if isPublishing { return .savingToGitHub(generation: draft.generation) }
+    if draft.state == .reconnect, hasReconnected { return .savedLocally }
+    return draft.state
+  }
+
+  var isPublishing: Bool { publishing != nil }
 
   var canMutate: Bool {
     details.access.canEdit && !isDiscarded && editor.isSettled
@@ -111,15 +121,9 @@ final class FileSession {
   }
 
   var autosaveRequest: AutosaveRequest {
-    let stateAllowsAutosave: Bool
-    switch draft.state {
-    case .savedLocally, .failed(.network), .reconnect: stateAllowsAutosave = true
-    default: stateAllowsAutosave = false
-    }
-    return AutosaveRequest(
+    AutosaveRequest(
       generation: editor.generation,
-      eligible: autosaveAllowed && !isPublishing && saveState == .savedLocally
-        && stateAllowsAutosave && hasUnpublishedChanges)
+      eligible: autosaveAllowed && saveState == .savedLocally && hasUnpublishedChanges)
   }
 
   private var autosaveAllowed: Bool {
@@ -193,7 +197,6 @@ final class FileSession {
   func markRecovery() {
     file.isRecovery = true
     file.libraryRowID = draft.id.uuidString
-    saveState = .failed(.readOnly)
   }
 
   func inspectRemoteChanges() async {
@@ -237,7 +240,6 @@ final class FileSession {
       {
         draft = recorded
         file.draft = recorded
-        saveState = recorded.state
       }
       remoteInspectionProblem = nil
     } catch {
@@ -352,12 +354,11 @@ final class FileSession {
     }
     draft = committed
     file.draft = committed
-    saveState = committed.state
     guard await waitForLocalSave() else { throw EditError.localPersistenceFailed }
   }
 
   func didReconnect() {
-    if saveState == .reconnect { saveState = .savedLocally }
+    hasReconnected = true
   }
 
   // Library retries can save this file while it is open, so its persisted state is re-read.
@@ -373,7 +374,7 @@ final class FileSession {
     }
     draft = persisted
     file.draft = persisted
-    saveState = editor.generation == persisted.generation ? persisted.state : .savedLocally
+    hasReconnected = false
     guard persisted.state == .savedToGitHub,
       let gist = try? await library.adoptPublication(persisted)
     else { return }
@@ -381,9 +382,7 @@ final class FileSession {
   }
 
   func waitForPublication() async {
-    if isPublishing {
-      await withCheckedContinuation { publicationWaiters.append($0) }
-    }
+    await publishing?.value
   }
 
   @discardableResult
@@ -423,22 +422,25 @@ final class FileSession {
     if reason == .background || reason == .leaving { await waitForPublication() }
     guard !Task.isCancelled, shouldContinue(), publicationAllowed(reason: reason) else { return }
     if reason != .manual, !hasUnpublishedChanges { return }
-    guard canMutate, !isPublishing, !file.isRecovery, saveState.canPublish else { return }
+    guard canMutate, saveState.canPublish else { return }
     autosaveTask?.cancel()
     autosaveTask = nil
-    isPublishing = true
-    defer {
-      isPublishing = false
-      let waiters = publicationWaiters
-      publicationWaiters = []
-      for waiter in waiters { waiter.resume() }
+    let task = Task {
+      await send(reason: reason, shouldContinue: shouldContinue)
+      publishing = nil
     }
-    guard await waitForLocalSave() else { return }
-    guard !Task.isCancelled, shouldContinue(), canMutate, saveState.canPublish,
+    publishing = task
+    await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+  }
+
+  private func send(
+    reason: PublishReason, shouldContinue: @escaping @MainActor @Sendable () -> Bool
+  ) async {
+    guard await waitForLocalSave(), !Task.isCancelled, shouldContinue(), canMutate,
       publicationAllowed(reason: reason)
     else { return }
     let expectedGeneration = editor.generation
-    saveState = .savingToGitHub(generation: expectedGeneration)
+    hasReconnected = false
     do {
       let saved = try await library.publish(
         draftID: draft.id, accountID: draft.accountID, reason: reason,
@@ -451,9 +453,9 @@ final class FileSession {
               && self.editor.generation == expectedGeneration
           }
         })
-      draft = saved
-      file.draft = saved
-      saveState = editor.generation == saved.generation ? saved.state : .savedLocally
+      // Typing saved after GitHub acknowledged the publish is newer than what it returns.
+      if saved.generation >= draft.generation { draft = saved }
+      file.draft = draft
       if saved.state == .savedToGitHub || saved.state == .savedLocally {
         if reason == .background || reason == .leaving, Task.isCancelled || !shouldContinue() { return }
         do {
@@ -461,13 +463,6 @@ final class FileSession {
           if let gist {
             file.gist = gist
             file.draft = saved
-          }
-        } catch is CancellationError {
-          do {
-            draft = try await library.draft(id: draft.id, accountID: draft.accountID)
-            saveState = draft.state
-          } catch {
-            logger.error("Cancelled save state couldn't be read: \(String(reflecting: type(of: error)), privacy: .public)")
           }
         } catch {
           // The text reached GitHub, and the next refresh catches its details up.
@@ -482,26 +477,12 @@ final class FileSession {
           "Publishing failed: \(String(reflecting: type(of: error)), privacy: .public)")
       }
       do {
-        let persisted = try await library.draft(id: draft.id, accountID: draft.accountID)
-        draft = persisted
-        switch persisted.state {
-        case .failed, .conflict, .reconnect, .savingToGitHub:
-          saveState = persisted.state
-          return
-        case .savedLocally, .savedToGitHub:
-          if error is CancellationError {
-            saveState = editor.generation == persisted.generation ? persisted.state : .savedLocally
-            return
-          }
-          break
-        }
+        draft = try await library.draft(id: draft.id, accountID: draft.accountID)
       } catch {
         logger.error(
           "Publication-state reload failed: \(String(reflecting: type(of: error)), privacy: .public)"
         )
-        return
       }
-      saveState = error is AccountError ? .reconnect : .failed(.network)
     }
   }
 
@@ -530,12 +511,8 @@ final class FileSession {
       _ = await previous?.value
       guard let self else { return false }
       do {
-        let saved = try await library.persist(
+        draft = try await library.persist(
           draftID: draftID, accountID: accountID, text: text, generation: generation)
-        draft = saved
-        if editor.generation == saved.generation, !file.isRecovery {
-          saveState = saved.state
-        }
         return true
       } catch {
         logger.error(
