@@ -61,7 +61,6 @@ import SwiftUI
     } detail: {
         ContentUnavailableView("Select a gist", systemImage: "doc.text")
     }
-    .librarySearch(state: state)
 }
 
 #Preview("Gist") {

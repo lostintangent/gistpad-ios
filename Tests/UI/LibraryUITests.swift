@@ -35,6 +35,23 @@ final class LibraryUITests: XCTestCase {
     XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "library-today").count, 1)
   }
 
+  /// Covers the posture it runs in. `XCUIDevice` can't fold or rotate the Duo in Simulator, so
+  /// folding then unfolding, which used to strand Search in the detail, is checked by hand.
+  func testSidebarKeepsSearchAndTagsInItsColumn() throws {
+    let app = launchGistPad(open: "shape/README.md")
+    try waitUntil("the open gist") { app.navigationBars["The shape of a gist"].exists }
+    guard app.isRegularWidth else { throw XCTSkip("The sidebar only shows when the Duo is open.") }
+    let showSidebar = app.buttons.matching(NSPredicate(format: "label == 'Show Sidebar'")).firstMatch
+    if !app.element("library-note-shape").isHittable && showSidebar.isHittable { showSidebar.tap() }
+    let column = app.navigationBars["GistPad"]
+    let field = app.searchFields.firstMatch
+    let tags = app.buttons["library-filter-tags"]
+    try waitUntil("the sidebar's search field and Tags") { column.exists && field.isHittable && tags.isHittable }
+    XCTAssertGreaterThanOrEqual(field.frame.minX, column.frame.minX)
+    XCTAssertLessThan(field.frame.maxX, tags.frame.minX)
+    XCTAssertLessThanOrEqual(tags.frame.maxX, column.frame.maxX)
+  }
+
   func testSearchFindsAGistAndOpensIt() throws {
     let app = launchGistPad()
     try waitUntil("the Library") { app.element("library-note-shape").exists }
