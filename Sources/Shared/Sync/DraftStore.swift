@@ -408,10 +408,15 @@ public actor DraftStore {
         return try snapshot(draft)
     }
 
-    /// Makes a new gist's draft a new file in `gistID`, with no base.
-    func join(gistID: String, id: UUID, accountID: UUID) throws -> Draft {
+    /// Makes a new gist's draft a new file in `gist`, with no base. The gist joins the cached list,
+    /// so the draft finds it before the next refresh even if this publish doesn't land.
+    func join(_ gist: Gist, id: UUID, accountID: UUID) throws -> Draft {
         let draft = try find(id, accountID: accountID)
-        draft.gistID = gistID
+        draft.gistID = gist.id
+        try updateLibrary(accountID) { cached in
+            cached.owned.removeAll { $0.id == gist.id }
+            cached.owned.insert(gist, at: 0)
+        }
         try commit()
         return try snapshot(draft)
     }

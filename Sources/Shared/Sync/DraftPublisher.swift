@@ -114,7 +114,7 @@ public actor DraftPublisher {
     /// iPhone last saw the list, and creates one only when there's none.
     private func joinDailyGist(_ draft: Draft) async throws -> Draft {
         guard let daily = try await client.listGists().first(where: \.isDailyNote) else { return draft }
-        return try await store.join(gistID: daily.id, id: draft.id, accountID: draft.accountID)
+        return try await store.join(daily, id: draft.id, accountID: draft.accountID)
     }
 
     /// What you see after a publish fails.

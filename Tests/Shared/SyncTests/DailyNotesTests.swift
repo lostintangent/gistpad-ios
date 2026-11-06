@@ -16,13 +16,18 @@ private func dailyData() throws -> Data {
         #expect(draft.text == "# Today\n\nA thought\n\nA second thought\n- [ ] First task\n- [ ] 日本語 👩🏽‍💻\n")
     }
 
-    @Test func aDayWrittenOfflineJoinsTheDailyNotesGistTheWebStarted() async throws {
+    /// When the web wrote the same day too, the publish shows the conflict instead of overwriting it,
+    /// and Today still finds your day in the web's gist.
+    @Test(arguments: [false, true])
+    func aDayWrittenOfflineJoinsTheDailyNotesGistTheWebStarted(webWroteToday: Bool) async throws {
         let fixture = try SyncFixture()
         try await fixture.store.cacheLibrary(
             owned: [], starred: [], preferences: .init(metadata: [:]), accountID: SyncFixture.account)
         fixture.server.intercept { _ in throw URLError(.notConnectedToInternet) }
-        let web = fixture.server.addGist(description: DailyNote.gistDescription, files: ["2020-01-01.md": "An old day"])
         let day = DailyNote.Day(date: .now, timeZone: .gmt)
+        var webFiles = ["2020-01-01.md": "An old day"]
+        if webWroteToday { webFiles[day.filename] = "Written on the web" }
+        let web = fixture.server.addGist(description: DailyNote.gistDescription, files: webFiles)
         let today = try await DailyNotes(
             accountID: SyncFixture.account, githubUserID: SyncFixture.user, client: fixture.github,
             store: fixture.store, publisher: fixture.publisher
@@ -30,11 +35,22 @@ private func dailyData() throws -> Data {
         let typed = try await fixture.type("Written offline", in: today)
         fixture.server.intercept(nil)
 
-        #expect(try await fixture.publish(typed).state == .savedToGitHub)
+        let published = try await fixture.publish(typed)
+        if webWroteToday {
+            #expect(published.state == .conflict(.init(
+                generation: typed.generation, base: nil, local: "Written offline",
+                remote: "Written on the web", remoteRevision: web.revision)))
+        } else {
+            #expect(published.state == .savedToGitHub)
+        }
         #expect(fixture.server.gists.filter(\.isDailyNote).map(\.id) == [web.id])
         let files = try #require(fixture.server.gists.first { $0.id == web.id }).files
-        #expect(files[day.filename]?.content == "Written offline")
+        #expect(files[day.filename]?.content == (webWroteToday ? "Written on the web" : "Written offline"))
         #expect(files["2020-01-01.md"]?.content == "An old day")
+        let found = DailyNote(
+            day: day, cache: try await fixture.store.cachedLibrary(accountID: SyncFixture.account),
+            drafts: try await fixture.store.drafts(accountID: SyncFixture.account))
+        #expect(found.gistID == web.id && found.draftID == typed.id && found.text == "Written offline")
     }
 
     @Test func todayAndItsTasksFollowTheWeb() throws {
