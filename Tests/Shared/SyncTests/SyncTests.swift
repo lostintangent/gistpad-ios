@@ -46,6 +46,18 @@ import Testing
         #expect(fixture.count("PATCH /gists/\(gist.id)") == 0)
     }
 
+    @Test func openingANoteTheWebAlreadyMatchesIsSavedWithoutAConflict() async throws {
+        let fixture = try SyncFixture()
+        let gist = fixture.server.addGist(description: "Note", files: ["README.md": "one"])
+        let draft = try await fixture.type("same", in: fixture.open(gist))
+        fixture.server.edit(gist.id, files: ["README.md": "same"])
+
+        let opened = try await fixture.inspect(draft)
+        #expect(opened.state == .savedToGitHub)
+        #expect(opened.baseContent == "same")
+        #expect(fixture.count("PATCH /gists/\(gist.id)") == 0)
+    }
+
     enum RemoteChange: CaseIterable { case edited, addedOnTheWeb, deleted }
 
     @Test(arguments: RemoteChange.allCases)

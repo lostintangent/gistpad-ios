@@ -80,7 +80,12 @@ struct SyncFixture {
         let current = try await reload(draft)
         let remote = try await github.remoteFile(
             gistID: try #require(current.gistID), ownerID: Self.user, filename: current.filename)
-        return try await store.inspectRemoteChange(
+        if let content = remote.content, current.adoptsRemote(content) {
+            return try await store.refreshCleanDraft(
+                id: current.id, accountID: Self.account, expectedGeneration: current.generation,
+                content: content, revision: remote.gist.revision)
+        }
+        return try await store.reconcile(
             id: current.id, accountID: Self.account, expectedGeneration: current.generation,
             remote: remote.content, revision: remote.gist.revision)
     }

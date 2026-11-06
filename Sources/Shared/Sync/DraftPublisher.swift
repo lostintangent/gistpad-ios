@@ -33,13 +33,12 @@ public actor DraftPublisher {
                   await shouldPublish() else { throw CancellationError() }
         }
         do {
-            if draft.gistID == nil, let attempted = draft.attemptedContent,
-               let generation = draft.attemptedGeneration {
+            if draft.gistID == nil, let attempted = draft.attemptedContent {
                 if let created = try await createdGist(for: draft, content: attempted) {
                     draft = try await store.acknowledge(
                         id: id, accountID: accountID, gistID: created.id, content: attempted,
-                        revision: created.revision, generation: generation, publishedGist: created)
-                    if case .savedToGitHub = draft.state { return draft }
+                        revision: created.revision, publishedGist: created)
+                    if draft.isClean { return draft }
                 } else {
                     draft = try await store.clearAttempt(id: id, accountID: accountID)
                 }
@@ -47,35 +46,15 @@ public actor DraftPublisher {
             if let gistID = draft.gistID {
                 let fetched = try await client.remoteFile(
                     gistID: gistID, ownerID: draft.githubUserID, filename: draft.filename)
-                let remoteGist = fetched.gist
-                let remote = fetched.content
-                if let attempted = draft.attemptedContent, let generation = draft.attemptedGeneration {
-                    if sourceEqual(remote, attempted) {
-                        draft = try await store.acknowledge(
-                            id: id, accountID: accountID, gistID: gistID, content: attempted,
-                            revision: remoteGist.revision, generation: generation, publishedGist: remoteGist
-                        )
-                        if case .savedToGitHub = draft.state { return draft }
-                    } else {
-                        draft = try await store.clearAttempt(id: id, accountID: accountID)
-                    }
+                if let attempted = draft.attemptedContent, !sourceEqual(fetched.content, attempted) {
+                    draft = try await store.clearAttempt(id: id, accountID: accountID)
                 }
-                if sourceEqual(remote, draft.text) {
-                    return try await store.acknowledge(
-                        id: id, accountID: accountID, gistID: gistID, content: draft.text,
-                        revision: remoteGist.revision, generation: draft.generation, publishedGist: remoteGist
-                    )
-                }
+                draft = try await store.reconcile(
+                    id: id, accountID: accountID, expectedGeneration: draft.generation,
+                    remote: fetched.content, revision: fetched.gist.revision, gist: fetched.gist)
                 // Newer text from the web reaches a clean note when it's opened, not by publishing.
                 if draft.isClean { return draft }
-                guard sourceEqual(remote, draft.baseContent) else {
-                    let conflict = DraftConflict(
-                        generation: draft.generation, base: draft.baseContent, local: draft.text,
-                        remote: remote, remoteRevision: remoteGist.revision
-                    )
-                    try await store.setState(.conflict(conflict), id: id, accountID: accountID)
-                    return try await store.draft(id: id, accountID: accountID)
-                }
+                if case .conflict = draft.state { return draft }
             }
             try await store.beginAttempt(
                 id: id, accountID: accountID, content: draft.text, generation: draft.generation)
@@ -94,7 +73,7 @@ public actor DraftPublisher {
             guard sourceEqual(acknowledged, draft.text) else { throw DraftError.remoteDidNotAcknowledge }
             return try await store.acknowledge(
                 id: id, accountID: accountID, gistID: draft.gistID ?? result.id, content: acknowledged,
-                revision: result.revision, generation: draft.generation, publishedGist: result
+                revision: result.revision, publishedGist: result
             )
         } catch {
             // A publish that was sent stays recorded, and the next publish checks GitHub for it first.

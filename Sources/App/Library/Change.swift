@@ -114,7 +114,7 @@ extension GitHubSync {
           gistID: gistID, ownerID: current.githubUserID, filename: current.filename))
     case .recordRemote(let id, let generation, let remote, let revision):
       return .review(
-        try await drafts.inspectRemoteChange(
+        try await drafts.reconcile(
           id: id, accountID: accountID, expectedGeneration: generation,
           remote: remote, revision: revision))
     case .adoptRemote(let id, let generation, let remote, let revision):

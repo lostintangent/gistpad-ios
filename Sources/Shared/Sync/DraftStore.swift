@@ -385,7 +385,7 @@ public actor DraftStore {
 
     func acknowledge(
         id: UUID, accountID: UUID, gistID: String, content: String,
-        revision: String?, generation: UInt64, publishedGist: Gist? = nil
+        revision: String?, publishedGist: Gist? = nil
     ) throws -> Draft {
         let draft = try find(id, accountID: accountID)
         guard draft.gistID == nil || draft.gistID == gistID else { throw DraftError.staleGeneration }
@@ -420,25 +420,34 @@ public actor DraftStore {
         try commit()
     }
 
-    public func inspectRemoteChange(
+    /// Compares GitHub's copy of the file with the draft, for a publish and for opening a note. A
+    /// publish GitHub has is acknowledged, and any other change to GitHub's copy becomes a conflict,
+    /// unless the note is clean and can take the newer text. An attempt GitHub doesn't have is left
+    /// for the next publish to clear. Typing since the draft was read means a newer publish or check
+    /// follows, so this one stops here.
+    public func reconcile(
         id: UUID, accountID: UUID, expectedGeneration: UInt64,
-        remote: String?, revision: String?
+        remote: String?, revision: String?, gist: Gist? = nil
     ) throws -> Draft {
         let draft = try find(id, accountID: accountID)
-        guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
-        let state = Self.decode(draft.stateData)
-        if case .conflict = state { return try snapshot(draft) }
-        if let generation = draft.attemptedGeneration {
-            guard let gistID = draft.gistID, let attempted = draft.attemptedContent,
-                  sourceEqual(remote, attempted) else { return try snapshot(draft) }
+        guard draft.generation == expectedGeneration else { throw CancellationError() }
+        guard let gistID = draft.gistID else { return try snapshot(draft) }
+        if case .conflict = Self.decode(draft.stateData) { return try snapshot(draft) }
+        if let attempted = draft.attemptedContent {
+            guard sourceEqual(remote, attempted) else { return try snapshot(draft) }
             return try acknowledge(
                 id: id, accountID: accountID, gistID: gistID, content: attempted,
-                revision: revision, generation: generation)
+                revision: revision, publishedGist: gist)
         }
-        guard !sourceEqual(draft.baseContent, remote) else { return try snapshot(draft) }
-        if let remote, try snapshot(draft).adoptsRemote(remote) {
-            return try refreshClean(draft, content: remote, revision: revision)
+        if sourceEqual(remote, draft.text) {
+            return try acknowledge(
+                id: id, accountID: accountID, gistID: gistID, content: draft.text,
+                revision: revision, publishedGist: gist)
         }
+        let current = try snapshot(draft)
+        // A clean note takes on newer text through the editor, so its undo history stays honest.
+        if let remote, current.adoptsRemote(remote) { return current }
+        guard !sourceEqual(remote, draft.baseContent) else { return current }
         draft.stateData = try encode(.conflict(DraftConflict(
             generation: draft.generation, base: draft.baseContent, local: draft.text,
             remote: remote, remoteRevision: revision)))
