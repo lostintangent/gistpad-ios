@@ -101,9 +101,6 @@ public actor DraftPublisher {
         } catch {
             // A publish that was sent stays recorded, and the next publish checks GitHub for it first.
             if error is CancellationError || (error as? URLError)?.code == .cancelled {
-                if case .savingToGitHub = try await store.draft(id: id, accountID: accountID).state {
-                    try await store.setState(.savedLocally, id: id, accountID: accountID)
-                }
                 throw CancellationError()
             }
             let state: PublishState

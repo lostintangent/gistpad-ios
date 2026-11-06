@@ -191,6 +191,22 @@ import Testing
         #expect(fixture.remote(gist.id) == "base")
     }
 
+    @Test func aPublishCutOffBeforeItsStoreWritesIsSavedOnThisIPhoneUntilTheNextPublish() async throws {
+        let fixture = try SyncFixture()
+        let gist = fixture.server.addGist(description: "Note", files: ["README.md": "base"])
+        let draft = try await fixture.type("local", in: fixture.open(gist))
+        // The phone locked mid-publish, so nothing after recording the attempt reached the store.
+        try await fixture.store.beginAttempt(
+            id: draft.id, accountID: draft.accountID, content: draft.text, generation: draft.generation)
+        #expect(try await fixture.reload(draft).state == .savedLocally)
+        let opened = try await fixture.inspect(draft)
+        #expect(opened.state == .savedLocally)
+
+        let published = try await fixture.publish(opened)
+        #expect(published.state == .savedToGitHub)
+        #expect(fixture.remote(gist.id) == "local")
+    }
+
     @Test(arguments: [true, false], [false, true])
     func aCutOffCreateFindsItsGistInsteadOfPostingTwice(landed: Bool, daily: Bool) async throws {
         let fixture = try SyncFixture()

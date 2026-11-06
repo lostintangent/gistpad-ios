@@ -18,6 +18,7 @@ public struct DraftConflict: Codable, Equatable, Sendable {
 
 public enum PublishState: Codable, Equatable, Sendable {
     case savedLocally
+    /// A publish in flight, which only the open file shows. The store never keeps it.
     case savingToGitHub(generation: UInt64)
     case savedToGitHub
     case reconnect
@@ -75,7 +76,6 @@ public enum DraftError: Error, Equatable, Sendable {
     case notFound
     case accountMismatch
     case staleGeneration
-    case publishInProgress
     case unresolvedConflict
     case readOnly
     case remoteDidNotAcknowledge
@@ -91,7 +91,6 @@ extension DraftError: LocalizedError {
         case .accountMismatch: String(localized: "This gist belongs to another GitHub account.")
         case .staleGeneration:
             String(localized: "This file changed. Review the latest version first.")
-        case .publishInProgress: String(localized: "Wait for this gist to finish publishing.")
         case .unresolvedConflict:
             String(localized: "This file also changed on GitHub. Review both versions first.")
         case .readOnly: String(localized: "Only its owner can edit this gist.")
@@ -158,18 +157,11 @@ final class StoredDraft {
 
 @ModelActor
 public actor DraftStore {
-    public init(container: ModelContainer) throws {
+    public init(container: ModelContainer) {
         modelContainer = container
         let context = ModelContext(container)
         context.autosaveEnabled = false
         modelExecutor = DefaultSerialModelExecutor(modelContext: context)
-        for draft in try context.fetch(FetchDescriptor<StoredDraft>()) {
-            // A publish cut off by the app quitting resumes on the next publish, which checks GitHub first.
-            if case .savingToGitHub = Self.decode(draft.stateData) {
-                draft.stateData = try JSONEncoder().encode(PublishState.savedLocally)
-            }
-        }
-        try context.save()
     }
 
     public static func open(url: URL? = nil, inMemory: Bool = false) throws -> DraftStore {
@@ -187,7 +179,7 @@ public actor DraftStore {
         }
         // GistPad.entitlements gives the app's files complete protection, so drafts stay sealed
         // while the phone is locked.
-        return try DraftStore(container: ModelContainer(for: schema, configurations: [configuration]))
+        return DraftStore(container: try ModelContainer(for: schema, configurations: [configuration]))
     }
 
     public func drafts(accountID: UUID) throws -> [Draft] {
@@ -372,16 +364,15 @@ public actor DraftStore {
                 generation: generation, base: conflict.base, local: text,
                 remote: conflict.remote, remoteRevision: conflict.remoteRevision
             )))
-        } else if let sent = draft.attemptedGeneration, case .savingToGitHub = previousState {
-            draft.stateData = try encode(.savingToGitHub(generation: sent))
         } else {
             // After a cut-off publish GitHub may hold the attempted text, so matching the base isn't saved.
             draft.stateData = try encode(try snapshot(draft).isClean ? .savedToGitHub : .savedLocally)
         }
     }
 
-    /// Records what's about to be sent, so a publish cut off midway can tell whether it landed.
-    /// Typing since the draft was read means a newer publish follows, so this one stops here.
+    /// Records what's about to be sent, so the next publish or open can tell whether a publish cut
+    /// off midway landed. Until one does, the note is saved on this iPhone. Typing since the draft
+    /// was read means a newer publish follows, so this one stops here.
     func beginAttempt(
         id: UUID, accountID: UUID, content: String, generation: UInt64
     ) throws {
@@ -389,7 +380,7 @@ public actor DraftStore {
         guard draft.generation == generation else { throw CancellationError() }
         draft.attemptedContent = content
         draft.attemptedGeneration = generation
-        draft.stateData = try encode(.savingToGitHub(generation: generation))
+        draft.stateData = try encode(.savedLocally)
         try commit()
     }
 
@@ -440,7 +431,6 @@ public actor DraftStore {
         let state = Self.decode(draft.stateData)
         if case .conflict = state { return try snapshot(draft) }
         if let generation = draft.attemptedGeneration {
-            if case .savingToGitHub = state { throw DraftError.publishInProgress }
             guard let gistID = draft.gistID, let attempted = draft.attemptedContent,
                   sourceEqual(remote, attempted) else { return try snapshot(draft) }
             return try acknowledge(
@@ -502,9 +492,13 @@ public actor DraftStore {
     }
 
     private func encode(_ state: PublishState) throws -> Data { try JSONEncoder().encode(state) }
-    // Older builds stored states that no longer exist, such as `offline`. Those drafts are simply unpublished.
+    // Older builds stored states that no longer exist, such as `offline`, and Saving, which only a
+    // running publish shows now. Those drafts are simply unpublished.
     private static func decode(_ data: Data) -> PublishState {
-        (try? JSONDecoder().decode(PublishState.self, from: data)) ?? .savedLocally
+        switch try? JSONDecoder().decode(PublishState.self, from: data) {
+        case .none, .savingToGitHub: .savedLocally
+        case .some(let state): state
+        }
     }
 
     func commit() throws {
