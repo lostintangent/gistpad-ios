@@ -1,8 +1,8 @@
-import Interface
-import Notebook
+import Screens
+import Model
 import Platform
 import SwiftUI
-import Sync
+import Store
 
 struct AddToTodaySheet: View {
   @State private var day = Date.now

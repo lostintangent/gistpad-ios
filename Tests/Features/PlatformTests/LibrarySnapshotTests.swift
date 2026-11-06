@@ -1,6 +1,6 @@
 import Foundation
 import Editor
-import Sync
+import Store
 import Testing
 @testable import Platform
 
@@ -27,15 +27,16 @@ struct LibrarySnapshotTests {
             description: DailyNote.gistDescription, text: "- [ ] Tomorrow"))
 
         let snapshot = LibrarySnapshot.make(
-            accountID: account,
-            cache: CachedLibrary(
-                accountID: account, owned: [daily, archived, edited, older, opened],
-                starred: [starred],
-                preferences: Preferences(metadata: [
+            account: GistPadAccount(
+                id: account, login: "octocat",
+                preferences: GistPadPreferences(metadata: [
                     "accentColor": .string("#0EA5E9"),
                     "tags": .object(["work": .object(["name": .string("Work")])]),
                     "gistTags": .object([edited.id: .array([.string("work")])])
                 ])),
+            cache: GistCache(
+                accountID: account, owned: [daily, archived, edited, older, opened],
+                starred: [starred]),
             drafts: [typed, started, unpublishedDay])
 
         #expect(snapshot.recents.map(\.title) == ["Started on the phone", "Edited on the phone", "Older"])
@@ -65,10 +66,8 @@ struct LibrarySnapshotTests {
             text: "# Tomorrow\n", generation: 1)
 
         let snapshot = LibrarySnapshot.make(
-            accountID: account,
-            cache: CachedLibrary(
-                accountID: account, owned: [manga], starred: [],
-                preferences: Preferences(metadata: [:])),
+            account: GistPadAccount(id: account, login: "octocat", preferences: GistPadPreferences(metadata: [:])),
+            cache: GistCache(accountID: account, owned: [manga], starred: []),
             drafts: [edited, unpublishedFile],
             visibleText: { text in
                 (text as NSString).substring(from: Syntax.contentStart(in: text))

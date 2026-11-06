@@ -1,5 +1,5 @@
 import Foundation
-import Sync
+import Store
 
 /// What intents ask of the app, provided through `AppDependencyManager`.
 @MainActor

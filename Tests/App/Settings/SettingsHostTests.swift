@@ -1,4 +1,4 @@
-import Sync
+import Store
 import SwiftUI
 import Testing
 import UIKit
@@ -35,7 +35,7 @@ struct SettingsHostTests {
   }
 
   private struct SettingsPreferenceFixture: View {
-    @State var preferences: Preferences
+    @State var preferences: GistPadPreferences
     let saved: @MainActor (BooleanPreference, Bool) -> Void
 
     var body: some View {

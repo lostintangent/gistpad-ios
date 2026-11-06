@@ -1,6 +1,6 @@
 import Comments
-import Interface
-import Notebook
+import Screens
+import Model
 import SwiftUI
 
 struct CommentsInspector: View {
@@ -106,7 +106,7 @@ struct CommentsInspector: View {
 extension View {
   /// Comments for the open gist: an inspector beside the file on a wide display, a sheet on iPhone.
   func commentsInspector(
-    _ comments: CommentsPresentation, active: FileSession?,
+    _ comments: CommentsPresentation, active: GistFileEditor?,
     columnVisibility: Binding<NavigationSplitViewVisibility>
   ) -> some View {
     modifier(CommentsInspectorHost(
@@ -116,7 +116,7 @@ extension View {
 
 private struct CommentsInspectorHost: ViewModifier {
   @Bindable var comments: CommentsPresentation
-  let active: FileSession?
+  let active: GistFileEditor?
   @Binding var columnVisibility: NavigationSplitViewVisibility
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -173,7 +173,7 @@ private struct CommentsInspectorHost: ViewModifier {
       }
       .onChange(of: commentCount, initial: true) { _, count in
         if let count {
-          comments.library.recordCommentCount(
+          comments.model.recordCommentCount(
             accountID: count.scope.accountID, gistID: count.scope.gistID, total: count.total)
         }
       }

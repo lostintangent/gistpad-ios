@@ -1,6 +1,6 @@
 import Editor
-import Interface
-import Sync
+import Screens
+import Store
 import SwiftUI
 import Testing
 import UIKit

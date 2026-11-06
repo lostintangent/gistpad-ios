@@ -1,16 +1,16 @@
 import Foundation
-import Notebook
+import Model
 import SwiftUI
-import Sync
+import Store
 
 struct ConflictTarget: Identifiable {
   var id: UUID { review.id }
-  let session: FileSession
+  let fileEditor: GistFileEditor
   let review: Conflict
 }
 
 struct ConflictReview: View {
-  let session: FileSession
+  let fileEditor: GistFileEditor
   @State private var review: Conflict
   @State private var tab = ReviewTab.changes
   @State private var isApplying = false
@@ -21,13 +21,13 @@ struct ConflictReview: View {
   @State private var isComparing = true
   @Environment(\.dismiss) private var dismiss
 
-  init(session: FileSession, review: Conflict) {
-    self.session = session
+  init(fileEditor: GistFileEditor, review: Conflict) {
+    self.fileEditor = fileEditor
     _review = State(initialValue: review)
   }
 
   private var isStale: Bool {
-    session.editor.generation != review.draft.generation || !review.matches(session.draft)
+    fileEditor.editor.generation != review.draft.generation || !review.matches(fileEditor.draft)
   }
 
   var body: some View {
@@ -42,7 +42,7 @@ struct ConflictReview: View {
               systemImage: "exclamationmark.circle")
             Button("Review Latest Draft") {
               do {
-                review = try session.reviewContext()
+                review = try fileEditor.reviewContext()
                 error = nil
               } catch { self.error = error.localizedDescription }
             }
@@ -78,8 +78,8 @@ struct ConflictReview: View {
             Button("Use GitHub's") { isConfirmingRemote = true }
               .buttonStyle(.bordered)
           }
-          .disabled(isStale || !session.canMutate)
-          if !session.canMutate {
+          .disabled(isStale || !fileEditor.canMutate)
+          if !fileEditor.canMutate {
             Text("Finish the current edit to apply this version.")
           }
         }
@@ -166,7 +166,7 @@ struct ConflictReview: View {
     Task {
       defer { isApplying = false }
       do {
-        try await session.applyReview(review, text: text, publishes: publishes)
+        try await fileEditor.applyReview(review, text: text, publishes: publishes)
         dismiss()
       } catch {
         self.error = error.localizedDescription

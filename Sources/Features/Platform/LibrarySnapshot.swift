@@ -1,5 +1,5 @@
 import Foundation
-import Sync
+import Store
 
 public enum PlatformError: LocalizedError, Equatable, Sendable {
     case accountChanged
@@ -36,10 +36,12 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
     let recents: [GistEntity]
 
     public static func make(
-        accountID: UUID?, cache: CachedLibrary?, drafts: [Draft],
+        account: GistPadAccount?, cache: GistCache?, drafts: [Draft],
         visibleText: (String) -> String = { $0 }
     ) -> Self {
         var gists: [(entity: GistEntity, isRecent: Bool)] = []
+        let accountID = account?.id
+        let preferences = account?.preferences
         if let accountID {
             let owned = Set(cache?.owned.map(\.id) ?? [])
             for gist in cache?.gists ?? [] {
@@ -52,14 +54,14 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
                     let editedAt = draft?.hasUnpublishedEdits == true ? draft?.updatedAt : nil
                     gists.append((
                         GistEntity(
-                            title: isDefault ? gist.displayName : GistFile.displayName(filename),
+                            title: isDefault ? gist.displayName : Gist.File.displayName(filename),
                             excerpt: excerpt(body),
-                            tags: cache?.preferences.tagNames(gistID: gist.id) ?? [],
+                            tags: preferences?.tagNames(gistID: gist.id) ?? [],
                             updatedAt: max(gist.updatedAt, editedAt ?? gist.updatedAt),
                             link: .gist(id: gist.id, filename: isDefault ? nil : filename),
                             accountID: accountID, folderName: gist.displayName,
                             body: nil,
-                            pinned: cache?.preferences.pinnedGists.contains(gist.id) ?? false),
+                            pinned: preferences?.pinnedGists.contains(gist.id) ?? false),
                         isDefault && owned.contains(gist.id) && !gist.isDailyNote && !gist.isArchived))
                 }
             }
@@ -71,14 +73,14 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
                 let body = visibleText(draft.text)
                 gists.append((
                     GistEntity(
-                        title: GistFile.displayName(draft.filename),
+                        title: Gist.File.displayName(draft.filename),
                         excerpt: excerpt(body),
-                        tags: cache?.preferences.tagNames(gistID: gistID) ?? [],
+                        tags: preferences?.tagNames(gistID: gistID) ?? [],
                         updatedAt: draft.updatedAt,
                         link: .gist(id: gistID, filename: draft.filename),
                         accountID: accountID, folderName: gist.displayName,
                         body: nil,
-                        pinned: cache?.preferences.pinnedGists.contains(gistID) ?? false),
+                        pinned: preferences?.pinnedGists.contains(gistID) ?? false),
                     false))
             }
             for draft in drafts where draft.gistID == nil {
@@ -101,7 +103,7 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
         }
         return Self(
             accountID: accountID,
-            accentHex: cache?.preferences.accentColor,
+            accentHex: preferences?.accentColor,
             gists: gists.map(\.entity),
             recents: Array(gists.filter(\.isRecent).prefix(3).map(\.entity)))
     }

@@ -1,6 +1,6 @@
 import Foundation
 @testable import Editor
-import Interface
+import Screens
 import Platform
 import SwiftUI
 import Testing
@@ -8,8 +8,8 @@ import UIKit
 import WebKit
 
 @testable import GistPad
-@testable import Notebook
-@testable import Sync
+@testable import Model
+@testable import Store
 
 @Suite(.serialized)
 @MainActor
@@ -28,7 +28,7 @@ struct RootViewTests {
       + (1...300).map { "\($0). A retained reading entry \($0)\n" }.joined()
       + "\nAn exact final source line."
     let other = "# Another note\n\nA different retained source."
-    let fixture = try await LibraryFixture(autosave: false) {
+    let fixture = try await ModelFixture(autosave: false) {
       $0.addGist(
         id: "reading", description: "Reading list",
         files: ["README.md": source, "Calendar.md": "# A second file"])
@@ -39,9 +39,9 @@ struct RootViewTests {
     var retained: UITextView?
     for id in ["reading", "other", "reading"] {
       let text = id == "reading" ? source : other
-      host.library.select(rowID: id)
+      host.model.select(rowID: id)
       try await host.waitUntil {
-        host.library.visibleFile?.gist?.id == id && host.editor(text: text) != nil
+        host.model.visibleFile?.gist?.id == id && host.editor(text: text) != nil
           && host.picker != nil
       }
       let editor = try #require(host.editor(text: text))
@@ -101,15 +101,15 @@ struct RootViewTests {
   }
 
   @Test func leavingANewBlankNoteLeavesNothingBehind() async throws {
-    let fixture = try await LibraryFixture {
+    let fixture = try await ModelFixture {
       $0.addGist(id: "kept", description: "Kept", files: ["README.md": "A real note"])
     }
     let host = try await NavigationHost(fixture: fixture, sizeClass: .compact)
     defer { await host.close() }
     // Creating is local, so it works offline.
     fixture.fail()
-    await host.library.open(.new)
-    let first = try #require(host.library.visibleFile?.draft)
+    await host.model.open(.new)
+    let first = try #require(host.model.visibleFile?.draft)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     #expect(host.editor(text: "")?.selectedRange == NSRange(location: 0, length: 0))
     try await host.waitForKeyboard(visible: true)
@@ -117,16 +117,16 @@ struct RootViewTests {
     host.pending.link = .gist(id: "kept", filename: nil)
     try await host.waitUntil {
       host.pending.link == nil && host.editor(text: "A real note") != nil
-        && host.library.sessions[first.id] == nil
+        && host.model.editors[first.id] == nil
     }
-    #expect(host.library.state.selectedID == "kept")
+    #expect(host.model.state.selectedID == "kept")
 
-    await host.library.open(.new)
-    let second = try #require(host.library.visibleFile?.draft)
+    await host.model.open(.new)
+    let second = try #require(host.model.visibleFile?.draft)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     try await host.waitForKeyboard(visible: true)
     host.returnToLibrary()
-    try await host.waitUntil { host.isLibraryVisible && host.library.loadedFile == nil }
+    try await host.waitUntil { host.isLibraryVisible && host.model.loadedFile == nil }
     let stored = try await fixture.store.drafts(accountID: fixture.account.id).map(\.id)
     #expect(!stored.contains(first.id) && !stored.contains(second.id))
     #expect(fixture.publishes.isEmpty)
@@ -134,12 +134,12 @@ struct RootViewTests {
 
   @Test(arguments: [true, false])
   func returningToLibraryPublishesTheOutgoingNoteAndKeepsItsEditor(autosave: Bool) async throws {
-    let fixture = try await LibraryFixture(autosave: autosave) {
+    let fixture = try await ModelFixture(autosave: autosave) {
       $0.addGist(id: "a", description: "Current", files: ["README.md": "Current source"])
     }
     let host = try await NavigationHost(fixture: fixture, sizeClass: .compact)
     defer { await host.close() }
-    await host.library.open(.gist(id: "a"))
+    await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "Current source") != nil }
     let editor = try #require(host.editor(text: "Current source"))
     editor.becomeFirstResponder()
@@ -147,7 +147,7 @@ struct RootViewTests {
     let typed = ContinuousClock.now
     editor.insertText("Local ")
     try await host.waitUntil {
-      host.library.localDrafts.first { $0.gistID == "a" }?.generation == 1
+      host.model.localDrafts.first { $0.gistID == "a" }?.generation == 1
     }
     host.returnToLibrary()
     try await host.waitUntil { fixture.remote("a", "README.md") == "Local Current source" }
@@ -155,7 +155,7 @@ struct RootViewTests {
     if autosave { #expect(ContinuousClock.now - typed < .seconds(5)) }
     try await host.waitUntil { host.isLibraryVisible }
     #expect(fixture.publishes == ["PATCH /gists/a"])
-    #expect(host.library.state.selectedID == nil)
+    #expect(host.model.state.selectedID == nil)
     #expect(!editor.isFirstResponder)
     let selection = editor.selectedRange
     host.pending.link = .gist(id: "a", filename: nil)
@@ -167,20 +167,20 @@ struct RootViewTests {
   }
 
   @Test func switchingNotesMidCompositionKeepsAndPublishesTheComposedText() async throws {
-    let fixture = try await LibraryFixture(autosave: false) {
+    let fixture = try await ModelFixture(autosave: false) {
       $0.addGist(id: "a", description: "First note", files: ["README.md": "First note source"])
       $0.addGist(id: "b", description: "Second note", files: ["README.md": "Second note source"])
     }
     let host = try await NavigationHost(fixture: fixture)
     defer { await host.close() }
-    host.library.select(rowID: "a")
+    host.model.select(rowID: "a")
     try await host.waitUntil { host.editor(text: "First note source") != nil }
     let first = try #require(host.editor(text: "First note source"))
     try #require(first.becomeFirstResponder())
     first.selectedRange = NSRange(location: 0, length: 0)
     first.setMarkedText("にほんご", selectedRange: NSRange(location: 4, length: 0))
     try #require(first.markedTextRange != nil)
-    host.library.select(rowID: "b")
+    host.model.select(rowID: "b")
     try await host.waitUntil { host.editor(text: "Second note source") != nil }
     #expect(first.markedTextRange == nil)
     #expect(first.text == "にほんごFirst note source")
@@ -189,11 +189,11 @@ struct RootViewTests {
   }
 
   @Test func startingTodayFocusesTheCaretAfterItsDurableInitialContent() async throws {
-    let fixture = try await LibraryFixture()
+    let fixture = try await ModelFixture()
     let host = try await NavigationHost(fixture: fixture)
     defer { await host.close() }
-    await host.library.open(.today())
-    let draft = try #require(host.library.visibleFile?.draft)
+    await host.model.open(.today())
+    let draft = try #require(host.model.visibleFile?.draft)
     #expect(!draft.text.isEmpty)
     try await host.waitUntil { host.editor(text: draft.text)?.isFirstResponder == true }
     let editor = try #require(host.editor(text: draft.text))
@@ -202,7 +202,7 @@ struct RootViewTests {
   }
 
   @Test func aColdLinkWaitsForRestorationAndOpensTheExactFile() async throws {
-    let fixture = try await LibraryFixture {
+    let fixture = try await ModelFixture {
       $0.addGist(
         id: "b", description: "Routed note",
         files: ["README.md": "Text", "Ideas.md": "Routed file source"])
@@ -214,8 +214,8 @@ struct RootViewTests {
     try await host.waitUntil {
       pending.link == nil && host.editor(text: "Routed file source") != nil
     }
-    #expect(host.library.loadedFile?.filename == "Ideas.md")
-    #expect(host.library.loadedFile?.gist?.id == "b")
+    #expect(host.model.loadedFile?.filename == "Ideas.md")
+    #expect(host.model.loadedFile?.gist?.id == "b")
   }
 
   /// A widget's Today opens on a folded phone at a cold launch without waiting for GitHub: at once
@@ -223,14 +223,14 @@ struct RootViewTests {
   @Test(arguments: [true, false])
   func aColdTodayLinkOpensWithoutWaitingForGitHub(writtenOnThisIPhone: Bool) async throws {
     let today = DailyNote.filename()
-    let fixture = try await LibraryFixture {
+    let fixture = try await ModelFixture {
       $0.addGist(
         id: "daily", description: DailyNote.gistDescription,
         files: [DailyNote.filename(date: .now - 86_400): "- [x] Yesterday's task\n"])
     }
     var text = "# \(today.dropLast(3))\n\n"
     if writtenOnThisIPhone {
-      await fixture.library.start()
+      await fixture.model.start()
       text = "Written on this iPhone"
       _ = try await fixture.stageEdit(gistID: "daily", filename: today, text: text)
     }
@@ -238,7 +238,7 @@ struct RootViewTests {
     let pending = PendingLink()
     pending.link = .today
     let host = try await NavigationHost(
-      fixture: fixture, library: fixture.relaunch(), pending: pending, sizeClass: .compact,
+      fixture: fixture, model: fixture.relaunch(), pending: pending, sizeClass: .compact,
       waitsForStart: false)
     defer {
       github.open()
@@ -248,7 +248,7 @@ struct RootViewTests {
     try await host.waitUntil { !host.isLibraryVisible }
     if !writtenOnThisIPhone { github.open() }
     try await host.waitUntil {
-      pending.link == nil && host.library.visibleFile?.filename == today
+      pending.link == nil && host.model.visibleFile?.filename == today
         && host.editor(text: text)?.isFirstResponder == true
     }
   }
@@ -257,7 +257,7 @@ struct RootViewTests {
   /// the last launch opens from GitHub while the launch's refresh is still out.
   @Test func aColdTodayLinkOpensTodayFromTheWebOverAStaleLibrary() async throws {
     let today = DailyNote.filename()
-    let fixture = try await LibraryFixture(
+    let fixture = try await ModelFixture(
       selection: .init(gistID: "a", filename: "README.md", draftID: nil)
     ) {
       $0.addGist(
@@ -265,13 +265,13 @@ struct RootViewTests {
         files: [DailyNote.filename(date: .now - 86_400): "- [x] Yesterday's task\n"])
       $0.addGist(id: "a", description: "Last opened", files: ["README.md": "Last opened"])
     }
-    await fixture.library.start()
+    await fixture.model.start()
     fixture.server.edit("daily", files: [today: "Started on the web"])
     let refresh = fixture.hold("GET /gists/starred")
     let pending = PendingLink()
     pending.link = .today
     let host = try await NavigationHost(
-      fixture: fixture, library: fixture.relaunch(), pending: pending, sizeClass: .compact,
+      fixture: fixture, model: fixture.relaunch(), pending: pending, sizeClass: .compact,
       waitsForStart: false)
     defer {
       refresh.open()
@@ -279,13 +279,13 @@ struct RootViewTests {
     }
     try await refresh.arrival()
     try await host.waitUntil {
-      pending.link == nil && host.library.visibleFile?.filename == today
+      pending.link == nil && host.model.visibleFile?.filename == today
         && host.editor(text: "Started on the web") != nil
     }
   }
 
   @Test func aNewGistLinkOpensABlankNoteReadyToWrite() async throws {
-    let fixture = try await LibraryFixture {
+    let fixture = try await ModelFixture {
       $0.addGist(id: "a", description: "Existing", files: ["README.md": "Existing source"])
     }
     let pending = PendingLink()
@@ -293,14 +293,14 @@ struct RootViewTests {
     let host = try await NavigationHost(fixture: fixture, pending: pending)
     defer { await host.close() }
     try await host.waitUntil { pending.link == nil && host.editor(text: "")?.isFirstResponder == true }
-    let draft = try #require(host.library.visibleFile?.draft)
-    #expect(!host.library.localDrafts.contains { $0.id == draft.id })
-    #expect(host.library.visibleFile?.gist == nil)
+    let draft = try #require(host.model.visibleFile?.draft)
+    #expect(!host.model.localDrafts.contains { $0.id == draft.id })
+    #expect(host.model.visibleFile?.gist == nil)
     #expect(fixture.publishes.isEmpty)
   }
 
   @Test func aFailedOpenShowsItsOwnTitleAndRetryInsteadOfThePreviousEditor() async throws {
-    let fixture = try await LibraryFixture {
+    let fixture = try await ModelFixture {
       $0.addGist(id: "a", description: "Previous", files: ["README.md": "Previous source"])
       $0.addGist(
         id: "b", description: "Requested",
@@ -308,31 +308,31 @@ struct RootViewTests {
     }
     let host = try await NavigationHost(fixture: fixture)
     defer { await host.close() }
-    await host.library.open(.gist(id: "a"))
+    await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "Previous source") != nil }
     fixture.fail("GET /gists/b")
-    await host.library.open(.gist(id: "b", filename: "Other.md", rowID: "result-b"))
+    await host.model.open(.gist(id: "b", filename: "Other.md", rowID: "result-b"))
     try await host.waitUntil {
       host.descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title }.contains("Requested")
     }
     #expect(host.editor(text: "Previous source") == nil)
     fixture.restore()
-    try await host.library.open(#require(host.library.opening).request)
+    try await host.model.open(#require(host.model.opening).request)
     try await host.waitUntil { host.editor(text: "Retried source") != nil }
     #expect(accessibilityElement("note-open-retry", in: host.window) == nil)
-    #expect(host.library.loadedFile?.gist?.id == "b")
-    #expect(host.library.state.selectedID == "b")
-    #expect(host.library.loadedFile?.filename == "Other.md")
+    #expect(host.model.loadedFile?.gist?.id == "b")
+    #expect(host.model.state.selectedID == "b")
+    #expect(host.model.loadedFile?.filename == "Other.md")
   }
 
   @Test func sourceIntelligenceOpensTheLiveSheetForTheRetainedEditor() async throws {
-    let fixture = try await LibraryFixture(autosave: false) {
+    let fixture = try await ModelFixture(autosave: false) {
       $0.addGist(
         id: "a", description: "A retained thought", files: ["README.md": "A little room to think."])
     }
     let host = try await NavigationHost(fixture: fixture)
     defer { await host.close() }
-    await host.library.open(.gist(id: "a"))
+    await host.model.open(.gist(id: "a"))
     try await host.waitUntil { host.editor(text: "A little room to think.") != nil }
     let editor = try #require(host.editor(text: "A little room to think."))
     editor.becomeFirstResponder()
@@ -358,7 +358,7 @@ struct RootViewTests {
 /// The app's root view in a real window, around a fixture library.
 @MainActor
 private struct NavigationHost {
-  let library: Library
+  let model: GistPadModel
   let window: UIWindow
   let pending: PendingLink
   let layout: LayoutPreferences
@@ -366,10 +366,10 @@ private struct NavigationHost {
   private let previousWindow: UIWindow?
 
   init(
-    fixture: LibraryFixture, library: Library? = nil, pending: PendingLink = PendingLink(),
+    fixture: ModelFixture, model: GistPadModel? = nil, pending: PendingLink = PendingLink(),
     sizeClass: UIUserInterfaceSizeClass? = nil, mode: FileMode = .edit, waitsForStart: Bool = true
   ) async throws {
-    self.library = library ?? fixture.library
+    self.model = model ?? fixture.model
     self.pending = pending
     suite = "RootView-\(UUID())"
     layout = LayoutPreferences(defaults: try #require(UserDefaults(suiteName: suite)))
@@ -390,12 +390,12 @@ private struct NavigationHost {
       origin: sceneBounds.origin, size: CGSize(width: width, height: sceneBounds.height))
     if let sizeClass { window.traitOverrides.horizontalSizeClass = sizeClass }
     window.rootViewController = UIHostingController(
-      rootView: RootView(library: self.library, layout: layout, pending: pending))
+      rootView: RootView(model: self.model, layout: layout, pending: pending))
     window.makeKeyAndVisible()
     guard waitsForStart else { return }
-    let library = self.library
+    let model = self.model
     try await waitUntil {
-      library.state.loadState == .ready && library.cachedLibrary != nil && !library.isStarting
+      model.state.loadState == .ready && model.gistCache != nil && !model.isStarting
     }
   }
 
@@ -495,12 +495,12 @@ private struct NavigationHost {
       guard ContinuousClock.now < deadline else {
         Attachment.record(
           """
-          load: \(library.state.loadState)
-          selected: \(String(describing: library.state.selectedID))
-          loaded: \(String(describing: library.loadedFile?.id))
-          presented: \(String(describing: library.visibleFile?.id))
-          opening: \(String(describing: library.opening))
-          error: \(String(describing: library.openError))
+          load: \(model.state.loadState)
+          selected: \(String(describing: model.state.selectedID))
+          loaded: \(String(describing: model.loadedFile?.id))
+          presented: \(String(describing: model.visibleFile?.id))
+          opening: \(String(describing: model.opening))
+          error: \(String(describing: model.openError))
           link: \(String(describing: pending.link))
           library visible: \(isLibraryVisible)
           editors: \(descendants.compactMap { ($0 as? UITextView)?.text })

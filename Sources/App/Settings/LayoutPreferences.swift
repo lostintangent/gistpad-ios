@@ -1,5 +1,5 @@
 import Foundation
-import Interface
+import Screens
 import Observation
 
 @MainActor

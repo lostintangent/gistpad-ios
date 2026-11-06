@@ -3,8 +3,8 @@ import PackageDescription
 
 // GistPad.xcodeproj builds the app and its extensions from Sources/App and Sources/Extensions,
 // and links these modules. Shared is the core that features build on.
-let shared = ["Accent", "Comments", "Sync"]
-let features = ["Editor", "Intelligence", "Interface", "Notebook", "Platform", "Preview"]
+let shared = ["Accent", "Comments", "Store"]
+let features = ["Editor", "Intelligence", "Model", "Platform", "Preview", "Screens"]
 
 let package = Package(
   name: "GistPad",
@@ -17,8 +17,8 @@ let package = Package(
     .target(name: "Accent", path: "Sources/Shared/Accent"),
     .target(name: "Comments", path: "Sources/Shared/Comments", exclude: ["README.md"]),
     .target(
-      name: "Sync", dependencies: ["Comments", .product(name: "Auth", package: "supabase-swift")],
-      path: "Sources/Shared/Sync", exclude: ["README.md"]),
+      name: "Store", dependencies: ["Comments", .product(name: "Auth", package: "supabase-swift")],
+      path: "Sources/Shared/Store", exclude: ["README.md"]),
 
     .target(
       name: "Editor", dependencies: ["Accent", "Comments"], path: "Sources/Features/Editor",
@@ -27,13 +27,13 @@ let package = Package(
       name: "Intelligence", dependencies: ["Editor"], path: "Sources/Features/Intelligence",
       resources: [.process("Resources")]),
     .target(
-      name: "Interface", dependencies: ["Accent", "Comments", "Sync"],
-      path: "Sources/Features/Interface", exclude: ["README.md"], resources: [.process("Resources")]),
+      name: "Screens", dependencies: ["Accent", "Comments", "Store"],
+      path: "Sources/Features/Screens", exclude: ["README.md"], resources: [.process("Resources")]),
     .target(
-      name: "Notebook", dependencies: ["Comments", "Editor", "Interface", "Sync"],
-      path: "Sources/Features/Notebook"),
+      name: "Model", dependencies: ["Comments", "Editor", "Screens", "Store"],
+      path: "Sources/Features/Model"),
     .target(
-      name: "Platform", dependencies: ["Sync", "Accent"], path: "Sources/Features/Platform",
+      name: "Platform", dependencies: ["Store", "Accent"], path: "Sources/Features/Platform",
       exclude: ["README.md"]),
     .target(
       name: "Preview", dependencies: ["Accent", "Comments"], path: "Sources/Features/Preview",
@@ -44,7 +44,7 @@ let package = Package(
       name: "CommentsTests", dependencies: ["Comments"], path: "Tests/Shared/CommentsTests",
       resources: [.copy("Fixtures")]),
     .testTarget(
-      name: "SyncTests", dependencies: ["Sync", "Comments"], path: "Tests/Shared/SyncTests"),
+      name: "StoreTests", dependencies: ["Store", "Comments"], path: "Tests/Shared/StoreTests"),
 
     .testTarget(
       name: "EditorTests", dependencies: ["Editor", "Comments"], path: "Tests/Features/EditorTests"),
@@ -52,12 +52,12 @@ let package = Package(
       name: "IntelligenceTests", dependencies: ["Intelligence"],
       path: "Tests/Features/IntelligenceTests"),
     .testTarget(
-      name: "InterfaceTests", dependencies: ["Interface"], path: "Tests/Features/InterfaceTests"),
+      name: "ScreensTests", dependencies: ["Screens"], path: "Tests/Features/ScreensTests"),
     .testTarget(
-      name: "NotebookTests", dependencies: ["Notebook", "Editor", "Interface", "Sync"],
-      path: "Tests/Features/NotebookTests"),
+      name: "ModelTests", dependencies: ["Model", "Editor", "Screens", "Store"],
+      path: "Tests/Features/ModelTests"),
     .testTarget(
-      name: "PlatformTests", dependencies: ["Platform", "Sync", "Editor"],
+      name: "PlatformTests", dependencies: ["Platform", "Store", "Editor"],
       path: "Tests/Features/PlatformTests"),
     .testTarget(
       name: "PreviewTests", dependencies: ["Preview", "Accent", "Comments"],

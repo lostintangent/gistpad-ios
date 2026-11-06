@@ -1,9 +1,9 @@
 #if DEBUG
   import Foundation
-  import Interface
-  import Notebook
+  import Screens
+  import Model
   import Platform
-  import Sync
+  import Store
 
   /// The one launch contract for UI tests and captures. `--fixture standard|empty|signed-out|offline|showcase` runs the
   /// real app against the fixture GitHub. `--open <gist>[/<file>]` (or `today`), `--mode edit|preview|split`,
@@ -48,7 +48,7 @@
     @MainActor static var pendingSheet = current?.sheet == .today ? nil : current?.sheet
 
     @MainActor
-    func library() async throws -> Library {
+    func model() async throws -> GistPadModel {
       let server = FixtureServer()
       if fixture == .standard || fixture == .offline { try FixtureLibrary.seed(server) }
       if fixture == .showcase { FixtureLibrary.seedShowcase(server) }
@@ -57,7 +57,7 @@
         let account = try await server.signIn(accounts)
         let seeded =
           switch fixture {
-          case .empty: [Preferences.Change]()
+          case .empty: [GistPadPreferences.Change]()
           case .showcase: FixtureLibrary.showcasePreferences
           default: FixtureLibrary.preferences
           }
@@ -66,16 +66,16 @@
       let store = try DraftStore.open(inMemory: true)
       let sync = GitHubSync(accounts: accounts, drafts: store)
       if fixture == .offline, let account = try await sync.connectedAccount() {
-        try await sync.cacheLibrary(
+        try await sync.cacheGists(
           owned: sync.gists(accountID: account.id), starred: sync.starredGists(accountID: account.id),
-          account: account)
+          accountID: account.id)
         server.intercept { _ in throw URLError(.notConnectedToInternet) }
       }
       if let link = sheet == .today ? .addToToday : link { PendingLink.shared.link = link }
-      let library = PlatformBridge.connect(
+      let model = PlatformBridge.connect(
         sync, store: store, lastOpened: LastOpened(defaults: Self.defaults))
-      if let query { library.state.query = query }
-      return library
+      if let query { model.state.query = query }
+      return model
     }
 
     @MainActor

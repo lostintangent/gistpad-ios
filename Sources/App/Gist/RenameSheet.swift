@@ -1,4 +1,4 @@
-import Sync
+import Store
 import SwiftUI
 
 struct RenameSheet: View {

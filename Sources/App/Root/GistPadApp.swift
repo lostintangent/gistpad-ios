@@ -1,11 +1,11 @@
-import Notebook
+import Model
 import Platform
 import SwiftUI
-import Sync
+import Store
 
 @main
 struct GistPadApp: App {
-  @State private var library: Library?
+  @State private var model: GistPadModel?
   @State private var loadError: String?
   @State private var cannotOpenLink = false
 
@@ -22,7 +22,7 @@ struct GistPadApp: App {
     do {
       #if DEBUG
         if let fixture = FixtureLaunch.current {
-          library = try await fixture.library()
+          model = try await fixture.model()
           return
         }
       #endif
@@ -31,30 +31,30 @@ struct GistPadApp: App {
       else {
         throw AccountError.invalidConfiguration
       }
-      library = try PlatformBridge.library(publishableKey: key)
+      model = try PlatformBridge.model(publishableKey: key)
     } catch {
       loadError = error.localizedDescription
     }
   }
 
   @ViewBuilder
-  private func rootView(_ library: Library) -> some View {
+  private func rootView(_ model: GistPadModel) -> some View {
     #if DEBUG
       if let fixture = FixtureLaunch.current {
-        RootView(library: library, layout: fixture.layout())
+        RootView(model: model, layout: fixture.layout())
       } else {
-        RootView(library: library)
+        RootView(model: model)
       }
     #else
-      RootView(library: library)
+      RootView(model: model)
     #endif
   }
 
   var body: some Scene {
     WindowGroup {
       Group {
-        if let library {
-          rootView(library)
+        if let model {
+          rootView(model)
         } else if let loadError {
           ContentUnavailableView {
             Label("Couldn't Load Your Gists", systemImage: "exclamationmark.circle")
@@ -69,7 +69,7 @@ struct GistPadApp: App {
         }
       }
       .task {
-        guard library == nil, !Self.isHostingTests else { return }
+        guard model == nil, !Self.isHostingTests else { return }
         await load()
       }
       .onOpenURL { url in
@@ -84,7 +84,7 @@ struct GistPadApp: App {
       } message: {
         Text("GistPad can't open this link.")
       }
-      .accent(savedHex: library?.account?.preferences.accentColor)
+      .accent(savedHex: model?.account?.preferences.accentColor)
     }
   }
 }

@@ -1,10 +1,10 @@
 #if DEBUG
   import Foundation
-  import Notebook
+  import Model
   import Preview
-  import Sync
+  import Store
 
-  /// One deterministic account, served by Sync's fixture GitHub, covering every row and screen Designer reviews.
+  /// One deterministic account, served by Store's fixture GitHub, covering every row and screen Designer reviews.
   enum FixtureLibrary {
     static func seed(_ server: FixtureServer, now: Date = .now) throws {
       let hour: TimeInterval = 3_600
@@ -67,17 +67,17 @@
     }
 
     /// Pins and tags, written through the account's real preference path once the fixture signs in.
-    static let preferences: [Preferences.Change] =
+    static let preferences: [GistPadPreferences.Change] =
       [.setPinned(gistID: "shape", pinned: true), .setPinned(gistID: "words", pinned: true)]
       + [
         ("ideas", "Ideas", "#EBC85A"), ("design", "Design", "#548C80"), ("personal", "Personal", "#A88EB5"),
         ("reading", "Reading list for the long winter evenings", "#FFFFFF"), ("ink", "Ink", "#000000"),
         ("someday", "Someday", nil),
-      ].map { Preferences.Change.upsertTag(id: $0.0, name: $0.1, color: $0.2) }
+      ].map { GistPadPreferences.Change.upsertTag(id: $0.0, name: $0.1, color: $0.2) }
       + [
         ("shape", ["ideas", "design"]), ("weekend", ["personal", "someday"]), ("words", ["ideas", "reading"]),
         ("mixed", ["personal", "ink"]), ("longtitle", ["reading", "ink", "someday", "design"]),
-      ].flatMap { gist, tags in tags.map { Preferences.Change.setTag(gistID: gist, tagID: $0, included: true) } }
+      ].flatMap { gist, tags in tags.map { GistPadPreferences.Change.setTag(gistID: gist, tagID: $0, included: true) } }
 
     /// A notebook that reads like a real person's, for the README and the App Store.
     static func seedShowcase(_ server: FixtureServer, now: Date = .now) {
@@ -122,16 +122,16 @@
         comments: ["Can we do two pies this year?"])
     }
 
-    static let showcasePreferences: [Preferences.Change] =
+    static let showcasePreferences: [GistPadPreferences.Change] =
       [.setPinned(gistID: "lisbon", pinned: true)]
       + [
         ("family", "Family", "#A88EB5"), ("cooking", "Cooking", "#E8A25A"), ("travel", "Travel", "#5A9BD5"),
         ("books", "Books", "#EBC85A"), ("home", "Home", "#548C80"), ("work", "Work", nil),
-      ].map { Preferences.Change.upsertTag(id: $0.0, name: $0.1, color: $0.2) }
+      ].map { GistPadPreferences.Change.upsertTag(id: $0.0, name: $0.1, color: $0.2) }
       + [
         ("menu", ["family", "cooking"]), ("garden", ["home"]), ("reading", ["books"]),
         ("lisbon", ["travel"]), ("sourdough", ["cooking"]), ("talk", ["work"]),
-      ].flatMap { gist, tags in tags.map { Preferences.Change.setTag(gistID: gist, tagID: $0, included: true) } }
+      ].flatMap { gist, tags in tags.map { GistPadPreferences.Change.setTag(gistID: gist, tagID: $0, included: true) } }
 
     private static let thanksgivingMenu =
       """

@@ -1,5 +1,5 @@
 import Editor
-import Interface
+import Screens
 import Observation
 import SwiftUI
 import Testing

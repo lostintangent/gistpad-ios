@@ -1,7 +1,7 @@
 import Comments
 import Editor
-import Interface
-import Notebook
+import Screens
+import Model
 import Observation
 import OSLog
 import SwiftUI
@@ -29,53 +29,53 @@ final class CommentsPresentation {
   var overlappingIDs: [Int64] = []
   var sidebarBeforeOpening: NavigationSplitViewVisibility?
   var requestedRowID: String?
-  private(set) var sessionID: UUID?
+  private(set) var editorID: UUID?
   private(set) var scope: Scope?
-  @ObservationIgnored let library: Library
-  @ObservationIgnored private var session: FileSession?
+  @ObservationIgnored let model: GistPadModel
+  @ObservationIgnored private var fileEditor: GistFileEditor?
   @ObservationIgnored private var afterDismiss: (() -> Void)?
   @ObservationIgnored private var returnsToEditing = false
 
-  init(library: Library) {
-    self.library = library
+  init(model: GistPadModel) {
+    self.model = model
   }
 
-  static func supports(_ file: File) -> Bool {
+  static func supports(_ file: GistFile) -> Bool {
     guard let gist = file.gist else { return false }
     return !gist.isDailyNote && !file.isRecovery
   }
 
-  func matches(_ file: File) -> Bool {
+  func matches(_ file: GistFile) -> Bool {
     guard let gistID = file.gist?.id else { return false }
     return scope == .init(accountID: file.accountID, gistID: gistID)
   }
 
-  func activate(_ next: FileSession) {
+  func activate(_ next: GistFileEditor) {
     let nextScope = Self.supports(next.file)
       ? next.file.gist.map { Scope(accountID: next.file.accountID, gistID: $0.id) } : nil
-    guard sessionID != next.editor.id || scope != nextScope else { return }
+    guard editorID != next.editor.id || scope != nextScope else { return }
     if scope != nextScope {
       hide()
       conversation = nil
     }
     scope = nextScope
-    session = next
-    sessionID = next.editor.id
+    fileEditor = next
+    editorID = next.editor.id
     sourceLinkedIDs = nil
     previewLinkedIDs = nil
     preparationFailure = nil
   }
 
-  func prepareAnnotations(for next: FileSession, showsInline: Bool) async {
-    guard showsInline, sessionID == next.editor.id else { return }
+  func prepareAnnotations(for next: GistFileEditor, showsInline: Bool) async {
+    guard showsInline, editorID == next.editor.id else { return }
     await prepare()?.refresh()
   }
 
   func open(
-    for next: FileSession, origin: FileMode? = nil,
+    for next: GistFileEditor, origin: FileMode? = nil,
     rootID: Int64? = nil, quote: String? = nil
   ) {
-    guard sessionID == next.editor.id, Self.supports(next.file) else { return }
+    guard editorID == next.editor.id, Self.supports(next.file) else { return }
     let opening = !isPresented
     if opening {
       returnsToEditing = next.editor.textView.isFirstResponder
@@ -92,15 +92,15 @@ final class CommentsPresentation {
     isPresented = true
     let filename = next.draft.filename
     Task {
-      guard let model = await prepare() else { return }
+      guard let conversation = await prepare() else { return }
       if let quote {
-        model.beginQuote(quote, filename: filename)
+        conversation.beginQuote(quote, filename: filename)
         isComposerFocused = true
       }
-      if model.comments == nil {
-        await model.refresh()
+      if conversation.comments == nil {
+        await conversation.refresh()
       } else if opening {
-        Task { await model.refresh() }
+        Task { await conversation.refresh() }
       }
       if rootID != nil { threadRevealRevision &+= 1 }
     }
@@ -136,11 +136,11 @@ final class CommentsPresentation {
     }
     let resumesEditing = returnsToEditing
     returnsToEditing = false
-    guard resumesEditing, let session, session.editor.canFormat,
-      !session.editor.textView.isHidden, session.editor.textView.window != nil
+    guard resumesEditing, let fileEditor, fileEditor.editor.canFormat,
+      !fileEditor.editor.textView.isHidden, fileEditor.editor.textView.window != nil
     else { return }
-    if !session.editor.textView.becomeFirstResponder() {
-      session.editor.inputError = String(localized: "Tap the file to resume writing.")
+    if !fileEditor.editor.textView.becomeFirstResponder() {
+      fileEditor.editor.inputError = String(localized: "Tap the file to resume writing.")
     }
   }
 
@@ -159,9 +159,9 @@ final class CommentsPresentation {
     afterDismiss = nil
     returnsToEditing = false
     conversation = nil
-    session = nil
+    fileEditor = nil
     scope = nil
-    sessionID = nil
+    editorID = nil
     requestedRowID = nil
     sourceLinkedIDs = nil
     previewLinkedIDs = nil
@@ -169,16 +169,16 @@ final class CommentsPresentation {
 
   private func prepare() async -> CommentsModel? {
     if let conversation { return conversation }
-    guard let scope, let gist = session?.file.gist else { return nil }
+    guard let scope, let gist = fileEditor?.file.gist else { return nil }
     do {
-      let services = try await library.comments(accountID: scope.accountID)
+      let services = try await model.comments(accountID: scope.accountID)
       guard self.scope == scope else { return nil }
       if let conversation { return conversation }
-      let model = CommentsModel(
+      let created = CommentsModel(
         gistID: scope.gistID, userID: services.userID, gistOwnerID: gist.owner?.id,
         remote: services.remote)
-      conversation = model
-      return model
+      conversation = created
+      return created
     } catch {
       guard self.scope == scope else { return nil }
       preparationFailure = error.localizedDescription

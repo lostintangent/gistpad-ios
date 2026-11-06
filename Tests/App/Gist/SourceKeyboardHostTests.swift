@@ -1,5 +1,5 @@
 @testable import Editor
-import Interface
+import Screens
 import SwiftUI
 import Testing
 import UIKit

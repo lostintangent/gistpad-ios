@@ -1,12 +1,12 @@
-import Interface
-import Notebook
+import Screens
+import Model
 import Preview
 import OSLog
 import SwiftUI
 
 struct OpeningFileView: View {
   let title: String
-  var file: File?
+  var file: GistFile?
   @State private var renderError: String?
   @State private var reload = 0
   @State private var progressTitle: String?

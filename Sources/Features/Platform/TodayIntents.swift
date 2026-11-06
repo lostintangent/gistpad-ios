@@ -1,7 +1,7 @@
 #if os(iOS)
 import AppIntents
 import Foundation
-import Sync
+import Store
 
 public struct AddToTodayIntent: AppIntent {
     public static let title: LocalizedStringResource = "Add to Today"

@@ -1,9 +1,9 @@
-import Interface
-import Sync
+import Screens
+import Store
 import SwiftUI
 
 struct SettingsSheet<Appearance: View>: View {
-  let account: Account?
+  let account: GistPadAccount?
   let savePreference: @MainActor (BooleanPreference, Bool) async throws -> Void
   let connect: @MainActor () -> Void
   let signOut: @MainActor () async throws -> Void
