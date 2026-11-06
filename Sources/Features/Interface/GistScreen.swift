@@ -154,7 +154,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
         ToolbarItem(placement: .primaryAction) {
             Menu {
                 ControlGroup {
-                    if let pin = actions.togglePin {
+                    if let pin = actions.togglePin, !gist.isDailyNote {
                         Button(
                             gist.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
                             systemImage: gist.isPinned ? "pin.fill" : "pin", action: pin
@@ -215,7 +215,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
                         Button(String(localized: "Open in GitHub", bundle: .module), systemImage: "arrow.up.right", action: open)
                     }
                 }
-                if let archive = actions.toggleArchive {
+                if let archive = actions.toggleArchive, !gist.isDailyNote {
                     Section {
                         Button(
                             gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),

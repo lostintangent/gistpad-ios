@@ -62,7 +62,7 @@ Headers use the system header font with `.headerProminence(.increased)` and a se
 
 No excerpts, thumbnails or cards. Vertical padding is 14 pt, scaled with Body, and the compact horizontal inset is 16 pt. At accessibility sizes the row stacks: title, metadata, then tags.
 
-Swipe trailing for **Delete** (red, confirmed) and **Archive** or **Unarchive** (system gray). Swipe leading for **Pin** or **Unpin**. The context menu offers Open Comments, Pin, Archive and Delete.
+Swipe trailing for **Delete** (red, confirmed) and **Archive** or **Unarchive** (system gray). Swipe leading for **Pin** or **Unpin**. The context menu offers Open Comments, Pin, Archive and Delete. A daily note is a file, not a gist, so it only offers Delete: no leading swipe, and no Pin or Archive anywhere.
 
 ### Search, filters and toolbars
 
@@ -95,6 +95,8 @@ The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and
 2. Rename Gist…, Tags, Files, Intelligence…, Find and Replace.
 3. Open in GitHub.
 4. Archive or Unarchive.
+
+A daily note leaves out Pin and Archive.
 5. **Delete Gist…**, or **Delete Daily Note…** on a daily note.
 
 **Delete.** Title **Delete “[title]”?** Message: **This deletes the gist from this iPhone and GitHub, including changes that haven't been published. This can't be undone.** A daily note says **the daily note** instead. Buttons Cancel and a destructive Delete. Deleting a daily note removes that day's file, or the gist when it's the last file.

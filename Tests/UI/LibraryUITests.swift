@@ -113,6 +113,28 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("mixed to leave the Library") { !mixed.exists }
   }
 
+  func testDailyNoteRowsOnlyOfferDelete() throws {
+    let app = launchGistPad()
+    let dailyNotes = app.element("library-collection-dailyNotes")
+    try waitUntil("the Library") { dailyNotes.exists }
+    dailyNotes.scrollIntoView(in: app)
+    dailyNotes.tap()
+    let day = app.libraryRows.matching(NSPredicate(format: "identifier BEGINSWITH 'library-note-daily/'")).firstMatch
+    try waitUntil("a daily note") { day.exists }
+    day.scrollIntoView(in: app)
+
+    day.swipeRight()
+    XCTAssertFalse(app.buttons["Pin"].firstMatch.waitForExistence(timeout: 2))
+    day.swipeLeft()
+    XCTAssertTrue(app.buttons["Delete"].firstMatch.waitForExistence(timeout: 5))
+    XCTAssertFalse(app.buttons["Archive"].exists)
+    day.swipeRight()
+
+    day.press(forDuration: 0.8)
+    XCTAssertTrue(app.buttons["Delete"].firstMatch.waitForExistence(timeout: 5))
+    XCTAssertFalse(app.buttons["Pin"].exists || app.buttons["Archive"].exists)
+  }
+
   func testANewGistCanBeDeletedRightAfterYouLeaveIt() throws {
     let app = launchGistPad()
     let create = app.buttons["library-create"].firstMatch

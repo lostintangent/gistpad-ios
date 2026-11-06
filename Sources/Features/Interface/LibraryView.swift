@@ -460,7 +460,7 @@ public struct LibraryView: View {
                 }
                 .tint(.red)
             }
-            if gist.isOwned, !gist.isRecovery {
+            if gist.canPinAndArchive {
                 Button {
                     actions.toggleArchive(gist.id)
                 } label: {
@@ -472,7 +472,7 @@ public struct LibraryView: View {
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            if gist.isOwned, !gist.isRecovery {
+            if gist.canPinAndArchive {
                 Button {
                     actions.togglePin(gist.id)
                 } label: {
@@ -492,7 +492,7 @@ public struct LibraryView: View {
                 String(localized: "Open Comments", bundle: .module), systemImage: "text.bubble"
             ) { actions.openComments(gist.id) }
         }
-        if gist.isOwned, !gist.isRecovery {
+        if gist.canPinAndArchive {
             Button(
                 gist.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
                 systemImage: gist.isPinned ? "pin.slash" : "pin"

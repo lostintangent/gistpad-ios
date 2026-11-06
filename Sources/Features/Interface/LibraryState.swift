@@ -65,6 +65,9 @@ public struct GistItem: Equatable, Identifiable, Sendable {
 
     public var supportsComments: Bool { gistID != nil && !isDailyNote }
 
+    /// Pin and Archive organize whole gists. A daily note is one file, so it only deletes.
+    var canPinAndArchive: Bool { isOwned && !isRecovery && !isDailyNote }
+
     public var visibleCommentCount: Int? {
         guard supportsComments, let commentCount, commentCount > 0 else { return nil }
         return commentCount
