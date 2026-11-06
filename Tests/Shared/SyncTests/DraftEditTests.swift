@@ -4,20 +4,12 @@ import Testing
 @testable import Sync
 
 @Suite struct DraftEditTests {
-    @Test func invalidUTF16OffsetsAndStaleGenerationsNeverMutateTheDraft() async throws {
+    @Test func aStaleAdditionNeverMutatesTheDraft() async throws {
         let store = try DraftStore.open(inMemory: true)
         let account = UUID()
-        let text = "\u{1F642} - [ ] Task"
+        let text = "- [ ] Task"
         let draft = try await store.newDraft(accountID: account, githubUserID: 42, text: text)
-        let splitSurrogate = DraftEdit(
-            draftID: draft.id, accountID: account, expectedGeneration: 0,
-            range: NSRange(location: 1, length: 0), expectedText: "", replacement: "broken"
-        )
-        await #expect(throws: DraftError.invalidEdit) { try await store.apply(splitSurrogate) }
-        let stale = DraftEdit(
-            draftID: draft.id, accountID: account, expectedGeneration: 3,
-            range: NSRange(location: 6, length: 1), expectedText: " ", replacement: "x"
-        )
+        let stale = DraftEdit(draftID: draft.id, accountID: account, expectedGeneration: 3, text: "x")
         await #expect(throws: DraftError.staleGeneration) { try await store.apply(stale) }
         #expect(try await store.draft(id: draft.id, accountID: account).text == text)
     }
@@ -62,11 +54,8 @@ import Testing
         try await upgraded.cacheLibrary(
             owned: [], starred: [], preferences: Preferences(metadata: [:]), accountID: account
         )
-        let edit = DraftEdit(
-            draftID: id, accountID: account, expectedGeneration: 7,
-            range: NSRange(location: 0, length: 8), expectedText: "unsynced", replacement: "accepted"
-        )
-        #expect(try await upgraded.apply(edit).text == "accepted source")
+        let edit = DraftEdit(draftID: id, accountID: account, expectedGeneration: 7, text: " accepted")
+        #expect(try await upgraded.apply(edit).text == "unsynced source accepted")
         #expect(try await upgraded.cachedLibrary(accountID: account) != nil)
     }
 }

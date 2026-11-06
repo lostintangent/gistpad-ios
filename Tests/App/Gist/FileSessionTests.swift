@@ -176,8 +176,7 @@ struct FileSessionTests {
     let image = "\n![Image](https://example.test/image.png)"
     let insertion = DraftEdit(
       draftID: session.draft.id, accountID: fixture.account.id,
-      expectedGeneration: session.editor.generation, range: NSRange(location: 4, length: 0),
-      expectedText: "", replacement: image)
+      expectedGeneration: session.editor.generation, text: image)
     try await session.applyDurableEdit(insertion) { try await fixture.store.apply(insertion) }
     #expect(session.editor.text == "Base" + image)
     session.editor.textView.undoManager?.undo()

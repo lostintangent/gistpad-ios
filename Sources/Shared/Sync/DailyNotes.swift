@@ -99,8 +99,7 @@ extension DraftEdit {
             : asTask || source.hasSuffix("\n") ? "\n" : "\n\n"
         return Self(
             draftID: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation,
-            range: NSRange(location: source.utf16.count, length: 0), expectedText: "",
-            replacement: separator + content + "\n")
+            text: separator + content + "\n")
     }
 }
 

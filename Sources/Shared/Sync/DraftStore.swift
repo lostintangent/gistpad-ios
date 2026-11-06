@@ -75,7 +75,6 @@ public enum DraftError: Error, Equatable, Sendable {
     case notFound
     case accountMismatch
     case staleGeneration
-    case invalidEdit
     case publishInProgress
     case unresolvedConflict
     case readOnly
@@ -91,7 +90,7 @@ extension DraftError: LocalizedError {
         switch self {
         case .notFound: String(localized: "This file is no longer on this iPhone.")
         case .accountMismatch: String(localized: "This gist belongs to another GitHub account.")
-        case .staleGeneration, .invalidEdit:
+        case .staleGeneration:
             String(localized: "This file changed. Review the latest version first.")
         case .publishInProgress: String(localized: "Wait for this gist to finish publishing.")
         case .unresolvedConflict:
@@ -106,44 +105,19 @@ extension DraftError: LocalizedError {
     }
 }
 
-/// One replacement in a draft's text from outside the editor, like Add to Today. It lands only
-/// while the draft is still at `expectedGeneration` and `range` still holds `expectedText`, so a
-/// stale or repeated edit can't change newer text.
+/// Text added to the end of a draft from outside the editor, like Add to Today. It lands only while
+/// the draft is still at `expectedGeneration`, so a stale or repeated addition can't change newer text.
 public struct DraftEdit: Equatable, Sendable {
     public let draftID: UUID
     public let accountID: UUID
     public let expectedGeneration: UInt64
-    public let range: NSRange
-    public let expectedText: String
-    public let replacement: String
+    public let text: String
 
-    public init(
-        draftID: UUID, accountID: UUID, expectedGeneration: UInt64,
-        range: NSRange, expectedText: String, replacement: String
-    ) {
+    public init(draftID: UUID, accountID: UUID, expectedGeneration: UInt64, text: String) {
         self.draftID = draftID
         self.accountID = accountID
         self.expectedGeneration = expectedGeneration
-        self.range = range
-        self.expectedText = expectedText
-        self.replacement = replacement
-    }
-
-    func apply(to text: String) throws -> String {
-        let source = text as NSString
-        guard range.location >= 0, range.length >= 0, range.location <= source.length,
-              range.length <= source.length - range.location,
-              isScalarBoundary(range.location, in: source),
-              isScalarBoundary(NSMaxRange(range), in: source),
-              sourceEqual(source.substring(with: range), expectedText)
-        else { throw DraftError.invalidEdit }
-        return source.replacingCharacters(in: range, with: replacement)
-    }
-
-    private func isScalarBoundary(_ offset: Int, in source: NSString) -> Bool {
-        guard offset > 0, offset < source.length else { return true }
-        return !(0xD800...0xDBFF).contains(source.character(at: offset - 1))
-            || !(0xDC00...0xDFFF).contains(source.character(at: offset))
+        self.text = text
     }
 }
 
@@ -420,7 +394,7 @@ public actor DraftStore {
     public func apply(_ edit: DraftEdit) throws -> Draft {
         let draft = try find(edit.draftID, accountID: edit.accountID)
         guard draft.generation == edit.expectedGeneration else { throw DraftError.staleGeneration }
-        try replaceText(draft, text: edit.apply(to: draft.text), generation: draft.generation + 1)
+        try replaceText(draft, text: draft.text + edit.text, generation: draft.generation + 1)
         try commit()
         return try snapshot(draft)
     }

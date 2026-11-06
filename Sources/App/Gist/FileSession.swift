@@ -315,7 +315,9 @@ final class FileSession {
       throw AccountError.accountChanged
     }
     try await commitMutation(
-      Edit(range: edit.range, expected: edit.expectedText, replacement: edit.replacement),
+      Edit(
+        range: NSRange(location: editor.text.utf16.count, length: 0), expected: "",
+        replacement: edit.text),
       expectedGeneration: edit.expectedGeneration, commit: commit)
   }
 

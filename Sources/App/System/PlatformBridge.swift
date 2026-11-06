@@ -240,8 +240,7 @@ final class PlatformBridge: DailyNoteActions {
       try await self.apply(
         DraftEdit(
           draftID: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation,
-          range: NSRange(location: draft.text.utf16.count, length: 0),
-          expectedText: "", replacement: addition))
+          text: addition))
       guard let body = self.visibleBody(for: note, accountID: draft.accountID) else {
         return note.withoutBody()
       }
