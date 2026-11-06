@@ -106,6 +106,7 @@ struct FileSessionTests {
     let daily = try #require(fixture.server.gists.first { $0.isDailyNote })
     #expect(fixture.remote(daily.id, today.filename) == session.editor.text)
     #expect(session.saveState == .savedToGitHub)
+    #expect(session.file.gist?.id == daily.id)
   }
 
   @Test func restoredGenerationsAndRapidEditsPersistInOrder() async throws {

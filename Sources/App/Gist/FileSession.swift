@@ -375,8 +375,13 @@ final class FileSession {
     draft = persisted
     file.draft = persisted
     hasReconnected = false
-    guard persisted.state == .savedToGitHub,
-      let gist = try? await library.adoptPublication(persisted)
+    adoptPublishedGist()
+  }
+
+  /// Points the file at the gist its publish just cached, so a new note's first publish gives it one.
+  private func adoptPublishedGist() {
+    guard draft.state == .savedToGitHub || draft.state == .savedLocally,
+      let gist = library.cachedLibrary?.gists.first(where: { $0.id == draft.gistID })
     else { return }
     file.gist = gist
   }
@@ -456,21 +461,7 @@ final class FileSession {
       // Typing saved after GitHub acknowledged the publish is newer than what it returns.
       if saved.generation >= draft.generation { draft = saved }
       file.draft = draft
-      if saved.state == .savedToGitHub || saved.state == .savedLocally {
-        if reason == .background || reason == .leaving, Task.isCancelled || !shouldContinue() { return }
-        do {
-          let gist = try await library.adoptPublication(saved)
-          if let gist {
-            file.gist = gist
-            file.draft = saved
-          }
-        } catch {
-          // The text reached GitHub, and the next refresh catches its details up.
-          logger.error(
-            "Saved-file metadata refresh failed: \(String(reflecting: type(of: error)), privacy: .public)"
-          )
-        }
-      }
+      adoptPublishedGist()
     } catch {
       if !(error is CancellationError) {
         logger.error(
