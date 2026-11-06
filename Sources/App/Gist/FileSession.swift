@@ -7,22 +7,19 @@ import Observation
 
 enum EditError: LocalizedError {
   case localPersistenceFailed
-  case invalidCommittedEdit
 
   var errorDescription: String? {
-    switch self {
-    case .localPersistenceFailed:
-      String(
-        localized:
-          "Your latest changes couldn't be saved on this iPhone. Keep the editor open and retry the local save."
-      )
-    case .invalidCommittedEdit:
-      String(
-        localized:
-          "The accepted edit couldn't be matched to this editor. Keep it open to recover both versions."
-      )
-    }
+    String(
+      localized:
+        "Your latest changes couldn't be saved on this iPhone. Keep the editor open and retry the local save."
+    )
   }
+}
+
+enum PublishReason: Equatable, Sendable {
+  case manual
+  case autosave
+  case background
 }
 
 @MainActor
@@ -32,8 +29,8 @@ final class FileSession {
   let editor: Editor
   private(set) var draft: Draft
   private var publishing: Task<Void, Never>?
-  /// Reconnecting GitHub lets a note that's waiting on it publish again.
-  private var hasReconnected = false
+  /// Why the last publish didn't land, until you type, publish again or reconnect GitHub.
+  private var failure: PublishState?
   private(set) var isPerformingDestructiveAction = false
   private(set) var isApplyingDurableEdit = false
   private(set) var remoteInspectionProblem: RemoteReadProblem?
@@ -43,7 +40,6 @@ final class FileSession {
   @ObservationIgnored private var autosaveTask: Task<Void, Never>?
   @ObservationIgnored private var scheduledAutosave: AutosaveRequest?
   @ObservationIgnored private var lastEditingRequestID: UUID?
-  @ObservationIgnored private var isDiscarded = false
   @ObservationIgnored private let autosaveDelay: Duration
   @ObservationIgnored private var isInspectingRemote = false
   /// When this note last read GitHub, so opening it again reads only once that's stale.
@@ -51,18 +47,15 @@ final class FileSession {
   @ObservationIgnored private let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "File")
 
-  init(
-    file: File, draft: Draft, library: Library,
-    autosaveDelay: Duration = .seconds(5)
-  ) {
+  init(file: File, library: Library, autosaveDelay: Duration = .seconds(5)) {
     self.file = file
-    self.draft = draft
+    draft = file.draft
     self.library = library
     self.autosaveDelay = autosaveDelay
     editor = Editor(
       fileID: file.id, text: draft.text, generation: draft.generation,
       showsFrontMatter: library.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
-    if draft.base == nil { mode = .edit }
+    if isNew { mode = .edit }
     editor.textView.isEditable = details.access.canEdit
     applyWritingPreferences()
     editor.onEdit = { [weak self] text, generation in
@@ -78,6 +71,9 @@ final class FileSession {
     try await library.uploadImage(image, gistID: gistID, accountID: accountID)
   }
 
+  /// A new gist, a new day or an empty file, which opens for writing.
+  var isNew: Bool { draft.base == nil || draft.text.isEmpty }
+
   /// The gist's header and actions, always current with the library.
   var details: GistDetails { library.details(for: file) }
 
@@ -86,14 +82,14 @@ final class FileSession {
   var saveState: PublishState {
     if file.isRecovery { return .failed(.readOnly) }
     if isPublishing { return .savingToGitHub(generation: draft.generation) }
-    if draft.state == .reconnect, hasReconnected { return .savedLocally }
-    return draft.state
+    if case .conflict = draft.state { return draft.state }
+    return failure ?? draft.state
   }
 
   var isPublishing: Bool { publishing != nil }
 
   var canMutate: Bool {
-    details.access.canEdit && !isDiscarded && editor.isSettled
+    details.access.canEdit && editor.isSettled
       && !isPerformingDestructiveAction
       && !isApplyingDurableEdit
   }
@@ -178,9 +174,11 @@ final class FileSession {
     return autosaveTask
   }
 
-  func refreshMetadata(gist: Gist? = nil) async throws {
-    adopt(try await library.draft(id: draft.id, accountID: draft.accountID))
-    file.filename = draft.filename
+  /// Brings the note's name and gist up to date after a change. A file GitHub renamed before you
+  /// typed in it takes `filename`.
+  func refreshMetadata(gist: Gist? = nil, filename: String? = nil) async throws {
+    adopt(try await library.current(draft))
+    if !draft.isSaved, let filename { adopt(draft.renamed(filename)) }
     if let gist { file.gist = gist }
     editor.textView.isEditable =
       details.access.canEdit && !isPerformingDestructiveAction && !isApplyingDurableEdit
@@ -194,11 +192,11 @@ final class FileSession {
       library.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
   }
 
-  /// Reads this note from GitHub as it opens or the app comes back. A note without unpublished
-  /// edits takes GitHub's newer text, and one with edits shows the conflict.
+  /// Reads this note from GitHub as it opens or the app comes back. A note you haven't typed in
+  /// takes GitHub's newer text, and one with edits shows the conflict.
   func inspectRemoteChanges() async {
     guard Library.isStale(refreshedAt), !isInspectingRemote, !isPublishing, canMutate,
-      !file.isRecovery, draft.gistID != nil, !draft.isDiscardableBlank,
+      !file.isRecovery, draft.gistID != nil,
       library.account?.id == draft.accountID, library.pendingAccount == nil
     else { return }
     if case .conflict = draft.state { return }
@@ -208,32 +206,23 @@ final class FileSession {
     let generation = editor.generation
     do {
       guard
-        case .remoteRead(let current, let remote) = try await library.perform(
-          .fetchRemote(draftID: draft.id)),
+        case .remoteRead(let current, let remote?) = try await library.perform(
+          .fetchRemote(draft)),
         current.id == draft.id, current.generation == generation,
         editor.generation == generation, !isPublishing, canMutate
       else { return }
-      if let remote, let content = remote.content, current.adoptsRemote(content) {
-        // Every text change bumps the generation, so this commit is refused if any edit or publish
-        // landed after the fetch. Adoption can't overwrite unpublished text.
-        try await commitMutation(
-          Edit(
-            range: NSRange(location: 0, length: editor.text.utf16.count),
-            expected: editor.text, replacement: content),
-          expectedGeneration: current.generation
-        ) {
-          guard
-            case .review(let adopted) = try await library.perform(
-              .adoptRemote(
-                draftID: draft.id, generation: current.generation, remote: content,
-                revision: remote.gist.revision))
-          else { throw ChangeError.staleReview }
-          return adopted
+      if !current.isSaved {
+        if let content = remote.content, !sourceEqual(content, current.base) {
+          // Every text change bumps the generation, so this is refused if you typed after the fetch.
+          try await commitMutation(
+            Edit(
+              range: NSRange(location: 0, length: editor.text.utf16.count),
+              expected: editor.text, replacement: content),
+            expectedGeneration: current.generation
+          ) { current.adopting(content, revision: remote.gist.revision) }
         }
       } else if case .review(let recorded) = try await library.perform(
-        .recordRemote(
-          draftID: draft.id, generation: current.generation, remote: remote?.content,
-          revision: remote?.gist.revision))
+        .recordRemote(current, remote: remote.content, revision: remote.gist.revision))
       {
         adopt(recorded)
       }
@@ -258,10 +247,7 @@ final class FileSession {
   }
 
   var hasUnpublishedChanges: Bool {
-    guard !isDiscarded else { return false }
-    if draft.isDiscardableBlank, editor.text.utf8.elementsEqual(draft.text.utf8) { return false }
-    guard let base = draft.base else { return true }
-    return !editor.text.utf8.elementsEqual(base.utf8) || draft.sentGeneration != nil
+    draft.hasUnpublishedEdits || editor.generation > draft.generation
   }
 
   func reviewContext() throws -> Conflict {
@@ -303,21 +289,21 @@ final class FileSession {
 
   func endDestructiveAction() {
     isPerformingDestructiveAction = false
-    editor.textView.isEditable = details.access.canEdit && !isDiscarded
+    editor.textView.isEditable = details.access.canEdit
   }
 
   func applyDurableEdit(
     _ edit: DraftEdit,
     commit: @MainActor () async throws -> Draft
   ) async throws {
-    guard edit.accountID == draft.accountID, edit.draftID == draft.id else {
+    guard edit.draft.accountID == draft.accountID, edit.draft.id == draft.id else {
       throw AccountError.accountChanged
     }
     try await commitMutation(
       Edit(
         range: NSRange(location: editor.text.utf16.count, length: 0), expected: "",
         replacement: edit.text),
-      expectedGeneration: edit.expectedGeneration, commit: commit)
+      expectedGeneration: edit.draft.generation, commit: commit)
   }
 
   func commitMutation(
@@ -340,12 +326,6 @@ final class FileSession {
     guard editor.generation == expectedGeneration, editor.isSettled
     else { throw DraftError.staleGeneration }
     let committed = try await commit()
-    guard committed.id == draft.id, committed.accountID == draft.accountID,
-      committed.generation == (changed ? expectedGeneration + 1 : expectedGeneration),
-      committed.text.utf8.elementsEqual(result.utf8)
-    else {
-      throw EditError.invalidCommittedEdit
-    }
     if changed {
       try editor.apply(edit, generation: expectedGeneration)
     }
@@ -354,23 +334,7 @@ final class FileSession {
   }
 
   func didReconnect() {
-    hasReconnected = true
-  }
-
-  // Library retries can save this file while it is open, so its persisted state is re-read.
-  func refreshPersistedState() async {
-    guard !isPublishing, !isDiscarded, !file.isRecovery else { return }
-    let persisted: Draft
-    do {
-      persisted = try await library.draft(id: draft.id, accountID: draft.accountID)
-    } catch {
-      logger.error(
-        "File state refresh failed: \(String(reflecting: type(of: error)), privacy: .public)")
-      return
-    }
-    adopt(persisted)
-    hasReconnected = false
-    adoptPublishedGist()
+    failure = nil
   }
 
   /// Points the file at the gist its publish just cached, so a new note's first publish gives it one.
@@ -392,33 +356,11 @@ final class FileSession {
     await publishing?.value
   }
 
-  @discardableResult
-  func leave() async -> Bool {
+  /// Leaving a note publishes your edits.
+  func leave() async {
     editor.commitComposition()
-    guard await waitForLocalSave() else { return false }
-    if draft.isDiscardableBlank, library.isDraftSelected(draft.id) { return false }
-    if draft.isDiscardableBlank,
-      canMutate, !isPublishing,
-      editor.generation == draft.generation, editor.text.utf8.elementsEqual(draft.text.utf8)
-    {
-      do {
-        try beginDestructiveAction()
-        defer { endDestructiveAction() }
-        if try await library.discardBlankDraft(draft) {
-          isDiscarded = true
-          autosaveTask?.cancel()
-          autosaveTask = nil
-          return true
-        }
-      } catch {
-        logger.error(
-          "Blank draft cleanup failed: \(String(reflecting: type(of: error)), privacy: .public)")
-        return false
-      }
-    }
-    guard hasUnpublishedChanges else { return false }
+    guard await waitForLocalSave(), hasUnpublishedChanges else { return }
     await publish(reason: .background)
-    return false
   }
 
   func publish(
@@ -446,34 +388,22 @@ final class FileSession {
     guard await waitForLocalSave(), !Task.isCancelled, shouldContinue(), canMutate,
       publicationAllowed(reason: reason)
     else { return }
-    let expectedGeneration = editor.generation
-    hasReconnected = false
+    failure = nil
     do {
-      let saved = try await library.publish(
-        draftID: draft.id, accountID: draft.accountID, reason: reason,
-        expectedGeneration: reason == .manual ? nil : expectedGeneration,
-        shouldPublish: { [weak self] in
-          await MainActor.run {
-            guard let self else { return false }
-            return shouldContinue() && self.canMutate && !self.file.isRecovery
-              && self.publicationAllowed(reason: reason)
-              && self.editor.generation == expectedGeneration
-          }
-        })
-      adopt(saved)
+      // A new gist publishes when you ask, even before you type in it.
+      if reason == .manual, !draft.isSaved, draft.gistID == nil {
+        draft = try await library.keep(draft)
+      }
+      adopt(try await library.publish(draft))
       adoptPublishedGist()
     } catch {
-      if !(error is CancellationError) {
+      if !(error is CancellationError || (error as? URLError)?.code == .cancelled) {
         logger.error(
           "Publishing failed: \(String(reflecting: type(of: error)), privacy: .public)")
+        failure = PublishState(failure: error)
       }
-      do {
-        adopt(try await library.draft(id: draft.id, accountID: draft.accountID))
-      } catch {
-        logger.error(
-          "Publication-state reload failed: \(String(reflecting: type(of: error)), privacy: .public)"
-        )
-      }
+      // The publish may have recorded sent text or found its gist before it stopped.
+      if let current = try? await library.current(draft) { adopt(current) }
     }
   }
 
@@ -496,14 +426,12 @@ final class FileSession {
 
   private func persist(text: String, generation: UInt64) {
     let previous = persistence
-    let draftID = draft.id
-    let accountID = draft.accountID
     persistence = Task { [weak self] in
       _ = await previous?.value
       guard let self else { return false }
       do {
-        draft = try await library.persist(
-          draftID: draftID, accountID: accountID, text: text, generation: generation)
+        draft = try await library.save(draft, text: text, generation: generation)
+        failure = nil
         return true
       } catch {
         logger.error(

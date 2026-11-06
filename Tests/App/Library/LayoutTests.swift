@@ -81,14 +81,11 @@ struct LayoutTests {
     let accountID = UUID()
     let original = (1...80).map { "Paragraph \($0): a retained native notebook." }.joined(
       separator: "\n\n")
-    let draft = try await store.newGistDraft(accountID: accountID, githubUserID: 42, content: original)
+    let draft = Draft(accountID: accountID, githubUserID: 42, text: original)
     let session = Editor(fileID: draft.id.uuidString, text: draft.text)
     var persistence: Task<Draft, any Error>?
     session.onEdit = { text, generation in
-      persistence = Task {
-        try await store.persist(
-          id: draft.id, accountID: accountID, text: text, generation: generation)
-      }
+      persistence = Task { try await store.save(draft, text: text, generation: generation) }
     }
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)

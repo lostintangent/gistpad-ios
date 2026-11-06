@@ -1,41 +1,28 @@
 import Foundation
 import Sync
 
+/// A note in the detail column: its draft, whether stored or just read, and the gist it's in.
 struct File: Equatable, Sendable, Identifiable {
-  let accountID: UUID
+  var draft: Draft
   var gist: Gist?
-  var filename: String
-  let text: String
-  var draft: Draft?
   var isRecovery: Bool
   var libraryRowID: String?
   var editingRequestID: UUID?
   var revealsDetail = true
-  var activationID: String { editingRequestID?.uuidString ?? id }
   let id: String
-
-  init(accountID: UUID, gist: Gist, filename: String, text: String) {
-    self.accountID = accountID
-    self.gist = gist
-    self.filename = filename
-    self.text = text
-    draft = nil
-    isRecovery = false
-    id = "\(accountID.uuidString)/\(gist.id)/\(filename)"
-  }
+  var accountID: UUID { draft.accountID }
+  var filename: String { draft.filename }
+  var activationID: String { editingRequestID?.uuidString ?? id }
 
   init(draft: Draft, gist: Gist? = nil, isRecovery: Bool = false) {
-    accountID = draft.accountID
-    self.gist = gist
-    filename = draft.filename
-    text = draft.text
     self.draft = draft
+    self.gist = gist
     self.isRecovery = isRecovery
     id = "\(draft.accountID.uuidString)/draft/\(draft.id.uuidString)"
   }
 
   var selection: FileReference {
-    FileReference(gistID: gist?.id ?? draft?.gistID, filename: filename, draftID: draft?.id)
+    FileReference(gistID: gist?.id ?? draft.gistID, filename: filename, draftID: draft.id)
   }
 
   var rowID: String {
@@ -48,7 +35,7 @@ struct File: Equatable, Sendable, Identifiable {
 
   func refersToSameFile(as other: File) -> Bool {
     guard accountID == other.accountID, filename == other.filename else { return false }
-    if let draftID = draft?.id, draftID == other.draft?.id { return true }
+    if draft.id == other.draft.id { return true }
     if let gistID = selection.gistID { return gistID == other.selection.gistID }
     return false
   }

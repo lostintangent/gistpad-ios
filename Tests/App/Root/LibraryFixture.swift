@@ -56,13 +56,12 @@ struct LibraryFixture {
   /// A local edit made before this launch, of a gist that's on GitHub or that used to be.
   func stageEdit(gistID: String, filename: String, text: String) async throws -> Draft {
     let gist = server.gists.first { $0.id == gistID }
-    let draft = try await store.draft(
+    let content = gist?.files[filename]?.content
+    let draft = Draft(
       accountID: account.id, githubUserID: FixtureServer.you.id, gistID: gistID,
-      filename: filename, description: gist?.description ?? "",
-      content: gist?.files[filename]?.content ?? "", revision: gist?.revision,
-      isNewFile: gist != nil && gist?.files[filename] == nil)
-    return try await store.persist(
-      id: draft.id, accountID: account.id, text: text, generation: draft.generation + 1)
+      filename: filename, description: gist?.description ?? "", text: content ?? "",
+      base: gist == nil ? "" : content, baseRevision: gist?.revision)
+    return try await store.save(draft, text: text, generation: draft.generation + 1)
   }
 
   /// Fails every request whose "METHOD /path" starts with `prefix`, as if offline unless `code`

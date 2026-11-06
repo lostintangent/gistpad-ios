@@ -76,7 +76,7 @@ published. `compareWithGitHub` decides everything else about GitHub's copy, for
 both opening a note and publishing. A copy that matches the draft or its sent
 text is confirmed, and any other change becomes a `DraftConflict`, including a file
 deleted on GitHub. `resolveConflict` makes GitHub's text the new base after the
-editor applies the chosen text as one undoable edit. `updateDraftMetadata`
+editor applies the chosen text as one undoable edit. `rename`
 follows a rename, `removeDrafts` forgets a gist or file that GitHub deleted, and
 `discardLocalCopy` deletes a gist that's only on the phone.
 

@@ -8,15 +8,14 @@ enum Change: Equatable, Sendable {
   case star(gistID: String, starred: Bool)
   case archive(gistID: String, archived: Bool)
   case rename(gistID: String, title: String)
-  case renameLocal(draftID: UUID, title: String)
+  case renameLocal(Draft, title: String)
   case renameFile(gistID: String, filename: String, newFilename: String)
   case addFile(gistID: String, filename: String)
   case delete(gistID: String)
   case deleteFile(gistID: String, filename: String)
-  case fetchRemote(draftID: UUID)
-  case recordRemote(draftID: UUID, generation: UInt64, remote: String?, revision: String?)
-  case adoptRemote(draftID: UUID, generation: UInt64, remote: String, revision: String?)
-  case discardLocalCopy(draftID: UUID, generation: UInt64)
+  case fetchRemote(Draft)
+  case recordRemote(Draft, remote: String?, revision: String?)
+  case discardLocalCopy(Draft)
   case resolveConflict(Conflict, text: String, generation: UInt64)
 }
 
@@ -91,41 +90,39 @@ extension GitHubSync {
     case .signOut:
       try await accounts.signOut(accountID: accountID)
       return .signedOut
-    case .discardLocalCopy(let id, let generation):
-      try await drafts.discardLocalCopy(
-        id: id, accountID: accountID, expectedGeneration: generation)
-      return .discardedDraft(id)
-    case .renameLocal(let id, let title):
+    case .discardLocalCopy(let draft):
+      try await drafts.discardLocalCopy(id: draft.id, accountID: accountID)
+      return .discardedDraft(draft.id)
+    case .renameLocal(let draft, let title):
       guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         throw ChangeError.invalidTitle
       }
-      let draft = try await drafts.draft(id: id, accountID: accountID)
+      guard draft.accountID == accountID else { throw AccountError.accountChanged }
+      let kept = try await drafts.keep(draft)
+      guard kept.sentGeneration == nil else { throw ChangeError.publicationInProgress }
       return .draft(
-        try await drafts.updateDraftMetadata(
-          id: id, accountID: accountID, expectedFilename: draft.filename,
-          filename: draft.filename, description: title))
-    case .fetchRemote(let id):
-      let current = try await drafts.draft(id: id, accountID: accountID)
+        try await drafts.rename(
+          kept.id, accountID: accountID, filename: kept.filename, description: title))
+    case .fetchRemote(let draft):
+      let current = try await drafts.current(draft)
       guard let gistID = current.gistID else { return .remoteRead(current, nil) }
       let client = await client(accountID: accountID)
-      return .remoteRead(
-        current,
-        try await client.remoteFile(
-          gistID: gistID, ownerID: current.githubUserID, filename: current.filename))
-    case .recordRemote(let id, let generation, let remote, let revision):
+      let remote = try await client.remoteFile(
+        gistID: gistID, ownerID: current.githubUserID, filename: current.filename)
+      try await drafts.cacheGist(remote.gist, accountID: accountID)
+      if let content = remote.content {
+        try await drafts.cacheContent(
+          content, gist: remote.gist, filename: current.filename, accountID: accountID)
+      }
+      return .remoteRead(current, remote)
+    case .recordRemote(let draft, let remote, let revision):
       return .review(
-        try await drafts.compareWithGitHub(
-          id: id, accountID: accountID, expectedGeneration: generation,
-          remote: remote, revision: revision))
-    case .adoptRemote(let id, let generation, let remote, let revision):
-      return .review(
-        try await drafts.refreshPublishedDraft(
-          id: id, accountID: accountID, expectedGeneration: generation,
-          content: remote, revision: revision))
+        try await drafts.compareWithGitHub(draft, remote: remote, revision: revision))
     case .resolveConflict(let review, let text, let generation):
       guard review.draft.accountID == accountID else { throw AccountError.accountChanged }
-      let current = try await drafts.draft(id: review.draft.id, accountID: accountID)
-      guard review.matches(current) else { throw ChangeError.staleReview }
+      guard let current = try await drafts.draft(id: review.draft.id, accountID: accountID),
+        review.matches(current)
+      else { throw ChangeError.staleReview }
       return .review(
         try await drafts.resolveConflict(
           id: current.id, accountID: accountID, expectedGeneration: current.generation,
@@ -149,9 +146,9 @@ extension GitHubSync {
       }
       let updated = try await client.updateDescription(title, gist: gist)
       for draft in local {
-        _ = try await drafts.updateDraftMetadata(
-          id: draft.id, accountID: accountID, expectedFilename: draft.filename,
-          filename: draft.filename, description: updated.description ?? "")
+        _ = try await drafts.rename(
+          draft.id, accountID: accountID, filename: draft.filename,
+          description: updated.description ?? "")
       }
       return .gist(updated)
     case .renameFile(let id, let filename, let newFilename):
@@ -169,19 +166,21 @@ extension GitHubSync {
       }
       let updated = try await client.updateGist(id: id, files: [filename: .rename(newFilename)])
       for draft in local where draft.filename == filename {
-        _ = try await drafts.updateDraftMetadata(
-          id: draft.id, accountID: accountID, expectedFilename: filename,
-          filename: newFilename, description: updated.description ?? "")
+        _ = try await drafts.rename(
+          draft.id, accountID: accountID, filename: newFilename,
+          description: updated.description ?? "")
       }
       return .gist(updated)
     case .addFile(let id, let filename):
-      let (_, gist, userID) = try await ownedGist(id: id, account: account)
+      let (client, gist, userID) = try await ownedGist(id: id, account: account)
       try Self.validateFilename(filename)
       guard gist.files[filename] == nil else { throw ChangeError.filenameExists }
-      let draft = try await drafts.draft(
-        accountID: accountID, githubUserID: userID, gistID: id, filename: filename,
-        description: gist.description ?? "", content: "", isNewFile: true)
-      return .draft(draft, gist: gist)
+      let updated = try await client.updateGist(id: id, files: [filename: .content("")])
+      try await drafts.cacheGist(updated, accountID: accountID)
+      try await drafts.cacheContent("", gist: updated, filename: filename, accountID: accountID)
+      let draft = Draft(
+        accountID: accountID, githubUserID: userID, gist: updated, filename: filename, text: "")
+      return .draft(draft, gist: updated)
     case .delete(let id):
       let (client, _, _) = try await ownedGist(id: id, account: account)
       return try await deleteGist(id, client: client, accountID: accountID)

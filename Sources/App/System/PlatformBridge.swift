@@ -197,7 +197,8 @@ final class PlatformBridge: DailyNoteActions {
       }
       let draft = try await self.todayDraft(accountID: accountID, target: target)
       try await self.apply(.addToToday(text, asTask: asTask, to: draft))
-      return .unpublishedGist(accountID: accountID, draftID: draft.id)
+      return draft.gistID.map { .gist(id: $0, filename: draft.filename) }
+        ?? .unpublishedGist(accountID: accountID, draftID: draft.id)
     }
   }
 
@@ -237,10 +238,7 @@ final class PlatformBridge: DailyNoteActions {
       let newline = draft.text.contains("\r\n") ? "\r\n" : "\n"
       let addition = (draft.text.isEmpty || draft.text.last?.isNewline == true ? "" : newline)
         + text + (text.last?.isNewline == true ? "" : newline)
-      try await self.apply(
-        DraftEdit(
-          draftID: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation,
-          text: addition))
+      try await self.apply(DraftEdit(draft: draft, text: addition))
       guard let body = self.visibleBody(for: note, accountID: draft.accountID) else {
         return note.withoutBody()
       }
@@ -267,8 +265,8 @@ final class PlatformBridge: DailyNoteActions {
             throw PlatformError.unsupportedNoteUpdate
           }
           _ = try await library.apply(.rename(gistID: id, title: name), accountID: draft.accountID)
-        case .unpublishedGist(_, let id):
-          _ = try await library.apply(.renameLocal(draftID: id, title: name), accountID: draft.accountID)
+        case .unpublishedGist:
+          _ = try await library.apply(.renameLocal(draft, title: name), accountID: draft.accountID)
         case .gist, .today, .addToToday, .newGist:
           throw PlatformError.unsupportedNoteUpdate
         }
@@ -298,7 +296,6 @@ final class PlatformBridge: DailyNoteActions {
       throw PlatformError.accountChanged
     }
     try await validateAccount(accountID)
-    let draft: Draft
     switch note.link {
     case .gist(let id, let filename):
       let local = try await sync.localState(accountID: accountID)
@@ -309,26 +306,23 @@ final class PlatformBridge: DailyNoteActions {
       if let existing = local.drafts.first(where: {
         $0.gistID == id && $0.filename == filename
       }) {
-        draft = try await store.draft(id: existing.id, accountID: accountID)
-      } else {
-        guard gist.markdownFilenames.contains(filename) else { throw DraftError.notFound }
-        let text = try await sync.content(gist: gist, filename: filename, accountID: accountID)
-        draft = try await sync.draft(for: File(
-          accountID: accountID, gist: gist, filename: filename, text: text))
+        return try await current(existing)
       }
+      guard gist.markdownFilenames.contains(filename) else { throw DraftError.notFound }
+      let userID = try await sync.verifiedUserID(accountID: accountID)
+      let text = try await sync.content(gist: gist, filename: filename, accountID: accountID)
+      return try await current(
+        Draft(accountID: accountID, githubUserID: userID, gist: gist, filename: filename, text: text))
     case .unpublishedGist(let owner, let id):
       guard owner == accountID else { throw PlatformError.accountChanged }
-      draft = try await store.draft(id: id, accountID: accountID)
+      guard let draft = try await store.draft(id: id, accountID: accountID) else {
+        throw DraftError.notFound
+      }
       guard draft.gistID == nil else { throw DraftError.staleGeneration }
+      return try await current(draft)
     case .today, .addToToday, .newGist:
       throw DraftError.notFound
     }
-    if let session = sessions[draft.id]?.value {
-      guard session.canMutate, await session.waitForLocalSave() else {
-        throw PlatformError.editingInProgress
-      }
-    }
-    return try await store.draft(id: draft.id, accountID: accountID)
   }
 
   /// Today's file as you last saved it, started the same way the app starts today.
@@ -336,13 +330,24 @@ final class PlatformBridge: DailyNoteActions {
     accountID: UUID, target: DailyNote.Day = DailyNote.Day()
   ) async throws -> Draft {
     try await validateAccount(accountID)
-    let today = try await sync.today(accountID: accountID, target: target)
-    if let session = sessions[today.draft.id]?.value {
-      guard session.canMutate, await session.waitForLocalSave() else {
-        throw PlatformError.editingInProgress
-      }
+    return try await current(try await sync.today(accountID: accountID, target: target).draft)
+  }
+
+  /// The note as you last saved it, from its open editor once your typing there is saved.
+  private func current(_ draft: Draft) async throws -> Draft {
+    guard let session = session(for: draft) else { return try await store.current(draft) }
+    guard session.canMutate, await session.waitForLocalSave() else {
+      throw PlatformError.editingInProgress
     }
-    return try await store.draft(id: today.draft.id, accountID: accountID)
+    return session.draft
+  }
+
+  private func session(for draft: Draft) -> FileSession? {
+    sessions.values.lazy.compactMap(\.value).first {
+      $0.draft.id == draft.id
+        || ($0.draft.gistID != nil && $0.draft.gistID == draft.gistID
+          && $0.draft.filename == draft.filename)
+    }
   }
 
   func validateAccount(_ accountID: UUID) async throws {
@@ -353,23 +358,23 @@ final class PlatformBridge: DailyNoteActions {
   }
 
   private func apply(_ edit: DraftEdit) async throws {
-    let draft = try await store.draft(id: edit.draftID, accountID: edit.accountID)
-    if case .conflict = draft.state { throw PlatformError.editingInProgress }
-    let session = sessions[edit.draftID]?.value
+    let accountID = edit.draft.accountID
+    if case .conflict = edit.draft.state { throw PlatformError.editingInProgress }
+    let session = session(for: edit.draft)
     if let session {
       guard !session.file.isRecovery, session.canMutate else {
         throw PlatformError.editingInProgress
       }
       try await session.applyDurableEdit(edit) {
-        try await self.validateAccount(edit.accountID)
+        try await self.validateAccount(accountID)
         return try await self.store.apply(edit)
       }
     } else {
       _ = try await store.apply(edit)
     }
     do {
-      if library?.account?.id == edit.accountID {
-        try await library?.reloadPlatformState(accountID: edit.accountID)
+      if library?.account?.id == accountID {
+        try await library?.reloadPlatformState(accountID: accountID)
       }
       try await refresh()
     } catch {
@@ -388,10 +393,7 @@ final class PlatformBridge: DailyNoteActions {
         if let session {
           await session.publish(reason: .background, shouldContinue: { lease.isActive })
         } else {
-          _ = try await library?.publish(
-            draftID: edit.draftID, accountID: edit.accountID, reason: .background,
-            expectedGeneration: edit.expectedGeneration + 1,
-            shouldPublish: { await MainActor.run { lease.isActive } })
+          _ = try await library?.publish(edit.draft)
         }
         try await refresh()
       } catch {

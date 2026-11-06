@@ -38,7 +38,7 @@ struct PlatformTests {
     // Today's publish goes out and is cut off, so GitHub may or may not have it.
     fixture.fixture.fail("PATCH")
     await session.publish()
-    #expect(try await fixture.store.draft(id: session.draft.id, accountID: fixture.account.id)
+    #expect(try await fixture.store.current(session.draft)
       .sent == typed)
     fixture.fixture.restore()
 
@@ -150,7 +150,7 @@ struct PlatformTests {
     #expect(session.editor.text == original + "Pick up the dry cleaning\n")
     #expect(await session.waitForLocalSave())
     #expect(fixture.publishes.isEmpty)
-    #expect(try await fixture.store.draft(id: session.draft.id, accountID: fixture.account.id).text
+    #expect(try await fixture.store.current(session.draft).text
       == session.editor.text)
   }
 

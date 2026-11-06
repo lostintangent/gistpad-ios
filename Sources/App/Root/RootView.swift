@@ -150,7 +150,7 @@ struct RootView: View {
   /// Prepares a file as it comes into the detail column.
   private func didActivate() {
     guard let active else { return }
-    active.mode = layout.initialMode(isUnpublished: active.draft.base == nil)
+    active.mode = layout.initialMode(isUnpublished: active.isNew)
     comments.activate(active)
     active.requestCreationFocus()
     openRequestedComments()
@@ -313,10 +313,6 @@ struct RootView: View {
     }
     actions.reconnect = reconnect
     actions.recoverStatus = {
-      if library.unsentChange != nil {
-        Task { await retryPublish() }
-        return
-      }
       switch (library.state.loadState, library.remoteRefreshProblem?.recovery) {
       case (.reconnectRequired, _), (_, .reconnect?):
         reconnect()
@@ -445,18 +441,13 @@ struct RootView: View {
       preview(session)
     }
     .toolbar {
-      if (library.unsentChangeStatus ?? session.remoteInspectionStatus) != .idle
-      {
+      if session.remoteInspectionStatus != .idle {
         ToolbarSpacer(.flexible, placement: .bottomBar)
         ToolbarItem(placement: .bottomBar) {
           GitHubStatusControl(
-            state: library.unsentChangeStatus ?? session.remoteInspectionStatus
+            state: session.remoteInspectionStatus
           ) {
             Task {
-              if library.unsentChange != nil {
-                await retryPublish()
-                return
-              }
               if session.remoteInspectionProblem?.recovery == .reconnect {
                 await library.signIn()
                 guard library.account?.id == session.draft.accountID,
@@ -584,7 +575,7 @@ struct RootView: View {
   /// this iPhone, one day of the daily notes gist, or the whole gist.
   private func deletion(_ session: FileSession) -> Change? {
     if session.file.isRecovery || session.draft.gistID == nil {
-      return .discardLocalCopy(draftID: session.draft.id, generation: session.draft.generation)
+      return .discardLocalCopy(session.draft)
     }
     guard let gist = session.file.gist, session.details.access.canEdit else { return nil }
     if gist.isDailyNote {
@@ -743,10 +734,7 @@ struct RootView: View {
 
   private func rename(_ kind: RenameTarget.Kind, session: FileSession) {
     sheet = .name(
-      RenameTarget(
-        accountID: session.draft.accountID, draftID: session.draft.id,
-        gistID: session.draft.gistID, filename: session.draft.filename,
-        title: session.details.title, kind: kind))
+      RenameTarget(draft: session.draft, title: session.details.title, kind: kind))
   }
 
   private func nameEditor(_ target: RenameTarget) -> some View {
@@ -757,25 +745,25 @@ struct RootView: View {
           ? String(localized: "Rename File") : String(localized: "Add File")),
       fieldTitle: target.kind == .title ? String(localized: "Name") : String(localized: "Filename"),
       initialValue: target.kind == .title
-        ? target.title : (target.kind == .filename ? target.filename : ""),
+        ? target.title : (target.kind == .filename ? target.draft.filename : ""),
       isFilename: target.kind != .title
     ) { value in
       let action: Change
       switch target.kind {
       case .title:
-        if let gistID = target.gistID {
+        if let gistID = target.draft.gistID {
           action = .rename(gistID: gistID, title: value)
         } else {
-          action = .renameLocal(draftID: target.draftID, title: value)
+          action = .renameLocal(target.draft, title: value)
         }
       case .filename:
-        guard let gistID = target.gistID else { throw GistLinks.Error.notPublished }
-        action = .renameFile(gistID: gistID, filename: target.filename, newFilename: value)
+        guard let gistID = target.draft.gistID else { throw GistLinks.Error.notPublished }
+        action = .renameFile(gistID: gistID, filename: target.draft.filename, newFilename: value)
       case .addFile:
-        guard let gistID = target.gistID else { throw GistLinks.Error.notPublished }
+        guard let gistID = target.draft.gistID else { throw GistLinks.Error.notPublished }
         action = .addFile(gistID: gistID, filename: value)
       }
-      _ = try await library.apply(action, accountID: target.accountID)
+      _ = try await library.apply(action, accountID: target.draft.accountID)
     }
   }
 
@@ -798,13 +786,6 @@ struct RootView: View {
     }
     return TagEditor(
       tags: library.state.tags, selectedTagIDs: target.selected, save: save)
-  }
-
-  private func retryPublish() async {
-    do { try await library.retryPublish() } catch {
-      library.openError = error.localizedDescription
-    }
-    await active?.refreshPersistedState()
   }
 
   /// Archiving is absolute, so its undo is the opposite archive, registered with the scene so

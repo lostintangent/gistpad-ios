@@ -103,7 +103,7 @@ struct LibraryTests {
     fixture.server.edit("a", description: "Changed remotely", files: ["README.md": "Remote text"])
     await library.refresh()
     #expect(library.state.gists.first { $0.id == "a" }?.title == "Changed remotely")
-    #expect(library.loadedFile?.text == "Original text")
+    #expect(library.loadedFile?.draft.text == "Original text")
     #expect(library.state.query == "Original")
     #expect(library.state.selectedTagIDs == ["ideas"])
     #expect(library.state.selectedID == "a")
@@ -120,7 +120,7 @@ struct LibraryTests {
     let start = Task { await library.start() }
     try await list.arrival()
     await library.open(.gist(id: "a"))
-    #expect(library.state.selectedID == library.loadedFile?.draft?.id.uuidString)
+    #expect(library.state.selectedID == library.loadedFile?.draft.id.uuidString)
     list.open()
     await start.value
     #expect(library.state.selectedID == "a")
@@ -189,7 +189,7 @@ struct LibraryTests {
     library.select(rowID: "b")
     #expect(library.opening == nil)
     #expect(library.visibleFile.map(library.details(for:))?.title == "Second")
-    #expect(library.visibleFile?.text == "Second source")
+    #expect(library.visibleFile?.draft.text == "Second source")
     #expect(library.activeSession?.file.gist?.id == "b")
     await Task.yield()
     #expect(fixture.server.requests == requests)
@@ -205,8 +205,8 @@ struct LibraryTests {
     await library.start()
     await library.open(.gist(id: "frontmatter"))
     let file = try #require(library.loadedFile)
-    let draft = try #require(file.draft)
-    let session = FileSession(file: file, draft: draft, library: library)
+    let draft = file.draft
+    let session = FileSession(file: file, library: library)
     let editor = session.editor
     let view = editor.textView
     #expect(editor.showsFrontMatter)
@@ -355,7 +355,7 @@ struct LibraryTests {
     let new = try await phone.open(.new)
     #expect(phone.onScreen == "")
     _ = try await phone.library.apply(
-      .renameLocal(draftID: new.draft.id, title: "Ideas"), accountID: phone.accountID)
+      .renameLocal(new.draft, title: "Ideas"), accountID: phone.accountID)
     await phone.leave(new)
     #expect(phone.rows.map(\.title) == ["Ideas"])
     #expect(phone.publishes.isEmpty)
@@ -580,14 +580,11 @@ struct LibraryTests {
         _ = try await phone.library.apply(change, accountID: phone.accountID)
       }
     }
-    #expect(phone.status == "Couldn't sync")
     phone.goOnline()
     await phone.returnToApp()
     #expect(phone.github.gists.first?.description == "First")
-    #expect(phone.publishes.isEmpty)
-    try await phone.library.retryPublish()
-    #expect(phone.status == nil)
-    #expect(phone.rows.first?.isPinned == true)
+    #expect(phone.rows.first?.isStarred == false)
+    #expect(phone.rows.first?.isPinned == false)
   }
 
   @Test func renamingAFileKeepsWhatYouTyped() async throws {
@@ -671,9 +668,9 @@ struct LibraryTests {
     await library.start()
     await library.open(.today())
     let file = try #require(library.loadedFile)
-    let draft = try #require(file.draft)
+    let draft = file.draft
     #expect(file.editingRequestID != nil)
-    let session = FileSession(file: file, draft: draft, library: library)
+    let session = FileSession(file: file, library: library)
     session.requestCreationFocus()
     #expect(session.mode == .edit)
     session.mode = .preview
@@ -699,16 +696,11 @@ struct LibraryTests {
     await second.value
     let today = try #require(library.loadedFile?.draft)
     #expect(today.filename == DailyNote.Day().filename)
-    _ = try await library.persist(
-      draftID: today.id, accountID: today.accountID, text: "- [ ] One task", generation: 1)
-    _ = try await library.publish(draftID: today.id, accountID: today.accountID)
+    let typed = try await library.save(today, text: "- [ ] One task", generation: 1)
+    _ = try await library.publish(typed)
     await library.open(.gist(id: "a"))
     await library.open(.today())
-    #expect(library.loadedFile?.draft?.id == today.id)
-    let dailies = try await fixture.store.drafts(accountID: fixture.account.id).filter {
-      $0.description == DailyNote.gistDescription
-    }
-    #expect(dailies.map(\.id) == [today.id])
+    #expect(library.loadedFile?.draft.id == today.id)
     #expect(fixture.publishes == ["POST /gists"])
     #expect(fixture.server.gists.filter(\.isDailyNote).map { Array($0.files.keys) }
       == [[today.filename]])
@@ -726,7 +718,7 @@ struct LibraryTests {
     let target = DailyNote.Day(
       date: Date(timeIntervalSince1970: 1_790_208_000), timeZone: TimeZone(secondsFromGMT: 0)!)
     await library.open(.today(target))
-    #expect(library.loadedFile?.draft?.filename == target.filename)
+    #expect(library.loadedFile?.draft.filename == target.filename)
     #expect(library.loadedFile?.editingRequestID != nil)
   }
 
@@ -756,12 +748,11 @@ struct LibraryTests {
     await library.openRow(id: rowID)
     let fileID = try #require(library.loadedFile?.id)
     let text = "- [x] A retained task\n- [ ] A new task"
-    _ = try await library.persist(
-      draftID: draft.id, accountID: draft.accountID, text: text, generation: draft.generation + 1)
+    let typed = try await library.save(draft, text: text, generation: draft.generation + 1)
     let row = try #require(library.state.gists.first { $0.id == rowID })
     #expect(row.progress == .init(completed: 1, total: 2))
     #expect(row.isOverdue)
-    _ = try await library.publish(draftID: draft.id, accountID: draft.accountID)
+    _ = try await library.publish(typed)
     #expect(fixture.remote("daily", "2026-10-24.md") == text)
     #expect(fixture.publishes == ["PATCH /gists/daily"])
     #expect(library.loadedFile?.id == fileID)
@@ -832,10 +823,10 @@ struct LibraryTests {
     await library.start()
     await library.openRow(id: "daily/2026-10-24.md")
     #expect(library.loadedFile?.filename == "2026-10-24.md")
-    #expect(library.loadedFile?.text == "The beta day")
+    #expect(library.loadedFile?.draft.text == "The beta day")
     #expect(library.state.selectedID == "daily/2026-10-24.md")
     await library.openRow(id: "daily/2026-10-23.md")
-    #expect(library.loadedFile?.text == "The alpha day")
+    #expect(library.loadedFile?.draft.text == "The alpha day")
     #expect(library.state.selectedID == "daily/2026-10-23.md")
     await library.open(.gist(id: "daily", filename: "2026-10-24.md"))
     #expect(library.state.selectedID == "daily/2026-10-24.md")
@@ -854,26 +845,26 @@ struct LibraryTests {
     }
     let accountID = fixture.account.id
     // An earlier day written offline, before there was a daily notes gist.
-    let staged = try await fixture.store.newGistDraft(
-      accountID: accountID, githubUserID: FixtureServer.you.id, filename: "2026-10-23.md",
-      description: DailyNote.gistDescription)
-    let earlier = try await fixture.store.persist(
-      id: staged.id, accountID: accountID, text: "The alpha day", generation: staged.generation + 1)
+    let earlier = try await fixture.store.save(
+      Draft(
+        accountID: accountID, githubUserID: FixtureServer.you.id, filename: "2026-10-23.md",
+        description: DailyNote.gistDescription),
+      text: "The alpha day", generation: 1)
     let library = fixture.library
     await library.start()
-    // Its deletion is confirmed, then Today publishes it and joins the gist it creates.
-    await library.open(.today())
+    // Its deletion is confirmed, then it publishes and Today joins the gist it creates.
+    await library.publishDrafts()
     let gistID = try #require(fixture.server.gists.first(where: \.isDailyNote)?.id)
+    await library.open(.today())
     let today = try #require(library.loadedFile?.draft)
     #expect(today.gistID == gistID)
-    _ = try await library.persist(
-      draftID: today.id, accountID: accountID, text: "- [ ] Today's task",
-      generation: today.generation + 1)
-    _ = try await library.publish(draftID: today.id, accountID: accountID)
+    let typed = try await library.save(
+      today, text: "- [ ] Today's task", generation: today.generation + 1)
+    _ = try await library.publish(typed)
     #expect(fixture.remote(gistID, "2026-10-23.md") == "The alpha day")
 
     let settled = try await library.settledDeletionAction(
-      .discardLocalCopy(draftID: earlier.id, generation: earlier.generation),
+      .discardLocalCopy(earlier),
       confirmedWithoutGist: true, accountID: accountID)
     try #require(
       settled == .deleteFile(gistID: gistID, filename: "2026-10-23.md"),

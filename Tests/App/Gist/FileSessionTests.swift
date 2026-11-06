@@ -41,9 +41,7 @@ struct FileSessionTests {
     let window = try EditorContinuityTests().host(session.editor)
     defer { window.isHidden = true }
     let image = "\n![Image](https://example.test/image.png)"
-    let insertion = DraftEdit(
-      draftID: session.draft.id, accountID: fixture.account.id,
-      expectedGeneration: session.editor.generation, text: image)
+    let insertion = DraftEdit(draft: session.draft, text: image)
     try await session.applyDurableEdit(insertion) { try await fixture.store.apply(insertion) }
     #expect(session.editor.text == "Base" + image)
     session.editor.textView.undoManager?.undo()
@@ -159,15 +157,13 @@ private extension LibraryFixture {
   func open() async throws -> FileSession {
     if library.account == nil { await library.start() }
     await library.open(.gist(id: "a"))
-    let file = try #require(library.loadedFile)
-    let draft = try #require(file.draft)
     return FileSession(
-      file: file, draft: draft, library: library, autosaveDelay: .milliseconds(30))
+      file: try #require(library.loadedFile), library: library, autosaveDelay: .milliseconds(30))
   }
 
   /// The editor's file as it's saved on this iPhone.
   func saved(_ session: FileSession) async throws -> Draft {
-    try await store.draft(id: session.draft.id, accountID: account.id)
+    try await store.current(session.draft)
   }
 }
 

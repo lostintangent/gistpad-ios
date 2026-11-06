@@ -87,11 +87,9 @@
 - Nothing, while it's on GitHub or will publish by itself.
 - **Publish**, when Autosave is off or a publish didn't land. Tapping it publishes.
 - **GitHub needs attention**, for a conflict or a GitHub reconnect.
-- **Couldn't sync** or **Couldn't update your gists**, in the list, when a change didn't go through or the list couldn't refresh. A refresh that only timed out or lost its connection shows nothing, and the next moment tries again.
+- **Couldn't update your gists**, in the list, when the list couldn't refresh. A refresh that only timed out or lost its connection shows nothing, and the next moment tries again.
+- An alert, when a change didn't go through. Nothing retries it.
 
 ### Left out on purpose
 - No merging, no background sync and no retry timers.
 
----
-
-*Where the code differs today:* it creates a draft when you open a file, keeps it after publishing and deletes untouched ones later. Adding a file makes a draft instead of creating the file. A new day publishes any earlier unpublished day first. These are still to do, in t336.

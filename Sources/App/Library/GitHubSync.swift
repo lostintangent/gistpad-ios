@@ -61,32 +61,21 @@ actor GitHubSync {
     return text
   }
 
-  func draft(for file: File) async throws -> Draft {
-    guard let gist = file.gist else { throw GitHubClientError.missingFile }
-    let githubUserID = try await verifiedUserID(accountID: file.accountID)
-    return try await drafts.draft(
-      accountID: file.accountID, githubUserID: githubUserID,
-      gistID: gist.id, filename: file.filename,
-      description: gist.description ?? "",
-      content: file.text, revision: gist.revision)
+  func current(_ draft: Draft) async throws -> Draft {
+    try await drafts.current(draft)
   }
 
-  func persist(draftID: UUID, accountID: UUID, text: String, generation: UInt64) async throws
-    -> Draft
-  {
-    try await drafts.persist(id: draftID, accountID: accountID, text: text, generation: generation)
+  func save(_ draft: Draft, text: String, generation: UInt64) async throws -> Draft {
+    try await drafts.save(draft, text: text, generation: generation)
   }
 
-  func publish(
-    draftID: UUID, accountID: UUID, reason: PublishReason,
-    expectedGeneration: UInt64?, shouldPublish: @escaping @Sendable () async -> Bool
-  ) async throws -> Draft {
-    let publisher = await publisher(accountID: accountID)
-    return try await mutationQueue.run {
-      try await publisher.publish(
-        id: draftID, accountID: accountID, reason: reason,
-        expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
-    }
+  func keep(_ draft: Draft) async throws -> Draft {
+    try await drafts.keep(draft)
+  }
+
+  func publish(_ draft: Draft) async throws -> Draft {
+    let publisher = await publisher(accountID: draft.accountID)
+    return try await mutationQueue.run { try await publisher.publish(draft) }
   }
 
   func localState(accountID: UUID) async throws -> LocalState {
@@ -95,15 +84,12 @@ actor GitHubSync {
     return LocalState(cache: cache, drafts: localDrafts)
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account, keeping: Set<String> = [])
-    async throws
-  {
+  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
     try await drafts.cacheLibrary(
-      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id,
-      keeping: keeping)
+      owned: owned, starred: starred, preferences: account.preferences, accountID: account.id)
   }
 
-  private func verifiedUserID(accountID: UUID) async throws -> Int64 {
+  func verifiedUserID(accountID: UUID) async throws -> Int64 {
     guard let account = try await accounts.cachedAccount(), account.id == accountID else {
       throw AccountError.accountChanged
     }
@@ -111,25 +97,20 @@ actor GitHubSync {
     return id
   }
 
+  /// Stores a new gist you've named, or one made from outside the app, before you type in it.
   func createDraft(
-    accountID: UUID, description: String = "", content: String? = nil
+    accountID: UUID, description: String, content: String? = nil
   ) async throws -> Draft {
     let userID = try await verifiedUserID(accountID: accountID)
-    return try await drafts.newGistDraft(
-      accountID: accountID, githubUserID: userID, description: description, content: content)
-  }
-
-  func discardBlankDraft(_ draft: Draft) async throws -> Bool {
-    try await drafts.discardBlankDraft(
-      id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation)
+    return try await drafts.keep(
+      Draft(accountID: accountID, githubUserID: userID, description: description, content: content))
   }
 
   func today(accountID: UUID, target: DailyNote.Day) async throws -> (gist: Gist?, draft: Draft) {
     let userID = try await verifiedUserID(accountID: accountID)
-    let publisher = await publisher(accountID: accountID)
     let service = DailyNotes(
       accountID: accountID, githubUserID: userID, client: await client(accountID: accountID),
-      store: drafts, publisher: publisher)
+      store: drafts)
     return try await mutationQueue.run { try await service.stageToday(target: target) }
   }
 

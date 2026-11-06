@@ -7,18 +7,6 @@ import Sync
 import OSLog
 import Observation
 
-/// The last GitHub write that failed. A newer failure replaces it, and Retry runs it again.
-struct UnsentChange {
-  enum Operation {
-    case change(Change)
-    case file(draftID: UUID)
-  }
-
-  let operation: Operation
-  let accountID: UUID
-  let recovery: RemoteReadProblem.Recovery
-}
-
 @MainActor @Observable
 final class Library {
   let state = LibraryState()
@@ -44,7 +32,6 @@ final class Library {
   }
   private(set) var remoteRefreshProblem: RemoteReadProblem?
   private(set) var isRefreshingRemote = false
-  private(set) var unsentChange: UnsentChange?
   /// The files opened this session, by draft. Returning to one keeps its caret, scroll and undo.
   private(set) var sessions: [UUID: FileSession] = [:]
   /// Autosave runs only while the app is in the foreground.
@@ -66,28 +53,7 @@ final class Library {
     self.lastOpened = lastOpened
   }
 
-  var unsentChangeStatus: GitHubStatusState? {
-    guard let unsentChange, account?.id == unsentChange.accountID else { return nil }
-    // Pins, tags and settings are saved to the GistPad account, not GitHub.
-    let (message, detail): (String, String?) =
-      switch (unsentChange.operation, unsentChange.recovery) {
-      case (_, .reconnect): (AccountError.reconnectGitHub.localizedDescription, nil)
-      case (.file, _):
-        (
-          String(localized: "This file didn't reach GitHub."),
-          String(localized: "Your changes are saved on this iPhone.")
-        )
-      case (.change(.preferences), _):
-        (String(localized: "This change wasn't saved."), nil)
-      case (.change, _): (String(localized: "This change didn't reach GitHub."), nil)
-      }
-    return RemoteReadProblem(message: message, recovery: unsentChange.recovery)
-      .status(heading: String(localized: "Couldn't sync"), detail: detail)
-  }
-
-  // A failed GitHub-backed write outranks read problems, because it means local changes didn't reach GitHub.
   var remoteRefreshStatus: GitHubStatusState {
-    if let status = unsentChangeStatus { return status }
     if let problem = remoteRefreshProblem, cachedLibrary != nil || !localDrafts.isEmpty {
       return problem.status(
         heading: String(localized: "Couldn't update your gists"),
@@ -126,7 +92,7 @@ final class Library {
     }
     fileRequest = UUID()
     openError = nil
-    if let file = cachedFile(rowID: id), file.draft != nil {
+    if let file = cachedFile(rowID: id) {
       present(file)
       return true
     }
@@ -154,7 +120,7 @@ final class Library {
     if let draft,
       draft.gistID.flatMap({ gistID in cachedLibrary?.gists.contains(where: { $0.id == gistID }) }) != true
     {
-      return .discardLocalCopy(draftID: draft.id, generation: draft.generation)
+      return .discardLocalCopy(draft)
     }
     let gistID = target?.gistID ?? draft?.gistID ?? rowID
     guard let gist = cachedLibrary?.owned.first(where: { $0.id == gistID }) else { return nil }
@@ -215,11 +181,14 @@ final class Library {
     }) {
       return localFile(draft, rowID: rowID)
     }
-    guard let gist, let text = cachedLibrary?.content(gist: gist, filename: selectedFilename) else {
-      return nil
-    }
+    guard let gist, let userID = account.githubUserID,
+      let text = cachedLibrary?.content(gist: gist, filename: selectedFilename)
+    else { return nil }
     var file = File(
-      accountID: account.id, gist: gist, filename: selectedFilename, text: text)
+      draft: Draft(
+        accountID: account.id, githubUserID: userID, gist: gist, filename: selectedFilename,
+        text: text),
+      gist: gist)
     file.libraryRowID = rowID
     return file
   }
@@ -269,28 +238,26 @@ final class Library {
     state.selectedID = file.rowID
     if file.isRecovery { openError = Self.recoveryMessage }
     remember(file.selection)
-    guard let draft = file.draft else { return }
     if let session = sessions.values.first(where: { $0.file.refersToSameFile(as: file) }) {
       session.adoptPresentation(file)
     } else {
-      sessions[draft.id] = FileSession(file: file, draft: draft, library: self)
+      sessions[file.draft.id] = FileSession(file: file, library: self)
     }
   }
 
   private func unfilteredRowID(for file: File) -> String? {
     state.gists.first {
-      $0.id == file.draft?.id.uuidString
+      $0.id == file.draft.id.uuidString
         || ($0.gistID != nil && $0.gistID == file.selection.gistID
           && ($0.filename == nil || $0.filename == file.filename))
     }?.id
   }
 
-  private func recordLocalDraft(_ draft: Draft) {
+  /// Records a draft as this iPhone now has it: stored, or let go once GitHub has its text.
+  private func record(_ draft: Draft) {
     localDraftRecords += 1
     localDrafts.removeAll { $0.id == draft.id }
-    localDrafts.append(draft)
-    projectLibrary()
-    updateToday()
+    if draft.isSaved { localDrafts.append(draft) }
   }
 
   private func updateLibraryExcerpt(for draft: Draft) {
@@ -337,7 +304,7 @@ final class Library {
         return
       }
       account = restored
-      try await reloadLocalState(accountID: restored.id, discardAbandonedBlanks: true)
+      try await reloadLocalState(accountID: restored.id)
       isStarting = false
       await refresh()
       await restoreLastOpened()
@@ -371,7 +338,7 @@ final class Library {
       }
       account = signedIn
       pendingAccount = nil
-      try await reloadLocalState(accountID: signedIn.id, discardAbandonedBlanks: true)
+      try await reloadLocalState(accountID: signedIn.id)
       await refresh()
       await restoreLastOpened()
     } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
@@ -398,7 +365,7 @@ final class Library {
     guard self.pendingAccount == pendingAccount else { return }
     reset(to: pendingAccount)
     do {
-      try await reloadLocalState(accountID: pendingAccount.id, discardAbandonedBlanks: true)
+      try await reloadLocalState(accountID: pendingAccount.id)
     } catch {
       report(error, operation: "reload-local")
       openError = error.localizedDescription
@@ -471,8 +438,7 @@ final class Library {
       async let starredGists = sync.starredGists(accountID: account.id)
       let (owned, starred) = try await (ownedGists, starredGists)
       guard request == libraryRequest, self.account?.id == account.id else { return }
-      try await sync.cacheLibrary(
-        owned: owned, starred: starred, account: refreshed, keeping: openGistIDs)
+      try await sync.cacheLibrary(owned: owned, starred: starred, account: refreshed)
       guard request == libraryRequest, self.account?.id == account.id else { return }
       self.account = refreshed
       state.loadState = .ready
@@ -514,12 +480,6 @@ final class Library {
     _ = try? await sync.content(gist: daily, filename: filename, accountID: accountID)
   }
 
-  /// Drafts a refresh keeps even when GitHub no longer lists their gist, because they're on screen.
-  /// An open editor may hold a copy `localDrafts` hasn't seen yet, so a refresh keeps by gist.
-  private var openGistIDs: Set<String> {
-    Set([loadedFile?.selection.gistID, visibleFile?.selection.gistID].compactMap { $0 })
-  }
-
   /// Opens a file in the detail column. A newer open supersedes this one, but keeps any file this
   /// one created.
   func open(_ request: Opening.Request) async {
@@ -541,13 +501,7 @@ final class Library {
       if token == fileRequest, opening?.failure == nil { opening = nil }
     }
     do {
-      var opened = try await file(for: request, account: account)
-      if opened.draft == nil {
-        let draft = try await sync.draft(for: opened)
-        // Recorded, so selecting this file again presents it at once.
-        if self.account?.id == account.id { recordLocalDraft(draft) }
-        opened.draft = draft
-      }
+      let opened = try await file(for: request, account: account)
       guard token == fileRequest else { return }
       present(opened)
     } catch is CancellationError {
@@ -585,9 +539,14 @@ final class Library {
           gist.defaultMarkdownFilename
         }
       guard let selected else { throw GitHubClientError.missingFile }
+      guard let userID = account.githubUserID else { throw AccountError.reconnectGitHub }
       let text = try await sync.content(gist: gist, filename: selected, accountID: account.id)
       var file = File(
-        accountID: account.id, gist: gist, filename: selected, text: text)
+        draft: try await sync.current(
+          Draft(
+            accountID: account.id, githubUserID: userID, gist: gist, filename: selected,
+            text: text)),
+        gist: gist)
       file.libraryRowID = rowID
       return file
     case .draft(let id, let rowID):
@@ -608,16 +567,14 @@ final class Library {
         file = cached
       } else {
         let today = try await sync.today(accountID: account.id, target: target)
-        if self.account?.id == account.id { recordLocalDraft(today.draft) }
         file = File(draft: today.draft, gist: today.gist)
       }
       file.editingRequestID = focusesEditor ? UUID() : nil
       file.revealsDetail = focusesEditor
       return file
     case .new:
-      let draft = try await sync.createDraft(accountID: account.id)
-      if self.account?.id == account.id { recordLocalDraft(draft) }
-      var file = File(draft: draft)
+      guard let userID = account.githubUserID else { throw AccountError.reconnectGitHub }
+      var file = File(draft: Draft(accountID: account.id, githubUserID: userID))
       file.editingRequestID = UUID()
       return file
     }
@@ -654,36 +611,14 @@ final class Library {
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
   }
 
-  private func reloadLocalState(
-    accountID: UUID, discardAbandonedBlanks: Bool = false
-  ) async throws {
+  private func reloadLocalState(accountID: UUID) async throws {
     let records = localDraftRecords
     let local = try await sync.localState(accountID: accountID)
     guard account?.id == accountID, pendingAccount == nil else { return }
-    var removed: Set<UUID> = []
-    for draft in local.drafts where discardAbandonedBlanks && draft.isDiscardableBlank {
-      guard account?.id == accountID, pendingAccount == nil else { return }
-      guard !isCreating, loadedFile?.draft?.id != draft.id, !isDraftSelected(draft.id)
-      else { continue }
-      if try await discardBlankDraft(draft) { removed.insert(draft.id) }
-    }
-    guard account?.id == accountID, pendingAccount == nil else { return }
-    // A draft created or saved while this read ran is newer than the read, so read again.
+    // A draft saved while this read ran is newer than the read, so read again.
     if localDraftRecords != records { return try await reloadLocalState(accountID: accountID) }
-    let drafts = local.drafts.filter { $0.accountID == accountID && !removed.contains($0.id) }
-    // A refresh drops published drafts of gists GitHub no longer lists, so don't reopen them at launch.
-    let vanished = localDrafts.filter { old in !drafts.contains { $0.id == old.id } }
-    if let selection = lastOpened.selection(accountID: accountID), vanished.contains(where: {
-      $0.id == selection.draftID
-        || ($0.gistID != nil && $0.gistID == selection.gistID && $0.filename == selection.filename)
-    }) {
-      lastOpened.clear(accountID: accountID)
-    }
+    let drafts = local.drafts
     localDrafts = drafts
-    // A deleted file has nothing left to save, so its failure no longer needs attention.
-    clearUnsentChange { operation in
-      if case .file(let draftID) = operation { !drafts.contains { $0.id == draftID } } else { false }
-    }
     cachedLibrary = local.cache
     projectLibrary()
     updateToday()
@@ -707,56 +642,22 @@ final class Library {
     if wasSelected, opening == nil { state.selectedID = rowID }
   }
 
-  private static func libraryDrafts(
-    _ drafts: [Draft], owned: [Gist], accountID: UUID
-  ) -> [Draft] {
-    drafts.filter { draft in
-      guard draft.accountID == accountID else { return false }
-      guard let gist = owned.first(where: { $0.id == draft.gistID }),
-        gist.isDailyNote, gist.truncated != true, gist.files[draft.filename] == nil
-      else { return true }
-      return draft.state != .savedToGitHub || draft.sentGeneration != nil
-    }
-  }
-
-  /// The Markdown files a gist shows. A file added on this iPhone shows until it reaches GitHub or
-  /// is deleted.
+  /// The Markdown files a gist shows, with any this iPhone has that GitHub doesn't yet.
   private static func filenames(of gist: Gist, drafts: [Draft]) -> [String] {
-    Set(
-      gist.markdownFilenames
-        + drafts.filter {
-          $0.gistID == gist.id
-            && (gist.files[$0.filename] != nil || $0.state != .savedToGitHub)
-        }.map(\.filename)
-    ).sorted()
+    Set(gist.markdownFilenames + drafts.filter { $0.gistID == gist.id }.map(\.filename)).sorted()
   }
-
-  private static func librarySource(draft: Draft?, cached: String?) -> String? {
-    if let draft, draft.state != .savedToGitHub || draft.sentGeneration != nil {
-      return draft.text
-    }
-    return cached ?? draft?.text
-  }
-
 
   private func updateToday() {
-    let drafts = account.map {
-      Self.libraryDrafts(localDrafts, owned: cachedLibrary?.owned ?? [], accountID: $0.id)
-    }
-    state.today = DailyNote(cache: cachedLibrary, drafts: drafts ?? [])
+    state.today = DailyNote(cache: cachedLibrary, drafts: localDrafts)
   }
 
   private static let recoveryMessage = String(
     localized:
       "This gist was deleted on GitHub. Your unpublished text is kept on this iPhone.")
 
-  func draft(id: UUID, accountID: UUID) async throws -> Draft {
-    guard
-      let draft = try await sync.localState(accountID: accountID).drafts.first(where: {
-        $0.id == id
-      })
-    else { throw DraftError.notFound }
-    return draft
+  /// The draft as this iPhone has it now, stored or not.
+  func current(_ draft: Draft) async throws -> Draft {
+    try await sync.current(draft)
   }
 
   /// Re-reads a local discard once publication has settled. If the file reached GitHub after the
@@ -766,41 +667,12 @@ final class Library {
   func settledDeletionAction(
     _ action: Change, confirmedWithoutGist: Bool, accountID: UUID
   ) async throws -> Change {
-    let draftID: UUID
-    switch action {
-    case .discardLocalCopy(let id, _): draftID = id
-    default: return action
-    }
-    let draft = try await self.draft(id: draftID, accountID: accountID)
+    guard case .discardLocalCopy(let known) = action else { return action }
+    let draft = try await sync.current(known)
     if confirmedWithoutGist, let gistID = draft.gistID {
       return .deleteFile(gistID: gistID, filename: draft.filename)
     }
-    return .discardLocalCopy(draftID: draft.id, generation: draft.generation)
-  }
-
-  func isDraftSelected(_ id: UUID) -> Bool {
-    state.selectedID != nil && visibleFile?.draft?.id == id
-  }
-
-  func discardBlankDraft(_ draft: Draft) async throws -> Bool {
-    guard account?.id == draft.accountID, pendingAccount == nil,
-      draft.isDiscardableBlank, !isDraftSelected(draft.id)
-    else { return false }
-    let selection = lastOpened.selection(accountID: draft.accountID)
-    guard try await sync.discardBlankDraft(draft) else { return false }
-    if selection?.draftID == draft.id,
-      lastOpened.selection(accountID: draft.accountID)?.draftID == draft.id
-    {
-      lastOpened.clear(accountID: draft.accountID)
-    }
-    guard account?.id == draft.accountID else { return true }
-    sessions[draft.id] = nil
-    localDrafts.removeAll { $0.id == draft.id }
-    state.gists.removeAll { $0.id == draft.id.uuidString }
-    if loadedFile?.draft?.id == draft.id, !isDraftSelected(draft.id) {
-      loadedFile = nil
-    }
-    return true
+    return .discardLocalCopy(draft)
   }
 
   func uploadImage(_ image: Data, gistID: String, accountID: UUID) async throws -> URL {
@@ -826,49 +698,6 @@ final class Library {
     projectLibrary()
   }
 
-  /// Runs the last failed write again, reconnecting GitHub first when that's what it needs. Writes
-  /// are absolute, so repeating one is safe. A failure that raises attention again isn't rethrown.
-  func retryPublish() async throws {
-    guard let failure = unsentChange, account?.id == failure.accountID else { return }
-    if failure.recovery == .reconnect { await signIn() }
-    do {
-      switch failure.operation {
-      case .change(let change): _ = try await perform(change)
-      case .file(let draftID): _ = try await publish(draftID: draftID, accountID: failure.accountID)
-      }
-    } catch {
-      if Self.writeRecovery(for: failure.operation, error) == nil { throw error }
-    }
-  }
-
-  private func recordUnsentChange(
-    _ operation: UnsentChange.Operation, accountID: UUID, error: any Error
-  ) {
-    guard let recovery = Self.writeRecovery(for: operation, error) else { return }
-    unsentChange = UnsentChange(
-      operation: operation, accountID: accountID, recovery: recovery)
-  }
-
-  private func clearUnsentChange(where matches: (UnsentChange.Operation) -> Bool) {
-    guard let unsentChange, matches(unsentChange.operation) else { return }
-    self.unsentChange = nil
-  }
-
-  /// How a failed GitHub write recovers, or nil when the failure isn't one to raise and retry.
-  static func writeRecovery(
-    for operation: UnsentChange.Operation, _ error: any Error
-  ) -> RemoteReadProblem.Recovery? {
-    if (error as? AccountError) == .accountChanged { return nil }
-    if case .change(let action) = operation {
-      switch action {
-      case .preferences, .star, .archive: break
-      default: return nil
-      }
-      if (error as? ChangeError) == .publicationInProgress { return nil }
-    }
-    return RemoteRead.problem(for: error)?.recovery
-  }
-
   /// Applies a change once the files it touches are saved on this iPhone, holding off typing in
   /// a file it deletes, then brings every open file's details up to date.
   func apply(_ action: Change, accountID: UUID) async throws -> ChangeResult {
@@ -882,7 +711,7 @@ final class Library {
     }
     let confirmedWithoutGist: Bool =
       switch action {
-      case .discardLocalCopy(let draftID, _): localDrafts.first { $0.id == draftID }?.gistID == nil
+      case .discardLocalCopy(let draft): draft.gistID == nil
       default: false
       }
     do {
@@ -892,7 +721,7 @@ final class Library {
           case .delete(let gistID), .deleteFile(let gistID, _):
             session.draft.gistID == gistID
               || localDrafts.contains { $0.id == session.draft.id && $0.gistID == gistID }
-          case .discardLocalCopy(let draftID, _): session.draft.id == draftID
+          case .discardLocalCopy(let draft): session.draft.id == draft.id
           case .signOut: true
           default: false
           }
@@ -921,7 +750,11 @@ final class Library {
       switch result {
       case .gist(let gist, _):
         for session in sessions.values where session.draft.gistID == gist.id {
-          try await session.refreshMetadata(gist: gist)
+          let renamed: String? =
+            if case .renameFile(_, let filename, let newFilename) = action,
+              session.draft.filename == filename
+            { newFilename } else { nil }
+          try await session.refreshMetadata(gist: gist, filename: renamed)
         }
       case .account:
         for session in sessions.values { try await session.refreshMetadata() }
@@ -941,11 +774,10 @@ final class Library {
     }
   }
 
-  /// Applies a change from a tap. A failure the status control can retry isn't also an alert.
+  /// Applies a change from a tap. A change that doesn't go through is an alert.
   func run(_ action: Change, accountID: UUID) {
     Task {
       do { _ = try await apply(action, accountID: accountID) } catch {
-        guard Self.writeRecovery(for: .change(action), error) == nil else { return }
         openError = error.localizedDescription
       }
     }
@@ -974,13 +806,9 @@ final class Library {
           report(error, operation: "confirm-local-sign-out")
         }
       }
-      recordUnsentChange(.change(action), accountID: account.id, error: error)
       throw error
     }
     guard self.account?.id == account.id else { throw AccountError.accountChanged }
-    // A later successful write means GitHub is reachable again, and every write is absolute, so
-    // whatever the failed one changed is no longer shown as changed.
-    clearUnsentChange { if case .change = $0 { true } else { false } }
     switch result {
     case .signedOut:
       reset(to: nil)
@@ -1060,7 +888,6 @@ final class Library {
     cachedLibrary = nil
     openError = nil
     remoteRefreshProblem = nil
-    unsentChange = nil
     isRefreshingRemote = false
     state.replace(gists: [], known: false)
     state.selectedID = nil
@@ -1080,13 +907,13 @@ final class Library {
   func details(for file: File) -> GistDetails {
     let title =
       file.gist?.displayName
-      ?? file.draft.flatMap { $0.description.isEmpty ? nil : $0.description }
+      ?? (file.draft.description.isEmpty ? nil : file.draft.description)
       ?? String(localized: "Untitled")
     guard let gist = file.gist, let account, account.id == file.accountID else {
       return GistDetails(
         title: title, files: [.init(id: file.filename, filename: file.filename)],
         selectedFileID: file.filename,
-        isDailyNote: file.gist?.isDailyNote ?? (file.draft?.description == DailyNote.gistDescription),
+        isDailyNote: file.gist?.isDailyNote ?? (file.draft.description == DailyNote.gistDescription),
         isAutoSaveEnabled: account?.id == file.accountID
           && account?.preferences.isAutoSaveEnabled == true)
     }
@@ -1110,7 +937,7 @@ final class Library {
   /// Points the open file at the gist it published to, keeping it selected under its new row.
   private func apply(published saved: Draft, gist: Gist) {
     guard
-      loadedFile?.draft?.id == saved.id
+      loadedFile?.draft.id == saved.id
         || (loadedFile?.gist?.id == gist.id && loadedFile?.filename == saved.filename)
     else { return }
     let wasSelected = state.selectedID == loadedFile?.rowID
@@ -1123,63 +950,48 @@ final class Library {
     }
   }
 
-  func persist(draftID: UUID, accountID: UUID, text: String, generation: UInt64) async throws
-    -> Draft
-  {
-    let saved = try await sync.persist(
-      draftID: draftID, accountID: accountID, text: text, generation: generation)
-    if account?.id == accountID {
-      localDraftRecords += 1
-      localDrafts.removeAll { $0.id == saved.id }
-      localDrafts.append(saved)
-      updateLibraryExcerpt(for: saved)
+  /// Saves your typing on this iPhone.
+  func save(_ draft: Draft, text: String, generation: UInt64) async throws -> Draft {
+    let saved = try await sync.save(draft, text: text, generation: generation)
+    if account?.id == draft.accountID {
+      record(saved)
+      if saved.isSaved { updateLibraryExcerpt(for: saved) } else { projectLibrary() }
       updateToday()
     }
     return saved
+  }
+
+  /// Stores a note before you type in it.
+  func keep(_ draft: Draft) async throws -> Draft {
+    let kept = try await sync.keep(draft)
+    if account?.id == draft.accountID {
+      record(kept)
+      projectLibrary()
+      updateToday()
+    }
+    return kept
   }
 
   /// Publishes each file with unpublished edits, in order, through its editor when it's open. The
   /// first offline result stops the sweep, and the next launch or return to the app retries it.
   func publishDrafts() async {
     guard let accountID = account?.id, pendingAccount == nil else { return }
-    let ids = localDrafts.filter { $0.accountID == accountID && $0.hasUnpublishedEdits }.map(\.id)
-    for id in ids {
+    for draft in localDrafts where draft.hasUnpublishedEdits {
       guard !Task.isCancelled else { break }
-      let state: PublishState?
-      if let session = sessions[id] {
+      if let session = sessions[draft.id] {
         await session.publish(reason: .background)
-        state = session.draft.state
+        if session.saveState == .failed(.network) { break }
       } else {
-        _ = try? await publish(draftID: id, accountID: accountID, reason: .background)
-        state = (try? await draft(id: id, accountID: accountID))?.state
+        do { _ = try await publish(draft) } catch is URLError { break } catch {}
       }
-      if state == .failed(.network) { break }
     }
     try? await reloadLocalState(accountID: accountID)
   }
 
-  func publish(
-    draftID: UUID, accountID: UUID, reason: PublishReason = .manual,
-    expectedGeneration: UInt64? = nil,
-    shouldPublish: @escaping @Sendable () async -> Bool = { true }
-  ) async throws -> Draft {
-    guard account?.id == accountID || reason == .manual, pendingAccount == nil else {
-      throw AccountError.accountChanged
-    }
-    let saved: Draft
-    do {
-      saved = try await sync.publish(
-        draftID: draftID, accountID: accountID, reason: reason,
-        expectedGeneration: expectedGeneration, shouldPublish: shouldPublish)
-    } catch {
-      if account?.id == accountID, pendingAccount == nil {
-        recordUnsentChange(.file(draftID: draftID), accountID: accountID, error: error)
-      }
-      throw error
-    }
-    if saved.state == .savedToGitHub {
-      clearUnsentChange { if case .file(draftID) = $0 { true } else { false } }
-    }
+  func publish(_ draft: Draft) async throws -> Draft {
+    let accountID = draft.accountID
+    guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
+    let saved = try await sync.publish(draft)
     if account?.id == accountID {
       libraryRequest = UUID()
       isRefreshingRemote = false
@@ -1206,7 +1018,6 @@ final class Library {
       unique[gist.id] = gist
     }
     let preferences = account.preferences
-    let drafts = libraryDrafts(drafts, owned: owned, accountID: account.id)
     var items = unique.values.flatMap { gist -> [GistItem] in
       let gistDrafts = drafts.filter { $0.gistID == gist.id }
       let fileCount = filenames(of: gist, drafts: gistDrafts).count
@@ -1238,9 +1049,10 @@ final class Library {
           let inline = gist.files[filename].flatMap {
             $0.truncated == true ? nil : $0.content
           }.map(GistFile.decodeContent)
-          updateLibraryContent(&item, text: librarySource(
-            draft: gistDrafts.first { $0.filename == filename },
-            cached: cached?.content(gist: gist, filename: filename) ?? inline))
+          updateLibraryContent(
+            &item,
+            text: gistDrafts.first { $0.filename == filename }?.text
+              ?? cached?.content(gist: gist, filename: filename) ?? inline)
         }
         return item
       }

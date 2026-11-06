@@ -1,11 +1,5 @@
 import Foundation
 
-public enum PublishReason: Equatable, Sendable {
-    case manual
-    case autosave
-    case background
-}
-
 public actor DraftPublisher {
     private let client: GitHubClient
     private let store: DraftStore
@@ -15,46 +9,31 @@ public actor DraftPublisher {
         self.store = store
     }
 
-    /// Publishes your draft: if GitHub has its base, its sent text or already its text, your text is
-    /// sent, and anything else on GitHub is a conflict. A note you haven't typed in has nothing to
-    /// publish. Autosave and lifecycle publishes are checked once before reaching GitHub, and typing
-    /// during the publish hands over to the publish that typing schedules. Callers run one publish at
-    /// a time, through the library's queue for GitHub writes.
+    /// Publishes your draft as this iPhone stores it now: if GitHub has its base, its sent text or
+    /// already its text, your text is sent, and anything else on GitHub is a conflict. A note you
+    /// haven't typed in has nothing to publish, and typing during the publish hands over to the
+    /// publish that typing schedules. Callers run one publish at a time, through the library's queue
+    /// for GitHub writes.
     @discardableResult
-    public func publish(
-        _ draft: Draft, reason: PublishReason = .manual, expectedGeneration: UInt64? = nil,
-        shouldPublish: @escaping @Sendable () async -> Bool = { true }
-    ) async throws -> Draft {
+    public func publish(_ draft: Draft) async throws -> Draft {
         try Task.checkCancellation()
         var draft = try await store.current(draft)
         guard draft.isSaved else { return draft }
         if case .conflict = draft.state { return draft }
-        if reason != .manual {
-            guard expectedGeneration == nil || draft.generation == expectedGeneration,
-                  await shouldPublish() else { throw CancellationError() }
+        // Sent text stays on the draft if this is cut off, so the next publish checks GitHub for it first.
+        if draft.gistID == nil, let sent = draft.sent {
+            draft = try await findCreatedGist(sent, for: draft)
         }
-        do {
-            if draft.gistID == nil, let sent = draft.sent {
-                draft = try await findCreatedGist(sent, for: draft)
-            }
-            if draft.isSaved, draft.gistID == nil, draft.description == DailyNote.gistDescription {
-                draft = try await joinDailyGist(draft)
-            }
-            if draft.isSaved, let gistID = draft.gistID {
-                draft = try await compareWithGitHub(draft, gistID: gistID)
-            }
-            // Newer text from the web reaches a note when it's opened, not by publishing.
-            guard draft.isSaved else { return draft }
-            if case .conflict = draft.state { return draft }
-            return try await send(draft)
-        } catch {
-            // Sent text stays on the draft, so the next publish checks GitHub for it first.
-            if error is CancellationError || (error as? URLError)?.code == .cancelled {
-                throw CancellationError()
-            }
-            try await store.setState(Self.state(after: error), id: draft.id, accountID: draft.accountID)
-            throw error
+        if draft.isSaved, draft.gistID == nil, draft.description == DailyNote.gistDescription {
+            draft = try await joinDailyGist(draft)
         }
+        if draft.isSaved, let gistID = draft.gistID {
+            draft = try await compareWithGitHub(draft, gistID: gistID)
+        }
+        // Newer text from the web reaches a note when it's opened, not by publishing.
+        guard draft.isSaved else { return draft }
+        if case .conflict = draft.state { return draft }
+        return try await send(draft)
     }
 
     /// Records your text as sent, then sends it. When GitHub confirms it, it becomes the base.
@@ -115,9 +94,12 @@ public actor DraftPublisher {
         return try await store.join(daily, id: draft.id, accountID: draft.accountID)
     }
 
+}
+
+extension PublishState {
     /// What you see after a publish fails.
-    private static func state(after error: Error) -> PublishState {
-        switch error {
+    public init(failure error: any Error) {
+        self = switch error {
         case GitHubClientError.http(status: 401), is AccountError: .reconnect
         case GitHubClientError.http(let status): .failed(.http(status: status))
         case GitHubClientError.incompleteGist, GitHubClientError.fileTooLarge: .failed(.incompleteRemote)

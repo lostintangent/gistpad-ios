@@ -83,10 +83,7 @@ struct RenameSheet: View {
 struct RenameTarget: Identifiable {
   enum Kind { case title, filename, addFile }
   let id = UUID()
-  let accountID: UUID
-  let draftID: UUID
-  let gistID: String?
-  let filename: String
+  let draft: Draft
   let title: String
   let kind: Kind
 }

@@ -6,26 +6,13 @@ import Testing
 @Suite struct GistVerbTests {
     private let account = SyncFixture.account
 
-    @Test func metadataChangesRetainSourceAndGeneration() async throws {
+    @Test func renamingADraftKeepsWhatYouTyped() async throws {
         let sync = try SyncFixture()
         let gist = sync.server.addGist(description: "Before", files: ["One.md": "one", "Two.md": "two"])
         let one = try await sync.type("local", in: sync.open(gist, "One.md"))
-        func rename(_ expected: String, to filename: String, account: UUID = SyncFixture.account) async throws
-            -> Draft {
-            try await sync.store.updateDraftMetadata(
-                id: one.id, accountID: account, expectedFilename: expected, filename: filename, description: "After")
-        }
 
-        await #expect(throws: DraftError.staleGeneration) { try await rename("Gone.md", to: "Three.md") }
-        await #expect(throws: DraftError.accountMismatch) { try await rename("One.md", to: "Three.md", account: UUID()) }
-        for filename in ["", "folder/file.md", "bad\nname.md"] {
-            await #expect(throws: DraftError.invalidFilename) { try await rename("One.md", to: filename) }
-        }
-        try await sync.store.recordSent(id: one.id, accountID: account, content: "local", generation: 1)
-        await #expect(throws: DraftError.publicationPending) { try await rename("One.md", to: "New.md") }
-        try await sync.store.forgetSent(id: one.id, accountID: account)
-
-        let renamed = try await rename("One.md", to: "New.md")
+        let renamed = try await sync.store.rename(
+            one.id, accountID: account, filename: "New.md", description: "After")
         #expect(renamed.filename == "New.md")
         #expect(renamed.description == "After")
         #expect(renamed.text == one.text)
@@ -50,18 +37,7 @@ import Testing
         #expect(edited.updatedAt != opened.updatedAt)
         let same = try await sync.store.save(opened, text: "edit", generation: 1)
         #expect(same.updatedAt == edited.updatedAt)
-
-        // A rename to canonically equal but byte-distinct Unicode is still an edit.
-        let renamed = try await sync.store.updateDraftMetadata(
-            id: opened.id, accountID: account, expectedFilename: opened.filename,
-            filename: "Cafe\u{301}.md", description: "Note")
-        #expect(renamed.filename.utf8.elementsEqual("Cafe\u{301}.md".utf8))
-        #expect(renamed.updatedAt != edited.updatedAt)
-        let unchanged = try await sync.store.updateDraftMetadata(
-            id: opened.id, accountID: account, expectedFilename: renamed.filename,
-            filename: renamed.filename, description: "Note")
-        #expect(unchanged.updatedAt == renamed.updatedAt)
         #expect(try await DraftStore.open(url: url).draft(id: opened.id, accountID: account)?.updatedAt
-            == renamed.updatedAt)
+            == edited.updatedAt)
     }
 }

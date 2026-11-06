@@ -128,28 +128,22 @@ extension UUID {
 
 public enum DraftError: Error, Equatable, Sendable {
     case notFound
-    case accountMismatch
     case staleGeneration
     case unresolvedConflict
     case readOnly
     case notConfirmed
-    case invalidFilename
-    case publicationPending
 }
 
 extension DraftError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .notFound: String(localized: "This file is no longer on this iPhone.")
-        case .accountMismatch: String(localized: "This gist belongs to another GitHub account.")
         case .staleGeneration:
             String(localized: "This file changed. Review the latest version first.")
         case .unresolvedConflict:
             String(localized: "This file also changed on GitHub. Review both versions first.")
         case .readOnly: String(localized: "Only its owner can edit this gist.")
         case .notConfirmed: String(localized: "GitHub didn't confirm the change. Try again.")
-        case .invalidFilename: String(localized: "Enter a filename without slashes.")
-        case .publicationPending: String(localized: "You can change this after the gist publishes.")
         }
     }
 }
@@ -306,22 +300,9 @@ public actor DraftStore {
         return draft
     }
 
-    public func updateDraftMetadata(
-        id: UUID, accountID: UUID, expectedFilename: String,
-        filename: String, description: String
-    ) throws -> Draft {
+    /// Names a stored draft as you or GitHub named its gist or file.
+    public func rename(_ id: UUID, accountID: UUID, filename: String, description: String) throws -> Draft {
         let draft = try find(id, accountID: accountID)
-        guard !filename.isEmpty, !filename.contains("/"), !filename.contains("\\"),
-              !filename.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
-            throw DraftError.invalidFilename
-        }
-        guard draft.filename == expectedFilename || draft.filename == filename else {
-            throw DraftError.staleGeneration
-        }
-        guard draft.sentGeneration == nil else { throw DraftError.publicationPending }
-        if !sourceEqual(draft.filename, filename) || !sourceEqual(draft.gistDescription, description) {
-            draft.updatedAt = .now
-        }
         draft.filename = filename
         draft.gistDescription = description
         try commit()
@@ -354,10 +335,9 @@ public actor DraftStore {
         try commit()
     }
 
-    public func discardLocalCopy(id: UUID, accountID: UUID, expectedGeneration: UInt64) throws {
+    public func discardLocalCopy(id: UUID, accountID: UUID) throws {
         released[id] = nil
         guard let draft = try stored(id, accountID: accountID) else { return }
-        guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
         modelContext.delete(draft)
         try commit()
     }
@@ -404,7 +384,6 @@ public actor DraftStore {
         let draft = try find(id, accountID: accountID)
         guard draft.gistID == nil || draft.gistID == gistID else { throw DraftError.staleGeneration }
         if let publishedGist {
-            guard publishedGist.id == gistID else { throw DraftError.notConfirmed }
             try cachePublication(
                 publishedGist, accountID: accountID, githubUserID: draft.githubUserID,
                 filename: draft.filename, content: content)
@@ -437,12 +416,6 @@ public actor DraftStore {
         draft.sentGeneration = nil
         draft.stateData = try encode(.savedLocally)
         return try settle(draft)
-    }
-
-    func setState(_ state: PublishState, id: UUID, accountID: UUID) throws {
-        guard let draft = try stored(id, accountID: accountID) else { return }
-        draft.stateData = try encode(state)
-        try commit()
     }
 
     /// Compares GitHub's copy of the file with your draft, for a publish and for opening a note. If
@@ -515,15 +488,13 @@ public actor DraftStore {
     }
 
     private func stored(_ id: UUID, accountID: UUID) throws -> StoredDraft? {
-        guard let draft = try modelContext.fetch(FetchDescriptor<StoredDraft>(
-            predicate: #Predicate { $0.id == id }
-        )).first else { return nil }
-        guard draft.accountID == accountID else { throw DraftError.accountMismatch }
-        return draft
+        try modelContext.fetch(FetchDescriptor<StoredDraft>(
+            predicate: #Predicate { $0.id == id && $0.accountID == accountID }
+        )).first
     }
 
-    /// The draft as the app sees it. Only the states that need you are stored: a conflict, a failed
-    /// publish and reconnecting. Whether it's saved to GitHub or only on this iPhone comes from its text.
+    /// The draft as the app sees it. Only a conflict is stored, and whether it's saved to GitHub or
+    /// only on this iPhone comes from its text.
     static func snapshot(_ draft: StoredDraft) -> Draft {
         var snapshot = Draft(
             id: draft.id, accountID: draft.accountID, githubUserID: draft.githubUserID,
@@ -533,11 +504,8 @@ public actor DraftStore {
             sent: draft.sent, sentGeneration: draft.sentGeneration,
             state: decode(draft.stateData), updatedAt: draft.updatedAt, isSaved: true
         )
-        switch snapshot.state {
-        case .conflict, .failed, .reconnect: break
-        case .savedLocally, .savingToGitHub, .savedToGitHub:
-            snapshot.state = snapshot.isPublished ? .savedToGitHub : .savedLocally
-        }
+        if case .conflict = snapshot.state { return snapshot }
+        snapshot.state = snapshot.isPublished ? .savedToGitHub : .savedLocally
         return snapshot
     }
 
