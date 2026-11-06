@@ -3,7 +3,7 @@
 ## Nouns
 
 - **GitHub** is the truth. Gists hold files, and files hold text.
-- **Cache** is the phone's copy of GitHub: the gist list, plus the text of each file you've opened.
+- **Cache** is the phone's copy of GitHub: the gist list, plus the text of today's note and of each file you've opened.
 - **Draft** is one file's unpublished text, plus two more texts:
   - **base** is GitHub's text when you started typing. A new gist or a new day has none.
   - **sent** is the text of a publish GitHub hasn't confirmed yet.
@@ -27,7 +27,7 @@
 
 ### Launch
 - First time: sign in with GitHub, then Refresh.
-- After that: show the cache, Refresh, Publish any leftover drafts, and reopen the last file.
+- After that: show the cache, Refresh, Publish any leftover drafts, and reopen the last file if there is one.
 
 ### Open a file
 - Show it, then Refresh that file.
@@ -70,6 +70,7 @@
 ### Delete
 - A gist: Delete. One that never reached GitHub is only a draft, so it works offline.
 - A daily note: Delete that day's file, or the whole gist when it's the last day. A deleted today stays deleted until you open today again.
+- Deleting the file you have open leaves nothing open.
 
 ### Everything else
 - Title, star, archive, comments, adding or renaming a file, tags, pins and settings apply right away. They need a connection and are never drafted.
@@ -93,4 +94,4 @@
 
 ---
 
-*Where the code differs today:* it creates a draft when you open a file, keeps it after publishing and deletes untouched ones later. Adding a file makes a draft instead of creating the file. A new day publishes any earlier unpublished day first. A refresh that timed out shows Couldn't update your gists. t323 makes the code match this page.
+*Where the code differs today:* it creates a draft when you open a file, keeps it after publishing and deletes untouched ones later. Adding a file makes a draft instead of creating the file. A new day publishes any earlier unpublished day first. A refresh that timed out shows Couldn't update your gists. Refresh skips today's text until you open it. t323 makes the code match this page.
