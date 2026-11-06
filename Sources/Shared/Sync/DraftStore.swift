@@ -130,17 +130,17 @@ final class StoredDraft {
     var gistDescription: String
     var text: String
     var generation: UInt64
-    // `base` and `sent`, stored under their first names so drafts from earlier builds still open.
-    var baseContent: String?
+    // Earlier builds stored these under their first names.
+    @Attribute(originalName: "baseContent") var base: String?
     var baseRevision: String?
-    var attemptedContent: String?
-    var attemptedGeneration: UInt64?
+    @Attribute(originalName: "attemptedContent") var sent: String?
+    @Attribute(originalName: "attemptedGeneration") var sentGeneration: UInt64?
     var stateData: Data
     var updatedAt: Date? = nil
 
     init(
         id: UUID, accountID: UUID, githubUserID: Int64, gistID: String?,
-        filename: String, description: String, text: String, baseContent: String?,
+        filename: String, description: String, text: String, base: String?,
         baseRevision: String?, stateData: Data
     ) {
         self.id = id
@@ -151,7 +151,7 @@ final class StoredDraft {
         gistDescription = description
         self.text = text
         generation = 0
-        self.baseContent = baseContent
+        self.base = base
         self.baseRevision = baseRevision
         self.stateData = stateData
         updatedAt = .now
@@ -224,7 +224,7 @@ public actor DraftStore {
         guard draft.filename == expectedFilename || draft.filename == filename else {
             throw DraftError.staleGeneration
         }
-        guard draft.attemptedGeneration == nil else { throw DraftError.publicationPending }
+        guard draft.sentGeneration == nil else { throw DraftError.publicationPending }
         if let gistID = draft.gistID {
             let duplicates = try modelContext.fetch(FetchDescriptor<StoredDraft>(
                 predicate: #Predicate {
@@ -290,7 +290,7 @@ public actor DraftStore {
         let draft = StoredDraft(
             id: UUID(), accountID: accountID, githubUserID: githubUserID, gistID: gistID,
             filename: filename, description: description, text: text,
-            baseContent: isNewFile ? nil : text, baseRevision: revision,
+            base: isNewFile ? nil : text, baseRevision: revision,
             stateData: try encode(.savedLocally)
         )
         modelContext.insert(draft)
@@ -315,7 +315,7 @@ public actor DraftStore {
             draft.generation += 1
             draft.text = fresh
         }
-        draft.baseContent = fresh
+        draft.base = fresh
         draft.baseRevision = revision
         draft.stateData = try encode(.savedLocally)
         try commit()
@@ -329,7 +329,7 @@ public actor DraftStore {
         let text = GistFile.decodeContent(GistFile.initialContent(description: description, content: content))
         let draft = StoredDraft(
             id: UUID(), accountID: accountID, githubUserID: githubUserID, gistID: nil,
-            filename: filename, description: description, text: text, baseContent: nil,
+            filename: filename, description: description, text: text, base: nil,
             baseRevision: nil, stateData: try encode(.savedLocally)
         )
         modelContext.insert(draft)
@@ -380,8 +380,8 @@ public actor DraftStore {
     ) throws {
         let draft = try find(id, accountID: accountID)
         guard draft.generation == generation else { throw CancellationError() }
-        draft.attemptedContent = content
-        draft.attemptedGeneration = generation
+        draft.sent = content
+        draft.sentGeneration = generation
         draft.stateData = try encode(.savedLocally)
         try commit()
     }
@@ -399,10 +399,10 @@ public actor DraftStore {
                 filename: draft.filename, content: content)
         }
         draft.gistID = gistID
-        draft.baseContent = content
+        draft.base = content
         draft.baseRevision = revision
-        draft.attemptedContent = nil
-        draft.attemptedGeneration = nil
+        draft.sent = nil
+        draft.sentGeneration = nil
         draft.stateData = try encode(.savedLocally)
         try commit()
         return try snapshot(draft)
@@ -423,8 +423,8 @@ public actor DraftStore {
 
     func forgetSent(id: UUID, accountID: UUID) throws -> Draft {
         let draft = try find(id, accountID: accountID)
-        draft.attemptedContent = nil
-        draft.attemptedGeneration = nil
+        draft.sent = nil
+        draft.sentGeneration = nil
         draft.stateData = try encode(.savedLocally)
         try commit()
         return try snapshot(draft)
@@ -449,7 +449,7 @@ public actor DraftStore {
         guard draft.generation == expectedGeneration else { throw CancellationError() }
         guard let gistID = draft.gistID else { return try snapshot(draft) }
         if case .conflict = Self.decode(draft.stateData) { return try snapshot(draft) }
-        if let sent = draft.attemptedContent {
+        if let sent = draft.sent {
             guard sourceEqual(remote, sent) else { return try snapshot(draft) }
             return try confirm(
                 id: id, accountID: accountID, gistID: gistID, content: sent,
@@ -463,9 +463,9 @@ public actor DraftStore {
         let current = try snapshot(draft)
         // A published note takes on newer text through the editor, so its undo history stays honest.
         if let remote, current.adoptsRemote(remote) { return current }
-        guard !sourceEqual(remote, draft.baseContent) else { return current }
+        guard !sourceEqual(remote, draft.base) else { return current }
         draft.stateData = try encode(.conflict(DraftConflict(
-            generation: draft.generation, base: draft.baseContent, local: draft.text,
+            generation: draft.generation, base: draft.base, local: draft.text,
             remote: remote, remoteRevision: revision)))
         try commit()
         return try snapshot(draft)
@@ -483,13 +483,13 @@ public actor DraftStore {
         }
         guard case .conflict(let conflict) = Self.decode(draft.stateData),
               conflict.generation == expectedGeneration else { throw DraftError.unresolvedConflict }
-        draft.baseContent = conflict.remote
+        draft.base = conflict.remote
         draft.baseRevision = conflict.remoteRevision
         if !sourceEqual(draft.text, text) { draft.updatedAt = .now }
         draft.text = text
         draft.generation = generation
-        draft.attemptedContent = nil
-        draft.attemptedGeneration = nil
+        draft.sent = nil
+        draft.sentGeneration = nil
         draft.stateData = try encode(.savedLocally)
         try commit()
         return try snapshot(draft)
@@ -510,8 +510,8 @@ public actor DraftStore {
             id: draft.id, accountID: draft.accountID, githubUserID: draft.githubUserID,
             gistID: draft.gistID, filename: draft.filename, description: draft.gistDescription,
             text: draft.text, generation: draft.generation,
-            base: draft.baseContent, baseRevision: draft.baseRevision,
-            sent: draft.attemptedContent, sentGeneration: draft.attemptedGeneration,
+            base: draft.base, baseRevision: draft.baseRevision,
+            sent: draft.sent, sentGeneration: draft.sentGeneration,
             state: Self.decode(draft.stateData), updatedAt: draft.updatedAt
         )
         switch snapshot.state {
