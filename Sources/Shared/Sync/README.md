@@ -52,45 +52,53 @@ holds one `Draft` per account and file. Every write commits before it returns,
 so the editor may say a change is saved on this iPhone as soon as `persist`
 does.
 
-A draft's `generation` increases with every edit, and `persist` rejects an
-older one. `apply(_:)` takes a `DraftEdit` from outside the editor, such as a
-widget's task toggle or Add to Today, and lands it only if the text it expects
-is still there.
+A draft's `generation` increases with every edit, and `persist` rejects an older
+one. `apply(_:)` takes a `DraftEdit` from outside the editor, such as Add to
+Today or a shortcut, and adds its text to the end only if the draft hasn't
+changed since it was read.
 
 `baseContent` is GitHub's text the draft started from. `hasUnpublishedEdits`
 compares against it, and a new gist or file has no base until it publishes.
-`isDiscardableBlank` is true for a new gist that's untitled and
-whitespace-only, and for a day that was never typed in (generation 0), whatever
-it started from. Neither has reached GitHub, and `discardBlankDraft` removes
-either when you leave it.
+`isClean` means GitHub has exactly the draft's text, with no publish
+outstanding. A clean draft's state reads `.savedToGitHub`, and any other draft
+without a problem reads `.savedLocally`, so the store never has to keep the two
+in step. `.savingToGitHub` is never stored, because only the editor knows a
+publish is running.
 
-`inspectRemoteChange` and `refreshCleanDraft` take on GitHub's newer text when
-you have no edits, and record a `DraftConflict` when both sides changed.
-`resolveConflict` makes GitHub's text the new base after the editor applies the
-chosen text as one undoable edit. `updateDraftMetadata` follows a rename,
-`removeDrafts` forgets a gist or file that GitHub deleted, and
+`isDiscardableBlank` is true for a new gist that's untitled and whitespace-only,
+and for a day that was never typed in (generation 0), whatever it started from.
+Neither has reached GitHub, and `discardBlankDraft` removes either when you
+leave it.
+
+`refreshCleanDraft` takes on GitHub's newer text when the draft is clean.
+`reconcile` decides everything else about GitHub's copy, for both opening a note
+and publishing. A copy that matches the draft or its outstanding attempt is
+acknowledged, and any other change becomes a `DraftConflict`, including a file
+deleted on GitHub. `resolveConflict` makes GitHub's text the new base after the
+editor applies the chosen text as one undoable edit. `updateDraftMetadata`
+follows a rename, `removeDrafts` forgets a gist or file that GitHub deleted, and
 `discardLocalCopy` deletes a gist that's only on the phone.
 
 ## Publishing
 
-`DraftPublisher` sends one draft at a time for the account. It reads GitHub's
-copy first. A match is acknowledged, a clean draft takes GitHub's text, and a
-changed base becomes a conflict. Before sending, it records the attempted text
-and generation, so a publish cut off by a dropped connection or a quit checks
-GitHub before sending again. An edit that landed is acknowledged, and a create
-looks for its gist by description and file bytes, so it never posts twice.
-Typing during a publish stays unpublished for the next one. Typing after a
-cut-off publish is `.savedLocally` again, even back to the base text, because
-GitHub may hold the attempt.
+`DraftPublisher` sends one draft at a time for the account. A clean draft has
+nothing to send, so newer text on the web reaches it when the note is opened.
+Otherwise it reads GitHub's copy and asks `reconcile`. Before sending, it
+records the attempted text and generation, so a publish cut off by a dropped
+connection or a quit checks GitHub before sending again. An edit that landed is
+acknowledged, and a create looks for its gist by description and file bytes, so
+it never posts twice. Typing during a publish stays unpublished for the next
+one. Typing after a cut-off publish is `.savedLocally` again, even back to the
+base text, because GitHub may hold the attempt.
 
-Failures persist as `PublishState`. Network and HTTP failures can be retried, a
-401 is `.reconnect`, and `Retry-After` is honored. An acknowledged publish
-updates the library cache in the same commit as the draft.
+Failures persist as `PublishState`. Network and HTTP failures wait for the next
+publish moment, and a 401 is `.reconnect`. An acknowledged publish updates the
+library cache in the same commit as the draft.
 
 When to publish belongs to the app: five seconds after typing stops, leaving a
 file, leaving the app, and the sweep at launch and return. GitHub has no
-conditional write, so the fresh read narrows a race with the web but can't
-close it.
+conditional write, so the fresh read narrows a race with the web but can't close
+it.
 
 ## Daily notes
 
