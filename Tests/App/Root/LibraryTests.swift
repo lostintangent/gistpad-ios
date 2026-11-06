@@ -90,6 +90,33 @@ struct LibraryTests {
     #expect(library.loadedFile?.rowID == "a")
   }
 
+  /// A refresh cut off by leaving the app can come back as a timeout. Returning retries it, and
+  /// shows checking rather than the problem until the retry settles.
+  @Test func returningToTheAppRetriesAFailedRefresh() async throws {
+    let fixture = try await LibraryFixture {
+      $0.addGist(id: "a", description: "A note", files: ["README.md": "Text"])
+    }
+    let library = fixture.library
+    await library.start()
+    fixture.fail("GET /gists")
+    await library.refresh()
+    guard case .problem = library.remoteRefreshStatus else {
+      Issue.record("The failed refresh should show its problem.")
+      return
+    }
+    let retry = fixture.hold("GET /gists/starred")
+    let returning = Task { await library.refreshOnReturn() }
+    try await retry.arrival()
+    guard case .checking = library.remoteRefreshStatus else {
+      Issue.record("The retry should show as checking.")
+      return
+    }
+    retry.open()
+    await returning.value
+    #expect(library.remoteRefreshStatus == .idle)
+    #expect(library.state.loadState == .ready)
+  }
+
   @Test func networkFailureKeepsExistingLibraryAndFile() async throws {
     let fixture = try await LibraryFixture {
       $0.addGist(id: "a", description: "A note", files: ["README.md": "Text"])

@@ -54,6 +54,7 @@ final class Library {
   @ObservationIgnored private let sync: GitHubSync
   @ObservationIgnored private let lastOpened: LastOpened
   @ObservationIgnored private var libraryRequest = UUID()
+  @ObservationIgnored private var refreshedAt: Date?
   @ObservationIgnored private var fileRequest = UUID()
   @ObservationIgnored private let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "Library")
@@ -432,6 +433,18 @@ final class Library {
     }
   }
 
+  /// Refreshes as the app comes back, like the web on focus: when the last refresh failed or was
+  /// cut off by leaving, or its list is more than five minutes old.
+  func refreshOnReturn() async {
+    guard account != nil, !isStarting else { return }
+    if remoteRefreshProblem == nil, !isRefreshingRemote, let refreshedAt,
+      refreshedAt.timeIntervalSinceNow > -5 * 60
+    {
+      return
+    }
+    await refresh()
+  }
+
   func refresh() async {
     guard pendingAccount == nil, !isSigningOut else { return }
     guard let account else {
@@ -442,6 +455,8 @@ final class Library {
     libraryRequest = request
     let previousState: LibraryLoadState = state.loadState == .loading ? .ready : state.loadState
     isRefreshingRemote = true
+    // A retry shows as checking instead of the problem it may be about to clear.
+    remoteRefreshProblem = nil
     defer {
       if request == libraryRequest { isRefreshingRemote = false }
     }
@@ -460,7 +475,7 @@ final class Library {
       state.loadState = .ready
       try await reloadLocalState(accountID: account.id)
       guard request == libraryRequest, self.account?.id == account.id else { return }
-      remoteRefreshProblem = nil
+      refreshedAt = .now
     } catch {
       guard request == libraryRequest else { return }
       guard let problem = RemoteRead.problem(for: error) else {

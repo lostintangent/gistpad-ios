@@ -187,6 +187,7 @@ struct RootView: View {
       if phase == .background { publishOnBackground() }
       if phase == .active {
         Task { await library.publishUnsyncedEdits() }
+        Task { await library.refreshOnReturn() }
         library.updateCalendar()
         Task { await active?.inspectRemoteChanges() }
       }
