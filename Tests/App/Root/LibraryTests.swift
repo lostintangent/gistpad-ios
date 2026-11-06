@@ -651,6 +651,30 @@ struct LibraryTests {
     #expect(!library.state.gists.contains { $0.gistID == "daily" })
   }
 
+  @Test func deletingTheOpenTodayFromTheListKeepsItDeleted() async throws {
+    let today = DailyNote.filename()
+    let fixture = try await LibraryFixture(
+      selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+    ) {
+      $0.addGist(id: "a", description: "Somewhere else", files: ["README.md": "Text"])
+      $0.addGist(
+        id: "daily", description: DailyNote.gistDescription,
+        files: [today: "Today's words", "2026-10-23.md": "An earlier day"])
+    }
+    let library = fixture.library
+    await library.start()
+    await library.open(.today())
+    #expect(library.loadedFile?.filename == today)
+    _ = try await library.apply(
+      try #require(library.deletion(forRow: "daily/\(today)")), accountID: fixture.account.id)
+    #expect(library.loadedFile == nil)
+    #expect(fixture.remote("daily", today) == nil)
+    #expect(!library.state.gists.contains { $0.filename == today })
+    #expect(try await fixture.store.drafts(accountID: fixture.account.id).allSatisfy {
+      $0.filename != today
+    })
+  }
+
   @Test func aDayThatPublishesWhileItsDeletionWaitsRemovesOnlyThatDay() async throws {
     let fixture = try await LibraryFixture(
       selection: .init(gistID: "a", filename: "README.md", draftID: nil)
