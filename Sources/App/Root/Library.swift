@@ -27,6 +27,7 @@ final class Library {
   private(set) var loadedFile: File?
   private(set) var isSigningIn = false
   private(set) var isSigningOut = false
+  /// Launch is restoring the account and this iPhone's drafts. Links wait for it, not for GitHub.
   private(set) var isStarting = false
   /// The file opening in the detail column, until it's presented or fails.
   private(set) var opening: Opening?
@@ -336,6 +337,7 @@ final class Library {
       }
       account = restored
       try await reloadLocalState(accountID: restored.id, discardAbandonedBlanks: true)
+      isStarting = false
       await refresh()
       await restoreSelectionIfNeeded()
     } catch is CancellationError {

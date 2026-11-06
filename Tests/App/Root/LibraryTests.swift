@@ -847,6 +847,72 @@ struct RootViewTests {
     #expect(host.library.loadedFile?.gist?.id == "b")
   }
 
+  /// A widget's Today opens on a folded phone at a cold launch without waiting for GitHub: at once
+  /// when you've written in it on this iPhone, and behind its placeholder while GitHub stages it.
+  @Test(arguments: [true, false])
+  func aColdTodayLinkOpensWithoutWaitingForGitHub(writtenOnThisIPhone: Bool) async throws {
+    let today = DailyNote.filename()
+    let fixture = try await LibraryFixture {
+      $0.addGist(
+        id: "daily", description: DailyNote.gistDescription,
+        files: [DailyNote.filename(date: .now - 86_400): "- [x] Yesterday's task\n"])
+    }
+    var text = "# \(today.dropLast(3))\n\n"
+    if writtenOnThisIPhone {
+      await fixture.library.start()
+      text = "Written on this iPhone"
+      _ = try await fixture.stageEdit(gistID: "daily", filename: today, text: text)
+    }
+    let github = fixture.hold("GET /gists")
+    let pending = PendingLink()
+    pending.link = .today
+    let host = try await NavigationHost(
+      fixture: fixture, library: fixture.relaunch(), pending: pending, sizeClass: .compact,
+      waitsForStart: false)
+    defer {
+      github.open()
+      await host.close()
+    }
+    try await github.arrival()
+    try await host.waitUntil { !host.isLibraryVisible }
+    if !writtenOnThisIPhone { github.open() }
+    try await host.waitUntil {
+      pending.link == nil && host.library.visibleFile?.filename == today
+        && host.editor(text: text)?.isFirstResponder == true
+    }
+  }
+
+  /// Opening early doesn't mean deciding from a stale library: today started on the web since
+  /// the last launch opens from GitHub while the launch's refresh is still out.
+  @Test func aColdTodayLinkOpensTodayFromTheWebOverAStaleLibrary() async throws {
+    let today = DailyNote.filename()
+    let fixture = try await LibraryFixture(
+      selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+    ) {
+      $0.addGist(
+        id: "daily", description: DailyNote.gistDescription,
+        files: [DailyNote.filename(date: .now - 86_400): "- [x] Yesterday's task\n"])
+      $0.addGist(id: "a", description: "Last opened", files: ["README.md": "Last opened"])
+    }
+    await fixture.library.start()
+    fixture.server.edit("daily", files: [today: "Started on the web"])
+    let refresh = fixture.hold("GET /gists/starred")
+    let pending = PendingLink()
+    pending.link = .today
+    let host = try await NavigationHost(
+      fixture: fixture, library: fixture.relaunch(), pending: pending, sizeClass: .compact,
+      waitsForStart: false)
+    defer {
+      refresh.open()
+      await host.close()
+    }
+    try await refresh.arrival()
+    try await host.waitUntil {
+      pending.link == nil && host.library.visibleFile?.filename == today
+        && host.editor(text: "Started on the web") != nil
+    }
+  }
+
   @Test func aNewGistLinkOpensABlankNoteReadyToWrite() async throws {
     let fixture = try await LibraryFixture {
       $0.addGist(id: "a", description: "Existing", files: ["README.md": "Existing source"])
@@ -929,10 +995,10 @@ private struct NavigationHost {
   private let previousWindow: UIWindow?
 
   init(
-    fixture: LibraryFixture, pending: PendingLink = PendingLink(),
-    sizeClass: UIUserInterfaceSizeClass? = nil, mode: FileMode = .edit
+    fixture: LibraryFixture, library: Library? = nil, pending: PendingLink = PendingLink(),
+    sizeClass: UIUserInterfaceSizeClass? = nil, mode: FileMode = .edit, waitsForStart: Bool = true
   ) async throws {
-    library = fixture.library
+    self.library = library ?? fixture.library
     self.pending = pending
     suite = "RootView-\(UUID())"
     layout = LayoutPreferences(defaults: try #require(UserDefaults(suiteName: suite)))
@@ -953,9 +1019,10 @@ private struct NavigationHost {
       origin: sceneBounds.origin, size: CGSize(width: width, height: sceneBounds.height))
     if let sizeClass { window.traitOverrides.horizontalSizeClass = sizeClass }
     window.rootViewController = UIHostingController(
-      rootView: RootView(library: library, layout: layout, pending: pending))
+      rootView: RootView(library: self.library, layout: layout, pending: pending))
     window.makeKeyAndVisible()
-    let library = library
+    guard waitsForStart else { return }
+    let library = self.library
     try await waitUntil {
       library.state.loadState == .ready && library.cachedLibrary != nil && !library.isStarting
     }

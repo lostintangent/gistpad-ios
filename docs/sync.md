@@ -38,7 +38,7 @@ You should never have to think about sync. Nothing you type is lost, you always 
 
 ## Daily notes
 
-- **Opening today's note shows it right away**, from the Today button, the widget, Shortcuts, or the app opening on today. The day starts from the Daily notes gist's template, with the date filled in, or a heading with the date when there's no template. It opens offline too.
+- **Opening today's note shows it right away**, from the Today button, the widget, Shortcuts, or the app opening on today. A link from a cold launch doesn't wait for the library to refresh. Before the phone starts a new day, it asks GitHub for the Daily notes gist, so a day started on the web opens instead. The day starts from the Daily notes gist's template, with the date filled in, or a heading with the date when there's no template. It opens offline too.
 - **Today reaches GitHub once you type in it**, at the next publish moment. Add to Today counts as typing. A day you open and leave untouched is discarded, whatever it started from.
 - **The first day creates the Daily notes gist.** If an earlier day never reached GitHub, opening the next day publishes it first, so every day lands in one gist.
 - **Earlier days** are deleted on purpose. Nothing carries over.

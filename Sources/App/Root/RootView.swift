@@ -866,6 +866,8 @@ struct RootView: View {
     library.openError = nil
     switch link {
     case .today:
+      // Like the Today button, a folded phone shows Today while it's staged.
+      compactColumn = .detail
       await library.open(.today())
     case .addToToday:
       sheet = .addToToday
