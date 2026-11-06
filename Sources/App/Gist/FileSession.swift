@@ -137,7 +137,7 @@ final class FileSession {
     switch reason {
     case .manual: true
     case .autosave: autosaveAllowed
-    case .background, .leaving:
+    case .background:
       library.account?.id == draft.accountID && library.pendingAccount == nil
         && editor.isSettled && editor.textView.markedTextRange == nil
     }
@@ -415,7 +415,7 @@ final class FileSession {
       }
     }
     guard hasUnpublishedChanges else { return false }
-    await publish(reason: .leaving)
+    await publish(reason: .background)
     return false
   }
 
@@ -424,7 +424,7 @@ final class FileSession {
     shouldContinue: @escaping @MainActor @Sendable () -> Bool = { true }
   ) async {
     guard !Task.isCancelled, shouldContinue() else { return }
-    if reason == .background || reason == .leaving { await waitForPublication() }
+    if reason == .background { await waitForPublication() }
     guard !Task.isCancelled, shouldContinue(), publicationAllowed(reason: reason) else { return }
     if reason != .manual, !hasUnpublishedChanges { return }
     guard canMutate, saveState.canPublish else { return }

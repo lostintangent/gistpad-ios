@@ -4,7 +4,6 @@ public enum PublishReason: Equatable, Sendable {
     case manual
     case autosave
     case background
-    case leaving
 }
 
 public actor DraftPublisher {

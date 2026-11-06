@@ -971,11 +971,6 @@ final class Library {
       libraryRequest = UUID()
       isRefreshingRemote = false
       if state.loadState == .loading { state.loadState = .ready }
-      if let cache = cachedLibrary {
-        try await sync.cacheLibrary(
-          owned: cache.owned.filter { $0.id != id }, starred: cache.starred.filter { $0.id != id },
-          account: account)
-      }
     case .deletedFile(let id, let filename, _):
       forget(accountID: account.id) { $0.gistID == id && $0.filename == filename }
     case .review, .remoteRead:
