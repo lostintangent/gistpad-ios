@@ -68,6 +68,12 @@ public struct GistItem: Equatable, Identifiable, Sendable {
     /// Pin and Archive organize whole gists. A daily note is one file, so it only deletes.
     var canPinAndArchive: Bool { isOwned && !isRecovery && !isDailyNote }
 
+    /// A daily note reads as its day, "Friday, Nov 6".
+    func displayTitle(now: Date, locale: Locale, calendar: Calendar) -> String {
+        guard isDailyNote, let dailyDate else { return title }
+        return DateLabels.dailyTitle(for: dailyDate, relativeTo: now, locale: locale, calendar: calendar)
+    }
+
     public var visibleCommentCount: Int? {
         guard supportsComments, let commentCount, commentCount > 0 else { return nil }
         return commentCount

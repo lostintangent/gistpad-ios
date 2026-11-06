@@ -94,9 +94,7 @@ struct GistRow: View {
     }
 
     private var displayTitle: String {
-        guard gist.isDailyNote, let dailyDate = gist.dailyDate else { return gist.title }
-        return DateLabels.dailyTitle(
-            for: dailyDate, relativeTo: now, locale: locale, calendar: displayCalendar)
+        gist.displayTitle(now: now, locale: locale, calendar: displayCalendar)
     }
 
     private var spokenTitle: String {

@@ -14,6 +14,8 @@ public struct GistScreen<Source: View, Preview: View>: View {
     private let areCommentsPresented: Bool
     @State private var confirmingDeletion = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.locale) private var locale
+    @Environment(\.calendar) private var calendar
     // Match the native toolbar's settled segment size on its first layout.
     @ScaledMetric(relativeTo: .body) private var minimumModeSegmentWidth = 48
 
@@ -22,8 +24,10 @@ public struct GistScreen<Source: View, Preview: View>: View {
     private var paneLayout: AnyLayout {
         showingSplit ? AnyLayout(HStackLayout(spacing: 1)) : AnyLayout(ZStackLayout())
     }
+    private var title: String { gist.displayTitle(now: .now, locale: locale, calendar: calendar) }
+    private var switchesFiles: Bool { gist.files.count > 1 && actions.selectFile != nil }
     private var showsFiles: Bool {
-        gist.files.count > 1 || (gist.access.canEdit && (actions.addFile != nil || actions.renameFile != nil))
+        switchesFiles || (gist.access.canEdit && (actions.addFile != nil || actions.renameFile != nil))
     }
 
     public init(
@@ -65,10 +69,10 @@ public struct GistScreen<Source: View, Preview: View>: View {
             }
         }
         .background(Color(uiColor: .systemBackground))
-        .navigationTitle(gist.title)
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .navigationSubtitle(gist.headerFilename ?? "")
-        .modifier(FileMenu(isEnabled: gist.files.count > 1) { fileChoices })
+        .modifier(FileMenu(isEnabled: switchesFiles) { fileChoices })
         .toolbar {
             primaryToolbar
             secondaryToolbar
@@ -171,7 +175,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
                         if !(areCommentsPresented && horizontalSizeClass == .compact) {
                             ShareLink(
                                 item: url,
-                                preview: SharePreview(gist.title, icon: Image("Artwork", bundle: .module))
+                                preview: SharePreview(title, icon: Image("Artwork", bundle: .module))
                             )
                         }
                         Button(String(localized: "Copy Link", bundle: .module), systemImage: "link") {
@@ -240,18 +244,11 @@ public struct GistScreen<Source: View, Preview: View>: View {
             }
             .accessibilityIdentifier("note-actions")
             .deletionConfirmation(
-                title: deletionTitle, isDailyNote: gist.isDailyNote, isPresented: $confirmingDeletion
+                title: title, isDailyNote: gist.isDailyNote, isPresented: $confirmingDeletion
             ) {
                 actions.delete?()
             }
         }
-    }
-
-    /// A daily note's confirmation names its day, like its Library row, not the daily notes gist.
-    private var deletionTitle: String {
-        guard gist.isDailyNote,
-              let file = gist.files.first(where: { $0.id == gist.selectedFileID }) else { return gist.title }
-        return GistFile.displayName(file.filename)
     }
 
     private var commentsLabel: String {
@@ -262,16 +259,17 @@ public struct GistScreen<Source: View, Preview: View>: View {
 
     @ViewBuilder
     private var fileChoices: some View {
-        Picker(
-            String(localized: "Files", bundle: .module),
-            selection: Binding(
-                get: { gist.selectedFileID },
-                set: { if $0 != gist.selectedFileID { actions.selectFile?($0) } })
-        ) {
-            ForEach(gist.files) { Text(verbatim: $0.filename).tag($0.id) }
+        if let selectFile = actions.selectFile {
+            Picker(
+                String(localized: "Files", bundle: .module),
+                selection: Binding(
+                    get: { gist.selectedFileID },
+                    set: { if $0 != gist.selectedFileID { selectFile($0) } })
+            ) {
+                ForEach(gist.files) { Text(verbatim: $0.filename).tag($0.id) }
+            }
+            .pickerStyle(.inline)
         }
-        .pickerStyle(.inline)
-        .disabled(actions.selectFile == nil)
         if gist.access.canEdit && (actions.renameFile != nil || actions.addFile != nil) {
             Section {
                 if let rename = actions.renameFile {

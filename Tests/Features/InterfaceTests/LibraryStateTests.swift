@@ -96,6 +96,15 @@ struct LibraryStateTests {
         #expect(!state.hasMatches)
     }
 
+    @Test func aDailyNoteIsTitledByItsDayWithoutAFilename() throws {
+        let days = ["2026-11-05.md", "2026-11-06.md"].map { GistDetails.File(id: $0, filename: $0) }
+        let daily = GistDetails(
+            title: DailyNote.gistDescription, files: days, selectedFileID: "2026-11-06.md", isDailyNote: true)
+        let now = try #require(DailyNote.date(filename: "2026-11-06.md"))
+        #expect(daily.displayTitle(now: now, locale: Locale(identifier: "en_US"), calendar: .current) == "Friday, Nov 6")
+        #expect(daily.headerFilename == nil)
+    }
+
     @Test func readOnlyGistsCantBeEdited() {
         #expect(FileAccess.editable.canEdit)
         #expect(!FileAccess.readOnly.canEdit)

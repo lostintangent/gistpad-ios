@@ -447,7 +447,8 @@ public struct LibraryView: View {
             }
         }
         .deletionConfirmation(
-            title: gist.title, isDailyNote: gist.isDailyNote,
+            title: gist.displayTitle(now: now, locale: locale, calendar: calendar),
+            isDailyNote: gist.isDailyNote,
             isPresented: Binding(
                 get: { pendingDeletion == gist.id },
                 set: { if !$0 { pendingDeletion = nil } }),

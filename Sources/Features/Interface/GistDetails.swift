@@ -56,12 +56,22 @@ public struct GistDetails: Equatable, Sendable {
     /// The gistpad.dev link to this file, once it's on GitHub.
     public var shareURL: URL?
 
+    /// A daily note reads as its day, exactly like its Library row.
+    func displayTitle(now: Date, locale: Locale, calendar: Calendar) -> String {
+        guard isDailyNote, let selectedFilename,
+              let day = DailyNote.date(filename: selectedFilename) else { return title }
+        return DateLabels.dailyTitle(for: day, relativeTo: now, locale: locale, calendar: calendar)
+    }
+
+    /// The file among several, except README.md. A daily note's title already names its day.
     var headerFilename: String? {
-        guard files.count > 1,
-              let filename = files.first(where: { $0.id == selectedFileID })?.filename,
+        guard !isDailyNote, files.count > 1,
+              let filename = selectedFilename,
               filename.caseInsensitiveCompare("README.md") != .orderedSame else { return nil }
         return filename
     }
+
+    private var selectedFilename: String? { files.first(where: { $0.id == selectedFileID })?.filename }
 
     public init(
         title: String, files: [File], selectedFileID: String,
@@ -106,10 +116,11 @@ public struct GistActions {
 
     public init() {}
 
-    /// A daily note is a file, not a gist. It switches days, shares and deletes,
-    /// but nothing pins, stars, archives, tags or renames the gist around it.
+    /// A daily note is a file, not a gist. It shares and deletes, but nothing pins, stars,
+    /// archives, tags or renames the gist around it, and the Library picks the other days.
     var dailyNote: GistActions {
         var actions = self
+        actions.selectFile = nil
         actions.togglePin = nil
         actions.toggleStar = nil
         actions.toggleArchive = nil

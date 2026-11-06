@@ -43,12 +43,12 @@ autosave is off or a publish that can be retried didn't land, as
 that opens the diff or reconnects. Comments is a toggle with a quiet count from
 `ToolbarBadgeLabel`. The More menu holds Pin, Star, Share and Copy Link, then
 Rename, Tags, Files, Intelligence and Find and Replace, then Open in GitHub,
-Archive and Delete. A daily note is a file, not a gist, so `GistActions.dailyNote`
-drops Pin, Star, Archive, Tags, Rename and the file menu's Rename File and Add
-File, and its Library row offers only Delete. Share hides while Comments is a
-sheet in compact width, because the share sheet can't present over it. Delete
-confirms with the gist's title, or the day for a daily note, before it calls
-`delete`.
+Archive and Delete. A daily note is a file, not a gist. Its title is its day,
+exactly as its row reads, with no subtitle. `GistActions.dailyNote` drops Pin,
+Star, Archive, Tags, Rename and the file switcher, and its Library row offers
+only Delete. Share hides while Comments is a sheet in compact width, because the
+share sheet can't present over it. Delete confirms with the title, the day for a
+daily note, before it calls `delete`.
 
 ## Sheets
 

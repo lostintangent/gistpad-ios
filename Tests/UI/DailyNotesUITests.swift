@@ -30,12 +30,12 @@ final class DailyNotesUITests: XCTestCase {
   }
 
   func testDeletingADailyNoteFromItsScreenKeepsTheOtherDays() throws {
-    // The fixture's daily notes gist holds four days, ending today.
-    let yesterday = Self.yesterday
-    let app = launchGistPad(open: "daily/\(yesterday).md")
+    let app = launchGistPad(open: "daily/\(Self.yesterdayFilename)")
     try tap(app.buttons["note-actions"].firstMatch, "More")
     try tap(app.buttons["Delete Daily Note…"].firstMatch, "Delete Daily Note…")
-    try waitUntil("a confirmation that names the day") { app.staticTexts["Delete “\(yesterday)”?"].exists }
+    try waitUntil("a confirmation that names the day") {
+      app.staticTexts["Delete “\(Self.yesterdayTitle)”?"].exists
+    }
     try confirmDeletion(in: app)
 
     // Deleting the open file returns to the Library.
@@ -45,26 +45,33 @@ final class DailyNotesUITests: XCTestCase {
     try waitUntil("the other three days") { dailyNotes.countValue == "3 daily notes" }
   }
 
-  func testADailyNoteOffersOnlyFileActions() throws {
-    let app = launchGistPad(open: "daily/\(Self.yesterday).md")
+  func testADailyNoteIsTitledByItsDayAndOffersOnlyFileActions() throws {
+    let app = launchGistPad(open: "daily/\(Self.yesterdayFilename)")
+    try waitUntil("the day as the title") { app.navigationBars[Self.yesterdayTitle].exists }
     try tap(app.buttons["note-actions"].firstMatch, "More")
     try waitUntil("the More menu") { app.buttons["Delete Daily Note…"].exists }
     XCTAssertTrue(app.buttons["Copy Link"].exists)
-    for gistAction in ["Pin", "Star", "Archive", "Rename Gist…", "Tags"] {
+    for gistAction in ["Pin", "Star", "Archive", "Rename Gist…", "Tags", "Files"] {
       XCTAssertFalse(app.buttons[gistAction].exists, gistAction)
     }
-
-    try tap(app.buttons["Files"].firstMatch, "Files")
-    try waitUntil("the other days") { app.buttons["\(Self.yesterday).md"].exists }
-    XCTAssertFalse(app.buttons["note-rename-file"].exists || app.buttons["note-add-file"].exists)
   }
 
-  private static var yesterday: String {
+  // The fixture's daily notes gist holds four days, ending today.
+  private static let yesterday = Date.now.addingTimeInterval(-86_400)
+
+  private static var yesterdayFilename: String {
     let formatter = DateFormatter()
     formatter.calendar = Calendar(identifier: .gregorian)
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "yyyy-MM-dd"
-    return formatter.string(from: .now.addingTimeInterval(-86_400))
+    return formatter.string(from: yesterday) + ".md"
+  }
+
+  /// Yesterday as its row and its screen read it, such as "Thursday, Nov 5".
+  private static var yesterdayTitle: String {
+    let style = Date.FormatStyle(locale: Locale(identifier: "en_US")).weekday(.wide).month(.abbreviated).day()
+    return yesterday.formatted(
+      Calendar.current.isDate(yesterday, equalTo: .now, toGranularity: .year) ? style : style.year())
   }
 
   func testAddToTodayAppendsATask() throws {
