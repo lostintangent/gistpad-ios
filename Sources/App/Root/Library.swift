@@ -541,6 +541,8 @@ final class Library {
       guard let selected else { throw GitHubClientError.missingFile }
       guard let userID = account.githubUserID else { throw AccountError.reconnectGitHub }
       let text = try await sync.content(gist: gist, filename: selected, accountID: account.id)
+      // The read is cached on this iPhone, so the note opens from here next time.
+      try await reloadLocalState(accountID: account.id)
       var file = File(
         draft: try await sync.current(
           Draft(
@@ -578,6 +580,15 @@ final class Library {
       file.editingRequestID = UUID()
       return file
     }
+  }
+
+  /// Closes a new note you left without writing in it, since nothing of it was kept.
+  func close(_ session: FileSession) {
+    guard !session.draft.isSaved, session.draft.gistID == nil,
+      state.selectedID == nil || visibleFile?.draft.id != session.draft.id
+    else { return }
+    sessions[session.draft.id] = nil
+    if loadedFile?.draft.id == session.draft.id { loadedFile = nil }
   }
 
   func showLibrary() {

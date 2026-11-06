@@ -30,7 +30,7 @@ struct File: Equatable, Sendable, Identifiable {
     if let gist, gist.isDailyNote {
       return "\(gist.id)/\(filename)"
     }
-    return gist?.id ?? draft?.id.uuidString ?? id
+    return gist?.id ?? draft.id.uuidString
   }
 
   func refersToSameFile(as other: File) -> Bool {

@@ -109,8 +109,7 @@ struct LibraryTests {
     #expect(library.state.selectedID == "a")
   }
 
-  /// A launch link can open a gist before GitHub's list arrives. The gist's row then replaces the
-  /// draft's, and the open gist stays selected under it.
+  /// A launch link can open a gist before GitHub's list arrives, and it stays selected once its row does.
   @Test func aGistOpenedBeforeTheListArrivesStaysSelected() async throws {
     let fixture = try await LibraryFixture {
       $0.addGist(id: "a", description: "Opened early", files: ["README.md": "Text"])
@@ -120,7 +119,7 @@ struct LibraryTests {
     let start = Task { await library.start() }
     try await list.arrival()
     await library.open(.gist(id: "a"))
-    #expect(library.state.selectedID == library.loadedFile?.draft.id.uuidString)
+    #expect(library.state.selectedID == "a")
     list.open()
     await start.value
     #expect(library.state.selectedID == "a")
@@ -700,7 +699,8 @@ struct LibraryTests {
     _ = try await library.publish(typed)
     await library.open(.gist(id: "a"))
     await library.open(.today())
-    #expect(library.loadedFile?.draft.id == today.id)
+    #expect(library.loadedFile?.draft.text == typed.text)
+    #expect(library.loadedFile?.gist?.isDailyNote == true)
     #expect(fixture.publishes == ["POST /gists"])
     #expect(fixture.server.gists.filter(\.isDailyNote).map { Array($0.files.keys) }
       == [[today.filename]])
@@ -964,7 +964,7 @@ struct RootViewTests {
     }
   }
 
-  @Test func leavingANewBlankNoteDiscardsItsDraftWithoutPublishing() async throws {
+  @Test func leavingANewBlankNoteLeavesNothingBehind() async throws {
     let fixture = try await LibraryFixture {
       $0.addGist(id: "kept", description: "Kept", files: ["README.md": "A real note"])
     }
@@ -981,7 +981,7 @@ struct RootViewTests {
     host.pending.link = .gist(id: "kept", filename: nil)
     try await host.waitUntil {
       host.pending.link == nil && host.editor(text: "A real note") != nil
-        && !host.library.localDrafts.contains { $0.id == first.id }
+        && host.library.sessions[first.id] == nil
     }
     #expect(host.library.state.selectedID == "kept")
 
@@ -990,10 +990,7 @@ struct RootViewTests {
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     try await host.waitForKeyboard(visible: true)
     host.returnToLibrary()
-    try await host.waitUntil {
-      host.isLibraryVisible && !host.library.localDrafts.contains { $0.id == second.id }
-    }
-    #expect(host.library.loadedFile == nil)
+    try await host.waitUntil { host.isLibraryVisible && host.library.loadedFile == nil }
     let stored = try await fixture.store.drafts(accountID: fixture.account.id).map(\.id)
     #expect(!stored.contains(first.id) && !stored.contains(second.id))
     #expect(fixture.publishes.isEmpty)
@@ -1161,7 +1158,7 @@ struct RootViewTests {
     defer { await host.close() }
     try await host.waitUntil { pending.link == nil && host.editor(text: "")?.isFirstResponder == true }
     let draft = try #require(host.library.visibleFile?.draft)
-    #expect(host.library.localDrafts.contains { $0.id == draft.id })
+    #expect(!host.library.localDrafts.contains { $0.id == draft.id })
     #expect(host.library.visibleFile?.gist == nil)
     #expect(fixture.publishes.isEmpty)
   }

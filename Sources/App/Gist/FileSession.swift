@@ -53,7 +53,7 @@ final class FileSession {
     self.library = library
     self.autosaveDelay = autosaveDelay
     editor = Editor(
-      fileID: file.id, text: draft.text, generation: draft.generation,
+      fileID: file.id, text: file.draft.text, generation: file.draft.generation,
       showsFrontMatter: library.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
     if isNew { mode = .edit }
     editor.textView.isEditable = details.access.canEdit
@@ -359,7 +359,9 @@ final class FileSession {
   /// Leaving a note publishes your edits.
   func leave() async {
     editor.commitComposition()
-    guard await waitForLocalSave(), hasUnpublishedChanges else { return }
+    guard await waitForLocalSave() else { return }
+    if !draft.isSaved, draft.gistID == nil { return library.close(self) }
+    guard hasUnpublishedChanges else { return }
     await publish(reason: .background)
   }
 
