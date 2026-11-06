@@ -94,4 +94,4 @@
 
 ---
 
-*Where the code differs today:* it creates a draft when you open a file, keeps it after publishing and deletes untouched ones later. Adding a file makes a draft instead of creating the file. A new day publishes any earlier unpublished day first. t323 makes the code match this page.
+*Where the code differs today:* it creates a draft when you open a file, keeps it after publishing and deletes untouched ones later. Adding a file makes a draft instead of creating the file. A new day publishes any earlier unpublished day first. These are still to do, in t336.
