@@ -75,6 +75,16 @@ struct SyncFixture {
         try await publisher.publish(id: draft.id, accountID: Self.account)
     }
 
+    /// Checks GitHub's copy of the file the way opening a note does.
+    func inspect(_ draft: Draft) async throws -> Draft {
+        let current = try await reload(draft)
+        let remote = try await github.remoteFile(
+            gistID: try #require(current.gistID), ownerID: Self.user, filename: current.filename)
+        return try await store.inspectRemoteChange(
+            id: current.id, accountID: Self.account, expectedGeneration: current.generation,
+            remote: remote.content, revision: remote.gist.revision)
+    }
+
     func reload(_ draft: Draft) async throws -> Draft {
         try await store.draft(id: draft.id, accountID: Self.account)
     }

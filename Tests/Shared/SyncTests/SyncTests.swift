@@ -31,7 +31,7 @@ import Testing
         let draft = try await fixture.open(gist)
         fixture.server.edit(gist.id, files: ["README.md": "two"])
 
-        let adopted = try await fixture.publisher.inspect(id: draft.id, accountID: SyncFixture.account)
+        let adopted = try await fixture.inspect(draft)
         #expect(adopted.text == "two")
         #expect(adopted.baseContent == "two")
         #expect(adopted.generation == 1)
@@ -245,7 +245,7 @@ import Testing
         if edited { draft = try await fixture.type("mine", in: draft) }
         fixture.server.edit(gist.id, files: ["README.md": decomposed])
 
-        let inspected = try await fixture.publisher.inspect(id: draft.id, accountID: SyncFixture.account)
+        let inspected = try await fixture.inspect(draft)
         if edited {
             guard case .conflict(let conflict) = inspected.state else {
                 Issue.record("A byte-different remote is a change, got \(inspected.state)")

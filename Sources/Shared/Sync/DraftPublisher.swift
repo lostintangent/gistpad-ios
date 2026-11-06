@@ -129,20 +129,6 @@ public actor DraftPublisher {
         }
     }
 
-    /// Reads GitHub's copy of the file once. A clean draft takes it on, and edits on both sides become
-    /// a conflict that shows the diff.
-    public func inspect(id: UUID, accountID: UUID) async throws -> Draft {
-        try Task.checkCancellation()
-        let draft = try await store.draft(id: id, accountID: accountID)
-        guard let gistID = draft.gistID else { return draft }
-        if case .conflict = draft.state { return draft }
-        let remote = try await client.remoteFile(
-            gistID: gistID, ownerID: draft.githubUserID, filename: draft.filename)
-        return try await store.inspectRemoteChange(
-            id: id, accountID: accountID, expectedGeneration: draft.generation,
-            remote: remote.content, revision: remote.gist.revision)
-    }
-
     /// The gist a cut-off create made, found by its description and a same-named file with the same
     /// bytes, so a create is never posted twice.
     private func createdGist(for draft: Draft, content: String) async throws -> Gist? {
