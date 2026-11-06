@@ -941,12 +941,13 @@ struct RootViewTests {
         if showsPreview {
           let preview = try #require(host.descendants.compactMap { $0 as? WKWebView }.first)
           var rendered = false
-          let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+          // WebKit's content process can take several seconds to start while the suite runs.
+          let deadline = ContinuousClock.now.advanced(by: .seconds(15))
           while !rendered, ContinuousClock.now < deadline {
             rendered = try await preview.callAsyncJavaScript(
               "return document.body.innerText.includes('retained');",
               arguments: [:], in: nil, contentWorld: .page) as? Bool == true
-            if !rendered { try await Task.sleep(for: .milliseconds(20)) }
+            if !rendered { try await Task.sleep(for: .milliseconds(100)) }
           }
           #expect(rendered)
         } else {
@@ -1019,15 +1020,15 @@ struct RootViewTests {
     let editor = try #require(host.editor(text: "Current source"))
     editor.becomeFirstResponder()
     editor.selectedRange = .init(location: 0, length: 0)
+    let typed = ContinuousClock.now
     editor.insertText("Local ")
     try await host.waitUntil {
       host.library.localDrafts.first { $0.gistID == "a" }?.generation == 1
     }
     host.returnToLibrary()
-    // Well before autosave's quiet timer.
-    try await host.waitUntil(timeout: .seconds(1)) {
-      fixture.remote("a", "README.md") == "Local Current source"
-    }
+    try await host.waitUntil { fixture.remote("a", "README.md") == "Local Current source" }
+    // Autosave waits five quiet seconds after typing, so a publish before then came from leaving.
+    if autosave { #expect(ContinuousClock.now - typed < .seconds(5)) }
     try await host.waitUntil { host.isLibraryVisible }
     #expect(fixture.publishes == ["PATCH /gists/a"])
     #expect(host.library.state.selectedID == nil)
@@ -1362,10 +1363,8 @@ private struct NavigationHost {
     throw HostError.presentationTimedOut
   }
 
-  func waitUntil(
-    timeout: Duration = .seconds(5), _ predicate: @MainActor () -> Bool
-  ) async throws {
-    let deadline = ContinuousClock.now.advanced(by: timeout)
+  func waitUntil(_ predicate: @MainActor () -> Bool) async throws {
+    let deadline = ContinuousClock.now.advanced(by: .seconds(5))
     while !predicate() {
       guard ContinuousClock.now < deadline else {
         Attachment.record(

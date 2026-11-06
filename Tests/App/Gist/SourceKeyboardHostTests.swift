@@ -259,12 +259,15 @@ private final class SourceKeyboardFixture {
         previousKeyWindow?.makeKey()
     }
 
+    /// Waits for the keyboard, viewport and caret to hold still. The first keyboard in a fresh
+    /// window can take several seconds while the suite runs.
     func settle(_ name: String) async throws {
         let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(15))
         var lastSample: Sample?
         var stableSince = clock.now
         var stableSamples = 0
-        for _ in 0..<300 {
+        while clock.now < deadline {
             host.view.layoutIfNeeded()
             editor.layoutIfNeeded()
             let keyboardReady = editor.inputAccessoryView.map { accessory in
