@@ -24,9 +24,10 @@ recovery copy.
 
 `LibraryActions` carries the row actions. Every owned row can be deleted in any
 state. The Library confirms first, then calls `delete` with the row's ID, and the
-app decides what that removes. Apply `.librarySearch(state:)` to the split root
-and `.libraryRail(isVisible:today:create:openToday:)` to regular detail content,
-so New and Today sit beside the open gist. Pass a `GitHubStatusProblem` as
+app decides what that removes. The Library owns its search, so it stays in the
+Library column through folds and rotations. Apply
+`.libraryRail(isVisible:today:create:openToday:)` to regular detail content, so
+New and Today sit beside the open gist. Pass a `GitHubStatusProblem` as
 `problem` to show `GitHubStatusControl` in the bottom bar.
 
 ## Gist screen

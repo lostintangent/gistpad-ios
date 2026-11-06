@@ -2,36 +2,6 @@
 import Sync
 import SwiftUI
 
-extension EnvironmentValues {
-    @Entry var isLibrarySearchPresented = false
-}
-
-private struct LibrarySearchModifier: ViewModifier {
-    @Bindable var state: LibraryState
-    @State private var isPresented = false
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-
-    func body(content: Content) -> some View {
-        searchableContent(content)
-            // UIKit places a minimized button past the overlay sidebar's trailing edge, so the
-            // sidebar keeps the full field.
-            .searchToolbarBehavior(horizontalSizeClass == .regular ? .automatic : .minimize)
-            .environment(\.isLibrarySearchPresented, isPresented)
-    }
-
-    @ViewBuilder
-    private func searchableContent(_ content: Content) -> some View {
-        if state.loadState == .signedOut {
-            content
-        } else {
-            content.searchable(
-                text: $state.query, isPresented: $isPresented,
-                placement: horizontalSizeClass == .regular ? .sidebar : .automatic
-            )
-        }
-    }
-}
-
 private struct LibraryCreateButton: View {
     let action: @MainActor () -> Void
 
@@ -42,10 +12,6 @@ private struct LibraryCreateButton: View {
 }
 
 extension View {
-    public func librarySearch(state: LibraryState) -> some View {
-        modifier(LibrarySearchModifier(state: state))
-    }
-
     public func libraryRail(
         isVisible: Bool, today: DailyNote,
         create: @escaping @MainActor () -> Void, openToday: @escaping @MainActor () -> Void
@@ -118,12 +84,12 @@ public struct LibraryView: View {
     @State private var pendingDeletion: String?
     @State private var showingTags = false
     @State private var tagQuery = ""
+    @State private var isSearchPresented = false
     @ScaledMetric(relativeTo: .body) private var compactRowInset: CGFloat = 16
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.isLibrarySearchPresented) private var isSearchPresented
 
     /// `isSidebar` comes from the split view's owner, because a sidebar column always reads as compact.
     public init(
@@ -155,7 +121,19 @@ public struct LibraryView: View {
     private var navigationList: some View {
         if state.loadState == .signedOut {
             signedOutInvitation
-        } else if isSidebar {
+        } else {
+            // Search belongs to the Library column with one placement, so folding and rotating
+            // never move it into the detail. A minimized button lands past the overlay sidebar's
+            // trailing edge, so the sidebar keeps the full field.
+            styledList
+                .searchable(text: $state.query, isPresented: $isSearchPresented, placement: .toolbar)
+                .searchToolbarBehavior(isSidebar ? .automatic : .minimize)
+        }
+    }
+
+    @ViewBuilder
+    private var styledList: some View {
+        if isSidebar {
             libraryList.listStyle(.sidebar)
         } else {
             libraryList.listStyle(.insetGrouped)

@@ -112,7 +112,6 @@ struct RootView: View {
       .frame(minWidth: comments.isPresented && horizontalSizeClass == .regular ? 320 : 0)
     }
     .navigationSplitViewStyle(.balanced)
-    .librarySearch(state: library.state)
     .commentsInspector(comments, active: active, columnVisibility: $columnVisibility)
   }
 
