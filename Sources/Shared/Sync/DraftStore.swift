@@ -58,11 +58,16 @@ public struct Draft: Equatable, Sendable, Identifiable {
         return baseContent == nil || !sourceEqual(text, baseContent)
     }
 
-    /// Whether a clean, published note silently takes on `remote` instead of raising a conflict.
+    /// Whether GitHub has this text: the note is published, unedited since, and no publish is waiting
+    /// to be confirmed.
+    public var isClean: Bool {
+        gistID != nil && attemptedGeneration == nil && sourceEqual(text, baseContent)
+    }
+
+    /// Whether a clean note silently takes on `remote` instead of raising a conflict.
     /// The store and the editor both use this, so they always agree on the outcome.
     public func adoptsRemote(_ remote: String) -> Bool {
-        gistID != nil && attemptedGeneration == nil
-            && sourceEqual(text, baseContent) && !sourceEqual(baseContent, remote)
+        isClean && !sourceEqual(baseContent, remote)
     }
 }
 
@@ -356,8 +361,7 @@ public actor DraftStore {
     ) throws -> Draft {
         let draft = try find(id, accountID: accountID)
         guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
-        guard draft.gistID != nil, draft.attemptedGeneration == nil,
-              sourceEqual(draft.text, draft.baseContent) else { return try snapshot(draft) }
+        guard try snapshot(draft).isClean else { return try snapshot(draft) }
         return try refreshClean(draft, content: content, revision: revision)
     }
 
@@ -435,10 +439,7 @@ public actor DraftStore {
             draft.stateData = try encode(.savingToGitHub(generation: sent))
         } else {
             // After a cut-off publish GitHub may hold the attempted text, so matching the base isn't saved.
-            draft.stateData = try encode(
-                draft.attemptedGeneration == nil && draft.gistID != nil && sourceEqual(text, draft.baseContent)
-                    ? .savedToGitHub : .savedLocally
-            )
+            draft.stateData = try encode(try snapshot(draft).isClean ? .savedToGitHub : .savedLocally)
         }
     }
 
@@ -552,7 +553,7 @@ public actor DraftStore {
         return draft
     }
 
-    private func snapshot(_ draft: StoredDraft) throws -> Draft {
+    func snapshot(_ draft: StoredDraft) throws -> Draft {
         Draft(
             id: draft.id, accountID: draft.accountID, githubUserID: draft.githubUserID,
             gistID: draft.gistID, filename: draft.filename, description: draft.gistDescription,

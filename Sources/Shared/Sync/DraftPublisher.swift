@@ -27,7 +27,7 @@ public actor DraftPublisher {
     ) async throws -> Draft {
         try Task.checkCancellation()
         var draft = try await store.draft(id: id, accountID: accountID)
-        if case .conflict = draft.state, !isCleanDraft(draft) { return draft }
+        if case .conflict = draft.state, !draft.isClean { return draft }
         if reason != .manual {
             guard expectedGeneration == nil || draft.generation == expectedGeneration,
                   await shouldPublish() else { throw CancellationError() }
@@ -67,7 +67,7 @@ public actor DraftPublisher {
                         revision: remoteGist.revision, generation: draft.generation, publishedGist: remoteGist
                     )
                 }
-                if isCleanDraft(draft), let remote {
+                if draft.isClean, let remote {
                     return try await store.refreshCleanDraft(
                         id: id, accountID: accountID, expectedGeneration: draft.generation,
                         content: remote, revision: remoteGist.revision)
@@ -140,10 +140,5 @@ public actor DraftPublisher {
             if sourceEqual(remote.content, content) { return remote.gist }
         }
         return nil
-    }
-
-    private func isCleanDraft(_ draft: Draft) -> Bool {
-        draft.attemptedContent == nil && draft.attemptedGeneration == nil
-            && sourceEqual(draft.text, draft.baseContent)
     }
 }

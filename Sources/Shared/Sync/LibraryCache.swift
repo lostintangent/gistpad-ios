@@ -108,7 +108,7 @@ extension DraftStore {
             predicate: #Predicate { $0.accountID == accountID }
         )).filter {
             guard let gistID = $0.gistID, !keeping.contains(gistID) else { return false }
-            return !ids.contains(gistID) && $0.attemptedGeneration == nil && sourceEqual($0.text, $0.baseContent)
+            return try !ids.contains(gistID) && snapshot($0).isClean
         }
         for draft in gone { modelContext.delete(draft) }
         let snapshot = CachedLibrary(
