@@ -4,8 +4,7 @@ import Sync
 /// A change to the library, applied in order on GitHub and this iPhone.
 enum Change: Equatable, Sendable {
   case signOut
-  case preference(Preferences.Change)
-  case saveTags([Preferences.Change])
+  case preferences([Preferences.Change])
   case star(gistID: String, starred: Bool)
   case archive(gistID: String, archived: Bool)
   case rename(gistID: String, title: String)
@@ -87,9 +86,7 @@ extension GitHubSync {
       throw AccountError.accountChanged
     }
     switch action {
-    case .preference(let operation):
-      return .account(try await accounts.update([operation], accountID: accountID))
-    case .saveTags(let operations):
+    case .preferences(let operations):
       return .account(try await accounts.update(operations, accountID: accountID))
     case .signOut:
       try await accounts.signOut(accountID: accountID)

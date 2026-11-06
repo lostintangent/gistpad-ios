@@ -76,7 +76,7 @@ final class Library {
           String(localized: "This file didn't reach GitHub."),
           String(localized: "Your changes are saved on this iPhone.")
         )
-      case (.change(.preference), _), (.change(.saveTags), _):
+      case (.change(.preferences), _):
         (String(localized: "This change wasn't saved."), nil)
       case (.change, _): (String(localized: "This change didn't reach GitHub."), nil)
       }
@@ -819,7 +819,7 @@ final class Library {
     if (error as? AccountError) == .accountChanged { return nil }
     if case .change(let action) = operation {
       switch action {
-      case .preference, .saveTags, .star, .archive: break
+      case .preferences, .star, .archive: break
       default: return nil
       }
       if (error as? ChangeError) == .publicationInProgress { return nil }

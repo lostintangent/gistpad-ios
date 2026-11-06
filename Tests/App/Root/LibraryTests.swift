@@ -84,7 +84,7 @@ struct LibraryTests {
     let library = fixture.library
     await library.start()
     fixture.fail("PUT /auth/v1/user")
-    _ = try? await library.perform(.preference(.setPinned(gistID: "a", pinned: true)))
+    _ = try? await library.perform(.preferences([.setPinned(gistID: "a", pinned: true)]))
     guard case .problem(let problem) = library.remoteRefreshStatus else {
       Issue.record("A failed GitHub write should raise the GitHub status control.")
       return

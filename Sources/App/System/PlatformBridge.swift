@@ -279,7 +279,7 @@ final class PlatformBridge: DailyNoteActions {
           throw PlatformError.unsupportedNoteUpdate
         }
         _ = try await library.apply(
-          .preference(.setPinned(gistID: id, pinned: isPinned)), accountID: draft.accountID)
+          .preferences([.setPinned(gistID: id, pinned: isPinned)]), accountID: draft.accountID)
       }
       do {
         try await self.refresh()

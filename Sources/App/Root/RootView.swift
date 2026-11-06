@@ -247,7 +247,7 @@ struct RootView: View {
       account: account,
       savePreference: { key, value in
         guard let account else { throw AccountError.signedOut }
-        _ = try await library.apply(.preference(.setBoolean(key, value)), accountID: account.id)
+        _ = try await library.apply(.preferences([.setBoolean(key, value)]), accountID: account.id)
       },
       connect: {
         sheet = nil
@@ -267,7 +267,7 @@ struct RootView: View {
     ) {
       AccentColorRow(savedHex: account?.preferences.accentColor) { hex in
         guard let account else { throw AccountError.signedOut }
-        _ = try await library.apply(.preference(.setAccentColor(hex)), accountID: account.id)
+        _ = try await library.apply(.preferences([.setAccentColor(hex)]), accountID: account.id)
       }
     }
     .id(account?.id)
@@ -332,7 +332,7 @@ struct RootView: View {
         return
       }
       library.run(
-        .preference(.setPinned(gistID: id, pinned: !account.preferences.pinnedGists.contains(id))),
+        .preferences([.setPinned(gistID: id, pinned: !account.preferences.pinnedGists.contains(id))]),
         accountID: account.id)
     }
     actions.toggleArchive = { rowID in
@@ -634,9 +634,7 @@ struct RootView: View {
       if !session.file.isRecovery {
         actions.togglePin = {
           library.run(
-            .preference(
-              .setPinned(
-                gistID: gistID, pinned: !session.details.isPinned)),
+            .preferences([.setPinned(gistID: gistID, pinned: !session.details.isPinned)]),
             accountID: session.draft.accountID)
         }
         actions.toggleStar = {
@@ -794,7 +792,7 @@ struct RootView: View {
           case .delete(let id): .deleteTag(id: id)
           }
         }
-        _ = try await library.apply(.saveTags(operations), accountID: target.accountID)
+        _ = try await library.apply(.preferences(operations), accountID: target.accountID)
       }
     } else {
       save = nil
