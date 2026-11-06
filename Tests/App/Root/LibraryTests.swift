@@ -72,6 +72,24 @@ struct LibraryTests {
     #expect(library.state.selectedID == "a")
   }
 
+  /// A launch link can open a gist before GitHub's list arrives. The gist's row then replaces the
+  /// draft's, and the open gist stays selected under it.
+  @Test func aGistOpenedBeforeTheListArrivesStaysSelected() async throws {
+    let fixture = try await LibraryFixture {
+      $0.addGist(id: "a", description: "Opened early", files: ["README.md": "Text"])
+    }
+    let library = fixture.library
+    let list = fixture.hold("GET /gists/starred")
+    let start = Task { await library.start() }
+    try await list.arrival()
+    await library.open(.gist(id: "a"))
+    #expect(library.state.selectedID == library.loadedFile?.draft?.id.uuidString)
+    list.open()
+    await start.value
+    #expect(library.state.selectedID == "a")
+    #expect(library.loadedFile?.rowID == "a")
+  }
+
   @Test func networkFailureKeepsExistingLibraryAndFile() async throws {
     let fixture = try await LibraryFixture {
       $0.addGist(id: "a", description: "A note", files: ["README.md": "Text"])
