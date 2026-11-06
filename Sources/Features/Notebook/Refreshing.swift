@@ -166,10 +166,21 @@ extension FileSession {
     guard await waitForLocalSave() else { return }
     let generation = editor.generation
     do {
-      guard
-        case .remoteRead(let current, let remote?) = try await library.perform(
-          .fetchRemote(draft)),
-        current.id == draft.id, current.generation == generation,
+      let (current, remote) = try await library.sync.serially { sync in
+        let current = try await sync.drafts.current(draft)
+        guard let gistID = current.gistID else { return (current, RemoteFile?.none) }
+        let client = await sync.client(accountID: current.accountID)
+        let remote = try await client.remoteFile(
+          gistID: gistID, ownerID: current.githubUserID, filename: current.filename)
+        try await sync.drafts.cacheGist(remote.gist, accountID: current.accountID)
+        if let content = remote.content {
+          try await sync.drafts.cacheContent(
+            content, gist: remote.gist, filename: current.filename, accountID: current.accountID)
+        }
+        return (current, remote)
+      }
+      try await library.reloadLocalState(accountID: current.accountID)
+      guard let remote, current.id == draft.id, current.generation == generation,
         editor.generation == generation, !isPublishing, canMutate
       else { return }
       if !current.isSaved {
@@ -182,10 +193,13 @@ extension FileSession {
             expectedGeneration: current.generation
           ) { current.adopting(content, revision: remote.gist.revision) }
         }
-      } else if case .review(let recorded) = try await library.perform(
-        .recordRemote(current, remote: remote.content, revision: remote.gist.revision))
-      {
-        adopt(recorded)
+      } else {
+        adopt(
+          try await library.sync.serially { sync in
+            try await sync.drafts.compareWithGitHub(
+              current, remote: remote.content, revision: remote.gist.revision)
+          })
+        try await library.reloadLocalState(accountID: current.accountID)
       }
       remoteInspectionProblem = nil
       refreshedAt = .now

@@ -1,37 +1,16 @@
 import Foundation
 import Sync
 
-// Starring, pinning, renaming and deleting go to GitHub in order, after the notes they touch
+// Starring, pinning, renaming and deleting go to GitHub one at a time, after the notes they touch
 // are saved on this iPhone.
 
-/// A change to the library, applied in order on GitHub and this iPhone.
-public enum Change: Equatable, Sendable {
-  case signOut
-  case preferences([Preferences.Change])
-  case star(gistID: String, starred: Bool)
-  case archive(gistID: String, archived: Bool)
-  case rename(gistID: String, title: String)
-  case renameLocal(Draft, title: String)
-  case renameFile(gistID: String, filename: String, newFilename: String)
-  case addFile(gistID: String, filename: String)
-  case delete(gistID: String)
-  case deleteFile(gistID: String, filename: String)
-  case fetchRemote(Draft)
-  case recordRemote(Draft, remote: String?, revision: String?)
-  case discardLocalCopy(Draft)
-  case resolveConflict(Conflict, text: String, generation: UInt64)
-}
-
-public enum ChangeResult: Sendable {
-  case signedOut
-  case account(Account)
-  case gist(Gist, starred: Bool? = nil)
-  case draft(Draft, gist: Gist? = nil)
-  case deleted(gistID: String)
-  case deletedFile(gistID: String, filename: String, gist: Gist)
-  case review(Draft)
-  case remoteRead(Draft, RemoteFile?)
-  case discardedDraft(UUID)
+/// What deleting a row or an open file removes.
+public enum Deletion: Equatable, Sendable {
+  /// A gist that's only on this iPhone, or a recovered copy of a file.
+  case localCopy(Draft)
+  /// One day of the daily notes gist.
+  case file(gistID: String, filename: String)
+  case gist(id: String)
 }
 
 public enum ChangeError: Error, Equatable {
@@ -57,44 +36,211 @@ extension ChangeError: LocalizedError {
 }
 
 extension Library {
-  /// What deleting a row removes: a copy that's only on this iPhone, one day of the daily notes
-  /// gist, or the whole gist. Rows the account doesn't own can't be deleted.
-  public func deletion(forRow rowID: String) -> Change? {
+  /// What deleting a row removes. Rows the account doesn't own can't be deleted.
+  public func deletion(forRow rowID: String) -> Deletion? {
     guard account != nil, pendingAccount == nil else { return nil }
     let target = rowSelection(for: rowID)
     let draft = target?.draftID.flatMap { id in localDrafts.first { $0.id == id } }
     if let draft,
       draft.gistID.flatMap({ gistID in cachedLibrary?.gists.contains(where: { $0.id == gistID }) }) != true
     {
-      return .discardLocalCopy(draft)
+      return .localCopy(draft)
     }
     let gistID = target?.gistID ?? draft?.gistID ?? rowID
     guard let gist = cachedLibrary?.owned.first(where: { $0.id == gistID }) else { return nil }
     if gist.isDailyNote, let filename = target?.filename {
-      return .deleteFile(gistID: gist.id, filename: filename)
+      return .file(gistID: gist.id, filename: filename)
     }
-    return .delete(gistID: gist.id)
+    return .gist(id: gist.id)
   }
 
-  /// Re-reads a local discard once publication has settled. If the file reached GitHub after the
-  /// confirmation, the confirmed deletion removes it there too. That's only its own file, because a
-  /// new day can join the daily notes gist an earlier day created, and `deleteFile` takes the gist
-  /// with its last file.
-  func settledDeletionAction(
-    _ action: Change, confirmedWithoutGist: Bool, accountID: UUID
-  ) async throws -> Change {
-    guard case .discardLocalCopy(let known) = action else { return action }
-    let draft = try await sync.current(known)
-    if confirmedWithoutGist, let gistID = draft.gistID {
-      return .deleteFile(gistID: gistID, filename: draft.filename)
+  /// Saves pins, tags, the accent color and settings with your account.
+  public func updatePreferences(_ changes: [Preferences.Change]) async throws {
+    try await change { account in
+      let updated = try await sync.serially { sync in
+        try await sync.accounts.update(changes, accountID: account.id)
+      }
+      self.account = updated
+      if let cache = cachedLibrary {
+        try await sync.cacheLibrary(owned: cache.owned, starred: cache.starred, account: updated)
+      }
+      for session in sessions.values { try await session.refreshMetadata() }
     }
-    return .discardLocalCopy(draft)
   }
 
-  /// Applies a change once the files it touches are saved on this iPhone, holding off typing in
-  /// a file it deletes, then brings every open file's details up to date.
-  public func apply(_ action: Change, accountID: UUID) async throws -> ChangeResult {
-    guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
+  public func setStarred(_ starred: Bool, gistID: String) async throws {
+    try await change { account in
+      let gist = try await sync.serially { sync in
+        let client = await sync.client(accountID: account.id)
+        let gist = try await client.gist(id: gistID)
+        try await client.setStarred(starred, id: gistID)
+        return gist
+      }
+      try await landed(gist, starred: starred)
+    }
+  }
+
+  public func setArchived(_ archived: Bool, gistID: String) async throws {
+    try await change { account in
+      try await landed(
+        try await sync.serially { sync in
+          let (client, gist, _) = try await sync.ownedGist(gistID, account: account)
+          return try await client.setArchived(archived, gist: gist)
+        })
+    }
+  }
+
+  /// Renames a gist on GitHub, or names a new one that's only on this iPhone.
+  public func rename(_ draft: Draft, to title: String) async throws {
+    if let gistID = draft.gistID { return try await rename(gistID: gistID, to: title) }
+    try Self.validateTitle(title)
+    try await change { _ in
+      let renamed = try await sync.serially { sync in
+        let kept = try await sync.drafts.keep(draft)
+        guard kept.sentGeneration == nil else { throw ChangeError.publicationInProgress }
+        return try await sync.drafts.rename(
+          kept.id, accountID: kept.accountID, filename: kept.filename, description: title)
+      }
+      present(File(draft: renamed, gist: nil))
+      try await sessions[renamed.id]?.refreshMetadata()
+    }
+  }
+
+  /// Renames a gist on GitHub and its drafts on this iPhone.
+  public func rename(gistID: String, to title: String) async throws {
+    try Self.validateTitle(title)
+    try await change { account in
+      try await landed(
+        try await sync.serially { sync in
+          let (client, gist, _) = try await sync.ownedGist(gistID, account: account)
+          let local = try await sync.unsentDrafts(gistID: gistID, accountID: account.id)
+          let updated = try await client.updateDescription(title, gist: gist)
+          for draft in local {
+            _ = try await sync.drafts.rename(
+              draft.id, accountID: account.id, filename: draft.filename,
+              description: updated.description ?? "")
+          }
+          return updated
+        })
+    }
+  }
+
+  public func renameFile(_ filename: String, to newFilename: String, gistID: String) async throws {
+    try Self.validateFilename(newFilename)
+    try await change { account in
+      let gist = try await sync.serially { sync in
+        let (client, gist, _) = try await sync.ownedGist(gistID, account: account)
+        guard filename != newFilename else { return gist }
+        guard gist.files[filename] != nil else { throw GitHubClientError.missingFile }
+        let local = try await sync.unsentDrafts(gistID: gistID, accountID: account.id)
+        guard gist.files[newFilename] == nil, !local.contains(where: { $0.filename == newFilename })
+        else { throw ChangeError.filenameExists }
+        let updated = try await client.updateGist(
+          id: gistID, files: [filename: .rename(newFilename)])
+        for draft in local where draft.filename == filename {
+          _ = try await sync.drafts.rename(
+            draft.id, accountID: account.id, filename: newFilename,
+            description: updated.description ?? "")
+        }
+        return updated
+      }
+      try await landed(gist, renamedFile: (filename, newFilename))
+    }
+  }
+
+  /// Adds an empty Markdown file to a gist and opens it.
+  public func addFile(_ filename: String, to gistID: String) async throws {
+    try Self.validateFilename(filename)
+    try await change { account in
+      let (draft, gist) = try await sync.serially { sync in
+        let (client, gist, userID) = try await sync.ownedGist(gistID, account: account)
+        guard gist.files[filename] == nil else { throw ChangeError.filenameExists }
+        let updated = try await client.updateGist(id: gistID, files: [filename: .content("")])
+        try await sync.drafts.cacheGist(updated, accountID: account.id)
+        try await sync.drafts.cacheContent(
+          "", gist: updated, filename: filename, accountID: account.id)
+        let draft = Draft(
+          accountID: account.id, githubUserID: userID, gist: updated, filename: filename, text: "")
+        return (draft, updated)
+      }
+      present(File(draft: draft, gist: gist))
+      try await sessions[draft.id]?.refreshMetadata(gist: gist)
+    }
+  }
+
+  /// Deletes what you confirmed once any publish of it settles. A copy that reached GitHub after
+  /// you confirmed is deleted there too, but only its own file, because a new day can join the
+  /// daily notes gist an earlier day created.
+  public func delete(_ deletion: Deletion) async throws {
+    try await change(locking: { session in
+      switch deletion {
+      case .localCopy(let draft): session.draft.id == draft.id
+      case .file(let gistID, _), .gist(let gistID):
+        session.draft.gistID == gistID
+          || localDrafts.contains { $0.id == session.draft.id && $0.gistID == gistID }
+      }
+    }) { account in
+      switch deletion {
+      case .localCopy(let confirmed):
+        let draft = try await sync.current(confirmed)
+        if confirmed.gistID == nil, let gistID = draft.gistID {
+          return try await deleteFile(draft.filename, gistID: gistID, account: account)
+        }
+        try await sync.serially { sync in
+          try await sync.drafts.discardLocalCopy(id: draft.id, accountID: draft.accountID)
+        }
+        forget(accountID: account.id) {
+          $0.draftID == draft.id
+            || ($0.gistID != nil && $0.gistID == draft.gistID && $0.filename == draft.filename)
+        }
+        localDrafts.removeAll { $0.id == draft.id }
+        projectLibrary()
+      case .file(let gistID, let filename):
+        try await deleteFile(filename, gistID: gistID, account: account)
+      case .gist(let id):
+        try await sync.serially { sync in
+          let (client, _, _) = try await sync.ownedGist(id, account: account)
+          try await client.deleteGist(id: id)
+          try await sync.drafts.removeDrafts(gistID: id, accountID: account.id)
+        }
+        forgetGist(id, accountID: account.id)
+      }
+    }
+  }
+
+  /// Signs out once every open note is saved on this iPhone.
+  public func signOut() async throws {
+    try await change(locking: { _ in true }) { account in
+      isSigningOut = true
+      libraryRequest = UUID()
+      defer { isSigningOut = false }
+      do {
+        try await sync.serially { sync in try await sync.accounts.signOut(accountID: account.id) }
+      } catch {
+        // A sign-out that already removed this iPhone's session still signs you out here.
+        if try await sync.cachedAccount() == nil, self.account?.id == account.id {
+          reset(to: nil)
+        }
+        throw error
+      }
+      reset(to: nil)
+    }
+  }
+
+  /// Runs a change from a tap. One that doesn't go through is an alert.
+  public func run(_ change: @escaping @MainActor () async throws -> Void) {
+    Task {
+      do { try await change() } catch { openError = error.localizedDescription }
+    }
+  }
+
+  /// Runs one change at a time, once every open note is saved on this iPhone, then reloads what's
+  /// saved here. Typing pauses in the notes it `locks` until it lands.
+  private func change(
+    locking locks: (FileSession) -> Bool = { _ in false },
+    _ body: @MainActor (Account) async throws -> Void
+  ) async throws {
+    guard let account, pendingAccount == nil else { throw AccountError.accountChanged }
     guard !isApplying else { throw ChangeError.publicationInProgress }
     isApplying = true
     var locked: [FileSession] = []
@@ -102,154 +248,77 @@ extension Library {
       for session in locked { session.endDestructiveAction() }
       isApplying = false
     }
-    let confirmedWithoutGist: Bool =
-      switch action {
-      case .discardLocalCopy(let draft): draft.gistID == nil
-      default: false
-      }
     do {
-      for session in sessions.values {
-        let requiresLock: Bool =
-          switch action {
-          case .delete(let gistID), .deleteFile(let gistID, _):
-            session.draft.gistID == gistID
-              || localDrafts.contains { $0.id == session.draft.id && $0.gistID == gistID }
-          case .discardLocalCopy(let draft): session.draft.id == draft.id
-          case .signOut: true
-          default: false
-          }
-        guard requiresLock else { continue }
-        switch action {
-        case .delete, .deleteFile, .discardLocalCopy:
-          await session.waitForPublication()
-          try Task.checkCancellation()
-          guard account?.id == accountID, pendingAccount == nil else {
-            throw AccountError.accountChanged
-          }
-        default: break
-        }
+      for session in sessions.values where locks(session) && session.details.access.canEdit {
+        await session.waitForPublication()
         try session.beginDestructiveAction()
         locked.append(session)
       }
       for session in sessions.values {
         guard await session.waitForLocalSave() else { throw EditError.localPersistenceFailed }
       }
-      guard account?.id == accountID, pendingAccount == nil else {
+      try Task.checkCancellation()
+      guard self.account?.id == account.id, pendingAccount == nil else {
         throw AccountError.accountChanged
       }
-      let result = try await perform(
-        try await settledDeletionAction(
-          action, confirmedWithoutGist: confirmedWithoutGist, accountID: accountID))
-      switch result {
-      case .gist(let gist, _):
-        for session in sessions.values where session.draft.gistID == gist.id {
-          let renamed: String? =
-            if case .renameFile(_, let filename, let newFilename) = action,
-              session.draft.filename == filename
-            { newFilename } else { nil }
-          try await session.refreshMetadata(gist: gist, filename: renamed)
-        }
-      case .account:
-        for session in sessions.values { try await session.refreshMetadata() }
-      case .draft(let draft, let gist):
-        try await sessions[draft.id]?.refreshMetadata(gist: gist)
-      case .deletedFile(let gistID, _, let gist):
-        for session in sessions.values where session.draft.gistID == gistID {
-          try await session.refreshMetadata(gist: gist)
-        }
-      case .signedOut, .deleted, .discardedDraft, .review, .remoteRead:
-        break
-      }
-      return result
+      try await body(account)
+      if self.account?.id == account.id { try await reloadLocalState(accountID: account.id) }
     } catch {
-      report(error, operation: "action")
+      report(error, operation: "change")
       throw error
     }
   }
 
-  /// Applies a change from a tap. A change that doesn't go through is an alert.
-  public func run(_ action: Change, accountID: UUID) {
-    Task {
-      do { _ = try await apply(action, accountID: accountID) } catch {
-        openError = error.localizedDescription
+  /// Takes a gist GitHub just changed into the cache and every note open in it.
+  private func landed(
+    _ gist: Gist, starred: Bool? = nil, renamedFile: (from: String, to: String)? = nil
+  ) async throws {
+    if var cache = cachedLibrary, let account {
+      cache.owned = cache.owned.map { $0.id == gist.id ? gist : $0 }
+      cache.starred = cache.starred.map { $0.id == gist.id ? gist : $0 }
+      if let starred {
+        cache.starred.removeAll { $0.id == gist.id }
+        if starred { cache.starred.append(gist) }
       }
+      try await sync.cacheLibrary(owned: cache.owned, starred: cache.starred, account: account)
+    }
+    for session in sessions.values where session.draft.gistID == gist.id {
+      try await session.refreshMetadata(
+        gist: gist, filename: session.draft.filename == renamedFile?.from ? renamedFile?.to : nil)
     }
   }
 
-  func perform(_ action: Change) async throws -> ChangeResult {
-    guard let account, pendingAccount == nil else { throw AccountError.accountChanged }
-    guard !isSigningOut else { throw ChangeError.publicationInProgress }
-    if case .signOut = action {
-      isSigningOut = true
-      libraryRequest = UUID()
+  /// Deletes one file. GitHub can't keep a gist without files, so the last one takes the gist.
+  private func deleteFile(_ filename: String, gistID: String, account: Account) async throws {
+    let left = try await sync.serially { sync -> Gist? in
+      let (client, gist, _) = try await sync.ownedGist(gistID, account: account)
+      if gist.files[filename] != nil, gist.files.count == 1 {
+        try await client.deleteGist(id: gistID)
+        try await sync.drafts.removeDrafts(gistID: gistID, accountID: account.id)
+        return nil
+      }
+      // A file that's already gone from GitHub only needs its copy on this iPhone removed.
+      let updated =
+        gist.files[filename] == nil
+        ? gist : try await client.updateGist(id: gistID, files: [filename: .delete])
+      try await sync.drafts.removeDrafts(
+        gistID: gistID, filename: filename, updated: updated, accountID: account.id)
+      return updated
     }
-    defer {
-      if case .signOut = action { isSigningOut = false }
+    guard let left else { return forgetGist(gistID, accountID: account.id) }
+    forget(accountID: account.id) { $0.gistID == gistID && $0.filename == filename }
+    for session in sessions.values where session.draft.gistID == gistID {
+      try await session.refreshMetadata(gist: left)
     }
-    let result: ChangeResult
-    do {
-      result = try await sync.perform(action, accountID: account.id)
-    } catch {
-      if case .signOut = action {
-        do {
-          if try await sync.cachedAccount() == nil, self.account?.id == account.id {
-            reset(to: nil)
-          }
-        } catch {
-          report(error, operation: "confirm-local-sign-out")
-        }
-      }
-      throw error
-    }
-    guard self.account?.id == account.id else { throw AccountError.accountChanged }
-    switch result {
-    case .signedOut:
-      reset(to: nil)
-      return result
-    case .account(let updated):
-      self.account = updated
-      if let cache = cachedLibrary {
-        try await sync.cacheLibrary(
-          owned: cache.owned, starred: cache.starred, account: updated)
-      }
-    case .gist(let gist, let starred):
-      if var cache = cachedLibrary {
-        cache.owned = cache.owned.map { $0.id == gist.id ? gist : $0 }
-        cache.starred = cache.starred.map { $0.id == gist.id ? gist : $0 }
-        if let starred {
-          cache.starred.removeAll { $0.id == gist.id }
-          if starred { cache.starred.append(gist) }
-        }
-        try await sync.cacheLibrary(
-          owned: cache.owned, starred: cache.starred, account: account)
-      }
-    case .draft(let draft, let gist):
-      present(File(draft: draft, gist: gist))
-    case .deleted(let id):
-      let draftIDs = Set(localDrafts.filter { $0.gistID == id }.map(\.id))
-      forget(accountID: account.id) {
-        $0.gistID == id || $0.draftID.map(draftIDs.contains) == true
-      }
-      // A refresh that started before the delete would bring the gist back.
-      libraryRequest = UUID()
-      isRefreshingRemote = false
-      if state.loadState == .loading { state.loadState = .ready }
-    case .deletedFile(let id, let filename, _):
-      forget(accountID: account.id) { $0.gistID == id && $0.filename == filename }
-    case .review, .remoteRead:
-      break
-    case .discardedDraft(let id):
-      let discarded = localDrafts.first { $0.id == id }
-      forget(accountID: account.id) {
-        $0.draftID == id
-          || ($0.gistID != nil && $0.gistID == discarded?.gistID
-            && $0.filename == discarded?.filename)
-      }
-      localDrafts.removeAll { $0.id == id }
-      projectLibrary()
-    }
-    try await reloadLocalState(accountID: account.id)
-    return result
+  }
+
+  private func forgetGist(_ id: String, accountID: UUID) {
+    let draftIDs = Set(localDrafts.filter { $0.gistID == id }.map(\.id))
+    forget(accountID: accountID) { $0.gistID == id || $0.draftID.map(draftIDs.contains) == true }
+    // A refresh that started before the delete would bring the gist back.
+    libraryRequest = UUID()
+    isRefreshingRemote = false
+    if state.loadState == .loading { state.loadState = .ready }
   }
 
   /// Closes and forgets the open, opening, failed and remembered file when it no longer exists.
@@ -270,6 +339,13 @@ extension Library {
 }
 
 extension FileSession {
+  /// What Delete on this file's screen removes, the same as its row in the list.
+  public var deletion: Deletion? {
+    if file.isRecovery || draft.gistID == nil { return .localCopy(draft) }
+    guard let gist = file.gist, details.access.canEdit else { return nil }
+    return gist.isDailyNote ? .file(gistID: gist.id, filename: file.filename) : .gist(id: gist.id)
+  }
+
   func beginDestructiveAction() throws {
     guard canMutate, !isPublishing else { throw ChangeError.publicationInProgress }
     isPerformingDestructiveAction = true
@@ -282,145 +358,23 @@ extension FileSession {
   }
 }
 
+extension Library {
+  private static func validateTitle(_ title: String) throws {
+    guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      throw ChangeError.invalidTitle
+    }
+  }
+
+  private static func validateFilename(_ filename: String) throws {
+    guard !filename.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+      filename.hasSuffix(".md"), !filename.contains("/"), !filename.contains("\0")
+    else { throw ChangeError.invalidFilename }
+  }
+}
+
 extension GitHubSync {
-  func perform(_ action: Change, accountID: UUID) async throws -> ChangeResult {
-    try await mutationQueue.run { try await self.performSerial(action, accountID: accountID) }
-  }
-
-  private func performSerial(
-    _ action: Change, accountID: UUID
-  ) async throws -> ChangeResult {
-    guard let account = try await accounts.cachedAccount(), account.id == accountID else {
-      throw AccountError.accountChanged
-    }
-    switch action {
-    case .preferences(let operations):
-      return .account(try await accounts.update(operations, accountID: accountID))
-    case .signOut:
-      try await accounts.signOut(accountID: accountID)
-      return .signedOut
-    case .discardLocalCopy(let draft):
-      try await drafts.discardLocalCopy(id: draft.id, accountID: accountID)
-      return .discardedDraft(draft.id)
-    case .renameLocal(let draft, let title):
-      guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-        throw ChangeError.invalidTitle
-      }
-      guard draft.accountID == accountID else { throw AccountError.accountChanged }
-      let kept = try await drafts.keep(draft)
-      guard kept.sentGeneration == nil else { throw ChangeError.publicationInProgress }
-      return .draft(
-        try await drafts.rename(
-          kept.id, accountID: accountID, filename: kept.filename, description: title))
-    case .fetchRemote(let draft):
-      let current = try await drafts.current(draft)
-      guard let gistID = current.gistID else { return .remoteRead(current, nil) }
-      let client = await client(accountID: accountID)
-      let remote = try await client.remoteFile(
-        gistID: gistID, ownerID: current.githubUserID, filename: current.filename)
-      try await drafts.cacheGist(remote.gist, accountID: accountID)
-      if let content = remote.content {
-        try await drafts.cacheContent(
-          content, gist: remote.gist, filename: current.filename, accountID: accountID)
-      }
-      return .remoteRead(current, remote)
-    case .recordRemote(let draft, let remote, let revision):
-      return .review(
-        try await drafts.compareWithGitHub(draft, remote: remote, revision: revision))
-    case .resolveConflict(let review, let text, let generation):
-      guard review.draft.accountID == accountID else { throw AccountError.accountChanged }
-      guard let current = try await drafts.draft(id: review.draft.id, accountID: accountID),
-        review.matches(current)
-      else { throw ChangeError.staleReview }
-      return .review(
-        try await drafts.resolveConflict(
-          id: current.id, accountID: accountID, expectedGeneration: current.generation,
-          text: text, generation: generation))
-    case .star(let id, let starred):
-      let client = await client(accountID: accountID)
-      let gist = try await client.gist(id: id)
-      try await client.setStarred(starred, id: id)
-      return .gist(gist, starred: starred)
-    case .archive(let id, let archived):
-      let (client, gist, _) = try await ownedGist(id: id, account: account)
-      return .gist(try await client.setArchived(archived, gist: gist))
-    case .rename(let id, let title):
-      let (client, gist, _) = try await ownedGist(id: id, account: account)
-      guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-        throw ChangeError.invalidTitle
-      }
-      let local = try await drafts.drafts(accountID: accountID).filter { $0.gistID == id }
-      guard !local.contains(where: { $0.sentGeneration != nil }) else {
-        throw ChangeError.publicationInProgress
-      }
-      let updated = try await client.updateDescription(title, gist: gist)
-      for draft in local {
-        _ = try await drafts.rename(
-          draft.id, accountID: accountID, filename: draft.filename,
-          description: updated.description ?? "")
-      }
-      return .gist(updated)
-    case .renameFile(let id, let filename, let newFilename):
-      let (client, gist, _) = try await ownedGist(id: id, account: account)
-      try Self.validateFilename(newFilename)
-      guard filename != newFilename else { return .gist(gist) }
-      guard gist.files[filename] != nil else { throw GitHubClientError.missingFile }
-      guard gist.files[newFilename] == nil else { throw ChangeError.filenameExists }
-      let local = try await drafts.drafts(accountID: accountID).filter { $0.gistID == id }
-      guard !local.contains(where: { $0.filename == newFilename }) else {
-        throw ChangeError.filenameExists
-      }
-      guard !local.contains(where: { $0.sentGeneration != nil }) else {
-        throw ChangeError.publicationInProgress
-      }
-      let updated = try await client.updateGist(id: id, files: [filename: .rename(newFilename)])
-      for draft in local where draft.filename == filename {
-        _ = try await drafts.rename(
-          draft.id, accountID: accountID, filename: newFilename,
-          description: updated.description ?? "")
-      }
-      return .gist(updated)
-    case .addFile(let id, let filename):
-      let (client, gist, userID) = try await ownedGist(id: id, account: account)
-      try Self.validateFilename(filename)
-      guard gist.files[filename] == nil else { throw ChangeError.filenameExists }
-      let updated = try await client.updateGist(id: id, files: [filename: .content("")])
-      try await drafts.cacheGist(updated, accountID: accountID)
-      try await drafts.cacheContent("", gist: updated, filename: filename, accountID: accountID)
-      let draft = Draft(
-        accountID: accountID, githubUserID: userID, gist: updated, filename: filename, text: "")
-      return .draft(draft, gist: updated)
-    case .delete(let id):
-      let (client, _, _) = try await ownedGist(id: id, account: account)
-      return try await deleteGist(id, client: client, accountID: accountID)
-    case .deleteFile(let id, let filename):
-      let (client, gist, _) = try await ownedGist(id: id, account: account)
-      let isLastRemoteFile = gist.files[filename] != nil && gist.files.count == 1
-      if isLastRemoteFile {
-        // GitHub can't leave a gist without files, so deleting the last file deletes the gist.
-        return try await deleteGist(id, client: client, accountID: accountID)
-      }
-      // A file that's already gone from GitHub only needs its copy on this iPhone removed.
-      let updated =
-        gist.files[filename] == nil
-        ? gist : try await client.updateGist(id: id, files: [filename: .delete])
-      try await drafts.removeDrafts(
-        gistID: id, filename: filename, updated: updated, accountID: accountID)
-      return .deletedFile(gistID: id, filename: filename, gist: updated)
-    }
-  }
-
-  private func deleteGist(
-    _ id: String, client: GitHubClient, accountID: UUID
-  ) async throws -> ChangeResult {
-    try await client.deleteGist(id: id)
-    try await drafts.removeDrafts(gistID: id, accountID: accountID)
-    return .deleted(gistID: id)
-  }
-
-  private func ownedGist(
-    id: String, account: Account
-  ) async throws -> (GitHubClient, Gist, Int64) {
+  /// A gist the account owns, read fresh from GitHub before changing it.
+  func ownedGist(_ id: String, account: Account) async throws -> (GitHubClient, Gist, Int64) {
     let client = await client(accountID: account.id)
     let gist = try await client.gist(id: id)
     guard let userID = account.githubUserID, gist.owner?.id == userID else {
@@ -429,9 +383,13 @@ extension GitHubSync {
     return (client, gist, userID)
   }
 
-  private static func validateFilename(_ filename: String) throws {
-    guard !filename.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-      filename.hasSuffix(".md"), !filename.contains("/"), !filename.contains("\0")
-    else { throw ChangeError.invalidFilename }
+  /// A gist's drafts on this iPhone, which a rename carries along. One that's publishing would
+  /// land under the old name.
+  func unsentDrafts(gistID: String, accountID: UUID) async throws -> [Draft] {
+    let local = try await drafts.drafts(accountID: accountID).filter { $0.gistID == gistID }
+    guard !local.contains(where: { $0.sentGeneration != nil }) else {
+      throw ChangeError.publicationInProgress
+    }
+    return local
   }
 }

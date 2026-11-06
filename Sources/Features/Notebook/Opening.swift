@@ -66,26 +66,17 @@ extension Library {
     return placeholder(for: request(forRow: selected)).title
   }
 
-  @discardableResult
-  func beginOpeningRow(id: String) -> Bool {
+  /// Opens a library row, at once when its file is already on this iPhone.
+  public func select(rowID id: String) {
     guard account != nil, pendingAccount == nil else {
       openError = String(localized: "Reconnect GitHub to open this gist.")
-      return false
+      return
     }
     fileRequest = UUID()
     openError = nil
-    if let file = cachedFile(rowID: id) {
-      present(file)
-      return true
-    }
+    if let file = cachedFile(rowID: id) { return present(file) }
     opening = placeholder(for: request(forRow: id))
     state.selectedID = id
-    return false
-  }
-
-  /// Opens a library row, at once when its file is already on this iPhone.
-  public func select(rowID id: String) {
-    guard !beginOpeningRow(id: id), opening?.rowID == id else { return }
     let request = fileRequest
     Task {
       guard request == fileRequest else { return }

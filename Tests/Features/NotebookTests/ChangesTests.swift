@@ -48,7 +48,7 @@ struct ChangesTests {
     #expect(phone.onScreen == "The alpha day")
     try await phone.open(.gist(id: "d", filename: "2026-10-24.md"))
     #expect(phone.library.state.selectedID == "d/2026-10-24.md")
-    #expect(try phone.deletion(row: "d/2026-10-24.md") == .deleteFile(gistID: "d", filename: "2026-10-24.md"))
+    #expect(try phone.deletion(row: "d/2026-10-24.md") == .file(gistID: "d", filename: "2026-10-24.md"))
     try await phone.delete(row: "d/2026-10-24.md")
     #expect(phone.onScreen == nil)
     #expect(phone.onGitHub("d", "2026-10-24.md") == nil)

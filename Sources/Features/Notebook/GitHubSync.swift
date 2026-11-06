@@ -6,7 +6,7 @@ import Sync
 public actor GitHubSync {
   let accounts: AccountStore
   let drafts: DraftStore
-  let mutationQueue = SerialQueue()
+  private let queue = SerialQueue()
   private var clients: [UUID: GitHubClient] = [:]
 
   public init(accounts: AccountStore, drafts: DraftStore) {
@@ -76,7 +76,15 @@ public actor GitHubSync {
 
   func publish(_ draft: Draft) async throws -> Draft {
     let publisher = await publisher(accountID: draft.accountID)
-    return try await mutationQueue.run { try await publisher.publish(draft) }
+    return try await serially { _ in try await publisher.publish(draft) }
+  }
+
+  /// Runs one change to GitHub or the drafts at a time, so a publish, a new day and a rename never
+  /// interleave.
+  func serially<Value: Sendable>(
+    _ operation: @Sendable (GitHubSync) async throws -> Value
+  ) async throws -> Value {
+    try await queue.run { try await operation(self) }
   }
 
   public func localState(accountID: UUID) async throws -> LocalState {
@@ -112,7 +120,7 @@ public actor GitHubSync {
     let service = DailyNotes(
       accountID: accountID, githubUserID: userID, client: await client(accountID: accountID),
       store: drafts)
-    return try await mutationQueue.run { try await service.stageToday(target: target) }
+    return try await serially { _ in try await service.stageToday(target: target) }
   }
 
   func uploadImage(_ image: Data, gistID: String, accountID: UUID) async throws -> URL {

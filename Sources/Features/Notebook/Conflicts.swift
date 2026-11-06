@@ -55,12 +55,15 @@ extension FileSession {
         expected: editor.text, replacement: text),
       expectedGeneration: review.draft.generation
     ) {
-      guard
-        case .review(let resolved) = try await library.perform(
-          .resolveConflict(review, text: text, generation: generation))
-      else {
-        throw ChangeError.staleReview
+      let resolved = try await library.sync.serially { sync in
+        guard let current = try await sync.drafts.draft(id: review.draft.id, accountID: review.draft.accountID),
+          review.matches(current)
+        else { throw ChangeError.staleReview }
+        return try await sync.drafts.resolveConflict(
+          id: current.id, accountID: current.accountID, expectedGeneration: current.generation,
+          text: text, generation: generation)
       }
+      try await library.reloadLocalState(accountID: resolved.accountID)
       return resolved
     }
     if publishes { await publish() }

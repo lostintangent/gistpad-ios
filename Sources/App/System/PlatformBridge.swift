@@ -254,9 +254,9 @@ final class PlatformBridge: DailyNoteActions {
           guard draft.description != DailyNote.gistDescription else {
             throw PlatformError.unsupportedNoteUpdate
           }
-          _ = try await library.apply(.rename(gistID: id, title: name), accountID: draft.accountID)
+          try await library.rename(gistID: id, to: name)
         case .unpublishedGist:
-          _ = try await library.apply(.renameLocal(draft, title: name), accountID: draft.accountID)
+          try await library.rename(draft, to: name)
         case .gist, .today, .addToToday, .newGist:
           throw PlatformError.unsupportedNoteUpdate
         }
@@ -266,8 +266,7 @@ final class PlatformBridge: DailyNoteActions {
         guard case .gist(let id, _) = note.link else {
           throw PlatformError.unsupportedNoteUpdate
         }
-        _ = try await library.apply(
-          .preferences([.setPinned(gistID: id, pinned: isPinned)]), accountID: draft.accountID)
+        try await library.updatePreferences([.setPinned(gistID: id, pinned: isPinned)])
       }
       do {
         try await self.refresh()

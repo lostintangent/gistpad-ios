@@ -106,12 +106,12 @@ final class Phone {
   // MARK: Changing gists
 
   /// What deleting a row would remove, as its confirmation asks.
-  func deletion(row id: String) throws -> Change {
+  func deletion(row id: String) throws -> Deletion {
     try #require(library.deletion(forRow: id))
   }
 
-  func delete(_ deletion: Change) async throws {
-    _ = try await library.apply(deletion, accountID: accountID)
+  func delete(_ deletion: Deletion) async throws {
+    try await library.delete(deletion)
   }
 
   /// Deletes a row from the list, as its swipe action does.
@@ -120,34 +120,31 @@ final class Phone {
   }
 
   func name(_ session: FileSession, _ title: String) async throws {
-    _ = try await library.apply(.renameLocal(session.draft, title: title), accountID: accountID)
+    try await library.rename(session.draft, to: title)
   }
 
   func rename(_ gistID: String, to title: String) async throws {
-    _ = try await library.apply(.rename(gistID: gistID, title: title), accountID: accountID)
+    try await library.rename(gistID: gistID, to: title)
   }
 
   func rename(_ gistID: String, _ filename: String, to newFilename: String) async throws {
-    _ = try await library.apply(
-      .renameFile(gistID: gistID, filename: filename, newFilename: newFilename),
-      accountID: accountID)
+    try await library.renameFile(filename, to: newFilename, gistID: gistID)
   }
 
   func add(_ filename: String, to gistID: String) async throws {
-    _ = try await library.apply(.addFile(gistID: gistID, filename: filename), accountID: accountID)
+    try await library.addFile(filename, to: gistID)
   }
 
   func star(_ gistID: String) async throws {
-    _ = try await library.apply(.star(gistID: gistID, starred: true), accountID: accountID)
+    try await library.setStarred(true, gistID: gistID)
   }
 
   func pin(_ gistID: String) async throws {
-    _ = try await library.apply(
-      .preferences([.setPinned(gistID: gistID, pinned: true)]), accountID: accountID)
+    try await library.updatePreferences([.setPinned(gistID: gistID, pinned: true)])
   }
 
   func signOut() async throws {
-    _ = try await library.apply(.signOut, accountID: accountID)
+    try await library.signOut()
   }
 
   // MARK: The web

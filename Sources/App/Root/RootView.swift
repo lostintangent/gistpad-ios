@@ -247,8 +247,7 @@ struct RootView: View {
     return SettingsSheet(
       account: account,
       savePreference: { key, value in
-        guard let account else { throw AccountError.signedOut }
-        _ = try await library.apply(.preferences([.setBoolean(key, value)]), accountID: account.id)
+        try await library.updatePreferences([.setBoolean(key, value)])
       },
       connect: {
         sheet = nil
@@ -261,14 +260,10 @@ struct RootView: View {
           }
         }
       },
-      signOut: {
-        guard let account else { throw AccountError.signedOut }
-        _ = try await library.apply(.signOut, accountID: account.id)
-      }
+      signOut: { try await library.signOut() }
     ) {
       AccentColorRow(savedHex: account?.preferences.accentColor) { hex in
-        guard let account else { throw AccountError.signedOut }
-        _ = try await library.apply(.preferences([.setAccentColor(hex)]), accountID: account.id)
+        try await library.updatePreferences([.setAccentColor(hex)])
       }
     }
     .id(account?.id)
@@ -328,24 +323,22 @@ struct RootView: View {
         library.openError = String(localized: "Save this local draft to GitHub before pinning it.")
         return
       }
-      library.run(
-        .preferences([.setPinned(gistID: id, pinned: !account.preferences.pinnedGists.contains(id))]),
-        accountID: account.id)
+      let pinned = !account.preferences.pinnedGists.contains(id)
+      library.run { try await library.updatePreferences([.setPinned(gistID: id, pinned: pinned)]) }
     }
     actions.toggleArchive = { rowID in
-      guard let account = library.account, let id = library.gistID(forRow: rowID),
+      guard let id = library.gistID(forRow: rowID),
         let gist = library.cachedLibrary?.gists.first(where: { $0.id == id })
       else {
         library.openError = String(
           localized: "A recovery or unpublished draft cannot be archived on GitHub.")
         return
       }
-      setArchived(!gist.isArchived, gistID: id, accountID: account.id)
+      setArchived(!gist.isArchived, gistID: id)
     }
     actions.delete = { rowID in
-      guard let accountID = library.account?.id, let change = library.deletion(forRow: rowID)
-      else { return }
-      library.run(change, accountID: accountID)
+      guard let deletion = library.deletion(forRow: rowID) else { return }
+      library.run { try await library.delete(deletion) }
     }
     return actions
   }
@@ -573,19 +566,6 @@ struct RootView: View {
     let showsInline: Bool
   }
 
-  /// What Delete on a file's screen removes, the same as its Library row: a copy that's only on
-  /// this iPhone, one day of the daily notes gist, or the whole gist.
-  private func deletion(_ session: FileSession) -> Change? {
-    if session.file.isRecovery || session.draft.gistID == nil {
-      return .discardLocalCopy(session.draft)
-    }
-    guard let gist = session.file.gist, session.details.access.canEdit else { return nil }
-    if gist.isDailyNote {
-      return .deleteFile(gistID: gist.id, filename: session.file.filename)
-    }
-    return .delete(gistID: gist.id)
-  }
-
   private func gistActions(_ session: FileSession) -> GistActions {
     var actions = GistActions()
     if CommentsPresentation.supports(session.file) {
@@ -625,21 +605,17 @@ struct RootView: View {
       }
       if !session.file.isRecovery {
         actions.togglePin = {
-          library.run(
-            .preferences([.setPinned(gistID: gistID, pinned: !session.details.isPinned)]),
-            accountID: session.draft.accountID)
+          let pinned = !session.details.isPinned
+          library.run {
+            try await library.updatePreferences([.setPinned(gistID: gistID, pinned: pinned)])
+          }
         }
         actions.toggleStar = {
-          library.run(
-            .star(gistID: gistID, starred: !session.details.isStarred),
-            accountID: session.draft.accountID)
+          let starred = !session.details.isStarred
+          library.run { try await library.setStarred(starred, gistID: gistID) }
         }
         if session.details.access.canEdit {
-          actions.toggleArchive = {
-            setArchived(
-              !session.details.isArchived, gistID: gistID,
-              accountID: session.draft.accountID)
-          }
+          actions.toggleArchive = { setArchived(!session.details.isArchived, gistID: gistID) }
           actions.addFile = { rename(.addFile, session: session) }
           actions.renameFile = { rename(.filename, session: session) }
         }
@@ -648,11 +624,11 @@ struct RootView: View {
     if session.details.access.canEdit, !session.file.isRecovery {
       actions.rename = { rename(.title, session: session) }
     }
-    if deletion(session) != nil {
+    if session.deletion != nil {
       actions.delete = {
         // Read at confirmation, so a file that published meanwhile deletes from GitHub.
-        guard let change = deletion(session) else { return }
-        library.run(change, accountID: session.draft.accountID)
+        guard let deletion = session.deletion else { return }
+        library.run { try await library.delete(deletion) }
       }
     }
     actions.find = {
@@ -750,22 +726,17 @@ struct RootView: View {
         ? target.title : (target.kind == .filename ? target.draft.filename : ""),
       isFilename: target.kind != .title
     ) { value in
-      let action: Change
+      let draft = target.draft
       switch target.kind {
       case .title:
-        if let gistID = target.draft.gistID {
-          action = .rename(gistID: gistID, title: value)
-        } else {
-          action = .renameLocal(target.draft, title: value)
-        }
+        try await library.rename(draft, to: value)
       case .filename:
-        guard let gistID = target.draft.gistID else { throw GistLinks.Error.notPublished }
-        action = .renameFile(gistID: gistID, filename: target.draft.filename, newFilename: value)
+        guard let gistID = draft.gistID else { throw GistLinks.Error.notPublished }
+        try await library.renameFile(draft.filename, to: value, gistID: gistID)
       case .addFile:
-        guard let gistID = target.draft.gistID else { throw GistLinks.Error.notPublished }
-        action = .addFile(gistID: gistID, filename: value)
+        guard let gistID = draft.gistID else { throw GistLinks.Error.notPublished }
+        try await library.addFile(value, to: gistID)
       }
-      _ = try await library.apply(action, accountID: target.draft.accountID)
     }
   }
 
@@ -781,7 +752,7 @@ struct RootView: View {
           case .delete(let id): .deleteTag(id: id)
           }
         }
-        _ = try await library.apply(.preferences(operations), accountID: target.accountID)
+        try await library.updatePreferences(operations)
       }
     } else {
       save = nil
@@ -792,10 +763,10 @@ struct RootView: View {
 
   /// Archiving is absolute, so its undo is the opposite archive, registered with the scene so
   /// shake to undo and the undo gesture reverse it.
-  private func setArchived(_ archived: Bool, gistID: String, accountID: UUID) {
-    library.run(.archive(gistID: gistID, archived: archived), accountID: accountID)
+  private func setArchived(_ archived: Bool, gistID: String) {
+    library.run { try await library.setArchived(archived, gistID: gistID) }
     undoManager?.registerUndo(withTarget: library) { _ in
-      setArchived(!archived, gistID: gistID, accountID: accountID)
+      setArchived(!archived, gistID: gistID)
     }
     undoManager?.setActionName(
       archived ? String(localized: "Archive") : String(localized: "Unarchive"))
