@@ -42,11 +42,12 @@
         return editor.window === window && editor.bounds.height > 0
       }
       try #require(editor.becomeFirstResponder())
+      // A writer reaches their place with the keyboard already up, so let it finish arriving.
+      _ = try await settledOffset(of: editor, in: host)
       editor.selectedRange = selection
       editor.scrollRangeToVisible(selection)
-      editor.layoutIfNeeded()
-      let offset = editor.contentOffset
-      try #require(offset.y > 0)
+      let offset = try await settledOffset(of: editor, in: host)
+      try #require(offset > 0)
       presentation.present(
         editor: session, title: "Saturday walk",
         revealSource: { _ in Issue.record("Closing must not navigate to a reference.") })
@@ -62,7 +63,8 @@
       }
       #expect(session.textView === editor)
       #expect(editor.selectedRange == selection)
-      #expect(abs(editor.contentOffset.y - offset.y) < 1)
+      let returned = try await settledOffset(of: editor, in: host)
+      #expect(abs(returned - offset) < 1)
       #expect(session.text.utf8.elementsEqual(source.utf8))
       #expect(session.generation == 0)
       #expect(changes == 0)
@@ -84,6 +86,29 @@
       }
       Issue.record("Timed out waiting for \(description).")
       throw NativeReturnFailure.timedOut
+    }
+
+    /// The arriving keyboard, the collapsing title and any keyboard still leaving from an earlier
+    /// test move the editor's insets for a moment, so its position is comparable once they settle.
+    private func settledOffset(of editor: UITextView, in host: UIViewController) async throws
+      -> CGFloat
+    {
+      var state: [CGFloat] = []
+      var since = ContinuousClock.now
+      try await waitForNativeReturnState("the keyboard to settle") {
+        host.view.layoutIfNeeded()
+        let current = [
+          editor.contentOffset.y, editor.adjustedContentInset.top,
+          editor.adjustedContentInset.bottom,
+        ]
+        if current != state {
+          state = current
+          since = .now
+        }
+        return editor.inputAccessoryView?.window != nil
+          && ContinuousClock.now - since > .milliseconds(300)
+      }
+      return editor.contentOffset.y
     }
 
     private enum NativeReturnFailure: Error {
