@@ -34,7 +34,7 @@ Use size classes and the container's geometry, never device names. Respect the D
 
 **Sheet buttons.** Every sheet closes with the system X in `.cancellationAction`: `Button(role: .cancel)` when closing throws away an edit, `Button(role: .close)` when there's nothing to lose. A sheet that saves confirms with `Button(role: .confirm)` in `.confirmationAction`, the system's blue glass checkmark. The roles supply the symbol, color and VoiceOver label, so neither sets text, an accessibility label, a tint or a button style. While saving, the checkmark becomes a `ProgressView`. Both stay visible while a field has focus, so on the Closed Duo they sit in the trailing rail like Comments' X. This covers Rename Gist…, Rename File…, Add File…, Add Link, Add to Today and the tag sheets.
 
-Launch restores the last open file. With none, nothing opens, because today's note only starts when you ask for it. Existing files open in Preview. New gists and today's note open in Edit with the caret ready. The mode you pick sticks.
+Launch restores the last open file. With none, nothing opens, because today's note only starts when you ask for it. Existing files open in Preview. New gists and today's note open in Edit with the caret ready. Their row appears, selected, with your first keystroke. Leave one untyped and it closes without a trace, like an empty note in Notes. The mode you pick sticks.
 
 Opening a file:
 
@@ -62,7 +62,7 @@ Headers use the system header font with `.headerProminence(.increased)` and a se
 
 No excerpts, thumbnails or cards. Vertical padding is 14 pt, scaled with Body, and the compact horizontal inset is 16 pt. At accessibility sizes the row stacks: title, metadata, then tags.
 
-Swipe trailing for **Delete** (red, confirmed) and **Archive** or **Unarchive** (system gray). Swipe leading for **Pin** or **Unpin**. The context menu offers Open Comments, Pin, Archive and Delete. A daily note is a file, not a gist, so it only offers Delete: no leading swipe, and no Pin or Archive anywhere.
+Swipe trailing for **Delete** (red, confirmed) and **Archive** or **Unarchive** (system gray). Swipe leading for **Pin** or **Unpin**. The context menu offers Open Comments, Pin, Archive and Delete. A daily note is a file, not a gist, so it only offers Delete: no leading swipe, and no Pin or Archive anywhere. A pin, star or archive that doesn't go through shows the standard alert with the system's reason, and nothing retries it.
 
 ### Search, filters and toolbars
 
