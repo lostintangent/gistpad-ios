@@ -3,8 +3,8 @@
   import Store
   import Synchronization
 
-  /// The library the app ships (its account store, draft store and GitHubSync) signed in to
-  /// Store's fixture GitHub, so tests drive real requests instead of a fake.
+  /// The model the app ships, with its account and draft stores, signed in to Store's fixture
+  /// GitHub, so tests drive real requests instead of a fake.
   @MainActor
   struct ModelFixture {
     let server = FixtureServer()
@@ -28,14 +28,12 @@
       self.account = account
       store = try DraftStore.open(inMemory: true)
       if let selection { lastOpened.save(selection, accountID: account.id) }
-      model = GistPadModel(
-        sync: GitHubSync(accounts: accounts, drafts: store), lastOpened: lastOpened)
+      model = GistPadModel(accounts: accounts, drafts: store, lastOpened: lastOpened)
     }
 
     /// The app launching again on this iPhone, with the same drafts and remembered file.
     func relaunch() -> GistPadModel {
-      GistPadModel(
-        sync: GitHubSync(accounts: accounts, drafts: store), lastOpened: lastOpened)
+      GistPadModel(accounts: accounts, drafts: store, lastOpened: lastOpened)
     }
 
     /// Every publish so far: a new gist or an edit to one.
@@ -65,6 +63,22 @@
       server.intercept { request in
         if Self.line(request).hasPrefix(prefix) { throw URLError(code) }
         return nil
+      }
+    }
+
+    /// The next publish reaches GitHub, but its answer never comes back.
+    func cutOffNextPublish() {
+      let session = server.session
+      let isFirst = Mutex(true)
+      server.intercept { request in
+        guard request.httpMethod == "POST" || request.httpMethod == "PATCH",
+          isFirst.withLock({ first in
+            defer { first = false }
+            return first
+          })
+        else { return nil }
+        _ = try await session.data(for: request)
+        throw URLError(.networkConnectionLost)
       }
     }
 

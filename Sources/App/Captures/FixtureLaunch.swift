@@ -64,16 +64,16 @@
         _ = try await accounts.update(seeded + (accent.map { [.setAccentColor($0)] } ?? []), accountID: account.id)
       }
       let store = try DraftStore.open(inMemory: true)
-      let sync = GitHubSync(accounts: accounts, drafts: store)
-      if fixture == .offline, let account = try await sync.connectedAccount() {
-        try await sync.cacheGists(
-          owned: sync.gists(accountID: account.id), starred: sync.starredGists(accountID: account.id),
-          accountID: account.id)
+      if fixture == .offline, let account = try await accounts.connectedAccount() {
+        let github = await accounts.githubClient(accountID: account.id)
+        try await store.cacheGists(
+          owned: github.listGists(), starred: github.listStarredGists(), accountID: account.id)
         server.intercept { _ in throw URLError(.notConnectedToInternet) }
       }
       if let link = sheet == .today ? .addToToday : link { PendingLink.shared.link = link }
       let model = PlatformBridge.connect(
-        sync, store: store, lastOpened: LastOpened(defaults: Self.defaults))
+        GistPadModel(
+          accounts: accounts, drafts: store, lastOpened: LastOpened(defaults: Self.defaults)))
       if let query { model.state.query = query }
       return model
     }

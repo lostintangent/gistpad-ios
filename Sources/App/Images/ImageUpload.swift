@@ -20,9 +20,9 @@ final class ImageUpload {
   private(set) var isUploading = false
   /// The note the picked image, or a retried one, goes into.
   @ObservationIgnored private weak var fileEditor: GistFileEditor?
-  @ObservationIgnored private let upload: @MainActor (Data, String, UUID) async throws -> URL
+  @ObservationIgnored private let upload: @MainActor (Data, GistFile) async throws -> URL
 
-  init(upload: @escaping @MainActor (Data, String, UUID) async throws -> URL) {
+  init(upload: @escaping @MainActor (Data, GistFile) async throws -> URL) {
     self.upload = upload
   }
 
@@ -62,7 +62,7 @@ final class ImageUpload {
     }
     do {
       let markdown = ImageStorage.markdown(
-        try await upload(image, gistID, fileEditor.draft.accountID))
+        try await upload(image, fileEditor.file))
       let editor = fileEditor.editor
       try editor.apply(
         Edit(

@@ -35,19 +35,67 @@ public final class GistPadModel {
   public var isForeground = false
   var isApplying = false
 
-  @ObservationIgnored let sync: GitHubSync
+  @ObservationIgnored let accountStore: AccountStore
+  @ObservationIgnored let draftStore: DraftStore
   @ObservationIgnored let lastOpened: LastOpened
+  @ObservationIgnored private var clients: [UUID: GitHubClient] = [:]
+  @ObservationIgnored private var isWriting = false
+  @ObservationIgnored private var writers: [CheckedContinuation<Void, Never>] = []
   @ObservationIgnored var libraryRequest = UUID()
   @ObservationIgnored var refreshedAt: Date?
   @ObservationIgnored var fileRequest = UUID()
   @ObservationIgnored let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "Library")
 
-  public init(
-    sync: GitHubSync, lastOpened: LastOpened = LastOpened()
-  ) {
-    self.sync = sync
+  public init(accounts: AccountStore, drafts: DraftStore, lastOpened: LastOpened = LastOpened()) {
+    accountStore = accounts
+    draftStore = drafts
     self.lastOpened = lastOpened
+  }
+
+  /// GitHub as the account sees it, one client per account.
+  func client(accountID: UUID) async -> GitHubClient {
+    if let client = clients[accountID] { return client }
+    let client = await accountStore.githubClient(accountID: accountID)
+    if let existing = clients[accountID] { return existing }
+    clients[accountID] = client
+    return client
+  }
+
+  /// A gist as GitHub has it now, which the cache then keeps.
+  func gist(id: String, accountID: UUID) async throws -> Gist {
+    let gist = try await client(accountID: accountID).gist(id: id)
+    try await draftStore.cacheGist(gist, accountID: accountID)
+    return gist
+  }
+
+  /// A file's text from the cache when it's current, otherwise from GitHub, which then caches it.
+  /// Nil when the gist has no such file.
+  public func text(of filename: String, in gist: Gist, accountID: UUID) async throws -> String? {
+    guard gist.files[filename] != nil else { return nil }
+    if let cached = try await draftStore.gistCache(accountID: accountID)?
+      .currentContent(gist: gist, filename: filename)
+    {
+      return cached
+    }
+    let text = try await client(accountID: accountID).content(gist: gist, filename: filename)
+    try await draftStore.cacheContent(text, gist: gist, filename: filename, accountID: accountID)
+    return text
+  }
+
+  /// Runs one write to GitHub or the drafts at a time, so a publish, a new day and a rename never
+  /// interleave.
+  func serially<Value>(_ write: () async throws -> Value) async throws -> Value {
+    if isWriting {
+      await withCheckedContinuation { writers.append($0) }
+    } else {
+      isWriting = true
+    }
+    defer {
+      if writers.isEmpty { isWriting = false } else { writers.removeFirst().resume() }
+    }
+    try Task.checkCancellation()
+    return try await write()
   }
 
   public func gistID(forRow rowID: String) -> String? {
@@ -84,21 +132,15 @@ public final class GistPadModel {
     }
   }
 
-  public func reloadPlatformState(accountID: UUID) async throws {
-    guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
-    try await reloadLocalState(accountID: accountID)
-    guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
-  }
-
   func reloadLocalState(accountID: UUID) async throws {
     let records = localDraftRecords
-    let local = try await sync.localState(accountID: accountID)
+    let cache = try await draftStore.gistCache(accountID: accountID)
+    let drafts = try await draftStore.drafts(accountID: accountID)
     guard account?.id == accountID, pendingAccount == nil else { return }
     // A draft saved while this read ran is newer than the read, so read again.
     if localDraftRecords != records { return try await reloadLocalState(accountID: accountID) }
-    let drafts = local.drafts
     localDrafts = drafts
-    gistCache = local.cache
+    gistCache = cache
     projectLibrary()
     updateToday()
   }

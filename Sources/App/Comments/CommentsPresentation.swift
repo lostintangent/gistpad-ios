@@ -171,12 +171,9 @@ final class CommentsPresentation {
     if let conversation { return conversation }
     guard let scope, let gist = fileEditor?.file.gist else { return nil }
     do {
-      let services = try await model.comments(accountID: scope.accountID)
+      let created = try await model.comments(for: gist)
       guard self.scope == scope else { return nil }
       if let conversation { return conversation }
-      let created = CommentsModel(
-        gistID: scope.gistID, userID: services.userID, gistOwnerID: gist.owner?.id,
-        remote: services.remote)
       conversation = created
       return created
     } catch {

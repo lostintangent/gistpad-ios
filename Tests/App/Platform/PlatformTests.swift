@@ -67,8 +67,7 @@ struct PlatformTests {
 
     _ = try await intent.perform()
 
-    let local = try await fixture.sync.localState(accountID: fixture.account.id)
-    let draft = try #require(local.drafts.first {
+    let draft = try #require(fixture.model.localDrafts.first {
       $0.gistID == nil && $0.description == "Groceries"
     })
     #expect(draft.text == "# Groceries\n\n")
@@ -106,11 +105,10 @@ struct PlatformTests {
 
     _ = try await intent.perform()
 
-    let local = try await fixture.sync.localState(accountID: fixture.account.id)
-    let draft = try #require(local.drafts.first {
+    let draft = try #require(fixture.model.localDrafts.first {
       $0.gistID == nil && $0.description == "Test Reading List"
     })
-    #expect(local.drafts.filter { $0.description == "Test Reading List" }.count == 1)
+    #expect(fixture.model.localDrafts.filter { $0.description == "Test Reading List" }.count == 1)
     #expect(draft.text == "# Ranked\n1. Vagabond\n")
     let note = try #require(try LibrarySnapshot.read()?.gists.first {
       $0.link == .unpublishedGist(accountID: fixture.account.id, draftID: draft.id)
@@ -166,8 +164,7 @@ struct PlatformTests {
     let updated = try await fixture.bridge.appendToNote(note, text: "A new line")
 
     #expect(updated.content == nil)
-    let local = try await fixture.sync.localState(accountID: fixture.account.id)
-    let draft = try #require(local.drafts.first { $0.filename == "another.md" })
+    let draft = try #require(fixture.model.localDrafts.first { $0.filename == "another.md" })
     #expect(draft.text == "---\nsecret: hide this from Siri\n---\n\nAnother note\nA new line\n")
     #expect(fixture.publishes.isEmpty)
   }
@@ -243,8 +240,9 @@ struct PlatformTests {
 
     _ = try await intent.perform()
 
-    #expect(try await fixture.sync.localState(accountID: fixture.account.id)
-      .cache?.owned.first(where: { $0.id == "manga" })?.description == "Reading Library")
+    #expect(
+      fixture.model.gistCache?.owned.first(where: { $0.id == "manga" })?.description
+        == "Reading Library")
     #expect(fixture.publishes == ["PATCH /gists/manga"])
   }
 
@@ -263,8 +261,8 @@ struct PlatformTests {
     let original = fileEditor.editor.text
     let url = try #require(URL(string: "https://example.com/assets/daily123/image.png"))
     var uploadedGistIDs: [String] = []
-    let images = ImageUpload { _, gistID, _ in
-      uploadedGistIDs.append(gistID)
+    let images = ImageUpload { _, file in
+      uploadedGistIDs.append(file.draft.gistID ?? "")
       return url
     }
     images.chooseImage(for: fileEditor)
@@ -287,7 +285,6 @@ struct PlatformTests {
 @MainActor
 private struct PlatformFixture {
   let fixture: ModelFixture
-  let sync: GitHubSync
   let model: GistPadModel
   let bridge: PlatformBridge
 
@@ -304,22 +301,20 @@ private struct PlatformFixture {
         files: ["README.md": "# Ranked\n1. Vagabond\n"])
     }
     // Connected the way the app launches, so every file the library opens reaches the bridge.
-    let sync = GitHubSync(accounts: fixture.accounts, drafts: fixture.store)
-    let model = PlatformBridge.connect(sync, store: fixture.store, lastOpened: fixture.lastOpened)
+    let model = PlatformBridge.connect(fixture.model)
     await model.start()
     await model.open(.today())
     let bridge = try #require(PlatformBridge.shared)
     try await bridge.refresh()
-    return Self(
-      fixture: fixture, sync: sync, model: model, bridge: bridge)
+    return Self(fixture: fixture, model: model, bridge: bridge)
   }
 
   var account: GistPadAccount { fixture.account }
   var store: DraftStore { fixture.store }
   var publishes: [String] { fixture.publishes }
 
-  func today() async throws -> (gist: Gist?, draft: Draft) {
-    try await sync.today(accountID: account.id, target: DailyNote.Day())
+  func today() async throws -> GistFile {
+    try await model.today()
   }
 
   /// Today, opened from the Today button.

@@ -39,20 +39,18 @@ func requestData(_ request: URLRequest) throws -> Data {
     FixtureServer.body(of: request)
 }
 
-/// The fixture GitHub with a draft store and publisher, signed in as `FixtureServer.you`.
+/// The fixture GitHub with a draft store, signed in as `FixtureServer.you`.
 struct SyncFixture {
     static let account = FixtureServer.accountID
     static let user = FixtureServer.you.id
     let server: FixtureServer
     let store: DraftStore
     let github: GitHubClient
-    let publisher: DraftPublisher
 
     init(store: DraftStore? = nil, server: FixtureServer = FixtureServer()) throws {
         self.server = server
         self.store = try store ?? DraftStore.open(inMemory: true)
         github = GitHubClient(session: server.session) { "fixture-github" }
-        publisher = DraftPublisher(client: github, store: self.store)
     }
 
     /// A gist's file as you open it: your draft, or what GitHub has now.
@@ -66,10 +64,6 @@ struct SyncFixture {
 
     func type(_ text: String, in draft: Draft) async throws -> Draft {
         try await store.save(draft, text: text, generation: draft.generation + 1)
-    }
-
-    func publish(_ draft: Draft) async throws -> Draft {
-        try await publisher.publish(draft)
     }
 }
 

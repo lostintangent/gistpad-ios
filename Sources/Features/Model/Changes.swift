@@ -57,8 +57,8 @@ extension GistPadModel {
   /// Saves pins, tags, the accent color and settings with your account.
   public func updatePreferences(_ changes: [GistPadPreferences.Change]) async throws {
     try await change { account in
-      let updated = try await sync.serially { sync in
-        try await sync.accounts.update(changes, accountID: account.id)
+      let updated = try await serially {
+        try await accountStore.update(changes, accountID: account.id)
       }
       self.account = updated
       for fileEditor in editors.values { try await fileEditor.refreshMetadata() }
@@ -67,10 +67,10 @@ extension GistPadModel {
 
   public func setStarred(_ starred: Bool, gistID: String) async throws {
     try await change { account in
-      let gist = try await sync.serially { sync in
-        let client = await sync.client(accountID: account.id)
-        let gist = try await client.gist(id: gistID)
-        try await client.setStarred(starred, id: gistID)
+      let github = await client(accountID: account.id)
+      let gist = try await serially {
+        let gist = try await github.gist(id: gistID)
+        try await github.setStarred(starred, id: gistID)
         return gist
       }
       try await landed(gist, starred: starred)
@@ -80,9 +80,9 @@ extension GistPadModel {
   public func setArchived(_ archived: Bool, gistID: String) async throws {
     try await change { account in
       try await landed(
-        try await sync.serially { sync in
-          let (client, gist, _) = try await sync.ownedGist(gistID, account: account)
-          return try await client.setArchived(archived, gist: gist)
+        try await serially {
+          let (github, gist, _) = try await ownedGist(gistID, account: account)
+          return try await github.setArchived(archived, gist: gist)
         })
     }
   }
@@ -92,10 +92,10 @@ extension GistPadModel {
     if let gistID = draft.gistID { return try await rename(gistID: gistID, to: title) }
     try Self.validateTitle(title)
     try await change { _ in
-      let renamed = try await sync.serially { sync in
-        let kept = try await sync.drafts.keep(draft)
+      let renamed = try await serially {
+        let kept = try await draftStore.keep(draft)
         guard kept.sentGeneration == nil else { throw ChangeError.publicationInProgress }
-        return try await sync.drafts.rename(
+        return try await draftStore.rename(
           kept.id, accountID: kept.accountID, filename: kept.filename, description: title)
       }
       present(GistFile(draft: renamed, gist: nil))
@@ -108,12 +108,12 @@ extension GistPadModel {
     try Self.validateTitle(title)
     try await change { account in
       try await landed(
-        try await sync.serially { sync in
-          let (client, gist, _) = try await sync.ownedGist(gistID, account: account)
-          let local = try await sync.unsentDrafts(gistID: gistID, accountID: account.id)
-          let updated = try await client.updateDescription(title, gist: gist)
+        try await serially {
+          let (github, gist, _) = try await ownedGist(gistID, account: account)
+          let local = try await unsentDrafts(gistID: gistID, accountID: account.id)
+          let updated = try await github.updateDescription(title, gist: gist)
           for draft in local {
-            _ = try await sync.drafts.rename(
+            _ = try await draftStore.rename(
               draft.id, accountID: account.id, filename: draft.filename,
               description: updated.description ?? "")
           }
@@ -125,17 +125,17 @@ extension GistPadModel {
   public func renameFile(_ filename: String, to newFilename: String, gistID: String) async throws {
     try Self.validateFilename(newFilename)
     try await change { account in
-      let gist = try await sync.serially { sync in
-        let (client, gist, _) = try await sync.ownedGist(gistID, account: account)
+      let gist = try await serially {
+        let (github, gist, _) = try await ownedGist(gistID, account: account)
         guard filename != newFilename else { return gist }
         guard gist.files[filename] != nil else { throw GitHubClientError.missingFile }
-        let local = try await sync.unsentDrafts(gistID: gistID, accountID: account.id)
+        let local = try await unsentDrafts(gistID: gistID, accountID: account.id)
         guard gist.files[newFilename] == nil, !local.contains(where: { $0.filename == newFilename })
         else { throw ChangeError.filenameExists }
-        let updated = try await client.updateGist(
+        let updated = try await github.updateGist(
           id: gistID, files: [filename: .rename(newFilename)])
         for draft in local where draft.filename == filename {
-          _ = try await sync.drafts.rename(
+          _ = try await draftStore.rename(
             draft.id, accountID: account.id, filename: newFilename,
             description: updated.description ?? "")
         }
@@ -149,12 +149,12 @@ extension GistPadModel {
   public func addFile(_ filename: String, to gistID: String) async throws {
     try Self.validateFilename(filename)
     try await change { account in
-      let (draft, gist) = try await sync.serially { sync in
-        let (client, gist, userID) = try await sync.ownedGist(gistID, account: account)
+      let (draft, gist) = try await serially {
+        let (github, gist, userID) = try await ownedGist(gistID, account: account)
         guard gist.files[filename] == nil else { throw ChangeError.filenameExists }
-        let updated = try await client.updateGist(id: gistID, files: [filename: .content("")])
-        try await sync.drafts.cacheGist(updated, accountID: account.id)
-        try await sync.drafts.cacheContent(
+        let updated = try await github.updateGist(id: gistID, files: [filename: .content("")])
+        try await draftStore.cacheGist(updated, accountID: account.id)
+        try await draftStore.cacheContent(
           "", gist: updated, filename: filename, accountID: account.id)
         let draft = Draft(
           accountID: account.id, githubUserID: userID, gist: updated, filename: filename, text: "")
@@ -179,12 +179,12 @@ extension GistPadModel {
     }) { account in
       switch deletion {
       case .localCopy(let confirmed):
-        let draft = try await sync.current(confirmed)
+        let draft = try await current(confirmed)
         if confirmed.gistID == nil, let gistID = draft.gistID {
           return try await deleteFile(draft.filename, gistID: gistID, account: account)
         }
-        try await sync.serially { sync in
-          try await sync.drafts.discardLocalCopy(id: draft.id, accountID: draft.accountID)
+        try await serially {
+          try await draftStore.discardLocalCopy(id: draft.id, accountID: draft.accountID)
         }
         forget(accountID: account.id) {
           $0.draftID == draft.id
@@ -195,10 +195,10 @@ extension GistPadModel {
       case .file(let gistID, let filename):
         try await deleteFile(filename, gistID: gistID, account: account)
       case .gist(let id):
-        try await sync.serially { sync in
-          let (client, _, _) = try await sync.ownedGist(id, account: account)
-          try await client.deleteGist(id: id)
-          try await sync.drafts.removeDrafts(gistID: id, accountID: account.id)
+        try await serially {
+          let (github, _, _) = try await ownedGist(id, account: account)
+          try await github.deleteGist(id: id)
+          try await draftStore.removeDrafts(gistID: id, accountID: account.id)
         }
         forgetGist(id, accountID: account.id)
       }
@@ -212,10 +212,10 @@ extension GistPadModel {
       libraryRequest = UUID()
       defer { isSigningOut = false }
       do {
-        try await sync.serially { sync in try await sync.accounts.signOut(accountID: account.id) }
+        try await serially { try await accountStore.signOut(accountID: account.id) }
       } catch {
         // A sign-out that already removed this iPhone's session still signs you out here.
-        if try await sync.cachedAccount() == nil, self.account?.id == account.id {
+        if try await accountStore.cachedAccount() == nil, self.account?.id == account.id {
           reset(to: nil)
         }
         throw error
@@ -277,7 +277,7 @@ extension GistPadModel {
         cache.starred.removeAll { $0.id == gist.id }
         if starred { cache.starred.append(gist) }
       }
-      try await sync.cacheGists(owned: cache.owned, starred: cache.starred, accountID: account.id)
+      try await draftStore.cacheGists(owned: cache.owned, starred: cache.starred, accountID: account.id)
     }
     for fileEditor in editors.values where fileEditor.draft.gistID == gist.id {
       try await fileEditor.refreshMetadata(
@@ -287,18 +287,18 @@ extension GistPadModel {
 
   /// Deletes one file. GitHub can't keep a gist without files, so the last one takes the gist.
   private func deleteFile(_ filename: String, gistID: String, account: GistPadAccount) async throws {
-    let left = try await sync.serially { sync -> Gist? in
-      let (client, gist, _) = try await sync.ownedGist(gistID, account: account)
+    let left = try await serially { () -> Gist? in
+      let (github, gist, _) = try await ownedGist(gistID, account: account)
       if gist.files[filename] != nil, gist.files.count == 1 {
-        try await client.deleteGist(id: gistID)
-        try await sync.drafts.removeDrafts(gistID: gistID, accountID: account.id)
+        try await github.deleteGist(id: gistID)
+        try await draftStore.removeDrafts(gistID: gistID, accountID: account.id)
         return nil
       }
       // A file that's already gone from GitHub only needs its copy on this iPhone removed.
       let updated =
         gist.files[filename] == nil
-        ? gist : try await client.updateGist(id: gistID, files: [filename: .delete])
-      try await sync.drafts.removeDrafts(
+        ? gist : try await github.updateGist(id: gistID, files: [filename: .delete])
+      try await draftStore.removeDrafts(
         gistID: gistID, filename: filename, updated: updated, accountID: account.id)
       return updated
     }
@@ -369,21 +369,23 @@ extension GistPadModel {
   }
 }
 
-extension GitHubSync {
+extension GistPadModel {
   /// A gist the account owns, read fresh from GitHub before changing it.
-  func ownedGist(_ id: String, account: GistPadAccount) async throws -> (GitHubClient, Gist, Int64) {
-    let client = await client(accountID: account.id)
-    let gist = try await client.gist(id: id)
+  private func ownedGist(
+    _ id: String, account: GistPadAccount
+  ) async throws -> (GitHubClient, Gist, Int64) {
+    let github = await client(accountID: account.id)
+    let gist = try await github.gist(id: id)
     guard let userID = account.githubUserID, gist.owner?.id == userID else {
       throw DraftError.readOnly
     }
-    return (client, gist, userID)
+    return (github, gist, userID)
   }
 
   /// A gist's drafts on this iPhone, which a rename carries along. One that's publishing would
   /// land under the old name.
-  func unsentDrafts(gistID: String, accountID: UUID) async throws -> [Draft] {
-    let local = try await drafts.drafts(accountID: accountID).filter { $0.gistID == gistID }
+  private func unsentDrafts(gistID: String, accountID: UUID) async throws -> [Draft] {
+    let local = try await draftStore.drafts(accountID: accountID).filter { $0.gistID == gistID }
     guard !local.contains(where: { $0.sentGeneration != nil }) else {
       throw ChangeError.publicationInProgress
     }

@@ -27,18 +27,15 @@ extension PlatformBridge {
 
   static func model(publishableKey: String) throws -> GistPadModel {
     if let services { return services.model }
-    let store = try DraftStore.open()
-    let sync = GitHubSync(
-      accounts: try AccountStore(publishableKey: publishableKey), drafts: store)
-    return connect(sync, store: store, lastOpened: LastOpened(defaults: .standard))
+    return connect(
+      GistPadModel(
+        accounts: try AccountStore(publishableKey: publishableKey), drafts: try DraftStore.open(),
+        lastOpened: LastOpened(defaults: .standard)))
   }
 
-  /// Builds the library and connects it to App Intents, widgets and Spotlight.
-  static func connect(
-    _ sync: GitHubSync, store: DraftStore, lastOpened: LastOpened
-  ) -> GistPadModel {
-    let model = GistPadModel(sync: sync, lastOpened: lastOpened)
-    services = (model, PlatformBridge(sync: sync, store: store, model: model))
+  /// Connects the model to App Intents, widgets and Spotlight.
+  static func connect(_ model: GistPadModel) -> GistPadModel {
+    services = (model, PlatformBridge(model: model))
     return model
   }
 }
@@ -49,9 +46,7 @@ final class PlatformBridge: DailyNoteActions {
     weak var value: GistFileEditor?
   }
 
-  private let sync: GitHubSync
-  private let store: DraftStore
-  private weak var model: GistPadModel?
+  private let model: GistPadModel
   private var visibleEditor: WeakEditor?
   private var visibleNoteID: String?
   private var refreshTask: Task<Void, Never>?
@@ -62,9 +57,7 @@ final class PlatformBridge: DailyNoteActions {
   private var spotlightTask: Task<Void, Never>?
   private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "SystemIntegration")
 
-  init(sync: GitHubSync, store: DraftStore, model: GistPadModel) {
-    self.sync = sync
-    self.store = store
+  init(model: GistPadModel) {
     self.model = model
     followLibrary()
     // Launch also catches up on anything that changed while the app wasn't running.
@@ -74,7 +67,7 @@ final class PlatformBridge: DailyNoteActions {
   /// Widgets, Spotlight and Shortcuts follow the library's account and the drafts on this iPhone.
   private func followLibrary() {
     withObservationTracking {
-      _ = (model?.account, model?.pendingAccount, model?.localDrafts)
+      _ = (model.account, model.pendingAccount, model.localDrafts)
     } onChange: { [weak self] in
       Task { @MainActor in
         self?.scheduleRefresh()
@@ -109,23 +102,11 @@ final class PlatformBridge: DailyNoteActions {
   }
 
   func refresh() async throws {
-    let account = try await sync.cachedAccount()
-    let accountID =
-      model?.pendingAccount == nil
-        && (model?.account == nil || model?.account?.id == account?.id)
-      ? account?.id : nil
-    let local: LocalState?
-    if let accountID {
-      local = try await sync.localState(accountID: accountID)
-    } else {
-      local = nil
-    }
-    let snapshot = LibrarySnapshot.make(
-      account: accountID == nil ? nil : account, cache: local?.cache, drafts: local?.drafts ?? [],
-      visibleText: Self.noteBody)
+    let account = model.pendingAccount == nil ? try await model.localAccount() : nil
     try Task.checkCancellation()
-    let current = try await sync.cachedAccount()
-    guard current?.id == account?.id else { throw PlatformError.accountChanged }
+    let snapshot = LibrarySnapshot.make(
+      account: account, cache: account == nil ? nil : model.gistCache,
+      drafts: account == nil ? [] : model.localDrafts, visibleText: Self.noteBody)
     try snapshot.write()
     WidgetCenter.shared.reloadTimelines(ofKind: LauncherWidgetView.kind)
     indexInSpotlight(snapshot)
@@ -136,14 +117,10 @@ final class PlatformBridge: DailyNoteActions {
   }
 
   func noteEntities(for identifiers: [String]) async throws -> [GistEntity] {
-    guard let account = try await sync.cachedAccount() else {
-      throw PlatformError.accountChanged
-    }
+    guard let account = try await model.localAccount() else { throw PlatformError.accountChanged }
     let accountID = account.id
-    try await validateAccount(accountID)
-    let local = try await sync.localState(accountID: accountID)
     let snapshot = LibrarySnapshot.make(
-      account: account, cache: local.cache, drafts: local.drafts,
+      account: account, cache: model.gistCache, drafts: model.localDrafts,
       visibleText: Self.noteBody)
     return snapshot.gists.filter { identifiers.contains($0.id) }.map { entity in
       guard let body = visibleBody(for: entity, accountID: accountID) else { return entity }
@@ -153,8 +130,8 @@ final class PlatformBridge: DailyNoteActions {
 
   private func visibleBody(for note: GistEntity, accountID: UUID) -> String? {
     guard note.id == visibleNoteID, let fileEditor = visibleEditor?.value,
-      model?.isForeground == true, model?.activeEditor === fileEditor,
-      model?.state.selectedID != nil,
+      model.isForeground, model.activeEditor === fileEditor,
+      model.state.selectedID != nil,
       fileEditor.draft.accountID == accountID
     else { return nil }
     return Self.noteBody(fileEditor.editor.text)
@@ -183,10 +160,11 @@ final class PlatformBridge: DailyNoteActions {
     text: String, asTask: Bool, target: DailyNote.Day
   ) async throws -> GistPadLink {
     try await serially {
-      guard let accountID = try await self.sync.cachedAccount()?.id else {
+      guard let accountID = try await self.model.localAccount()?.id else {
         throw PlatformError.accountChanged
       }
-      let draft = try await self.todayDraft(accountID: accountID, target: target)
+      // Today's file as you last saved it, started the same way the app starts today.
+      let draft = try await self.current(try await self.model.today(target).draft)
       try await self.apply(.addToToday(text, asTask: asTask, to: draft))
       return draft.gistID.map { .gist(id: $0, filename: draft.filename) }
         ?? .unpublishedGist(accountID: accountID, draftID: draft.id)
@@ -197,13 +175,10 @@ final class PlatformBridge: DailyNoteActions {
     try await serially {
       let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !name.isEmpty else { throw PlatformError.emptyNoteName }
-      guard let accountID = try await self.sync.cachedAccount()?.id,
-        let model = self.model
-      else { throw PlatformError.accountChanged }
-      try await self.validateAccount(accountID)
-      let draft = try await self.sync.createDraft(
-        accountID: accountID, description: name, content: content)
-      try await model.reloadPlatformState(accountID: accountID)
+      guard let accountID = try await self.model.localAccount()?.id else {
+        throw PlatformError.accountChanged
+      }
+      let draft = try await self.model.createGist(named: name, text: content)
       do {
         try await self.refresh()
       } catch {
@@ -242,7 +217,7 @@ final class PlatformBridge: DailyNoteActions {
   ) async throws -> GistEntity {
     try await serially {
       let draft = try await self.noteDraft(for: note)
-      guard let model = self.model else { throw PlatformError.accountChanged }
+      let model = self.model
       let name = name?.trimmingCharacters(in: .whitespacesAndNewlines)
       let renames = name != nil && name != String(note.name.characters)
       let changesPin = isPinned != nil && isPinned != note.isPinned
@@ -282,30 +257,29 @@ final class PlatformBridge: DailyNoteActions {
   }
 
   private func noteDraft(for note: GistEntity) async throws -> Draft {
-    guard let accountID = try await sync.cachedAccount()?.id, note.accountID == accountID else {
+    guard let account = try await model.localAccount(), note.accountID == account.id else {
       throw PlatformError.accountChanged
     }
-    try await validateAccount(accountID)
     switch note.link {
     case .gist(let id, let filename):
-      let local = try await sync.localState(accountID: accountID)
-      guard let gist = local.cache?.owned.first(where: { $0.id == id }),
+      guard let gist = model.gistCache?.owned.first(where: { $0.id == id }),
         let filename = filename ?? gist.defaultMarkdownFilename,
         filename.hasSuffix(".md")
       else { throw DraftError.readOnly }
-      if let existing = local.drafts.first(where: {
+      if let existing = model.localDrafts.first(where: {
         $0.gistID == id && $0.filename == filename
       }) {
         return try await current(existing)
       }
-      guard gist.markdownFilenames.contains(filename) else { throw DraftError.notFound }
-      let userID = try await sync.verifiedUserID(accountID: accountID)
-      let text = try await sync.content(gist: gist, filename: filename, accountID: accountID)
+      guard gist.markdownFilenames.contains(filename),
+        let text = try await model.text(of: filename, in: gist, accountID: account.id)
+      else { throw DraftError.notFound }
+      guard let userID = account.githubUserID else { throw AccountError.reconnectGitHub }
       return try await current(
-        Draft(accountID: accountID, githubUserID: userID, gist: gist, filename: filename, text: text))
+        Draft(accountID: account.id, githubUserID: userID, gist: gist, filename: filename, text: text))
     case .unpublishedGist(let owner, let id):
-      guard owner == accountID else { throw PlatformError.accountChanged }
-      guard let draft = try await store.draft(id: id, accountID: accountID) else {
+      guard owner == account.id else { throw PlatformError.accountChanged }
+      guard let draft = model.localDrafts.first(where: { $0.id == id }) else {
         throw DraftError.notFound
       }
       guard draft.gistID == nil else { throw DraftError.staleGeneration }
@@ -315,17 +289,9 @@ final class PlatformBridge: DailyNoteActions {
     }
   }
 
-  /// Today's file as you last saved it, started the same way the app starts today.
-  private func todayDraft(
-    accountID: UUID, target: DailyNote.Day = DailyNote.Day()
-  ) async throws -> Draft {
-    try await validateAccount(accountID)
-    return try await current(try await sync.today(accountID: accountID, target: target).draft)
-  }
-
   /// The note as you last saved it, from its open editor once your typing there is saved.
   private func current(_ draft: Draft) async throws -> Draft {
-    guard let fileEditor = fileEditor(for: draft) else { return try await store.current(draft) }
+    guard let fileEditor = fileEditor(for: draft) else { return try await model.current(draft) }
     guard fileEditor.canMutate, await fileEditor.waitForLocalSave() else {
       throw PlatformError.editingInProgress
     }
@@ -333,18 +299,17 @@ final class PlatformBridge: DailyNoteActions {
   }
 
   private func fileEditor(for draft: Draft) -> GistFileEditor? {
-    model?.editors.values.first { (fileEditor: GistFileEditor) in
+    model.editors.values.first { (fileEditor: GistFileEditor) in
       fileEditor.draft.id == draft.id
         || (fileEditor.draft.gistID != nil && fileEditor.draft.gistID == draft.gistID
           && fileEditor.draft.filename == draft.filename)
     }
   }
 
-  func validateAccount(_ accountID: UUID) async throws {
-    guard let current = try await sync.cachedAccount(), current.id == accountID,
-      model?.pendingAccount == nil,
-      model?.account == nil || model?.account?.id == accountID
-    else { throw PlatformError.accountChanged }
+  func validateAccount(_ accountID: UUID) throws {
+    guard model.account?.id == accountID, model.pendingAccount == nil else {
+      throw PlatformError.accountChanged
+    }
   }
 
   private func apply(_ edit: DraftEdit) async throws {
@@ -356,16 +321,14 @@ final class PlatformBridge: DailyNoteActions {
         throw PlatformError.editingInProgress
       }
       try await fileEditor.applyDurableEdit(edit) {
-        try await self.validateAccount(accountID)
-        return try await self.store.apply(edit)
+        try self.validateAccount(accountID)
+        return try await self.model.apply(edit)
       }
     } else {
-      _ = try await store.apply(edit)
+      try validateAccount(accountID)
+      _ = try await model.apply(edit)
     }
     do {
-      if model?.account?.id == accountID {
-        try await model?.reloadPlatformState(accountID: accountID)
-      }
       try await refresh()
     } catch {
       logger.error(
@@ -383,7 +346,7 @@ final class PlatformBridge: DailyNoteActions {
         if let fileEditor {
           await fileEditor.publish(reason: .background, shouldContinue: { lease.isActive })
         } else {
-          _ = try await model?.publish(edit.draft)
+          _ = try await model.publish(edit.draft)
         }
         try await refresh()
       } catch {

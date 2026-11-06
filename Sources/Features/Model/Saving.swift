@@ -24,13 +24,13 @@ extension GistPadModel {
   }
 
   /// The draft as this iPhone has it now, stored or not.
-  func current(_ draft: Draft) async throws -> Draft {
-    try await sync.current(draft)
+  public func current(_ draft: Draft) async throws -> Draft {
+    try await draftStore.current(draft)
   }
 
   /// Saves your typing on this iPhone.
   func save(_ draft: Draft, text: String, generation: UInt64) async throws -> Draft {
-    let saved = try await sync.save(draft, text: text, generation: generation)
+    let saved = try await draftStore.save(draft, text: text, generation: generation)
     if account?.id == draft.accountID {
       record(saved)
       if saved.isSaved { updateLibraryExcerpt(for: saved) } else { projectLibrary() }
@@ -39,9 +39,28 @@ extension GistPadModel {
     return saved
   }
 
+  /// Adds to a file from outside the app, such as Add to Today, and saves it on this iPhone.
+  public func apply(_ edit: DraftEdit) async throws -> Draft {
+    let applied = try await draftStore.apply(edit)
+    if account?.id == applied.accountID {
+      record(applied)
+      updateLibraryExcerpt(for: applied)
+      updateToday()
+    }
+    return applied
+  }
+
+  /// Stores a new gist you named outside the app, such as in Shortcuts, before it has any edits.
+  public func createGist(named name: String, text: String? = nil) async throws -> Draft {
+    guard let account, pendingAccount == nil else { throw AccountError.accountChanged }
+    guard let userID = account.githubUserID else { throw AccountError.reconnectGitHub }
+    return try await keep(
+      Draft(accountID: account.id, githubUserID: userID, description: name, content: text))
+  }
+
   /// Stores a note before you type in it.
   func keep(_ draft: Draft) async throws -> Draft {
-    let kept = try await sync.keep(draft)
+    let kept = try await draftStore.keep(draft)
     if account?.id == draft.accountID {
       record(kept)
       projectLibrary()

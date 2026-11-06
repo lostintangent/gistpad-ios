@@ -368,7 +368,7 @@ public actor DraftStore {
     /// Records the text a publish sends, so the next publish or open can tell whether a publish cut
     /// off midway landed. Typing since the draft was read means a newer publish follows, so this one
     /// stops here.
-    func recordSent(
+    public func recordSent(
         id: UUID, accountID: UUID, content: String, generation: UInt64
     ) throws {
         let draft = try find(id, accountID: accountID)
@@ -380,7 +380,7 @@ public actor DraftStore {
     }
 
     /// GitHub has `content`, which becomes the base.
-    func confirm(
+    public func confirm(
         id: UUID, accountID: UUID, gistID: String, content: String,
         revision: String?, publishedGist: Gist? = nil
     ) throws -> Draft {
@@ -402,7 +402,7 @@ public actor DraftStore {
 
     /// Makes a new gist's draft a new file in `gist`, with no base. The gist joins the cached list,
     /// so the draft finds it before the next refresh even if this publish doesn't land.
-    func join(_ gist: Gist, id: UUID, accountID: UUID) throws -> Draft {
+    public func join(_ gist: Gist, id: UUID, accountID: UUID) throws -> Draft {
         let draft = try find(id, accountID: accountID)
         draft.gistID = gist.id
         try updateCache(accountID) { cached in
@@ -413,7 +413,7 @@ public actor DraftStore {
         return Self.snapshot(draft)
     }
 
-    func forgetSent(id: UUID, accountID: UUID) throws -> Draft {
+    public func forgetSent(id: UUID, accountID: UUID) throws -> Draft {
         let draft = try find(id, accountID: accountID)
         draft.sent = nil
         draft.sentGeneration = nil

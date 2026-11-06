@@ -142,7 +142,7 @@ extension Gist.File {
         content == emptyContent ? "" : content
     }
 
-    static func encodeContent(_ content: String) -> String {
+    public static func encodeContent(_ content: String) -> String {
         content.isEmpty ? emptyContent : content
     }
 

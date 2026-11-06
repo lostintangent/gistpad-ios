@@ -250,7 +250,7 @@ extension GistPadModel {
     switch request {
     case .gist(let id, let filename, let rowID):
       if let cached = cachedFile(gistID: id, filename: filename, rowID: rowID) { return cached }
-      let gist = try await sync.gist(id: id, accountID: account.id)
+      let gist = try await gist(id: id, accountID: account.id)
       let filenames = gist.markdownFilenames
       let selected: String? =
         if let filename {
@@ -262,11 +262,13 @@ extension GistPadModel {
         }
       guard let selected else { throw GitHubClientError.missingFile }
       guard let userID = account.githubUserID else { throw AccountError.reconnectGitHub }
-      let text = try await sync.content(gist: gist, filename: selected, accountID: account.id)
+      guard let text = try await text(of: selected, in: gist, accountID: account.id) else {
+        throw GitHubClientError.missingFile
+      }
       // The read is cached on this iPhone, so the note opens from here next time.
       try await reloadLocalState(accountID: account.id)
       var file = GistFile(
-        draft: try await sync.current(
+        draft: try await current(
           Draft(
             accountID: account.id, githubUserID: userID, gist: gist, filename: selected,
             text: text)),
@@ -290,8 +292,7 @@ extension GistPadModel {
       {
         file = cached
       } else {
-        let today = try await sync.today(accountID: account.id, target: target)
-        file = GistFile(draft: today.draft, gist: today.gist)
+        file = try await today(target)
       }
       file.editingRequestID = focusesEditor ? UUID() : nil
       file.revealsDetail = focusesEditor

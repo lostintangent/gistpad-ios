@@ -53,6 +53,40 @@ struct DailyNotesTests {
     #expect(phone.model.loadedFile?.editingRequestID != nil)
   }
 
+  /// When the web wrote the same day too, publishing shows the conflict instead of overwriting it.
+  @Test(arguments: [false, true])
+  func `A day I wrote offline joins the daily notes gist the web started`(webWroteToday: Bool)
+    async throws
+  {
+    let phone = try await Phone(autosave: false)
+    await phone.launch()
+    let day = DailyNote.Day()
+    var webFiles = ["2020-01-01.md": "An old day"]
+    if webWroteToday { webFiles[day.filename] = "Written on the web" }
+    let web = phone.github.addGist(description: DailyNote.gistDescription, files: webFiles)
+    phone.goOffline()
+    let today = try await phone.open(.today())
+    try await phone.type("Written offline", in: today)
+    phone.goOnline()
+
+    await today.publish()
+    if webWroteToday {
+      guard case .conflict(let conflict) = today.saveState else {
+        Issue.record("Expected a conflict, got \(today.saveState)")
+        return
+      }
+      #expect(conflict.remote == "Written on the web")
+    } else {
+      #expect(today.saveState == .savedToGitHub)
+    }
+    #expect(phone.github.gists.filter(\.isDailyNote).map(\.id) == [web.id])
+    let files = try #require(phone.github.gists.first { $0.id == web.id }).files
+    #expect(files[day.filename]?.content == (webWroteToday ? "Written on the web" : "Written offline"))
+    #expect(files["2020-01-01.md"]?.content == "An old day")
+    #expect(phone.model.state.today.gistID == web.id)
+    #expect(phone.model.state.today.text == "Written offline")
+  }
+
   @Test func `Each day shows its tasks, read from GitHub only when the day changed`() async throws {
     let today = DailyNote.filename()
     let phone = try await Phone {

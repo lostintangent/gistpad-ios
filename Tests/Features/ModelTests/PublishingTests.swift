@@ -86,6 +86,50 @@ struct PublishingTests {
     #expect(daily.isPublic == false)
   }
 
+  @Test func `When GitHub's answer to a publish is lost, what I type next still publishes`()
+    async throws
+  {
+    let phone = try await Phone(autosave: false) {
+      $0.addGist(id: "a", description: "Note", files: ["README.md": "base"])
+    }
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a"))
+    try await phone.type("local", in: a)
+    phone.fixture.cutOffNextPublish()
+    await a.publish()
+    #expect(phone.onGitHub("a") == "local")
+
+    try await phone.type("base", in: a)
+    await a.publish()
+    #expect(a.saveState == .savedToGitHub)
+    #expect(phone.onGitHub("a") == "base")
+  }
+
+  @Test(arguments: [false, true])
+  func `When GitHub's answer to a new gist is lost, it's still made only once`(daily: Bool)
+    async throws
+  {
+    // Same title and file with other text, so only the text tells them apart.
+    let phone = try await Phone(autosave: false) {
+      $0.addGist(description: "Ideas", files: ["README.md": "# Ideas\n\nOlder"])
+    }
+    await phone.launch()
+    let new = try await phone.open(daily ? .today() : .new)
+    if !daily { try await phone.name(new, "Ideas") }
+    try await phone.type("# Ideas\n\nFirst", in: new)
+    phone.fixture.cutOffNextPublish()
+    await new.publish()
+    #expect(new.saveState != .savedToGitHub)
+
+    await new.publish()
+    #expect(new.saveState == .savedToGitHub)
+    let made = phone.github.gists.filter {
+      $0.files[new.draft.filename]?.content == "# Ideas\n\nFirst"
+    }
+    #expect(made.map(\.id) == [new.draft.gistID])
+    #expect(phone.publishes == ["POST /gists"])
+  }
+
   @Test func `A gist I start and name offline is created when I'm back`() async throws {
     let phone = try await Phone()
     await phone.launch()

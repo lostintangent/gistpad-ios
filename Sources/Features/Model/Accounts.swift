@@ -1,4 +1,5 @@
 import AuthenticationServices
+import Comments
 import Editor
 import Foundation
 import Store
@@ -14,7 +15,7 @@ extension GistPadModel {
     libraryRequest = request
     state.loadState = .loading
     do {
-      let restored = try await sync.connectedAccount()
+      let restored = try await accountStore.connectedAccount()
       guard request == libraryRequest else { return }
       guard let restored else {
         state.loadState = .signedOut
@@ -42,7 +43,7 @@ extension GistPadModel {
     let previousState = state.loadState
     defer { isSigningIn = false }
     do {
-      let signedIn = try await sync.signIn()
+      let signedIn = try await accountStore.signIn()
       libraryRequest = UUID()
       if let account, account.id != signedIn.id {
         pendingAccount = signedIn
@@ -100,14 +101,38 @@ extension GistPadModel {
       ))
   }
 
-  public func uploadImage(_ image: Data, gistID: String, accountID: UUID) async throws -> URL {
-    guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
-    return try await sync.uploadImage(image, gistID: gistID, accountID: accountID)
+  /// The signed-in account, with this iPhone's drafts and cache loaded but nothing read from
+  /// GitHub. App Intents use it, since they can run before the app's window starts the model.
+  public func localAccount() async throws -> GistPadAccount? {
+    guard pendingAccount == nil, !isSigningIn, !isSigningOut else {
+      throw AccountError.accountChanged
+    }
+    if let account { return account }
+    guard let restored = try await accountStore.connectedAccount() else { return nil }
+    if let account { return account }
+    account = restored
+    try await reloadLocalState(accountID: restored.id)
+    return restored
   }
 
-  public func comments(accountID: UUID) async throws -> CommentServices {
-    guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
-    return try await sync.comments(accountID: accountID)
+  /// Uploads an image to GistPad's public storage, filed under the file's gist.
+  public func uploadImage(_ image: Data, for file: GistFile) async throws -> URL {
+    guard account?.id == file.accountID, pendingAccount == nil else {
+      throw AccountError.accountChanged
+    }
+    guard let gistID = file.draft.gistID else { throw DraftError.notFound }
+    let storage = try await accountStore.imageStorage(accountID: file.accountID)
+    return try await storage.upload(image, gistID: gistID)
+  }
+
+  /// A gist's conversation, which you take part in as the signed-in account.
+  public func comments(for gist: Gist) async throws -> CommentsModel {
+    guard let account, pendingAccount == nil else { throw AccountError.accountChanged }
+    let github = await client(accountID: account.id)
+    let userID =
+      if let id = account.githubUserID { id } else { try await github.authenticatedUser().id }
+    return CommentsModel(
+      gistID: gist.id, userID: userID, gistOwnerID: gist.owner?.id, remote: github)
   }
 
   /// Drops everything shown for the current account and switches to `account`, or signs out.

@@ -63,10 +63,10 @@ extension GistPadModel {
   // Supabase only supplies preferences, so GitHub reads keep going when its refresh fails. A missing GitHub token still needs reconnecting.
   private func refreshedAccount() async throws -> GistPadAccount {
     do {
-      return try await sync.refreshAccount()
+      return try await accountStore.refreshAccount()
     } catch {
       if error is CancellationError || (error as? AccountError) == .reconnectGitHub { throw error }
-      guard let connected = try await sync.connectedAccount() else { throw error }
+      guard let connected = try await accountStore.connectedAccount() else { throw error }
       return connected
     }
   }
@@ -105,11 +105,12 @@ extension GistPadModel {
     do {
       let refreshed = try await refreshedAccount()
       guard refreshed.id == account.id else { throw AccountError.accountChanged }
-      async let ownedGists = sync.gists(accountID: account.id)
-      async let starredGists = sync.starredGists(accountID: account.id)
+      let github = await client(accountID: account.id)
+      async let ownedGists = github.listGists()
+      async let starredGists = github.listStarredGists()
       let (owned, starred) = try await (ownedGists, starredGists)
       guard request == libraryRequest, self.account?.id == account.id else { return }
-      try await sync.cacheGists(owned: owned, starred: starred, accountID: account.id)
+      try await draftStore.cacheGists(owned: owned, starred: starred, accountID: account.id)
       guard request == libraryRequest, self.account?.id == account.id else { return }
       self.account = refreshed
       state.loadState = .ready
@@ -166,15 +167,16 @@ extension GistFileEditor {
     guard await waitForLocalSave() else { return }
     let generation = editor.generation
     do {
-      let (current, remote) = try await model.sync.serially { sync in
-        let current = try await sync.drafts.current(draft)
+      let github = await model.client(accountID: draft.accountID)
+      let store = model.draftStore
+      let (current, remote) = try await model.serially {
+        let current = try await store.current(draft)
         guard let gistID = current.gistID else { return (current, RemoteFile?.none) }
-        let client = await sync.client(accountID: current.accountID)
-        let remote = try await client.remoteFile(
+        let remote = try await github.remoteFile(
           gistID: gistID, ownerID: current.githubUserID, filename: current.filename)
-        try await sync.drafts.cacheGist(remote.gist, accountID: current.accountID)
+        try await store.cacheGist(remote.gist, accountID: current.accountID)
         if let content = remote.content {
-          try await sync.drafts.cacheContent(
+          try await store.cacheContent(
             content, gist: remote.gist, filename: current.filename, accountID: current.accountID)
         }
         return (current, remote)
@@ -195,8 +197,8 @@ extension GistFileEditor {
         }
       } else {
         adopt(
-          try await model.sync.serially { sync in
-            try await sync.drafts.compareWithGitHub(
+          try await model.serially {
+            try await store.compareWithGitHub(
               current, remote: remote.content, revision: remote.gist.revision)
           })
         try await model.reloadLocalState(accountID: current.accountID)

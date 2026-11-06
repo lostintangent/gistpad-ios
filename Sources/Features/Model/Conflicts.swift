@@ -55,11 +55,12 @@ extension GistFileEditor {
         expected: editor.text, replacement: text),
       expectedGeneration: review.draft.generation
     ) {
-      let resolved = try await model.sync.serially { sync in
-        guard let current = try await sync.drafts.draft(id: review.draft.id, accountID: review.draft.accountID),
+      let store = model.draftStore
+      let resolved = try await model.serially {
+        guard let current = try await store.draft(id: review.draft.id, accountID: review.draft.accountID),
           review.matches(current)
         else { throw ChangeError.staleReview }
-        return try await sync.drafts.resolveConflict(
+        return try await store.resolveConflict(
           id: current.id, accountID: current.accountID, expectedGeneration: current.generation,
           text: text, generation: generation)
       }
