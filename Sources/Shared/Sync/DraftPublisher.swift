@@ -26,7 +26,8 @@ public actor DraftPublisher {
     ) async throws -> Draft {
         try Task.checkCancellation()
         var draft = try await store.draft(id: id, accountID: accountID)
-        if case .conflict = draft.state, !draft.isClean { return draft }
+        if draft.isClean { return draft }
+        if case .conflict = draft.state { return draft }
         if reason != .manual {
             guard expectedGeneration == nil || draft.generation == expectedGeneration,
                   await shouldPublish() else { throw CancellationError() }
@@ -65,11 +66,8 @@ public actor DraftPublisher {
                         revision: remoteGist.revision, generation: draft.generation, publishedGist: remoteGist
                     )
                 }
-                if draft.isClean, let remote {
-                    return try await store.refreshCleanDraft(
-                        id: id, accountID: accountID, expectedGeneration: draft.generation,
-                        content: remote, revision: remoteGist.revision)
-                }
+                // Newer text from the web reaches a clean note when it's opened, not by publishing.
+                if draft.isClean { return draft }
                 guard sourceEqual(remote, draft.baseContent) else {
                     let conflict = DraftConflict(
                         generation: draft.generation, base: draft.baseContent, local: draft.text,

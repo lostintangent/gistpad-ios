@@ -92,13 +92,32 @@ import Testing
             text: keepingMine ? "mine" : "theirs",
             generation: keepingMine ? conflicted.generation : conflicted.generation + 1)
         #expect(resolved.baseContent == "theirs")
-        #expect(resolved.state == .savedLocally)
+        #expect(resolved.state == (keepingMine ? .savedLocally : .savedToGitHub))
         #expect(resolved.generation == (keepingMine ? 1 : 2))
 
         let published = try await fixture.publish(resolved)
         #expect(published.state == .savedToGitHub)
         #expect(fixture.remote(gist.id) == (keepingMine ? "mine" : "theirs"))
         #expect(fixture.count("PATCH /gists/\(gist.id)") == (keepingMine ? 1 : 0))
+    }
+
+    @Test func aNoteResetToGitHubsTextIsSavedThereAndPublishLeavesNewerWebTextAlone() async throws {
+        let fixture = try SyncFixture()
+        let gist = fixture.server.addGist(description: "Note", files: ["README.md": "base"])
+        let draft = try await fixture.type("mine", in: fixture.open(gist))
+        fixture.server.edit(gist.id, files: ["README.md": "theirs"])
+        let conflicted = try await fixture.publish(draft)
+        let reset = try await fixture.store.resolveConflict(
+            id: draft.id, accountID: SyncFixture.account, expectedGeneration: conflicted.generation,
+            text: "theirs", generation: conflicted.generation + 1)
+        #expect(reset.state == .savedToGitHub)
+
+        fixture.server.edit(gist.id, files: ["README.md": "newer on the web"])
+        let published = try await fixture.publish(reset)
+        #expect(published.text == "theirs")
+        #expect(published.generation == reset.generation)
+        #expect(fixture.remote(gist.id) == "newer on the web")
+        #expect(fixture.count("PATCH /gists/\(gist.id)") == 0)
     }
 
     @Test func typingDuringAPublishIsNeverLost() async throws {

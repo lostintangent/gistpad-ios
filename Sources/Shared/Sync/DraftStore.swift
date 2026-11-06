@@ -39,7 +39,7 @@ public struct Draft: Equatable, Sendable, Identifiable {
     public let baseRevision: String?
     public let attemptedContent: String?
     public let attemptedGeneration: UInt64?
-    public let state: PublishState
+    public internal(set) var state: PublishState
     public let updatedAt: Date?
 
     /// A note that leaving discards: a new gist that's still untitled and blank, or a day you opened
@@ -288,7 +288,7 @@ public actor DraftStore {
             id: UUID(), accountID: accountID, githubUserID: githubUserID, gistID: gistID,
             filename: filename, description: description, text: text,
             baseContent: isNewFile ? nil : text, baseRevision: revision,
-            stateData: try encode(isNewFile ? .savedLocally : .savedToGitHub)
+            stateData: try encode(.savedLocally)
         )
         modelContext.insert(draft)
         try commit()
@@ -314,7 +314,7 @@ public actor DraftStore {
         }
         draft.baseContent = fresh
         draft.baseRevision = revision
-        draft.stateData = try encode(.savedToGitHub)
+        draft.stateData = try encode(.savedLocally)
         try commit()
         return try snapshot(draft)
     }
@@ -365,8 +365,7 @@ public actor DraftStore {
                 remote: conflict.remote, remoteRevision: conflict.remoteRevision
             )))
         } else {
-            // After a cut-off publish GitHub may hold the attempted text, so matching the base isn't saved.
-            draft.stateData = try encode(try snapshot(draft).isClean ? .savedToGitHub : .savedLocally)
+            draft.stateData = try encode(.savedLocally)
         }
     }
 
@@ -401,8 +400,7 @@ public actor DraftStore {
         draft.baseRevision = revision
         draft.attemptedContent = nil
         draft.attemptedGeneration = nil
-        let currentIsAcknowledged = draft.generation == generation && sourceEqual(draft.text, content)
-        draft.stateData = try encode(currentIsAcknowledged ? .savedToGitHub : .savedLocally)
+        draft.stateData = try encode(.savedLocally)
         try commit()
         return try snapshot(draft)
     }
@@ -480,8 +478,10 @@ public actor DraftStore {
         return draft
     }
 
+    /// The draft as the app sees it. Only the states that need you are stored: a conflict, a failed
+    /// publish and reconnecting. Whether it's saved to GitHub or only on this iPhone comes from its text.
     func snapshot(_ draft: StoredDraft) throws -> Draft {
-        Draft(
+        var snapshot = Draft(
             id: draft.id, accountID: draft.accountID, githubUserID: draft.githubUserID,
             gistID: draft.gistID, filename: draft.filename, description: draft.gistDescription,
             text: draft.text, generation: draft.generation,
@@ -489,16 +489,18 @@ public actor DraftStore {
             attemptedContent: draft.attemptedContent, attemptedGeneration: draft.attemptedGeneration,
             state: Self.decode(draft.stateData), updatedAt: draft.updatedAt
         )
+        switch snapshot.state {
+        case .conflict, .failed, .reconnect: break
+        case .savedLocally, .savingToGitHub, .savedToGitHub:
+            snapshot.state = snapshot.isClean ? .savedToGitHub : .savedLocally
+        }
+        return snapshot
     }
 
     private func encode(_ state: PublishState) throws -> Data { try JSONEncoder().encode(state) }
-    // Older builds stored states that no longer exist, such as `offline`, and Saving, which only a
-    // running publish shows now. Those drafts are simply unpublished.
+    // Older builds stored states that no longer exist, such as `offline`. Those drafts have no problem.
     private static func decode(_ data: Data) -> PublishState {
-        switch try? JSONDecoder().decode(PublishState.self, from: data) {
-        case .none, .savingToGitHub: .savedLocally
-        case .some(let state): state
-        }
+        (try? JSONDecoder().decode(PublishState.self, from: data)) ?? .savedLocally
     }
 
     func commit() throws {

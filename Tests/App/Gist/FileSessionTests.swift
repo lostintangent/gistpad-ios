@@ -251,7 +251,7 @@ struct FileSessionTests {
     // Keeping my text changes nothing to undo. Taking GitHub's is one undo back to mine.
     #expect(session.editor.generation == generation + (keepsMine ? 0 : 1))
     #expect(undo.canUndo == !keepsMine)
-    #expect(session.saveState == .savedLocally)
+    #expect(session.saveState == (keepsMine ? .savedLocally : .savedToGitHub))
     #expect(fixture.publishes.isEmpty)
     guard !keepsMine else { return }
     undo.undo()
