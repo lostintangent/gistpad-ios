@@ -185,32 +185,9 @@ public actor DraftStore {
                 groupContainer: .none, cloudKitDatabase: .none
             )
         }
-        #if os(iOS)
-        if !inMemory {
-            let directory = configuration.url.deletingLastPathComponent()
-            try FileManager.default.createDirectory(
-                at: directory, withIntermediateDirectories: true,
-                attributes: [.protectionKey: FileProtectionType.complete]
-            )
-            try FileManager.default.setAttributes(
-                [.protectionKey: FileProtectionType.complete], ofItemAtPath: directory.path
-            )
-        }
-        #endif
-        let container = try ModelContainer(for: schema, configurations: [configuration])
-        #if os(iOS)
-        if !inMemory {
-            for suffix in ["", "-wal", "-shm"] {
-                let path = configuration.url.path + suffix
-                if FileManager.default.fileExists(atPath: path) {
-                    try FileManager.default.setAttributes(
-                        [.protectionKey: FileProtectionType.complete], ofItemAtPath: path
-                    )
-                }
-            }
-        }
-        #endif
-        return try DraftStore(container: container)
+        // GistPad.entitlements gives the app's files complete protection, so drafts stay sealed
+        // while the phone is locked.
+        return try DraftStore(container: ModelContainer(for: schema, configurations: [configuration]))
     }
 
     public func drafts(accountID: UUID) throws -> [Draft] {

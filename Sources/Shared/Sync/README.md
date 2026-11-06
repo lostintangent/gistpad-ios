@@ -46,10 +46,11 @@ cache or cookies and refuses redirects.
 
 ## Drafts
 
-`DraftStore` is a SwiftData store on the phone, with complete file protection
-and no CloudKit. It holds one `Draft` per account and file. Every write commits
-before it returns, so the editor may say a change is saved on this iPhone as
-soon as `persist` does.
+`DraftStore` is a SwiftData store on the phone, with no CloudKit. The app's
+`default-data-protection` entitlement gives it complete file protection. It
+holds one `Draft` per account and file. Every write commits before it returns,
+so the editor may say a change is saved on this iPhone as soon as `persist`
+does.
 
 A draft's `generation` increases with every edit, and `persist` rejects an
 older one. `apply(_:)` takes a `DraftEdit` from outside the editor, such as a
