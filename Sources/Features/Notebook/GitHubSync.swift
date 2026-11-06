@@ -143,3 +143,28 @@ public struct CommentServices: Sendable {
   public let remote: any CommentsRemote
   public let userID: Int64
 }
+
+public struct LocalState: Sendable {
+  public let cache: CachedLibrary?
+  public let drafts: [Draft]
+}
+
+actor SerialQueue {
+  private var busy = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func run<Value: Sendable>(
+    _ operation: @Sendable () async throws -> Value
+  ) async throws -> Value {
+    if busy {
+      await withCheckedContinuation { waiters.append($0) }
+    } else {
+      busy = true
+    }
+    defer {
+      if waiters.isEmpty { busy = false } else { waiters.removeFirst().resume() }
+    }
+    try Task.checkCancellation()
+    return try await operation()
+  }
+}
