@@ -10,8 +10,6 @@ public enum PublishReason: Equatable, Sendable {
 public actor DraftPublisher {
     private let client: GitHubClient
     private let store: DraftStore
-    private var busy = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
     private var notBefore: Date = .distantPast
 
     public init(client: GitHubClient, store: DraftStore) {
@@ -20,14 +18,13 @@ public actor DraftPublisher {
     }
 
     /// Publishes the draft. Autosave and lifecycle publishes are checked once before reaching GitHub,
-    /// and typing during the publish hands over to the publish that typing schedules.
+    /// and typing during the publish hands over to the publish that typing schedules. Callers run
+    /// one publish at a time, through the library's queue for GitHub writes.
     @discardableResult
     public func publish(
         id: UUID, accountID: UUID, reason: PublishReason = .manual, expectedGeneration: UInt64? = nil,
         shouldPublish: @escaping @Sendable () async -> Bool = { true }
     ) async throws -> Draft {
-        await acquire()
-        defer { release() }
         try Task.checkCancellation()
         var draft = try await store.draft(id: id, accountID: accountID)
         if case .conflict = draft.state, !isCleanDraft(draft) { return draft }
@@ -135,8 +132,6 @@ public actor DraftPublisher {
     /// Reads GitHub's copy of the file once. A clean draft takes it on, and edits on both sides become
     /// a conflict that shows the diff.
     public func inspect(id: UUID, accountID: UUID) async throws -> Draft {
-        await acquire()
-        defer { release() }
         try Task.checkCancellation()
         let draft = try await store.draft(id: id, accountID: accountID)
         guard let gistID = draft.gistID else { return draft }
@@ -164,15 +159,5 @@ public actor DraftPublisher {
     private func isCleanDraft(_ draft: Draft) -> Bool {
         draft.attemptedContent == nil && draft.attemptedGeneration == nil
             && sourceEqual(draft.text, draft.baseContent)
-    }
-
-    private func acquire() async {
-        if !busy { busy = true; return }
-        await withCheckedContinuation { waiters.append($0) }
-    }
-
-    private func release() {
-        if waiters.isEmpty { busy = false }
-        else { waiters.removeFirst().resume() }
     }
 }
