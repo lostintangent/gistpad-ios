@@ -24,7 +24,7 @@ extension GistPadModel {
     if loadedFile?.libraryRowID == saved.id.uuidString { loadedFile?.libraryRowID = nil }
     if wasSelected, opening == nil {
       state.selectedID = loadedFile?.rowID
-      remember(FileReference(gistID: gist.id, filename: saved.filename, draftID: saved.id))
+      remember(.gist(id: gist.id, filename: saved.filename))
     }
   }
 

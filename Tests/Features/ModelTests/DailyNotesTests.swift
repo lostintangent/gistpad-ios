@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct DailyNotesTests {
   @Test func `Today opens one note from my template, however many times I tap it`() async throws {
-    let phone = try await Phone(lastFile: .init(gistID: "a", filename: "README.md", draftID: nil)) {
+    let phone = try await Phone(lastFile: .gist(id: "a", filename: "README.md")) {
       $0.addGist(id: "a", description: "Somewhere else", files: ["README.md": "Text"])
       $0.addGist(
         id: "d", description: DailyNote.gistDescription,
@@ -158,7 +158,7 @@ struct DailyNotesTests {
   }
 
   @Test func `A day I delete while it publishes removes only that day`() async throws {
-    let phone = try await Phone(lastFile: .init(gistID: "a", filename: "README.md", draftID: nil)) {
+    let phone = try await Phone(lastFile: .gist(id: "a", filename: "README.md")) {
       $0.addGist(id: "a", description: "Somewhere else", files: ["README.md": "Text"])
     }
     // An earlier day written offline, before there was a daily notes gist.

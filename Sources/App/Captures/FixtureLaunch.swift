@@ -73,8 +73,7 @@
       }
       if let link = sheet == .today ? .addToToday : link { PendingLink.shared.link = link }
       let model = PlatformBridge.connect(
-        GistPadModel(
-          accounts: accounts, drafts: store, lastOpened: LastOpened(defaults: Self.defaults)))
+        GistPadModel(accounts: accounts, drafts: store, defaults: Self.defaults))
       if let query { model.state.query = query }
       return model
     }

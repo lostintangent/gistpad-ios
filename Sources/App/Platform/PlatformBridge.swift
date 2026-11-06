@@ -29,8 +29,8 @@ extension PlatformBridge {
     if let services { return services.model }
     return connect(
       GistPadModel(
-        accounts: try GistPadAccountStore(publishableKey: publishableKey), drafts: try GistFileDraftStore.open(),
-        lastOpened: LastOpened(defaults: .standard)))
+        accounts: try GistPadAccountStore(publishableKey: publishableKey),
+        drafts: try GistFileDraftStore.open()))
   }
 
   /// Connects the model to App Intents, widgets and Spotlight.

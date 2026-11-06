@@ -10,15 +10,16 @@
     let server = FixtureServer()
     let accounts: GistPadAccountStore
     let store: GistFileDraftStore
-    let lastOpened = LastOpened()
+    /// This iPhone's remembered files, kept in memory so tests never share or leave one.
+    let defaults: UserDefaults = MemoryDefaults()
     let account: GistPadAccount
     let model: GistPadModel
 
     /// Seeds GitHub, signs in and saves `preferences`, like a web account. Autosave is on unless
-    /// `autosave` turns it off. A remembered `selection` reopens at launch.
+    /// `autosave` turns it off. The `lastOpened` file reopens at launch.
     init(
       autosave: Bool = true, preferences: [GistPadPreferences.Change] = [],
-      selection: FileReference? = nil, seed: (FixtureServer) throws -> Void = { _ in }
+      lastOpened: Opening.Request? = nil, seed: (FixtureServer) throws -> Void = { _ in }
     ) async throws {
       try seed(server)
       accounts = try server.accounts()
@@ -27,13 +28,16 @@
       if !operations.isEmpty { account = try await accounts.update(operations, accountID: account.id) }
       self.account = account
       store = try GistFileDraftStore.open(inMemory: true)
-      if let selection { lastOpened.save(selection, accountID: account.id) }
-      model = GistPadModel(accounts: accounts, drafts: store, lastOpened: lastOpened)
+      if let lastOpened {
+        defaults.set(
+          try JSONEncoder().encode(lastOpened), forKey: GistPadModel.lastOpenedKey(account.id))
+      }
+      model = GistPadModel(accounts: accounts, drafts: store, defaults: defaults)
     }
 
     /// The app launching again on this iPhone, with the same drafts and remembered file.
     func relaunch() -> GistPadModel {
-      GistPadModel(accounts: accounts, drafts: store, lastOpened: lastOpened)
+      GistPadModel(accounts: accounts, drafts: store, defaults: defaults)
     }
 
     /// Every publish so far: a new gist or an edit to one.
@@ -143,5 +147,13 @@
         while !state.withLock({ $0.isOpen }) { try? await Task.sleep(for: .milliseconds(5)) }
       }
     }
+  }
+
+  /// The few defaults the model reads and writes, without a suite on disk.
+  private final class MemoryDefaults: UserDefaults, @unchecked Sendable {
+    private var values: [String: Any] = [:]
+    override func object(forKey key: String) -> Any? { values[key] }
+    override func set(_ value: Any?, forKey key: String) { values[key] = value }
+    override func removeObject(forKey key: String) { values[key] = nil }
   }
 #endif

@@ -21,8 +21,11 @@ public struct GistFile: Equatable, Sendable, Identifiable {
     id = "\(draft.accountID.uuidString)/draft/\(draft.id.uuidString)"
   }
 
-  var selection: FileReference {
-    FileReference(gistID: gist?.id ?? draft.gistID, filename: filename, draftID: draft.id)
+  var gistID: String? { gist?.id ?? draft.gistID }
+
+  /// What reopens this file: its gist's file once it has one, or else its draft.
+  var request: Opening.Request {
+    if let gistID { .gist(id: gistID, filename: filename) } else { .draft(id: draft.id) }
   }
 
   public var rowID: String {
@@ -36,7 +39,7 @@ public struct GistFile: Equatable, Sendable, Identifiable {
   func refersToSameFile(as other: GistFile) -> Bool {
     guard accountID == other.accountID, filename == other.filename else { return false }
     if draft.id == other.draft.id { return true }
-    if let gistID = selection.gistID { return gistID == other.selection.gistID }
+    if let gistID { return gistID == other.gistID }
     return false
   }
 }

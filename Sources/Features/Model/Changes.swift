@@ -39,18 +39,15 @@ extension GistPadModel {
   /// What deleting a row removes. Rows the account doesn't own can't be deleted.
   public func deletion(forRow rowID: String) -> Deletion? {
     guard account != nil, pendingAccount == nil else { return nil }
-    let target = rowSelection(for: rowID)
-    let draft = target?.draftID.flatMap { id in localDrafts.first { $0.id == id } }
-    if let draft,
+    if let draft = draft(forRow: rowID),
       draft.gistID.flatMap({ gistID in gistCache?.gists.contains(where: { $0.id == gistID }) }) != true
     {
       return .localCopy(draft)
     }
-    let gistID = target?.gistID ?? draft?.gistID ?? rowID
-    guard let gist = gistCache?.owned.first(where: { $0.id == gistID }) else { return nil }
-    if gist.isDailyNote, let filename = target?.filename {
-      return .file(gistID: gist.id, filename: filename)
-    }
+    guard case .gist(let gistID, let filename, _) = request(forRow: rowID),
+      let gist = gistCache?.owned.first(where: { $0.id == gistID })
+    else { return nil }
+    if gist.isDailyNote, let filename { return .file(gistID: gist.id, filename: filename) }
     return .gist(id: gist.id)
   }
 
@@ -187,10 +184,7 @@ extension GistPadModel {
         try await serially {
           try await draftStore.discardLocalCopy(id: draft.id, accountID: draft.accountID)
         }
-        forget(accountID: account.id) {
-          $0.draftID == draft.id
-            || ($0.gistID != nil && $0.gistID == draft.gistID && $0.filename == draft.filename)
-        }
+        forget(gistID: draft.gistID, filename: draft.filename, drafts: [draft.id], accountID: account.id)
         localDrafts.removeAll { $0.id == draft.id }
         projectLibrary()
       case .file(let gistID, let filename):
@@ -303,7 +297,7 @@ extension GistPadModel {
       return updated
     }
     guard let left else { return forgetGist(gistID, accountID: account.id) }
-    forget(accountID: account.id) { $0.gistID == gistID && $0.filename == filename }
+    forget(gistID: gistID, filename: filename, accountID: account.id)
     for fileEditor in editors.values where fileEditor.draft.gistID == gistID {
       try await fileEditor.refreshMetadata(gist: left)
     }
@@ -311,27 +305,37 @@ extension GistPadModel {
 
   private func forgetGist(_ id: String, accountID: UUID) {
     let draftIDs = Set(localDrafts.filter { $0.gistID == id }.map(\.id))
-    forget(accountID: accountID) { $0.gistID == id || $0.draftID.map(draftIDs.contains) == true }
+    forget(gistID: id, drafts: draftIDs, accountID: accountID)
     // A refresh that started before the delete would bring the gist back.
     libraryRequest = UUID()
     isRefreshingRemote = false
     if state.loadState == .loading { state.loadState = .ready }
   }
 
-  /// Closes and forgets the open, opening, failed and remembered file when it no longer exists.
-  private func forget(accountID: UUID, where gone: (FileReference) -> Bool) {
-    if let loaded = loadedFile, gone(loaded.selection) {
+  /// Closes and forgets the open, opening, failed and remembered file once it's gone: `filename`
+  /// in the gist, or every file of it when `filename` is nil, and the drafts in `drafts`.
+  private func forget(
+    gistID: String?, filename: String? = nil, drafts: Set<UUID> = [], accountID: UUID
+  ) {
+    func gone(_ request: Opening.Request) -> Bool {
+      switch request {
+      case .gist(let id, let name, _): id == gistID && (filename == nil || name == filename)
+      case .draft(let id, _): drafts.contains(id)
+      case .today, .new: false
+      }
+    }
+    if let loaded = loadedFile, gone(loaded.request) {
       loadedFile = nil
       state.selectedID = nil
     }
-    if let selection = opening?.request.selection, gone(selection) {
+    if let request = opening?.request, gone(request) {
       fileRequest = UUID()
       opening = nil
     }
-    if let selection = lastOpened.selection(accountID: accountID), gone(selection) {
-      lastOpened.clear(accountID: accountID)
+    if let saved = lastOpened(accountID: accountID), gone(saved) {
+      defaults.removeObject(forKey: Self.lastOpenedKey(accountID))
     }
-    editors = editors.filter { !gone($0.value.file.selection) }
+    editors = editors.filter { !gone($0.value.file.request) }
   }
 }
 

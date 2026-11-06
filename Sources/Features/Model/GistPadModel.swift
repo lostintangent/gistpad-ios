@@ -37,7 +37,8 @@ public final class GistPadModel {
 
   @ObservationIgnored let accountStore: GistPadAccountStore
   @ObservationIgnored let draftStore: GistFileDraftStore
-  @ObservationIgnored let lastOpened: LastOpened
+  /// Where this iPhone remembers the file each account last had open.
+  @ObservationIgnored let defaults: UserDefaults
   @ObservationIgnored private var clients: [UUID: GitHubClient] = [:]
   @ObservationIgnored private var isWriting = false
   @ObservationIgnored private var writers: [CheckedContinuation<Void, Never>] = []
@@ -47,10 +48,12 @@ public final class GistPadModel {
   @ObservationIgnored let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "Library")
 
-  public init(accounts: GistPadAccountStore, drafts: GistFileDraftStore, lastOpened: LastOpened = LastOpened()) {
+  public init(
+    accounts: GistPadAccountStore, drafts: GistFileDraftStore, defaults: UserDefaults = .standard
+  ) {
     accountStore = accounts
     draftStore = drafts
-    self.lastOpened = lastOpened
+    self.defaults = defaults
   }
 
   /// GitHub as the account sees it, one client per account.

@@ -258,7 +258,7 @@ struct RootViewTests {
   @Test func aColdTodayLinkOpensTodayFromTheWebOverAStaleLibrary() async throws {
     let today = DailyNote.filename()
     let fixture = try await ModelFixture(
-      selection: .init(gistID: "a", filename: "README.md", draftID: nil)
+      lastOpened: .gist(id: "a", filename: "README.md")
     ) {
       $0.addGist(
         id: "daily", description: DailyNote.gistDescription,

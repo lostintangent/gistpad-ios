@@ -14,11 +14,11 @@ final class Phone {
   private(set) var model: GistPadModel
 
   init(
-    autosave: Bool = true, preferences: [GistPadPreferences.Change] = [], lastFile: FileReference? = nil,
+    autosave: Bool = true, preferences: [GistPadPreferences.Change] = [], lastFile: Opening.Request? = nil,
     github seed: (FixtureServer) throws -> Void = { _ in }
   ) async throws {
     fixture = try await ModelFixture(
-      autosave: autosave, preferences: preferences, selection: lastFile, seed: seed)
+      autosave: autosave, preferences: preferences, lastOpened: lastFile, seed: seed)
     model = fixture.model
   }
 

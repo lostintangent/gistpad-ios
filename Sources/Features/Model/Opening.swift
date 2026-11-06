@@ -5,7 +5,7 @@ import Store
 
 /// A file on its way to the detail column, and why it couldn't open if it failed.
 public struct Opening: Equatable {
-  public enum Request: Equatable {
+  public enum Request: Codable, Equatable {
     case gist(id: String, filename: String? = nil, rowID: String? = nil)
     case draft(id: UUID, rowID: String? = nil)
     case today(DailyNote.Day = DailyNote.Day(), focusesEditor: Bool = true)
@@ -17,15 +17,6 @@ public struct Opening: Equatable {
       case .new: true
       case .today(_, let focusesEditor): focusesEditor
       case .gist, .draft: false
-      }
-    }
-
-    /// The saved file this opens, so deleting it stops the opening.
-    var selection: FileReference? {
-      switch self {
-      case .gist(let id, let filename, _): .init(gistID: id, filename: filename ?? "", draftID: nil)
-      case .draft(let id, _): .init(gistID: nil, filename: "", draftID: id)
-      case .today, .new: nil
       }
     }
   }
@@ -84,29 +75,17 @@ extension GistPadModel {
     }
   }
 
-  func rowSelection(for rowID: String) -> FileReference? {
-    if let id = UUID(uuidString: rowID), let draft = localDrafts.first(where: { $0.id == id }) {
-      return .init(gistID: draft.gistID, filename: draft.filename, draftID: id)
-    }
-    if let row = state.gists.first(where: { $0.id == rowID }),
-      let gistID = row.gistID, let filename = row.filename
-    {
-      return .init(gistID: gistID, filename: filename, draftID: nil)
-    }
-    return nil
+  /// The draft a row shows when GitHub doesn't list its gist.
+  func draft(forRow rowID: String) -> Draft? {
+    UUID(uuidString: rowID).flatMap { id in localDrafts.first { $0.id == id } }
   }
 
   func cachedFile(rowID: String) -> GistFile? {
-    if let target = rowSelection(for: rowID) {
-      if let draftID = target.draftID, let draft = localDrafts.first(where: { $0.id == draftID }) {
-        return localFile(draft, rowID: rowID)
-      }
-      if let gistID = target.gistID {
-        return cachedFile(gistID: gistID, filename: target.filename, rowID: rowID)
-      }
-      return nil
+    switch request(forRow: rowID) {
+    case .draft(let id, _): localDrafts.first { $0.id == id }.map { localFile($0, rowID: rowID) }
+    case .gist(let id, let filename, _): cachedFile(gistID: id, filename: filename, rowID: rowID)
+    case .today, .new: nil
     }
-    return cachedFile(gistID: rowID, rowID: rowID)
   }
 
   private func cachedFile(
@@ -151,16 +130,18 @@ extension GistPadModel {
     return file
   }
 
-  private func request(forRow id: String) -> Opening.Request {
-    let target = rowSelection(for: id)
-    // A file that never reached GitHub only exists on this iPhone.
-    if let draftID = target?.draftID,
-      target?.gistID == nil
-        || localDrafts.contains(where: { $0.id == draftID && $0.base == nil })
-    {
-      return .draft(id: draftID, rowID: id)
+  func request(forRow id: String) -> Opening.Request {
+    if let draft = draft(forRow: id) {
+      // A file that never reached GitHub only exists on this iPhone.
+      guard let gistID = draft.gistID, draft.base != nil else { return .draft(id: draft.id, rowID: id) }
+      return .gist(id: gistID, filename: draft.filename, rowID: id)
     }
-    return .gist(id: target?.gistID ?? id, filename: target?.filename, rowID: id)
+    if let row = state.gists.first(where: { $0.id == id }), let gistID = row.gistID,
+      let filename = row.filename
+    {
+      return .gist(id: gistID, filename: filename, rowID: id)
+    }
+    return .gist(id: id, rowID: id)
   }
 
   private func placeholder(for request: Opening.Request) -> Opening {
@@ -186,7 +167,7 @@ extension GistPadModel {
     loadedFile = file
     state.selectedID = file.rowID
     if file.isRecovery { openError = Self.recoveryMessage }
-    remember(file.selection)
+    remember(file.request)
     if let fileEditor = editors.values.first(where: { $0.file.refersToSameFile(as: file) }) {
       fileEditor.adoptPresentation(file)
     } else {
@@ -197,7 +178,7 @@ extension GistPadModel {
   func unfilteredRowID(for file: GistFile) -> String? {
     state.gists.first {
       $0.id == file.draft.id.uuidString
-        || ($0.gistID != nil && $0.gistID == file.selection.gistID
+        || ($0.gistID != nil && $0.gistID == file.gistID
           && ($0.filename == nil || $0.filename == file.filename))
     }?.id
   }
@@ -320,23 +301,31 @@ extension GistPadModel {
     state.selectedID = nil
   }
 
-  func remember(_ selection: FileReference) {
+  func remember(_ request: Opening.Request) {
     guard let account else { return }
-    lastOpened.save(selection, accountID: account.id)
+    defaults.set(try? JSONEncoder().encode(request), forKey: Self.lastOpenedKey(account.id))
+  }
+
+  /// The file this account last had open. One that can't be read is simply forgotten.
+  func lastOpened(accountID: UUID) -> Opening.Request? {
+    (defaults.object(forKey: Self.lastOpenedKey(accountID)) as? Data).flatMap {
+      try? JSONDecoder().decode(Opening.Request.self, from: $0)
+    }
+  }
+
+  /// Keeps its original name so a remembered file can survive an update.
+  static func lastOpenedKey(_ accountID: UUID) -> String {
+    "notebook.selection.\(accountID.uuidString)"
   }
 
   /// Reopens the file you last had open. With nothing remembered, nothing opens, because a file
   /// only starts when you ask for it.
   func restoreLastOpened() async {
     guard loadedFile == nil, state.selectedID == nil, opening == nil, let account,
-      pendingAccount == nil
+      pendingAccount == nil, let saved = lastOpened(accountID: account.id)
     else { return }
-    let saved = lastOpened.selection(accountID: account.id)
-    if let draftID = saved?.draftID, localDrafts.contains(where: { $0.id == draftID }) {
-      await open(.draft(id: draftID))
-    } else if let gistID = saved?.gistID {
-      await open(.gist(id: gistID, filename: saved?.filename))
-    }
+    if case .draft(let id, _) = saved, !localDrafts.contains(where: { $0.id == id }) { return }
+    await open(saved)
   }
 
   private static let recoveryMessage = String(
@@ -361,45 +350,5 @@ extension GistFileEditor {
     file.editingRequestID = incoming.editingRequestID
     file.revealsDetail = incoming.revealsDetail
     if let gist = incoming.gist { file.gist = gist }
-  }
-}
-
-public struct FileReference: Codable, Equatable, Sendable {
-  let gistID: String?
-  let filename: String
-  let draftID: UUID?
-}
-
-@MainActor
-public final class LastOpened {
-  private let defaults: UserDefaults?
-  private var memory: [UUID: FileReference] = [:]
-
-  public init(defaults: UserDefaults? = nil) { self.defaults = defaults }
-
-  /// The file to reopen at launch. One that can't be read is simply forgotten.
-  func selection(accountID: UUID) -> FileReference? {
-    guard let defaults else { return memory[accountID] }
-    return defaults.data(forKey: key(accountID)).flatMap {
-      try? JSONDecoder().decode(FileReference.self, from: $0)
-    }
-  }
-
-  func save(_ selection: FileReference, accountID: UUID) {
-    guard let defaults else {
-      memory[accountID] = selection
-      return
-    }
-    defaults.set(try? JSONEncoder().encode(selection), forKey: key(accountID))
-  }
-
-  func clear(accountID: UUID) {
-    defaults?.removeObject(forKey: key(accountID))
-    memory[accountID] = nil
-  }
-
-  /// Keeps its original name so the last-opened file survives the update.
-  private func key(_ accountID: UUID) -> String {
-    "notebook.selection.\(accountID.uuidString)"
   }
 }
