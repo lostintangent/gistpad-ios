@@ -166,7 +166,7 @@ public actor DailyNotes {
             if let daily {
                 do { return try await client.gist(id: daily.id) }
                 // Deleting its last day on the web deleted it, so look for the one today joins.
-                catch GitHubClientError.http(status: 404, _) {}
+                catch GitHubClientError.http(status: 404) {}
             }
             return try await client.listGists().first(where: \.isDailyNote)
         } catch let error as URLError where cached != nil && error.code != .cancelled {

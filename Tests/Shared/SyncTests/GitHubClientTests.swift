@@ -69,9 +69,8 @@ import Testing
         do {
             _ = try await client.gist(id: "abc123")
             Issue.record("Expected throttling")
-        } catch GitHubClientError.http(let status, let retry) {
+        } catch GitHubClientError.http(let status) {
             #expect(status == 403)
-            #expect(try #require(retry).timeIntervalSinceNow > 50)
         }
     }
 

@@ -40,7 +40,7 @@ enum RemoteRead {
     if let error = error as? AccountError {
       return error == .signedOut || error == .reconnectGitHub || error == .accountChanged
     }
-    if case .http(401, _)? = error as? GitHubClientError { return true }
+    if case .http(401)? = error as? GitHubClientError { return true }
     return false
   }
 }

@@ -5,7 +5,7 @@ public enum GitHubClientError: Error, Equatable, Sendable {
     case invalidIdentifier
     case invalidResponse
     case unsafeURL
-    case http(status: Int, retryAfter: Date?)
+    case http(status: Int)
     case incompleteGist
     case missingFile
     case fileTooLarge
@@ -15,10 +15,10 @@ public enum GitHubClientError: Error, Equatable, Sendable {
 extension GitHubClientError: LocalizedError {
     public var errorDescription: String? {
         switch self {
-        case .http(401, _): String(localized: "Reconnect GitHub to continue. Your gists on this iPhone are unchanged.")
-        case .http(403, _), .http(429, _):
+        case .http(401): String(localized: "Reconnect GitHub to continue. Your gists on this iPhone are unchanged.")
+        case .http(403), .http(429):
             String(localized: "GitHub declined the request. Try again later or reconnect GitHub.")
-        case .http(404, _): String(localized: "This gist is no longer available to this account.")
+        case .http(404): String(localized: "This gist is no longer available to this account.")
         case .incompleteGist:
             String(localized: "GitHub returned an incomplete gist. It can't be edited safely.")
         case .missingFile: String(localized: "This file is no longer in the gist.")
@@ -87,7 +87,7 @@ public actor GitHubClient {
         let (data, response) = try await session.data(from: url)
         guard let response = response as? HTTPURLResponse else { throw GitHubClientError.invalidResponse }
         guard response.statusCode == 200 else {
-            throw GitHubClientError.http(status: response.statusCode, retryAfter: nil)
+            throw GitHubClientError.http(status: response.statusCode)
         }
         guard data.count <= 10_000_000 else { throw GitHubClientError.fileTooLarge }
         guard let content = String(data: data, encoding: .utf8) else { throw GitHubClientError.invalidUTF8 }
@@ -277,16 +277,7 @@ public actor GitHubClient {
         let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse else { throw GitHubClientError.invalidResponse }
         guard (200..<300).contains(response.statusCode) else {
-            var retry = response.retryAfterDate
-            if retry == nil, [403, 429].contains(response.statusCode) {
-                if response.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0" {
-                    retry = response.value(forHTTPHeaderField: "X-RateLimit-Reset")
-                        .flatMap(TimeInterval.init).map { Date(timeIntervalSince1970: $0) }
-                } else {
-                    retry = .now.addingTimeInterval(60)
-                }
-            }
-            throw GitHubClientError.http(status: response.statusCode, retryAfter: retry)
+            throw GitHubClientError.http(status: response.statusCode)
         }
         return (data, response.value(forHTTPHeaderField: "Link"))
     }
@@ -302,15 +293,3 @@ private final class NoRedirects: NSObject, URLSessionTaskDelegate {
 }
 
 extension GitHubClient: CommentsRemote {}
-
-extension HTTPURLResponse {
-    var retryAfterDate: Date? {
-        guard let value = value(forHTTPHeaderField: "Retry-After") else { return nil }
-        if let seconds = TimeInterval(value) { return .now.addingTimeInterval(max(0, seconds)) }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
-        return formatter.date(from: value)
-    }
-}

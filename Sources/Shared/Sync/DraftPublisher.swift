@@ -10,7 +10,6 @@ public enum PublishReason: Equatable, Sendable {
 public actor DraftPublisher {
     private let client: GitHubClient
     private let store: DraftStore
-    private var notBefore: Date = .distantPast
 
     public init(client: GitHubClient, store: DraftStore) {
         self.client = client
@@ -33,7 +32,6 @@ public actor DraftPublisher {
                   await shouldPublish() else { throw CancellationError() }
         }
         do {
-            if Date.now < notBefore { try await Task.sleep(for: .seconds(notBefore.timeIntervalSinceNow)) }
             if draft.gistID == nil, let attempted = draft.attemptedContent,
                let generation = draft.attemptedGeneration {
                 if let created = try await createdGist(for: draft, content: attempted) {
@@ -111,9 +109,7 @@ public actor DraftPublisher {
             let state: PublishState
             if let error = error as? GitHubClientError {
                 switch error {
-                case .http(let status, let retryAfter):
-                    if let retryAfter { notBefore = max(notBefore, retryAfter) }
-                    state = status == 401 ? .reconnect : .failed(.http(status: status, retryAfter: retryAfter))
+                case .http(let status): state = status == 401 ? .reconnect : .failed(.http(status: status))
                 case .incompleteGist, .fileTooLarge: state = .failed(.incompleteRemote)
                 default: state = .failed(.network)
                 }

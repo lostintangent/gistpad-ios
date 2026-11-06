@@ -7,8 +7,6 @@ actor GitHubSync {
   let drafts: DraftStore
   let mutationQueue = SerialQueue()
   private var clients: [UUID: GitHubClient] = [:]
-  private var publishers: [UUID: DraftPublisher] = [:]
-  private var dailyServices: [UUID: DailyNotes] = [:]
 
   init(accounts: AccountStore, drafts: DraftStore) {
     self.accounts = accounts
@@ -127,29 +125,15 @@ actor GitHubSync {
   }
 
   func today(accountID: UUID, target: DailyNote.Day) async throws -> (gist: Gist?, draft: Draft) {
-    let service: DailyNotes
-    if let existing = dailyServices[accountID] {
-      service = existing
-    } else {
-      let userID = try await verifiedUserID(accountID: accountID)
-      let client = await client(accountID: accountID)
-      let publisher = await publisher(accountID: accountID)
-      service =
-        dailyServices[accountID]
-        ?? DailyNotes(
-          accountID: accountID, githubUserID: userID, client: client,
-          store: drafts, publisher: publisher)
-      dailyServices[accountID] = service
-    }
+    let userID = try await verifiedUserID(accountID: accountID)
+    let publisher = await publisher(accountID: accountID)
+    let service = DailyNotes(
+      accountID: accountID, githubUserID: userID, client: await client(accountID: accountID),
+      store: drafts, publisher: publisher)
     return try await mutationQueue.run { try await service.stageToday(target: target) }
   }
 
   private func publisher(accountID: UUID) async -> DraftPublisher {
-    if let publisher = publishers[accountID] { return publisher }
-    let client = await client(accountID: accountID)
-    if let existing = publishers[accountID] { return existing }
-    let publisher = DraftPublisher(client: client, store: drafts)
-    publishers[accountID] = publisher
-    return publisher
+    DraftPublisher(client: await client(accountID: accountID), store: drafts)
   }
 }

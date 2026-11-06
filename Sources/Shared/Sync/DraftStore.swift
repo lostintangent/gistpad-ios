@@ -3,7 +3,7 @@ import SwiftData
 
 public enum PublishFailure: Codable, Equatable, Sendable {
     case network
-    case http(status: Int, retryAfter: Date?)
+    case http(status: Int)
     case readOnly
     case incompleteRemote
 }
