@@ -56,7 +56,11 @@
 - GitHub moved past your base while you had a draft. You see both versions.
 - Keep Mine: base ← GitHub, then Publish.
 - Use GitHub's: draft ← GitHub's text, as an edit you can undo. It now matches GitHub, so the draft is deleted.
-- GitHub's side is empty when the gist or file was deleted elsewhere. Keep Mine creates it again, and Use GitHub's deletes the draft.
+- GitHub's side is empty when the file was deleted elsewhere. Keep Mine adds it back.
+
+### Deleted elsewhere
+- A gist deleted on the web leaves the list at the next Refresh.
+- If you had a draft, it stays on the phone and never publishes, so you can copy your words out. Delete removes it.
 
 ### Return to the app
 - Publish any drafts.
@@ -82,11 +86,11 @@
 - Nothing, while it's on GitHub or will publish by itself.
 - **Publish**, when Autosave is off or a publish didn't land. Tapping it publishes.
 - **GitHub needs attention**, for a conflict or a GitHub reconnect.
-- **Couldn't sync** or **Couldn't update your gists**, in the list, when a change didn't go through or the list couldn't refresh.
+- **Couldn't sync** or **Couldn't update your gists**, in the list, when a change didn't go through or the list couldn't refresh. A refresh that only timed out or lost its connection shows nothing, and the next moment tries again.
 
 ### Left out on purpose
 - No merging, no background sync and no retry timers.
 
 ---
 
-*Where the code differs today:* it creates a draft when you open a file, keeps it after publishing and deletes untouched ones later. Adding a file makes a draft instead of creating the file. A gist deleted elsewhere leaves a read-only copy instead of a conflict. A new day publishes any earlier unpublished day first. t323 makes the code match this page.
+*Where the code differs today:* it creates a draft when you open a file, keeps it after publishing and deletes untouched ones later. Adding a file makes a draft instead of creating the file. A new day publishes any earlier unpublished day first. A refresh that timed out shows Couldn't update your gists. t323 makes the code match this page.
