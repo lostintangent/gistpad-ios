@@ -46,6 +46,8 @@ final class FileSession {
   @ObservationIgnored private var isDiscarded = false
   @ObservationIgnored private let autosaveDelay: Duration
   @ObservationIgnored private var isInspectingRemote = false
+  /// When this note last read GitHub, so opening it again reads only once that's stale.
+  @ObservationIgnored private var refreshedAt: Date?
   @ObservationIgnored private let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "File")
 
@@ -199,9 +201,11 @@ final class FileSession {
     file.libraryRowID = draft.id.uuidString
   }
 
+  /// Reads this note from GitHub as it opens or the app comes back. A note without unpublished
+  /// edits takes GitHub's newer text, and one with edits shows the conflict.
   func inspectRemoteChanges() async {
-    guard !isInspectingRemote, !isPublishing, canMutate, !file.isRecovery,
-      draft.gistID != nil, !draft.isDiscardableBlank,
+    guard Library.isStale(refreshedAt), !isInspectingRemote, !isPublishing, canMutate,
+      !file.isRecovery, draft.gistID != nil, !draft.isDiscardableBlank,
       library.account?.id == draft.accountID, library.pendingAccount == nil
     else { return }
     if case .conflict = draft.state { return }
@@ -242,6 +246,7 @@ final class FileSession {
         file.draft = recorded
       }
       remoteInspectionProblem = nil
+      refreshedAt = .now
     } catch {
       logger.error(
         "Remote inspection failed: \(String(reflecting: type(of: error)), privacy: .public)")

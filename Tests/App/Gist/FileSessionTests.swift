@@ -233,6 +233,34 @@ struct FileSessionTests {
     #expect(fixture.publishes.isEmpty)
   }
 
+  /// Opening a note shows the phone's copy, then GitHub's newer text, as RootView reads it when the
+  /// note appears. Opening it again within five minutes reads nothing.
+  @Test func openingANoteShowsGitHubsNewerTextAndReopeningItSoonReadsNothing() async throws {
+    let fixture = try await LibraryFixture {
+      $0.addGist(id: "a", description: "A", files: ["README.md": "One"])
+      $0.addGist(id: "b", description: "B", files: ["README.md": "Two"])
+    }
+    await fixture.library.start()
+    await fixture.library.open(.gist(id: "a"))
+    fixture.server.edit("a", files: ["README.md": "Changed on the web"])
+    let library = fixture.relaunch()
+    await library.start()
+    let note = try #require(library.activeSession)
+    #expect(note.editor.text == "One")
+    await note.inspectRemoteChanges()
+    #expect(note.editor.text == "Changed on the web")
+    let reads = fixture.server.requests.filter { $0 == "GET /gists/a" }.count
+    fixture.server.edit("a", files: ["README.md": "Changed again"])
+    await library.open(.gist(id: "b"))
+    await library.activeSession?.inspectRemoteChanges()
+    await library.open(.gist(id: "a"))
+    #expect(library.activeSession === note)
+    await note.inspectRemoteChanges()
+    #expect(note.editor.text == "Changed on the web")
+    #expect(fixture.server.requests.filter { $0 == "GET /gists/a" }.count == reads)
+    #expect(fixture.publishes.isEmpty)
+  }
+
   @Test(arguments: [true, false])
   func resolvingAConflictEitherWayKeepsUndoHonest(keepsMine: Bool) async throws {
     let fixture = try await makeFixture()

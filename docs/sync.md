@@ -18,7 +18,7 @@
 
 ## Verbs
 
-- **Refresh:** cache ← GitHub.
+- **Refresh:** cache ← GitHub. The list and each file refresh at most once every 5 minutes, and a failed refresh tries again at the next chance.
 - **Save:** draft ← your text. The first keystroke creates the draft, with base ← what you were looking at.
 - **Publish:** if GitHub has the base, sent, or already your text, then sent ← your text and GitHub ← sent. When GitHub confirms, cache ← GitHub, base ← sent, and the draft is deleted unless you typed since. If GitHub has anything else, it's a conflict.
 - **Delete:** the gist or file leaves GitHub, the cache and the phone.
@@ -31,7 +31,7 @@
 
 ### Open a file
 - Show it, then Refresh that file.
-- With no draft, GitHub's latest text simply appears.
+- With no draft, GitHub's newer text simply appears. With one, you see the conflict.
 - A file you've never opened needs a connection the first time.
 
 ### Open today
@@ -65,7 +65,7 @@
 ### Return to the app
 - Publish any drafts.
 - Refresh the open file.
-- Refresh the list if it's more than 5 minutes old or the last refresh failed.
+- Refresh the list.
 
 ### Delete
 - A gist: Delete. One that never reached GitHub is only a draft, so it works offline.
@@ -94,4 +94,4 @@
 
 ---
 
-*Where the code differs today:* it creates a draft when you open a file, keeps it after publishing and deletes untouched ones later. Adding a file makes a draft instead of creating the file. A new day publishes any earlier unpublished day first. A refresh that timed out shows Couldn't update your gists. Refresh skips today's text until you open it. t323 makes the code match this page.
+*Where the code differs today:* it creates a draft when you open a file, keeps it after publishing and deletes untouched ones later. Adding a file makes a draft instead of creating the file. A new day publishes any earlier unpublished day first. t323 makes the code match this page.

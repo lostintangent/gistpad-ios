@@ -472,6 +472,7 @@ struct RootView: View {
         .sharedBackgroundVisibility(.hidden)
       }
     }
+    .task(id: session.editor.id) { await session.inspectRemoteChanges() }
     .task(id: CommentReadInput(
       session: session.editor.id, gistID: session.file.gist?.id,
       knownTotal: session.file.gist?.commentCount,

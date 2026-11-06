@@ -433,13 +433,16 @@ final class Library {
     }
   }
 
-  /// Refreshes as the app comes back, like the web on focus: when the last refresh failed or was
-  /// cut off by leaving, or its list is more than five minutes old.
+  /// The list and each file read GitHub again only once their last read is five minutes old. A
+  /// failed read leaves no time, so the next chance tries again.
+  static func isStale(_ refreshedAt: Date?) -> Bool {
+    refreshedAt.map { $0.timeIntervalSinceNow < -5 * 60 } ?? true
+  }
+
+  /// Refreshes as the app comes back, like the web on focus, when the list is stale or leaving cut
+  /// its refresh off.
   func refreshOnReturn() async {
-    guard account != nil, !isStarting else { return }
-    if remoteRefreshProblem == nil, !isRefreshingRemote, let refreshedAt,
-      refreshedAt.timeIntervalSinceNow > -5 * 60
-    {
+    guard account != nil, !isStarting, isRefreshingRemote || Self.isStale(refreshedAt) else {
       return
     }
     await refresh()
