@@ -118,6 +118,22 @@
 
     public var canFormat: Bool { textView.isEditable && isSettled }
 
+    /// Locking the editor puts the keyboard away, so a change landing in the note can't race typing.
+    public var isEditable: Bool {
+      get { textView.isEditable }
+      set { textView.isEditable = newValue }
+    }
+
+    public var isSpellCheckingEnabled: Bool {
+      get { textView.spellCheckingType != .no }
+      set { textView.spellCheckingType = newValue ? .yes : .no }
+    }
+
+    /// Brings the keyboard back where the caret is, as after a lock lifts.
+    public func focus() {
+      textView.becomeFirstResponder()
+    }
+
     /// Keeps what the keyboard is composing as typed text, as leaving a note does in Notes.
     public func commitComposition() {
       guard textView.markedTextRange != nil else { return }
@@ -736,5 +752,48 @@
       setContentOffset(
         CGPoint(x: contentOffset.x, y: min(maximum, max(minimum, y))), animated: false)
     }
+  }
+#endif
+
+#if !canImport(UIKit)
+  import Foundation
+  import Observation
+
+  /// Off iOS the editor is just the note's text, so the library's sync runs in Mac tests. Typing
+  /// there is `apply`, which counts a generation and reports the edit as a keystroke does on iOS.
+  @MainActor
+  @Observable
+  public final class Editor: Identifiable {
+    public let fileID: String
+    public let id = UUID()
+    public private(set) var text: String
+    public private(set) var generation: UInt64
+    public var isEditable = true
+    public var isSpellCheckingEnabled = true
+    public var isEditing: Bool { false }
+    public var isSettled: Bool { true }
+    @ObservationIgnored public var onEdit: ((String, UInt64) -> Void)?
+
+    public init(
+      fileID: String, text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
+    ) {
+      self.fileID = fileID
+      self.text = text
+      self.generation = generation
+    }
+
+    public func apply(_ edit: Edit, generation: UInt64) throws {
+      guard self.generation == generation else { throw Edit.MutationError.staleGeneration }
+      let result = try edit.applying(to: text)
+      guard !result.utf8.elementsEqual(text.utf8) else { return }
+      text = result
+      self.generation += 1
+      onEdit?(text, self.generation)
+    }
+
+    public func commitComposition() {}
+    public func requestFocusAtEnd() {}
+    public func focus() {}
+    public func setShowsFrontMatter(_ value: Bool) {}
   }
 #endif
