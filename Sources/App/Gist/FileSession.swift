@@ -179,9 +179,7 @@ final class FileSession {
   }
 
   func refreshMetadata(gist: Gist? = nil) async throws {
-    let current = try await library.draft(id: draft.id, accountID: draft.accountID)
-    if current.generation >= draft.generation { draft = current }
-    file.draft = draft
+    adopt(try await library.draft(id: draft.id, accountID: draft.accountID))
     file.filename = draft.filename
     if let gist { file.gist = gist }
     editor.textView.isEditable =
@@ -237,8 +235,7 @@ final class FileSession {
           draftID: draft.id, generation: current.generation, remote: remote?.content,
           revision: remote?.gist.revision))
       {
-        draft = recorded
-        file.draft = recorded
+        adopt(recorded)
       }
       remoteInspectionProblem = nil
       refreshedAt = .now
@@ -352,8 +349,7 @@ final class FileSession {
     if changed {
       try editor.apply(edit, generation: expectedGeneration)
     }
-    draft = committed
-    file.draft = committed
+    adopt(committed)
     guard await waitForLocalSave() else { throw EditError.localPersistenceFailed }
   }
 
@@ -372,8 +368,7 @@ final class FileSession {
         "File state refresh failed: \(String(reflecting: type(of: error)), privacy: .public)")
       return
     }
-    draft = persisted
-    file.draft = persisted
+    adopt(persisted)
     hasReconnected = false
     adoptPublishedGist()
   }
@@ -384,6 +379,13 @@ final class FileSession {
       let gist = library.cachedLibrary?.gists.first(where: { $0.id == draft.gistID })
     else { return }
     file.gist = gist
+  }
+
+  /// Takes the store's latest word on this draft. A read or publish that started before a keystroke
+  /// can finish after that keystroke saves, and its older draft would make the edit look published.
+  private func adopt(_ stored: Draft) {
+    if stored.generation >= draft.generation { draft = stored }
+    file.draft = draft
   }
 
   func waitForPublication() async {
@@ -458,9 +460,7 @@ final class FileSession {
               && self.editor.generation == expectedGeneration
           }
         })
-      // Typing saved after GitHub confirmed the publish is newer than what it returns.
-      if saved.generation >= draft.generation { draft = saved }
-      file.draft = draft
+      adopt(saved)
       adoptPublishedGist()
     } catch {
       if !(error is CancellationError) {
@@ -468,7 +468,7 @@ final class FileSession {
           "Publishing failed: \(String(reflecting: type(of: error)), privacy: .public)")
       }
       do {
-        draft = try await library.draft(id: draft.id, accountID: draft.accountID)
+        adopt(try await library.draft(id: draft.id, accountID: draft.accountID))
       } catch {
         logger.error(
           "Publication-state reload failed: \(String(reflecting: type(of: error)), privacy: .public)"

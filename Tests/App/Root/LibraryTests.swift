@@ -1363,13 +1363,16 @@ private struct NavigationHost {
     throw HostError.presentationTimedOut
   }
 
-  func waitUntil(_ predicate: @MainActor () -> Bool) async throws {
+  func waitUntil(
+    sourceLocation: SourceLocation = #_sourceLocation, _ predicate: @MainActor () -> Bool
+  ) async throws {
     let deadline = ContinuousClock.now.advanced(by: .seconds(5))
     while !predicate() {
       guard ContinuousClock.now < deadline else {
         Attachment.record(
           """
           load: \(library.state.loadState)
+          selected: \(String(describing: library.state.selectedID))
           loaded: \(String(describing: library.loadedFile?.id))
           presented: \(String(describing: library.visibleFile?.id))
           opening: \(String(describing: library.opening))
@@ -1383,7 +1386,9 @@ private struct NavigationHost {
           window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }
         Attachment.record(image, named: "navigation-timeout.png", as: .png)
-        Issue.record("The mounted library did not reach its expected presentation.")
+        Issue.record(
+          "The mounted library did not reach its expected presentation.",
+          sourceLocation: sourceLocation)
         throw HostError.presentationTimedOut
       }
       try await Task.sleep(for: .milliseconds(16))
