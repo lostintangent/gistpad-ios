@@ -55,21 +55,21 @@ struct SyncFixture {
         publisher = DraftPublisher(client: github, store: self.store)
     }
 
-    /// Your draft of a gist's file, opened from what GitHub has now.
+    /// A gist's file as you open it: your draft, or what GitHub has now.
     func open(_ gist: Gist, _ filename: String = "README.md") async throws -> Draft {
         let current = try #require(server.gists.first { $0.id == gist.id })
-        return try await store.draft(
-            accountID: Self.account, githubUserID: Self.user, gistID: gist.id, filename: filename,
-            description: current.description ?? "", content: current.files[filename]?.content ?? "",
-            revision: current.revision, isNewFile: current.files[filename] == nil)
+        let content = try #require(current.files[filename]?.content)
+        return try await store.current(Draft(
+            accountID: Self.account, githubUserID: Self.user, gist: current, filename: filename,
+            text: GistFile.decodeContent(content)))
     }
 
     func type(_ text: String, in draft: Draft) async throws -> Draft {
-        try await store.persist(id: draft.id, accountID: Self.account, text: text, generation: draft.generation + 1)
+        try await store.save(draft, text: text, generation: draft.generation + 1)
     }
 
     func publish(_ draft: Draft) async throws -> Draft {
-        try await publisher.publish(id: draft.id, accountID: Self.account)
+        try await publisher.publish(draft)
     }
 }
 

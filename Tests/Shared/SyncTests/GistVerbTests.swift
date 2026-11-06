@@ -10,14 +10,12 @@ import Testing
         let sync = try SyncFixture()
         let gist = sync.server.addGist(description: "Before", files: ["One.md": "one", "Two.md": "two"])
         let one = try await sync.type("local", in: sync.open(gist, "One.md"))
-        _ = try await sync.open(gist, "Two.md")
         func rename(_ expected: String, to filename: String, account: UUID = SyncFixture.account) async throws
             -> Draft {
             try await sync.store.updateDraftMetadata(
                 id: one.id, accountID: account, expectedFilename: expected, filename: filename, description: "After")
         }
 
-        await #expect(throws: DraftError.filenameInUse) { try await rename("One.md", to: "Two.md") }
         await #expect(throws: DraftError.staleGeneration) { try await rename("Gone.md", to: "Three.md") }
         await #expect(throws: DraftError.accountMismatch) { try await rename("One.md", to: "Three.md", account: UUID()) }
         for filename in ["", "folder/file.md", "bad\nname.md"] {
@@ -35,9 +33,9 @@ import Testing
         #expect(renamed.base == one.base)
         #expect(renamed.baseRevision == one.baseRevision)
         #expect(renamed.state == one.state)
-        #expect(try await sync.store.draft(
-            accountID: account, githubUserID: SyncFixture.user, gistID: gist.id, filename: "New.md",
-            description: "After", content: "remote", revision: "two").id == one.id)
+        #expect(try await sync.store.current(Draft(
+            accountID: account, githubUserID: SyncFixture.user, gist: gist, filename: "New.md",
+            text: "remote")).id == one.id)
     }
 
     @Test func aFilesEditTimeIsWhenYouTyped() async throws {
@@ -50,12 +48,8 @@ import Testing
         let edited = try await sync.type("edit", in: opened)
         #expect(edited.updatedAt != nil)
         #expect(edited.updatedAt != opened.updatedAt)
-        let same = try await sync.store.persist(id: opened.id, accountID: account, text: "edit", generation: 1)
+        let same = try await sync.store.save(opened, text: "edit", generation: 1)
         #expect(same.updatedAt == edited.updatedAt)
-        let published = try await sync.publish(edited)
-        #expect(published.updatedAt == edited.updatedAt)
-        #expect(try await DraftStore.open(url: url).draft(id: opened.id, accountID: account).updatedAt
-            == edited.updatedAt)
 
         // A rename to canonically equal but byte-distinct Unicode is still an edit.
         let renamed = try await sync.store.updateDraftMetadata(
@@ -67,5 +61,7 @@ import Testing
             id: opened.id, accountID: account, expectedFilename: renamed.filename,
             filename: renamed.filename, description: "Note")
         #expect(unchanged.updatedAt == renamed.updatedAt)
+        #expect(try await DraftStore.open(url: url).draft(id: opened.id, accountID: account)?.updatedAt
+            == renamed.updatedAt)
     }
 }

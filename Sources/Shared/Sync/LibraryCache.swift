@@ -100,22 +100,14 @@ extension DraftStore {
         return try JSONDecoder().decode(CachedLibrary.self, from: stored.payload)
     }
 
-    /// Saves GitHub's fresh lists, which are the authority on what exists. A published draft of a gist
-    /// that's no longer listed goes with it, unless its gist is open (`keeping` holds gist IDs), while one
-    /// holding unpublished text stays as a recovery copy.
+    /// Saves GitHub's fresh lists, which are the authority on what exists. A draft of a gist that's no
+    /// longer listed stays as a recovery copy.
     public func cacheLibrary(
         owned: [Gist], starred: [Gist], preferences: Preferences,
-        accountID: UUID, cachedAt: Date = .now, keeping: Set<String> = []
+        accountID: UUID, cachedAt: Date = .now
     ) throws {
         let previous = try cachedLibrary(accountID: accountID)
         let ids = Set(owned.map(\.id) + starred.map(\.id))
-        let gone = try modelContext.fetch(FetchDescriptor<StoredDraft>(
-            predicate: #Predicate { $0.accountID == accountID }
-        )).filter {
-            guard let gistID = $0.gistID, !keeping.contains(gistID) else { return false }
-            return try !ids.contains(gistID) && snapshot($0).isPublished
-        }
-        for draft in gone { modelContext.delete(draft) }
         let snapshot = CachedLibrary(
             accountID: accountID, owned: owned, starred: starred,
             preferences: preferences, cachedAt: cachedAt,

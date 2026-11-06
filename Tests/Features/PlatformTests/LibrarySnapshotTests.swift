@@ -17,21 +17,14 @@ struct LibrarySnapshotTests {
         let older = try gist("older", "Older", updated: "2026-10-18T00:00:00Z")
         let opened = try gist("opened", "Opened, not edited", updated: "2026-10-15T00:00:00Z")
         let store = try DraftStore.open(inMemory: true)
-        // Opening a gist starts its draft, which mustn't make it recent.
-        let openedDraft = try await store.draft(
-            accountID: account, githubUserID: 42, gistID: opened.id, filename: "README.md",
-            description: "Opened, not edited", content: "Text", revision: "1")
-        let editing = try await store.draft(
-            accountID: account, githubUserID: 42, gistID: edited.id, filename: "README.md",
-            description: "Edited on the phone", content: "Text", revision: "1")
-        let typed = try await store.persist(
-            id: editing.id, accountID: account, text: "Typed on the phone", generation: 1)
-        let started = try await store.newGistDraft(
-            accountID: account, githubUserID: 42, description: "Started on the phone")
-        let blank = try await store.newGistDraft(accountID: account, githubUserID: 42)
-        let unpublishedDay = try await store.newGistDraft(
+        let typed = try await store.save(
+            Draft(accountID: account, githubUserID: 42, gist: edited, filename: "README.md", text: "Text"),
+            text: "Typed on the phone", generation: 1)
+        let started = try await store.keep(Draft(
+            accountID: account, githubUserID: 42, description: "Started on the phone", content: nil))
+        let unpublishedDay = try await store.keep(Draft(
             accountID: account, githubUserID: 42, filename: DailyNote.filename(),
-            description: DailyNote.gistDescription, content: "- [ ] Tomorrow")
+            description: DailyNote.gistDescription, text: "- [ ] Tomorrow"))
 
         let snapshot = LibrarySnapshot.make(
             accountID: account,
@@ -43,7 +36,7 @@ struct LibrarySnapshotTests {
                     "tags": .object(["work": .object(["name": .string("Work")])]),
                     "gistTags": .object([edited.id: .array([.string("work")])])
                 ])),
-            drafts: [openedDraft, typed, started, blank, unpublishedDay])
+            drafts: [typed, started, unpublishedDay])
 
         #expect(snapshot.recents.map(\.title) == ["Started on the phone", "Edited on the phone", "Older"])
         #expect(snapshot.recents.map(\.link) == [
@@ -52,7 +45,7 @@ struct LibrarySnapshotTests {
         ])
         #expect(snapshot.recents[1].updatedAt == typed.updatedAt)
         #expect(snapshot.recents[1].tags == ["Work"])
-        #expect(snapshot.gists.count == 9)
+        #expect(snapshot.gists.count == 8)
         #expect(snapshot.accentHex == "#0EA5E9")
     }
 
@@ -62,15 +55,14 @@ struct LibrarySnapshotTests {
             "manga", "Manga reading list", updated: "2026-10-24T09:00:00Z",
             files: ["README.md": source, "Calendars.md": "# Release dates\n"])
         let store = try DraftStore.open(inMemory: true)
-        let draft = try await store.draft(
-            accountID: account, githubUserID: 42, gistID: manga.id, filename: "README.md",
-            description: manga.description ?? "", content: source, revision: "1")
-        let edited = try await store.persist(
-            id: draft.id, accountID: account, text: source + "Second favorite: Pluto.\n",
-            generation: 1)
-        let unpublishedFile = try await store.draft(
-            accountID: account, githubUserID: 42, gistID: manga.id, filename: "Next.md",
-            description: manga.description ?? "", content: "# Tomorrow\n", isNewFile: true)
+        let edited = try await store.save(
+            Draft(accountID: account, githubUserID: 42, gist: manga, filename: "README.md", text: source),
+            text: source + "Second favorite: Pluto.\n", generation: 1)
+        let unpublishedFile = try await store.save(
+            Draft(
+                accountID: account, githubUserID: 42, gistID: manga.id, filename: "Next.md",
+                description: manga.description ?? ""),
+            text: "# Tomorrow\n", generation: 1)
 
         let snapshot = LibrarySnapshot.make(
             accountID: account,

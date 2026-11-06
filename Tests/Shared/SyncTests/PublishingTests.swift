@@ -13,7 +13,7 @@ import Testing
         await #expect(throws: URLError.self) { try await fixture.publish(sent) }
         #expect(text(fixture.server, gist.id) == "local")
 
-        let undone = try await fixture.type("base", in: fixture.store.draft(id: sent.id, accountID: SyncFixture.account))
+        let undone = try await fixture.type("base", in: fixture.store.current(sent))
         #expect(try await fixture.publish(undone).state == .savedToGitHub)
         #expect(text(fixture.server, gist.id) == "base")
     }
@@ -26,16 +26,15 @@ import Testing
         // Same title and file with other text, so only the text tells them apart.
         fixture.server.addGist(description: "Ideas", files: ["README.md": "# Ideas\n\nOlder"])
         cutOffNextPublish(fixture.server)
-        let draft = if daily {
+        let staged = if daily {
             try await DailyNotes(
                 accountID: SyncFixture.account, githubUserID: SyncFixture.user, client: fixture.github,
-                store: fixture.store, publisher: fixture.publisher
+                store: fixture.store
             ).stageToday(target: DailyNote.Day(date: .now, timeZone: .gmt)).draft
         } else {
-            try await fixture.store.newGistDraft(
-                accountID: SyncFixture.account, githubUserID: SyncFixture.user, description: "Ideas",
-                content: "# Ideas\n\nFirst")
+            Draft(accountID: SyncFixture.account, githubUserID: SyncFixture.user, description: "Ideas")
         }
+        let draft = try await fixture.type("# Ideas\n\nFirst", in: staged)
         await #expect(throws: URLError.self) { try await fixture.publish(draft) }
 
         let published = try await fixture.publish(draft)

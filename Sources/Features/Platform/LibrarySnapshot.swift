@@ -91,7 +91,7 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
                         link: .unpublishedGist(accountID: accountID, draftID: draft.id),
                         accountID: accountID, folderName: nil,
                         body: nil, pinned: false),
-                    draft.description != DailyNote.gistDescription && !draft.isDiscardableBlank))
+                    draft.description != DailyNote.gistDescription))
             }
         }
         gists.sort {

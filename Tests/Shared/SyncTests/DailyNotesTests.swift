@@ -10,7 +10,7 @@ private func dailyData() throws -> Data {
 @Suite struct DailyNotesTests {
     @Test func addToTodayAppendsAParagraphOrOneTaskPerLine() async throws {
         let store = try DraftStore.open(inMemory: true)
-        var draft = try await store.newGistDraft(accountID: UUID(), githubUserID: 42, content: "# Today\n\nA thought")
+        var draft = Draft(accountID: UUID(), githubUserID: 42, text: "# Today\n\nA thought")
         draft = try await store.apply(.addToToday("A second thought", asTask: false, to: draft))
         draft = try await store.apply(.addToToday("First task\n  \t\n日本語 👩🏽‍💻\n", asTask: true, to: draft))
         #expect(draft.text == "# Today\n\nA thought\n\nA second thought\n- [ ] First task\n- [ ] 日本語 👩🏽‍💻\n")
@@ -30,7 +30,7 @@ private func dailyData() throws -> Data {
         let web = fixture.server.addGist(description: DailyNote.gistDescription, files: webFiles)
         let today = try await DailyNotes(
             accountID: SyncFixture.account, githubUserID: SyncFixture.user, client: fixture.github,
-            store: fixture.store, publisher: fixture.publisher
+            store: fixture.store
         ).stageToday(target: day).draft
         let typed = try await fixture.type("Written offline", in: today)
         fixture.server.intercept(nil)
@@ -50,7 +50,8 @@ private func dailyData() throws -> Data {
         let found = DailyNote(
             day: day, cache: try await fixture.store.cachedLibrary(accountID: SyncFixture.account),
             drafts: try await fixture.store.drafts(accountID: SyncFixture.account))
-        #expect(found.gistID == web.id && found.draftID == typed.id && found.text == "Written offline")
+        #expect(found.gistID == web.id && found.text == "Written offline")
+        #expect(found.draftID == (webWroteToday ? typed.id : nil))
     }
 
     @Test func todayAndItsTasksFollowTheWeb() throws {

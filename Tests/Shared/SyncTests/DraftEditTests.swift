@@ -8,13 +8,16 @@ import Testing
         let store = try DraftStore.open(inMemory: true)
         let account = UUID()
         let text = "- [ ] Task"
-        let draft = try await store.newGistDraft(accountID: account, githubUserID: 42, content: text)
-        let stale = DraftEdit(draftID: draft.id, accountID: account, expectedGeneration: 3, text: "x")
-        await #expect(throws: DraftError.staleGeneration) { try await store.apply(stale) }
-        #expect(try await store.draft(id: draft.id, accountID: account).text == text)
+        let opened = Draft(accountID: account, githubUserID: 42)
+        let typed = try await store.save(opened, text: text, generation: 1)
+        await #expect(throws: DraftError.staleGeneration) {
+            try await store.apply(DraftEdit(draft: opened, text: "x"))
+        }
+        #expect(try await store.draft(id: typed.id, accountID: account)?.text == text)
     }
 
-    @Test func schemaChangesKeepDraftsAndDropRetiredRecoveryAndReceiptRows() async throws {
+    /// Earlier builds also kept drafts with nothing GitHub lacks, which go when the store opens.
+    @Test func schemaChangesKeepDraftsAndDropRetiredRows() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -39,6 +42,16 @@ import Testing
             draft.generation = 7
             draft.autosavePaused = true
             context.insert(draft)
+            context.insert(RetiredSchema.StoredDraft(
+                id: UUID(), accountID: account, githubUserID: 42, gistID: "abc123",
+                filename: "Opened.md", description: "Note", text: "as published",
+                baseContent: "as published", baseRevision: "one",
+                stateData: try JSONEncoder().encode(PublishState.savedLocally)))
+            context.insert(RetiredSchema.StoredDraft(
+                id: UUID(), accountID: account, githubUserID: 42, gistID: "daily",
+                filename: "2026-11-06.md", description: DailyNote.gistDescription, text: "# 2026-11-06\n\n",
+                baseContent: nil, baseRevision: "one",
+                stateData: try JSONEncoder().encode(PublishState.savedLocally)))
             context.insert(RetiredSchema.StoredRecovery(
                 draft: draft, sent: "older source", generation: 6, remote: "remote base"
             ))
@@ -46,7 +59,8 @@ import Testing
             try context.save()
         }
         let upgraded = try DraftStore.open(url: url)
-        let draft = try await upgraded.draft(id: id, accountID: account)
+        #expect(try await upgraded.drafts(accountID: account).map(\.id) == [id])
+        let draft = try #require(try await upgraded.draft(id: id, accountID: account))
         #expect(draft.text == "unsynced source")
         #expect(draft.generation == 7)
         #expect(draft.state == .savedLocally)
@@ -54,8 +68,8 @@ import Testing
         try await upgraded.cacheLibrary(
             owned: [], starred: [], preferences: Preferences(metadata: [:]), accountID: account
         )
-        let edit = DraftEdit(draftID: id, accountID: account, expectedGeneration: 7, text: " accepted")
-        #expect(try await upgraded.apply(edit).text == "unsynced source accepted")
+        #expect(try await upgraded.apply(DraftEdit(draft: draft, text: " accepted")).text
+            == "unsynced source accepted")
         #expect(try await upgraded.cachedLibrary(accountID: account) != nil)
     }
 }

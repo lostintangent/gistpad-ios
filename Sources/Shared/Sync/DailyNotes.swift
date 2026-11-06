@@ -97,9 +97,7 @@ extension DraftEdit {
             : text.trimmingCharacters(in: .newlines)
         let separator = source.isEmpty || source.hasSuffix(asTask ? "\n" : "\n\n") ? ""
             : asTask || source.hasSuffix("\n") ? "\n" : "\n\n"
-        return Self(
-            draftID: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation,
-            text: separator + content + "\n")
+        return Self(draft: draft, text: separator + content + "\n")
     }
 }
 
@@ -108,21 +106,17 @@ public actor DailyNotes {
     private let githubUserID: Int64
     private let client: GitHubClient
     private let store: DraftStore
-    private let publisher: DraftPublisher
 
-    public init(
-        accountID: UUID, githubUserID: Int64,
-        client: GitHubClient, store: DraftStore, publisher: DraftPublisher
-    ) {
+    public init(accountID: UUID, githubUserID: Int64, client: GitHubClient, store: DraftStore) {
         self.accountID = accountID
         self.githubUserID = githubUserID
         self.client = client
         self.store = store
-        self.publisher = publisher
     }
 
-    /// Today's file, ready to edit: your draft once you've started the day, else a draft from the daily
-    /// notes gist, else the first day of a new daily notes gist. Autosave publishes it like any other file.
+    /// Today's file, ready to edit: your draft once you've started the day, else the day as the daily
+    /// notes gist has it or starts it, else the first day of a new daily notes gist. Typing saves it,
+    /// and autosave publishes it like any other file.
     public func stageToday(target: DailyNote.Day = .init()) async throws -> (gist: Gist?, draft: Draft) {
         let drafts = try await store.drafts(accountID: accountID)
         let cached = try await store.cachedLibrary(accountID: accountID)
@@ -131,31 +125,24 @@ public actor DailyNotes {
         if let started = drafts.first(where: { $0.id == day.draftID }) {
             return (gist: cached?.owned.first { $0.id == started.gistID }, draft: started)
         }
-        if let pending = drafts.first(where: {
-            $0.gistID == nil && $0.description == DailyNote.gistDescription
-        }) {
-            // An earlier day never reached GitHub, so it creates the gist that today joins.
-            try await publisher.publish(id: pending.id, accountID: accountID)
-        }
         guard let gist = try await dailyGist(cached: cached) else {
-            return (gist: nil, draft: try await store.newGistDraft(
+            return (gist: nil, draft: Draft(
                 accountID: accountID, githubUserID: githubUserID, filename: target.filename,
                 description: DailyNote.gistDescription,
-                content: DailyNote.content(template: nil, filename: target.filename)))
+                text: DailyNote.content(template: nil, filename: target.filename)))
         }
         guard gist.owner?.id == githubUserID else { throw DraftError.readOnly }
-        let content: String
         if let text = try await text(of: target.filename, in: gist) {
-            content = text
-        } else {
-            let template = try await text(of: DailyNote.templateFilename, in: gist)
-            content = DailyNote.content(template: template, filename: target.filename)
+            return (gist: gist, draft: Draft(
+                accountID: accountID, githubUserID: githubUserID, gist: gist, filename: target.filename,
+                text: text))
         }
-        let draft = try await store.draft(
-            accountID: accountID, githubUserID: githubUserID, gistID: gist.id,
-            filename: target.filename, description: gist.description ?? "", content: content,
-            revision: gist.revision, isNewFile: gist.files[target.filename] == nil)
-        return (gist: gist, draft: draft)
+        let template = try await text(of: DailyNote.templateFilename, in: gist)
+        return (gist: gist, draft: Draft(
+            accountID: accountID, githubUserID: githubUserID, gistID: gist.id, filename: target.filename,
+            description: gist.description ?? "",
+            text: DailyNote.content(template: template, filename: target.filename),
+            baseRevision: gist.revision))
     }
 
     /// The daily gist as GitHub has it now, because the web may have started today since the

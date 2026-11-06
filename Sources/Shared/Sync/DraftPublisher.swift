@@ -15,19 +15,19 @@ public actor DraftPublisher {
         self.store = store
     }
 
-    /// Publishes the draft: if GitHub has its base, its sent text or already its text, your text is
-    /// sent, and anything else on GitHub is a conflict. Autosave and lifecycle publishes are checked
-    /// once before reaching GitHub, and typing during the publish hands over to the publish that
-    /// typing schedules. Callers run one publish at a time, through the library's queue for GitHub
-    /// writes.
+    /// Publishes your draft: if GitHub has its base, its sent text or already its text, your text is
+    /// sent, and anything else on GitHub is a conflict. A note you haven't typed in has nothing to
+    /// publish. Autosave and lifecycle publishes are checked once before reaching GitHub, and typing
+    /// during the publish hands over to the publish that typing schedules. Callers run one publish at
+    /// a time, through the library's queue for GitHub writes.
     @discardableResult
     public func publish(
-        id: UUID, accountID: UUID, reason: PublishReason = .manual, expectedGeneration: UInt64? = nil,
+        _ draft: Draft, reason: PublishReason = .manual, expectedGeneration: UInt64? = nil,
         shouldPublish: @escaping @Sendable () async -> Bool = { true }
     ) async throws -> Draft {
         try Task.checkCancellation()
-        var draft = try await store.draft(id: id, accountID: accountID)
-        if draft.isPublished { return draft }
+        var draft = try await store.current(draft)
+        guard draft.isSaved else { return draft }
         if case .conflict = draft.state { return draft }
         if reason != .manual {
             guard expectedGeneration == nil || draft.generation == expectedGeneration,
@@ -36,29 +36,28 @@ public actor DraftPublisher {
         do {
             if draft.gistID == nil, let sent = draft.sent {
                 draft = try await findCreatedGist(sent, for: draft)
-                if draft.isPublished { return draft }
             }
-            if draft.gistID == nil, draft.description == DailyNote.gistDescription {
+            if draft.isSaved, draft.gistID == nil, draft.description == DailyNote.gistDescription {
                 draft = try await joinDailyGist(draft)
             }
-            if let gistID = draft.gistID {
+            if draft.isSaved, let gistID = draft.gistID {
                 draft = try await compareWithGitHub(draft, gistID: gistID)
-                // Newer text from the web reaches a published note when it's opened, not by publishing.
-                if draft.isPublished { return draft }
-                if case .conflict = draft.state { return draft }
             }
+            // Newer text from the web reaches a note when it's opened, not by publishing.
+            guard draft.isSaved else { return draft }
+            if case .conflict = draft.state { return draft }
             return try await send(draft)
         } catch {
             // Sent text stays on the draft, so the next publish checks GitHub for it first.
             if error is CancellationError || (error as? URLError)?.code == .cancelled {
                 throw CancellationError()
             }
-            try await store.setState(Self.state(after: error), id: id, accountID: accountID)
+            try await store.setState(Self.state(after: error), id: draft.id, accountID: draft.accountID)
             throw error
         }
     }
 
-    /// sent ← your text, then GitHub ← sent. When GitHub confirms, base ← sent.
+    /// Records your text as sent, then sends it. When GitHub confirms it, it becomes the base.
     private func send(_ draft: Draft) async throws -> Draft {
         try await store.recordSent(
             id: draft.id, accountID: draft.accountID, content: draft.text, generation: draft.generation)
@@ -88,8 +87,7 @@ public actor DraftPublisher {
             draft = try await store.forgetSent(id: draft.id, accountID: draft.accountID)
         }
         return try await store.compareWithGitHub(
-            id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation,
-            remote: github.content, revision: github.gist.revision, gist: github.gist)
+            draft, remote: github.content, revision: github.gist.revision, gist: github.gist)
     }
 
     /// A create that was cut off may have made the gist already. It's found by its description and
