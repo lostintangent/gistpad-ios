@@ -10,17 +10,23 @@ You should never have to think about sync. Nothing you type is lost, you always 
 4. **Only unpublished edits are held back.** Once GitHub has your text, there's nothing left to publish. Undoing your way back to the published text has the same effect.
 5. **You're only interrupted when you'd otherwise lose words.** That only happens in a conflict.
 
+## Your gists
+
+- **Open the app.** The list shows what's on the phone right away, then refreshes from GitHub.
+- **Return to the app.** The list refreshes again if the last refresh failed, was still running when you left, or is more than 5 minutes old, like the web. While it runs you see it checking, not the old problem.
+- **Pull down** to refresh any time.
+
 ## Editing a file
 
 - **Open.** The cached copy shows instantly, then the file refreshes from GitHub. If you haven't made edits, GitHub's version replaces the cached copy silently. You never see a warning.
 - **Return to the app.** The open file refreshes the same way.
 - **Edit.** Each edit is saved on the phone and marked as unpublished.
-- **Publish.** If GitHub still has the version you started editing from, your text replaces it.
+- **Publish.** If GitHub still has the version you started editing from, your text replaces it. If GitHub already has your text, from the web or from a publish that was cut off, there's nothing left to publish.
 - **Conflict.** If GitHub changed after you started editing, nothing is overwritten. You see both versions and choose one of two options:
   - **Keep Mine** publishes your text over GitHub's. The gist's history on GitHub still has their version.
   - **Use GitHub's** replaces your text with theirs as one edit you can undo.
 
-  A conflict can only happen when GitHub changes while you have unpublished edits.
+  A conflict can only happen when GitHub changes to something other than your text while you have unpublished edits.
 
   If the file was deleted on GitHub, GitHub's side is empty and Keep Mine adds the file back with your text.
 
@@ -65,12 +71,14 @@ Delete works in any state. It removes the gist from GitHub if it got there, and 
 ## What you see
 
 - **Nothing:** it's on GitHub, or it's on the phone and will publish by itself.
-- **Publish:** Autosave is off, or a publish didn't land because you're offline or GitHub had a problem. Your text is saved on the phone either way, and tapping it tries again.
+- **Publish:** Autosave is off, or a publish didn't land because you're offline or GitHub had a problem. Your text is saved on the phone either way. Tapping it tries again, and so does the next publish moment.
 - **GitHub needs attention:** a conflict, which opens both versions, or GitHub needs reconnecting.
 - **Couldn't sync, in the list:** a file or change didn't reach GitHub or your account. It says whether your changes are still saved on the phone.
+- **Couldn't update your gists, in the list:** the list couldn't refresh from GitHub. Your gists on the phone are unchanged, and Try Again refreshes.
 
 ## Deliberately left out
 
 - **No automatic merging.** Conflicts don't offer a combined version.
 - **No extra copies of your text.** There are no recovery snapshots, only the one unpublished draft.
-- **No background sync.** The app publishes your own edits and refreshes what you open, nothing more.
+- **No background sync.** The app publishes your own edits and refreshes the list and what you open, nothing more.
+- **No retry timers.** A publish or refresh that fails waits for the next publish moment, a return to the app, or a tap.
