@@ -77,7 +77,7 @@ struct LayoutTests {
     let defaults = try #require(UserDefaults(suiteName: name))
     defer { defaults.removePersistentDomain(forName: name) }
     let layout = LayoutPreferences(defaults: defaults)
-    let store = try DraftStore.open(inMemory: true)
+    let store = try GistFileDraftStore.open(inMemory: true)
     let accountID = UUID()
     let original = (1...80).map { "Paragraph \($0): a retained native notebook." }.joined(
       separator: "\n\n")

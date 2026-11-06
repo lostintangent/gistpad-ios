@@ -26,12 +26,12 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
         let account = UUID()
         let full = try decodeGist(gistData(content: "A cached body\n- [ ] Task"))
         let metadata = try metadataOnly(full)
-        let store = try DraftStore.open(url: url)
+        let store = try GistFileDraftStore.open(url: url)
         try await store.cacheGists(owned: [metadata], starred: [], accountID: account)
         let before = try #require(try await store.gistCache(accountID: account))
         #expect(before.content(gist: metadata, filename: "README.md") == nil)
         try await store.cacheGist(full, accountID: account)
-        let reopened = try DraftStore.open(url: url)
+        let reopened = try GistFileDraftStore.open(url: url)
         let cached = try #require(try await reopened.gistCache(accountID: account))
         let gist = try #require(cached.owned.first)
         #expect(cached.content(gist: gist, filename: "README.md") == "A cached body\n- [ ] Task")
@@ -50,7 +50,7 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
     @Test func shareLinksPercentEncodeEachFileComponentAndNeverPublishADraft() async throws {
         let filename = "Résumé #1? 100%.md"
         let gist = try decodeGist(gistData(filename: filename))
-        let store = try DraftStore.open(inMemory: true)
+        let store = try GistFileDraftStore.open(inMemory: true)
         let account = UUID()
         let local = try await store.save(
             Draft(accountID: account, githubUserID: 42, gist: gist, filename: filename, text: "base"),

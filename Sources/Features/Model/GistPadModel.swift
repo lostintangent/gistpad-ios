@@ -35,8 +35,8 @@ public final class GistPadModel {
   public var isForeground = false
   var isApplying = false
 
-  @ObservationIgnored let accountStore: AccountStore
-  @ObservationIgnored let draftStore: DraftStore
+  @ObservationIgnored let accountStore: GistPadAccountStore
+  @ObservationIgnored let draftStore: GistFileDraftStore
   @ObservationIgnored let lastOpened: LastOpened
   @ObservationIgnored private var clients: [UUID: GitHubClient] = [:]
   @ObservationIgnored private var isWriting = false
@@ -47,7 +47,7 @@ public final class GistPadModel {
   @ObservationIgnored let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "Library")
 
-  public init(accounts: AccountStore, drafts: DraftStore, lastOpened: LastOpened = LastOpened()) {
+  public init(accounts: GistPadAccountStore, drafts: GistFileDraftStore, lastOpened: LastOpened = LastOpened()) {
     accountStore = accounts
     draftStore = drafts
     self.lastOpened = lastOpened

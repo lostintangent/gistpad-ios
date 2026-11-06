@@ -63,7 +63,7 @@
           }
         _ = try await accounts.update(seeded + (accent.map { [.setAccentColor($0)] } ?? []), accountID: account.id)
       }
-      let store = try DraftStore.open(inMemory: true)
+      let store = try GistFileDraftStore.open(inMemory: true)
       if fixture == .offline, let account = try await accounts.connectedAccount() {
         let github = await accounts.githubClient(accountID: account.id)
         try await store.cacheGists(

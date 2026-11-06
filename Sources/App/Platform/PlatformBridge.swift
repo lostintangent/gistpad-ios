@@ -29,7 +29,7 @@ extension PlatformBridge {
     if let services { return services.model }
     return connect(
       GistPadModel(
-        accounts: try AccountStore(publishableKey: publishableKey), drafts: try DraftStore.open(),
+        accounts: try GistPadAccountStore(publishableKey: publishableKey), drafts: try GistFileDraftStore.open(),
         lastOpened: LastOpened(defaults: .standard)))
   }
 

@@ -44,12 +44,12 @@ struct SyncFixture {
     static let account = FixtureServer.accountID
     static let user = FixtureServer.you.id
     let server: FixtureServer
-    let store: DraftStore
+    let store: GistFileDraftStore
     let github: GitHubClient
 
-    init(store: DraftStore? = nil, server: FixtureServer = FixtureServer()) throws {
+    init(store: GistFileDraftStore? = nil, server: FixtureServer = FixtureServer()) throws {
         self.server = server
-        self.store = try store ?? DraftStore.open(inMemory: true)
+        self.store = try store ?? GistFileDraftStore.open(inMemory: true)
         github = GitHubClient(session: server.session) { "fixture-github" }
     }
 

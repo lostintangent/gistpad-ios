@@ -28,7 +28,7 @@ import Testing
     @Test func aFilesEditTimeIsWhenYouTyped() async throws {
         let url = try temporaryStoreURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        let sync = try SyncFixture(store: DraftStore.open(url: url))
+        let sync = try SyncFixture(store: GistFileDraftStore.open(url: url))
         let gist = sync.server.addGist(description: "Note", files: ["Caf\u{e9}.md": "base"])
         let opened = try await sync.open(gist, "Caf\u{e9}.md")
 
@@ -37,7 +37,7 @@ import Testing
         #expect(edited.updatedAt != opened.updatedAt)
         let same = try await sync.store.save(opened, text: "edit", generation: 1)
         #expect(same.updatedAt == edited.updatedAt)
-        #expect(try await DraftStore.open(url: url).draft(id: opened.id, accountID: account)?.updatedAt
+        #expect(try await GistFileDraftStore.open(url: url).draft(id: opened.id, accountID: account)?.updatedAt
             == edited.updatedAt)
     }
 }

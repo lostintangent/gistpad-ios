@@ -19,7 +19,7 @@ import Testing
 
         let account = try await accounts.signIn { url in
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-            #expect(url.host == AccountStore.projectURL.host)
+            #expect(url.host == GistPadAccountStore.projectURL.host)
             #expect(query.first { $0.name == "provider" }?.value == "github")
             #expect(query.first { $0.name == "scopes" }?.value == "gist")
             #expect(query.first { $0.name == "redirect_to" }?.value == "gistpad://auth-callback")

@@ -98,7 +98,7 @@ public struct Keychain: AuthLocalStorage {
     }
 }
 
-public actor AccountStore {
+public actor GistPadAccountStore {
     public static let projectURL = URL(string: "https://upnfachynwuwialgybvf.supabase.co")!
     public static let callbackURL = URL(string: "gistpad://auth-callback")!
     private static let sessionKey = "gistpad-supabase-session"

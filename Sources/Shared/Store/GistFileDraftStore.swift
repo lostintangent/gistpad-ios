@@ -199,7 +199,7 @@ final class StoredDraft {
 }
 
 @ModelActor
-public actor DraftStore {
+public actor GistFileDraftStore {
     /// Drafts a publish let go of, so typing that was already on its way continues from what GitHub has.
     private var released: [UUID: Draft] = [:]
 
@@ -218,7 +218,7 @@ public actor DraftStore {
         modelExecutor = DefaultSerialModelExecutor(modelContext: context)
     }
 
-    public static func open(url: URL? = nil, inMemory: Bool = false) throws -> DraftStore {
+    public static func open(url: URL? = nil, inMemory: Bool = false) throws -> GistFileDraftStore {
         let schema = Schema([StoredDraft.self, StoredLibrary.self])
         let configuration: ModelConfiguration
         if let url {
@@ -233,7 +233,7 @@ public actor DraftStore {
         }
         // GistPad.entitlements gives the app's files complete protection, so drafts stay sealed
         // while the phone is locked.
-        return DraftStore(container: try ModelContainer(for: schema, configurations: [configuration]))
+        return GistFileDraftStore(container: try ModelContainer(for: schema, configurations: [configuration]))
     }
 
     public func drafts(accountID: UUID) throws -> [Draft] {

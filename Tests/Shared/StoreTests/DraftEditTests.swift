@@ -5,7 +5,7 @@ import Testing
 
 @Suite struct DraftEditTests {
     @Test func aStaleAdditionNeverMutatesTheDraft() async throws {
-        let store = try DraftStore.open(inMemory: true)
+        let store = try GistFileDraftStore.open(inMemory: true)
         let account = UUID()
         let text = "- [ ] Task"
         let opened = Draft(accountID: account, githubUserID: 42)
@@ -58,7 +58,7 @@ import Testing
             context.insert(RetiredSchema.StoredCommandReceipt(id: UUID(), payload: Data("{}".utf8)))
             try context.save()
         }
-        let upgraded = try DraftStore.open(url: url)
+        let upgraded = try GistFileDraftStore.open(url: url)
         #expect(try await upgraded.drafts(accountID: account).map(\.id) == [id])
         let draft = try #require(try await upgraded.draft(id: id, accountID: account))
         #expect(draft.text == "unsynced source")

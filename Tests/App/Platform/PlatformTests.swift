@@ -310,7 +310,7 @@ private struct PlatformFixture {
   }
 
   var account: GistPadAccount { fixture.account }
-  var store: DraftStore { fixture.store }
+  var store: GistFileDraftStore { fixture.store }
   var publishes: [String] { fixture.publishes }
 
   func today() async throws -> GistFile {

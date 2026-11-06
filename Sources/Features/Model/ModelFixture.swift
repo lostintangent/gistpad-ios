@@ -8,8 +8,8 @@
   @MainActor
   struct ModelFixture {
     let server = FixtureServer()
-    let accounts: AccountStore
-    let store: DraftStore
+    let accounts: GistPadAccountStore
+    let store: GistFileDraftStore
     let lastOpened = LastOpened()
     let account: GistPadAccount
     let model: GistPadModel
@@ -26,7 +26,7 @@
       let operations = preferences + (autosave ? [] : [.setBoolean(.isAutoSaveEnabled, false)])
       if !operations.isEmpty { account = try await accounts.update(operations, accountID: account.id) }
       self.account = account
-      store = try DraftStore.open(inMemory: true)
+      store = try GistFileDraftStore.open(inMemory: true)
       if let selection { lastOpened.save(selection, accountID: account.id) }
       model = GistPadModel(accounts: accounts, drafts: store, lastOpened: lastOpened)
     }

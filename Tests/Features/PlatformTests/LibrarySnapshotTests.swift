@@ -16,7 +16,7 @@ struct LibrarySnapshotTests {
         let edited = try gist("edited", "Edited on the phone", updated: "2026-10-19T00:00:00Z")
         let older = try gist("older", "Older", updated: "2026-10-18T00:00:00Z")
         let opened = try gist("opened", "Opened, not edited", updated: "2026-10-15T00:00:00Z")
-        let store = try DraftStore.open(inMemory: true)
+        let store = try GistFileDraftStore.open(inMemory: true)
         let typed = try await store.save(
             Draft(accountID: account, githubUserID: 42, gist: edited, filename: "README.md", text: "Text"),
             text: "Typed on the phone", generation: 1)
@@ -55,7 +55,7 @@ struct LibrarySnapshotTests {
         let manga = try gist(
             "manga", "Manga reading list", updated: "2026-10-24T09:00:00Z",
             files: ["README.md": source, "Calendars.md": "# Release dates\n"])
-        let store = try DraftStore.open(inMemory: true)
+        let store = try GistFileDraftStore.open(inMemory: true)
         let edited = try await store.save(
             Draft(accountID: account, githubUserID: 42, gist: manga, filename: "README.md", text: source),
             text: source + "Second favorite: Pluto.\n", generation: 1)

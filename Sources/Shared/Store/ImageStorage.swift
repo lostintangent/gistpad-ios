@@ -19,7 +19,7 @@ public struct ImageStorage: Sendable {
         publishableKey: String, session: URLSession? = nil,
         token: @escaping TokenProvider
     ) throws {
-        guard AccountStore.isPublishableKey(publishableKey) else { throw AccountError.invalidConfiguration }
+        guard GistPadAccountStore.isPublishableKey(publishableKey) else { throw AccountError.invalidConfiguration }
         self.publishableKey = publishableKey
         self.session = session ?? GitHubClient.makeSession()
         self.token = token
@@ -30,7 +30,7 @@ public struct ImageStorage: Sendable {
         let fileExtension = type == .jpeg ? "jpg" : type.preferredFilenameExtension ?? ""
         let path = "assets/\(gistID)/\(assetID.uuidString.lowercased()).\(fileExtension)"
         let credential = try await token()
-        var request = URLRequest(url: AccountStore.projectURL.appending(path: "storage/v1/object/\(path)"))
+        var request = URLRequest(url: GistPadAccountStore.projectURL.appending(path: "storage/v1/object/\(path)"))
         request.httpMethod = "POST"
         request.httpBody = image
         request.setValue(publishableKey, forHTTPHeaderField: "apikey")
@@ -40,7 +40,7 @@ public struct ImageStorage: Sendable {
         let (_, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw Failure.http(status: status) }
-        return AccountStore.projectURL.appending(path: "storage/v1/object/public/\(path)")
+        return GistPadAccountStore.projectURL.appending(path: "storage/v1/object/public/\(path)")
     }
 
     public static func markdown(_ url: URL) -> String { "![Image](\(url.absoluteString))" }

@@ -53,15 +53,15 @@ public final class FixtureServer: Sendable {
     }
 
     /// An account store that signs in to this server and keeps its credentials in memory.
-    public func accounts() throws -> AccountStore {
-        try AccountStore(
+    public func accounts() throws -> GistPadAccountStore {
+        try GistPadAccountStore(
             publishableKey: "sb_publishable_fixture", credentials: credentials, session: session,
             automaticallyRefreshesToken: false,
             launchFlow: { _ in URL(string: "gistpad://auth-callback?code=fixture")! })
     }
 
     @discardableResult
-    public func signIn(_ accounts: AccountStore) async throws -> GistPadAccount {
+    public func signIn(_ accounts: GistPadAccountStore) async throws -> GistPadAccount {
         try await accounts.signIn()
     }
 

@@ -79,7 +79,7 @@ final class StoredLibrary {
     }
 }
 
-extension DraftStore {
+extension GistFileDraftStore {
     func cachePublication(
         _ gist: Gist, accountID: UUID, githubUserID: Int64, filename: String, content: String
     ) throws {
