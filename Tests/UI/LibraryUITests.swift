@@ -139,13 +139,18 @@ final class LibraryUITests: XCTestCase {
     let app = launchGistPad()
     let create = app.buttons["library-create"].firstMatch
     try waitUntil("New Gist") { create.isHittable }
+    app.dismissSidebarOverlay()
     create.tap()
     let editor = app.textViews["source-editor"]
     try waitUntil("the new gist's editor") { editor.isHittable && app.keyboards.firstMatch.exists }
     editor.typeText("# Gone soon\n\nA thought to delete.")
 
     // Leaving for the Library (or another gist, in the sidebar) publishes the new gist.
-    if app.isRegularWidth { app.element("library-note-words").tap() } else { app.showLibrary() }
+    app.showLibrary()
+    if app.isRegularWidth {
+      app.element("library-note-words").tap()
+      app.showLibrary()
+    }
     let published = app.libraryRows.matching(
       NSPredicate(format: "identifier MATCHES 'library-note-f[0-9a-f]{7}'")).firstMatch
     try waitUntil("the published gist in the Library") { published.isHittable }
@@ -182,7 +187,7 @@ final class LibraryUITests: XCTestCase {
 
     app.buttons["tag-save"].tap()
     try waitUntil("the saved tags") { !app.buttons["tag-save"].exists }
-    app.buttons["note-actions"].tap()
+    try openNoteActions(in: app)
     try tap(app.buttons["Tags"].firstMatch, "Tags")
     try waitUntil("the reopened Tags sheet") { ideas.isHittable }
     XCTAssertTrue(ideas.label.contains("Big Ideas"))

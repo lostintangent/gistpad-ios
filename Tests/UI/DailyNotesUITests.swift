@@ -10,6 +10,7 @@ final class DailyNotesUITests: XCTestCase {
     try waitUntil("Today with its unfinished tasks") {
       today.isHittable && today.label == "Today, 2 unfinished tasks"
     }
+    app.dismissSidebarOverlay()
     today.tap()
     let editor = app.textViews["source-editor"]
     try waitUntil("today's note, ready to write") {
@@ -22,6 +23,7 @@ final class DailyNotesUITests: XCTestCase {
     let app = launchGistPad("empty")
     let today = app.element("library-today")
     try waitUntil("Today") { today.isHittable }
+    app.dismissSidebarOverlay()
     today.tap()
     let editor = app.textViews["source-editor"]
     try waitUntil("a new day, ready to write") { editor.isHittable && app.keyboards.firstMatch.exists }
@@ -31,14 +33,17 @@ final class DailyNotesUITests: XCTestCase {
 
   func testDeletingADailyNoteFromItsScreenKeepsTheOtherDays() throws {
     let app = launchGistPad(open: "daily/\(Self.yesterdayFilename)")
-    try tap(app.buttons["note-actions"].firstMatch, "More")
+    try waitUntil("the day") { app.navigationBars[Self.yesterdayTitle].exists }
+    try openNoteActions(in: app)
     try tap(app.buttons["Delete Daily Note…"].firstMatch, "Delete Daily Note…")
     try waitUntil("a confirmation that names the day") {
       app.staticTexts["Delete “\(Self.yesterdayTitle)”?"].exists
     }
     try confirmDeletion(in: app)
 
-    // Deleting the open file returns to the Library.
+    // Deleting the open file returns to the Library, or empties the note beside a hidden sidebar.
+    try waitUntil("the day to close") { !app.navigationBars[Self.yesterdayTitle].exists }
+    app.showLibrary()
     XCTAssertTrue(app.element("library-list").waitForExistence(timeout: 10))
     let dailyNotes = app.element("library-collection-dailyNotes")
     dailyNotes.scrollIntoView(in: app)
@@ -48,7 +53,7 @@ final class DailyNotesUITests: XCTestCase {
   func testADailyNoteIsTitledByItsDayAndOffersOnlyFileActions() throws {
     let app = launchGistPad(open: "daily/\(Self.yesterdayFilename)")
     try waitUntil("the day as the title") { app.navigationBars[Self.yesterdayTitle].exists }
-    try tap(app.buttons["note-actions"].firstMatch, "More")
+    try openNoteActions(in: app)
     try waitUntil("the More menu") { app.buttons["Delete Daily Note…"].exists }
     XCTAssertTrue(app.buttons["Copy Link"].exists)
     for gistAction in ["Pin", "Star", "Archive", "Rename Gist…", "Tags", "Files"] {

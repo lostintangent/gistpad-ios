@@ -175,7 +175,7 @@
       + Array(repeating: "A little room for thoughts, sketches, and the shape of a good day.", count: 20)
       .joined(separator: "\n\n")
       + "\n\n## Further down\n\nA late native passage should scroll into view.\n\n"
-      + Array(repeating: "Room below, so the late passage can rest at the top of the page.", count: 12)
+      + Array(repeating: "Room below, so the late passage can rest at the top of the page.", count: 24)
       .joined(separator: "\n\n") + "\n"
   }
 #endif

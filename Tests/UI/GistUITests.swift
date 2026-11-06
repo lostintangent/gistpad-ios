@@ -9,11 +9,12 @@ final class GistUITests: XCTestCase {
     let title = app.navigationBars["The shape of a gist"]
     let modes = app.segmentedControls["note-toggle-mode"]
     try waitUntil("Edit") { title.exists && modes.buttons["Edit"].isSelected }
+    app.dismissSidebarOverlay()
 
     modes.buttons["Preview"].tap()
     try waitUntil("Preview") { modes.buttons["Preview"].isSelected && app.webViews.firstMatch.exists }
     XCTAssertTrue(title.exists)
-    XCTAssertTrue(app.buttons["note-actions"].exists)
+    XCTAssertTrue(app.moreButton.exists)
 
     // Split joins the picker when the note is wide enough for two panes.
     if modes.buttons["Split"].exists {
@@ -32,7 +33,7 @@ final class GistUITests: XCTestCase {
     // README.md is the gist's front page, so the title stands alone without a filename.
     try waitUntil("README.md") { (editor.value as? String)?.hasPrefix("# A considered") == true }
 
-    app.buttons["note-actions"].tap()
+    try openNoteActions(in: app)
     try tap(app.buttons["Files"].firstMatch, "Files")
     try tap(app.buttons["Ideas.md"].firstMatch, "Ideas.md")
     try waitUntil("Ideas.md") { (editor.value as? String)?.hasPrefix("# Ideas") == true }
@@ -41,7 +42,10 @@ final class GistUITests: XCTestCase {
 
   func testAddLinkOpensReadyForItsURL() throws {
     let app = launchGistPad(open: "shape/README.md", mode: "edit")
-    try tap(app.textViews["source-editor"], "the editor")
+    let editor = app.textViews["source-editor"]
+    try waitUntil("the editor") { editor.exists }
+    app.dismissSidebarOverlay()
+    try tap(editor, "the editor")
     try tap(app.buttons["editor-insert-menu"], "Insert")
     try tap(app.buttons["Link…"].firstMatch, "Link…")
     let url = app.textFields["URL"]

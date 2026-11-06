@@ -9,6 +9,7 @@ final class CommentsUITests: XCTestCase {
     let late = app.buttons["A late native passage"].firstMatch
     try waitUntil("the Preview") { app.webViews.firstMatch.exists && late.exists }
     // With the sidebar hidden, Comments is the only thing that changes the reading width.
+    app.dismissSidebarOverlay()
     let hideSidebar = app.buttons["Hide Sidebar"].firstMatch
     if hideSidebar.isHittable {
       hideSidebar.tap()
@@ -56,6 +57,7 @@ final class CommentsUITests: XCTestCase {
     let app = launchGistPad(open: "highlights", mode: "preview")
     let careful = app.buttons["careful"].firstMatch
     try waitUntil("the highlight") { careful.isHittable }
+    app.dismissSidebarOverlay()
     careful.tap()
     let thread = app.element("comment-thread-2")
     try waitUntil("the selected thread") { thread.exists && thread.isSelected }

@@ -51,9 +51,35 @@ extension XCUIApplication {
       .matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch.exists
   }
 
-  /// Returns to the Library: Back in a stack, or nothing when the sidebar is already showing.
+  /// Hides the sidebar when it overlays the note, as the system's split view shows it at launch
+  /// in unfolded portrait. Does nothing when the sidebar sits beside the note or isn't showing.
+  func dismissSidebarOverlay() {
+    let sidebar = element("library-list")
+    let note = navigationBars.matching(NSPredicate(format: "identifier != 'GistPad'")).firstMatch
+    guard sidebar.isHittable, note.exists, note.frame.minX < sidebar.frame.maxX else { return }
+    buttons.matching(NSPredicate(format: "label == 'Hide Sidebar'")).allElementsBoundByIndex
+      .first(where: \.isHittable)?.tap()
+    XCTAssertTrue(sidebar.wait(for: \.isHittable, toEqual: false, timeout: 5), "The sidebar still covers the note")
+  }
+
+  /// The note's More button, or the system's overflow button when the toolbar is too narrow for
+  /// More, as a gist with a title menu is in unfolded portrait.
+  var moreButton: XCUIElement {
+    let actions = buttons["note-actions"]
+    return actions.exists ? actions : buttons["TopOverflowBarButtonItem"]
+  }
+
+  /// Shows the sidebar when the unfolded Duo hides it, as it does once the overlay is dismissed.
+  func showSidebar() {
+    let show = buttons.matching(NSPredicate(format: "label == 'Show Sidebar'")).firstMatch
+    guard isRegularWidth, show.waitForExistence(timeout: 2), show.isHittable else { return }
+    show.tap()
+    XCTAssertTrue(element("library-list").waitForExistence(timeout: 5), "The sidebar never showed")
+  }
+
+  /// Returns to the Library: Back in a stack, or the sidebar when the Duo is open.
   func showLibrary() {
-    guard !isRegularWidth else { return }
+    guard !isRegularWidth else { return showSidebar() }
     // The Duo's cover floats Back beside the bar, outside the navigation bar's subtree.
     let back = buttons["BackButton"].firstMatch
     XCTAssertTrue(back.wait(for: \.isHittable, toEqual: true, timeout: 10), "Back never became tappable")
@@ -85,6 +111,20 @@ extension XCTestCase {
   ) throws {
     try waitUntil(description, file: file, line: line) { element.isHittable }
     element.tap()
+  }
+
+  /// Opens the note's More menu, first dismissing a sidebar that overlays the note, and through
+  /// the system's overflow menu when the toolbar moved More there.
+  @MainActor
+  func openNoteActions(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) throws {
+    app.dismissSidebarOverlay()
+    let more = app.moreButton
+    let overflows = more.identifier == "TopOverflowBarButtonItem"
+    try tap(more, "More", file: file, line: line)
+    guard overflows else { return }
+    try tap(
+      app.buttons.matching(NSPredicate(format: "label == 'More' AND identifier == ''")).firstMatch,
+      "More in the overflow menu", file: file, line: line)
   }
 
   /// Taps the destructive button in the confirmation dialog that a Delete action presents.
