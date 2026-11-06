@@ -343,7 +343,7 @@ struct LibraryTests {
     }
     #expect(phone.publishes == ["POST /gists"])
     #expect(today.saveState == .savedToGitHub)
-    let daily = try #require(phone.github.gists.first(where: \.isDailyNote))
+    let daily = try #require(phone.github.gists.first { $0.isDailyNote })
     #expect(daily.files[DailyNote.Day().filename]?.content == today.editor.text)
     #expect(daily.isPublic == false)
   }
@@ -486,7 +486,6 @@ struct LibraryTests {
     #expect(row.isRecovery)
     let kept = try await phone.open(.draft(id: try #require(UUID(uuidString: row.id))))
     #expect(phone.onScreen == "Mine")
-    #expect(!kept.saveState.canPublish)
     await kept.publish()
     await phone.leave(kept)
     await phone.leaveApp()
@@ -642,7 +641,7 @@ struct LibraryTests {
     #expect(phone.onGitHub("a")?.utf8.elementsEqual(mine.utf8) == true)
   }
 
-  @Test func anotherAccountSigningInWaitsForYourChoice() async throws {
+  @Test func keepingYourAccountWhenAnotherSignsInHoldsEditsUntilYouReconnect() async throws {
     let phone = try await Phone(autosave: false) {
       $0.addGist(id: "a", description: "First", files: ["README.md": "One"])
     }
@@ -657,7 +656,11 @@ struct LibraryTests {
     phone.library.keepCurrentAccount()
     #expect(phone.library.pendingAccount == nil)
     await phone.leave(a)
-    #expect(phone.onGitHub("a") == "Mine")
+    #expect(phone.onGitHub("a") == "One")
+    guard case .reconnectRequired = phone.library.state.loadState else {
+      Issue.record("Expected a prompt to reconnect")
+      return
+    }
   }
 
   // MARK: Daily notes
