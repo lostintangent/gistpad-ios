@@ -49,7 +49,14 @@ public actor GitHubClient {
         self.token = token
     }
 
+    /// The one real network session, shared by GitHub, Supabase and image uploads.
     public nonisolated static func makeSession() -> URLSession {
+        #if DEBUG
+            // Tests answer from a FixtureServer, so one that reaches for the real network stops here.
+            precondition(
+                NSClassFromString("XCTestCase") == nil,
+                "Tests can't reach the real network. Pass a FixtureServer's session.")
+        #endif
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil

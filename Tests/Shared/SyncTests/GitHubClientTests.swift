@@ -116,6 +116,12 @@ import Testing
             "DELETE /gists/\(gist.id)",
         ])
     }
+
+    @Test func aTestThatReachesForTheRealNetworkFails() async {
+        await #expect(processExitsWith: .failure) {
+            _ = GitHubClient { "a real token" }
+        }
+    }
 }
 
 /// A gist whose README lives only behind its raw URL, the way GitHub serves large files.
