@@ -65,9 +65,6 @@ actor GitHubSync {
 
   func draft(for file: File) async throws -> Draft {
     guard let gist = file.gist else { throw GitHubClientError.missingFile }
-    guard let account = try await accounts.cachedAccount(), account.id == file.accountID else {
-      throw AccountError.accountChanged
-    }
     let githubUserID = try await verifiedUserID(accountID: file.accountID)
     return try await drafts.draft(
       accountID: file.accountID, githubUserID: githubUserID,

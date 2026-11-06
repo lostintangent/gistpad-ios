@@ -28,10 +28,10 @@ struct LibrarySnapshotTests {
             id: editing.id, accountID: account, text: "Typed on the phone", generation: 1)
         let started = try await store.newGistDraft(
             accountID: account, githubUserID: 42, description: "Started on the phone")
-        let blank = try await store.newDraft(accountID: account, githubUserID: 42)
-        let unpublishedDay = try await store.newDraft(
+        let blank = try await store.newGistDraft(accountID: account, githubUserID: 42)
+        let unpublishedDay = try await store.newGistDraft(
             accountID: account, githubUserID: 42, filename: DailyNote.filename(),
-            description: DailyNote.gistDescription, text: "- [ ] Tomorrow")
+            description: DailyNote.gistDescription, content: "- [ ] Tomorrow")
 
         let snapshot = LibrarySnapshot.make(
             accountID: account,

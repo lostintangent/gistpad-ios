@@ -81,7 +81,6 @@ public enum DraftError: Error, Equatable, Sendable {
     case remoteDidNotAcknowledge
     case invalidFilename
     case filenameInUse
-    case staleMetadata
     case publicationPending
 }
 
@@ -99,7 +98,6 @@ extension DraftError: LocalizedError {
         case .remoteDidNotAcknowledge: String(localized: "GitHub didn't confirm the change. Try again.")
         case .invalidFilename: String(localized: "Enter a filename without slashes.")
         case .filenameInUse: String(localized: "This gist already has a file with that name.")
-        case .staleMetadata: String(localized: "This file changed. Review the latest version first.")
         case .publicationPending: String(localized: "You can change this after the gist publishes.")
         }
     }
@@ -252,7 +250,7 @@ public actor DraftStore {
             throw DraftError.invalidFilename
         }
         guard draft.filename == expectedFilename || draft.filename == filename else {
-            throw DraftError.staleMetadata
+            throw DraftError.staleGeneration
         }
         guard draft.attemptedGeneration == nil else { throw DraftError.publicationPending }
         if let gistID = draft.gistID {
@@ -356,19 +354,7 @@ public actor DraftStore {
         accountID: UUID, githubUserID: Int64, filename: String = "README.md",
         description: String = "", content: String? = nil
     ) throws -> Draft {
-        try newDraft(
-            accountID: accountID, githubUserID: githubUserID, filename: filename,
-            description: description,
-            text: GistFile.decodeContent(
-                GistFile.initialContent(description: description, content: content)
-            )
-        )
-    }
-
-    public func newDraft(
-        accountID: UUID, githubUserID: Int64, filename: String = "README.md",
-        description: String = "", text: String = ""
-    ) throws -> Draft {
+        let text = GistFile.decodeContent(GistFile.initialContent(description: description, content: content))
         let draft = StoredDraft(
             id: UUID(), accountID: accountID, githubUserID: githubUserID, gistID: nil,
             filename: filename, description: description, text: text, baseContent: nil,
@@ -550,7 +536,9 @@ public actor DraftStore {
     }
 }
 
-func sourceEqual(_ lhs: String?, _ rhs: String?) -> Bool {
+/// Byte-for-byte equality, since Swift's `==` treats canonically equivalent Unicode as equal and
+/// GitHub doesn't.
+public func sourceEqual(_ lhs: String?, _ rhs: String?) -> Bool {
     switch (lhs, rhs) {
     case (.none, .none): true
     case (.some(let lhs), .some(let rhs)): lhs.utf8.elementsEqual(rhs.utf8)

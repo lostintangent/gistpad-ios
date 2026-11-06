@@ -256,16 +256,8 @@ struct Conflict: Equatable, Sendable, Identifiable {
     }
     return conflict.generation == self.conflict.generation
       && conflict.remoteRevision == self.conflict.remoteRevision
-      && Self.exactlyEqual(conflict.base, self.conflict.base)
-      && Self.exactlyEqual(conflict.local, self.conflict.local)
-      && Self.exactlyEqual(conflict.remote, self.conflict.remote)
-  }
-
-  static func exactlyEqual(_ left: String?, _ right: String?) -> Bool {
-    switch (left, right) {
-    case (.none, .none): true
-    case (.some(let left), .some(let right)): left.utf8.elementsEqual(right.utf8)
-    default: false
-    }
+      && sourceEqual(conflict.base, self.conflict.base)
+      && sourceEqual(conflict.local, self.conflict.local)
+      && sourceEqual(conflict.remote, self.conflict.remote)
   }
 }

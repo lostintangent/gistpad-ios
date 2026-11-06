@@ -53,19 +53,21 @@ import Testing
         let store = try DraftStore.open(url: url)
         let user = SyncFixture.user
         var blanks = [
-            try await store.newDraft(accountID: account, githubUserID: user),
-            try await store.newDraft(accountID: account, githubUserID: user, text: " \t\r\n\u{2003}"),
+            try await store.newGistDraft(accountID: account, githubUserID: user),
+            try await store.newGistDraft(accountID: account, githubUserID: user, content: " \t\r\n\u{2003}"),
         ]
+        let titled = try await store.newGistDraft(accountID: account, githubUserID: user, description: "A title")
         var kept = [
-            try await store.newDraft(accountID: account, githubUserID: user, description: "A title"),
+            try await store.persist(id: titled.id, accountID: account, text: "", generation: 1),
             try await store.draft(
                 accountID: account, githubUserID: user, gistID: "existing", filename: "README.md",
                 description: "", content: "", revision: "one"),
         ]
         for text in ["\u{2064}", "👩🏽‍💻", "\u{200B}", "Keep e\u{301}\r\n日本語"] {
-            kept.append(try await store.newDraft(accountID: account, githubUserID: user, text: text))
+            let typed = try await store.newGistDraft(accountID: account, githubUserID: user)
+            kept.append(try await store.persist(id: typed.id, accountID: account, text: text, generation: 1))
         }
-        let retyped = try await store.newDraft(accountID: account, githubUserID: user)
+        let retyped = try await store.newGistDraft(accountID: account, githubUserID: user)
         blanks.append(try await store.persist(id: retyped.id, accountID: account, text: " ", generation: 1))
 
         for draft in kept {

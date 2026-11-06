@@ -216,9 +216,9 @@ import Testing
                 store: fixture.store, publisher: fixture.publisher
             ).stageToday(target: DailyNote.Day(date: .now, timeZone: .gmt)).draft
         } else {
-            try await fixture.store.newDraft(
+            try await fixture.store.newGistDraft(
                 accountID: SyncFixture.account, githubUserID: SyncFixture.user, description: "Ideas",
-                text: "# Ideas\n\nFirst")
+                content: "# Ideas\n\nFirst")
         }
         await #expect(throws: URLError.self) { try await fixture.publish(draft) }
 

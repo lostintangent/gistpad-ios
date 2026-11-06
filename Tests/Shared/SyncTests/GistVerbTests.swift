@@ -18,7 +18,7 @@ import Testing
         }
 
         await #expect(throws: DraftError.filenameInUse) { try await rename("One.md", to: "Two.md") }
-        await #expect(throws: DraftError.staleMetadata) { try await rename("Gone.md", to: "Three.md") }
+        await #expect(throws: DraftError.staleGeneration) { try await rename("Gone.md", to: "Three.md") }
         await #expect(throws: DraftError.accountMismatch) { try await rename("One.md", to: "Three.md", account: UUID()) }
         for filename in ["", "folder/file.md", "bad\nname.md"] {
             await #expect(throws: DraftError.invalidFilename) { try await rename("One.md", to: filename) }

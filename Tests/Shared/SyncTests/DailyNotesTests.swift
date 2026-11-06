@@ -109,7 +109,7 @@ private func day(_ iso: String) throws -> DailyNote.Day {
 
     @Test func addToTodayAppendsAParagraphOrOneTaskPerLine() async throws {
         let store = try DraftStore.open(inMemory: true)
-        var draft = try await store.newDraft(accountID: UUID(), githubUserID: 42, text: "# Today\n\nA thought")
+        var draft = try await store.newGistDraft(accountID: UUID(), githubUserID: 42, content: "# Today\n\nA thought")
         draft = try await store.apply(.addToToday("A second thought", asTask: false, to: draft))
         draft = try await store.apply(.addToToday("First task\n  \t\n日本語 👩🏽‍💻\n", asTask: true, to: draft))
         #expect(draft.text == "# Today\n\nA thought\n\nA second thought\n- [ ] First task\n- [ ] 日本語 👩🏽‍💻\n")

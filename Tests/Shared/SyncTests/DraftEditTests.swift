@@ -8,7 +8,7 @@ import Testing
         let store = try DraftStore.open(inMemory: true)
         let account = UUID()
         let text = "- [ ] Task"
-        let draft = try await store.newDraft(accountID: account, githubUserID: 42, text: text)
+        let draft = try await store.newGistDraft(accountID: account, githubUserID: 42, content: text)
         let stale = DraftEdit(draftID: draft.id, accountID: account, expectedGeneration: 3, text: "x")
         await #expect(throws: DraftError.staleGeneration) { try await store.apply(stale) }
         #expect(try await store.draft(id: draft.id, accountID: account).text == text)

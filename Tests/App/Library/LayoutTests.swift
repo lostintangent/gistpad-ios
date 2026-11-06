@@ -81,7 +81,7 @@ struct LayoutTests {
     let accountID = UUID()
     let original = (1...80).map { "Paragraph \($0): a retained native notebook." }.joined(
       separator: "\n\n")
-    let draft = try await store.newDraft(accountID: accountID, githubUserID: 42, text: original)
+    let draft = try await store.newGistDraft(accountID: accountID, githubUserID: 42, content: original)
     let session = Editor(fileID: draft.id.uuidString, text: draft.text)
     var persistence: Task<Draft, any Error>?
     session.onEdit = { text, generation in
