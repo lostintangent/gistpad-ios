@@ -1032,11 +1032,11 @@ final class Library {
     if account == nil { state.loadState = .signedOut }
   }
 
-  /// A gist belongs to the signed-in account when its owner's login matches, ignoring case as
-  /// GitHub does.
+  /// A gist belongs to the signed-in account when its owner is the account's GitHub user, which
+  /// holds across login renames.
   func owns(_ gist: Gist) -> Bool {
-    guard let account, let login = gist.owner?.login else { return false }
-    return login.caseInsensitiveCompare(account.login) == .orderedSame
+    guard let id = account?.githubUserID else { return false }
+    return gist.owner?.id == id
   }
 
   /// A file's header and actions, read from its gist, the account's preferences and the drafts on

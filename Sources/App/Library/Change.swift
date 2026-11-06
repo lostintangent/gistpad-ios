@@ -215,13 +215,9 @@ extension GitHubSync {
   ) async throws -> (GitHubClient, Gist, Int64) {
     let client = await client(accountID: account.id)
     let gist = try await client.gist(id: id)
-    let userID: Int64
-    if let cached = account.githubUserID {
-      userID = cached
-    } else {
-      userID = try await client.authenticatedUser().id
+    guard let userID = account.githubUserID, gist.owner?.id == userID else {
+      throw DraftError.readOnly
     }
-    guard gist.owner?.id == userID else { throw DraftError.readOnly }
     return (client, gist, userID)
   }
 

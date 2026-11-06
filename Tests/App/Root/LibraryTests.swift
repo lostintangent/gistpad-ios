@@ -41,6 +41,19 @@ struct LibraryTests {
     #expect(state.gists.first { $0.id == "b" }?.isOwned == false)
   }
 
+  @Test func yourGistsStayEditableAfterAGitHubLoginRename() async throws {
+    let fixture = try await LibraryFixture {
+      $0.addGist(id: "a", description: "Mine", files: ["README.md": "Mine"])
+      // The account still carries the login from before the rename.
+      $0.mergeMetadata(["user_name": "octocat-before-rename"])
+    }
+    let library = fixture.library
+    await library.start()
+    await library.open(.gist(id: "a"))
+    #expect(fixture.account.login == "octocat-before-rename")
+    #expect(library.loadedFile.map(library.details(for:))?.access == .editable)
+  }
+
   @Test func refreshDoesNotReplaceAnOpenFileOrFilters() async throws {
     let fixture = try await LibraryFixture(preferences: Self.ideas) {
       $0.addGist(id: "a", description: "Original", files: ["README.md": "Original text"])
