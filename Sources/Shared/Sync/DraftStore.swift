@@ -247,10 +247,13 @@ public actor DraftStore {
         try stored(id, accountID: accountID).map(Self.snapshot)
     }
 
-    /// `draft` as this iPhone has it now: as stored, as its last publish left it, or as it is.
+    /// `draft` as this iPhone has it now: as stored, as its last publish left it, or as it is. A draft
+    /// nobody has typed in yet is GitHub's text already, so it counts its own edits from zero.
     public func current(_ draft: Draft) throws -> Draft {
         if let row = try stored(draft) { return Self.snapshot(row) }
-        if let released = released[draft.id], released.generation >= draft.generation { return released }
+        if draft.generation > 0, let released = released[draft.id], released.generation >= draft.generation {
+            return released
+        }
         return draft
     }
 

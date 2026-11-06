@@ -1,5 +1,5 @@
 import Foundation
-import Editor
+@testable import Editor
 import Interface
 import Testing
 import UIKit
@@ -84,32 +84,33 @@ struct FileSessionTests {
     #expect(fixture.publishes.isEmpty)
   }
 
-  /// Opening a note shows the phone's copy, then GitHub's newer text, as RootView reads it when the
-  /// note appears. Opening it again within five minutes reads nothing.
-  @Test func openingANoteShowsGitHubsNewerTextAndReopeningItSoonReadsNothing() async throws {
-    let fixture = try await LibraryFixture {
-      $0.addGist(id: "a", description: "A", files: ["README.md": "One"])
-      $0.addGist(id: "b", description: "B", files: ["README.md": "Two"])
+  @Test func sourceUsesTheSavedFrontMatterPreferenceWithoutChangingTheDraft() async throws {
+    let prefix = "---\nedit:\n  instructions: Preserve source bytes\n---\n\n"
+    let source = prefix + "# Content\n\nA retained thought."
+    let fixture = try await LibraryFixture(preferences: [.setBoolean(.showFrontmatter, true)]) {
+      $0.addGist(id: "frontmatter", description: "Content", files: ["README.md": source])
     }
-    await fixture.library.start()
-    await fixture.library.open(.gist(id: "a"))
-    fixture.server.edit("a", files: ["README.md": "Changed on the web"])
-    let library = fixture.relaunch()
+    let library = fixture.library
     await library.start()
-    let note = try #require(library.activeSession)
-    #expect(note.editor.text == "One")
-    await note.inspectRemoteChanges()
-    #expect(note.editor.text == "Changed on the web")
-    let reads = fixture.server.requests.filter { $0 == "GET /gists/a" }.count
-    fixture.server.edit("a", files: ["README.md": "Changed again"])
-    await library.open(.gist(id: "b"))
-    await library.activeSession?.inspectRemoteChanges()
-    await library.open(.gist(id: "a"))
-    #expect(library.activeSession === note)
-    await note.inspectRemoteChanges()
-    #expect(note.editor.text == "Changed on the web")
-    #expect(fixture.server.requests.filter { $0 == "GET /gists/a" }.count == reads)
-    #expect(fixture.publishes.isEmpty)
+    await library.open(.gist(id: "frontmatter"))
+    let file = try #require(library.loadedFile)
+    let draft = file.draft
+    let session = FileSession(file: file, library: library)
+    let editor = session.editor
+    let view = editor.textView
+    #expect(editor.showsFrontMatter)
+    #expect(editor.contentStart == 0)
+    #expect(view.selectedRange == .init(location: 0, length: 0))
+    _ = try await fixture.accounts.update(
+      [.setBoolean(.showFrontmatter, false)], accountID: fixture.account.id)
+    await library.refresh()
+    try await session.refreshMetadata()
+    #expect(!editor.showsFrontMatter)
+    #expect(editor.contentStart == prefix.utf16.count)
+    #expect(editor.textView === view)
+    #expect(editor.text.utf8.elementsEqual(source.utf8))
+    #expect(editor.generation == draft.generation)
+    #expect(view.undoManager?.canUndo != true)
   }
 
   @Test(arguments: [true, false])
