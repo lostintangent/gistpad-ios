@@ -31,11 +31,7 @@ final class DailyNotesUITests: XCTestCase {
 
   func testDeletingADailyNoteFromItsScreenKeepsTheOtherDays() throws {
     // The fixture's daily notes gist holds four days, ending today.
-    let formatter = DateFormatter()
-    formatter.calendar = Calendar(identifier: .gregorian)
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.dateFormat = "yyyy-MM-dd"
-    let yesterday = formatter.string(from: .now.addingTimeInterval(-86_400))
+    let yesterday = Self.yesterday
     let app = launchGistPad(open: "daily/\(yesterday).md")
     try tap(app.buttons["note-actions"].firstMatch, "More")
     try tap(app.buttons["Delete Daily Note…"].firstMatch, "Delete Daily Note…")
@@ -47,6 +43,28 @@ final class DailyNotesUITests: XCTestCase {
     let dailyNotes = app.element("library-collection-dailyNotes")
     dailyNotes.scrollIntoView(in: app)
     try waitUntil("the other three days") { dailyNotes.countValue == "3 daily notes" }
+  }
+
+  func testADailyNoteOffersOnlyFileActions() throws {
+    let app = launchGistPad(open: "daily/\(Self.yesterday).md")
+    try tap(app.buttons["note-actions"].firstMatch, "More")
+    try waitUntil("the More menu") { app.buttons["Delete Daily Note…"].exists }
+    XCTAssertTrue(app.buttons["Copy Link"].exists)
+    for gistAction in ["Pin", "Star", "Archive", "Rename Gist…", "Tags"] {
+      XCTAssertFalse(app.buttons[gistAction].exists, gistAction)
+    }
+
+    try tap(app.buttons["Files"].firstMatch, "Files")
+    try waitUntil("the other days") { app.buttons["\(Self.yesterday).md"].exists }
+    XCTAssertFalse(app.buttons["note-rename-file"].exists || app.buttons["note-add-file"].exists)
+  }
+
+  private static var yesterday: String {
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter.string(from: .now.addingTimeInterval(-86_400))
   }
 
   func testAddToTodayAppendsATask() throws {

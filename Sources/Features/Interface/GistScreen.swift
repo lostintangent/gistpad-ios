@@ -36,7 +36,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
         self.gist = gist
         self._mode = mode
         self.saveState = saveState
-        self.actions = actions
+        self.actions = gist.isDailyNote ? actions.dailyNote : actions
         self.allowsSplit = allowsSplit
         self.areCommentsPresented = areCommentsPresented
         self.source = source()
@@ -154,7 +154,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
         ToolbarItem(placement: .primaryAction) {
             Menu {
                 ControlGroup {
-                    if let pin = actions.togglePin, !gist.isDailyNote {
+                    if let pin = actions.togglePin {
                         Button(
                             gist.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
                             systemImage: gist.isPinned ? "pin.fill" : "pin", action: pin
@@ -215,7 +215,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
                         Button(String(localized: "Open in GitHub", bundle: .module), systemImage: "arrow.up.right", action: open)
                     }
                 }
-                if let archive = actions.toggleArchive, !gist.isDailyNote {
+                if let archive = actions.toggleArchive {
                     Section {
                         Button(
                             gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
