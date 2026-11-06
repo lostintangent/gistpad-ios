@@ -478,7 +478,15 @@ final class Library {
       refreshedAt = .now
     } catch {
       guard request == libraryRequest else { return }
-      guard let problem = RemoteRead.problem(for: error) else {
+      // A failed refresh leaves the list stale, so returning to the app tries again.
+      refreshedAt = nil
+      // A request that only timed out or lost its connection keeps your gists on screen without
+      // a problem, and the next refresh tries again. With nothing cached, the failure explains itself.
+      let wasDropped = (error as? URLError).map {
+        [URLError.Code.timedOut, .networkConnectionLost].contains($0.code)
+      } ?? false
+      guard let problem = RemoteRead.problem(for: error), !(wasDropped && cachedLibrary != nil)
+      else {
         state.loadState = previousState
         return
       }

@@ -117,6 +117,26 @@ struct LibraryTests {
     #expect(library.state.loadState == .ready)
   }
 
+  /// A refresh that only timed out or lost its connection keeps the list without a problem, and
+  /// returning to the app tries again.
+  @Test(arguments: [URLError.Code.timedOut, .networkConnectionLost])
+  func aDroppedRefreshShowsNothing(_ code: URLError.Code) async throws {
+    let fixture = try await LibraryFixture {
+      $0.addGist(id: "a", description: "A note", files: ["README.md": "Text"])
+    }
+    let library = fixture.library
+    await library.start()
+    fixture.fail("GET /gists", with: code)
+    await library.refresh()
+    #expect(library.remoteRefreshStatus == .idle)
+    #expect(library.state.loadState == .ready)
+    #expect(library.state.gists.contains { $0.id == "a" })
+    fixture.restore()
+    fixture.server.edit("a", description: "Changed on the web")
+    await library.refreshOnReturn()
+    #expect(library.state.gists.first { $0.id == "a" }?.title == "Changed on the web")
+  }
+
   @Test func networkFailureKeepsExistingLibraryAndFile() async throws {
     let fixture = try await LibraryFixture {
       $0.addGist(id: "a", description: "A note", files: ["README.md": "Text"])

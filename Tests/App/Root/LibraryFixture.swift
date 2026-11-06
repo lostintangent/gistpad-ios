@@ -62,10 +62,11 @@ struct LibraryFixture {
       id: draft.id, accountID: account.id, text: text, generation: draft.generation + 1)
   }
 
-  /// Fails every request whose "METHOD /path" starts with `prefix`, as if offline.
-  func fail(_ prefix: String = "") {
+  /// Fails every request whose "METHOD /path" starts with `prefix`, as if offline unless `code`
+  /// says otherwise.
+  func fail(_ prefix: String = "", with code: URLError.Code = .notConnectedToInternet) {
     server.intercept { request in
-      if Self.line(request).hasPrefix(prefix) { throw URLError(.notConnectedToInternet) }
+      if Self.line(request).hasPrefix(prefix) { throw URLError(code) }
       return nil
     }
   }
