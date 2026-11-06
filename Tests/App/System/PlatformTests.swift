@@ -39,7 +39,7 @@ struct PlatformTests {
     fixture.fixture.fail("PATCH")
     await session.publish()
     #expect(try await fixture.store.draft(id: session.draft.id, accountID: fixture.account.id)
-      .attemptedContent == typed)
+      .sent == typed)
     fixture.fixture.restore()
 
     try await fixture.bridge.addToToday(text: "A thought", asTask: true, target: DailyNote.Day())
@@ -47,7 +47,7 @@ struct PlatformTests {
     #expect(session.saveState == .savedLocally)
     #expect(fixture.publishes.isEmpty)
 
-    await fixture.library.publishUnsyncedEdits()
+    await fixture.library.publishDrafts()
     #expect(fixture.publishes == ["PATCH /gists/daily123"])
     #expect(fixture.fixture.remote("daily123", DailyNote.Day().filename) == session.editor.text)
     #expect(session.saveState == .savedToGitHub)

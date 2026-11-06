@@ -114,12 +114,12 @@ extension GitHubSync {
           gistID: gistID, ownerID: current.githubUserID, filename: current.filename))
     case .recordRemote(let id, let generation, let remote, let revision):
       return .review(
-        try await drafts.reconcile(
+        try await drafts.compareWithGitHub(
           id: id, accountID: accountID, expectedGeneration: generation,
           remote: remote, revision: revision))
     case .adoptRemote(let id, let generation, let remote, let revision):
       return .review(
-        try await drafts.refreshCleanDraft(
+        try await drafts.refreshPublishedDraft(
           id: id, accountID: accountID, expectedGeneration: generation,
           content: remote, revision: revision))
     case .resolveConflict(let review, let text, let generation):
@@ -144,7 +144,7 @@ extension GitHubSync {
         throw ChangeError.invalidTitle
       }
       let local = try await drafts.drafts(accountID: accountID).filter { $0.gistID == id }
-      guard !local.contains(where: { $0.attemptedGeneration != nil }) else {
+      guard !local.contains(where: { $0.sentGeneration != nil }) else {
         throw ChangeError.publicationInProgress
       }
       let updated = try await client.updateDescription(title, gist: gist)
@@ -164,7 +164,7 @@ extension GitHubSync {
       guard !local.contains(where: { $0.filename == newFilename }) else {
         throw ChangeError.filenameExists
       }
-      guard !local.contains(where: { $0.attemptedGeneration != nil }) else {
+      guard !local.contains(where: { $0.sentGeneration != nil }) else {
         throw ChangeError.publicationInProgress
       }
       let updated = try await client.updateGist(id: id, files: [filename: .rename(newFilename)])

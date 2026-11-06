@@ -15,9 +15,11 @@ public actor DraftPublisher {
         self.store = store
     }
 
-    /// Publishes the draft. Autosave and lifecycle publishes are checked once before reaching GitHub,
-    /// and typing during the publish hands over to the publish that typing schedules. Callers run
-    /// one publish at a time, through the library's queue for GitHub writes.
+    /// Publishes the draft: if GitHub has its base, its sent text or already its text, your text is
+    /// sent, and anything else on GitHub is a conflict. Autosave and lifecycle publishes are checked
+    /// once before reaching GitHub, and typing during the publish hands over to the publish that
+    /// typing schedules. Callers run one publish at a time, through the library's queue for GitHub
+    /// writes.
     @discardableResult
     public func publish(
         id: UUID, accountID: UUID, reason: PublishReason = .manual, expectedGeneration: UInt64? = nil,
@@ -25,89 +27,104 @@ public actor DraftPublisher {
     ) async throws -> Draft {
         try Task.checkCancellation()
         var draft = try await store.draft(id: id, accountID: accountID)
-        if draft.isClean { return draft }
+        if draft.isPublished { return draft }
         if case .conflict = draft.state { return draft }
         if reason != .manual {
             guard expectedGeneration == nil || draft.generation == expectedGeneration,
                   await shouldPublish() else { throw CancellationError() }
         }
         do {
-            if draft.gistID == nil, let attempted = draft.attemptedContent {
-                if let created = try await createdGist(for: draft, content: attempted) {
-                    draft = try await store.acknowledge(
-                        id: id, accountID: accountID, gistID: created.id, content: attempted,
-                        revision: created.revision, publishedGist: created)
-                    if draft.isClean { return draft }
-                } else {
-                    draft = try await store.clearAttempt(id: id, accountID: accountID)
-                }
+            if draft.gistID == nil, let sent = draft.sent {
+                draft = try await findCreatedGist(sent, for: draft)
+                if draft.isPublished { return draft }
+            }
+            if draft.gistID == nil, draft.description == DailyNote.gistDescription {
+                draft = try await joinDailyGist(draft)
             }
             if let gistID = draft.gistID {
-                let fetched = try await client.remoteFile(
-                    gistID: gistID, ownerID: draft.githubUserID, filename: draft.filename)
-                if let attempted = draft.attemptedContent, !sourceEqual(fetched.content, attempted) {
-                    draft = try await store.clearAttempt(id: id, accountID: accountID)
-                }
-                draft = try await store.reconcile(
-                    id: id, accountID: accountID, expectedGeneration: draft.generation,
-                    remote: fetched.content, revision: fetched.gist.revision, gist: fetched.gist)
-                // Newer text from the web reaches a clean note when it's opened, not by publishing.
-                if draft.isClean { return draft }
+                draft = try await compareWithGitHub(draft, gistID: gistID)
+                // Newer text from the web reaches a published note when it's opened, not by publishing.
+                if draft.isPublished { return draft }
                 if case .conflict = draft.state { return draft }
             }
-            try await store.beginAttempt(
-                id: id, accountID: accountID, content: draft.text, generation: draft.generation)
-            let result: Gist
-            if let gistID = draft.gistID {
-                result = try await client.updateGist(
-                    id: gistID, files: [draft.filename: .content(draft.text)]
-                )
-            } else {
-                result = try await client.createGist(
-                    description: draft.description, filename: draft.filename,
-                    content: GistFile.encodeContent(draft.text)
-                )
-            }
-            let acknowledged = try await client.content(gist: result, filename: draft.filename)
-            guard sourceEqual(acknowledged, draft.text) else { throw DraftError.remoteDidNotAcknowledge }
-            return try await store.acknowledge(
-                id: id, accountID: accountID, gistID: draft.gistID ?? result.id, content: acknowledged,
-                revision: result.revision, publishedGist: result
-            )
+            return try await send(draft)
         } catch {
-            // A publish that was sent stays recorded, and the next publish checks GitHub for it first.
+            // Sent text stays on the draft, so the next publish checks GitHub for it first.
             if error is CancellationError || (error as? URLError)?.code == .cancelled {
                 throw CancellationError()
             }
-            let state: PublishState
-            if let error = error as? GitHubClientError {
-                switch error {
-                case .http(let status): state = status == 401 ? .reconnect : .failed(.http(status: status))
-                case .incompleteGist, .fileTooLarge: state = .failed(.incompleteRemote)
-                default: state = .failed(.network)
-                }
-            } else if error is AccountError {
-                state = .reconnect
-            } else if (error as? DraftError) == .readOnly {
-                state = .failed(.readOnly)
-            } else {
-                state = .failed(.network)
-            }
-            try await store.setState(state, id: id, accountID: accountID)
+            try await store.setState(Self.state(after: error), id: id, accountID: accountID)
             throw error
         }
     }
 
-    /// The gist a cut-off create made, found by its description and a same-named file with the same
-    /// bytes, so a create is never posted twice.
-    private func createdGist(for draft: Draft, content: String) async throws -> Gist? {
-        let size = GistFile.encodeContent(content).utf8.count
+    /// sent ← your text, then GitHub ← sent. When GitHub confirms, base ← sent.
+    private func send(_ draft: Draft) async throws -> Draft {
+        try await store.recordSent(
+            id: draft.id, accountID: draft.accountID, content: draft.text, generation: draft.generation)
+        let gist: Gist
+        if let gistID = draft.gistID {
+            gist = try await client.updateGist(id: gistID, files: [draft.filename: .content(draft.text)])
+        } else {
+            gist = try await client.createGist(
+                description: draft.description, filename: draft.filename,
+                content: GistFile.encodeContent(draft.text))
+        }
+        let confirmed = try await client.content(gist: gist, filename: draft.filename)
+        guard sourceEqual(confirmed, draft.text) else { throw DraftError.notConfirmed }
+        return try await store.confirm(
+            id: draft.id, accountID: draft.accountID, gistID: draft.gistID ?? gist.id, content: confirmed,
+            revision: gist.revision, publishedGist: gist)
+    }
+
+    /// Reads GitHub's copy of the file. Sent text GitHub doesn't have is forgotten, and the store
+    /// confirms the sent text or your text if GitHub has either, or raises a conflict unless GitHub
+    /// still has the base.
+    private func compareWithGitHub(_ draft: Draft, gistID: String) async throws -> Draft {
+        let github = try await client.remoteFile(
+            gistID: gistID, ownerID: draft.githubUserID, filename: draft.filename)
+        var draft = draft
+        if let sent = draft.sent, !sourceEqual(github.content, sent) {
+            draft = try await store.forgetSent(id: draft.id, accountID: draft.accountID)
+        }
+        return try await store.compareWithGitHub(
+            id: draft.id, accountID: draft.accountID, expectedGeneration: draft.generation,
+            remote: github.content, revision: github.gist.revision, gist: github.gist)
+    }
+
+    /// A create that was cut off may have made the gist already. It's found by its description and
+    /// a same-named file with the sent bytes, so a gist is never created twice, and sent is
+    /// confirmed. Otherwise sent is forgotten.
+    private func findCreatedGist(_ sent: String, for draft: Draft) async throws -> Draft {
+        let size = GistFile.encodeContent(sent).utf8.count
         for gist in try await client.listGists()
         where (gist.description ?? "") == draft.description && gist.files[draft.filename]?.size == size {
-            let remote = try await client.remoteFile(
+            let github = try await client.remoteFile(
                 gistID: gist.id, ownerID: draft.githubUserID, filename: draft.filename)
-            if sourceEqual(remote.content, content) { return remote.gist }
+            if sourceEqual(github.content, sent) {
+                return try await store.confirm(
+                    id: draft.id, accountID: draft.accountID, gistID: github.gist.id, content: sent,
+                    revision: github.gist.revision, publishedGist: github.gist)
+            }
         }
-        return nil
+        return try await store.forgetSent(id: draft.id, accountID: draft.accountID)
+    }
+
+    /// A new day joins the Daily notes gist GitHub has, which the web may have started since this
+    /// iPhone last saw the list, and creates one only when there's none.
+    private func joinDailyGist(_ draft: Draft) async throws -> Draft {
+        guard let daily = try await client.listGists().first(where: \.isDailyNote) else { return draft }
+        return try await store.join(gistID: daily.id, id: draft.id, accountID: draft.accountID)
+    }
+
+    /// What you see after a publish fails.
+    private static func state(after error: Error) -> PublishState {
+        switch error {
+        case GitHubClientError.http(status: 401), is AccountError: .reconnect
+        case GitHubClientError.http(let status): .failed(.http(status: status))
+        case GitHubClientError.incompleteGist, GitHubClientError.fileTooLarge: .failed(.incompleteRemote)
+        case DraftError.readOnly: .failed(.readOnly)
+        default: .failed(.network)
+        }
     }
 }

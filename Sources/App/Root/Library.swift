@@ -238,7 +238,7 @@ final class Library {
     // A file that never reached GitHub only exists on this iPhone.
     if let draftID = target?.draftID,
       target?.gistID == nil
-        || localDrafts.contains(where: { $0.id == draftID && $0.baseContent == nil })
+        || localDrafts.contains(where: { $0.id == draftID && $0.base == nil })
     {
       return .draft(id: draftID, rowID: id)
     }
@@ -671,7 +671,7 @@ final class Library {
     // A draft created or saved while this read ran is newer than the read, so read again.
     if localDraftRecords != records { return try await reloadLocalState(accountID: accountID) }
     let drafts = local.drafts.filter { $0.accountID == accountID && !removed.contains($0.id) }
-    // A refresh drops clean copies of gists GitHub no longer lists, so don't reopen them at launch.
+    // A refresh drops published drafts of gists GitHub no longer lists, so don't reopen them at launch.
     let vanished = localDrafts.filter { old in !drafts.contains { $0.id == old.id } }
     if let selection = lastOpened.selection(accountID: accountID), vanished.contains(where: {
       $0.id == selection.draftID
@@ -715,7 +715,7 @@ final class Library {
       guard let gist = owned.first(where: { $0.id == draft.gistID }),
         gist.isDailyNote, gist.truncated != true, gist.files[draft.filename] == nil
       else { return true }
-      return draft.state != .savedToGitHub || draft.attemptedGeneration != nil
+      return draft.state != .savedToGitHub || draft.sentGeneration != nil
     }
   }
 
@@ -732,7 +732,7 @@ final class Library {
   }
 
   private static func librarySource(draft: Draft?, cached: String?) -> String? {
-    if let draft, draft.state != .savedToGitHub || draft.attemptedGeneration != nil {
+    if let draft, draft.state != .savedToGitHub || draft.sentGeneration != nil {
       return draft.text
     }
     return cached ?? draft?.text
@@ -1140,7 +1140,7 @@ final class Library {
 
   /// Publishes each file with unpublished edits, in order, through its editor when it's open. The
   /// first offline result stops the sweep, and the next launch or return to the app retries it.
-  func publishUnsyncedEdits() async {
+  func publishDrafts() async {
     guard let accountID = account?.id, pendingAccount == nil else { return }
     let ids = localDrafts.filter { $0.accountID == accountID && $0.hasUnpublishedEdits }.map(\.id)
     for id in ids {

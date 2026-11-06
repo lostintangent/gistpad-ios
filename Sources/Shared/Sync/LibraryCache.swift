@@ -100,7 +100,7 @@ extension DraftStore {
         return try JSONDecoder().decode(CachedLibrary.self, from: stored.payload)
     }
 
-    /// Saves GitHub's fresh lists, which are the authority on what exists. A clean phone copy of a gist
+    /// Saves GitHub's fresh lists, which are the authority on what exists. A published draft of a gist
     /// that's no longer listed goes with it, unless its gist is open (`keeping` holds gist IDs), while one
     /// holding unpublished text stays as a recovery copy.
     public func cacheLibrary(
@@ -113,7 +113,7 @@ extension DraftStore {
             predicate: #Predicate { $0.accountID == accountID }
         )).filter {
             guard let gistID = $0.gistID, !keeping.contains(gistID) else { return false }
-            return try !ids.contains(gistID) && snapshot($0).isClean
+            return try !ids.contains(gistID) && snapshot($0).isPublished
         }
         for draft in gone { modelContext.delete(draft) }
         let snapshot = CachedLibrary(

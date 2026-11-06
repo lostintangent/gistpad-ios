@@ -158,7 +158,7 @@ final class Phone {
   func launch() async {
     library.isForeground = true
     await library.start()
-    await library.publishUnsyncedEdits()
+    await library.publishDrafts()
   }
 
   /// The app quitting and launching again, with the same files on this iPhone.
@@ -200,7 +200,7 @@ final class Phone {
 
   func returnToApp() async {
     library.isForeground = true
-    await library.publishUnsyncedEdits()
+    await library.publishDrafts()
     await library.refreshOnReturn()
     library.updateCalendar()
     await library.activeSession?.inspectRemoteChanges()

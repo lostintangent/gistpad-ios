@@ -50,7 +50,7 @@ import Testing
         #expect(draft.text == "unsynced source")
         #expect(draft.generation == 7)
         #expect(draft.state == .savedLocally)
-        #expect(draft.baseContent == "remote base")
+        #expect(draft.base == "remote base")
         try await upgraded.cacheLibrary(
             owned: [], starred: [], preferences: Preferences(metadata: [:]), accountID: account
         )

@@ -117,7 +117,7 @@ struct RootView: View {
     navigation
     .task {
       await library.start()
-      await library.publishUnsyncedEdits()
+      await library.publishDrafts()
     }
     .task(id: linkToOpen) { await openPendingLink() }
     #if DEBUG
@@ -150,7 +150,7 @@ struct RootView: View {
   /// Prepares a file as it comes into the detail column.
   private func didActivate() {
     guard let active else { return }
-    active.mode = layout.initialMode(isUnpublished: active.draft.baseContent == nil)
+    active.mode = layout.initialMode(isUnpublished: active.draft.base == nil)
     comments.activate(active)
     active.requestCreationFocus()
     openRequestedComments()
@@ -184,7 +184,7 @@ struct RootView: View {
     .onChange(of: scenePhase) { _, phase in
       if phase == .background { publishOnBackground() }
       if phase == .active {
-        Task { await library.publishUnsyncedEdits() }
+        Task { await library.publishDrafts() }
         Task { await library.refreshOnReturn() }
         library.updateCalendar()
         Task { await active?.inspectRemoteChanges() }

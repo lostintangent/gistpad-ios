@@ -23,16 +23,16 @@ import Testing
         for filename in ["", "folder/file.md", "bad\nname.md"] {
             await #expect(throws: DraftError.invalidFilename) { try await rename("One.md", to: filename) }
         }
-        try await sync.store.beginAttempt(id: one.id, accountID: account, content: "local", generation: 1)
+        try await sync.store.recordSent(id: one.id, accountID: account, content: "local", generation: 1)
         await #expect(throws: DraftError.publicationPending) { try await rename("One.md", to: "New.md") }
-        try await sync.store.clearAttempt(id: one.id, accountID: account)
+        try await sync.store.forgetSent(id: one.id, accountID: account)
 
         let renamed = try await rename("One.md", to: "New.md")
         #expect(renamed.filename == "New.md")
         #expect(renamed.description == "After")
         #expect(renamed.text == one.text)
         #expect(renamed.generation == one.generation)
-        #expect(renamed.baseContent == one.baseContent)
+        #expect(renamed.base == one.base)
         #expect(renamed.baseRevision == one.baseRevision)
         #expect(renamed.state == one.state)
         #expect(try await sync.store.draft(

@@ -57,10 +57,11 @@ one. `apply(_:)` takes a `DraftEdit` from outside the editor, such as Add to
 Today or a shortcut, and adds its text to the end only if the draft hasn't
 changed since it was read.
 
-`baseContent` is GitHub's text the draft started from. `hasUnpublishedEdits`
+`base` is GitHub's text when you started typing. `hasUnpublishedEdits`
 compares against it, and a new gist or file has no base until it publishes.
-`isClean` means GitHub has exactly the draft's text, with no publish
-outstanding. A clean draft's state reads `.savedToGitHub`, and any other draft
+`sent` is the text of a publish GitHub hasn't confirmed yet. `isPublished`
+means GitHub has exactly the draft's text, with nothing sent and unconfirmed.
+A published draft's state reads `.savedToGitHub`, and any other draft
 without a problem reads `.savedLocally`, so the store never has to keep the two
 in step. `.savingToGitHub` is never stored, because only the editor knows a
 publish is running.
@@ -70,10 +71,10 @@ and for a day that was never typed in (generation 0), whatever it started from.
 Neither has reached GitHub, and `discardBlankDraft` removes either when you
 leave it.
 
-`refreshCleanDraft` takes on GitHub's newer text when the draft is clean.
-`reconcile` decides everything else about GitHub's copy, for both opening a note
-and publishing. A copy that matches the draft or its outstanding attempt is
-acknowledged, and any other change becomes a `DraftConflict`, including a file
+`refreshPublishedDraft` takes on GitHub's newer text when the draft is
+published. `compareWithGitHub` decides everything else about GitHub's copy, for
+both opening a note and publishing. A copy that matches the draft or its sent
+text is confirmed, and any other change becomes a `DraftConflict`, including a file
 deleted on GitHub. `resolveConflict` makes GitHub's text the new base after the
 editor applies the chosen text as one undoable edit. `updateDraftMetadata`
 follows a rename, `removeDrafts` forgets a gist or file that GitHub deleted, and
@@ -81,18 +82,18 @@ follows a rename, `removeDrafts` forgets a gist or file that GitHub deleted, and
 
 ## Publishing
 
-`DraftPublisher` sends one draft at a time for the account. A clean draft has
-nothing to send, so newer text on the web reaches it when the note is opened.
-Otherwise it reads GitHub's copy and asks `reconcile`. Before sending, it
-records the attempted text and generation, so a publish cut off by a dropped
-connection or a quit checks GitHub before sending again. An edit that landed is
-acknowledged, and a create looks for its gist by description and file bytes, so
-it never posts twice. Typing during a publish stays unpublished for the next
-one. Typing after a cut-off publish is `.savedLocally` again, even back to the
-base text, because GitHub may hold the attempt.
+`DraftPublisher` sends one draft at a time for the account. A published draft
+has nothing to send, so newer text on the web reaches it when the note is
+opened. Otherwise it reads GitHub's copy and asks `compareWithGitHub`. Sending
+records `sent` first, so a publish cut off by a dropped connection or a quit
+checks GitHub before sending again. Sent text that landed is confirmed, and a
+create looks for its gist by description and file bytes, so it never posts
+twice. Typing during a publish stays unpublished for the next one. Typing after
+a cut-off publish is `.savedLocally` again, even back to the base text, because
+GitHub may hold the sent text.
 
 Failures persist as `PublishState`. Network and HTTP failures wait for the next
-publish moment, and a 401 is `.reconnect`. An acknowledged publish updates the
+publish moment, and a 401 is `.reconnect`. A confirmed publish updates the
 library cache in the same commit as the draft.
 
 When to publish belongs to the app: five seconds after typing stops, leaving a
@@ -110,7 +111,9 @@ the web's file for today, else a new file in the `📆 Daily notes` gist from
 `template.md` with `{{date}}` filled in, else the first day of a new daily gist
 with a `# YYYY-MM-DD` heading. Offline, the cache's answer stands. Staging
 only reads, and the new day publishes once you type in it. An earlier day that
-never reached GitHub publishes first, so it creates the gist today joins.
+never reached GitHub publishes first, so it creates the gist today joins. A
+first day's publish joins the daily gist GitHub has, if the web started one
+since this iPhone last saw the list.
 
 `DailyNote.Day` pins the date and time zone when an action starts. `DailyNote`
 reads a day from the cache and drafts for the widget, and `FileTask` and

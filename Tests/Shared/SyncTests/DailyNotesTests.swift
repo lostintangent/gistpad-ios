@@ -16,6 +16,27 @@ private func dailyData() throws -> Data {
         #expect(draft.text == "# Today\n\nA thought\n\nA second thought\n- [ ] First task\n- [ ] 日本語 👩🏽‍💻\n")
     }
 
+    @Test func aDayWrittenOfflineJoinsTheDailyNotesGistTheWebStarted() async throws {
+        let fixture = try SyncFixture()
+        try await fixture.store.cacheLibrary(
+            owned: [], starred: [], preferences: .init(metadata: [:]), accountID: SyncFixture.account)
+        fixture.server.intercept { _ in throw URLError(.notConnectedToInternet) }
+        let web = fixture.server.addGist(description: DailyNote.gistDescription, files: ["2020-01-01.md": "An old day"])
+        let day = DailyNote.Day(date: .now, timeZone: .gmt)
+        let today = try await DailyNotes(
+            accountID: SyncFixture.account, githubUserID: SyncFixture.user, client: fixture.github,
+            store: fixture.store, publisher: fixture.publisher
+        ).stageToday(target: day).draft
+        let typed = try await fixture.type("Written offline", in: today)
+        fixture.server.intercept(nil)
+
+        #expect(try await fixture.publish(typed).state == .savedToGitHub)
+        #expect(fixture.server.gists.filter(\.isDailyNote).map(\.id) == [web.id])
+        let files = try #require(fixture.server.gists.first { $0.id == web.id }).files
+        #expect(files[day.filename]?.content == "Written offline")
+        #expect(files["2020-01-01.md"]?.content == "An old day")
+    }
+
     @Test func todayAndItsTasksFollowTheWeb() throws {
         let instant = try Date.ISO8601FormatStyle().parse("2026-10-24T01:00:00Z")
         let la = try #require(TimeZone(identifier: "America/Los_Angeles"))

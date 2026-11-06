@@ -35,17 +35,19 @@ public struct Draft: Equatable, Sendable, Identifiable {
     public let description: String
     public let text: String
     public let generation: UInt64
-    public let baseContent: String?
+    /// GitHub's text when you started typing. A new gist or a new day has none.
+    public let base: String?
     public let baseRevision: String?
-    public let attemptedContent: String?
-    public let attemptedGeneration: UInt64?
+    /// The text of a publish GitHub hasn't confirmed yet.
+    public let sent: String?
+    public let sentGeneration: UInt64?
     public internal(set) var state: PublishState
     public let updatedAt: Date?
 
     /// A note that leaving discards: a new gist that's still untitled and blank, or a day you opened
     /// and never typed in, whatever it started from. Neither has reached GitHub.
     public var isDiscardableBlank: Bool {
-        guard baseContent == nil, attemptedContent == nil, attemptedGeneration == nil,
+        guard base == nil, sent == nil, sentGeneration == nil,
               state == .savedLocally else { return false }
         if description == DailyNote.gistDescription, DailyNote.date(filename: filename) != nil {
             return generation == 0
@@ -56,19 +58,19 @@ public struct Draft: Equatable, Sendable, Identifiable {
     /// Whether this note has text that GitHub doesn't have yet, including a new note that was never created.
     public var hasUnpublishedEdits: Bool {
         guard !isDiscardableBlank else { return false }
-        return baseContent == nil || !sourceEqual(text, baseContent)
+        return base == nil || !sourceEqual(text, base)
     }
 
     /// Whether GitHub has this text: the note is published, unedited since, and no publish is waiting
     /// to be confirmed.
-    public var isClean: Bool {
-        gistID != nil && attemptedGeneration == nil && sourceEqual(text, baseContent)
+    public var isPublished: Bool {
+        gistID != nil && sentGeneration == nil && sourceEqual(text, base)
     }
 
-    /// Whether a clean note silently takes on `remote` instead of raising a conflict.
+    /// Whether a published note silently takes on `remote` instead of raising a conflict.
     /// The store and the editor both use this, so they always agree on the outcome.
     public func adoptsRemote(_ remote: String) -> Bool {
-        isClean && !sourceEqual(baseContent, remote)
+        isPublished && !sourceEqual(base, remote)
     }
 }
 
@@ -78,7 +80,7 @@ public enum DraftError: Error, Equatable, Sendable {
     case staleGeneration
     case unresolvedConflict
     case readOnly
-    case remoteDidNotAcknowledge
+    case notConfirmed
     case invalidFilename
     case filenameInUse
     case publicationPending
@@ -94,7 +96,7 @@ extension DraftError: LocalizedError {
         case .unresolvedConflict:
             String(localized: "This file also changed on GitHub. Review both versions first.")
         case .readOnly: String(localized: "Only its owner can edit this gist.")
-        case .remoteDidNotAcknowledge: String(localized: "GitHub didn't confirm the change. Try again.")
+        case .notConfirmed: String(localized: "GitHub didn't confirm the change. Try again.")
         case .invalidFilename: String(localized: "Enter a filename without slashes.")
         case .filenameInUse: String(localized: "This gist already has a file with that name.")
         case .publicationPending: String(localized: "You can change this after the gist publishes.")
@@ -128,6 +130,7 @@ final class StoredDraft {
     var gistDescription: String
     var text: String
     var generation: UInt64
+    // `base` and `sent`, stored under their first names so drafts from earlier builds still open.
     var baseContent: String?
     var baseRevision: String?
     var attemptedContent: String?
@@ -296,17 +299,17 @@ public actor DraftStore {
     }
 
     /// Takes on GitHub's `content` when the draft has no edits of its own, and otherwise leaves it alone.
-    public func refreshCleanDraft(
+    public func refreshPublishedDraft(
         id: UUID, accountID: UUID, expectedGeneration: UInt64,
         content: String, revision: String?
     ) throws -> Draft {
         let draft = try find(id, accountID: accountID)
         guard draft.generation == expectedGeneration else { throw DraftError.staleGeneration }
-        guard try snapshot(draft).isClean else { return try snapshot(draft) }
-        return try refreshClean(draft, content: content, revision: revision)
+        guard try snapshot(draft).isPublished else { return try snapshot(draft) }
+        return try refreshPublished(draft, content: content, revision: revision)
     }
 
-    private func refreshClean(_ draft: StoredDraft, content: String, revision: String?) throws -> Draft {
+    private func refreshPublished(_ draft: StoredDraft, content: String, revision: String?) throws -> Draft {
         let fresh = GistFile.decodeContent(content)
         if !sourceEqual(draft.text, fresh) {
             draft.generation += 1
@@ -369,10 +372,10 @@ public actor DraftStore {
         }
     }
 
-    /// Records what's about to be sent, so the next publish or open can tell whether a publish cut
-    /// off midway landed. Until one does, the note is saved on this iPhone. Typing since the draft
+    /// sent ← `content`, so the next publish or open can tell whether a publish cut off midway
+    /// landed. Until one does, the note is saved on this iPhone. Typing since the draft
     /// was read means a newer publish follows, so this one stops here.
-    func beginAttempt(
+    func recordSent(
         id: UUID, accountID: UUID, content: String, generation: UInt64
     ) throws {
         let draft = try find(id, accountID: accountID)
@@ -383,14 +386,14 @@ public actor DraftStore {
         try commit()
     }
 
-    func acknowledge(
+    func confirm(
         id: UUID, accountID: UUID, gistID: String, content: String,
         revision: String?, publishedGist: Gist? = nil
     ) throws -> Draft {
         let draft = try find(id, accountID: accountID)
         guard draft.gistID == nil || draft.gistID == gistID else { throw DraftError.staleGeneration }
         if let publishedGist {
-            guard publishedGist.id == gistID else { throw DraftError.remoteDidNotAcknowledge }
+            guard publishedGist.id == gistID else { throw DraftError.notConfirmed }
             try cachePublication(
                 publishedGist, accountID: accountID, githubUserID: draft.githubUserID,
                 filename: draft.filename, content: content)
@@ -405,7 +408,15 @@ public actor DraftStore {
         return try snapshot(draft)
     }
 
-    func clearAttempt(id: UUID, accountID: UUID) throws -> Draft {
+    /// Makes a new gist's draft a new file in `gistID`, with no base.
+    func join(gistID: String, id: UUID, accountID: UUID) throws -> Draft {
+        let draft = try find(id, accountID: accountID)
+        draft.gistID = gistID
+        try commit()
+        return try snapshot(draft)
+    }
+
+    func forgetSent(id: UUID, accountID: UUID) throws -> Draft {
         let draft = try find(id, accountID: accountID)
         draft.attemptedContent = nil
         draft.attemptedGeneration = nil
@@ -420,12 +431,12 @@ public actor DraftStore {
         try commit()
     }
 
-    /// Compares GitHub's copy of the file with the draft, for a publish and for opening a note. A
-    /// publish GitHub has is acknowledged, and any other change to GitHub's copy becomes a conflict,
-    /// unless the note is clean and can take the newer text. An attempt GitHub doesn't have is left
-    /// for the next publish to clear. Typing since the draft was read means a newer publish or check
-    /// follows, so this one stops here.
-    public func reconcile(
+    /// Compares GitHub's copy of the file with the draft, for a publish and for opening a note. If
+    /// GitHub has the sent text or your text, it's confirmed. Any other change to GitHub's copy is a
+    /// conflict, unless the note is published and can take the newer text. Sent text GitHub doesn't
+    /// have is left for the next publish to forget. Typing since the draft was read means a newer
+    /// publish or check follows, so this one stops here.
+    public func compareWithGitHub(
         id: UUID, accountID: UUID, expectedGeneration: UInt64,
         remote: String?, revision: String?, gist: Gist? = nil
     ) throws -> Draft {
@@ -433,19 +444,19 @@ public actor DraftStore {
         guard draft.generation == expectedGeneration else { throw CancellationError() }
         guard let gistID = draft.gistID else { return try snapshot(draft) }
         if case .conflict = Self.decode(draft.stateData) { return try snapshot(draft) }
-        if let attempted = draft.attemptedContent {
-            guard sourceEqual(remote, attempted) else { return try snapshot(draft) }
-            return try acknowledge(
-                id: id, accountID: accountID, gistID: gistID, content: attempted,
+        if let sent = draft.attemptedContent {
+            guard sourceEqual(remote, sent) else { return try snapshot(draft) }
+            return try confirm(
+                id: id, accountID: accountID, gistID: gistID, content: sent,
                 revision: revision, publishedGist: gist)
         }
         if sourceEqual(remote, draft.text) {
-            return try acknowledge(
+            return try confirm(
                 id: id, accountID: accountID, gistID: gistID, content: draft.text,
                 revision: revision, publishedGist: gist)
         }
         let current = try snapshot(draft)
-        // A clean note takes on newer text through the editor, so its undo history stays honest.
+        // A published note takes on newer text through the editor, so its undo history stays honest.
         if let remote, current.adoptsRemote(remote) { return current }
         guard !sourceEqual(remote, draft.baseContent) else { return current }
         draft.stateData = try encode(.conflict(DraftConflict(
@@ -494,14 +505,14 @@ public actor DraftStore {
             id: draft.id, accountID: draft.accountID, githubUserID: draft.githubUserID,
             gistID: draft.gistID, filename: draft.filename, description: draft.gistDescription,
             text: draft.text, generation: draft.generation,
-            baseContent: draft.baseContent, baseRevision: draft.baseRevision,
-            attemptedContent: draft.attemptedContent, attemptedGeneration: draft.attemptedGeneration,
+            base: draft.baseContent, baseRevision: draft.baseRevision,
+            sent: draft.attemptedContent, sentGeneration: draft.attemptedGeneration,
             state: Self.decode(draft.stateData), updatedAt: draft.updatedAt
         )
         switch snapshot.state {
         case .conflict, .failed, .reconnect: break
         case .savedLocally, .savingToGitHub, .savedToGitHub:
-            snapshot.state = snapshot.isClean ? .savedToGitHub : .savedLocally
+            snapshot.state = snapshot.isPublished ? .savedToGitHub : .savedLocally
         }
         return snapshot
     }

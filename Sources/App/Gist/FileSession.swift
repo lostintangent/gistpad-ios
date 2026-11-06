@@ -62,7 +62,7 @@ final class FileSession {
     editor = Editor(
       fileID: file.id, text: draft.text, generation: draft.generation,
       showsFrontMatter: library.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
-    if draft.baseContent == nil { mode = .edit }
+    if draft.base == nil { mode = .edit }
     editor.textView.isEditable = details.access.canEdit
     applyWritingPreferences()
     editor.onEdit = { [weak self] text, generation in
@@ -196,11 +196,6 @@ final class FileSession {
       library.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
   }
 
-  func markRecovery() {
-    file.isRecovery = true
-    file.libraryRowID = draft.id.uuidString
-  }
-
   /// Reads this note from GitHub as it opens or the app comes back. A note without unpublished
   /// edits takes GitHub's newer text, and one with edits shows the conflict.
   func inspectRemoteChanges() async {
@@ -268,8 +263,8 @@ final class FileSession {
   var hasUnpublishedChanges: Bool {
     guard !isDiscarded else { return false }
     if draft.isDiscardableBlank, editor.text.utf8.elementsEqual(draft.text.utf8) { return false }
-    guard let base = draft.baseContent else { return true }
-    return !editor.text.utf8.elementsEqual(base.utf8) || draft.attemptedGeneration != nil
+    guard let base = draft.base else { return true }
+    return !editor.text.utf8.elementsEqual(base.utf8) || draft.sentGeneration != nil
   }
 
   func reviewContext() throws -> Conflict {
@@ -463,7 +458,7 @@ final class FileSession {
               && self.editor.generation == expectedGeneration
           }
         })
-      // Typing saved after GitHub acknowledged the publish is newer than what it returns.
+      // Typing saved after GitHub confirmed the publish is newer than what it returns.
       if saved.generation >= draft.generation { draft = saved }
       file.draft = draft
       adoptPublishedGist()
