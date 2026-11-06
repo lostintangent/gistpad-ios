@@ -662,6 +662,14 @@ final class Library {
     state.replace(
       gists: contents.gists, tags: contents.tags, dailyNoteCount: contents.dailyNoteCount,
       known: cachedLibrary != nil)
+    // A note opened before GitHub's list arrives sits under its draft's row until the gist's row
+    // replaces it, so keep it selected under the new row.
+    guard let file = loadedFile, !state.gists.contains(where: { $0.id == file.rowID }),
+      let rowID = unfilteredRowID(for: file)
+    else { return }
+    let wasSelected = state.selectedID == file.rowID
+    loadedFile?.libraryRowID = rowID
+    if wasSelected, opening == nil { state.selectedID = rowID }
   }
 
   private static func libraryDrafts(
