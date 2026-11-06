@@ -1,6 +1,7 @@
 #if DEBUG
   import Foundation
   import Interface
+  import Notebook
   import Platform
   import Sync
 

@@ -1,5 +1,6 @@
 import Comments
 import Interface
+import Notebook
 import SwiftUI
 
 struct CommentsInspector: View {

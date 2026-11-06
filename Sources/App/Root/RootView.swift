@@ -2,11 +2,12 @@ import AppIntents
 import Comments
 import Editor
 import Interface
-import Platform
-import Sync
-import OSLog
+import Notebook
 import Observation
+import OSLog
+import Platform
 import SwiftUI
+import Sync
 
 struct RootView: View {
   @Bindable var library: Library
@@ -17,6 +18,7 @@ struct RootView: View {
   @State private var layout = LayoutPreferences()
   @State private var intelligence = IntelligencePresentation()
   @State private var comments: CommentsPresentation
+  @State private var images: ImageUpload
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.openURL) private var openURL
   @Environment(\.undoManager) private var undoManager
@@ -30,6 +32,7 @@ struct RootView: View {
     self.pending = pending
     _layout = State(initialValue: layout)
     _comments = State(initialValue: CommentsPresentation(library: library))
+    _images = State(initialValue: ImageUpload(upload: library.uploadImage))
   }
 
   private var active: FileSession? { library.activeSession }
@@ -353,8 +356,8 @@ struct RootView: View {
     let identifier = onScreenNote(for: session).map {
       EntityIdentifier(for: GistEntity.self, identifier: $0.url.absoluteString)
     }
-    return gistScreen(session, images: session.images, availableWidth: availableWidth)
-      .imagePicker(session.images)
+    return gistScreen(session, availableWidth: availableWidth)
+      .imagePicker(images)
       .userActivity("dev.gistpad.GistPad.note", isActive: identifier != nil) { activity in
         activity.title = session.details.title
         activity.isEligibleForSearch = false
@@ -389,8 +392,7 @@ struct RootView: View {
   }
 
   private func gistScreen(
-    _ session: FileSession, images: ImageUpload,
-    availableWidth: CGFloat
+    _ session: FileSession, availableWidth: CGFloat
   ) -> some View {
     let mode = Binding(
       get: {
@@ -427,8 +429,8 @@ struct RootView: View {
     ) {
       EditorView(
         editor: session.editor, title: details.title,
-        insertImage: { comments.performAfterClosing { images.chooseImage() } },
-        canInsertImage: images.canChooseImage,
+        insertImage: { comments.performAfterClosing { images.chooseImage(for: session) } },
+        canInsertImage: images.canChooseImage(for: session),
         intelligence: { comments.performAfterClosing { presentIntelligence(session) } },
         comments: commentConfiguration(session),
         onOpenCommentThreads: commentOpener(session, origin: .edit),

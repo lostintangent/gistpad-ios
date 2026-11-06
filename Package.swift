@@ -4,7 +4,7 @@ import PackageDescription
 // GistPad.xcodeproj builds the app and its extensions from Sources/App and Sources/Extensions,
 // and links these modules. Shared is the core that features build on.
 let shared = ["Accent", "Comments", "Sync"]
-let features = ["Editor", "Intelligence", "Interface", "Platform", "Preview"]
+let features = ["Editor", "Intelligence", "Interface", "Notebook", "Platform", "Preview"]
 
 let package = Package(
   name: "GistPad",
@@ -30,6 +30,9 @@ let package = Package(
       name: "Interface", dependencies: ["Accent", "Comments", "Sync"],
       path: "Sources/Features/Interface", exclude: ["README.md"], resources: [.process("Resources")]),
     .target(
+      name: "Notebook", dependencies: ["Comments", "Editor", "Interface", "Sync"],
+      path: "Sources/Features/Notebook"),
+    .target(
       name: "Platform", dependencies: ["Sync", "Accent"], path: "Sources/Features/Platform",
       exclude: ["README.md"]),
     .target(
@@ -50,6 +53,8 @@ let package = Package(
       path: "Tests/Features/IntelligenceTests"),
     .testTarget(
       name: "InterfaceTests", dependencies: ["Interface"], path: "Tests/Features/InterfaceTests"),
+    .testTarget(
+      name: "NotebookTests", dependencies: ["Notebook"], path: "Tests/Features/NotebookTests"),
     .testTarget(
       name: "PlatformTests", dependencies: ["Platform", "Sync", "Editor"],
       path: "Tests/Features/PlatformTests"),

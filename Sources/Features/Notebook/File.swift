@@ -2,17 +2,17 @@ import Foundation
 import Sync
 
 /// A note in the detail column: its draft, whether stored or just read, and the gist it's in.
-struct File: Equatable, Sendable, Identifiable {
-  var draft: Draft
-  var gist: Gist?
-  var isRecovery: Bool
+public struct File: Equatable, Sendable, Identifiable {
+  public var draft: Draft
+  public var gist: Gist?
+  public var isRecovery: Bool
   var libraryRowID: String?
   var editingRequestID: UUID?
-  var revealsDetail = true
-  let id: String
-  var accountID: UUID { draft.accountID }
-  var filename: String { draft.filename }
-  var activationID: String { editingRequestID?.uuidString ?? id }
+  public var revealsDetail = true
+  public let id: String
+  public var accountID: UUID { draft.accountID }
+  public var filename: String { draft.filename }
+  public var activationID: String { editingRequestID?.uuidString ?? id }
 
   init(draft: Draft, gist: Gist? = nil, isRecovery: Bool = false) {
     self.draft = draft
@@ -25,7 +25,7 @@ struct File: Equatable, Sendable, Identifiable {
     FileReference(gistID: gist?.id ?? draft.gistID, filename: filename, draftID: draft.id)
   }
 
-  var rowID: String {
+  public var rowID: String {
     if let libraryRowID { return libraryRowID }
     if let gist, gist.isDailyNote {
       return "\(gist.id)/\(filename)"
@@ -42,8 +42,8 @@ struct File: Equatable, Sendable, Identifiable {
 }
 
 /// A file on its way to the detail column, and why it couldn't open if it failed.
-struct Opening: Equatable {
-  enum Request: Equatable {
+public struct Opening: Equatable {
+  public enum Request: Equatable {
     case gist(id: String, filename: String? = nil, rowID: String? = nil)
     case draft(id: UUID, rowID: String? = nil)
     case today(DailyNote.Day = DailyNote.Day(), focusesEditor: Bool = true)
@@ -68,12 +68,12 @@ struct Opening: Equatable {
     }
   }
 
-  let request: Request
-  let rowID: String
-  let title: String
-  var failure: String?
+  public let request: Request
+  public let rowID: String
+  public let title: String
+  public var failure: String?
 
-  var filename: String? {
+  public var filename: String? {
     switch request {
     case .gist(_, let filename, _): filename
     case .today(let target, _): target.filename

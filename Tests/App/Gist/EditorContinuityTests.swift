@@ -4,6 +4,7 @@ import Testing
 import UIKit
 
 @testable import GistPad
+@testable import Notebook
 
 @Suite(.serialized)
 @MainActor

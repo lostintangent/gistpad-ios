@@ -7,6 +7,7 @@ import Testing
 import UIKit
 
 @testable import GistPad
+@testable import Notebook
 
 /// The library the app ships (its account store, draft store and GitHubSync) signed in to
 /// Sync's fixture GitHub, so tests drive real requests instead of a fake.

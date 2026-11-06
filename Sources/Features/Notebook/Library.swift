@@ -8,34 +8,34 @@ import OSLog
 import Observation
 
 @MainActor @Observable
-final class Library {
-  let state = LibraryState()
-  private(set) var account: Account?
-  private(set) var pendingAccount: Account?
+public final class Library {
+  public let state = LibraryState()
+  public private(set) var account: Account?
+  public private(set) var pendingAccount: Account?
   private(set) var loadedFile: File?
-  private(set) var isSigningIn = false
-  private(set) var isSigningOut = false
+  public private(set) var isSigningIn = false
+  public private(set) var isSigningOut = false
   /// Launch is restoring the account and this iPhone's drafts. Links wait for it, not for GitHub.
-  private(set) var isStarting = false
+  public private(set) var isStarting = false
   /// The file opening in the detail column, until it's presented or fails.
-  private(set) var opening: Opening?
-  private(set) var localDrafts: [Draft] = []
+  public private(set) var opening: Opening?
+  public private(set) var localDrafts: [Draft] = []
   /// Counts drafts recorded in memory, so a local read that started earlier knows it's stale.
   private var localDraftRecords = 0
-  private(set) var cachedLibrary: CachedLibrary?
+  public private(set) var cachedLibrary: CachedLibrary?
   private(set) var isCreating = false
   /// The one message the app shows in an alert, such as a failed open or change.
-  var openError: String?
-  var isShowingError: Bool {
+  public var openError: String?
+  public var isShowingError: Bool {
     get { openError != nil }
     set { if !newValue { openError = nil } }
   }
-  private(set) var remoteRefreshProblem: RemoteReadProblem?
+  public private(set) var remoteRefreshProblem: RemoteReadProblem?
   private(set) var isRefreshingRemote = false
   /// The files opened this session, by draft. Returning to one keeps its caret, scroll and undo.
-  private(set) var sessions: [UUID: FileSession] = [:]
+  public private(set) var sessions: [UUID: FileSession] = [:]
   /// Autosave runs only while the app is in the foreground.
-  var isForeground = false
+  public var isForeground = false
   private(set) var isApplying = false
 
   @ObservationIgnored private let sync: GitHubSync
@@ -46,14 +46,14 @@ final class Library {
   @ObservationIgnored private let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "Library")
 
-  init(
+  public init(
     sync: GitHubSync, lastOpened: LastOpened = LastOpened()
   ) {
     self.sync = sync
     self.lastOpened = lastOpened
   }
 
-  var remoteRefreshStatus: GitHubStatusState {
+  public var remoteRefreshStatus: GitHubStatusState {
     if let problem = remoteRefreshProblem, cachedLibrary != nil || !localDrafts.isEmpty {
       return problem.status(
         heading: String(localized: "Couldn't update your gists"),
@@ -63,7 +63,7 @@ final class Library {
       ? .checking(operation: String(localized: "Checking GitHub for changes")) : .idle
   }
 
-  var visibleFile: File? {
+  public var visibleFile: File? {
     if let opening { return opening.failure == nil ? cachedFile(rowID: opening.rowID) : nil }
     guard let selected = state.selectedID else { return loadedFile }
     if loadedFile?.rowID == selected { return loadedFile }
@@ -71,12 +71,12 @@ final class Library {
   }
 
   /// The editor for the file in the detail column.
-  var activeSession: FileSession? {
+  public var activeSession: FileSession? {
     guard let file = visibleFile else { return nil }
     return sessions.values.first { $0.file.refersToSameFile(as: file) }
   }
 
-  var openingTitle: String? {
+  public var openingTitle: String? {
     if let opening { return opening.title }
     guard let selected = state.selectedID, selected != loadedFile?.rowID else {
       return nil
@@ -102,7 +102,7 @@ final class Library {
   }
 
   /// Opens a library row, at once when its file is already on this iPhone.
-  func select(rowID id: String) {
+  public func select(rowID id: String) {
     guard !beginOpeningRow(id: id), opening?.rowID == id else { return }
     let request = fileRequest
     Task {
@@ -113,7 +113,7 @@ final class Library {
 
   /// What deleting a row removes: a copy that's only on this iPhone, one day of the daily notes
   /// gist, or the whole gist. Rows the account doesn't own can't be deleted.
-  func deletion(forRow rowID: String) -> Change? {
+  public func deletion(forRow rowID: String) -> Change? {
     guard account != nil, pendingAccount == nil else { return nil }
     let target = rowSelection(for: rowID)
     let draft = target?.draftID.flatMap { id in localDrafts.first { $0.id == id } }
@@ -130,7 +130,7 @@ final class Library {
     return .delete(gistID: gist.id)
   }
 
-  func gistID(forRow rowID: String) -> String? {
+  public func gistID(forRow rowID: String) -> String? {
     if cachedLibrary?.gists.contains(where: { $0.id == rowID }) == true { return rowID }
     return state.gists.first { $0.id == rowID && $0.isDailyNote }?.gistID
   }
@@ -289,7 +289,7 @@ final class Library {
     }
   }
 
-  func start() async {
+  public func start() async {
     guard !isStarting, !isSigningOut else { return }
     isStarting = true
     defer { isStarting = false }
@@ -319,7 +319,7 @@ final class Library {
     }
   }
 
-  func signIn() async {
+  public func signIn() async {
     guard !isSigningIn, !isSigningOut else { return }
     isSigningIn = true
     let previousState = state.loadState
@@ -353,7 +353,7 @@ final class Library {
   }
 
   /// Switches to the account that just signed in, once every open file is saved on this iPhone.
-  func switchAccount() async throws {
+  public func switchAccount() async throws {
     guard let pendingAccount else { return }
     for session in sessions.values {
       guard !session.isPublishing, !session.isApplyingDurableEdit else {
@@ -374,7 +374,7 @@ final class Library {
     await restoreLastOpened()
   }
 
-  func keepCurrentAccount() {
+  public func keepCurrentAccount() {
     pendingAccount = nil
     state.loadState = .reconnectRequired(
       message: String(
@@ -384,7 +384,7 @@ final class Library {
   }
 
   /// A new day moves Today and makes yesterday's unfinished tasks overdue.
-  func updateCalendar() {
+  public func updateCalendar() {
     projectLibrary()
     updateToday()
   }
@@ -408,14 +408,14 @@ final class Library {
 
   /// Refreshes as the app comes back, like the web on focus, when the list is stale or leaving cut
   /// its refresh off.
-  func refreshOnReturn() async {
+  public func refreshOnReturn() async {
     guard account != nil, !isStarting, isRefreshingRemote || Self.isStale(refreshedAt) else {
       return
     }
     await refresh()
   }
 
-  func refresh() async {
+  public func refresh() async {
     guard pendingAccount == nil, !isSigningOut else { return }
     guard let account else {
       await start()
@@ -482,7 +482,7 @@ final class Library {
 
   /// Opens a file in the detail column. A newer open supersedes this one, but keeps any file this
   /// one created.
-  func open(_ request: Opening.Request) async {
+  public func open(_ request: Opening.Request) async {
     guard let account, pendingAccount == nil else {
       openError = String(localized: "Reconnect GitHub to open this gist.")
       return
@@ -591,7 +591,7 @@ final class Library {
     if loadedFile?.draft.id == session.draft.id { loadedFile = nil }
   }
 
-  func showLibrary() {
+  public func showLibrary() {
     fileRequest = UUID()
     opening = nil
     state.selectedID = nil
@@ -616,7 +616,7 @@ final class Library {
     }
   }
 
-  func reloadPlatformState(accountID: UUID) async throws {
+  public func reloadPlatformState(accountID: UUID) async throws {
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
     try await reloadLocalState(accountID: accountID)
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
@@ -686,18 +686,18 @@ final class Library {
     return .discardLocalCopy(draft)
   }
 
-  func uploadImage(_ image: Data, gistID: String, accountID: UUID) async throws -> URL {
+  public func uploadImage(_ image: Data, gistID: String, accountID: UUID) async throws -> URL {
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
     return try await sync.uploadImage(image, gistID: gistID, accountID: accountID)
   }
 
-  func comments(accountID: UUID) async throws -> CommentServices {
+  public func comments(accountID: UUID) async throws -> CommentServices {
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
     return try await sync.comments(accountID: accountID)
   }
 
   /// Keeps a gist's comment count current in the library once its conversation loads.
-  func recordCommentCount(accountID: UUID, gistID: String, total: Int) {
+  public func recordCommentCount(accountID: UUID, gistID: String, total: Int) {
     guard account?.id == accountID, pendingAccount == nil, !isSigningOut,
       var cache = cachedLibrary, cache.gists.first(where: { $0.id == gistID })?.isDailyNote == false
     else { return }
@@ -711,7 +711,7 @@ final class Library {
 
   /// Applies a change once the files it touches are saved on this iPhone, holding off typing in
   /// a file it deletes, then brings every open file's details up to date.
-  func apply(_ action: Change, accountID: UUID) async throws -> ChangeResult {
+  public func apply(_ action: Change, accountID: UUID) async throws -> ChangeResult {
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
     guard !isApplying else { throw ChangeError.publicationInProgress }
     isApplying = true
@@ -786,7 +786,7 @@ final class Library {
   }
 
   /// Applies a change from a tap. A change that doesn't go through is an alert.
-  func run(_ action: Change, accountID: UUID) {
+  public func run(_ action: Change, accountID: UUID) {
     Task {
       do { _ = try await apply(action, accountID: accountID) } catch {
         openError = error.localizedDescription
@@ -915,7 +915,7 @@ final class Library {
 
   /// A file's header and actions, read from its gist, the account's preferences and the drafts on
   /// this iPhone, so it's always current.
-  func details(for file: File) -> GistDetails {
+  public func details(for file: File) -> GistDetails {
     let title =
       file.gist?.displayName
       ?? (file.draft.description.isEmpty ? nil : file.draft.description)
@@ -985,7 +985,7 @@ final class Library {
 
   /// Publishes each file with unpublished edits, in order, through its editor when it's open. The
   /// first offline result stops the sweep, and the next launch or return to the app retries it.
-  func publishDrafts() async {
+  public func publishDrafts() async {
     guard let accountID = account?.id, pendingAccount == nil else { return }
     for draft in localDrafts where draft.hasUnpublishedEdits {
       guard !Task.isCancelled else { break }
@@ -999,7 +999,7 @@ final class Library {
     try? await reloadLocalState(accountID: accountID)
   }
 
-  func publish(_ draft: Draft) async throws -> Draft {
+  public func publish(_ draft: Draft) async throws -> Draft {
     let accountID = draft.accountID
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
     let saved = try await sync.publish(draft)

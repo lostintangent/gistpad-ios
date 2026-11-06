@@ -1,14 +1,15 @@
+import Comments
 import Foundation
 import Sync
 
 /// GitHub, the account and the drafts on this iPhone, behind one actor the library talks to.
-actor GitHubSync {
+public actor GitHubSync {
   let accounts: AccountStore
   let drafts: DraftStore
   let mutationQueue = SerialQueue()
   private var clients: [UUID: GitHubClient] = [:]
 
-  init(accounts: AccountStore, drafts: DraftStore) {
+  public init(accounts: AccountStore, drafts: DraftStore) {
     self.accounts = accounts
     self.drafts = drafts
   }
@@ -21,11 +22,11 @@ actor GitHubSync {
     return client
   }
 
-  func cachedAccount() async throws -> Account? {
+  public func cachedAccount() async throws -> Account? {
     try await accounts.cachedAccount()
   }
 
-  func connectedAccount() async throws -> Account? {
+  public func connectedAccount() async throws -> Account? {
     try await accounts.connectedAccount()
   }
 
@@ -37,12 +38,12 @@ actor GitHubSync {
     try await accounts.refreshAccount()
   }
 
-  func gists(accountID: UUID) async throws -> [Gist] {
+  public func gists(accountID: UUID) async throws -> [Gist] {
     let client = await client(accountID: accountID)
     return try await client.listGists()
   }
 
-  func starredGists(accountID: UUID) async throws -> [Gist] {
+  public func starredGists(accountID: UUID) async throws -> [Gist] {
     let client = await client(accountID: accountID)
     return try await client.listStarredGists()
   }
@@ -54,7 +55,7 @@ actor GitHubSync {
     return gist
   }
 
-  func content(gist: Gist, filename: String, accountID: UUID) async throws -> String {
+  public func content(gist: Gist, filename: String, accountID: UUID) async throws -> String {
     let client = await client(accountID: accountID)
     let text = try await client.content(gist: gist, filename: filename)
     try await drafts.cacheContent(text, gist: gist, filename: filename, accountID: accountID)
@@ -78,18 +79,18 @@ actor GitHubSync {
     return try await mutationQueue.run { try await publisher.publish(draft) }
   }
 
-  func localState(accountID: UUID) async throws -> LocalState {
+  public func localState(accountID: UUID) async throws -> LocalState {
     let cache = try await drafts.cachedLibrary(accountID: accountID)
     let localDrafts = try await drafts.drafts(accountID: accountID)
     return LocalState(cache: cache, drafts: localDrafts)
   }
 
-  func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
+  public func cacheLibrary(owned: [Gist], starred: [Gist], account: Account) async throws {
     try await drafts.cacheLibrary(
       owned: owned, starred: starred, preferences: account.preferences, accountID: account.id)
   }
 
-  func verifiedUserID(accountID: UUID) async throws -> Int64 {
+  public func verifiedUserID(accountID: UUID) async throws -> Int64 {
     guard let account = try await accounts.cachedAccount(), account.id == accountID else {
       throw AccountError.accountChanged
     }
@@ -98,7 +99,7 @@ actor GitHubSync {
   }
 
   /// Stores a new gist you've named, or one made from outside the app, before you type in it.
-  func createDraft(
+  public func createDraft(
     accountID: UUID, description: String, content: String? = nil
   ) async throws -> Draft {
     let userID = try await verifiedUserID(accountID: accountID)
@@ -106,7 +107,7 @@ actor GitHubSync {
       Draft(accountID: accountID, githubUserID: userID, description: description, content: content))
   }
 
-  func today(accountID: UUID, target: DailyNote.Day) async throws -> (gist: Gist?, draft: Draft) {
+  public func today(accountID: UUID, target: DailyNote.Day) async throws -> (gist: Gist?, draft: Draft) {
     let userID = try await verifiedUserID(accountID: accountID)
     let service = DailyNotes(
       accountID: accountID, githubUserID: userID, client: await client(accountID: accountID),
@@ -114,7 +115,31 @@ actor GitHubSync {
     return try await mutationQueue.run { try await service.stageToday(target: target) }
   }
 
+  func uploadImage(_ image: Data, gistID: String, accountID: UUID) async throws -> URL {
+    let storage = try await accounts.imageStorage(accountID: accountID)
+    return try await storage.upload(image, gistID: gistID)
+  }
+
+  func comments(accountID: UUID) async throws -> CommentServices {
+    guard let account = try await accounts.cachedAccount(), account.id == accountID else {
+      throw AccountError.accountChanged
+    }
+    let client = await client(accountID: accountID)
+    let userID: Int64
+    if let cachedID = account.githubUserID {
+      userID = cachedID
+    } else {
+      userID = try await client.authenticatedUser().id
+    }
+    return CommentServices(remote: client, userID: userID)
+  }
+
   private func publisher(accountID: UUID) async -> DraftPublisher {
     DraftPublisher(client: await client(accountID: accountID), store: drafts)
   }
+}
+
+public struct CommentServices: Sendable {
+  public let remote: any CommentsRemote
+  public let userID: Int64
 }

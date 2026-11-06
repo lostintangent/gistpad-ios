@@ -8,6 +8,7 @@ import Testing
 import UIKit
 
 @testable import GistPad
+@testable import Notebook
 @testable import Sync
 
 @Suite(.serialized)
@@ -262,11 +263,11 @@ struct PlatformTests {
     let original = session.editor.text
     let url = try #require(URL(string: "https://example.com/assets/daily123/image.png"))
     var uploadedGistIDs: [String] = []
-    let images = ImageUpload(session: session) { _, gistID in
+    let images = ImageUpload { _, gistID, _ in
       uploadedGistIDs.append(gistID)
       return url
     }
-    images.chooseImage()
+    images.chooseImage(for: session)
     #expect(images.isShowingPicker)
     session.editor.textView.selectedRange = NSRange(
       location: (original as NSString).length, length: 0)

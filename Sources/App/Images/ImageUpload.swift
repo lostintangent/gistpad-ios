@@ -1,9 +1,10 @@
-import Foundation
 import Editor
-import Sync
+import Foundation
+import Notebook
 import Observation
 import PhotosUI
 import SwiftUI
+import Sync
 
 /// Adds an image the way gistpad.dev does: upload it to public storage, then insert its Markdown at the cursor.
 @MainActor
@@ -17,22 +18,22 @@ final class ImageUpload {
   var isShowingPicker = false
   var failure: Failure?
   private(set) var isUploading = false
+  /// The note the picked image, or a retried one, goes into.
   @ObservationIgnored private weak var session: FileSession?
-  @ObservationIgnored private let upload: @MainActor (Data, String) async throws -> URL
+  @ObservationIgnored private let upload: @MainActor (Data, String, UUID) async throws -> URL
 
-  init(session: FileSession, upload: @escaping @MainActor (Data, String) async throws -> URL) {
-    self.session = session
+  init(upload: @escaping @MainActor (Data, String, UUID) async throws -> URL) {
     self.upload = upload
   }
 
-  var canChooseImage: Bool {
-    guard let session else { return false }
-    return !isUploading && session.canMutate && !session.file.isRecovery
+  func canChooseImage(for session: FileSession) -> Bool {
+    !isUploading && session.canMutate && !session.file.isRecovery
   }
 
-  func chooseImage() {
-    guard canChooseImage else { return }
-    session?.editor.textView.resignFirstResponder()
+  func chooseImage(for session: FileSession) {
+    guard canChooseImage(for: session) else { return }
+    self.session = session
+    session.editor.textView.resignFirstResponder()
     isShowingPicker = true
   }
 
@@ -60,7 +61,8 @@ final class ImageUpload {
       return
     }
     do {
-      let markdown = ImageStorage.markdown(try await upload(image, gistID))
+      let markdown = ImageStorage.markdown(
+        try await upload(image, gistID, session.draft.accountID))
       let editor = session.editor
       try editor.apply(
         Edit(
@@ -79,12 +81,5 @@ final class ImageUpload {
     case is ImageStorage.Failure: String(localized: "This item couldn't be read as an image. Choose another one.")
     default: error.localizedDescription
     }
-  }
-}
-
-extension GitHubSync {
-  func uploadImage(_ image: Data, gistID: String, accountID: UUID) async throws -> URL {
-    let storage = try await accounts.imageStorage(accountID: accountID)
-    return try await storage.upload(image, gistID: gistID)
   }
 }

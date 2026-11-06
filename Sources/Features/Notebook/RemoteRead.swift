@@ -2,11 +2,11 @@ import Foundation
 import Interface
 import Sync
 
-struct RemoteReadProblem: Equatable {
-  enum Recovery: Equatable { case retry, reconnect }
+public struct RemoteReadProblem: Equatable {
+  public enum Recovery: Equatable { case retry, reconnect }
 
   let message: String
-  var recovery: Recovery = .retry
+  public var recovery: Recovery = .retry
 
   func status(heading: String, detail: String?) -> GitHubStatusState {
     let recoveryTitle = switch recovery {
@@ -20,7 +20,7 @@ struct RemoteReadProblem: Equatable {
 }
 
 @MainActor
-enum RemoteRead {
+public enum RemoteRead {
   /// The problem a failed GitHub read shows, or nil when a newer request superseded it.
   static func problem(for error: any Error) -> RemoteReadProblem? {
     if error is CancellationError || (error as? URLError)?.code == .cancelled

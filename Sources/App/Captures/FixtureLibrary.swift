@@ -1,5 +1,6 @@
 #if DEBUG
   import Foundation
+  import Notebook
   import Preview
   import Sync
 

@@ -1,4 +1,5 @@
 import Interface
+import Notebook
 import Preview
 import OSLog
 import SwiftUI

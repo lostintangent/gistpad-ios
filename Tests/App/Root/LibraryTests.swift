@@ -8,6 +8,7 @@ import UIKit
 import WebKit
 
 @testable import GistPad
+@testable import Notebook
 @testable import Sync
 
 @MainActor

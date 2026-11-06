@@ -5,6 +5,7 @@ import Testing
 import UIKit
 
 @testable import GistPad
+@testable import Notebook
 @testable import Sync
 
 @Suite(.serialized)

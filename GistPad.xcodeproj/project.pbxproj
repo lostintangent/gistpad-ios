@@ -10,6 +10,8 @@
 		D96000000000000000000002 /* Comments in Frameworks */ = {isa = PBXBuildFile; productRef = D96000000000000000000052 /* Comments */; };
 		A00000000000000000000001 /* Editor in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000051 /* Editor */; };
 		A00000000000000000000002 /* Editor in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000052 /* Editor */; };
+		F10000000000000000000001 /* Notebook in Frameworks */ = {isa = PBXBuildFile; productRef = F10000000000000000000051 /* Notebook */; };
+		F10000000000000000000002 /* Notebook in Frameworks */ = {isa = PBXBuildFile; productRef = F10000000000000000000052 /* Notebook */; };
 		A0000000000000000000000B /* Preview in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000054 /* Preview */; };
 		A0000000000000000000000D /* Interface in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000056 /* Interface */; };
 		A0000000000000000000000E /* Sync in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000058 /* Sync */; };
@@ -86,8 +88,8 @@
 
 /* Begin PBXFrameworksBuildPhase section */
 		B40000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (B40000000000000000000002 /* Platform in Frameworks */, B4000000000000000000000C /* Sync in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
-		A00000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000001 /* Editor in Frameworks */, A0000000000000000000000B /* Preview in Frameworks */, A0000000000000000000000D /* Interface in Frameworks */, A0000000000000000000000E /* Sync in Frameworks */, C50000000000000000000004 /* Accent in Frameworks */, B40000000000000000000001 /* Platform in Frameworks */, B4000000000000000000000B /* Intelligence in Frameworks */, D96000000000000000000001 /* Comments in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
-		A00000000000000000000009 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000002 /* Editor in Frameworks */, A0000000000000000000000F /* Interface in Frameworks */, C50000000000000000000001 /* Accent in Frameworks */, C50000000000000000000002 /* Preview in Frameworks */, C50000000000000000000003 /* Sync in Frameworks */, B40000000000000000000005 /* Platform in Frameworks */, B40000000000000000000007 /* Intelligence in Frameworks */, E70000000000000000000001 /* Auth in Frameworks */, D96000000000000000000002 /* Comments in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
+		A00000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000001 /* Editor in Frameworks */, A0000000000000000000000B /* Preview in Frameworks */, A0000000000000000000000D /* Interface in Frameworks */, A0000000000000000000000E /* Sync in Frameworks */, C50000000000000000000004 /* Accent in Frameworks */, B40000000000000000000001 /* Platform in Frameworks */, B4000000000000000000000B /* Intelligence in Frameworks */, D96000000000000000000001 /* Comments in Frameworks */, F10000000000000000000001 /* Notebook in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
+		A00000000000000000000009 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000002 /* Editor in Frameworks */, A0000000000000000000000F /* Interface in Frameworks */, C50000000000000000000001 /* Accent in Frameworks */, C50000000000000000000002 /* Preview in Frameworks */, C50000000000000000000003 /* Sync in Frameworks */, B40000000000000000000005 /* Platform in Frameworks */, B40000000000000000000007 /* Intelligence in Frameworks */, E70000000000000000000001 /* Auth in Frameworks */, D96000000000000000000002 /* Comments in Frameworks */, F10000000000000000000002 /* Notebook in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
 		F80000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
@@ -145,7 +147,7 @@
 			dependencies = (B40000000000000000000033,);
 			fileSystemSynchronizedGroups = (A00000000000000000000006 /* App */,);
 			name = GistPad;
-			packageProductDependencies = (A00000000000000000000051 /* Editor */, A00000000000000000000054 /* Preview */, A00000000000000000000056 /* Interface */, A00000000000000000000058 /* Sync */, C50000000000000000000054 /* Accent */, B40000000000000000000051 /* Platform */, B40000000000000000000056 /* Intelligence */, D96000000000000000000051 /* Comments */,);
+			packageProductDependencies = (A00000000000000000000051 /* Editor */, A00000000000000000000054 /* Preview */, A00000000000000000000056 /* Interface */, A00000000000000000000058 /* Sync */, C50000000000000000000054 /* Accent */, B40000000000000000000051 /* Platform */, B40000000000000000000056 /* Intelligence */, D96000000000000000000051 /* Comments */, F10000000000000000000051 /* Notebook */,);
 			productName = GistPad;
 			productReference = A00000000000000000000004;
 			productType = "com.apple.product-type.application";
@@ -158,7 +160,7 @@
 			dependencies = (A00000000000000000000033,);
 			fileSystemSynchronizedGroups = (A00000000000000000000007 /* App */,);
 			name = GistPadTests;
-			packageProductDependencies = (A00000000000000000000052 /* Editor */, A00000000000000000000059 /* Interface */, C50000000000000000000051 /* Accent */, C50000000000000000000052 /* Preview */, C50000000000000000000053 /* Sync */, B40000000000000000000053 /* Platform */, B40000000000000000000055 /* Intelligence */, E70000000000000000000051 /* Auth */, D96000000000000000000052 /* Comments */,);
+			packageProductDependencies = (A00000000000000000000052 /* Editor */, A00000000000000000000059 /* Interface */, C50000000000000000000051 /* Accent */, C50000000000000000000052 /* Preview */, C50000000000000000000053 /* Sync */, B40000000000000000000053 /* Platform */, B40000000000000000000055 /* Intelligence */, E70000000000000000000051 /* Auth */, D96000000000000000000052 /* Comments */, F10000000000000000000052 /* Notebook */,);
 			productName = GistPadTests;
 			productReference = A00000000000000000000005;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -402,6 +404,8 @@
 		D96000000000000000000052 /* Comments */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = Comments; };
 		A00000000000000000000051 /* Editor */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = Editor; };
 		A00000000000000000000052 /* Editor */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = Editor; };
+		F10000000000000000000051 /* Notebook */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = Notebook; };
+		F10000000000000000000052 /* Notebook */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = Notebook; };
 		A00000000000000000000054 /* Preview */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = Preview; };
 		A00000000000000000000056 /* Interface */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = Interface; };
 		A00000000000000000000058 /* Sync */ = {isa = XCSwiftPackageProductDependency; package = A00000000000000000000050 /* GistPad */; productName = Sync; };

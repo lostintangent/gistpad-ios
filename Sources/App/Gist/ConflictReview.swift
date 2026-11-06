@@ -1,6 +1,7 @@
 import Foundation
-import Sync
+import Notebook
 import SwiftUI
+import Sync
 
 struct ConflictTarget: Identifiable {
   var id: UUID { review.id }

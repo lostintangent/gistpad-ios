@@ -1,9 +1,10 @@
 import AppIntents
 import Editor
 import Foundation
+import Notebook
+import OSLog
 import Platform
 import Sync
-import OSLog
 import UIKit
 import WidgetKit
 
@@ -40,11 +41,6 @@ extension PlatformBridge {
     services = (library, PlatformBridge(sync: sync, store: store, library: library))
     return library
   }
-
-  static func register(_ session: FileSession, library: Library) {
-    guard services?.library === library else { return }
-    services?.bridge.register(session)
-  }
 }
 
 @MainActor
@@ -56,7 +52,6 @@ final class PlatformBridge: DailyNoteActions {
   private let sync: GitHubSync
   private let store: DraftStore
   private weak var library: Library?
-  private var sessions: [UUID: WeakSession] = [:]
   private var visibleSession: WeakSession?
   private var visibleNoteID: String?
   private var refreshTask: Task<Void, Never>?
@@ -86,11 +81,6 @@ final class PlatformBridge: DailyNoteActions {
         self?.followLibrary()
       }
     }
-  }
-
-  func register(_ session: FileSession) {
-    sessions = sessions.filter { $0.value.value != nil }
-    sessions[session.draft.id] = WeakSession(value: session)
   }
 
   func setVisibleNote(_ id: String?, session: FileSession) {
@@ -343,10 +333,10 @@ final class PlatformBridge: DailyNoteActions {
   }
 
   private func session(for draft: Draft) -> FileSession? {
-    sessions.values.lazy.compactMap(\.value).first {
-      $0.draft.id == draft.id
-        || ($0.draft.gistID != nil && $0.draft.gistID == draft.gistID
-          && $0.draft.filename == draft.filename)
+    library?.sessions.values.first { (session: FileSession) in
+      session.draft.id == draft.id
+        || (session.draft.gistID != nil && session.draft.gistID == draft.gistID
+          && session.draft.filename == draft.filename)
     }
   }
 

@@ -1,6 +1,7 @@
+import Notebook
 import Platform
-import Sync
 import SwiftUI
+import Sync
 
 @main
 struct GistPadApp: App {

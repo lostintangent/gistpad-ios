@@ -1,8 +1,9 @@
 import Comments
 import Editor
 import Interface
-import OSLog
+import Notebook
 import Observation
+import OSLog
 import SwiftUI
 
 /// Comments for the open gist: one in-memory `CommentsModel`, dropped when another gist opens.

@@ -2,7 +2,7 @@ import Foundation
 import Sync
 
 /// A change to the library, applied in order on GitHub and this iPhone.
-enum Change: Equatable, Sendable {
+public enum Change: Equatable, Sendable {
   case signOut
   case preferences([Preferences.Change])
   case star(gistID: String, starred: Bool)
@@ -19,7 +19,7 @@ enum Change: Equatable, Sendable {
   case resolveConflict(Conflict, text: String, generation: UInt64)
 }
 
-enum ChangeResult: Sendable {
+public enum ChangeResult: Sendable {
   case signedOut
   case account(Account)
   case gist(Gist, starred: Bool? = nil)
@@ -31,7 +31,7 @@ enum ChangeResult: Sendable {
   case discardedDraft(UUID)
 }
 
-enum ChangeError: Error, Equatable {
+public enum ChangeError: Error, Equatable {
   case invalidTitle
   case invalidFilename
   case filenameExists
@@ -40,7 +40,7 @@ enum ChangeError: Error, Equatable {
 }
 
 extension ChangeError: LocalizedError {
-  var errorDescription: String? {
+  public var errorDescription: String? {
     switch self {
     case .invalidTitle: String(localized: "Enter a name for this gist.")
     case .invalidFilename:
@@ -227,12 +227,12 @@ extension GitHubSync {
   }
 }
 
-struct Conflict: Equatable, Sendable, Identifiable {
-  var id: UUID { draft.id }
-  let draft: Draft
-  let conflict: DraftConflict
+public struct Conflict: Equatable, Sendable, Identifiable {
+  public var id: UUID { draft.id }
+  public let draft: Draft
+  public let conflict: DraftConflict
 
-  static func == (left: Self, right: Self) -> Bool { left.matches(right.draft) }
+  public static func == (left: Self, right: Self) -> Bool { left.matches(right.draft) }
 
   init(draft: Draft) throws {
     guard case .conflict(let conflict) = draft.state, conflict.generation == draft.generation else {
@@ -242,7 +242,7 @@ struct Conflict: Equatable, Sendable, Identifiable {
     self.conflict = conflict
   }
 
-  func matches(_ current: Draft) -> Bool {
+  public func matches(_ current: Draft) -> Bool {
     guard current.id == draft.id, current.accountID == draft.accountID,
       current.gistID == draft.gistID, current.filename.utf8.elementsEqual(draft.filename.utf8),
       current.generation == draft.generation, case .conflict(let conflict) = current.state

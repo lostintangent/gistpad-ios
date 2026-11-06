@@ -5,10 +5,10 @@ import Sync
 import OSLog
 import Observation
 
-enum EditError: LocalizedError {
+public enum EditError: LocalizedError {
   case localPersistenceFailed
 
-  var errorDescription: String? {
+  public var errorDescription: String? {
     String(
       localized:
         "Your latest changes couldn't be saved on this iPhone. Keep the editor open and retry the local save."
@@ -16,7 +16,7 @@ enum EditError: LocalizedError {
   }
 }
 
-enum PublishReason: Equatable, Sendable {
+public enum PublishReason: Equatable, Sendable {
   case manual
   case autosave
   case background
@@ -24,17 +24,17 @@ enum PublishReason: Equatable, Sendable {
 
 @MainActor
 @Observable
-final class FileSession {
-  private(set) var file: File
-  let editor: Editor
-  private(set) var draft: Draft
+public final class FileSession {
+  public private(set) var file: File
+  public let editor: Editor
+  public private(set) var draft: Draft
   private var publishing: Task<Void, Never>?
   /// Why the last publish didn't land, until you type, publish again or reconnect GitHub.
   private var failure: PublishState?
   private(set) var isPerformingDestructiveAction = false
   private(set) var isApplyingDurableEdit = false
-  private(set) var remoteInspectionProblem: RemoteReadProblem?
-  var mode: FileMode = .preview
+  public private(set) var remoteInspectionProblem: RemoteReadProblem?
+  public var mode: FileMode = .preview
   @ObservationIgnored let library: Library
   @ObservationIgnored private var persistence: Task<Bool, Never>?
   @ObservationIgnored private var autosaveTask: Task<Void, Never>?
@@ -56,30 +56,23 @@ final class FileSession {
       fileID: file.id, text: file.draft.text, generation: file.draft.generation,
       showsFrontMatter: library.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
     if isNew { mode = .edit }
-    editor.textView.isEditable = details.access.canEdit
+    updateEditable()
     applyWritingPreferences()
     editor.onEdit = { [weak self] text, generation in
       self?.persist(text: text, generation: generation)
     }
-    PlatformBridge.register(self, library: library)
     observeAutosave()
   }
 
-  /// Adds images at the caret, uploading them to the library's account.
-  @ObservationIgnored private(set) lazy var images = ImageUpload(session: self) {
-    [library = self.library, accountID = self.draft.accountID] image, gistID in
-    try await library.uploadImage(image, gistID: gistID, accountID: accountID)
-  }
-
   /// A new gist, a new day or an empty file, which opens for writing.
-  var isNew: Bool { draft.base == nil || draft.text.isEmpty }
+  public var isNew: Bool { draft.base == nil || draft.text.isEmpty }
 
   /// The gist's header and actions, always current with the library.
-  var details: GistDetails { library.details(for: file) }
+  public var details: GistDetails { library.details(for: file) }
 
   /// Where this note stands with GitHub: read-only for a recovery copy, Saving while a publish
   /// runs, and otherwise the draft's state.
-  var saveState: PublishState {
+  public var saveState: PublishState {
     if file.isRecovery { return .failed(.readOnly) }
     if isPublishing { return .savingToGitHub(generation: draft.generation) }
     if case .conflict = draft.state { return draft.state }
@@ -88,13 +81,13 @@ final class FileSession {
 
   var isPublishing: Bool { publishing != nil }
 
-  var canMutate: Bool {
+  public var canMutate: Bool {
     details.access.canEdit && editor.isSettled
       && !isPerformingDestructiveAction
       && !isApplyingDurableEdit
   }
 
-  var remoteInspectionStatus: GitHubStatusState {
+  public var remoteInspectionStatus: GitHubStatusState {
     guard let problem = remoteInspectionProblem else { return .idle }
     switch saveState {
     case .failed, .conflict, .reconnect:
@@ -105,7 +98,7 @@ final class FileSession {
     }
   }
 
-  func requestCreationFocus() {
+  public func requestCreationFocus() {
     guard let request = file.editingRequestID, request != lastEditingRequestID, canMutate
     else { return }
     lastEditingRequestID = request
@@ -128,7 +121,7 @@ final class FileSession {
     library.isForeground && library.account?.id == draft.accountID && library.pendingAccount == nil
       && library.state.loadState == .ready
       && library.account?.preferences.isAutoSaveEnabled == true
-      && canMutate && editor.textView.markedTextRange == nil && !file.isRecovery
+      && canMutate && !file.isRecovery
   }
 
   private func publicationAllowed(reason: PublishReason) -> Bool {
@@ -137,7 +130,7 @@ final class FileSession {
     case .autosave: autosaveAllowed
     case .background:
       library.account?.id == draft.accountID && library.pendingAccount == nil
-        && editor.isSettled && editor.textView.markedTextRange == nil
+        && editor.isSettled
     }
   }
 
@@ -180,21 +173,26 @@ final class FileSession {
     adopt(try await library.current(draft))
     if !draft.isSaved, let filename { adopt(draft.renamed(filename)) }
     if let gist { file.gist = gist }
-    editor.textView.isEditable =
-      details.access.canEdit && !isPerformingDestructiveAction && !isApplyingDurableEdit
+    updateEditable()
     applyWritingPreferences()
   }
 
+  /// You can type in your own gists, except while a change is landing in the note.
+  private func updateEditable() {
+    editor.isEditable =
+      details.access.canEdit && !isPerformingDestructiveAction && !isApplyingDurableEdit
+  }
+
   private func applyWritingPreferences() {
-    let enabled = library.account?.preferences.booleanValue(.isSpellcheckEnabled) ?? true
-    editor.textView.spellCheckingType = enabled ? .yes : .no
+    editor.isSpellCheckingEnabled =
+      library.account?.preferences.booleanValue(.isSpellcheckEnabled) ?? true
     editor.setShowsFrontMatter(
       library.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
   }
 
   /// Reads this note from GitHub as it opens or the app comes back. A note you haven't typed in
   /// takes GitHub's newer text, and one with edits shows the conflict.
-  func inspectRemoteChanges() async {
+  public func inspectRemoteChanges() async {
     guard Library.isStale(refreshedAt), !isInspectingRemote, !isPublishing, canMutate,
       !file.isRecovery, draft.gistID != nil,
       library.account?.id == draft.accountID, library.pendingAccount == nil
@@ -250,7 +248,7 @@ final class FileSession {
     draft.hasUnpublishedEdits || editor.generation > draft.generation
   }
 
-  func reviewContext() throws -> Conflict {
+  public func reviewContext() throws -> Conflict {
     let review = try Conflict(draft: draft)
     guard editor.generation == draft.generation,
       editor.text.utf8.elementsEqual(draft.text.utf8)
@@ -258,7 +256,7 @@ final class FileSession {
     return review
   }
 
-  func applyReview(_ review: Conflict, text: String, publishes: Bool) async throws {
+  public func applyReview(_ review: Conflict, text: String, publishes: Bool) async throws {
     guard review.matches(draft), editor.generation == review.draft.generation else {
       throw ChangeError.staleReview
     }
@@ -284,15 +282,15 @@ final class FileSession {
   func beginDestructiveAction() throws {
     guard canMutate, !isPublishing else { throw ChangeError.publicationInProgress }
     isPerformingDestructiveAction = true
-    editor.textView.isEditable = false
+    updateEditable()
   }
 
   func endDestructiveAction() {
     isPerformingDestructiveAction = false
-    editor.textView.isEditable = details.access.canEdit
+    updateEditable()
   }
 
-  func applyDurableEdit(
+  public func applyDurableEdit(
     _ edit: DraftEdit,
     commit: @MainActor () async throws -> Draft
   ) async throws {
@@ -314,13 +312,13 @@ final class FileSession {
     guard editor.generation == expectedGeneration else { throw DraftError.staleGeneration }
     let result = try edit.applying(to: editor.text)
     let changed = !result.utf8.elementsEqual(editor.text.utf8)
+    let wasEditing = editor.isEditing
     isApplyingDurableEdit = true
-    let wasFirstResponder = editor.textView.isFirstResponder
-    editor.textView.isEditable = false
+    updateEditable()
     defer {
       isApplyingDurableEdit = false
-      editor.textView.isEditable = details.access.canEdit
-      if wasFirstResponder { editor.textView.becomeFirstResponder() }
+      updateEditable()
+      if wasEditing { editor.focus() }
     }
     guard await waitForLocalSave() else { throw EditError.localPersistenceFailed }
     guard editor.generation == expectedGeneration, editor.isSettled
@@ -333,7 +331,7 @@ final class FileSession {
     guard await waitForLocalSave() else { throw EditError.localPersistenceFailed }
   }
 
-  func didReconnect() {
+  public func didReconnect() {
     failure = nil
   }
 
@@ -357,7 +355,7 @@ final class FileSession {
   }
 
   /// Leaving a note publishes your edits.
-  func leave() async {
+  public func leave() async {
     editor.commitComposition()
     guard await waitForLocalSave() else { return }
     if !draft.isSaved, draft.gistID == nil { return library.close(self) }
@@ -365,7 +363,7 @@ final class FileSession {
     await publish(reason: .background)
   }
 
-  func publish(
+  public func publish(
     reason: PublishReason = .manual,
     shouldContinue: @escaping @MainActor @Sendable () -> Bool = { true }
   ) async {
@@ -409,13 +407,13 @@ final class FileSession {
     }
   }
 
-  func waitForLocalSave() async -> Bool {
+  public func waitForLocalSave() async -> Bool {
     await persistence?.value ?? true
   }
 
   /// Leaving the app saves every open file on this iPhone first, then publishes them one by one
   /// for as long as the system lets the app keep running.
-  static func publishOnBackground(
+  public static func publishOnBackground(
     _ sessions: [FileSession],
     shouldContinue: @escaping @MainActor @Sendable () -> Bool
   ) async {

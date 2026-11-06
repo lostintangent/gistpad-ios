@@ -1,18 +1,18 @@
 import Foundation
 import Sync
 
-struct FileReference: Codable, Equatable, Sendable {
+public struct FileReference: Codable, Equatable, Sendable {
   let gistID: String?
   let filename: String
   let draftID: UUID?
 }
 
 @MainActor
-final class LastOpened {
+public final class LastOpened {
   private let defaults: UserDefaults?
   private var memory: [UUID: FileReference] = [:]
 
-  init(defaults: UserDefaults? = nil) { self.defaults = defaults }
+  public init(defaults: UserDefaults? = nil) { self.defaults = defaults }
 
   /// The file to reopen at launch. One that can't be read is simply forgotten.
   func selection(accountID: UUID) -> FileReference? {
@@ -41,7 +41,7 @@ final class LastOpened {
   }
 }
 
-struct LocalState: Sendable {
-  let cache: CachedLibrary?
-  let drafts: [Draft]
+public struct LocalState: Sendable {
+  public let cache: CachedLibrary?
+  public let drafts: [Draft]
 }
