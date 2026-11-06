@@ -168,7 +168,6 @@ public actor AccountStore {
     public func cachedAccount() async throws -> Account? {
         guard !signingOut else { throw AccountError.busy }
         guard let session = try persistedSession() else { return nil }
-        try retainConnection(session)
         return snapshot(session.user)
     }
 
@@ -184,11 +183,11 @@ public actor AccountStore {
     public func refreshAccount() async throws -> Account {
         guard !signingIn, !signingOut else { throw AccountError.busy }
         _ = try persistedSession()
-        let session = try await auth.session
-        try retainConnection(session)
         let user = try await auth.user()
         guard try persistedSession()?.user.id == user.id else { throw AccountError.accountChanged }
-        return snapshot(user)
+        let account = snapshot(user)
+        persistAccount(account)
+        return account
     }
 
     @discardableResult
@@ -209,8 +208,14 @@ public actor AccountStore {
             try await auth.signInWithOAuth(provider: .github, redirectTo: Self.callbackURL, scopes: "gist")
         }
         try verifyPersistedSession(session)
-        try retainConnection(session)
-        return snapshot(session.user)
+        // Only sign-in's session carries GitHub's token, because Supabase refreshes don't resend it.
+        if let token = session.providerToken, !token.isEmpty {
+            try credentials.store(key: providerKey(session.user.id), value: Data(token.utf8))
+        }
+        try credentials.store(key: Self.connectionKey, value: Data(session.user.id.uuidString.utf8))
+        let account = snapshot(session.user)
+        persistAccount(account)
+        return account
     }
 
     static func isPublishableKey(_ key: String) -> Bool {
@@ -315,10 +320,7 @@ public actor AccountStore {
     /// The GitHub account this device is connected to. It survives Supabase session loss, so GitHub reads don't depend on Supabase.
     public func connectedAccountID() throws -> UUID? {
         guard !signingOut else { throw AccountError.busy }
-        if let session = try persistedSession() {
-            try retainConnection(session)
-            return session.user.id
-        }
+        if let session = try persistedSession() { return session.user.id }
         if let data = try credentials.retrieve(key: Self.connectionKey) {
             guard let id = String(data: data, encoding: .utf8).flatMap(UUID.init(uuidString:)) else {
                 throw AccountError.credentialPersistence
@@ -326,20 +328,6 @@ public actor AccountStore {
             return id
         }
         return nil
-    }
-
-    private func retainConnection(_ session: Session) throws {
-        guard !signingOut, try persistedSession()?.user.id == session.user.id else {
-            throw AccountError.accountChanged
-        }
-        if let token = session.providerToken, !token.isEmpty {
-            try credentials.store(key: providerKey(session.user.id), value: Data(token.utf8))
-        }
-        let connection = Data(session.user.id.uuidString.utf8)
-        if try credentials.retrieve(key: Self.connectionKey) != connection {
-            try credentials.store(key: Self.connectionKey, value: connection)
-        }
-        persistAccount(snapshot(session.user))
     }
 
     private func providerKey(_ id: UUID) -> String { Self.providerPrefix + id.uuidString }
