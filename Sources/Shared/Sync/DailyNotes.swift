@@ -126,25 +126,25 @@ public actor DailyNotes {
     /// notes gist, else the first day of a new daily notes gist. Autosave publishes it like any other file.
     public func stageToday(target: DailyNote.Day = .init()) async throws -> (gist: Gist?, draft: Draft) {
         let drafts = try await store.drafts(accountID: accountID)
+        let cached = try await store.cachedLibrary(accountID: accountID)
+        // A day you've started opens from this iPhone, and opening it checks GitHub like any note.
+        let day = DailyNote(day: target, cache: cached, drafts: drafts)
+        if let started = drafts.first(where: { $0.id == day.draftID }) {
+            return (gist: cached?.owned.first { $0.id == started.gistID }, draft: started)
+        }
         if let pending = drafts.first(where: {
             $0.gistID == nil && $0.description == DailyNote.gistDescription
         }) {
-            if pending.filename == target.filename { return (gist: nil, draft: pending) }
             // An earlier day never reached GitHub, so it creates the gist that today joins.
             try await publisher.publish(id: pending.id, accountID: accountID)
         }
-        guard let gist = try await dailyGist() else {
+        guard let gist = try await dailyGist(cached: cached) else {
             return (gist: nil, draft: try await store.newGistDraft(
                 accountID: accountID, githubUserID: githubUserID, filename: target.filename,
                 description: DailyNote.gistDescription,
                 content: DailyNote.content(template: nil, filename: target.filename)))
         }
         guard gist.owner?.id == githubUserID else { throw DraftError.readOnly }
-        if let existing = try await store.drafts(accountID: accountID).first(where: {
-            $0.gistID == gist.id && $0.filename == target.filename
-        }) {
-            return (gist: gist, draft: existing)
-        }
         let content: String
         if let text = try await text(of: target.filename, in: gist) {
             content = text
@@ -161,8 +161,7 @@ public actor DailyNotes {
 
     /// The daily gist as GitHub has it now, because the web may have started today since the
     /// library was cached. Offline, the library on this iPhone decides.
-    private func dailyGist() async throws -> Gist? {
-        let cached = try await store.cachedLibrary(accountID: accountID)
+    private func dailyGist(cached: CachedLibrary?) async throws -> Gist? {
         let daily = cached?.owned.first(where: \.isDailyNote)
         do {
             if let daily {

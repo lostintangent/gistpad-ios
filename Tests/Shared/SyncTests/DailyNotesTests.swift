@@ -91,6 +91,22 @@ private func day(_ iso: String) throws -> DailyNote.Day {
         #expect(offline.draft.text == "# 2026-10-26\n\n")
     }
 
+    /// Add to Today and the widget reach a day you've started without waiting on GitHub.
+    @Test func aStartedDayOpensWithoutAskingGitHub() async throws {
+        let sync = try SyncFixture()
+        let gist = sync.server.addGist(description: DailyNote.gistDescription, files: ["2026-10-23.md": "Yesterday"])
+        try await sync.store.cacheLibrary(
+            owned: [gist], starred: [], preferences: .init(metadata: [:]), accountID: SyncFixture.account)
+        let today = try day("2026-10-24")
+        let typed = try await sync.type("- [ ] Ship", in: try await sync.dailyNotes.stageToday(target: today).draft)
+
+        let asked = sync.server.requests.count
+        let again = try await sync.dailyNotes.stageToday(target: today)
+        #expect(again.gist?.id == gist.id)
+        #expect(again.draft.id == typed.id)
+        #expect(sync.server.requests.count == asked)
+    }
+
     @Test func addToTodayAppendsAParagraphOrOneTaskPerLine() async throws {
         let store = try DraftStore.open(inMemory: true)
         var draft = try await store.newDraft(accountID: UUID(), githubUserID: 42, text: "# Today\n\nA thought")

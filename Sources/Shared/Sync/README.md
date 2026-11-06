@@ -94,11 +94,12 @@ close it.
 ## Daily notes
 
 `DailyNotes.stageToday(target:)` returns today's file, ready to edit. That's
-your draft if you've started the day, else a new file in the `📆 Daily notes`
-gist from `template.md` with `{{date}}` filled in, else the first day of a new
-daily gist with a `# YYYY-MM-DD` heading. It reads the daily gist from GitHub,
-by the cached library's ID when there is one, because the web may have started
-today since the cache was written. Offline, the cache's answer stands. Staging
+your draft if you've started the day, without asking GitHub. Otherwise it reads
+the daily gist from GitHub, by the cached library's ID when there is one,
+because the web may have started today since the cache was written. Then it's
+the web's file for today, else a new file in the `📆 Daily notes` gist from
+`template.md` with `{{date}}` filled in, else the first day of a new daily gist
+with a `# YYYY-MM-DD` heading. Offline, the cache's answer stands. Staging
 only reads, and the new day publishes once you type in it. An earlier day that
 never reached GitHub publishes first, so it creates the gist today joins.
 
