@@ -473,6 +473,7 @@ final class Library {
       guard request == libraryRequest, self.account?.id == account.id else { return }
       self.account = refreshed
       state.loadState = .ready
+      await refreshToday(in: owned, accountID: account.id)
       try await reloadLocalState(accountID: account.id)
       guard request == libraryRequest, self.account?.id == account.id else { return }
       refreshedAt = .now
@@ -497,6 +498,17 @@ final class Library {
         ? .reconnectRequired(message: error.localizedDescription)
         : .failed(message: error.localizedDescription)
     }
+  }
+
+  /// GitHub lists gists without their text, so a refresh reads today's file whenever the Daily
+  /// notes gist changed it. The Today button and today's row then count the tasks of a day started
+  /// on the web. A failed read leaves what the phone had.
+  private func refreshToday(in owned: [Gist], accountID: UUID) async {
+    let filename = DailyNote.filename()
+    guard let daily = owned.first(where: \.isDailyNote), daily.files[filename] != nil,
+      cachedLibrary?.currentContent(gist: daily, filename: filename) == nil
+    else { return }
+    _ = try? await sync.content(gist: daily, filename: filename, accountID: accountID)
   }
 
   /// Drafts a refresh keeps even when GitHub no longer lists their gist, because they're on screen.

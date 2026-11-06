@@ -43,6 +43,11 @@ public struct CachedLibrary: Codable, Equatable, Sendable {
         cachedContent(gist: gist, filename: filename)?.text
     }
 
+    /// A file's cached text, only when it's as new as `gist`.
+    public func currentContent(gist: Gist, filename: String) -> String? {
+        cachedContent(gist: gist, filename: filename).flatMap { $0.isCurrent ? $0.text : nil }
+    }
+
     func cachedContent(gist: Gist, filename: String) -> (text: String, isCurrent: Bool)? {
         let candidates = [details[gist.id], gist].compactMap { $0 }.sorted { $0.updatedAt > $1.updatedAt }
         for candidate in candidates {

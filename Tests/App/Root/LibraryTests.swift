@@ -576,8 +576,6 @@ struct LibraryTests {
       gistID: "daily", filename: "2026-10-24.md", text: "- [ ] A retained task")
     let library = fixture.library
     await library.start()
-    // Opening today reads its text, so its row and the Today button count its tasks.
-    await library.open(.today())
     let todayRow = try #require(
       library.state.unfilteredGists(in: .dailyNotes).first { $0.id == "daily/\(today)" })
     #expect(todayRow.dailyDate == DailyNote.date(filename: today))
@@ -603,6 +601,36 @@ struct LibraryTests {
     #expect(library.state.dailyNoteCount == 3)
     #expect(library.state.gists.filter { $0.id == rowID }.count == 1)
     #expect(!library.state.gists.contains { $0.id == draft.id.uuidString })
+  }
+
+  /// A day started on the web shows its tasks with nothing open. Refresh reads today's file only
+  /// when the Daily notes gist changed, and a failed read shows nothing.
+  @Test func refreshReadsTodayWhenTheDailyGistChanges() async throws {
+    let today = DailyNote.filename()
+    let fixture = try await LibraryFixture {
+      $0.addGist(
+        id: "daily", description: DailyNote.gistDescription,
+        files: [today: "- [x] One\n- [ ] Two"], updatedAt: .now - 60)
+    }
+    let raw = "GET /\(FixtureServer.you.login)/daily/raw/\(today)"
+    let reads = { fixture.server.requests.filter { $0 == raw }.count }
+    let library = fixture.library
+    fixture.fail(raw)
+    await library.start()
+    #expect(library.remoteRefreshStatus == .idle)
+    #expect(library.state.today.text == nil)
+    fixture.restore()
+    await library.refresh()
+    #expect(library.loadedFile == nil)
+    #expect(library.state.today.progress == .init(completed: 1, total: 2))
+    await library.refresh()
+    #expect(reads() == 1)
+    fixture.server.edit("daily", files: [today: "- [x] One\n- [x] Two"])
+    await library.refresh()
+    #expect(reads() == 2)
+    #expect(library.state.today.progress == .init(completed: 2, total: 2))
+    let row = library.state.unfilteredGists(in: .dailyNotes).first { $0.id == "daily/\(today)" }
+    #expect(row?.progress == .init(completed: 2, total: 2))
   }
 
   @Test func unfilteredDailyRowsResolveTheirGistAndRefreshOverdueOnCalendarChanges() async throws {
