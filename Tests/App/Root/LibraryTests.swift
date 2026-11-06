@@ -19,6 +19,43 @@ struct LibraryTests {
     .setTag(gistID: "a", tagID: "ideas", included: true),
   ]
 
+  // MARK: Launching
+
+  @Test func launchingShowsYourGistsAndOpensNothing() async throws {
+    let phone = try await Phone { $0.addGist(id: "a", description: "First", files: ["README.md": "One"]) }
+    await phone.launch()
+    #expect(phone.rows.map(\.id) == ["a"])
+    #expect(phone.onScreen == nil)
+    #expect(phone.publishes.isEmpty)
+  }
+
+  @Test func launchingAgainReopensYourLastFileAndPublishesEditsLeftBehind() async throws {
+    let phone = try await Phone(lastFile: .init(gistID: "a", filename: "Ideas.md", draftID: nil)) {
+      $0.addGist(id: "a", description: "First", files: ["README.md": "One", "Ideas.md": "Ideas"])
+      $0.addGist(id: "b", description: "Second", files: ["README.md": "Two"])
+      $0.addGist(id: "c", description: "Third", files: ["README.md": "Three"])
+    }
+    try await phone.leftover("b", text: "Two, edited")
+    try await phone.leftover("c", text: "Three, edited")
+    await phone.launch()
+    #expect(phone.onScreen == "Ideas")
+    #expect(phone.publishes.sorted() == ["PATCH /gists/b", "PATCH /gists/c"])
+    #expect(phone.onGitHub("b") == "Two, edited")
+    #expect(phone.onGitHub("c") == "Three, edited")
+    await phone.library.refresh()
+    #expect(phone.onScreen == "Ideas")
+  }
+
+  @Test func launchingOfflineShowsYourGistsAndLastFileFromThisIPhone() async throws {
+    let phone = try await Phone { $0.addGist(id: "a", description: "First", files: ["README.md": "One"]) }
+    await phone.launch()
+    try await phone.open(.gist(id: "a"))
+    phone.goOffline()
+    await phone.relaunch()
+    #expect(phone.rows.map(\.id) == ["a"])
+    #expect(phone.onScreen == "One")
+  }
+
   // MARK: Library
 
   @Test func mapsOwnedStarredAndWebMetadataWithoutDuplicates() async throws {
@@ -90,93 +127,6 @@ struct LibraryTests {
     #expect(library.loadedFile?.rowID == "a")
   }
 
-  /// A refresh cut off by leaving the app can come back as a timeout. Returning retries it, and
-  /// shows checking rather than the problem until the retry settles.
-  @Test func returningToTheAppRetriesAFailedRefresh() async throws {
-    let fixture = try await LibraryFixture {
-      $0.addGist(id: "a", description: "A note", files: ["README.md": "Text"])
-    }
-    let library = fixture.library
-    await library.start()
-    fixture.fail("GET /gists")
-    await library.refresh()
-    guard case .problem = library.remoteRefreshStatus else {
-      Issue.record("The failed refresh should show its problem.")
-      return
-    }
-    let retry = fixture.hold("GET /gists/starred")
-    let returning = Task { await library.refreshOnReturn() }
-    try await retry.arrival()
-    guard case .checking = library.remoteRefreshStatus else {
-      Issue.record("The retry should show as checking.")
-      return
-    }
-    retry.open()
-    await returning.value
-    #expect(library.remoteRefreshStatus == .idle)
-    #expect(library.state.loadState == .ready)
-  }
-
-  /// A refresh that only timed out or lost its connection keeps the list without a problem, and
-  /// returning to the app tries again.
-  @Test(arguments: [URLError.Code.timedOut, .networkConnectionLost])
-  func aDroppedRefreshShowsNothing(_ code: URLError.Code) async throws {
-    let fixture = try await LibraryFixture {
-      $0.addGist(id: "a", description: "A note", files: ["README.md": "Text"])
-    }
-    let library = fixture.library
-    await library.start()
-    fixture.fail("GET /gists", with: code)
-    await library.refresh()
-    #expect(library.remoteRefreshStatus == .idle)
-    #expect(library.state.loadState == .ready)
-    #expect(library.state.gists.contains { $0.id == "a" })
-    fixture.restore()
-    fixture.server.edit("a", description: "Changed on the web")
-    await library.refreshOnReturn()
-    #expect(library.state.gists.first { $0.id == "a" }?.title == "Changed on the web")
-  }
-
-  @Test func networkFailureKeepsExistingLibraryAndFile() async throws {
-    let fixture = try await LibraryFixture {
-      $0.addGist(id: "a", description: "A note", files: ["README.md": "Text"])
-    }
-    let library = fixture.library
-    await library.start()
-    await library.open(.gist(id: "a"))
-    fixture.fail()
-    await library.refresh()
-    #expect(library.state.gists.filter { !$0.isDailyNote }.count == 1)
-    #expect(library.loadedFile?.gist?.id == "a")
-    guard case .failed(let message) = library.state.loadState else {
-      Issue.record("A failed refresh must remain visible.")
-      return
-    }
-    #expect(!message.isEmpty)
-  }
-
-  @Test func failedGitHubWriteRaisesAttentionUntilItsRetrySucceeds() async throws {
-    let fixture = try await LibraryFixture {
-      $0.addGist(id: "a", description: "A note", files: ["README.md": "Text"])
-    }
-    let library = fixture.library
-    await library.start()
-    fixture.fail("PUT /auth/v1/user")
-    _ = try? await library.perform(.preferences([.setPinned(gistID: "a", pinned: true)]))
-    guard case .problem(let problem) = library.remoteRefreshStatus else {
-      Issue.record("A failed GitHub write should raise the GitHub status control.")
-      return
-    }
-    #expect(problem.heading == "Couldn't sync")
-    #expect(problem.message == "This change wasn't saved.")
-    #expect(problem.recoveryTitle == "Try Again")
-    fixture.restore()
-    try await library.retryPublish()
-    #expect(library.unsentChange == nil)
-    #expect(library.remoteRefreshStatus == .idle)
-    #expect(library.state.gists.first { $0.id == "a" }?.isPinned == true)
-  }
-
   @Test func commentTotalsUpdateTheirLibraryRow() async throws {
     let fixture = try await LibraryFixture {
       $0.addGist(
@@ -245,23 +195,6 @@ struct LibraryTests {
     #expect(fixture.server.requests == requests)
   }
 
-  @Test func launchRestoresTheAccountScopedFileWithoutCreatingAnything() async throws {
-    let fixture = try await LibraryFixture(
-      selection: .init(gistID: "a", filename: "Ideas.md", draftID: nil)
-    ) {
-      $0.addGist(
-        id: "a", description: "Last chosen", files: ["README.md": "Text", "Ideas.md": "Ideas"])
-    }
-    let library = fixture.library
-    await library.start()
-    #expect(library.loadedFile?.gist?.id == "a")
-    #expect(library.loadedFile?.filename == "Ideas.md")
-    #expect(!library.localDrafts.contains { $0.description == DailyNote.gistDescription })
-    await library.refresh()
-    #expect(library.loadedFile?.filename == "Ideas.md")
-    #expect(fixture.publishes.isEmpty)
-  }
-
   @Test func sourceUsesTheSavedFrontMatterPreferenceWithoutChangingTheDraft() async throws {
     let prefix = "---\nedit:\n  instructions: Preserve source bytes\n---\n\n"
     let source = prefix + "# Content\n\nA retained thought."
@@ -291,221 +224,453 @@ struct LibraryTests {
     #expect(view.undoManager?.canUndo != true)
   }
 
-  // MARK: Files on this iPhone
-
-  @Test func newNotesAreRealDurableLocalDraftsEvenOffline() async throws {
-    let fixture = try await LibraryFixture()
-    let library = fixture.library
-    await library.start()
-    fixture.fail()
-    await library.open(.new)
-    let file = try #require(library.visibleFile)
-    let draft = try #require(file.draft)
-    #expect(file.gist == nil)
-    #expect(file.editingRequestID != nil)
-    #expect(draft.gistID == nil)
-    #expect(draft.state == .savedLocally)
-    #expect(library.openError == nil)
-    #expect(library.state.gists.contains { $0.id == draft.id.uuidString })
-    fixture.restore()
-    await library.refresh()
-    await library.refresh()
-    #expect(library.state.gists.filter { $0.id == draft.id.uuidString }.count == 1)
-    #expect(fixture.publishes.isEmpty)
+  @Test func openingAFileOfflineThatsNeverBeenOpenedFails() async throws {
+    let phone = try await Phone { $0.addGist(id: "a", description: "First", files: ["README.md": "One"]) }
+    await phone.launch()
+    phone.goOffline()
+    await phone.library.open(.gist(id: "a"))
+    #expect(phone.library.opening?.failure != nil)
+    #expect(phone.onScreen == nil)
   }
 
-  @Test func launchDiscardsAnAbandonedBlankDraftEvenWhenItWasRemembered() async throws {
-    let fixture = try await LibraryFixture()
-    let accountID = fixture.account.id
-    let blank = try await fixture.store.newGistDraft(
-      accountID: accountID, githubUserID: FixtureServer.you.id)
-    let kept = try await fixture.store.newGistDraft(
-      accountID: accountID, githubUserID: FixtureServer.you.id)
-    let text = "Keep e\u{301}\r\n日本語 👩🏽‍💻"
-    _ = try await fixture.store.persist(id: kept.id, accountID: accountID, text: text, generation: 1)
-    fixture.lastOpened.save(
-      .init(gistID: nil, filename: blank.filename, draftID: blank.id), accountID: accountID)
-    let library = fixture.library
-    await library.start()
-    #expect(library.loadedFile == nil)
-    #expect(library.localDrafts.map(\.id) == [kept.id])
-    #expect(library.state.gists.map(\.id) == [kept.id.uuidString])
-    let stored = try await fixture.store.drafts(accountID: accountID)
-    #expect(stored.first { $0.id == kept.id }?.text.utf8.elementsEqual(text.utf8) == true)
-    #expect(fixture.publishes.isEmpty)
+  @Test func openingTodayFillsInTheDailyTemplate() async throws {
+    let phone = try await Phone {
+      $0.addGist(
+        id: "d", description: DailyNote.gistDescription,
+        files: ["template.md": "# {{date}}\n\n- [ ] Plan {{date}}\n"])
+    }
+    await phone.launch()
+    try await phone.open(.today())
+    let date = DailyNote.Day().filename.dropLast(3)
+    #expect(phone.onScreen == "# \(date)\n\n- [ ] Plan \(date)\n")
+    #expect(phone.publishes.isEmpty)
   }
 
-  @Test func returningToTheAppPublishesEveryLeftNoteWithUnpublishedEdits() async throws {
-    let fixture = try await LibraryFixture {
+  @Test(arguments: [false, true])
+  func leavingAnUntouchedFilePublishesNothing(today: Bool) async throws {
+    let phone = try await Phone { $0.addGist(id: "a", description: "First", files: ["README.md": "One"]) }
+    await phone.launch()
+    await phone.leave(try await phone.open(today ? .today() : .gist(id: "a")))
+    await phone.returnToApp()
+    #expect(phone.publishes.isEmpty)
+    #expect(phone.rows.map(\.id) == ["a"])
+    #expect(phone.days.isEmpty)
+  }
+
+  // MARK: Writing
+
+  @Test func typingIsSavedOnThisIPhoneBeforeItPublishes() async throws {
+    let phone = try await Phone { $0.addGist(id: "a", description: "First", files: ["README.md": "One"]) }
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a"))
+    let last = "One, 日本語 👨‍👩‍👧‍👦"
+    try await phone.type("One,", "One, 日本", last, in: a)
+    #expect(a.saveState == .savedLocally)
+    #expect(phone.publishes.isEmpty)
+    phone.goOffline()
+    await phone.relaunch()
+    #expect(phone.onScreen?.utf8.elementsEqual(last.utf8) == true)
+  }
+
+  @Test(arguments: [true, false])
+  func autosavePublishesOnceTypingStops(autosave: Bool) async throws {
+    let phone = try await Phone(autosave: autosave) {
+      $0.addGist(id: "a", description: "First", files: ["README.md": "One"])
+    }
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a"))
+    try await phone.type("One, typed", in: a)
+    let older = a.updateAutosave()
+    try await phone.type("One, typed again", in: a)
+    let latest = a.updateAutosave()
+    #expect((latest != nil) == autosave)
+    #expect(phone.publishes.isEmpty)
+    await older?.value
+    await latest?.value
+    #expect(phone.publishes == (autosave ? ["PATCH /gists/a"] : []))
+    #expect(phone.onGitHub("a") == (autosave ? "One, typed again" : "One"))
+  }
+
+  @Test func leavingTheAppPublishesTheOpenFile() async throws {
+    let phone = try await Phone(autosave: false) {
+      $0.addGist(id: "a", description: "First", files: ["README.md": "One"])
+    }
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a"))
+    try await phone.type("One, typed", in: a)
+    await phone.leaveApp()
+    #expect(phone.onGitHub("a") == "One, typed")
+    #expect(a.saveState == .savedToGitHub)
+  }
+
+  @Test func typingDuringAPublishPublishesNext() async throws {
+    let phone = try await Phone { $0.addGist(id: "a", description: "First", files: ["README.md": "One"]) }
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a"))
+    try await phone.type("First", in: a)
+    let gate = phone.fixture.hold("PATCH /gists/a")
+    let publishing = Task { await a.publish() }
+    try await gate.arrival()
+    try await phone.type("Second", in: a)
+    gate.open()
+    await publishing.value
+    #expect(phone.onGitHub("a") == "First")
+    #expect(phone.onScreen == "Second")
+    #expect(a.saveState == .savedLocally)
+    await phone.leave(a)
+    #expect(phone.onGitHub("a") == "Second")
+  }
+
+  enum Moment: CaseIterable { case autosave, leavingTheFile, leavingTheApp, returningToTheApp }
+
+  @Test(arguments: Moment.allCases)
+  func anEditThatCouldntPublishPublishesAtTheNextChance(_ moment: Moment) async throws {
+    let phone = try await Phone()
+    await phone.launch()
+    phone.goOffline()
+    let today = try await phone.open(.today())
+    try await phone.type("# Today\n\n- [ ] Walk", in: today)
+    await today.publish()
+    #expect(today.saveState == .failed(.network))
+    phone.goOnline()
+    switch moment {
+    case .autosave:
+      try await phone.type("# Today\n\n- [ ] Walk the dog", in: today)
+      await today.updateAutosave()?.value
+    case .leavingTheFile: await phone.leave(today)
+    case .leavingTheApp: await phone.leaveApp()
+    case .returningToTheApp: await phone.returnToApp()
+    }
+    #expect(phone.publishes == ["POST /gists"])
+    #expect(today.saveState == .savedToGitHub)
+    let daily = try #require(phone.github.gists.first(where: \.isDailyNote))
+    #expect(daily.files[DailyNote.Day().filename]?.content == today.editor.text)
+    #expect(daily.isPublic == false)
+  }
+
+  @Test func aNewGistNamedOfflineIsCreatedWhenYouReturn() async throws {
+    let phone = try await Phone()
+    await phone.launch()
+    phone.goOffline()
+    let new = try await phone.open(.new)
+    #expect(phone.onScreen == "")
+    _ = try await phone.library.apply(
+      .renameLocal(draftID: new.draft.id, title: "Ideas"), accountID: phone.accountID)
+    await phone.leave(new)
+    #expect(phone.rows.map(\.title) == ["Ideas"])
+    #expect(phone.publishes.isEmpty)
+    phone.goOnline()
+    await phone.returnToApp()
+    let gist = try #require(phone.github.gists.first)
+    #expect(gist.description == "Ideas")
+    #expect(phone.publishes == ["POST /gists"])
+    #expect(phone.rows.map(\.id) == [gist.id])
+  }
+
+  // MARK: Returning to the app
+
+  @Test func returningToTheAppPublishesEditsAndRefreshesTheOpenFile() async throws {
+    let phone = try await Phone {
       $0.addGist(id: "a", description: "First", files: ["README.md": "One"])
       $0.addGist(id: "b", description: "Second", files: ["README.md": "Two"])
     }
-    _ = try await fixture.stageEdit(gistID: "a", filename: "README.md", text: "One, edited")
-    _ = try await fixture.stageEdit(gistID: "b", filename: "README.md", text: "Two, edited")
-    await fixture.library.start()
-    await fixture.library.publishUnsyncedEdits()
-    #expect(fixture.remote("a", "README.md") == "One, edited")
-    #expect(fixture.remote("b", "README.md") == "Two, edited")
-    #expect(fixture.publishes.sorted() == ["PATCH /gists/a", "PATCH /gists/b"])
+    await phone.launch()
+    try await phone.open(.gist(id: "a"))
+    let b = try await phone.open(.gist(id: "b"))
+    try await phone.type("Two, typed", in: b)
+    phone.goOffline()
+    try await phone.open(.gist(id: "a"))
+    phone.goOnline()
+    phone.webEdits("a", ["README.md": "One, from the web"])
+    await phone.returnToApp()
+    #expect(phone.onGitHub("b") == "Two, typed")
+    #expect(phone.onScreen == "One, from the web")
   }
 
-  @Test func everyOwnedRowDeletesInAnyStateAndSomeoneElsesCannot() async throws {
-    let fixture = try await LibraryFixture {
-      $0.addGist(id: "a", description: "An owned gist", files: ["README.md": "Mine"])
+  @Test(arguments: [URLError.Code.notConnectedToInternet, .networkConnectionLost])
+  func returningToTheAppRetriesAFailedRefresh(_ failure: URLError.Code) async throws {
+    let phone = try await Phone { $0.addGist(id: "a", description: "First", files: ["README.md": "One"]) }
+    await phone.launch()
+    try await phone.open(.gist(id: "a"))
+    phone.github.addGist(id: "b", description: "Second", files: ["README.md": "Two"])
+    phone.dropRequests(failure)
+    await phone.library.refresh()
+    #expect(phone.rows.map(\.id) == ["a"])
+    #expect(phone.onScreen == "One")
+    #expect(phone.status == (failure == .notConnectedToInternet ? "Couldn't update your gists" : nil))
+    phone.goOnline()
+    let list = phone.fixture.hold("GET /gists/starred")
+    let returning = Task { await phone.returnToApp() }
+    try await list.arrival()
+    #expect(phone.status == "Checking")
+    list.open()
+    await returning.value
+    #expect(Set(phone.rows.map(\.id)) == ["a", "b"])
+    #expect(phone.status == nil)
+  }
+
+  @Test func aGistDeletedOnTheWebLeavesTheListOnRefresh() async throws {
+    let phone = try await Phone {
+      $0.addGist(id: "a", description: "First", files: ["README.md": "One"])
+      $0.addGist(id: "b", description: "Second", files: ["README.md": "Two"])
+    }
+    await phone.launch()
+    try await phone.webDeletes("a")
+    #expect(Set(phone.rows.map(\.id)) == ["a", "b"])
+    await phone.library.refresh()
+    #expect(phone.rows.map(\.id) == ["b"])
+  }
+
+  // MARK: Conflicts
+
+  @Test func publishingOverAWebEditShowsBothVersionsAndKeepMinePublishesIt() async throws {
+    let phone = try await Phone(autosave: false) {
+      $0.addGist(id: "a", description: "First", files: ["README.md": "One"])
+    }
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a"))
+    try await phone.type("Mine", in: a)
+    phone.webEdits("a", ["README.md": "Theirs"])
+    await a.publish()
+    let review = try a.reviewContext()
+    #expect(review.conflict.local == "Mine")
+    #expect(review.conflict.remote == "Theirs")
+    #expect(phone.onGitHub("a") == "Theirs")
+    try await a.applyReview(review, text: "Mine", publishes: true)
+    #expect(phone.onGitHub("a") == "Mine")
+    #expect(a.saveState == .savedToGitHub)
+  }
+
+  @Test func usingGitHubsVersionTakesItWithoutPublishing() async throws {
+    let phone = try await Phone(autosave: false) {
+      $0.addGist(id: "a", description: "First", files: ["README.md": "One"])
+    }
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a"))
+    try await phone.type("Mine", in: a)
+    phone.webEdits("a", ["README.md": "Theirs"])
+    await a.publish()
+    try await a.applyReview(a.reviewContext(), text: "Theirs", publishes: false)
+    #expect(phone.onScreen == "Theirs")
+    #expect(a.saveState == .savedToGitHub)
+    #expect(phone.publishes.isEmpty)
+  }
+
+  @Test func keepingMineRestoresAFileDeletedOnTheWeb() async throws {
+    let phone = try await Phone(autosave: false) {
+      $0.addGist(id: "a", description: "First", files: ["README.md": "One", "Other.md": "Two"])
+    }
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a", filename: "README.md"))
+    try await phone.type("Mine", in: a)
+    phone.webEdits("a", ["README.md": nil])
+    await a.publish()
+    let review = try a.reviewContext()
+    #expect(review.conflict.remote == nil)
+    try await a.applyReview(review, text: "Mine", publishes: true)
+    #expect(phone.onGitHub("a") == "Mine")
+  }
+
+  @Test func editsToAGistDeletedOnTheWebStayOnThisIPhoneUntilYouDeleteThem() async throws {
+    let phone = try await Phone { $0.addGist(id: "a", description: "First", files: ["README.md": "One"]) }
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a"))
+    phone.goOffline()
+    try await phone.type("Mine", in: a)
+    await phone.leave(a)
+    phone.goOnline()
+    try await phone.webDeletes("a")
+    await phone.library.refresh()
+    let row = try #require(phone.rows.first)
+    #expect(phone.rows.count == 1)
+    #expect(row.isRecovery)
+    let kept = try await phone.open(.draft(id: try #require(UUID(uuidString: row.id))))
+    #expect(phone.onScreen == "Mine")
+    #expect(!kept.saveState.canPublish)
+    await kept.publish()
+    await phone.leave(kept)
+    await phone.leaveApp()
+    await phone.returnToApp()
+    #expect(phone.publishes.isEmpty)
+    #expect(phone.github.gists.isEmpty)
+    try await phone.delete(row: row.id)
+    #expect(phone.rows.isEmpty)
+  }
+
+  // MARK: Deleting
+
+  @Test func deletingAGistRemovesItFromGitHubAndClosesIt() async throws {
+    let phone = try await Phone(autosave: false) {
+      $0.addGist(id: "a", description: "First", files: ["README.md": "One"])
+      $0.addGist(id: "b", description: "Second", files: ["README.md": "Two"])
+    }
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a"))
+    try await phone.type("One, typed", in: a)
+    try await phone.delete(row: "a")
+    #expect(phone.github.requests.filter { $0.hasPrefix("DELETE") } == ["DELETE /gists/a"])
+    #expect(phone.github.gists.map(\.id) == ["b"])
+    #expect(phone.rows.map(\.id) == ["b"])
+    #expect(phone.onScreen == nil)
+    phone.goOffline()
+    await phone.relaunch()
+    #expect(phone.rows.map(\.id) == ["b"])
+    #expect(phone.onScreen == nil)
+  }
+
+  @Test func deletingANewGistOfflineRemovesIt() async throws {
+    let phone = try await Phone()
+    await phone.launch()
+    phone.goOffline()
+    let new = try await phone.open(.new)
+    try await phone.type("# Draft\n\nNever published", in: new)
+    try await phone.delete(row: try #require(phone.rows.first).id)
+    #expect(phone.onScreen == nil)
+    #expect(phone.rows.isEmpty)
+    phone.goOnline()
+    await phone.returnToApp()
+    #expect(phone.publishes.isEmpty)
+  }
+
+  @Test func deletingADailyNoteRemovesItsDayOrTheGistWithItsLastDay() async throws {
+    let phone = try await Phone {
       $0.addGist(
-        id: "shared", description: "A friend's gist", files: ["README.md": "Theirs"],
+        id: "d", description: DailyNote.gistDescription,
+        files: ["2026-10-23.md": "The alpha day", "2026-10-24.md": "The beta day"])
+    }
+    await phone.launch()
+    try await phone.delete(row: "d/2026-10-24.md")
+    #expect(phone.days == ["d/2026-10-23.md"])
+    #expect(phone.onGitHub("d", "2026-10-24.md") == nil)
+    #expect(phone.onGitHub("d", "2026-10-23.md") == "The alpha day")
+    try await phone.delete(row: "d/2026-10-23.md")
+    #expect(phone.github.gists.isEmpty)
+    #expect(phone.days.isEmpty)
+  }
+
+  @Test func deletingTodayClosesItUntilYouOpenItAgain() async throws {
+    let today = DailyNote.Day().filename
+    let phone = try await Phone {
+      $0.addGist(
+        id: "d", description: DailyNote.gistDescription,
+        files: [today: "Today's words", "2020-01-01.md": "An earlier day"])
+    }
+    await phone.launch()
+    try await phone.open(.today())
+    try await phone.delete(row: "d/\(today)")
+    #expect(phone.onScreen == nil)
+    #expect(phone.onGitHub("d", today) == nil)
+    await phone.returnToApp()
+    #expect(phone.days == ["d/2020-01-01.md"])
+    try await phone.open(.today())
+    #expect(phone.onScreen == "# \(today.dropLast(3))\n\n")
+  }
+
+  // MARK: Changing a gist
+
+  @Test func renamingStarringAndPinningNeedAConnection() async throws {
+    let phone = try await Phone { $0.addGist(id: "a", description: "First", files: ["README.md": "One"]) }
+    await phone.launch()
+    phone.goOffline()
+    let changes: [Change] = [
+      .rename(gistID: "a", title: "Renamed"), .star(gistID: "a", starred: true),
+      .preferences([.setPinned(gistID: "a", pinned: true)]),
+    ]
+    for change in changes {
+      await #expect(throws: (any Error).self) {
+        _ = try await phone.library.apply(change, accountID: phone.accountID)
+      }
+    }
+    #expect(phone.status == "Couldn't sync")
+    phone.goOnline()
+    await phone.returnToApp()
+    #expect(phone.github.gists.first?.description == "First")
+    #expect(phone.publishes.isEmpty)
+    try await phone.library.retryPublish()
+    #expect(phone.status == nil)
+    #expect(phone.rows.first?.isPinned == true)
+  }
+
+  @Test func renamingAFileKeepsWhatYouTyped() async throws {
+    let phone = try await Phone(autosave: false) {
+      $0.addGist(id: "a", description: "First", files: ["README.md": "One"])
+    }
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a"))
+    try await phone.type("Mine", in: a)
+    _ = try await phone.library.apply(
+      .renameFile(gistID: "a", filename: "README.md", newFilename: "Notes.md"),
+      accountID: phone.accountID)
+    #expect(a.editor.text == "Mine")
+    await phone.leave(a)
+    #expect(phone.onGitHub("a", "Notes.md") == "Mine")
+    #expect(phone.onGitHub("a", "README.md") == nil)
+  }
+
+  @Test func someoneElsesGistIsReadOnly() async throws {
+    let phone = try await Phone {
+      $0.addGist(
+        id: "shared", description: "Theirs", files: ["README.md": "Theirs"],
         owner: FixtureServer.someoneElse, isStarred: true)
     }
-    let accountID = fixture.account.id
-    let orphan = try await fixture.stageEdit(
-      gistID: "gone", filename: "README.md", text: "An edit to a gist deleted elsewhere")
-    let local = try await fixture.store.newGistDraft(
-      accountID: accountID, githubUserID: FixtureServer.you.id)
-    _ = try await fixture.store.persist(
-      id: local.id, accountID: accountID, text: "A gist never published", generation: 1)
-    let library = fixture.library
-    await library.start()
-    let orphanRow = try #require(library.state.gists.first { $0.id == orphan.id.uuidString })
-    #expect(orphanRow.isRecovery)
-    await library.refresh()
-    #expect(library.state.gists.first { $0.id == orphanRow.id }?.updatedAt == orphan.updatedAt)
-
-    // A new gist's row is its own as soon as it publishes.
-    await library.open(.new)
-    let created = try #require(library.loadedFile?.draft)
-    #expect(library.loadedFile.map(library.details(for:))?.shareURL == nil)
-    _ = try await library.persist(
-      draftID: created.id, accountID: accountID, text: "Just published", generation: 1)
-    let published = try await library.publish(draftID: created.id, accountID: accountID)
-    let gistID = try #require(published.gistID)
-    let shareURL = try #require(library.loadedFile.map(library.details(for:))?.shareURL)
-    #expect(shareURL.absoluteString.hasPrefix("https://gistpad.dev/#/share/\(gistID)/"))
-    #expect(library.state.selectedID == gistID)
-    #expect(library.deletion(forRow: created.id.uuidString) == .delete(gistID: gistID))
-    for id in ["gone", "unknown", "shared"] {
-      #expect(library.deletion(forRow: id) == nil)
-    }
-
-    await library.open(.draft(id: orphan.id))
-    #expect(library.loadedFile?.isRecovery == true)
-    let owned = [orphanRow.id, local.id.uuidString, "a", gistID]
-    for rowID in owned {
-      _ = try await library.perform(try #require(library.deletion(forRow: rowID)))
-    }
-    #expect(library.state.selectedID != orphanRow.id)
-    await library.refresh()
-    let rows = Set(library.state.gists.map(\.id))
-    #expect(rows.isDisjoint(with: owned) && rows.contains("shared"))
-    #expect(fixture.server.gists.map(\.id) == ["shared"])
-    #expect(
-      fixture.server.requests.filter { $0.hasPrefix("DELETE") }
-        == ["DELETE /gists/a", "DELETE /gists/\(gistID)"])
-    let stored = Set(try await fixture.store.drafts(accountID: accountID).map(\.id))
-    #expect(stored.isDisjoint(with: [orphan.id, local.id, created.id]))
+    await phone.launch()
+    let shared = try await phone.open(.gist(id: "shared"))
+    #expect(!shared.details.access.canEdit)
+    #expect(!shared.editor.textView.isEditable)
+    #expect(phone.library.deletion(forRow: "shared") == nil)
   }
 
-  @Test func deletingALibraryGistRemovesItsRowAndDraftsAndOpensNothing() async throws {
-    let fixture = try await LibraryFixture {
-      $0.addGist(id: "a", description: "A published note", files: ["README.md": "Text"])
-    }
-    let library = fixture.library
-    await library.start()
-    await library.open(.gist(id: "a"))
-    let draft = try #require(library.loadedFile?.draft)
-    _ = try await library.persist(
-      draftID: draft.id, accountID: draft.accountID, text: "An accepted edit", generation: 1)
-    _ = try await library.publish(draftID: draft.id, accountID: draft.accountID)
-    #expect(library.deletion(forRow: "a") == .delete(gistID: "a"))
-    _ = try await library.perform(.delete(gistID: "a"))
-    #expect(fixture.server.requests.filter { $0.hasPrefix("DELETE") } == ["DELETE /gists/a"])
-    #expect(fixture.server.gists.isEmpty)
-    #expect(library.loadedFile == nil)
-    #expect(library.state.selectedID == nil)
-    #expect(library.deletion(forRow: "a") == nil)
-    #expect(library.state.gists.isEmpty)
-    #expect(try await fixture.store.drafts(accountID: fixture.account.id).isEmpty)
-    let relaunched = fixture.relaunch()
-    await relaunched.start()
-    #expect(relaunched.state.gists.isEmpty)
-    #expect(relaunched.loadedFile == nil)
+  // MARK: Accounts
+
+  @Test func signingOutAndBackInKeepsWhatYouTyped() async throws {
+    let phone = try await Phone { $0.addGist(id: "a", description: "First", files: ["README.md": "One"]) }
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a"))
+    let mine = "Mine e\u{301} 日本語 👩🏽‍💻"
+    phone.goOffline()
+    try await phone.type(mine, in: a)
+    await phone.leave(a)
+    phone.goOnline()
+    _ = try await phone.library.apply(.signOut, accountID: phone.accountID)
+    #expect(phone.library.account == nil)
+    #expect(phone.library.state.loadState == .signedOut)
+    #expect(phone.library.state.gists.isEmpty)
+    #expect(phone.onScreen == nil)
+    await phone.library.signIn()
+    #expect(phone.library.account?.id == phone.accountID)
+    await phone.returnToApp()
+    #expect(phone.onGitHub("a")?.utf8.elementsEqual(mine.utf8) == true)
   }
 
-  // MARK: Account
-
-  @Test func signOutRetainsExactDraftsAndRestoresTheSameAccount() async throws {
-    let fixture = try await LibraryFixture(
-      selection: .init(gistID: "a", filename: "README.md", draftID: nil)
-    ) {
-      $0.addGist(id: "a", description: "Kept on this iPhone", files: ["README.md": "Base"])
+  @Test func anotherAccountSigningInWaitsForYourChoice() async throws {
+    let phone = try await Phone(autosave: false) {
+      $0.addGist(id: "a", description: "First", files: ["README.md": "One"])
     }
-    let text = "Private e\u{301}\r\n日本語 👩🏽‍💻"
-    let draft = try await fixture.stageEdit(gistID: "a", filename: "README.md", text: text)
-    let library = fixture.library
-    await library.start()
-    #expect(library.loadedFile?.draft?.id == draft.id)
-    _ = try await library.perform(.signOut)
-    #expect(library.account == nil)
-    #expect(library.loadedFile == nil)
-    #expect(library.cachedLibrary == nil)
-    #expect(library.state.gists.isEmpty)
-    #expect(library.state.loadState == .signedOut)
-    let kept = try await fixture.store.drafts(accountID: fixture.account.id)
-    #expect(kept.first { $0.id == draft.id }?.text.utf8.elementsEqual(text.utf8) == true)
-    await library.signIn()
-    #expect(library.account?.id == fixture.account.id)
-    #expect(library.loadedFile?.draft?.id == draft.id)
-    #expect(library.loadedFile?.text.utf8.elementsEqual(text.utf8) == true)
-    #expect(fixture.publishes.isEmpty)
-  }
-
-  @Test func anotherAccountSigningInWaitsAndKeepsTheOriginalDrafts() async throws {
-    let fixture = try await LibraryFixture(
-      selection: .init(gistID: "a", filename: "README.md", draftID: nil)
-    ) {
-      $0.addGist(id: "a", description: "Original account", files: ["README.md": "Base"])
-    }
-    let text = "日本語 e\u{301}\r\n**Private draft**"
-    let local = try await fixture.stageEdit(gistID: "a", filename: "README.md", text: text)
-    let library = fixture.library
-    await library.start()
+    await phone.launch()
+    let a = try await phone.open(.gist(id: "a"))
+    try await phone.type("Mine", in: a)
     let other = UUID()
-    try fixture.signInNext(as: other, login: FixtureServer.someoneElse.login)
-    await library.signIn()
-    #expect(library.account?.id == fixture.account.id)
-    #expect(library.pendingAccount?.id == other)
-    #expect(library.loadedFile?.accountID == fixture.account.id)
-    guard case .reconnectRequired = library.state.loadState else {
-      Issue.record("An account switch must not silently adopt another account.")
-      return
-    }
-    library.keepCurrentAccount()
-    #expect(library.account?.id == fixture.account.id)
-    #expect(library.pendingAccount == nil)
-    let kept = try await fixture.store.drafts(accountID: fixture.account.id)
-    #expect(kept.first { $0.id == local.id }?.text.utf8.elementsEqual(text.utf8) == true)
-    #expect(try await fixture.store.drafts(accountID: other).isEmpty)
+    try phone.fixture.signInNext(as: other, login: FixtureServer.someoneElse.login)
+    await phone.library.signIn()
+    #expect(phone.library.account?.id == phone.accountID)
+    #expect(phone.library.pendingAccount?.id == other)
+    phone.library.keepCurrentAccount()
+    #expect(phone.library.pendingAccount == nil)
+    await phone.leave(a)
+    #expect(phone.onGitHub("a") == "Mine")
   }
 
   // MARK: Daily notes
 
-  @Test func coldStartOpensNothingAndAnUntouchedTodayDoesNotPublish() async throws {
+  @Test func aTodayActionFocusesTheEditorOncePerRequest() async throws {
     let fixture = try await LibraryFixture()
     let library = fixture.library
     await library.start()
-    #expect(library.loadedFile == nil)
-    #expect(try await fixture.store.drafts(accountID: fixture.account.id).isEmpty)
     await library.open(.today())
     let file = try #require(library.loadedFile)
     let draft = try #require(file.draft)
-    #expect(file.filename == DailyNote.Day().filename)
     #expect(file.editingRequestID != nil)
-    #expect(draft.isDiscardableBlank)
-    let session = FileSession(
-      file: file, draft: draft, library: library, autosaveDelay: .milliseconds(1))
-    #expect(!session.hasUnpublishedChanges)
-    #expect(session.autosave(foreground: true) == nil)
-    await session.publish(reason: .background)
-    #expect(fixture.publishes.isEmpty)
+    let session = FileSession(file: file, draft: draft, library: library)
     session.requestCreationFocus()
     #expect(session.mode == .edit)
     session.mode = .preview
@@ -676,51 +841,6 @@ struct LibraryTests {
       library.deletion(forRow: "daily/2026-10-24.md")
         == .deleteFile(gistID: "daily", filename: "2026-10-24.md"),
       "A Daily row deletes only its own file.")
-  }
-
-  @Test func deletingADailyNoteRemovesOnlyItsFileOrTheGistWithItsLastFile() async throws {
-    let fixture = try await LibraryFixture(
-      selection: .init(gistID: "daily", filename: "2026-10-23.md", draftID: nil)
-    ) {
-      $0.addGist(
-        id: "daily", description: DailyNote.gistDescription,
-        files: ["2026-10-23.md": "The alpha day", "2026-10-24.md": "The beta day"])
-    }
-    let library = fixture.library
-    await library.start()
-    #expect(library.state.dailyNoteCount == 2)
-    _ = try await library.perform(try #require(library.deletion(forRow: "daily/2026-10-24.md")))
-    #expect(library.state.dailyNoteCount == 1)
-    #expect(library.state.gists.map(\.id) == ["daily/2026-10-23.md"])
-    #expect(fixture.remote("daily", "2026-10-24.md") == nil)
-    #expect(fixture.remote("daily", "2026-10-23.md") == "The alpha day")
-    _ = try await library.perform(try #require(library.deletion(forRow: "daily/2026-10-23.md")))
-    #expect(fixture.server.gists.isEmpty)
-    #expect(!library.state.gists.contains { $0.gistID == "daily" })
-  }
-
-  @Test func deletingTheOpenTodayFromTheListKeepsItDeleted() async throws {
-    let today = DailyNote.filename()
-    let fixture = try await LibraryFixture(
-      selection: .init(gistID: "a", filename: "README.md", draftID: nil)
-    ) {
-      $0.addGist(id: "a", description: "Somewhere else", files: ["README.md": "Text"])
-      $0.addGist(
-        id: "daily", description: DailyNote.gistDescription,
-        files: [today: "Today's words", "2026-10-23.md": "An earlier day"])
-    }
-    let library = fixture.library
-    await library.start()
-    await library.open(.today())
-    #expect(library.loadedFile?.filename == today)
-    _ = try await library.apply(
-      try #require(library.deletion(forRow: "daily/\(today)")), accountID: fixture.account.id)
-    #expect(library.loadedFile == nil)
-    #expect(fixture.remote("daily", today) == nil)
-    #expect(!library.state.gists.contains { $0.filename == today })
-    #expect(try await fixture.store.drafts(accountID: fixture.account.id).allSatisfy {
-      $0.filename != today
-    })
   }
 
   @Test func aDayThatPublishesWhileItsDeletionWaitsRemovesOnlyThatDay() async throws {

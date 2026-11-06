@@ -1,11 +1,8 @@
-import Auth
 import Foundation
-import Synchronization
 import Testing
 @testable import Sync
 
 typealias FakeResponse = FixtureServer.Response
-typealias MemoryCredentials = FixtureServer.Credentials
 
 enum FakeURLProtocol {
     static func session(handler: @escaping @Sendable (URLRequest) async throws -> FakeResponse) -> URLSession {
@@ -73,64 +70,6 @@ struct SyncFixture {
 
     func publish(_ draft: Draft) async throws -> Draft {
         try await publisher.publish(id: draft.id, accountID: Self.account)
-    }
-
-    /// Checks GitHub's copy of the file the way opening a note does.
-    func inspect(_ draft: Draft) async throws -> Draft {
-        let current = try await reload(draft)
-        let remote = try await github.remoteFile(
-            gistID: try #require(current.gistID), ownerID: Self.user, filename: current.filename)
-        if let content = remote.content, current.adoptsRemote(content) {
-            return try await store.refreshCleanDraft(
-                id: current.id, accountID: Self.account, expectedGeneration: current.generation,
-                content: content, revision: remote.gist.revision)
-        }
-        return try await store.reconcile(
-            id: current.id, accountID: Self.account, expectedGeneration: current.generation,
-            remote: remote.content, revision: remote.gist.revision)
-    }
-
-    func reload(_ draft: Draft) async throws -> Draft {
-        try await store.draft(id: draft.id, accountID: Self.account)
-    }
-
-    /// The file's content on GitHub right now.
-    func remote(_ gistID: String, _ filename: String = "README.md") -> String? {
-        server.gists.first { $0.id == gistID }?.files[filename]?.content
-    }
-
-    func count(_ request: String) -> Int {
-        server.requests.filter { $0 == request }.count
-    }
-
-    var dailyNotes: DailyNotes {
-        DailyNotes(
-            accountID: Self.account, githubUserID: Self.user, client: github, store: store, publisher: publisher)
-    }
-}
-
-/// Lets a test hold a request at the fixture until it's released.
-actor Gate {
-    private var arrived = false
-    private var open = false
-    private var arrivals: [CheckedContinuation<Void, Never>] = []
-    private var held: [CheckedContinuation<Void, Never>] = []
-
-    func pass() async {
-        arrived = true
-        arrivals.forEach { $0.resume() }
-        arrivals.removeAll()
-        if !open { await withCheckedContinuation { held.append($0) } }
-    }
-
-    func waitForArrival() async {
-        if !arrived { await withCheckedContinuation { arrivals.append($0) } }
-    }
-
-    func release() {
-        open = true
-        held.forEach { $0.resume() }
-        held.removeAll()
     }
 }
 
