@@ -340,7 +340,7 @@ final class Library {
       try await reloadLocalState(accountID: restored.id, discardAbandonedBlanks: true)
       isStarting = false
       await refresh()
-      await restoreSelectionIfNeeded()
+      await restoreLastOpened()
     } catch is CancellationError {
       if request == libraryRequest {
         state.loadState = account == nil ? .signedOut : .ready
@@ -373,7 +373,7 @@ final class Library {
       pendingAccount = nil
       try await reloadLocalState(accountID: signedIn.id, discardAbandonedBlanks: true)
       await refresh()
-      await restoreSelectionIfNeeded()
+      await restoreLastOpened()
     } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
       state.loadState = previousState
     } catch is CancellationError {
@@ -404,7 +404,7 @@ final class Library {
       openError = error.localizedDescription
     }
     await refresh()
-    await restoreSelectionIfNeeded()
+    await restoreLastOpened()
   }
 
   func keepCurrentAccount() {
@@ -611,21 +611,18 @@ final class Library {
     lastOpened.save(selection, accountID: account.id)
   }
 
-  private func restoreSelectionIfNeeded() async {
+  /// Reopens the file you last had open. With nothing remembered, nothing opens, because a file
+  /// only starts when you ask for it.
+  private func restoreLastOpened() async {
     guard loadedFile == nil, state.selectedID == nil, opening == nil, let account,
       pendingAccount == nil
     else { return }
     let saved = lastOpened.selection(accountID: account.id)
     if let draftID = saved?.draftID, localDrafts.contains(where: { $0.id == draftID }) {
       await open(.draft(id: draftID))
-      return
-    }
-    if let gistID = saved?.gistID {
+    } else if let gistID = saved?.gistID {
       await open(.gist(id: gistID, filename: saved?.filename))
-      if loadedFile != nil { return }
     }
-    guard loadedFile == nil, state.selectedID == nil else { return }
-    await open(.today(focusesEditor: false))
   }
 
   func reloadPlatformState(accountID: UUID) async throws {
@@ -780,7 +777,6 @@ final class Library {
     if loadedFile?.draft?.id == draft.id, !isDraftSelected(draft.id) {
       loadedFile = nil
     }
-    if !isStarting, !isSigningIn, !isCreating { await restoreSelectionIfNeeded() }
     return true
   }
 
@@ -1009,7 +1005,6 @@ final class Library {
       projectLibrary()
     }
     try await reloadLocalState(accountID: account.id)
-    await restoreSelectionIfNeeded()
     return result
   }
 

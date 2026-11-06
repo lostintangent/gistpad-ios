@@ -34,7 +34,7 @@ Use size classes and the container's geometry, never device names. Respect the D
 
 **Sheet buttons.** Every sheet closes with the system X in `.cancellationAction`: `Button(role: .cancel)` when closing throws away an edit, `Button(role: .close)` when there's nothing to lose. A sheet that saves confirms with `Button(role: .confirm)` in `.confirmationAction`, the system's blue glass checkmark. The roles supply the symbol, color and VoiceOver label, so neither sets text, an accessibility label, a tint or a button style. While saving, the checkmark becomes a `ProgressView`. Both stay visible while a field has focus, so on the Closed Duo they sit in the trailing rail like Comments' X. This covers Rename Gist…, Rename File…, Add File…, Add Link, Add to Today and the tag sheets.
 
-Launch restores the last open file, or opens today's note. Existing files open in Preview. New gists and today's note open in Edit with the caret ready. The mode you pick sticks.
+Launch restores the last open file. With none, nothing opens, because today's note only starts when you ask for it. Existing files open in Preview. New gists and today's note open in Edit with the caret ready. The mode you pick sticks.
 
 Opening a file:
 

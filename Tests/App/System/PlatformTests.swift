@@ -306,6 +306,7 @@ private struct PlatformFixture {
     let sync = GitHubSync(accounts: fixture.accounts, drafts: fixture.store)
     let library = PlatformBridge.connect(sync, store: fixture.store, lastOpened: fixture.lastOpened)
     await library.start()
+    await library.open(.today())
     let bridge = try #require(PlatformBridge.shared)
     try await bridge.refresh()
     return Self(
@@ -320,7 +321,7 @@ private struct PlatformFixture {
     try await sync.today(accountID: account.id, target: DailyNote.Day())
   }
 
-  /// Today, open as the app opens it at launch.
+  /// Today, opened from the Today button.
   func session() async throws -> FileSession {
     try #require(library.sessions[try await today().draft.id])
   }

@@ -307,12 +307,9 @@ struct LibraryTests {
       .init(gistID: nil, filename: blank.filename, draftID: blank.id), accountID: accountID)
     let library = fixture.library
     await library.start()
-    let today = try #require(library.loadedFile?.draft)
-    #expect(library.visibleFile?.filename == DailyNote.filename())
-    #expect(today.isDiscardableBlank)
-    #expect(Set(library.localDrafts.map(\.id)) == [kept.id, today.id])
-    #expect(
-      Set(library.state.gists.map(\.id)) == [kept.id.uuidString, today.id.uuidString])
+    #expect(library.loadedFile == nil)
+    #expect(library.localDrafts.map(\.id) == [kept.id])
+    #expect(library.state.gists.map(\.id) == [kept.id.uuidString])
     let stored = try await fixture.store.drafts(accountID: accountID)
     #expect(stored.first { $0.id == kept.id }?.text.utf8.elementsEqual(text.utf8) == true)
     #expect(fixture.publishes.isEmpty)
@@ -387,7 +384,7 @@ struct LibraryTests {
     #expect(stored.isDisjoint(with: [orphan.id, local.id, created.id]))
   }
 
-  @Test func deletingALibraryGistRemovesItsRowAndDraftsAndQuietlyOpensToday() async throws {
+  @Test func deletingALibraryGistRemovesItsRowAndDraftsAndOpensNothing() async throws {
     let fixture = try await LibraryFixture {
       $0.addGist(id: "a", description: "A published note", files: ["README.md": "Text"])
     }
@@ -402,18 +399,15 @@ struct LibraryTests {
     _ = try await library.perform(.delete(gistID: "a"))
     #expect(fixture.server.requests.filter { $0.hasPrefix("DELETE") } == ["DELETE /gists/a"])
     #expect(fixture.server.gists.isEmpty)
-    #expect(library.visibleFile?.filename == DailyNote.filename())
-    #expect(library.loadedFile?.editingRequestID == nil)
-    #expect(library.state.selectedID == library.loadedFile?.rowID)
+    #expect(library.loadedFile == nil)
+    #expect(library.state.selectedID == nil)
     #expect(library.deletion(forRow: "a") == nil)
-    #expect(library.state.gists.allSatisfy { $0.isDailyNote })
-    #expect(try await fixture.store.drafts(accountID: fixture.account.id).allSatisfy {
-      $0.gistID != "a"
-    })
+    #expect(library.state.gists.isEmpty)
+    #expect(try await fixture.store.drafts(accountID: fixture.account.id).isEmpty)
     let relaunched = fixture.relaunch()
     await relaunched.start()
-    #expect(relaunched.state.gists.allSatisfy { $0.isDailyNote })
-    #expect(relaunched.visibleFile?.filename == DailyNote.filename())
+    #expect(relaunched.state.gists.isEmpty)
+    #expect(relaunched.loadedFile == nil)
   }
 
   // MARK: Account
@@ -474,15 +468,17 @@ struct LibraryTests {
 
   // MARK: Daily notes
 
-  @Test func coldStartEnsuresTodayQuietlyWithoutPublishingAnUntouchedTemplate() async throws {
+  @Test func coldStartOpensNothingAndAnUntouchedTodayDoesNotPublish() async throws {
     let fixture = try await LibraryFixture()
     let library = fixture.library
     await library.start()
+    #expect(library.loadedFile == nil)
+    #expect(try await fixture.store.drafts(accountID: fixture.account.id).isEmpty)
+    await library.open(.today())
     let file = try #require(library.loadedFile)
     let draft = try #require(file.draft)
     #expect(file.filename == DailyNote.Day().filename)
-    #expect(file.editingRequestID == nil)
-    #expect(library.visibleFile?.filename == DailyNote.filename())
+    #expect(file.editingRequestID != nil)
     #expect(draft.isDiscardableBlank)
     let session = FileSession(
       file: file, draft: draft, library: library, autosaveDelay: .milliseconds(1))
@@ -490,10 +486,6 @@ struct LibraryTests {
     #expect(session.autosave(foreground: true) == nil)
     await session.publish(reason: .background)
     #expect(fixture.publishes.isEmpty)
-    await library.open(.today())
-    #expect(library.loadedFile?.draft?.id == draft.id)
-    #expect(library.loadedFile?.editingRequestID != nil)
-    session.adoptPresentation(try #require(library.loadedFile))
     session.requestCreationFocus()
     #expect(session.mode == .edit)
     session.mode = .preview
@@ -564,6 +556,8 @@ struct LibraryTests {
       gistID: "daily", filename: "2026-10-24.md", text: "- [ ] A retained task")
     let library = fixture.library
     await library.start()
+    // Opening today reads its text, so its row and the Today button count its tasks.
+    await library.open(.today())
     let todayRow = try #require(
       library.state.unfilteredGists(in: .dailyNotes).first { $0.id == "daily/\(today)" })
     #expect(todayRow.dailyDate == DailyNote.date(filename: today))
@@ -811,9 +805,8 @@ struct RootViewTests {
     host.returnToLibrary()
     try await host.waitUntil {
       host.isLibraryVisible && !host.library.localDrafts.contains { $0.id == second.id }
-        && host.library.visibleFile?.filename == DailyNote.filename()
     }
-    #expect(host.library.loadedFile?.editingRequestID == nil)
+    #expect(host.library.loadedFile == nil)
     let stored = try await fixture.store.drafts(accountID: fixture.account.id).map(\.id)
     #expect(!stored.contains(first.id) && !stored.contains(second.id))
     #expect(fixture.publishes.isEmpty)

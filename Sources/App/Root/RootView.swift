@@ -100,8 +100,6 @@ struct RootView: View {
           } else if let title = library.openingTitle {
             OpeningFileView(title: title)
               .id(library.opening?.rowID ?? library.state.selectedID)
-          } else {
-            OpeningFileView(title: String(localized: "Today"))
           }
         }
         .libraryRail(
