@@ -83,7 +83,7 @@ The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and
 
 ## The gist screen
 
-**Title.** The gist's title, with the file name as its subtitle, except README.md. With more than one file, the title is a menu of files, the current one checked, then **Rename File…** and **Add File…**.
+**Title.** The gist's title, with the file name as its subtitle, except README.md. With more than one file, the title is a menu of files, the current one checked, then **Rename File…** and **Add File…**. A daily note's title is its day, exactly as its row reads ("Friday, Nov 6"), with no subtitle and no menu. You move between days in the Daily Notes section, like the web.
 
 **Mode.** A segmented, icon-only picker: Edit `square.and.pencil`, Split `rectangle.split.2x1` (only when it fits) and Preview `eye`, each with its spoken name.
 
@@ -95,11 +95,11 @@ The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and
 2. Rename Gist…, Tags, Files, Intelligence…, Find and Replace.
 3. Open in GitHub.
 4. Archive or Unarchive.
-
-A daily note leaves out Pin and Archive.
 5. **Delete Gist…**, or **Delete Daily Note…** on a daily note.
 
-**Delete.** Title **Delete “[title]”?** Message: **This deletes the gist from this iPhone and GitHub, including changes that haven't been published. This can't be undone.** A daily note says **the daily note** instead. Buttons Cancel and a destructive Delete. Deleting a daily note removes that day's file, or the gist when it's the last file.
+A daily note is a file, not a gist, so it leaves out everything that acts on the gist: Pin, Star, Rename Gist…, Tags, Files and Archive. Its More menu keeps Share and Copy Link, Intelligence… and Find and Replace, Open in GitHub and Delete Daily Note…, each in its usual section. Share is headed by the day.
+
+**Delete.** Title **Delete “[title]”?** Message: **This deletes the gist from this iPhone and GitHub, including changes that haven't been published. This can't be undone.** A daily note is titled by its day, **Delete “Friday, Nov 6”?**, and says **the daily note** instead of the gist. Buttons Cancel and a destructive Delete. Deleting a daily note removes that day's file, or the gist when it's the last file.
 
 **Review Changes.** A conflict opens a large sheet with Changes, My Draft and GitHub tabs. It says **Your draft is saved on this iPhone.** and **Both versions changed the same passage. Choose a version, or return to your draft to combine the changes yourself.** Changes labels its sides **On this iPhone** and **On GitHub**, with `+` and `-` and sideways scrolling. **Keep Mine** publishes yours. **Use GitHub's** confirms with **Replace your local draft with the GitHub version?** / "Replace your text with GitHub's version. You can undo this."
 
