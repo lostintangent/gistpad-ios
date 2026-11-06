@@ -312,28 +312,12 @@ public actor GistFileDraftStore {
         return Self.snapshot(draft)
     }
 
-    /// Forgets a gist deleted on GitHub, or one of its files when `filename` is set and `updated` is
-    /// the gist GitHub returned without it.
-    public func removeDrafts(
-        gistID: String, filename: String? = nil, updated gist: Gist? = nil, accountID: UUID
-    ) throws {
+    /// Forgets the drafts of a gist deleted on GitHub, or of one of its files.
+    public func removeDrafts(gistID: String, filename: String? = nil, accountID: UUID) throws {
         for draft in try modelContext.fetch(FetchDescriptor<StoredDraft>(
             predicate: #Predicate { $0.accountID == accountID && $0.gistID == gistID }
         )) where filename == nil || draft.filename == filename {
             modelContext.delete(draft)
-        }
-        try updateCache(accountID) { cached in
-            if let filename, let gist {
-                cached.owned = cached.owned.map { $0.id == gistID ? gist : $0 }
-                cached.starred = cached.starred.map { $0.id == gistID ? gist : $0 }
-                if cached.details[gistID] != nil { cached.details[gistID] = gist }
-                cached.fileContent["\(gistID)/\(filename)"] = nil
-            } else {
-                cached.owned.removeAll { $0.id == gistID }
-                cached.starred.removeAll { $0.id == gistID }
-                cached.details[gistID] = nil
-                cached.fileContent = cached.fileContent.filter { !$0.key.hasPrefix(gistID + "/") }
-            }
         }
         try commit()
     }
@@ -381,16 +365,10 @@ public actor GistFileDraftStore {
 
     /// GitHub has `content`, which becomes the base.
     public func confirm(
-        id: UUID, accountID: UUID, gistID: String, content: String,
-        revision: String?, publishedGist: Gist? = nil
+        id: UUID, accountID: UUID, gistID: String, content: String, revision: String?
     ) throws -> Draft {
         let draft = try find(id, accountID: accountID)
         guard draft.gistID == nil || draft.gistID == gistID else { throw DraftError.staleGeneration }
-        if let publishedGist {
-            try cachePublication(
-                publishedGist, accountID: accountID, githubUserID: draft.githubUserID,
-                filename: draft.filename, content: content)
-        }
         draft.gistID = gistID
         draft.base = content
         draft.baseRevision = revision
@@ -400,15 +378,10 @@ public actor GistFileDraftStore {
         return try settle(draft)
     }
 
-    /// Makes a new gist's draft a new file in `gist`, with no base. The gist joins the cached list,
-    /// so the draft finds it before the next refresh even if this publish doesn't land.
-    public func join(_ gist: Gist, id: UUID, accountID: UUID) throws -> Draft {
+    /// Makes a new gist's draft a new file in the gist `gistID`, with no base.
+    public func join(gistID: String, id: UUID, accountID: UUID) throws -> Draft {
         let draft = try find(id, accountID: accountID)
-        draft.gistID = gist.id
-        try updateCache(accountID) { cached in
-            cached.owned.removeAll { $0.id == gist.id }
-            cached.owned.insert(gist, at: 0)
-        }
+        draft.gistID = gistID
         try commit()
         return Self.snapshot(draft)
     }
@@ -425,9 +398,7 @@ public actor GistFileDraftStore {
     /// GitHub has the sent text or your text, it's confirmed. GitHub's copy changing from the base
     /// is a conflict. Sent text GitHub doesn't have is left for the next publish to forget. Typing
     /// since the draft was read means a newer publish or check follows, so this one stops here.
-    public func compareWithGitHub(
-        _ read: Draft, remote: String?, revision: String?, gist: Gist? = nil
-    ) throws -> Draft {
+    public func compareWithGitHub(_ read: Draft, remote: String?, revision: String?) throws -> Draft {
         guard let draft = try stored(read.id, accountID: read.accountID) else { return try current(read) }
         guard draft.generation == read.generation else { throw CancellationError() }
         guard let gistID = draft.gistID else { return Self.snapshot(draft) }
@@ -435,13 +406,12 @@ public actor GistFileDraftStore {
         if let sent = draft.sent {
             guard sourceEqual(remote, sent) else { return Self.snapshot(draft) }
             return try confirm(
-                id: draft.id, accountID: draft.accountID, gistID: gistID, content: sent,
-                revision: revision, publishedGist: gist)
+                id: draft.id, accountID: draft.accountID, gistID: gistID, content: sent, revision: revision)
         }
         if sourceEqual(remote, draft.text) {
             return try confirm(
                 id: draft.id, accountID: draft.accountID, gistID: gistID, content: draft.text,
-                revision: revision, publishedGist: gist)
+                revision: revision)
         }
         guard !sourceEqual(remote, draft.base) else { return Self.snapshot(draft) }
         draft.stateData = try encode(.conflict(DraftConflict(
@@ -518,7 +488,7 @@ public actor GistFileDraftStore {
         (try? JSONDecoder().decode(PublishState.self, from: data)) ?? .savedLocally
     }
 
-    func commit() throws {
+    private func commit() throws {
         do { try modelContext.save() }
         catch { modelContext.rollback(); throw error }
     }

@@ -65,7 +65,7 @@ public final class GistPadModel {
   /// A gist as GitHub has it now, which the cache then keeps.
   func gist(id: String, accountID: UUID) async throws -> Gist {
     let gist = try await client(accountID: accountID).gist(id: id)
-    try await draftStore.cacheGist(gist, accountID: accountID)
+    try updateCache(accountID) { $0.update(gist) }
     return gist
   }
 
@@ -73,14 +73,38 @@ public final class GistPadModel {
   /// Nil when the gist has no such file.
   public func text(of filename: String, in gist: Gist, accountID: UUID) async throws -> String? {
     guard gist.files[filename] != nil else { return nil }
-    if let cached = try await draftStore.gistCache(accountID: accountID)?
-      .currentContent(gist: gist, filename: filename)
-    {
-      return cached
-    }
-    let text = try await client(accountID: accountID).content(gist: gist, filename: filename)
-    try await draftStore.cacheContent(text, gist: gist, filename: filename, accountID: accountID)
+    if let cached = try cache(accountID)?.currentText(of: filename, in: gist) { return cached }
+    // GitHub lists a gist without its revision, so read the gist to know which text this is.
+    let read = gist.revision == nil ? try await self.gist(id: gist.id, accountID: accountID) : gist
+    let text = try await client(accountID: accountID).content(gist: read, filename: filename)
+    try updateCache(accountID) { $0.store(text, of: filename, in: read) }
     return text
+  }
+
+  /// The account's cache: the one in memory for the signed-in account, otherwise as saved.
+  func cache(_ accountID: UUID) throws -> GistCache? {
+    if let gistCache, gistCache.accountID == accountID { return gistCache }
+    return try GistCache.load(accountID: accountID, from: draftStore.modelContainer)
+  }
+
+  /// Changes the account's cache and saves it, once the account has one.
+  func updateCache(_ accountID: UUID, _ change: (inout GistCache) -> Void) throws {
+    guard var cache = try cache(accountID) else { return }
+    change(&cache)
+    try save(cache)
+  }
+
+  /// Keeps GitHub's copy of a file, which is never wrong to cache.
+  func cache(_ remote: RemoteFile, filename: String, accountID: UUID) throws {
+    try updateCache(accountID) { cache in
+      cache.update(remote.gist)
+      if let content = remote.content { cache.store(content, of: filename, in: remote.gist) }
+    }
+  }
+
+  func save(_ cache: GistCache) throws {
+    try cache.save(to: draftStore.modelContainer)
+    if account?.id == cache.accountID { gistCache = cache }
   }
 
   /// Runs one write to GitHub or the drafts at a time, so a publish, a new day and a rename never
@@ -134,8 +158,8 @@ public final class GistPadModel {
 
   func reloadLocalState(accountID: UUID) async throws {
     let records = localDraftRecords
-    let cache = try await draftStore.gistCache(accountID: accountID)
     let drafts = try await draftStore.drafts(accountID: accountID)
+    let cache = try cache(accountID)
     guard account?.id == accountID, pendingAccount == nil else { return }
     // A draft saved while this read ran is newer than the read, so read again.
     if localDraftRecords != records { return try await reloadLocalState(accountID: accountID) }
@@ -173,10 +197,7 @@ public final class GistPadModel {
     guard account?.id == accountID, pendingAccount == nil, !isSigningOut,
       var cache = gistCache, cache.gists.first(where: { $0.id == gistID })?.isDailyNote == false
     else { return }
-    let update: (Gist) -> Gist = { $0.id == gistID ? $0.withCommentCount(total) : $0 }
-    cache.owned = cache.owned.map(update)
-    cache.starred = cache.starred.map(update)
-    cache.details = cache.details.mapValues(update)
+    cache.setCommentCount(total, gistID: gistID)
     gistCache = cache
     projectLibrary()
   }
@@ -268,7 +289,7 @@ public final class GistPadModel {
           updateLibraryContent(
             &item,
             text: gistDrafts.first { $0.filename == filename }?.text
-              ?? cached?.content(gist: gist, filename: filename) ?? inline)
+              ?? cached?.text(of: filename, in: gist) ?? inline)
         }
         return item
       }

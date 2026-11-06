@@ -39,8 +39,7 @@ private func dailyData() throws -> Data {
             object["files"] = [day.filename: [
                 "filename": day.filename, "language": "Markdown", "content": "- [ ] Partial", "truncated": truncated]]
             return GistCache(
-                accountID: UUID(), owned: [try decodeGist(JSONSerialization.data(withJSONObject: object))],
-                starred: [])
+                accountID: UUID(), owned: [try decodeGist(JSONSerialization.data(withJSONObject: object))])
         }
         #expect(DailyNote(day: day, cache: try cache(true), drafts: []).progress == nil)
         let today = DailyNote(day: day, cache: try cache(false), drafts: [])

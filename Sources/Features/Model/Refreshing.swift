@@ -110,11 +110,12 @@ extension GistPadModel {
       async let starredGists = github.listStarredGists()
       let (owned, starred) = try await (ownedGists, starredGists)
       guard request == libraryRequest, self.account?.id == account.id else { return }
-      try await draftStore.cacheGists(owned: owned, starred: starred, accountID: account.id)
-      guard request == libraryRequest, self.account?.id == account.id else { return }
+      var cache = try cache(account.id) ?? GistCache(accountID: account.id)
+      cache.replaceLists(owned: owned, starred: starred)
+      try save(cache)
       self.account = refreshed
       state.loadState = .ready
-      await refreshToday(in: owned, accountID: account.id)
+      await refreshToday(in: cache.owned, accountID: account.id)
       try await reloadLocalState(accountID: account.id)
       guard request == libraryRequest, self.account?.id == account.id else { return }
       refreshedAt = .now
@@ -168,17 +169,12 @@ extension GistFileEditor {
     let generation = editor.generation
     do {
       let github = await model.client(accountID: draft.accountID)
-      let store = model.draftStore
       let (current, remote) = try await model.serially {
-        let current = try await store.current(draft)
+        let current = try await model.current(draft)
         guard let gistID = current.gistID else { return (current, RemoteFile?.none) }
         let remote = try await github.remoteFile(
           gistID: gistID, ownerID: current.githubUserID, filename: current.filename)
-        try await store.cacheGist(remote.gist, accountID: current.accountID)
-        if let content = remote.content {
-          try await store.cacheContent(
-            content, gist: remote.gist, filename: current.filename, accountID: current.accountID)
-        }
+        try model.cache(remote, filename: current.filename, accountID: current.accountID)
         return (current, remote)
       }
       try await model.reloadLocalState(accountID: current.accountID)
@@ -198,7 +194,7 @@ extension GistFileEditor {
       } else {
         adopt(
           try await model.serially {
-            try await store.compareWithGitHub(
+            try await model.draftStore.compareWithGitHub(
               current, remote: remote.content, revision: remote.gist.revision)
           })
         try await model.reloadLocalState(accountID: current.accountID)

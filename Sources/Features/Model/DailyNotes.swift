@@ -16,7 +16,7 @@ extension GistPadModel {
   func refreshToday(in owned: [Gist], accountID: UUID) async {
     let filename = DailyNote.filename()
     guard let daily = owned.first(where: \.isDailyNote), daily.files[filename] != nil,
-      gistCache?.currentContent(gist: daily, filename: filename) == nil
+      gistCache?.currentText(of: filename, in: daily) == nil
     else { return }
     _ = try? await text(of: filename, in: daily, accountID: accountID)
   }
@@ -30,7 +30,7 @@ extension GistPadModel {
     let github = await client(accountID: account.id)
     return try await serially {
       let drafts = try await draftStore.drafts(accountID: account.id)
-      let cached = try await draftStore.gistCache(accountID: account.id)
+      let cached = try cache(account.id)
       // A day you've started opens from this iPhone, and opening it checks GitHub like any note.
       let day = DailyNote(day: target, cache: cached, drafts: drafts)
       if let started = drafts.first(where: { $0.id == day.draftID }) {

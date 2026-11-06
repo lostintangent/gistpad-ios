@@ -95,9 +95,9 @@ struct DailyNotesTests {
         files: [today: "- [x] One\n- [ ] Two", "2026-01-02.md": "- [ ] Carried over"],
         updatedAt: .now - 60)
     }
-    let raw = "GET /\(FixtureServer.you.login)/d/raw/\(today)"
-    let reads = { phone.github.requests.filter { $0 == raw }.count }
-    phone.fixture.fail(raw)
+    let read = "GET /gists/d"
+    let reads = { phone.github.requests.filter { $0 == read }.count }
+    phone.fixture.fail(read)
     await phone.launch()
     #expect(phone.status == nil)
     #expect(phone.model.state.today.text == nil)

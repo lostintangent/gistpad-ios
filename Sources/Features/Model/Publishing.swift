@@ -100,9 +100,13 @@ extension GistPadModel {
     }
     let confirmed = try await github.content(gist: gist, filename: draft.filename)
     guard sourceEqual(confirmed, draft.text) else { throw DraftError.notConfirmed }
+    try updateCache(draft.accountID) {
+      $0.insert(gist)
+      $0.store(confirmed, of: draft.filename, in: gist)
+    }
     return try await draftStore.confirm(
       id: draft.id, accountID: draft.accountID, gistID: draft.gistID ?? gist.id, content: confirmed,
-      revision: gist.revision, publishedGist: gist)
+      revision: gist.revision)
   }
 
   /// Reads GitHub's copy of the file. Sent text GitHub doesn't have is forgotten, and the store
@@ -113,12 +117,13 @@ extension GistPadModel {
   ) async throws -> Draft {
     let remote = try await github.remoteFile(
       gistID: gistID, ownerID: draft.githubUserID, filename: draft.filename)
+    try cache(remote, filename: draft.filename, accountID: draft.accountID)
     var draft = draft
     if let sent = draft.sent, !sourceEqual(remote.content, sent) {
       draft = try await draftStore.forgetSent(id: draft.id, accountID: draft.accountID)
     }
     return try await draftStore.compareWithGitHub(
-      draft, remote: remote.content, revision: remote.gist.revision, gist: remote.gist)
+      draft, remote: remote.content, revision: remote.gist.revision)
   }
 
   /// A create that was cut off may have made the gist already. It's found by its description and
@@ -133,19 +138,25 @@ extension GistPadModel {
       let remote = try await github.remoteFile(
         gistID: gist.id, ownerID: draft.githubUserID, filename: draft.filename)
       if sourceEqual(remote.content, sent) {
+        try updateCache(draft.accountID) {
+          $0.insert(remote.gist)
+          $0.store(sent, of: draft.filename, in: remote.gist)
+        }
         return try await draftStore.confirm(
           id: draft.id, accountID: draft.accountID, gistID: remote.gist.id, content: sent,
-          revision: remote.gist.revision, publishedGist: remote.gist)
+          revision: remote.gist.revision)
       }
     }
     return try await draftStore.forgetSent(id: draft.id, accountID: draft.accountID)
   }
 
   /// A new day joins the Daily notes gist GitHub has, which the web may have started since this
-  /// iPhone last saw the list, and creates one only when there's none.
+  /// iPhone last saw the list, and creates one only when there's none. The gist joins the cached
+  /// list, so the day finds it before the next refresh even if this publish doesn't land.
   private func joinDailyGist(_ draft: Draft, on github: GitHubClient) async throws -> Draft {
     guard let daily = try await github.listGists().first(where: \.isDailyNote) else { return draft }
-    return try await draftStore.join(daily, id: draft.id, accountID: draft.accountID)
+    try updateCache(draft.accountID) { $0.insert(daily) }
+    return try await draftStore.join(gistID: daily.id, id: draft.id, accountID: draft.accountID)
   }
 }
 

@@ -2,12 +2,14 @@ import Foundation
 import Testing
 @testable import Store
 
-private func metadataOnly(_ gist: Gist) throws -> Gist {
+/// The gist as GitHub lists it, without its files' text or its history.
+private func listed(_ gist: Gist) throws -> Gist {
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
     let data = try encoder.encode(gist)
     let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any]
     var object = try #require(parsed)
+    object.removeValue(forKey: "history")
     let files = try #require(object["files"] as? [String: [String: Any]])
     object["files"] = files.mapValues { value in
         var file = value
@@ -25,17 +27,21 @@ private func metadataOnly(_ gist: Gist) throws -> Gist {
         let url = directory.appendingPathComponent("drafts.store")
         let account = UUID()
         let full = try decodeGist(gistData(content: "A cached body\n- [ ] Task"))
-        let metadata = try metadataOnly(full)
         let store = try GistFileDraftStore.open(url: url)
-        try await store.cacheGists(owned: [metadata], starred: [], accountID: account)
-        let before = try #require(try await store.gistCache(accountID: account))
-        #expect(before.content(gist: metadata, filename: "README.md") == nil)
-        try await store.cacheGist(full, accountID: account)
+        var cache = GistCache(accountID: account)
+        cache.replaceLists(owned: [try listed(full)], starred: [])
+        #expect(cache.text(of: "README.md", in: try listed(full)) == nil)
+        cache.update(full)
+        try cache.save(to: store.modelContainer)
+
         let reopened = try GistFileDraftStore.open(url: url)
-        let cached = try #require(try await reopened.gistCache(accountID: account))
+        var cached = try #require(try GistCache.load(accountID: account, from: reopened.modelContainer))
+        // A refresh that lists the gist unchanged keeps its text current.
+        cached.replaceLists(owned: [try listed(full)], starred: [])
         let gist = try #require(cached.owned.first)
-        #expect(cached.content(gist: gist, filename: "README.md") == "A cached body\n- [ ] Task")
-        #expect(try await reopened.gistCache(accountID: UUID()) == nil)
+        #expect(gist.files["README.md"]?.content == nil)
+        #expect(cached.currentText(of: "README.md", in: gist) == "A cached body\n- [ ] Task")
+        #expect(try GistCache.load(accountID: UUID(), from: reopened.modelContainer) == nil)
     }
 
     @Test func aNewGistUsesWebHeadingAndEmptyContentDefaults() {

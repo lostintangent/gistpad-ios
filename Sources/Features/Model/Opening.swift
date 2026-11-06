@@ -131,7 +131,7 @@ extension GistPadModel {
       return localFile(draft, rowID: rowID)
     }
     guard let gist, let userID = account.githubUserID,
-      let text = gistCache?.content(gist: gist, filename: selectedFilename)
+      let text = gistCache?.text(of: selectedFilename, in: gist)
     else { return nil }
     var file = GistFile(
       draft: Draft(

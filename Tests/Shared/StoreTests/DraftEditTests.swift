@@ -65,12 +65,10 @@ import Testing
         #expect(draft.generation == 7)
         #expect(draft.state == .savedLocally)
         #expect(draft.base == "remote base")
-        try await upgraded.cacheGists(
-            owned: [], starred: [], accountID: account
-        )
+        try GistCache(accountID: account).save(to: upgraded.modelContainer)
         #expect(try await upgraded.apply(DraftEdit(draft: draft, text: " accepted")).text
             == "unsynced source accepted")
-        #expect(try await upgraded.gistCache(accountID: account) != nil)
+        #expect(try GistCache.load(accountID: account, from: upgraded.modelContainer) != nil)
     }
 }
 

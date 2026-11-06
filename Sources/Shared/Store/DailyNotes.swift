@@ -40,7 +40,7 @@ public struct DailyNote: Codable, Equatable, Sendable {
         }
         self.init(
             day: day, gistID: gist?.id, draftID: draft?.id,
-            text: draft?.text ?? gist.flatMap { cache?.content(gist: $0, filename: day.filename) },
+            text: draft?.text ?? gist.flatMap { cache?.text(of: day.filename, in: $0) },
             state: draft?.state)
     }
 }

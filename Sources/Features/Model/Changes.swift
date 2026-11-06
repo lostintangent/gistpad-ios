@@ -153,9 +153,10 @@ extension GistPadModel {
         let (github, gist, userID) = try await ownedGist(gistID, account: account)
         guard gist.files[filename] == nil else { throw ChangeError.filenameExists }
         let updated = try await github.updateGist(id: gistID, files: [filename: .content("")])
-        try await draftStore.cacheGist(updated, accountID: account.id)
-        try await draftStore.cacheContent(
-          "", gist: updated, filename: filename, accountID: account.id)
+        try updateCache(account.id) {
+          $0.update(updated)
+          $0.store("", of: filename, in: updated)
+        }
         let draft = Draft(
           accountID: account.id, githubUserID: userID, gist: updated, filename: filename, text: "")
         return (draft, updated)
@@ -198,6 +199,7 @@ extension GistPadModel {
         try await serially {
           let (github, _, _) = try await ownedGist(id, account: account)
           try await github.deleteGist(id: id)
+          try updateCache(account.id) { $0.remove(gistID: id) }
           try await draftStore.removeDrafts(gistID: id, accountID: account.id)
         }
         forgetGist(id, accountID: account.id)
@@ -270,14 +272,11 @@ extension GistPadModel {
   private func landed(
     _ gist: Gist, starred: Bool? = nil, renamedFile: (from: String, to: String)? = nil
   ) async throws {
-    if var cache = gistCache, let account {
-      cache.owned = cache.owned.map { $0.id == gist.id ? gist : $0 }
-      cache.starred = cache.starred.map { $0.id == gist.id ? gist : $0 }
-      if let starred {
-        cache.starred.removeAll { $0.id == gist.id }
-        if starred { cache.starred.append(gist) }
+    if let account {
+      try updateCache(account.id) { cache in
+        cache.update(gist)
+        if let starred { cache.setStarred(starred, gist) }
       }
-      try await draftStore.cacheGists(owned: cache.owned, starred: cache.starred, accountID: account.id)
     }
     for fileEditor in editors.values where fileEditor.draft.gistID == gist.id {
       try await fileEditor.refreshMetadata(
@@ -291,6 +290,7 @@ extension GistPadModel {
       let (github, gist, _) = try await ownedGist(gistID, account: account)
       if gist.files[filename] != nil, gist.files.count == 1 {
         try await github.deleteGist(id: gistID)
+        try updateCache(account.id) { $0.remove(gistID: gistID) }
         try await draftStore.removeDrafts(gistID: gistID, accountID: account.id)
         return nil
       }
@@ -298,8 +298,8 @@ extension GistPadModel {
       let updated =
         gist.files[filename] == nil
         ? gist : try await github.updateGist(id: gistID, files: [filename: .delete])
-      try await draftStore.removeDrafts(
-        gistID: gistID, filename: filename, updated: updated, accountID: account.id)
+      try updateCache(account.id) { $0.remove(gistID: gistID, filename: filename, updated: updated) }
+      try await draftStore.removeDrafts(gistID: gistID, filename: filename, accountID: account.id)
       return updated
     }
     guard let left else { return forgetGist(gistID, accountID: account.id) }

@@ -48,7 +48,7 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
                 for filename in gist.markdownFilenames {
                     let isDefault = filename == gist.defaultMarkdownFilename
                     let draft = drafts.first { $0.gistID == gist.id && $0.filename == filename }
-                    let text = draft?.text ?? cache?.content(gist: gist, filename: filename)
+                    let text = draft?.text ?? cache?.text(of: filename, in: gist)
                     let body = text.map(visibleText)
                     // Opening a gist starts its draft, so only typing that GitHub doesn't have yet is newer.
                     let editedAt = draft?.hasUnpublishedEdits == true ? draft?.updatedAt : nil

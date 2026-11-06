@@ -66,8 +66,9 @@
       let store = try GistFileDraftStore.open(inMemory: true)
       if fixture == .offline, let account = try await accounts.connectedAccount() {
         let github = await accounts.githubClient(accountID: account.id)
-        try await store.cacheGists(
-          owned: github.listGists(), starred: github.listStarredGists(), accountID: account.id)
+        try await GistCache(
+          accountID: account.id, owned: github.listGists(), starred: github.listStarredGists()
+        ).save(to: store.modelContainer)
         server.intercept { _ in throw URLError(.notConnectedToInternet) }
       }
       if let link = sheet == .today ? .addToToday : link { PendingLink.shared.link = link }
