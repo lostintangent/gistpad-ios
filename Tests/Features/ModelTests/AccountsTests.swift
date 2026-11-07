@@ -24,7 +24,7 @@ struct AccountsTests {
     _ = try await phone.open(.gist(id: "shared"))
     try await phone.signOut()
     #expect(phone.model.account == nil)
-    #expect(phone.model.state.loadState == .signedOut)
+    #expect(phone.model.phase == .signedOut)
     #expect(phone.model.state.gists.isEmpty)
     #expect(phone.onScreen == nil)
     await phone.model.signIn()
@@ -39,14 +39,11 @@ struct AccountsTests {
     try phone.fixture.signInNext(as: other, login: FixtureServer.someoneElse.login)
     await phone.model.signIn()
     #expect(phone.model.account?.id == phone.accountID)
-    #expect(phone.model.pendingAccount?.id == other)
+    #expect(phone.model.phase.switchingTo?.id == other)
     phone.model.keepCurrentAccount()
-    #expect(phone.model.pendingAccount == nil)
+    #expect(phone.model.phase == .ready)
     await phone.leave(again)
     #expect(phone.onGitHub("a")?.utf8.elementsEqual(mine.utf8) == true)
-    guard case .reconnectRequired = phone.model.state.loadState else {
-      Issue.record("Expected a prompt to reconnect")
-      return
-    }
+    #expect(phone.model.problem == .reconnect)
   }
 }

@@ -76,8 +76,11 @@ public struct LibraryActions {
 public struct LibraryView: View {
     @Bindable private var state: LibraryState
     private let actions: LibraryActions
-    private let problem: GitHubStatusProblem?
     private let isSidebar: Bool
+    private let isSignedOut: Bool
+    private let isLoading: Bool
+    private let problem: GitHubProblem?
+    private let status: GitHubStatusProblem?
     @Binding private var expandedSections: Set<LibrarySection>
     @Binding private var isPinnedExpanded: Bool
     @State private var collapsedDateGroups: Set<DateGroup> = []
@@ -94,13 +97,17 @@ public struct LibraryView: View {
     /// `isSidebar` comes from the split view's owner, because a sidebar column always reads as compact.
     public init(
         state: LibraryState, actions: LibraryActions, isSidebar: Bool,
-        problem: GitHubStatusProblem? = nil,
+        isSignedOut: Bool = false, isLoading: Bool = false, problem: GitHubProblem? = nil,
+        status: GitHubStatusProblem? = nil,
         expandedSections: Binding<Set<LibrarySection>>, isPinnedExpanded: Binding<Bool>
     ) {
         self.state = state
         self.actions = actions
         self.isSidebar = isSidebar
+        self.isSignedOut = isSignedOut
+        self.isLoading = isLoading
         self.problem = problem
+        self.status = status
         _expandedSections = expandedSections
         _isPinnedExpanded = isPinnedExpanded
     }
@@ -119,7 +126,7 @@ public struct LibraryView: View {
 
     @ViewBuilder
     private var navigationList: some View {
-        if state.loadState == .signedOut {
+        if isSignedOut {
             signedOutInvitation
         } else {
             // Search belongs to the Library column with one placement, so folding and rotating
@@ -141,12 +148,12 @@ public struct LibraryView: View {
     }
 
     private var navigationTitle: String {
-        if state.loadState == .signedOut { return "" }
+        if isSignedOut { return "" }
         return String(localized: "GistPad", bundle: .module)
     }
 
     private var navigationSubtitle: String {
-        guard state.loadState != .signedOut else { return "" }
+        guard !isSignedOut else { return "" }
         return state.mainGistCount.map(LibraryState.gistCountLabel) ?? ""
     }
 
@@ -162,7 +169,7 @@ public struct LibraryView: View {
                 }
                 ForEach(dateSections(now: context.date)) { dateSection($0, now: context.date) }
                 ForEach(displayedSections) { librarySection($0, now: context.date) }
-                if state.loadState != .loading && (state.hasFilters ? !state.hasMatches : !hasVisibleGists) {
+                if !isLoading && (state.hasFilters ? !state.hasMatches : !hasVisibleGists) {
                     emptyState
                 }
             }
@@ -333,7 +340,7 @@ public struct LibraryView: View {
     }
 
     private var statusProblem: GitHubStatusProblem? {
-        isSearchPresented ? nil : problem
+        isSearchPresented ? nil : status
     }
 
     private var searchScope: some View {
@@ -387,28 +394,28 @@ public struct LibraryView: View {
     /// With no gists to show, the empty state is also where a failed first load explains itself.
     private var emptyState: some View {
         Section {
-            switch state.loadState {
+            switch problem {
             case _ where state.hasFilters:
                 ContentUnavailableView.search(text: state.query)
-            case .failed(let message):
+            case .offline?, .rejected?:
                 ContentUnavailableView {
                     Label(String(localized: "Couldn't Load Your Gists", bundle: .module), systemImage: "exclamationmark.circle")
                 } description: {
-                    Text(verbatim: message)
+                    Text("GitHub couldn't be reached. Your gists will appear once it answers.", bundle: .module)
                 } actions: {
                     Button(String(localized: "Try Again", bundle: .module)) {
                         Task { await actions.refresh() }
                     }
                 }
-            case .reconnectRequired(let message):
+            case .reconnect?:
                 ContentUnavailableView {
                     Label(String(localized: "Reconnect GitHub", bundle: .module), systemImage: "person.crop.circle.badge.exclamationmark")
                 } description: {
-                    Text(verbatim: message)
+                    Text("Sign in with GitHub again to see your gists.", bundle: .module)
                 } actions: {
                     Button(String(localized: "Sign in with GitHub", bundle: .module), action: actions.reconnect)
                 }
-            default:
+            case nil:
                 ContentUnavailableView {
                     GistPadArtwork()
                     Text("No Gists Yet", bundle: .module)
@@ -514,7 +521,7 @@ public struct LibraryView: View {
 
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
-        if state.loadState != .signedOut {
+        if !isSignedOut {
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             if !isSearchPresented {
                 if let statusProblem {
@@ -538,7 +545,7 @@ public struct LibraryView: View {
                 }
             }
         }
-        if isSidebar || state.loadState == .signedOut {
+        if isSidebar || isSignedOut {
             ToolbarItem(placement: .primaryAction) {
                 settingsButton
             }

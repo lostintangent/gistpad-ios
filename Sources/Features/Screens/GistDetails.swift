@@ -16,12 +16,12 @@ public enum PublishStatus: Equatable, Sendable {
     case publishing
     /// GitHub's text moved past the draft's base, and you choose what to keep.
     case conflict
-    case failed(PublishFailure)
+    case failed(GitHubProblem)
 
     /// The file hasn't reached GitHub, and nothing needs you before it can.
     public var canPublish: Bool {
         switch self {
-        case .unpublished, .failed(.network), .failed(.http): true
+        case .unpublished, .failed(.offline): true
         default: false
         }
     }

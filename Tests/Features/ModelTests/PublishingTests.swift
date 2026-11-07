@@ -69,7 +69,7 @@ struct PublishingTests {
     let today = try await phone.open(.today())
     try await phone.type("# Today\n\n- [ ] Walk", in: today)
     await today.publish()
-    #expect(today.status == .failed(.network))
+    #expect(today.status == .failed(.offline))
     phone.goOnline()
     switch moment {
     case .autosave:

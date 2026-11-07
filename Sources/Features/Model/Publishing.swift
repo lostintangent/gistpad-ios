@@ -53,12 +53,12 @@ extension GistPadModel {
   /// Publishes each file with unpublished edits, in order, through its editor when it's open. The
   /// first offline result stops the sweep, and the next launch or return to the app retries it.
   func publishDrafts() async {
-    guard let accountID = account?.id, pendingAccount == nil else { return }
+    guard let accountID = account?.id, phase.switchingTo == nil else { return }
     for draft in drafts {
       guard !Task.isCancelled else { break }
       if let fileEditor = editors[draft.id] {
         await fileEditor.publish(reason: .background)
-        if fileEditor.status == .failed(.network) { break }
+        if fileEditor.status == .failed(.offline) { break }
       } else {
         do { _ = try await publish(draft) } catch is URLError { break } catch {}
       }
@@ -70,14 +70,12 @@ extension GistPadModel {
   /// once GitHub has its text. A file you haven't typed in has nothing to publish.
   public func publish(_ draft: GistFileDraft) async throws -> GistFileDraft? {
     let accountID = draft.accountID
-    guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
+    guard account?.id == accountID, phase.switchingTo == nil else { throw AccountError.accountChanged }
     let github = await client(accountID: accountID)
     let saved = try await serially { try await publish(draft, to: github) }
     if draft.gistID == nil, let gistID = saved?.gistID { publishedGistIDs[draft.id] = gistID }
     if account?.id == accountID {
-      libraryRequest = UUID()
-      isRefreshingRemote = false
-      if state.loadState == .loading { state.loadState = .ready }
+      supersedeRefresh()
       try await reloadLocalState(accountID: accountID)
       if let saved, let gist = gistCache?.gists.first(where: { $0.id == saved.gistID }) {
         apply(published: saved, gist: gist)
@@ -191,20 +189,6 @@ extension GistPadModel {
   }
 }
 
-extension PublishFailure {
-  /// Why a publish that threw `error` didn't land.
-  init(_ error: any Error) {
-    self =
-      switch error {
-      case GitHubClientError.http(status: 401), is AccountError: .reconnect
-      case GitHubClientError.http(let status): .http(status: status)
-      case GitHubClientError.incompleteGist, GitHubClientError.fileTooLarge: .incompleteRemote
-      case DraftError.readOnly: .readOnly
-      default: .network
-      }
-  }
-}
-
 extension GistFileEditor {
   var isPublishing: Bool { publishing != nil }
 
@@ -220,8 +204,8 @@ extension GistFileEditor {
   }
 
   private var autosaveAllowed: Bool {
-    model.isForeground && model.account?.id == file.accountID && model.pendingAccount == nil
-      && model.state.loadState == .ready
+    model.isForeground && model.account?.id == file.accountID
+      && model.phase == .ready && model.problem == nil
       && model.account?.preferences.isAutoSaveEnabled == true
       && canMutate && !file.isDeletedOnGitHub
   }
@@ -231,7 +215,7 @@ extension GistFileEditor {
     case .manual: true
     case .autosave: autosaveAllowed
     case .background:
-      model.account?.id == file.accountID && model.pendingAccount == nil
+      model.account?.id == file.accountID && model.phase.switchingTo == nil
         && editor.isSettled
     }
   }
@@ -330,7 +314,7 @@ extension GistFileEditor {
       if !(error is CancellationError || (error as? URLError)?.code == .cancelled) {
         logger.error(
           "Publishing failed: \(String(reflecting: type(of: error)), privacy: .public)")
-        failure = PublishFailure(error)
+        failure = GitHubProblem(error)
       }
       // The publish may have recorded sent text or found its gist before it stopped.
       if let stored = try? await model.current(file.current) { file.update(stored) }

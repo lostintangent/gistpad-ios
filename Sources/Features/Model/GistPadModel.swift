@@ -8,12 +8,11 @@ import Store
 public final class GistPadModel {
   public let state = LibraryState()
   public internal(set) var account: GistPadAccount?
-  public internal(set) var pendingAccount: GistPadAccount?
+  /// Whether you're signing in, loading, refreshing or switching. Links wait for loading, not for GitHub.
+  public internal(set) var phase: Phase = .loading
+  /// Why the list couldn't read GitHub, until a refresh gets through.
+  public internal(set) var problem: GitHubProblem?
   var loadedFile: GistFile?
-  public internal(set) var isSigningIn = false
-  public internal(set) var isSigningOut = false
-  /// Launch is restoring the account and this iPhone's drafts. Links wait for it, not for GitHub.
-  public internal(set) var isStarting = false
   /// The file opening in the detail column, until it's presented or fails.
   public internal(set) var opening: Opening?
   public internal(set) var drafts: [GistFileDraft] = []
@@ -27,8 +26,6 @@ public final class GistPadModel {
     get { openError != nil }
     set { if !newValue { openError = nil } }
   }
-  public internal(set) var remoteRefreshProblem: RemoteReadProblem?
-  var isRefreshingRemote = false
   /// The files opened this session, by draft. Returning to one keeps its caret, scroll and undo.
   public internal(set) var editors: [UUID: GistFileEditor] = [:]
   /// Autosave runs only while the app is in the foreground.
@@ -166,7 +163,7 @@ public final class GistPadModel {
     let records = localDraftRecords
     let stored = try await draftStore.drafts(accountID: accountID)
     let cache = try cache(accountID)
-    guard account?.id == accountID, pendingAccount == nil else { return }
+    guard account?.id == accountID, phase.switchingTo == nil else { return }
     // A draft saved while this read ran is newer than the read, so read again.
     if localDraftRecords != records { return try await reloadLocalState(accountID: accountID) }
     drafts = stored
@@ -200,7 +197,7 @@ public final class GistPadModel {
 
   /// Keeps a gist's comment count current in the library once its conversation loads.
   public func recordCommentCount(accountID: UUID, gistID: String, total: Int) {
-    guard account?.id == accountID, pendingAccount == nil, !isSigningOut,
+    guard account?.id == accountID, phase.switchingTo == nil, phase != .signingOut,
       var cache = gistCache, cache.gists.first(where: { $0.id == gistID })?.isDailyNote == false
     else { return }
     cache.setCommentCount(total, gistID: gistID)

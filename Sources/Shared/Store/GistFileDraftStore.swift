@@ -3,14 +3,6 @@ import Foundation
 import SwiftData
 
 /// Why a publish didn't land.
-public enum PublishFailure: Equatable, Sendable {
-    case network
-    case http(status: Int)
-    case readOnly
-    case incompleteRemote
-    case reconnect
-}
-
 /// One file's writing that GitHub doesn't have yet: which file, what you wrote, and what GitHub had.
 /// The store keeps it from your first keystroke until GitHub has the text. Before that, the same
 /// value describes the file as you open it, so your first keystroke has a draft to save.

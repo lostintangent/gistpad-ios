@@ -29,6 +29,27 @@ extension GitHubClientError: LocalizedError {
     }
 }
 
+/// Why GitHub couldn't be read or written.
+public enum GitHubProblem: Equatable, Sendable {
+    /// GitHub couldn't be reached or didn't answer, so trying again may work.
+    case offline
+    /// GitHub needs you to sign in again.
+    case reconnect
+    /// GitHub won't take the file: it isn't yours, or it's too large to edit here.
+    case rejected
+
+    /// Why a read or write that threw `error` didn't land.
+    public init(_ error: any Error) {
+        self =
+            switch error {
+            case GitHubClientError.http(status: 401), is AccountError: .reconnect
+            case GitHubClientError.incompleteGist, GitHubClientError.fileTooLarge, DraftError.readOnly:
+                .rejected
+            default: .offline
+            }
+    }
+}
+
 public struct RemoteFile: Sendable {
     public let gist: Gist
     public let content: String?

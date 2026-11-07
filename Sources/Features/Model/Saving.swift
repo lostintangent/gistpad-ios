@@ -58,7 +58,7 @@ extension GistPadModel {
 
   /// Stores a new gist you named outside the app, such as in Shortcuts, before it has any edits.
   public func createGist(named name: String, text: String? = nil) async throws -> GistFileDraft {
-    guard let account, pendingAccount == nil else { throw AccountError.accountChanged }
+    guard let account, phase.switchingTo == nil else { throw AccountError.accountChanged }
     return try await keep(GistFileDraft(accountID: account.id, newGistName: name, content: text))
   }
 

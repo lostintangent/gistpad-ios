@@ -395,7 +395,7 @@ private struct NavigationHost {
     guard waitsForStart else { return }
     let model = self.model
     try await waitUntil {
-      model.state.loadState == .ready && model.gistCache != nil && !model.isStarting
+      model.phase == .ready && model.gistCache != nil
     }
   }
 
@@ -495,7 +495,7 @@ private struct NavigationHost {
       guard ContinuousClock.now < deadline else {
         Attachment.record(
           """
-          load: \(model.state.loadState)
+          phase: \(model.phase)
           selected: \(String(describing: model.state.selectedID))
           loaded: \(String(describing: model.loadedFile?.id))
           presented: \(String(describing: model.visibleFile?.id))

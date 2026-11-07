@@ -6,57 +6,39 @@ import Store
 // The list and the open note read GitHub as they appear, at most every five minutes, so the
 // web's edits show up without a pull.
 
-public struct RemoteReadProblem: Equatable {
-  public enum Recovery: Equatable { case retry, reconnect }
-
-  let message: String
-  public var recovery: Recovery = .retry
-
-  func status(heading: String, detail: String?) -> GitHubStatusState {
-    let recoveryTitle = switch recovery {
-    case .retry: String(localized: "Try Again")
-    case .reconnect: String(localized: "Reconnect GitHub")
-    }
-    return .problem(
-      .init(
-        heading: heading, message: message, recoveryTitle: recoveryTitle, detail: detail))
-  }
-}
-
-@MainActor
-public enum RemoteRead {
+extension GitHubProblem {
   /// The problem a failed GitHub read shows, or nil when a newer request superseded it.
-  static func problem(for error: any Error) -> RemoteReadProblem? {
+  static func reading(_ error: any Error) -> GitHubProblem? {
     if error is CancellationError || (error as? URLError)?.code == .cancelled
       || (error as? DraftError) == .changed
       || (error as? ChangeError) == .staleReview
     {
       return nil
     }
-    if needsReconnect(error) {
-      return .init(
-        message: String(localized: "Reconnect GitHub to check for changes."), recovery: .reconnect)
-    }
-    return .init(message: error.localizedDescription)
+    return GitHubProblem(error)
   }
 
-  static func needsReconnect(_ error: any Error) -> Bool {
-    if let error = error as? AccountError {
-      return error == .signedOut || error == .reconnectGitHub || error == .accountChanged
+  func status(heading: String, detail: String?) -> GitHubStatusState {
+    let message = switch self {
+    case .offline: String(localized: "GitHub couldn't be reached.")
+    case .reconnect: String(localized: "Reconnect GitHub to check for changes.")
+    case .rejected: String(localized: "GitHub declined the request.")
     }
-    if case .http(401)? = error as? GitHubClientError { return true }
-    return false
+    let recoveryTitle =
+      self == .reconnect ? String(localized: "Reconnect GitHub") : String(localized: "Try Again")
+    return .problem(
+      .init(heading: heading, message: message, recoveryTitle: recoveryTitle, detail: detail))
   }
 }
 
 extension GistPadModel {
   public var remoteRefreshStatus: GitHubStatusState {
-    if let problem = remoteRefreshProblem, gistCache != nil || !drafts.isEmpty {
+    if let problem, gistCache != nil || !drafts.isEmpty {
       return problem.status(
         heading: String(localized: "Couldn't update your gists"),
         detail: String(localized: "Your gists on this iPhone are unchanged."))
     }
-    return isRefreshingRemote
+    return phase == .refreshing
       ? .checking(operation: String(localized: "Checking GitHub for changes")) : .idle
   }
 
@@ -80,28 +62,32 @@ extension GistPadModel {
   /// Refreshes as the app comes back, like the web on focus, when the list is stale or leaving cut
   /// its refresh off.
   func refreshOnReturn() async {
-    guard account != nil, !isStarting, isRefreshingRemote || Self.isStale(refreshedAt) else {
+    guard account != nil, phase != .loading, phase == .refreshing || Self.isStale(refreshedAt) else {
       return
     }
     await refresh()
   }
 
+  /// A change on this iPhone supersedes a list read already on its way, which would undo it.
+  func supersedeRefresh() {
+    libraryRequest = UUID()
+    if phase == .loading || phase == .refreshing { phase = .ready }
+  }
+
   public func refresh() async {
-    guard pendingAccount == nil, !isSigningOut else { return }
+    guard !phase.isChangingAccount else { return }
     guard let account else {
       await start()
       return
     }
     let request = UUID()
     libraryRequest = request
-    let previousState: LibraryLoadState = state.loadState == .loading ? .ready : state.loadState
-    isRefreshingRemote = true
+    phase = .refreshing
     // A retry shows as checking instead of the problem it may be about to clear.
-    remoteRefreshProblem = nil
+    problem = nil
     defer {
-      if request == libraryRequest { isRefreshingRemote = false }
+      if request == libraryRequest, phase == .refreshing { phase = .ready }
     }
-    state.loadState = .loading
     do {
       let refreshed = try await refreshedAccount()
       guard refreshed.id == account.id else { throw AccountError.accountChanged }
@@ -114,7 +100,6 @@ extension GistPadModel {
       cache.replaceLists(owned: owned, starred: starred)
       try save(cache)
       self.account = refreshed
-      state.loadState = .ready
       await refreshToday(in: cache.owned, accountID: account.id)
       try await reloadLocalState(accountID: account.id)
       guard request == libraryRequest, self.account?.id == account.id else { return }
@@ -128,17 +113,10 @@ extension GistPadModel {
       let wasDropped = (error as? URLError).map {
         [URLError.Code.timedOut, .networkConnectionLost].contains($0.code)
       } ?? false
-      guard let problem = RemoteRead.problem(for: error), !(wasDropped && gistCache != nil)
-      else {
-        state.loadState = previousState
-        return
-      }
+      guard let problem = GitHubProblem.reading(error), !(wasDropped && gistCache != nil)
+      else { return }
       report(error, operation: "refresh")
-      remoteRefreshProblem = problem
-      state.loadState =
-        problem.recovery == .reconnect
-        ? .reconnectRequired(message: error.localizedDescription)
-        : .failed(message: error.localizedDescription)
+      self.problem = problem
     }
   }
 }
@@ -160,7 +138,7 @@ extension GistFileEditor {
   public func inspectRemoteChanges() async {
     guard GistPadModel.isStale(refreshedAt), !isInspectingRemote, !isPublishing, canMutate,
       !file.isDeletedOnGitHub, file.current.gistID != nil, file.draft?.conflict == nil,
-      model.account?.id == file.accountID, model.pendingAccount == nil
+      model.account?.id == file.accountID, model.phase.switchingTo == nil
     else { return }
     isInspectingRemote = true
     defer { isInspectingRemote = false }
@@ -203,8 +181,8 @@ extension GistFileEditor {
     } catch {
       logger.error(
         "Remote inspection failed: \(String(reflecting: type(of: error)), privacy: .public)")
-      remoteInspectionProblem =
-        RemoteRead.needsReconnect(error) ? RemoteRead.problem(for: error) : nil
+      let problem = GitHubProblem.reading(error)
+      remoteInspectionProblem = problem == .reconnect ? problem : nil
     }
   }
 }

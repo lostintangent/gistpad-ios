@@ -38,7 +38,7 @@ extension ChangeError: LocalizedError {
 extension GistPadModel {
   /// What deleting a row removes. Rows the account doesn't own can't be deleted.
   public func deletion(forRow rowID: String) -> Deletion? {
-    guard account != nil, pendingAccount == nil else { return nil }
+    guard account != nil, phase.switchingTo == nil else { return nil }
     if let draft = draft(forRow: rowID),
       draft.gistID.flatMap({ gistID in gistCache?.gists.contains(where: { $0.id == gistID }) }) != true
     {
@@ -202,9 +202,9 @@ extension GistPadModel {
   /// Signs out once every open note is saved on this iPhone.
   public func signOut() async throws {
     try await change(locking: { _ in true }) { account in
-      isSigningOut = true
+      phase = .signingOut
       libraryRequest = UUID()
-      defer { isSigningOut = false }
+      defer { if phase == .signingOut { phase = .ready } }
       do {
         try await serially { try await accountStore.signOut(accountID: account.id) }
       } catch {
@@ -231,7 +231,7 @@ extension GistPadModel {
     locking locks: (GistFileEditor) -> Bool = { _ in false },
     _ body: @MainActor (GistPadAccount) async throws -> Void
   ) async throws {
-    guard let account, pendingAccount == nil else { throw AccountError.accountChanged }
+    guard let account, phase.switchingTo == nil else { throw AccountError.accountChanged }
     guard !isApplying else { throw ChangeError.publicationInProgress }
     isApplying = true
     var locked: [GistFileEditor] = []
@@ -249,7 +249,7 @@ extension GistPadModel {
         guard await fileEditor.waitForLocalSave() else { throw EditError.localPersistenceFailed }
       }
       try Task.checkCancellation()
-      guard self.account?.id == account.id, pendingAccount == nil else {
+      guard self.account?.id == account.id, phase.switchingTo == nil else {
         throw AccountError.accountChanged
       }
       try await body(account)
@@ -305,9 +305,7 @@ extension GistPadModel {
     let draftIDs = Set(drafts.filter { $0.gistID == id }.map(\.id))
     forget(gistID: id, drafts: draftIDs, accountID: accountID)
     // A refresh that started before the delete would bring the gist back.
-    libraryRequest = UUID()
-    isRefreshingRemote = false
-    if state.loadState == .loading { state.loadState = .ready }
+    supersedeRefresh()
   }
 
   /// Closes and forgets the open, opening, failed and remembered file once it's gone: `filename`

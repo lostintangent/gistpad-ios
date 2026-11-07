@@ -65,6 +65,7 @@ struct RootView: View {
         NavigationStack {
           LibraryView(
             state: model.state, actions: libraryActions, isSidebar: horizontalSizeClass == .regular,
+            isSignedOut: isSignedOut, isLoading: isLoadingLibrary, problem: model.problem,
             expandedSections: librarySections, isPinnedExpanded: pinnedExpanded)
         }
       } else {
@@ -72,6 +73,11 @@ struct RootView: View {
       }
     }
   }
+
+  /// Signed out once launch knows there's no account, so the list doesn't flash the invitation.
+  private var isSignedOut: Bool { model.account == nil && model.phase != .loading }
+
+  private var isLoadingLibrary: Bool { model.phase == .loading || model.phase == .refreshing }
 
   private var libraryProblem: GitHubStatusProblem? {
     if case .problem(let problem) = model.remoteRefreshStatus { problem } else { nil }
@@ -84,7 +90,8 @@ struct RootView: View {
       LibraryView(
         state: model.state, actions: libraryActions,
         isSidebar: horizontalSizeClass == .regular,
-        problem: libraryProblem,
+        isSignedOut: isSignedOut, isLoading: isLoadingLibrary, problem: model.problem,
+        status: libraryProblem,
         expandedSections: librarySections,
         isPinnedExpanded: pinnedExpanded)
         .id(model.account?.id)
@@ -106,7 +113,7 @@ struct RootView: View {
           }
         }
         .libraryRail(
-          isVisible: horizontalSizeClass == .regular && model.state.loadState != .signedOut,
+          isVisible: horizontalSizeClass == .regular && !isSignedOut,
           today: model.state.today,
           create: libraryActions.create, openToday: libraryActions.today)
       }
@@ -177,8 +184,7 @@ struct RootView: View {
 
   /// The account whose gists are up, or nil while one signs in, out or waits to replace it.
   private var settledAccountID: UUID? {
-    model.isSigningIn || model.isSigningOut || model.pendingAccount != nil
-      ? nil : model.account?.id
+    model.phase.isChangingAccount ? nil : model.account?.id
   }
 
   private var workspaceLifecycle: some View {
@@ -248,7 +254,7 @@ struct RootView: View {
         Task {
           await model.signIn()
           if model.account?.id == active?.file.accountID,
-            model.pendingAccount == nil, model.state.loadState == .ready
+            model.phase == .ready, model.problem == nil
           {
             await active?.publish()
           }
@@ -265,15 +271,15 @@ struct RootView: View {
 
   private var accountSwitchPresented: Binding<Bool> {
     Binding(
-      get: { model.pendingAccount != nil },
+      get: { model.phase.switchingTo != nil },
       set: { presented in
-        if !presented, model.pendingAccount != nil { model.keepCurrentAccount() }
+        if !presented, model.phase.switchingTo != nil { model.keepCurrentAccount() }
       })
   }
 
   @ViewBuilder
   private var accountSwitchSheet: some View {
-    if let account = model.account, let pending = model.pendingAccount {
+    if let account = model.account, let pending = model.phase.switchingTo {
       AccountSwitchSheet(
         current: account.login, replacement: pending.login,
         switchAccount: { try await model.switchAccount() },
@@ -297,7 +303,7 @@ struct RootView: View {
       Task {
         await model.signIn()
         if model.account?.id == active?.file.accountID,
-          model.pendingAccount == nil, model.state.loadState == .ready
+          model.phase == .ready, model.problem == nil
         {
           await active?.publish()
         }
@@ -305,10 +311,9 @@ struct RootView: View {
     }
     actions.reconnect = reconnect
     actions.recoverStatus = {
-      switch (model.state.loadState, model.remoteRefreshProblem?.recovery) {
-      case (.reconnectRequired, _), (_, .reconnect?):
+      if model.problem == .reconnect {
         reconnect()
-      default:
+      } else {
         Task { await model.refresh() }
       }
     }
@@ -365,7 +370,7 @@ struct RootView: View {
     guard scenePhase == .active,
       horizontalSizeClass != .compact || compactColumn == .detail,
       model.state.selectedID != nil, sheet == nil,
-      model.account?.id == fileEditor.file.accountID, model.pendingAccount == nil,
+      model.account?.id == fileEditor.file.accountID, model.phase.switchingTo == nil,
       !fileEditor.file.isDeletedOnGitHub
     else { return nil }
     if let gist = fileEditor.file.gist {
@@ -437,10 +442,10 @@ struct RootView: View {
             state: fileEditor.remoteInspectionStatus
           ) {
             Task {
-              if fileEditor.remoteInspectionProblem?.recovery == .reconnect {
+              if fileEditor.remoteInspectionProblem == .reconnect {
                 await model.signIn()
                 guard model.account?.id == fileEditor.file.accountID,
-                  model.pendingAccount == nil
+                  model.phase.switchingTo == nil
                 else { return }
                 await fileEditor.publish()
               }
@@ -457,12 +462,12 @@ struct RootView: View {
       editorID: fileEditor.editor.id, gistID: fileEditor.file.gist?.id,
       knownTotal: fileEditor.file.gist?.commentCount,
       isReady: model.account?.id == fileEditor.file.accountID
-        && model.pendingAccount == nil && !model.isSigningIn && !model.isSigningOut,
+        && !model.phase.isChangingAccount,
       allowsComments: CommentsPresentation.supports(fileEditor.file),
       showsInline: model.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true)
     ) {
-      guard model.account?.id == fileEditor.file.accountID, model.pendingAccount == nil,
-        !model.isSigningIn, !model.isSigningOut else { return }
+      guard model.account?.id == fileEditor.file.accountID, !model.phase.isChangingAccount
+      else { return }
       comments.activate(fileEditor)
       await comments.prepareAnnotations(
         for: fileEditor,
@@ -580,7 +585,7 @@ struct RootView: View {
       Task {
         await model.signIn()
         if model.account?.id == fileEditor.file.accountID,
-          model.pendingAccount == nil, model.state.loadState == .ready
+          model.phase == .ready, model.problem == nil
         {
           await fileEditor.publish()
         }
@@ -594,7 +599,7 @@ struct RootView: View {
             accountID: fileEditor.file.accountID, gistID: gistID,
             selected: Set(fileEditor.details.tags.map(\.id)),
             canEdit: model.account?.id == fileEditor.file.accountID
-              && model.pendingAccount == nil && !fileEditor.file.isDeletedOnGitHub))
+              && model.phase.switchingTo == nil && !fileEditor.file.isDeletedOnGitHub))
       }
       if !fileEditor.file.isDeletedOnGitHub {
         actions.togglePin = {
@@ -777,7 +782,7 @@ struct RootView: View {
 
   /// The pending link, once the account it opens in has settled.
   private var linkToOpen: GistPadLink? {
-    guard !model.isStarting, !model.isSigningIn, model.pendingAccount == nil else {
+    guard model.phase != .loading, model.phase != .signingIn, model.phase.switchingTo == nil else {
       return nil
     }
     return pending.link

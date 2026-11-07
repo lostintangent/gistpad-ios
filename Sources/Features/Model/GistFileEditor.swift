@@ -12,12 +12,12 @@ public final class GistFileEditor {
   public let editor: Editor
   var publishing: Task<Void, Never>?
   /// Why the last publish didn't land, until you type, publish again or reconnect GitHub.
-  var failure: PublishFailure?
+  var failure: GitHubProblem?
   /// The editor's last generation saved on this iPhone.
   var savedGeneration: UInt64 = 0
   var isPerformingDestructiveAction = false
   var isApplyingDurableEdit = false
-  public internal(set) var remoteInspectionProblem: RemoteReadProblem?
+  public internal(set) var remoteInspectionProblem: GitHubProblem?
   public var mode: FileMode = .preview
   @ObservationIgnored let model: GistPadModel
   @ObservationIgnored var persistence: Task<Bool, Never>?
@@ -57,7 +57,7 @@ public final class GistFileEditor {
   /// runs, a conflict until you choose, then why the last publish failed, and otherwise whether
   /// GitHub has your text.
   public var status: PublishStatus {
-    if file.isDeletedOnGitHub { return .failed(.readOnly) }
+    if file.isDeletedOnGitHub { return .failed(.rejected) }
     if isPublishing { return .publishing }
     if file.draft?.conflict != nil { return .conflict }
     if let failure { return .failed(failure) }

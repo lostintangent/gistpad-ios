@@ -25,7 +25,7 @@ extension GistPadModel {
   /// notes gist has it or starts it, else the first day of a new daily notes gist. Typing saves it,
   /// and autosave publishes it like any other file.
   public func today(_ target: DailyNote.Day = .init()) async throws -> GistFile {
-    guard let account, pendingAccount == nil else { throw AccountError.accountChanged }
+    guard let account, phase.switchingTo == nil else { throw AccountError.accountChanged }
     guard let userID = account.githubUserID else { throw AccountError.reconnectGitHub }
     let github = await client(accountID: account.id)
     return try await serially {

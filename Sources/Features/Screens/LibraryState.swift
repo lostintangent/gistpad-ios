@@ -110,14 +110,6 @@ public struct GistItem: Equatable, Identifiable, Sendable {
     }
 }
 
-public enum LibraryLoadState: Equatable, Sendable {
-    case loading
-    case ready
-    case failed(message: String)
-    case reconnectRequired(message: String)
-    case signedOut
-}
-
 @MainActor @Observable
 public final class LibraryState {
     public var gists: [GistItem]
@@ -125,7 +117,6 @@ public final class LibraryState {
     /// Nil until the account's gists are known, and while the daily gist is too large to count.
     public private(set) var dailyNoteCount: Int?
     public private(set) var hasKnownGists: Bool
-    public var loadState: LibraryLoadState
     public var query = ""
     public var selectedTagIDs: Set<String> = []
     public var selectedID: String?
@@ -134,13 +125,12 @@ public final class LibraryState {
     /// Nil gists mean the account's gists aren't known yet.
     public init(
         gists: [GistItem]? = nil, tags: [Tag] = [], dailyNoteCount: Int? = nil,
-        loadState: LibraryLoadState = .loading, today: DailyNote = .init()
+        today: DailyNote = .init()
     ) {
         self.gists = gists ?? []
         self.tags = tags
         self.dailyNoteCount = gists == nil ? nil : dailyNoteCount
         hasKnownGists = gists != nil
-        self.loadState = loadState
         self.today = today
     }
 

@@ -9,7 +9,7 @@ struct LibraryStateTests {
     private let tags = SampleLibrary.tags
 
     @Test func sectionsFollowOwnershipAndArchiveAndCountUniqueGists() {
-        let state = LibraryState(gists: gists, tags: tags, loadState: .ready)
+        let state = LibraryState(gists: gists, tags: tags)
         state.gists.append(.init(id: "shape/Ideas.md", title: "Ideas", updatedAt: nil, gistID: "shape"))
         #expect(state.unfilteredGists(in: .gists).map(\.id) == ["shape", "weekend", "words", "mixed", "shape/Ideas.md"])
         #expect(state.unfilteredGists(in: .dailyNotes).map(\.id) == ["daily"])
@@ -23,7 +23,7 @@ struct LibraryStateTests {
     }
 
     @Test func aSectionAppearsWithItsFirstGistAndHidesWithItsLast() {
-        let state = LibraryState(gists: [], loadState: .ready)
+        let state = LibraryState(gists: [])
         #expect(state.secondarySections.isEmpty)
         state.replace(gists: gists, tags: tags)
         #expect(state.secondarySections == [.dailyNotes, .starred, .archived])
@@ -32,7 +32,7 @@ struct LibraryStateTests {
     }
 
     @Test func tagsUseANDAndTitleSearchIsLocalized() {
-        let state = LibraryState(gists: gists, tags: tags, loadState: .ready)
+        let state = LibraryState(gists: gists, tags: tags)
         state.selectedTagIDs = ["ideas", "design"]
         #expect(state.matchingGists.map(\.id) == ["shape"])
         state.query = "  GIST\n"
@@ -44,7 +44,7 @@ struct LibraryStateTests {
     }
 
     @Test func eachTagCountsTheGistsItsFilterShows() {
-        let state = LibraryState(gists: gists, tags: tags, loadState: .ready)
+        let state = LibraryState(gists: gists, tags: tags)
         for tag in tags {
             state.selectedTagIDs = [tag.id]
             #expect(state.gistCount(tagged: tag.id) == state.resultGistCount)
@@ -52,7 +52,7 @@ struct LibraryStateTests {
     }
 
     @Test func theDailyCountIgnoresFilters() {
-        let state = LibraryState(gists: gists, tags: tags, dailyNoteCount: 12, loadState: .ready)
+        let state = LibraryState(gists: gists, tags: tags, dailyNoteCount: 12)
         state.query = "no matching day"
         #expect(state.count(in: .dailyNotes) == 12)
     }
@@ -84,7 +84,7 @@ struct LibraryStateTests {
     }
 
     @Test func theOpenGistStaysListedWithoutCountingAsAMatch() {
-        let state = LibraryState(gists: gists, tags: tags, loadState: .ready)
+        let state = LibraryState(gists: gists, tags: tags)
         state.selectedID = "shape"
         state.selectedTagIDs = ["personal"]
         #expect(state.matchingGists.map(\.id) == ["shape", "weekend", "mixed"])
@@ -111,8 +111,8 @@ struct LibraryStateTests {
     }
 
     @Test func aFailedPublishOffersPublishEvenWithAutosaveOn() {
-        #expect(PublishStatus.failed(.network).showsPublish(isAutoSaveEnabled: true))
-        #expect(!PublishStatus.failed(.readOnly).showsPublish(isAutoSaveEnabled: true))
+        #expect(PublishStatus.failed(.offline).showsPublish(isAutoSaveEnabled: true))
+        #expect(!PublishStatus.failed(.rejected).showsPublish(isAutoSaveEnabled: true))
         #expect(!PublishStatus.unpublished.showsPublish(isAutoSaveEnabled: true))
         #expect(PublishStatus.published.showsPublish(isAutoSaveEnabled: false))
     }

@@ -52,7 +52,7 @@ import SwiftUI
 
 #Preview("Library") {
     @Previewable @State var state = LibraryState(
-        gists: SampleLibrary.gists, tags: SampleLibrary.tags, loadState: .ready)
+        gists: SampleLibrary.gists, tags: SampleLibrary.tags)
     NavigationSplitView {
         LibraryView(
             state: state, actions: .init(refresh: {}, create: {}, today: {}), isSidebar: true,

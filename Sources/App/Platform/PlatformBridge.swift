@@ -67,7 +67,7 @@ final class PlatformBridge: DailyNoteActions {
   /// Widgets, Spotlight and Shortcuts follow the library's account and the drafts on this iPhone.
   private func followLibrary() {
     withObservationTracking {
-      _ = (model.account, model.pendingAccount, model.drafts)
+      _ = (model.account, model.phase, model.drafts)
     } onChange: { [weak self] in
       Task { @MainActor in
         self?.scheduleRefresh()
@@ -102,7 +102,7 @@ final class PlatformBridge: DailyNoteActions {
   }
 
   func refresh() async throws {
-    let account = model.pendingAccount == nil ? try await model.localAccount() : nil
+    let account = model.phase.switchingTo == nil ? try await model.localAccount() : nil
     try Task.checkCancellation()
     let snapshot = LibrarySnapshot.make(
       account: account, cache: account == nil ? nil : model.gistCache,
@@ -308,7 +308,7 @@ final class PlatformBridge: DailyNoteActions {
   }
 
   func validateAccount(_ accountID: UUID) throws {
-    guard model.account?.id == accountID, model.pendingAccount == nil else {
+    guard model.account?.id == accountID, model.phase.switchingTo == nil else {
       throw PlatformError.accountChanged
     }
   }

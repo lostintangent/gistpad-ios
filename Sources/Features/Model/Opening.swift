@@ -59,7 +59,7 @@ extension GistPadModel {
 
   /// Opens a library row, at once when its file is already on this iPhone.
   public func open(rowID id: String) {
-    guard account != nil, pendingAccount == nil else {
+    guard account != nil, phase.switchingTo == nil else {
       openError = String(localized: "Reconnect GitHub to open this gist.")
       return
     }
@@ -91,7 +91,7 @@ extension GistPadModel {
   private func cachedFile(
     gistID: String, filename: String? = nil, rowID: String? = nil
   ) -> GistFile? {
-    guard let account, pendingAccount == nil else { return nil }
+    guard let account, phase.switchingTo == nil else { return nil }
     let gist = gistCache?.gists.first { $0.id == gistID }
     let selectedFilename: String?
     if let filename {
@@ -182,7 +182,7 @@ extension GistPadModel {
   /// Opens a file in the detail column. A newer open supersedes this one, but keeps any file this
   /// one created.
   public func open(_ request: Opening.Request) async {
-    guard let account, pendingAccount == nil else {
+    guard let account, phase.switchingTo == nil else {
       openError = String(localized: "Reconnect GitHub to open this gist.")
       return
     }
@@ -314,7 +314,7 @@ extension GistPadModel {
   /// only starts when you ask for it.
   func restoreLastOpened() async {
     guard loadedFile == nil, state.selectedID == nil, opening == nil, let account,
-      pendingAccount == nil, let saved = lastOpened(accountID: account.id)
+      phase.switchingTo == nil, let saved = lastOpened(accountID: account.id)
     else { return }
     if case .draft(let id, _) = saved, !drafts.contains(where: { $0.id == id }) { return }
     await open(saved)
