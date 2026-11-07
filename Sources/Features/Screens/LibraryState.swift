@@ -28,18 +28,6 @@ public enum LibrarySection: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-public struct Tag: Equatable, Identifiable, Sendable {
-    public let id: String
-    public let name: String
-    public let colorHex: String?
-
-    public init(id: String, name: String, colorHex: String? = nil) {
-        self.id = id
-        self.name = name
-        self.colorHex = colorHex
-    }
-}
-
 public struct GistItem: Equatable, Identifiable, Sendable {
     public let id: String
     public var gistID: String?

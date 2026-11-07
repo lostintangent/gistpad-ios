@@ -1,4 +1,5 @@
 import Foundation
+import Store
 
 public enum TagEdit: Equatable, Sendable {
     case setMembership(tagID: String, included: Bool)

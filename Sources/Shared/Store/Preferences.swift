@@ -3,6 +3,19 @@ import Foundation
 
 public typealias MetadataValue = AnyJSON
 
+/// A tag you give gists, with its name and color, as GistPad keeps it in your preferences.
+public struct Tag: Equatable, Identifiable, Sendable {
+    public let id: String
+    public let name: String
+    public let colorHex: String?
+
+    public init(id: String, name: String, colorHex: String? = nil) {
+        self.id = id
+        self.name = name
+        self.colorHex = colorHex
+    }
+}
+
 public struct GistPadPreferences: Codable, Equatable, Sendable {
     public let metadata: [String: MetadataValue]
 
@@ -52,12 +65,6 @@ public struct GistPadPreferences: Codable, Equatable, Sendable {
         (metadata["gistTags"]?.objectValue ?? [:]).mapValues {
             $0.arrayValue?.compactMap(\.stringValue) ?? []
         }
-    }
-
-    public struct Tag: Equatable, Sendable {
-        public let id: String
-        public let name: String
-        public let colorHex: String?
     }
 
     public func tagNames(gistID: String) -> [String] {

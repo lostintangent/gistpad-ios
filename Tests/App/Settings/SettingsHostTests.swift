@@ -40,7 +40,7 @@ struct SettingsHostTests {
 
     var body: some View {
       SettingsSheet(
-        account: .init(id: UUID(), login: "octavia", preferences: preferences),
+        account: .init(id: UUID(), github: GitHubUser(id: 1, login: "octavia"), preferences: preferences),
         savePreference: { key, value in
           preferences = try preferences.applying(.setBoolean(key, value))
           #expect(preferences.metadata["unrelated"] == .string("retained"))

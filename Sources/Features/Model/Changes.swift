@@ -379,7 +379,7 @@ extension GistPadModel {
   ) async throws -> (GitHubClient, Gist) {
     let github = await client(accountID: account.id)
     let gist = try await github.gist(id: id)
-    guard let userID = account.githubUserID, gist.owner?.id == userID else {
+    guard gist.owner?.id == account.github.id else {
       throw DraftError.readOnly
     }
     return (github, gist)

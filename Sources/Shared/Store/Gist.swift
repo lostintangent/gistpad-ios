@@ -1,9 +1,16 @@
 import Foundation
 
+/// A GitHub identity: a gist's owner, and the GitHub side of your account.
 public struct GitHubUser: Codable, Equatable, Sendable {
     public let id: Int64
     public let login: String
     public let avatarURL: URL?
+
+    public init(id: Int64, login: String, avatarURL: URL? = nil) {
+        self.id = id
+        self.login = login
+        self.avatarURL = avatarURL
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, login

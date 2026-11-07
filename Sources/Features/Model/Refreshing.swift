@@ -146,7 +146,7 @@ extension GistFileEditor {
     let generation = editor.generation
     let read = file.nextDraft
     do {
-      guard let ownerID = model.account?.githubUserID else { throw AccountError.reconnectGitHub }
+      guard let ownerID = model.account?.github.id else { throw AccountError.reconnectGitHub }
       let github = await model.client(accountID: read.accountID)
       let (stored, remote) = try await model.serially {
         let stored = try await model.current(read)

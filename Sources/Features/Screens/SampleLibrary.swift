@@ -1,4 +1,5 @@
 import Foundation
+import Store
 
 public enum SampleLibrary {
     public static let referenceDate = Date(timeIntervalSince1970: 1_792_800_000)

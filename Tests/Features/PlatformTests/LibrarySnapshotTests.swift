@@ -28,7 +28,7 @@ struct LibrarySnapshotTests {
 
         let snapshot = LibrarySnapshot.make(
             account: GistPadAccount(
-                id: account, login: "octocat",
+                id: account, github: FixtureServer.you,
                 preferences: GistPadPreferences(metadata: [
                     "accentColor": .string("#0EA5E9"),
                     "tags": .object(["work": .object(["name": .string("Work")])]),
@@ -64,7 +64,7 @@ struct LibrarySnapshotTests {
             text: "# Tomorrow\n", github: nil)
 
         let snapshot = LibrarySnapshot.make(
-            account: GistPadAccount(id: account, login: "octocat", preferences: GistPadPreferences(metadata: [:])),
+            account: GistPadAccount(id: account, github: FixtureServer.you, preferences: GistPadPreferences(metadata: [:])),
             cache: GistCache(accountID: account, owned: [manga], starred: []),
             drafts: [edited, unpublishedFile],
             visibleText: { text in

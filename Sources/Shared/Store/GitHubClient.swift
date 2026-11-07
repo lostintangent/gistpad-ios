@@ -89,10 +89,6 @@ public actor GitHubClient {
         try await list(path: "/gists?per_page=100", allowImages: true)
     }
 
-    public func authenticatedUser() async throws -> GitHubUser {
-        try await decoded(path: "/user")
-    }
-
     public func listStarredGists() async throws -> [Gist] {
         try await list(path: "/gists/starred?per_page=100", allowImages: false)
     }

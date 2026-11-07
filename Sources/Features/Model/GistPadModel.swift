@@ -210,8 +210,7 @@ public final class GistPadModel {
   /// A gist belongs to the signed-in account when its owner is the account's GitHub user, which
   /// holds across login renames.
   func owns(_ gist: Gist) -> Bool {
-    guard let id = account?.githubUserID else { return false }
-    return gist.owner?.id == id
+    gist.owner?.id != nil && gist.owner?.id == account?.github.id
   }
 
   /// A file's header and actions, read from its gist, the account's preferences and the drafts on
@@ -326,9 +325,7 @@ public final class GistPadModel {
         }
         return $0.id < $1.id
       },
-      tags: preferences.tags.map { tag in
-        Tag(id: tag.id, name: tag.name, colorHex: tag.colorHex)
-      }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
+      tags: preferences.tags.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
       dailyNoteCount: hasIncompleteDaily ? nil : items.filter {
         $0.isDailyNote && $0.isOwned && $0.dailyDate != nil
       }.count

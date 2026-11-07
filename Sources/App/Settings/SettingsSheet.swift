@@ -21,7 +21,7 @@ struct SettingsSheet<Appearance: View>: View {
         Section {
           if let account {
             HStack(spacing: 14) {
-              AsyncImage(url: account.avatarURL) { phase in
+              AsyncImage(url: account.github.avatarURL) { phase in
                 if let image = phase.image {
                   image.resizable().scaledToFill()
                 } else {
@@ -36,10 +36,10 @@ struct SettingsSheet<Appearance: View>: View {
               VStack(alignment: .leading, spacing: 3) {
                 if let name = account.displayName {
                   Text(verbatim: name).font(.headline)
-                  Text(verbatim: "@\(account.login)")
+                  Text(verbatim: "@\(account.github.login)")
                     .font(.subheadline).foregroundStyle(.secondary)
                 } else {
-                  Text(verbatim: "@\(account.login)")
+                  Text(verbatim: "@\(account.github.login)")
                 }
               }
             }
@@ -102,7 +102,7 @@ struct SettingsSheet<Appearance: View>: View {
         Button("Sign Out", role: .destructive, action: confirmSignOut)
         Button("Cancel", role: .cancel) {}
       } message: {
-        Text("Drafts for @\(account?.login ?? "") stay on this iPhone. Nothing is published.")
+        Text("Drafts for @\(account?.github.login ?? "") stay on this iPhone. Nothing is published.")
       }
       .alert(
         errorTitle,

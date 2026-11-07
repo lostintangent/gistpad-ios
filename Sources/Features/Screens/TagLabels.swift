@@ -1,5 +1,6 @@
 #if os(iOS)
 import Accent
+import Store
 import SwiftUI
 
 struct TagLabel: View {

@@ -132,7 +132,7 @@ extension GistPadModel {
   /// Your GitHub user, who owns the gists you can publish to.
   private var ownerID: Int64 {
     get throws {
-      guard let id = account?.githubUserID else { throw AccountError.reconnectGitHub }
+      guard let id = account?.github.id else { throw AccountError.reconnectGitHub }
       return id
     }
   }

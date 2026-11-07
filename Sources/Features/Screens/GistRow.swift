@@ -1,4 +1,5 @@
 #if os(iOS)
+import Store
 import SwiftUI
 
 struct GistRow: View {

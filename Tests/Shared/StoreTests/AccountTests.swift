@@ -28,8 +28,7 @@ import Testing
             return URL(string: "gistpad://auth-callback?code=fixture")!
         }
         #expect(account.id == id)
-        #expect(account.login == FixtureServer.you.login)
-        #expect(account.githubUserID == FixtureServer.you.id)
+        #expect(account.github == FixtureServer.you)
         #expect(try await accounts.githubToken(accountID: id) == "fixture-github")
 
         // Supabase refreshes don't resend GitHub's token, so a relaunch keeps the one from sign-in.
@@ -93,7 +92,7 @@ import Testing
         }
         let account = try #require(try await server.accounts().connectedAccount())
         #expect(account.id == id)
-        #expect(account.login == FixtureServer.you.login)
+        #expect(account.github == FixtureServer.you)
         #expect(attempts.withLock { $0 } == 0)
     }
 }

@@ -28,21 +28,16 @@ extension AccountError: LocalizedError {
     }
 }
 
+/// Who's signed in: your GitHub identity and your GistPad preferences.
 public struct GistPadAccount: Codable, Equatable, Sendable, Identifiable {
     public let id: UUID
-    public let login: String
-    public let githubUserID: Int64?
-    public let avatarURL: URL?
+    public let github: GitHubUser
     public let preferences: GistPadPreferences
     public var displayName: String? { preferences.profileDisplayName }
 
-    public init(
-        id: UUID, login: String, githubUserID: Int64? = nil, avatarURL: URL? = nil, preferences: GistPadPreferences
-    ) {
+    public init(id: UUID, github: GitHubUser, preferences: GistPadPreferences) {
         self.id = id
-        self.login = login
-        self.githubUserID = githubUserID
-        self.avatarURL = avatarURL
+        self.github = github
         self.preferences = preferences
     }
 }
@@ -168,7 +163,7 @@ public actor GistPadAccountStore {
     public func cachedAccount() async throws -> GistPadAccount? {
         guard !signingOut else { throw AccountError.busy }
         guard let session = try persistedSession() else { return nil }
-        return snapshot(session.user)
+        return try snapshot(session.user)
     }
 
     /// The connected GitHub account for launch. It doesn't need a live Supabase session.
@@ -185,7 +180,7 @@ public actor GistPadAccountStore {
         _ = try persistedSession()
         let user = try await auth.user()
         guard try persistedSession()?.user.id == user.id else { throw AccountError.accountChanged }
-        let account = snapshot(user)
+        let account = try snapshot(user)
         persistAccount(account)
         return account
     }
@@ -213,7 +208,7 @@ public actor GistPadAccountStore {
             try credentials.store(key: providerKey(session.user.id), value: Data(token.utf8))
         }
         try credentials.store(key: Self.connectionKey, value: Data(session.user.id.uuidString.utf8))
-        let account = snapshot(session.user)
+        let account = try snapshot(session.user)
         persistAccount(account)
         return account
     }
@@ -285,7 +280,7 @@ public actor GistPadAccountStore {
         guard updated.id == accountID, try persistedSession()?.user.id == accountID else {
             throw AccountError.accountChanged
         }
-        let account = snapshot(updated)
+        let account = try snapshot(updated)
         persistAccount(account)
         return account
     }
@@ -362,12 +357,14 @@ public actor GistPadAccountStore {
               saved.refreshToken == session.refreshToken else { throw AccountError.credentialPersistence }
     }
 
-    private func snapshot(_ user: User) -> GistPadAccount {
-        GistPadAccount(
+    private func snapshot(_ user: User) throws -> GistPadAccount {
+        guard let githubID = githubUserID(user) else { throw AccountError.reconnectGitHub }
+        return GistPadAccount(
             id: user.id,
-            login: user.userMetadata["user_name"]?.stringValue ?? "",
-            githubUserID: githubUserID(user),
-            avatarURL: user.userMetadata["avatar_url"]?.stringValue.flatMap(URL.init(string:)),
+            github: GitHubUser(
+                id: githubID,
+                login: user.userMetadata["user_name"]?.stringValue ?? "",
+                avatarURL: user.userMetadata["avatar_url"]?.stringValue.flatMap(URL.init(string:))),
             preferences: GistPadPreferences(metadata: user.userMetadata)
         )
     }

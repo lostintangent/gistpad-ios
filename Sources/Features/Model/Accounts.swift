@@ -142,10 +142,8 @@ extension GistPadModel {
   public func comments(for gist: Gist) async throws -> CommentsModel {
     guard let account, phase.switchingTo == nil else { throw AccountError.accountChanged }
     let github = await client(accountID: account.id)
-    let userID =
-      if let id = account.githubUserID { id } else { try await github.authenticatedUser().id }
     return CommentsModel(
-      gistID: gist.id, userID: userID, gistOwnerID: gist.owner?.id, remote: github)
+      gistID: gist.id, userID: account.github.id, gistOwnerID: gist.owner?.id, remote: github)
   }
 
   /// Drops everything shown for the current account and switches to `account`, or signs out.

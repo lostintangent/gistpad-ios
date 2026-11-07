@@ -281,7 +281,7 @@ struct RootView: View {
   private var accountSwitchSheet: some View {
     if let account = model.account, let pending = model.phase.switchingTo {
       AccountSwitchSheet(
-        current: account.login, replacement: pending.login,
+        current: account.github.login, replacement: pending.github.login,
         switchAccount: { try await model.switchAccount() },
         keepCurrent: { model.keepCurrentAccount() })
     }

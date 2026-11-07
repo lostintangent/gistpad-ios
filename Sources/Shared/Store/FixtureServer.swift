@@ -167,8 +167,6 @@ private extension FixtureServer.State {
         if route.count > 3 { comment = route[3]; route[3] = ":comment" }
         if !id.isEmpty, !gists.contains(where: { $0.id == id }) { return .init(status: 404) }
         switch "\(method) /\(route.joined(separator: "/"))" {
-        case "GET /user":
-            return try json(FixtureServer.you)
         case "GET /gists":
             return try json(gists.filter { $0.owner == FixtureServer.you }.map { served($0, listed: true) })
         case "GET /gists/starred":
