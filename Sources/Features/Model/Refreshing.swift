@@ -28,7 +28,7 @@ public enum RemoteRead {
   /// The problem a failed GitHub read shows, or nil when a newer request superseded it.
   static func problem(for error: any Error) -> RemoteReadProblem? {
     if error is CancellationError || (error as? URLError)?.code == .cancelled
-      || (error as? DraftError) == .staleGeneration
+      || (error as? DraftError) == .changed
       || (error as? ChangeError) == .staleReview
     {
       return nil
@@ -146,8 +146,8 @@ extension GistPadModel {
 extension GistFileEditor {
   public var remoteInspectionStatus: GitHubStatusState {
     guard let problem = remoteInspectionProblem else { return .idle }
-    switch saveState {
-    case .failed, .conflict, .reconnect:
+    switch status {
+    case .failed, .conflict:
       return .idle
     default:
       return problem.status(
@@ -159,45 +159,44 @@ extension GistFileEditor {
   /// takes GitHub's newer text, and one with edits shows the conflict.
   public func inspectRemoteChanges() async {
     guard GistPadModel.isStale(refreshedAt), !isInspectingRemote, !isPublishing, canMutate,
-      !file.isRecovery, draft.gistID != nil,
-      model.account?.id == draft.accountID, model.pendingAccount == nil
+      !file.isRecovery, file.current.gistID != nil, file.draft?.conflict == nil,
+      model.account?.id == file.accountID, model.pendingAccount == nil
     else { return }
-    if case .conflict = draft.state { return }
     isInspectingRemote = true
     defer { isInspectingRemote = false }
     guard await waitForLocalSave() else { return }
     let generation = editor.generation
+    let read = file.current
     do {
-      let github = await model.client(accountID: draft.accountID)
-      let (current, remote) = try await model.serially {
-        let current = try await model.current(draft)
-        guard let gistID = current.gistID else { return (current, RemoteFile?.none) }
+      guard let ownerID = model.account?.githubUserID else { throw AccountError.reconnectGitHub }
+      let github = await model.client(accountID: read.accountID)
+      let (stored, remote) = try await model.serially {
+        let stored = try await model.current(read)
+        let current = stored ?? read
+        guard let gistID = current.gistID else { return (stored, RemoteFile?.none) }
         let remote = try await github.remoteFile(
-          gistID: gistID, ownerID: current.githubUserID, filename: current.filename)
+          gistID: gistID, ownerID: ownerID, filename: current.filename)
         try model.cache(remote, filename: current.filename, accountID: current.accountID)
-        return (current, remote)
+        return (stored, remote)
       }
-      try await model.reloadLocalState(accountID: current.accountID)
-      guard let remote, current.id == draft.id, current.generation == generation,
-        editor.generation == generation, !isPublishing, canMutate
-      else { return }
-      if !current.isSaved {
-        if let content = remote.content, !sourceEqual(content, current.base) {
-          // Every text change bumps the generation, so this is refused if you typed after the fetch.
-          try await commitMutation(
-            Edit(
-              range: NSRange(location: 0, length: editor.text.utf16.count),
-              expected: editor.text, replacement: content),
-            expectedGeneration: current.generation
-          ) { current.adopting(content, revision: remote.gist.revision) }
-        }
-      } else {
-        adopt(
+      try await model.reloadLocalState(accountID: read.accountID)
+      guard let remote, editor.generation == generation, !isPublishing, canMutate else { return }
+      if let stored {
+        // The store refuses this if you typed after the fetch.
+        await adopt(
           try await model.serially {
             try await model.draftStore.compareWithGitHub(
-              current, remote: remote.content, revision: remote.gist.revision)
+              stored, remote: remote.content, revision: remote.gist.revision)
           })
-        try await model.reloadLocalState(accountID: current.accountID)
+        try await model.reloadLocalState(accountID: read.accountID)
+      } else if let content = remote.content, !sourceEqual(content, read.text) {
+        // Every text change bumps the generation, so this is refused if you typed after the fetch.
+        try await commitMutation(
+          Edit(
+            range: NSRange(location: 0, length: editor.text.utf16.count),
+            expected: editor.text, replacement: content),
+          expectedGeneration: generation
+        ) { read.adopting(GitHubVersion(text: content, revision: remote.gist.revision)) }
       }
       remoteInspectionProblem = nil
       refreshedAt = .now

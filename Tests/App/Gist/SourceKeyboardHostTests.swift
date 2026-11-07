@@ -223,7 +223,7 @@ private final class SourceKeyboardFixture {
                         files: [.init(id: "README.md", filename: "README.md")],
                         selectedFileID: "README.md"
                     ),
-                    mode: .constant(.edit), saveState: .savedToGitHub
+                    mode: .constant(.edit), status: .published
                 ) {
                     EditorView(editor: session)
                 } preview: {

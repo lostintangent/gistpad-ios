@@ -132,7 +132,7 @@ final class PlatformBridge: DailyNoteActions {
     guard note.id == visibleNoteID, let fileEditor = visibleEditor?.value,
       model.isForeground, model.activeEditor === fileEditor,
       model.state.selectedID != nil,
-      fileEditor.draft.accountID == accountID
+      fileEditor.file.accountID == accountID
     else { return nil }
     return Self.noteBody(fileEditor.editor.text)
   }
@@ -164,7 +164,7 @@ final class PlatformBridge: DailyNoteActions {
         throw PlatformError.accountChanged
       }
       // Today's file as you last saved it, started the same way the app starts today.
-      let draft = try await self.current(try await self.model.today(target).draft)
+      let draft = try await self.current(try await self.model.today(target).current)
       try await self.apply(.addToToday(text, asTask: asTask, to: draft))
       return draft.gistID.map { .gist(id: $0, filename: draft.filename) }
         ?? .unpublishedGist(accountID: accountID, draftID: draft.id)
@@ -227,7 +227,7 @@ final class PlatformBridge: DailyNoteActions {
         guard !name.isEmpty else { throw PlatformError.unsupportedNoteUpdate }
         switch note.link {
         case .gist(let id, nil):
-          guard draft.description != DailyNote.gistDescription else {
+          guard self.model.gistCache?.owned.first(where: { $0.id == id })?.isDailyNote != true else {
             throw PlatformError.unsupportedNoteUpdate
           }
           try await model.rename(gistID: id, to: name)
@@ -256,7 +256,7 @@ final class PlatformBridge: DailyNoteActions {
     }
   }
 
-  private func noteDraft(for note: GistEntity) async throws -> Draft {
+  private func noteDraft(for note: GistEntity) async throws -> GistFileDraft {
     guard let account = try await model.localAccount(), note.accountID == account.id else {
       throw PlatformError.accountChanged
     }
@@ -274,15 +274,14 @@ final class PlatformBridge: DailyNoteActions {
       guard gist.markdownFilenames.contains(filename),
         let text = try await model.text(of: filename, in: gist, accountID: account.id)
       else { throw DraftError.notFound }
-      guard let userID = account.githubUserID else { throw AccountError.reconnectGitHub }
       return try await current(
-        Draft(accountID: account.id, githubUserID: userID, gist: gist, filename: filename, text: text))
+        GistFileDraft(accountID: account.id, gist: gist, filename: filename, text: text))
     case .unpublishedGist(let owner, let id):
       guard owner == account.id else { throw PlatformError.accountChanged }
       guard let draft = model.localDrafts.first(where: { $0.id == id }) else {
         throw DraftError.notFound
       }
-      guard draft.gistID == nil else { throw DraftError.staleGeneration }
+      guard draft.gistID == nil else { throw DraftError.changed }
       return try await current(draft)
     case .today, .addToToday, .newGist:
       throw DraftError.notFound
@@ -290,19 +289,21 @@ final class PlatformBridge: DailyNoteActions {
   }
 
   /// The note as you last saved it, from its open editor once your typing there is saved.
-  private func current(_ draft: Draft) async throws -> Draft {
-    guard let fileEditor = fileEditor(for: draft) else { return try await model.current(draft) }
+  private func current(_ draft: GistFileDraft) async throws -> GistFileDraft {
+    guard let fileEditor = fileEditor(for: draft) else {
+      return try await model.current(draft) ?? draft
+    }
     guard fileEditor.canMutate, await fileEditor.waitForLocalSave() else {
       throw PlatformError.editingInProgress
     }
-    return fileEditor.draft
+    return fileEditor.file.current
   }
 
-  private func fileEditor(for draft: Draft) -> GistFileEditor? {
+  private func fileEditor(for draft: GistFileDraft) -> GistFileEditor? {
     model.editors.values.first { (fileEditor: GistFileEditor) in
-      fileEditor.draft.id == draft.id
-        || (fileEditor.draft.gistID != nil && fileEditor.draft.gistID == draft.gistID
-          && fileEditor.draft.filename == draft.filename)
+      let file = fileEditor.file.current
+      return file.id == draft.id
+        || (file.gistID != nil && file.gistID == draft.gistID && file.filename == draft.filename)
     }
   }
 
@@ -314,7 +315,7 @@ final class PlatformBridge: DailyNoteActions {
 
   private func apply(_ edit: DraftEdit) async throws {
     let accountID = edit.draft.accountID
-    if case .conflict = edit.draft.state { throw PlatformError.editingInProgress }
+    if edit.draft.conflict != nil { throw PlatformError.editingInProgress }
     let fileEditor = fileEditor(for: edit.draft)
     if let fileEditor {
       guard !fileEditor.file.isRecovery, fileEditor.canMutate else {

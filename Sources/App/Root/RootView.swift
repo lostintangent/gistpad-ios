@@ -131,7 +131,7 @@ struct RootView: View {
       // few per frame. A launch link can restore today, open, and present a new note in one.
       Color.clear.onAppear(perform: didActivate).id(active?.file.activationID)
     }
-    .onChange(of: active?.draft.id) { previous, _ in
+    .onChange(of: active?.file.draftID) { previous, _ in
       if let previous, let outgoing = model.editors[previous] {
         Task { await outgoing.leave() }
       }
@@ -253,7 +253,7 @@ struct RootView: View {
         sheet = nil
         Task {
           await model.signIn()
-          if model.account?.id == active?.draft.accountID,
+          if model.account?.id == active?.file.accountID,
             model.pendingAccount == nil, model.state.loadState == .ready
           {
             active?.didReconnect()
@@ -302,7 +302,7 @@ struct RootView: View {
     let reconnect: @MainActor () -> Void = {
       Task {
         await model.signIn()
-        if model.account?.id == active?.draft.accountID,
+        if model.account?.id == active?.file.accountID,
           model.pendingAccount == nil, model.state.loadState == .ready
         {
           active?.didReconnect()
@@ -371,7 +371,7 @@ struct RootView: View {
     guard scenePhase == .active,
       horizontalSizeClass != .compact || compactColumn == .detail,
       model.state.selectedID != nil, sheet == nil,
-      model.account?.id == fileEditor.draft.accountID, model.pendingAccount == nil,
+      model.account?.id == fileEditor.file.accountID, model.pendingAccount == nil,
       !fileEditor.file.isRecovery
     else { return nil }
     if let gist = fileEditor.file.gist {
@@ -380,8 +380,8 @@ struct RootView: View {
         filename: fileEditor.file.filename == gist.defaultMarkdownFilename
           ? nil : fileEditor.file.filename)
     }
-    guard fileEditor.draft.gistID == nil else { return nil }
-    return .unpublishedGist(accountID: fileEditor.draft.accountID, draftID: fileEditor.draft.id)
+    guard fileEditor.file.current.gistID == nil else { return nil }
+    return .unpublishedGist(accountID: fileEditor.file.accountID, draftID: fileEditor.file.draftID)
   }
 
   private func gistScreen(
@@ -416,7 +416,7 @@ struct RootView: View {
     }
     return GistScreen(
       gist: details, mode: mode,
-      saveState: fileEditor.saveState, actions: gistActions(fileEditor),
+      status: fileEditor.status, actions: gistActions(fileEditor),
       allowsSplit: !comments.isPresented && LayoutPreferences.allowsSplit(availableWidth: availableWidth),
       areCommentsPresented: comments.isPresented && comments.matches(fileEditor.file)
     ) {
@@ -445,7 +445,7 @@ struct RootView: View {
             Task {
               if fileEditor.remoteInspectionProblem?.recovery == .reconnect {
                 await model.signIn()
-                guard model.account?.id == fileEditor.draft.accountID,
+                guard model.account?.id == fileEditor.file.accountID,
                   model.pendingAccount == nil
                 else { return }
                 fileEditor.didReconnect()
@@ -462,12 +462,12 @@ struct RootView: View {
     .task(id: CommentReadInput(
       editorID: fileEditor.editor.id, gistID: fileEditor.file.gist?.id,
       knownTotal: fileEditor.file.gist?.commentCount,
-      isReady: model.account?.id == fileEditor.draft.accountID
+      isReady: model.account?.id == fileEditor.file.accountID
         && model.pendingAccount == nil && !model.isSigningIn && !model.isSigningOut,
       allowsComments: CommentsPresentation.supports(fileEditor.file),
       showsInline: model.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true)
     ) {
-      guard model.account?.id == fileEditor.draft.accountID, model.pendingAccount == nil,
+      guard model.account?.id == fileEditor.file.accountID, model.pendingAccount == nil,
         !model.isSigningIn, !model.isSigningOut else { return }
       comments.activate(fileEditor)
       await comments.prepareAnnotations(
@@ -579,14 +579,13 @@ struct RootView: View {
     }
     actions.save = { publish(fileEditor) }
     actions.reviewChanges = {
-      do {
-        sheet = .review(.init(fileEditor: fileEditor, review: try fileEditor.reviewContext()))
-      } catch { model.openError = error.localizedDescription }
+      guard let review = fileEditor.file.draft, review.conflict != nil else { return }
+      sheet = .review(.init(fileEditor: fileEditor, review: review))
     }
     actions.reconnect = {
       Task {
         await model.signIn()
-        if model.account?.id == fileEditor.draft.accountID,
+        if model.account?.id == fileEditor.file.accountID,
           model.pendingAccount == nil, model.state.loadState == .ready
         {
           fileEditor.didReconnect()
@@ -598,9 +597,9 @@ struct RootView: View {
       actions.tags = {
         sheet = .tags(
           TagTarget(
-            accountID: fileEditor.draft.accountID, gistID: gistID,
+            accountID: fileEditor.file.accountID, gistID: gistID,
             selected: Set(fileEditor.details.tags.map(\.id)),
-            canEdit: model.account?.id == fileEditor.draft.accountID
+            canEdit: model.account?.id == fileEditor.file.accountID
               && model.pendingAccount == nil && !fileEditor.file.isRecovery))
       }
       if !fileEditor.file.isRecovery {
@@ -712,7 +711,7 @@ struct RootView: View {
 
   private func rename(_ kind: RenameTarget.Kind, fileEditor: GistFileEditor) {
     sheet = .name(
-      RenameTarget(draft: fileEditor.draft, title: fileEditor.details.title, kind: kind))
+      RenameTarget(draft: fileEditor.file.current, title: fileEditor.details.title, kind: kind))
   }
 
   private func nameEditor(_ target: RenameTarget) -> some View {

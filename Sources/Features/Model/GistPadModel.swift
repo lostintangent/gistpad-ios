@@ -16,7 +16,7 @@ public final class GistPadModel {
   public internal(set) var isStarting = false
   /// The file opening in the detail column, until it's presented or fails.
   public internal(set) var opening: Opening?
-  public internal(set) var localDrafts: [Draft] = []
+  public internal(set) var localDrafts: [GistFileDraft] = []
   /// Counts drafts recorded in memory, so a local read that started earlier knows it's stale.
   var localDraftRecords = 0
   public internal(set) var gistCache: GistCache?
@@ -35,6 +35,9 @@ public final class GistPadModel {
   public var isForeground = false
   var isApplying = false
 
+  /// The gist each new gist or day published into, by draft, so deleting one you confirmed while it
+  /// published removes it there too.
+  @ObservationIgnored var publishedGistIDs: [UUID: String] = [:]
   @ObservationIgnored let accountStore: GistPadAccountStore
   @ObservationIgnored let draftStore: GistFileDraftStore
   /// Where this iPhone remembers the file each account last had open.
@@ -130,10 +133,10 @@ public final class GistPadModel {
     return state.gists.first { $0.id == rowID && $0.isDailyNote }?.gistID
   }
 
-  func updateLibraryExcerpt(for draft: Draft) {
+  func updateLibraryExcerpt(for draft: GistFileDraft) {
     let gist = gistCache?.gists.first { $0.id == draft.gistID }
     let isDaily = gist?.isDailyNote == true
-      || draft.description == DailyNote.gistDescription
+      || draft.newGistName == DailyNote.gistDescription
     if isDaily, DailyNote.date(filename: draft.filename) == nil { return }
     if let gist, !gist.isDailyNote, draft.filename != gist.defaultMarkdownFilename { return }
     let rowID =
@@ -145,7 +148,7 @@ public final class GistPadModel {
       return
     }
     if state.gists[index].gistID == nil {
-      state.gists[index].updatedAt = draft.updatedAt
+      state.gists[index].updatedAt = draft.editedAt
     }
     Self.updateLibraryContent(&state.gists[index], text: draft.text)
   }
@@ -191,7 +194,7 @@ public final class GistPadModel {
   }
 
   /// The Markdown files a gist shows, with any this iPhone has that GitHub doesn't yet.
-  private static func filenames(of gist: Gist, drafts: [Draft]) -> [String] {
+  private static func filenames(of gist: Gist, drafts: [GistFileDraft]) -> [String] {
     Set(gist.markdownFilenames + drafts.filter { $0.gistID == gist.id }.map(\.filename)).sorted()
   }
 
@@ -217,13 +220,13 @@ public final class GistPadModel {
   public func details(for file: GistFile) -> GistDetails {
     let title =
       file.gist?.displayName
-      ?? (file.draft.description.isEmpty ? nil : file.draft.description)
+      ?? file.current.newGistName
       ?? String(localized: "Untitled")
     guard let gist = file.gist, let account, account.id == file.accountID else {
       return GistDetails(
         title: title, files: [.init(id: file.filename, filename: file.filename)],
         selectedFileID: file.filename,
-        isDailyNote: file.gist?.isDailyNote ?? (file.draft.description == DailyNote.gistDescription),
+        isDailyNote: file.gist?.isDailyNote ?? (file.current.newGistName == DailyNote.gistDescription),
         isAutoSaveEnabled: account?.id == file.accountID
           && account?.preferences.isAutoSaveEnabled == true)
     }
@@ -245,7 +248,7 @@ public final class GistPadModel {
   }
 
   static func libraryContents(
-    owned: [Gist], starred: [Gist], account: GistPadAccount, drafts: [Draft] = [],
+    owned: [Gist], starred: [Gist], account: GistPadAccount, drafts: [GistFileDraft] = [],
     cached: GistCache? = nil
   )
     -> (gists: [GistItem], tags: [Tag], dailyNoteCount: Int?)
@@ -298,14 +301,17 @@ public final class GistPadModel {
       }
     }
     items += drafts.filter { $0.gistID.map { unique[$0] == nil } ?? true }.compactMap { draft in
-      let daily = draft.description == DailyNote.gistDescription
+      let daily = draft.newGistName == DailyNote.gistDescription
       let day = daily ? DailyNote.date(filename: draft.filename) : nil
       if daily, day == nil { return nil }
+      // A copy of a gist deleted on GitHub goes by its file's name.
+      let title =
+        daily || draft.newGistName == nil && draft.gistID != nil
+        ? Gist.File.displayName(draft.filename)
+        : draft.newGistName ?? String(localized: "Untitled")
       var item = GistItem(
-        id: draft.id.uuidString,
-        title: daily ? Gist.File.displayName(draft.filename)
-          : (draft.description.isEmpty ? String(localized: "Untitled") : draft.description),
-        updatedAt: draft.updatedAt, isRecovery: draft.gistID != nil,
+        id: draft.id.uuidString, title: title,
+        updatedAt: draft.editedAt, isRecovery: draft.gistID != nil,
         isSecret: true, isDailyNote: daily, filename: draft.filename,
         dailyDate: day)
       updateLibraryContent(&item, text: draft.text)

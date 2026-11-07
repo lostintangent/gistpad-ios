@@ -54,16 +54,17 @@ struct SyncFixture {
     }
 
     /// A gist's file as you open it: your draft, or what GitHub has now.
-    func open(_ gist: Gist, _ filename: String = "README.md") async throws -> Draft {
+    func open(_ gist: Gist, _ filename: String = "README.md") async throws -> GistFileDraft {
         let current = try #require(server.gists.first { $0.id == gist.id })
         let content = try #require(current.files[filename]?.content)
-        return try await store.current(Draft(
-            accountID: Self.account, githubUserID: Self.user, gist: current, filename: filename,
-            text: Gist.File.decodeContent(content)))
+        let unedited = GistFileDraft(
+            accountID: Self.account, gist: current, filename: filename,
+            text: Gist.File.decodeContent(content))
+        return try await store.current(unedited) ?? unedited
     }
 
-    func type(_ text: String, in draft: Draft) async throws -> Draft {
-        try await store.save(draft, text: text, generation: draft.generation + 1)
+    func type(_ text: String, in draft: GistFileDraft) async throws -> GistFileDraft {
+        try await store.save(draft, text: text, github: draft.base)
     }
 }
 

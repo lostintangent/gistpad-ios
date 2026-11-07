@@ -90,7 +90,7 @@ final class CommentsPresentation {
     selectedRootID = rootID
     preparationFailure = nil
     isPresented = true
-    let filename = next.draft.filename
+    let filename = next.file.filename
     Task {
       guard let conversation = await prepare() else { return }
       if let quote {

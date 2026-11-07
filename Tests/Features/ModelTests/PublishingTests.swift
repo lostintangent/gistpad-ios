@@ -19,7 +19,7 @@ struct PublishingTests {
     let a = try await phone.open(.gist(id: "a"))
     let typed = "One, 日本語 👨‍👩‍👧‍👦"
     try await phone.type("One,", "One, 日本", typed, in: a)
-    #expect(a.saveState == .savedLocally)
+    #expect(a.status == .unpublished)
     #expect(phone.publishes.isEmpty)
 
     // Typing while a publish is on its way publishes next, once typing stops.
@@ -30,7 +30,7 @@ struct PublishingTests {
     sending.open()
     await publishing.value
     #expect(phone.onGitHub("a")?.utf8.elementsEqual(typed.utf8) == true)
-    #expect(a.saveState == .savedLocally)
+    #expect(a.status == .unpublished)
     await a.updateAutosave()?.value
     #expect(phone.publishes == ["PATCH /gists/a", "PATCH /gists/a"])
     #expect(phone.onGitHub("a") == "Second")
@@ -56,7 +56,7 @@ struct PublishingTests {
     try await phone.type("Two, typed", in: b)
     await phone.leaveApp()
     #expect(phone.onGitHub("b") == "Two, typed")
-    #expect(b.saveState == .savedToGitHub)
+    #expect(b.status == .published)
   }
 
   enum Moment: CaseIterable { case autosave, leavingTheNote, leavingTheApp, returningToTheApp }
@@ -69,7 +69,7 @@ struct PublishingTests {
     let today = try await phone.open(.today())
     try await phone.type("# Today\n\n- [ ] Walk", in: today)
     await today.publish()
-    #expect(today.saveState == .failed(.network))
+    #expect(today.status == .failed(.network))
     phone.goOnline()
     switch moment {
     case .autosave:
@@ -80,7 +80,7 @@ struct PublishingTests {
     case .returningToTheApp: await phone.returnToApp()
     }
     #expect(phone.publishes == ["POST /gists"])
-    #expect(today.saveState == .savedToGitHub)
+    #expect(today.status == .published)
     let daily = try #require(phone.github.gists.first { $0.isDailyNote })
     #expect(daily.files[DailyNote.Day().filename]?.content == today.editor.text)
     #expect(daily.isPublic == false)
@@ -101,7 +101,7 @@ struct PublishingTests {
 
     try await phone.type("base", in: a)
     await a.publish()
-    #expect(a.saveState == .savedToGitHub)
+    #expect(a.status == .published)
     #expect(phone.onGitHub("a") == "base")
   }
 
@@ -119,14 +119,14 @@ struct PublishingTests {
     try await phone.type("# Ideas\n\nFirst", in: new)
     phone.fixture.cutOffNextPublish()
     await new.publish()
-    #expect(new.saveState != .savedToGitHub)
+    #expect(new.status != .published)
 
     await new.publish()
-    #expect(new.saveState == .savedToGitHub)
+    #expect(new.status == .published)
     let made = phone.github.gists.filter {
-      $0.files[new.draft.filename]?.content == "# Ideas\n\nFirst"
+      $0.files[new.file.filename]?.content == "# Ideas\n\nFirst"
     }
-    #expect(made.map(\.id) == [new.draft.gistID])
+    #expect(made.map(\.id) == [new.file.current.gistID])
     #expect(phone.publishes == ["POST /gists"])
   }
 

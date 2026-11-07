@@ -44,6 +44,11 @@ public struct GistCache: Codable, Equatable, Sendable {
         texts[Self.key(gist.id, filename)]?.text
     }
 
+    /// The file's last text and revision from GitHub.
+    public func version(of filename: String, gistID: String) -> GitHubVersion? {
+        texts[Self.key(gistID, filename)]
+    }
+
     /// The file's text, only when it's as new as `gist`. A listed gist has no revision, so it's the
     /// one this cache read, as long as GitHub hasn't changed the gist since.
     public func currentText(of filename: String, in gist: Gist) -> String? {

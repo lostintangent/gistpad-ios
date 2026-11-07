@@ -23,7 +23,7 @@ struct GistFileEditorTests {
     edit(fileEditor, to: accepted)
     fileEditor.editor.textViewWritingToolsDidEnd(editor)
     #expect(await fileEditor.waitForLocalSave())
-    #expect(try await fixture.saved(fileEditor).generation == 1)
+    #expect(fileEditor.savedGeneration == 1)
     #expect(try await fixture.saved(fileEditor).text == accepted)
 
     fileEditor.editor.textViewWritingToolsWillBegin(editor)
@@ -31,8 +31,8 @@ struct GistFileEditorTests {
     edit(fileEditor, to: accepted)
     fileEditor.editor.textViewWritingToolsDidEnd(editor)
     #expect(await fileEditor.waitForLocalSave())
-    #expect(try await fixture.saved(fileEditor).generation == 1)
-    #expect(fileEditor.saveState == .savedLocally)
+    #expect(fileEditor.savedGeneration == 1)
+    #expect(fileEditor.status == .unpublished)
     #expect(fixture.publishes.isEmpty)
   }
 
@@ -42,16 +42,16 @@ struct GistFileEditorTests {
     let window = try EditorContinuityTests().host(fileEditor.editor)
     defer { window.isHidden = true }
     let image = "\n![Image](https://example.test/image.png)"
-    let insertion = DraftEdit(draft: fileEditor.draft, text: image)
-    try await fileEditor.applyDurableEdit(insertion) { try await fixture.store.apply(insertion) }
+    let insertion = DraftEdit(draft: fileEditor.file.current, text: image)
+    try await fileEditor.applyDurableEdit(insertion) { try await fixture.store.apply(insertion, github: nil) }
     #expect(fileEditor.editor.text == "Base" + image)
     fileEditor.editor.textView.undoManager?.undo()
     #expect(fileEditor.editor.text == "Base")
 
     edit(fileEditor, to: "Newer 日本語")
     #expect(await fileEditor.waitForLocalSave())
-    await #expect(throws: DraftError.staleGeneration) {
-      try await fileEditor.applyDurableEdit(insertion) { try await fixture.store.apply(insertion) }
+    await #expect(throws: DraftError.changed) {
+      try await fileEditor.applyDurableEdit(insertion) { try await fixture.store.apply(insertion, github: nil) }
     }
     #expect(fileEditor.editor.text == "Newer 日本語")
     #expect(try await fixture.saved(fileEditor).text == "Newer 日本語")
@@ -73,14 +73,14 @@ struct GistFileEditorTests {
     await fileEditor.inspectRemoteChanges()
     #expect(fileEditor.editor.text == "Base, kept here")
     #expect(editor.selectedRange == NSRange(location: 4, length: 3))
-    #expect(fileEditor.saveState.isConflict)
-    #expect(try fileEditor.reviewContext().conflict.remote == "Changed in the web app")
+    #expect(fileEditor.status == .conflict)
+    #expect(fileEditor.file.draft?.conflict?.text == "Changed in the web app")
     fixture.model.isForeground = true
     #expect(fileEditor.updateAutosave() == nil)
     editor.undoManager?.undo()
     #expect(fileEditor.editor.text == "Base")
     #expect(await fileEditor.waitForLocalSave())
-    #expect(fileEditor.saveState.isConflict)
+    #expect(fileEditor.status == .conflict)
     #expect(fixture.publishes.isEmpty)
   }
 
@@ -94,9 +94,9 @@ struct GistFileEditorTests {
     await model.start()
     await model.open(.gist(id: "frontmatter"))
     let file = try #require(model.loadedFile)
-    let draft = file.draft
     let fileEditor = GistFileEditor(file: file, model: model)
     let editor = fileEditor.editor
+    let generation = editor.generation
     let view = editor.textView
     #expect(editor.showsFrontMatter)
     #expect(editor.contentStart == 0)
@@ -109,7 +109,7 @@ struct GistFileEditorTests {
     #expect(editor.contentStart == prefix.utf16.count)
     #expect(editor.textView === view)
     #expect(editor.text.utf8.elementsEqual(source.utf8))
-    #expect(editor.generation == draft.generation)
+    #expect(editor.generation == generation)
     #expect(view.undoManager?.canUndo != true)
   }
 
@@ -127,12 +127,12 @@ struct GistFileEditorTests {
     undo.removeAllActions()
     let generation = fileEditor.editor.generation
     let choice = keepsMine ? "Mine" : "From GitHub 日本語"
-    try await fileEditor.applyReview(fileEditor.reviewContext(), text: choice, publishes: false)
+    try await fileEditor.resolveConflict(try #require(fileEditor.file.draft), text: choice, publishes: false)
     #expect(fileEditor.editor.text == choice)
     // Keeping my text changes nothing to undo. Taking GitHub's is one undo back to mine.
     #expect(fileEditor.editor.generation == generation + (keepsMine ? 0 : 1))
     #expect(undo.canUndo == !keepsMine)
-    #expect(fileEditor.saveState == (keepsMine ? .savedLocally : .savedToGitHub))
+    #expect(fileEditor.status == (keepsMine ? .unpublished : .published))
     #expect(fixture.publishes.isEmpty)
     guard !keepsMine else { return }
     undo.undo()
@@ -164,13 +164,7 @@ private extension ModelFixture {
   }
 
   /// The editor's file as it's saved on this iPhone.
-  func saved(_ fileEditor: GistFileEditor) async throws -> Draft {
-    try await store.current(fileEditor.draft)
-  }
-}
-
-extension PublishState {
-  fileprivate var isConflict: Bool {
-    if case .conflict = self { true } else { false }
+  func saved(_ fileEditor: GistFileEditor) async throws -> GistFileDraft {
+    try #require(try await store.current(fileEditor.file.current))
   }
 }

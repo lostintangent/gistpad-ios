@@ -10,8 +10,6 @@ public struct DailyNote: Codable, Equatable, Sendable {
     public let draftID: UUID?
     /// The day's Markdown, or nil when the phone has neither a draft nor a cached copy.
     public let text: String?
-    /// Your draft's publish state.
-    public let state: PublishState?
 
     public var date: Date? {
         Self.date(filename: day.filename, timeZone: TimeZone(identifier: day.timeZoneIdentifier) ?? .current)
@@ -22,26 +20,24 @@ public struct DailyNote: Codable, Equatable, Sendable {
 
     public init(
         day: DailyNote.Day = DailyNote.Day(), gistID: String? = nil, draftID: UUID? = nil,
-        text: String? = nil, state: PublishState? = nil
+        text: String? = nil
     ) {
         self.day = day
         self.gistID = gistID
         self.draftID = draftID
         self.text = text
-        self.state = state
     }
 
     /// What the library cache and your drafts say about `day`.
-    public init(day: DailyNote.Day = DailyNote.Day(), cache: GistCache?, drafts: [Draft]) {
+    public init(day: DailyNote.Day = DailyNote.Day(), cache: GistCache?, drafts: [GistFileDraft]) {
         let gist = cache?.owned.first(where: \.isDailyNote)
         let draft = drafts.first {
             $0.filename == day.filename && ($0.gistID == nil
-                ? $0.description == DailyNote.gistDescription : $0.gistID == gist?.id)
+                ? $0.newGistName == DailyNote.gistDescription : $0.gistID == gist?.id)
         }
         self.init(
             day: day, gistID: gist?.id, draftID: draft?.id,
-            text: draft?.text ?? gist.flatMap { cache?.text(of: day.filename, in: $0) },
-            state: draft?.state)
+            text: draft?.text ?? gist.flatMap { cache?.text(of: day.filename, in: $0) })
     }
 }
 
@@ -86,7 +82,7 @@ extension DailyNote {
 
 extension DraftEdit {
     /// Adds `text` to the end of the day's draft: a paragraph, or with `asTask`, one task per line.
-    public static func addToToday(_ text: String, asTask: Bool, to draft: Draft) -> Self {
+    public static func addToToday(_ text: String, asTask: Bool, to draft: GistFileDraft) -> Self {
         let source = draft.text
         let content = asTask
             ? text.split(whereSeparator: \.isNewline)

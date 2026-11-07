@@ -6,12 +6,13 @@ import Store
 struct ConflictTarget: Identifiable {
   var id: UUID { review.id }
   let fileEditor: GistFileEditor
-  let review: Conflict
+  /// The draft as you review it, with GitHub's newer version as its conflict.
+  let review: GistFileDraft
 }
 
 struct ConflictReview: View {
   let fileEditor: GistFileEditor
-  @State private var review: Conflict
+  @State private var review: GistFileDraft
   @State private var tab = ReviewTab.changes
   @State private var isApplying = false
   @State private var isConfirmingRemote = false
@@ -21,30 +22,34 @@ struct ConflictReview: View {
   @State private var isComparing = true
   @Environment(\.dismiss) private var dismiss
 
-  init(fileEditor: GistFileEditor, review: Conflict) {
+  init(fileEditor: GistFileEditor, review: GistFileDraft) {
     self.fileEditor = fileEditor
     _review = State(initialValue: review)
   }
 
   private var isStale: Bool {
-    fileEditor.editor.generation != review.draft.generation || !review.matches(fileEditor.draft)
+    fileEditor.file.draft != review || !sourceEqual(fileEditor.editor.text, review.text)
   }
+
+  private var github: String { review.conflict?.text ?? "" }
 
   var body: some View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
-          Text(verbatim: review.draft.filename).font(.headline)
+          Text(verbatim: review.filename).font(.headline)
           Text("Your draft is saved on this iPhone.")
           if isStale {
             Label(
               "Your draft changed while this review was open. Review the latest draft.",
               systemImage: "exclamationmark.circle")
             Button("Review Latest Draft") {
-              do {
-                review = try fileEditor.reviewContext()
+              if let latest = fileEditor.file.draft, latest.conflict != nil {
+                review = latest
                 error = nil
-              } catch { self.error = error.localizedDescription }
+              } else {
+                error = ChangeError.staleReview.localizedDescription
+              }
             }
           }
           if let error {
@@ -63,17 +68,18 @@ struct ConflictReview: View {
               changes(title: String(localized: "On GitHub"), lines: remoteChanges)
             }
           case .local:
-            source(review.conflict.local)
+            source(review.text)
           case .remote:
-            source(review.conflict.remote ?? "")
+            source(github)
           }
-          if review.conflict.remote != nil {
+          // GitHub deleting the file leaves no passage in common.
+          if !github.isEmpty {
             Text(
               "Both versions changed the same passage. Choose a version, or return to your draft to combine the changes yourself."
             )
           }
           VStack(alignment: .leading, spacing: 12) {
-            Button("Keep Mine") { apply(review.conflict.local, publishes: true) }
+            Button("Keep Mine") { apply(review.text, publishes: true) }
               .buttonStyle(.borderedProminent)
             Button("Use GitHub's") { isConfirmingRemote = true }
               .buttonStyle(.bordered)
@@ -101,7 +107,7 @@ struct ConflictReview: View {
         isPresented: $isConfirmingRemote, titleVisibility: .visible
       ) {
         Button("Use GitHub's", role: .destructive) {
-          apply(review.conflict.remote ?? "", publishes: false)
+          apply(github, publishes: false)
         }
         Button("Cancel", role: .cancel) {}
       } message: {
@@ -111,12 +117,9 @@ struct ConflictReview: View {
       }
       .task(id: review) {
         isComparing = true
-        let conflict = review.conflict
+        let base = review.base?.text, local = review.text, github = github
         let diffs = await Task.detached(priority: .userInitiated) {
-          (
-            DiffLine.changes(from: conflict.base, to: conflict.local),
-            DiffLine.changes(from: conflict.base, to: conflict.remote ?? "")
-          )
+          (DiffLine.changes(from: base, to: local), DiffLine.changes(from: base, to: github))
         }.value
         guard !Task.isCancelled else { return }
         localChanges = diffs.0
@@ -166,7 +169,7 @@ struct ConflictReview: View {
     Task {
       defer { isApplying = false }
       do {
-        try await fileEditor.applyReview(review, text: text, publishes: publishes)
+        try await fileEditor.resolveConflict(review, text: text, publishes: publishes)
         dismiss()
       } catch {
         self.error = error.localizedDescription

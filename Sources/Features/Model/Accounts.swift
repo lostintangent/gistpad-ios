@@ -120,7 +120,7 @@ extension GistPadModel {
     guard account?.id == file.accountID, pendingAccount == nil else {
       throw AccountError.accountChanged
     }
-    guard let gistID = file.draft.gistID else { throw DraftError.notFound }
+    guard let gistID = file.current.gistID else { throw DraftError.notFound }
     let storage = try await accountStore.imageStorage(accountID: file.accountID)
     return try await storage.upload(image, gistID: gistID)
   }

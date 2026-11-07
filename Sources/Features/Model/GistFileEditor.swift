@@ -10,10 +10,11 @@ import Store
 public final class GistFileEditor {
   public internal(set) var file: GistFile
   public let editor: Editor
-  public internal(set) var draft: Draft
   var publishing: Task<Void, Never>?
   /// Why the last publish didn't land, until you type, publish again or reconnect GitHub.
-  var failure: PublishState?
+  var failure: PublishFailure?
+  /// The editor's last generation saved on this iPhone.
+  var savedGeneration: UInt64 = 0
   var isPerformingDestructiveAction = false
   var isApplyingDurableEdit = false
   public internal(set) var remoteInspectionProblem: RemoteReadProblem?
@@ -32,11 +33,10 @@ public final class GistFileEditor {
 
   init(file: GistFile, model: GistPadModel, autosaveDelay: Duration = .seconds(5)) {
     self.file = file
-    draft = file.draft
     self.model = model
     self.autosaveDelay = autosaveDelay
     editor = Editor(
-      fileID: file.id, text: file.draft.text, generation: file.draft.generation,
+      fileID: file.id, text: file.text,
       showsFrontMatter: model.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
     if isNew { mode = .edit }
     updateEditable()
@@ -48,18 +48,25 @@ public final class GistFileEditor {
   }
 
   /// A new gist, a new day or an empty file, which opens for writing.
-  public var isNew: Bool { draft.base == nil || draft.text.isEmpty }
+  public var isNew: Bool { file.current.base == nil || file.text.isEmpty }
 
   /// The gist's header and actions, always current with the library.
   public var details: GistDetails { model.details(for: file) }
 
-  /// Where this note stands with GitHub: read-only for a recovery copy, Saving while a publish
-  /// runs, and otherwise the draft's state.
-  public var saveState: PublishState {
+  /// Where this note stands with GitHub: read-only for a recovery copy, publishing while a publish
+  /// runs, a conflict until you choose, then why the last publish failed, and otherwise whether
+  /// GitHub has your text.
+  public var status: PublishStatus {
     if file.isRecovery { return .failed(.readOnly) }
-    if isPublishing { return .savingToGitHub(generation: draft.generation) }
-    if case .conflict = draft.state { return draft.state }
-    return failure ?? draft.state
+    if isPublishing { return .publishing }
+    if file.draft?.conflict != nil { return .conflict }
+    if let failure { return .failed(failure) }
+    return file.current.isPublished && !hasUnpublishedChanges ? .published : .unpublished
+  }
+
+  /// Whether you've written anything GitHub doesn't have, including typing still saving.
+  var hasUnpublishedChanges: Bool {
+    file.draft != nil || editor.generation != savedGeneration
   }
 
   public var canMutate: Bool {
@@ -71,8 +78,11 @@ public final class GistFileEditor {
   /// Brings the note's name and gist up to date after a change. A file GitHub renamed before you
   /// typed in it takes `filename`.
   func refreshMetadata(gist: Gist? = nil, filename: String? = nil) async throws {
-    adopt(try await model.current(draft))
-    if !draft.isSaved, let filename { adopt(draft.renamed(filename)) }
+    if let stored = try await model.current(file.current) {
+      file.update(stored)
+    } else if let filename {
+      file.update(unedited: file.current.renamed(filename))
+    }
     if let gist { file.gist = gist }
     updateEditable()
     applyWritingPreferences()
@@ -91,10 +101,10 @@ public final class GistFileEditor {
       model.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
   }
 
-  /// Takes the store's latest word on this draft. A read or publish that started before a keystroke
-  /// can finish after that keystroke saves, and its older draft would make the edit look published.
-  func adopt(_ stored: Draft) {
-    if stored.generation >= draft.generation { draft = stored }
-    file.draft = draft
+  /// Takes a publish's or read's result once your typing has saved. A keystroke during it may have
+  /// stored newer text, which the store has.
+  func adopt(_ result: GistFileDraft) async {
+    _ = await waitForLocalSave()
+    file.update((try? await model.current(result)) ?? result)
   }
 }

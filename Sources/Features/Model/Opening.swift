@@ -76,7 +76,7 @@ extension GistPadModel {
   }
 
   /// The draft a row shows when GitHub doesn't list its gist.
-  func draft(forRow rowID: String) -> Draft? {
+  func draft(forRow rowID: String) -> GistFileDraft? {
     UUID(uuidString: rowID).flatMap { id in localDrafts.first { $0.id == id } }
   }
 
@@ -109,19 +109,15 @@ extension GistPadModel {
     }) {
       return localFile(draft, rowID: rowID)
     }
-    guard let gist, let userID = account.githubUserID,
-      let text = gistCache?.text(of: selectedFilename, in: gist)
-    else { return nil }
+    guard let gist, let text = gistCache?.text(of: selectedFilename, in: gist) else { return nil }
     var file = GistFile(
-      draft: Draft(
-        accountID: account.id, githubUserID: userID, gist: gist, filename: selectedFilename,
-        text: text),
+      unedited: GistFileDraft(accountID: account.id, gist: gist, filename: selectedFilename, text: text),
       gist: gist)
     file.libraryRowID = rowID
     return file
   }
 
-  private func localFile(_ draft: Draft, rowID: String?) -> GistFile {
+  private func localFile(_ draft: GistFileDraft, rowID: String?) -> GistFile {
     let gist = gistCache?.gists.first { $0.id == draft.gistID }
     var file = GistFile(
       draft: draft, gist: gist,
@@ -150,7 +146,7 @@ extension GistPadModel {
       case .gist(let id, _, let rowID):
         (rowID ?? id, gistCache?.gists.first { $0.id == id }?.displayName)
       case .draft(let id, let rowID):
-        (rowID ?? id.uuidString, localDrafts.first { $0.id == id }?.description)
+        (rowID ?? id.uuidString, localDrafts.first { $0.id == id }?.newGistName)
       case .today(let target, _): ("today/\(target.filename)", String(localized: "Today"))
       case .new: ("new", String(localized: "Untitled"))
       }
@@ -171,13 +167,13 @@ extension GistPadModel {
     if let fileEditor = editors.values.first(where: { $0.file.refersToSameFile(as: file) }) {
       fileEditor.adoptPresentation(file)
     } else {
-      editors[file.draft.id] = GistFileEditor(file: file, model: self)
+      editors[file.draftID] = GistFileEditor(file: file, model: self)
     }
   }
 
   func unfilteredRowID(for file: GistFile) -> String? {
     state.gists.first {
-      $0.id == file.draft.id.uuidString
+      $0.id == file.draftID.uuidString
         || ($0.gistID != nil && $0.gistID == file.gistID
           && ($0.filename == nil || $0.filename == file.filename))
     }?.id
@@ -242,18 +238,18 @@ extension GistPadModel {
           gist.defaultMarkdownFilename
         }
       guard let selected else { throw GitHubClientError.missingFile }
-      guard let userID = account.githubUserID else { throw AccountError.reconnectGitHub }
       guard let text = try await text(of: selected, in: gist, accountID: account.id) else {
         throw GitHubClientError.missingFile
       }
       // The read is cached on this iPhone, so the note opens from here next time.
       try await reloadLocalState(accountID: account.id)
-      var file = GistFile(
-        draft: try await current(
-          Draft(
-            accountID: account.id, githubUserID: userID, gist: gist, filename: selected,
-            text: text)),
-        gist: gist)
+      let unedited = GistFileDraft(accountID: account.id, gist: gist, filename: selected, text: text)
+      var file =
+        if let draft = try await current(unedited) {
+          GistFile(draft: draft, gist: gist)
+        } else {
+          GistFile(unedited: unedited, gist: gist)
+        }
       file.libraryRowID = rowID
       return file
     case .draft(let id, let rowID):
@@ -279,8 +275,7 @@ extension GistPadModel {
       file.revealsDetail = focusesEditor
       return file
     case .new:
-      guard let userID = account.githubUserID else { throw AccountError.reconnectGitHub }
-      var file = GistFile(draft: Draft(accountID: account.id, githubUserID: userID))
+      var file = GistFile(unedited: GistFileDraft(accountID: account.id))
       file.editingRequestID = UUID()
       return file
     }
@@ -288,11 +283,12 @@ extension GistPadModel {
 
   /// Closes a new note you left without writing in it, since nothing of it was kept.
   func close(_ fileEditor: GistFileEditor) {
-    guard !fileEditor.draft.isSaved, fileEditor.draft.gistID == nil,
-      state.selectedID == nil || visibleFile?.draft.id != fileEditor.draft.id
+    let file = fileEditor.file
+    guard file.draft == nil, file.current.gistID == nil,
+      state.selectedID == nil || visibleFile?.draftID != file.draftID
     else { return }
-    editors[fileEditor.draft.id] = nil
-    if loadedFile?.draft.id == fileEditor.draft.id { loadedFile = nil }
+    editors[file.draftID] = nil
+    if loadedFile?.draftID == file.draftID { loadedFile = nil }
   }
 
   public func showLibrary() {
@@ -343,8 +339,8 @@ extension GistFileEditor {
   }
 
   func adoptPresentation(_ incoming: GistFile) {
-    guard incoming.accountID == draft.accountID,
-      incoming.gist?.id == file.gist?.id, incoming.filename == draft.filename
+    guard incoming.accountID == file.accountID,
+      incoming.gist?.id == file.gist?.id, incoming.filename == file.filename
     else { return }
     file.libraryRowID = incoming.libraryRowID
     file.editingRequestID = incoming.editingRequestID

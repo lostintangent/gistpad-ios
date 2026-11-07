@@ -1,31 +1,65 @@
 import Foundation
 import Store
 
-/// A note in the detail column: its draft, whether stored or just read, and the gist it's in.
+/// A file as it is on this iPhone: its gist, and your draft once you've typed in it, else the file
+/// as you opened it.
 public struct GistFile: Equatable, Sendable, Identifiable {
-  public var draft: Draft
   public var gist: Gist?
+  /// Your stored draft, from your first keystroke until GitHub has the text.
+  public private(set) var draft: GistFileDraft?
+  /// The file before you type: GitHub's text, or a new gist or day as it starts.
+  public private(set) var unedited: GistFileDraft
   public var isRecovery: Bool
   var libraryRowID: String?
   var editingRequestID: UUID?
   public var revealsDetail = true
-  public let id: String
-  public var accountID: UUID { draft.accountID }
-  public var filename: String { draft.filename }
+  /// The file's identity on this iPhone, from the draft it opened with, which keys its editor.
+  public let draftID: UUID
+  public var id: String { "\(accountID.uuidString)/draft/\(draftID.uuidString)" }
+
+  /// The draft your next keystroke saves.
+  public var current: GistFileDraft { draft ?? unedited }
+  public var accountID: UUID { unedited.accountID }
+  public var filename: String { current.filename }
+  public var text: String { current.text }
   public var activationID: String { editingRequestID?.uuidString ?? id }
 
-  init(draft: Draft, gist: Gist? = nil, isRecovery: Bool = false) {
-    self.draft = draft
+  /// A file you haven't typed in.
+  init(unedited: GistFileDraft, gist: Gist? = nil) {
+    self.unedited = unedited
     self.gist = gist
-    self.isRecovery = isRecovery
-    id = "\(draft.accountID.uuidString)/draft/\(draft.id.uuidString)"
+    isRecovery = false
+    draftID = unedited.id
   }
 
-  var gistID: String? { gist?.id ?? draft.gistID }
+  /// A file with your stored draft.
+  init(draft: GistFileDraft, gist: Gist? = nil, isRecovery: Bool = false) {
+    self.init(unedited: draft, gist: gist)
+    self.draft = draft
+    self.isRecovery = isRecovery
+  }
+
+  /// Takes the store's word on the draft: kept, or let go with nothing left to keep.
+  mutating func update(_ stored: GistFileDraft) {
+    if stored.isDisposable {
+      draft = nil
+      unedited = stored
+    } else {
+      draft = stored
+    }
+  }
+
+  /// Takes the file as it is when nothing is stored for it.
+  mutating func update(unedited: GistFileDraft) {
+    draft = nil
+    self.unedited = unedited
+  }
+
+  var gistID: String? { gist?.id ?? current.gistID }
 
   /// What reopens this file: its gist's file once it has one, or else its draft.
   var request: Opening.Request {
-    if let gistID { .gist(id: gistID, filename: filename) } else { .draft(id: draft.id) }
+    if let gistID { .gist(id: gistID, filename: filename) } else { .draft(id: draftID) }
   }
 
   public var rowID: String {
@@ -33,12 +67,12 @@ public struct GistFile: Equatable, Sendable, Identifiable {
     if let gist, gist.isDailyNote {
       return "\(gist.id)/\(filename)"
     }
-    return gist?.id ?? draft.id.uuidString
+    return gist?.id ?? draftID.uuidString
   }
 
   func refersToSameFile(as other: GistFile) -> Bool {
     guard accountID == other.accountID, filename == other.filename else { return false }
-    if draft.id == other.draft.id { return true }
+    if draftID == other.draftID { return true }
     if let gistID { return gistID == other.gistID }
     return false
   }

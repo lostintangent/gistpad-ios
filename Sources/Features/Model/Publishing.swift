@@ -13,14 +13,14 @@ public enum PublishReason: Equatable, Sendable {
 
 extension GistPadModel {
   /// Points the open file at the gist it published to, keeping it selected under its new row.
-  private func apply(published saved: Draft, gist: Gist) {
+  private func apply(published saved: GistFileDraft, gist: Gist) {
     guard
-      loadedFile?.draft.id == saved.id
+      loadedFile?.draftID == saved.id
         || (loadedFile?.gist?.id == gist.id && loadedFile?.filename == saved.filename)
     else { return }
     let wasSelected = state.selectedID == loadedFile?.rowID
     loadedFile?.gist = gist
-    loadedFile?.draft = saved
+    loadedFile?.update(saved)
     if loadedFile?.libraryRowID == saved.id.uuidString { loadedFile?.libraryRowID = nil }
     if wasSelected, opening == nil {
       state.selectedID = loadedFile?.rowID
@@ -32,11 +32,11 @@ extension GistPadModel {
   /// first offline result stops the sweep, and the next launch or return to the app retries it.
   public func publishDrafts() async {
     guard let accountID = account?.id, pendingAccount == nil else { return }
-    for draft in localDrafts where draft.hasUnpublishedEdits {
+    for draft in localDrafts {
       guard !Task.isCancelled else { break }
       if let fileEditor = editors[draft.id] {
         await fileEditor.publish(reason: .background)
-        if fileEditor.saveState == .failed(.network) { break }
+        if fileEditor.status == .failed(.network) { break }
       } else {
         do { _ = try await publish(draft) } catch is URLError { break } catch {}
       }
@@ -44,17 +44,20 @@ extension GistPadModel {
     try? await reloadLocalState(accountID: accountID)
   }
 
-  public func publish(_ draft: Draft) async throws -> Draft {
+  /// Publishes the file's stored draft, and returns it as the store has it after: kept, or let go
+  /// once GitHub has its text. A file you haven't typed in has nothing to publish.
+  public func publish(_ draft: GistFileDraft) async throws -> GistFileDraft? {
     let accountID = draft.accountID
     guard account?.id == accountID, pendingAccount == nil else { throw AccountError.accountChanged }
     let github = await client(accountID: accountID)
     let saved = try await serially { try await publish(draft, to: github) }
+    if draft.gistID == nil, let gistID = saved?.gistID { publishedGistIDs[draft.id] = gistID }
     if account?.id == accountID {
       libraryRequest = UUID()
       isRefreshingRemote = false
       if state.loadState == .loading { state.loadState = .ready }
       try await reloadLocalState(accountID: accountID)
-      if let gist = gistCache?.gists.first(where: { $0.id == saved.gistID }) {
+      if let saved, let gist = gistCache?.gists.first(where: { $0.id == saved.gistID }) {
         apply(published: saved, gist: gist)
       }
     }
@@ -65,37 +68,34 @@ extension GistPadModel {
   /// already its text, your text is sent, and anything else on GitHub is a conflict. A note you
   /// haven't typed in has nothing to publish, and typing during the publish hands over to the
   /// publish that typing schedules.
-  private func publish(_ draft: Draft, to github: GitHubClient) async throws -> Draft {
+  private func publish(_ read: GistFileDraft, to github: GitHubClient) async throws -> GistFileDraft? {
     try Task.checkCancellation()
-    var draft = try await draftStore.current(draft)
-    guard draft.isSaved else { return draft }
-    if case .conflict = draft.state { return draft }
+    guard var draft = try await draftStore.current(read) else { return nil }
+    guard draft.conflict == nil else { return draft }
     // Sent text stays on the draft if this is cut off, so the next publish checks GitHub for it first.
     if draft.gistID == nil, let sent = draft.sent {
       draft = try await findCreatedGist(sent, for: draft, on: github)
     }
-    if draft.isSaved, draft.gistID == nil, draft.description == DailyNote.gistDescription {
+    if draft.gistID == nil, draft.newGistName == DailyNote.gistDescription {
       draft = try await joinDailyGist(draft, on: github)
     }
-    if draft.isSaved, let gistID = draft.gistID {
+    if !draft.isPublished, let gistID = draft.gistID {
       draft = try await compareWithGitHub(draft, gistID: gistID, on: github)
     }
     // Newer text from the web reaches a note when it's opened, not by publishing.
-    guard draft.isSaved else { return draft }
-    if case .conflict = draft.state { return draft }
+    guard !draft.isPublished, draft.conflict == nil else { return draft }
     return try await send(draft, to: github)
   }
 
   /// Records your text as sent, then sends it. When GitHub confirms it, it becomes the base.
-  private func send(_ draft: Draft, to github: GitHubClient) async throws -> Draft {
-    try await draftStore.recordSent(
-      id: draft.id, accountID: draft.accountID, content: draft.text, generation: draft.generation)
+  private func send(_ draft: GistFileDraft, to github: GitHubClient) async throws -> GistFileDraft {
+    try await draftStore.recordSent(draft)
     let gist: Gist
     if let gistID = draft.gistID {
       gist = try await github.updateGist(id: gistID, files: [draft.filename: .content(draft.text)])
     } else {
       gist = try await github.createGist(
-        description: draft.description, filename: draft.filename,
+        description: draft.newGistName ?? "", filename: draft.filename,
         content: Gist.File.encodeContent(draft.text))
     }
     let confirmed = try await github.content(gist: gist, filename: draft.filename)
@@ -105,22 +105,31 @@ extension GistPadModel {
       $0.store(confirmed, of: draft.filename, in: gist)
     }
     return try await draftStore.confirm(
-      id: draft.id, accountID: draft.accountID, gistID: draft.gistID ?? gist.id, content: confirmed,
-      revision: gist.revision)
+      draft, gistID: draft.gistID ?? gist.id,
+      base: GitHubVersion(text: confirmed, revision: gist.revision))
+  }
+
+  /// Your GitHub user, who owns the gists you can publish to.
+  private var ownerID: Int64 {
+    get throws {
+      guard let id = account?.githubUserID else { throw AccountError.reconnectGitHub }
+      return id
+    }
   }
 
   /// Reads GitHub's copy of the file. Sent text GitHub doesn't have is forgotten, and the store
   /// confirms the sent text or your text if GitHub has either, or raises a conflict unless GitHub
   /// still has the base.
   private func compareWithGitHub(
-    _ draft: Draft, gistID: String, on github: GitHubClient
-  ) async throws -> Draft {
+    _ draft: GistFileDraft, gistID: String, on github: GitHubClient
+  ) async throws -> GistFileDraft {
     let remote = try await github.remoteFile(
-      gistID: gistID, ownerID: draft.githubUserID, filename: draft.filename)
+      gistID: gistID, ownerID: try ownerID, filename: draft.filename)
     try cache(remote, filename: draft.filename, accountID: draft.accountID)
     var draft = draft
     if let sent = draft.sent, !sourceEqual(remote.content, sent) {
-      draft = try await draftStore.forgetSent(id: draft.id, accountID: draft.accountID)
+      draft = try await draftStore.forgetSent(draft)
+      if draft.isPublished { return draft }
     }
     return try await draftStore.compareWithGitHub(
       draft, remote: remote.content, revision: remote.gist.revision)
@@ -130,46 +139,46 @@ extension GistPadModel {
   /// a same-named file with the sent bytes, so a gist is never created twice, and sent is
   /// confirmed. Otherwise sent is forgotten.
   private func findCreatedGist(
-    _ sent: String, for draft: Draft, on github: GitHubClient
-  ) async throws -> Draft {
+    _ sent: String, for draft: GistFileDraft, on github: GitHubClient
+  ) async throws -> GistFileDraft {
     let size = Gist.File.encodeContent(sent).utf8.count
     for gist in try await github.listGists()
-    where (gist.description ?? "") == draft.description && gist.files[draft.filename]?.size == size {
+    where (gist.description ?? "") == (draft.newGistName ?? "") && gist.files[draft.filename]?.size == size {
       let remote = try await github.remoteFile(
-        gistID: gist.id, ownerID: draft.githubUserID, filename: draft.filename)
+        gistID: gist.id, ownerID: try ownerID, filename: draft.filename)
       if sourceEqual(remote.content, sent) {
         try updateCache(draft.accountID) {
           $0.insert(remote.gist)
           $0.store(sent, of: draft.filename, in: remote.gist)
         }
         return try await draftStore.confirm(
-          id: draft.id, accountID: draft.accountID, gistID: remote.gist.id, content: sent,
-          revision: remote.gist.revision)
+          draft, gistID: remote.gist.id,
+          base: GitHubVersion(text: sent, revision: remote.gist.revision))
       }
     }
-    return try await draftStore.forgetSent(id: draft.id, accountID: draft.accountID)
+    return try await draftStore.forgetSent(draft)
   }
 
   /// A new day joins the Daily notes gist GitHub has, which the web may have started since this
   /// iPhone last saw the list, and creates one only when there's none. The gist joins the cached
   /// list, so the day finds it before the next refresh even if this publish doesn't land.
-  private func joinDailyGist(_ draft: Draft, on github: GitHubClient) async throws -> Draft {
+  private func joinDailyGist(_ draft: GistFileDraft, on github: GitHubClient) async throws -> GistFileDraft {
     guard let daily = try await github.listGists().first(where: \.isDailyNote) else { return draft }
     try updateCache(draft.accountID) { $0.insert(daily) }
-    return try await draftStore.join(gistID: daily.id, id: draft.id, accountID: draft.accountID)
+    return try await draftStore.join(draft, gistID: daily.id)
   }
 }
 
-extension PublishState {
-  /// What you see after a publish fails.
-  init(failure error: any Error) {
+extension PublishFailure {
+  /// Why a publish that threw `error` didn't land.
+  init(_ error: any Error) {
     self =
       switch error {
       case GitHubClientError.http(status: 401), is AccountError: .reconnect
-      case GitHubClientError.http(let status): .failed(.http(status: status))
-      case GitHubClientError.incompleteGist, GitHubClientError.fileTooLarge: .failed(.incompleteRemote)
-      case DraftError.readOnly: .failed(.readOnly)
-      default: .failed(.network)
+      case GitHubClientError.http(let status): .http(status: status)
+      case GitHubClientError.incompleteGist, GitHubClientError.fileTooLarge: .incompleteRemote
+      case DraftError.readOnly: .readOnly
+      default: .network
       }
   }
 }
@@ -185,11 +194,11 @@ extension GistFileEditor {
   var autosaveRequest: AutosaveRequest {
     AutosaveRequest(
       generation: editor.generation,
-      eligible: autosaveAllowed && saveState == .savedLocally && hasUnpublishedChanges)
+      eligible: autosaveAllowed && status == .unpublished && hasUnpublishedChanges)
   }
 
   private var autosaveAllowed: Bool {
-    model.isForeground && model.account?.id == draft.accountID && model.pendingAccount == nil
+    model.isForeground && model.account?.id == file.accountID && model.pendingAccount == nil
       && model.state.loadState == .ready
       && model.account?.preferences.isAutoSaveEnabled == true
       && canMutate && !file.isRecovery
@@ -200,7 +209,7 @@ extension GistFileEditor {
     case .manual: true
     case .autosave: autosaveAllowed
     case .background:
-      model.account?.id == draft.accountID && model.pendingAccount == nil
+      model.account?.id == file.accountID && model.pendingAccount == nil
         && editor.isSettled
     }
   }
@@ -238,18 +247,14 @@ extension GistFileEditor {
     return autosaveTask
   }
 
-  var hasUnpublishedChanges: Bool {
-    draft.hasUnpublishedEdits || editor.generation > draft.generation
-  }
-
   public func didReconnect() {
     failure = nil
   }
 
   /// Points the file at the gist its publish just cached, so a new note's first publish gives it one.
   private func adoptPublishedGist() {
-    guard draft.state == .savedToGitHub || draft.state == .savedLocally,
-      let gist = model.gistCache?.gists.first(where: { $0.id == draft.gistID })
+    guard file.draft?.conflict == nil,
+      let gist = model.gistCache?.gists.first(where: { $0.id == file.current.gistID })
     else { return }
     file.gist = gist
   }
@@ -262,7 +267,7 @@ extension GistFileEditor {
   public func leave() async {
     editor.commitComposition()
     guard await waitForLocalSave() else { return }
-    if !draft.isSaved, draft.gistID == nil { return model.close(self) }
+    if file.draft == nil, file.current.gistID == nil { return model.close(self) }
     guard hasUnpublishedChanges else { return }
     await publish(reason: .background)
   }
@@ -275,7 +280,7 @@ extension GistFileEditor {
     if reason == .background { await waitForPublication() }
     guard !Task.isCancelled, shouldContinue(), publicationAllowed(reason: reason) else { return }
     if reason != .manual, !hasUnpublishedChanges { return }
-    guard canMutate, saveState.canPublish else { return }
+    guard canMutate, status.canPublish else { return }
     autosaveTask?.cancel()
     autosaveTask = nil
     let task = Task {
@@ -294,20 +299,21 @@ extension GistFileEditor {
     else { return }
     failure = nil
     do {
-      // A new gist publishes when you ask, even before you type in it.
-      if reason == .manual, !draft.isSaved, draft.gistID == nil {
+      var draft = file.current
+      // A new gist or a new day publishes when you ask, even before you type in it.
+      if reason == .manual, file.draft == nil, draft.gistID == nil {
         draft = try await model.keep(draft)
       }
-      adopt(try await model.publish(draft))
+      if let result = try await model.publish(draft) { await adopt(result) }
       adoptPublishedGist()
     } catch {
       if !(error is CancellationError || (error as? URLError)?.code == .cancelled) {
         logger.error(
           "Publishing failed: \(String(reflecting: type(of: error)), privacy: .public)")
-        failure = PublishState(failure: error)
+        failure = PublishFailure(error)
       }
       // The publish may have recorded sent text or found its gist before it stopped.
-      if let current = try? await model.current(draft) { adopt(current) }
+      if let stored = try? await model.current(file.current) { file.update(stored) }
     }
   }
 

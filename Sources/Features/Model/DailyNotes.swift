@@ -38,26 +38,23 @@ extension GistPadModel {
       }
       guard let gist = try await dailyGist(cached: cached, on: github) else {
         return GistFile(
-          draft: Draft(
-            accountID: account.id, githubUserID: userID, filename: target.filename,
-            description: DailyNote.gistDescription,
+          unedited: GistFileDraft(
+            accountID: account.id, newGistName: DailyNote.gistDescription,
+            filename: target.filename,
             text: DailyNote.content(template: nil, filename: target.filename)))
       }
       guard gist.owner?.id == userID else { throw DraftError.readOnly }
       if let text = try await text(of: target.filename, in: gist, accountID: account.id) {
         return GistFile(
-          draft: Draft(
-            accountID: account.id, githubUserID: userID, gist: gist, filename: target.filename,
-            text: text),
+          unedited: GistFileDraft(
+            accountID: account.id, gist: gist, filename: target.filename, text: text),
           gist: gist)
       }
       let template = try await text(of: DailyNote.templateFilename, in: gist, accountID: account.id)
       return GistFile(
-        draft: Draft(
-          accountID: account.id, githubUserID: userID, gistID: gist.id, filename: target.filename,
-          description: gist.description ?? "",
-          text: DailyNote.content(template: template, filename: target.filename),
-          baseRevision: gist.revision),
+        unedited: GistFileDraft(
+          accountID: account.id, gistID: gist.id, filename: target.filename,
+          text: DailyNote.content(template: template, filename: target.filename)),
         gist: gist)
     }
   }

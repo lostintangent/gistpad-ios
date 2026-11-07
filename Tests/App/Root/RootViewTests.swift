@@ -109,7 +109,7 @@ struct RootViewTests {
     // Creating is local, so it works offline.
     fixture.fail()
     await host.model.open(.new)
-    let first = try #require(host.model.visibleFile?.draft)
+    let first = try #require(host.model.visibleFile?.current)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     #expect(host.editor(text: "")?.selectedRange == NSRange(location: 0, length: 0))
     try await host.waitForKeyboard(visible: true)
@@ -122,7 +122,7 @@ struct RootViewTests {
     #expect(host.model.state.selectedID == "kept")
 
     await host.model.open(.new)
-    let second = try #require(host.model.visibleFile?.draft)
+    let second = try #require(host.model.visibleFile?.current)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     try await host.waitForKeyboard(visible: true)
     host.returnToLibrary()
@@ -147,7 +147,7 @@ struct RootViewTests {
     let typed = ContinuousClock.now
     editor.insertText("Local ")
     try await host.waitUntil {
-      host.model.localDrafts.first { $0.gistID == "a" }?.generation == 1
+      host.model.localDrafts.first { $0.gistID == "a" }?.text == "Local Current source"
     }
     host.returnToLibrary()
     try await host.waitUntil { fixture.remote("a", "README.md") == "Local Current source" }
@@ -193,7 +193,7 @@ struct RootViewTests {
     let host = try await NavigationHost(fixture: fixture)
     defer { await host.close() }
     await host.model.open(.today())
-    let draft = try #require(host.model.visibleFile?.draft)
+    let draft = try #require(host.model.visibleFile?.current)
     #expect(!draft.text.isEmpty)
     try await host.waitUntil { host.editor(text: draft.text)?.isFirstResponder == true }
     let editor = try #require(host.editor(text: draft.text))
@@ -293,7 +293,7 @@ struct RootViewTests {
     let host = try await NavigationHost(fixture: fixture, pending: pending)
     defer { await host.close() }
     try await host.waitUntil { pending.link == nil && host.editor(text: "")?.isFirstResponder == true }
-    let draft = try #require(host.model.visibleFile?.draft)
+    let draft = try #require(host.model.visibleFile?.current)
     #expect(!host.model.localDrafts.contains { $0.id == draft.id })
     #expect(host.model.visibleFile?.gist == nil)
     #expect(fixture.publishes.isEmpty)

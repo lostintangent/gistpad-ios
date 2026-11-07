@@ -81,11 +81,11 @@ struct LayoutTests {
     let accountID = UUID()
     let original = (1...80).map { "Paragraph \($0): a retained native notebook." }.joined(
       separator: "\n\n")
-    let draft = Draft(accountID: accountID, githubUserID: 42, text: original)
+    let draft = GistFileDraft(accountID: accountID, text: original)
     let session = Editor(fileID: draft.id.uuidString, text: draft.text)
-    var persistence: Task<Draft, any Error>?
-    session.onEdit = { text, generation in
-      persistence = Task { try await store.save(draft, text: text, generation: generation) }
+    var persistence: Task<GistFileDraft, any Error>?
+    session.onEdit = { text, _ in
+      persistence = Task { try await store.save(draft, text: text, github: nil) }
     }
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -211,7 +211,7 @@ private struct LayoutFixture: View {
                 isEditing: session.isEditing, canEdit: true)
             },
             set: { layout.select($0) }),
-          saveState: .savedLocally,
+          status: .unpublished,
           allowsSplit: LayoutPreferences.allowsSplit(availableWidth: width)
         ) {
           EditorView(editor: session)

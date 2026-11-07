@@ -18,13 +18,13 @@ struct LibrarySnapshotTests {
         let opened = try gist("opened", "Opened, not edited", updated: "2026-10-15T00:00:00Z")
         let store = try GistFileDraftStore.open(inMemory: true)
         let typed = try await store.save(
-            Draft(accountID: account, githubUserID: 42, gist: edited, filename: "README.md", text: "Text"),
-            text: "Typed on the phone", generation: 1)
-        let started = try await store.keep(Draft(
-            accountID: account, githubUserID: 42, description: "Started on the phone", content: nil))
-        let unpublishedDay = try await store.keep(Draft(
-            accountID: account, githubUserID: 42, filename: DailyNote.filename(),
-            description: DailyNote.gistDescription, text: "- [ ] Tomorrow"))
+            GistFileDraft(accountID: account, gist: edited, filename: "README.md", text: "Text"),
+            text: "Typed on the phone", github: nil)
+        let started = try await store.keep(GistFileDraft(
+            accountID: account, newGistName: "Started on the phone", content: nil))
+        let unpublishedDay = try await store.keep(GistFileDraft(
+            accountID: account, newGistName: DailyNote.gistDescription, filename: DailyNote.filename(),
+            text: "- [ ] Tomorrow"))
 
         let snapshot = LibrarySnapshot.make(
             account: GistPadAccount(
@@ -44,7 +44,7 @@ struct LibrarySnapshotTests {
             .unpublishedGist(accountID: account, draftID: started.id),
             .gist(id: edited.id, filename: nil), .gist(id: older.id, filename: nil)
         ])
-        #expect(snapshot.recents[1].updatedAt == typed.updatedAt)
+        #expect(snapshot.recents[1].updatedAt == typed.editedAt)
         #expect(snapshot.recents[1].tags == ["Work"])
         #expect(snapshot.gists.count == 8)
         #expect(snapshot.accentHex == "#0EA5E9")
@@ -57,13 +57,11 @@ struct LibrarySnapshotTests {
             files: ["README.md": source, "Calendars.md": "# Release dates\n"])
         let store = try GistFileDraftStore.open(inMemory: true)
         let edited = try await store.save(
-            Draft(accountID: account, githubUserID: 42, gist: manga, filename: "README.md", text: source),
-            text: source + "Second favorite: Pluto.\n", generation: 1)
+            GistFileDraft(accountID: account, gist: manga, filename: "README.md", text: source),
+            text: source + "Second favorite: Pluto.\n", github: nil)
         let unpublishedFile = try await store.save(
-            Draft(
-                accountID: account, githubUserID: 42, gistID: manga.id, filename: "Next.md",
-                description: manga.description ?? ""),
-            text: "# Tomorrow\n", generation: 1)
+            GistFileDraft(accountID: account, gistID: manga.id, filename: "Next.md"),
+            text: "# Tomorrow\n", github: nil)
 
         let snapshot = LibrarySnapshot.make(
             account: GistPadAccount(id: account, login: "octocat", preferences: GistPadPreferences(metadata: [:])),

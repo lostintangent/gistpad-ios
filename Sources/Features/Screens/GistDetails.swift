@@ -8,11 +8,20 @@ public enum FileMode: String, Sendable {
     case split
 }
 
-extension PublishState {
+/// Where the open file stands with GitHub.
+public enum PublishStatus: Equatable, Sendable {
+    case published
+    /// Saved on this iPhone, with text GitHub doesn't have yet.
+    case unpublished
+    case publishing
+    /// GitHub's text moved past the draft's base, and you choose what to keep.
+    case conflict
+    case failed(PublishFailure)
+
     /// The file hasn't reached GitHub, and nothing needs you before it can.
     public var canPublish: Bool {
         switch self {
-        case .savedLocally, .failed(.network), .failed(.http): true
+        case .unpublished, .failed(.network), .failed(.http): true
         default: false
         }
     }

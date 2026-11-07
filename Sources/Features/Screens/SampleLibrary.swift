@@ -66,7 +66,7 @@ import SwiftUI
 #Preview("Gist") {
     NavigationStack {
         GistScreen(
-            gist: SampleLibrary.gist, mode: .constant(.preview), saveState: .savedToGitHub
+            gist: SampleLibrary.gist, mode: .constant(.preview), status: .published
         ) {
             TextEditor(text: .constant("# The shape of a gist\n\nA quiet place to think."))
         } preview: {

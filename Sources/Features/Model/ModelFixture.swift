@@ -51,14 +51,15 @@
     }
 
     /// A local edit made before this launch, of a gist that's on GitHub or that used to be.
-    func stageEdit(gistID: String, filename: String, text: String) async throws -> Draft {
+    func stageEdit(gistID: String, filename: String, text: String) async throws -> GistFileDraft {
       let gist = server.gists.first { $0.id == gistID }
       let content = gist?.files[filename]?.content
-      let draft = Draft(
-        accountID: account.id, githubUserID: FixtureServer.you.id, gistID: gistID,
-        filename: filename, description: gist?.description ?? "", text: content ?? "",
-        base: gist == nil ? "" : content, baseRevision: gist?.revision)
-      return try await store.save(draft, text: text, generation: draft.generation + 1)
+      let draft = GistFileDraft(
+        accountID: account.id, gistID: gistID, filename: filename, text: content ?? "",
+        base: gist == nil
+          ? GitHubVersion(text: "", revision: nil)
+          : content.map { GitHubVersion(text: $0, revision: gist?.revision) })
+      return try await store.save(draft, text: text, github: nil)
     }
 
     /// Fails every request whose "METHOD /path" starts with `prefix`, as if offline unless `code`

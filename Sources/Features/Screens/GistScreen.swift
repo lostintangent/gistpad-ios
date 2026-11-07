@@ -6,7 +6,7 @@ import SwiftUI
 public struct GistScreen<Source: View, Preview: View>: View {
     private let gist: GistDetails
     @Binding private var mode: FileMode
-    private let saveState: PublishState
+    private let status: PublishStatus
     private let actions: GistActions
     private let source: Source
     private let preview: Preview
@@ -31,7 +31,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
     }
 
     public init(
-        gist: GistDetails, mode: Binding<FileMode>, saveState: PublishState,
+        gist: GistDetails, mode: Binding<FileMode>, status: PublishStatus,
         actions: GistActions = .init(),
         allowsSplit: Bool = false,
         areCommentsPresented: Bool = false,
@@ -39,7 +39,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
     ) {
         self.gist = gist
         self._mode = mode
-        self.saveState = saveState
+        self.status = status
         self.actions = gist.isDailyNote ? actions.dailyNote : actions
         self.allowsSplit = allowsSplit
         self.areCommentsPresented = areCommentsPresented
@@ -90,10 +90,10 @@ public struct GistScreen<Source: View, Preview: View>: View {
             }
             .sharedBackgroundVisibility(.hidden)
         }
-        if gist.access.canEdit, saveState.showsPublish(isAutoSaveEnabled: gist.isAutoSaveEnabled) {
+        if gist.access.canEdit, status.showsPublish(isAutoSaveEnabled: gist.isAutoSaveEnabled) {
             ToolbarItem(placement: .primaryAction) {
                 Button(String(localized: "Publish", bundle: .module), systemImage: "arrow.up.doc", action: actions.save)
-                    .disabled(!saveState.canPublish)
+                    .disabled(!status.canPublish)
                     .accessibilityIdentifier("note-publish")
             }
         }
@@ -107,9 +107,9 @@ public struct GistScreen<Source: View, Preview: View>: View {
 
     /// A conflict opens the diff, and a lost connection reconnects GitHub.
     private var needsYou: (() -> Void)? {
-        switch saveState {
+        switch status {
         case .conflict: actions.reviewChanges
-        case .reconnect: actions.reconnect
+        case .failed(.reconnect): actions.reconnect
         default: nil
         }
     }

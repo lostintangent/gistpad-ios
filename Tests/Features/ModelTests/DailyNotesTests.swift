@@ -21,7 +21,7 @@ struct DailyNotesTests {
     await second.value
     let today = try #require(phone.model.activeEditor)
     let date = DailyNote.Day().filename.dropLast(3)
-    #expect(today.draft.filename == DailyNote.Day().filename)
+    #expect(today.file.filename == DailyNote.Day().filename)
     #expect(phone.onScreen == "# \(date)\n\n- [ ] Plan \(date)\n")
     #expect(phone.publishes.isEmpty)
 
@@ -43,13 +43,13 @@ struct DailyNotesTests {
     #expect(phone.onScreen == "- [ ] One task")
     #expect(phone.publishes == ["PATCH /gists/d"])
     #expect(Set(try #require(phone.github.gists.first { $0.id == "d" }).files.keys)
-      == ["template.md", today.draft.filename])
+      == ["template.md", today.file.filename])
 
     // A Today action for another day opens that day.
     let target = DailyNote.Day(
       date: Date(timeIntervalSince1970: 1_790_208_000), timeZone: TimeZone(secondsFromGMT: 0)!)
     try await phone.open(.today(target))
-    #expect(phone.model.loadedFile?.draft.filename == target.filename)
+    #expect(phone.model.loadedFile?.filename == target.filename)
     #expect(phone.model.loadedFile?.editingRequestID != nil)
   }
 
@@ -71,13 +71,10 @@ struct DailyNotesTests {
 
     await today.publish()
     if webWroteToday {
-      guard case .conflict(let conflict) = today.saveState else {
-        Issue.record("Expected a conflict, got \(today.saveState)")
-        return
-      }
-      #expect(conflict.remote == "Written on the web")
+      #expect(today.status == .conflict)
+      #expect(today.file.draft?.conflict?.text == "Written on the web")
     } else {
-      #expect(today.saveState == .savedToGitHub)
+      #expect(today.status == .published)
     }
     #expect(phone.github.gists.filter(\.isDailyNote).map(\.id) == [web.id])
     let files = try #require(phone.github.gists.first { $0.id == web.id }).files
@@ -163,23 +160,22 @@ struct DailyNotesTests {
     }
     // An earlier day written offline, before there was a daily notes gist.
     let earlier = try await phone.fixture.store.save(
-      Draft(
-        accountID: phone.accountID, githubUserID: FixtureServer.you.id, filename: "2026-10-23.md",
-        description: DailyNote.gistDescription),
-      text: "The alpha day", generation: 1)
+      GistFileDraft(
+        accountID: phone.accountID, newGistName: DailyNote.gistDescription, filename: "2026-10-23.md"),
+      text: "The alpha day", github: nil)
     await phone.model.start()
     // I confirm its deletion as the launch publishes it, and Today joins the gist it creates.
     let deletion = try phone.deletion(row: earlier.id.uuidString)
     await phone.model.publishDrafts()
     let gistID = try #require(phone.github.gists.first(where: \.isDailyNote)?.id)
     let today = try await phone.open(.today())
-    #expect(today.draft.gistID == gistID)
+    #expect(today.file.current.gistID == gistID)
     try await phone.type("- [ ] Today's task", in: today)
     await today.publish()
     #expect(phone.onGitHub(gistID, "2026-10-23.md") == "The alpha day")
 
     try await phone.delete(deletion)
     #expect(phone.onGitHub(gistID, "2026-10-23.md") == nil)
-    #expect(phone.onGitHub(gistID, today.draft.filename) == "- [ ] Today's task")
+    #expect(phone.onGitHub(gistID, today.file.filename) == "- [ ] Today's task")
   }
 }

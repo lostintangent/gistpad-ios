@@ -11,18 +11,10 @@ import Testing
         let gist = sync.server.addGist(description: "Before", files: ["One.md": "one", "Two.md": "two"])
         let one = try await sync.type("local", in: sync.open(gist, "One.md"))
 
-        let renamed = try await sync.store.rename(
-            one.id, accountID: account, filename: "New.md", description: "After")
-        #expect(renamed.filename == "New.md")
-        #expect(renamed.description == "After")
-        #expect(renamed.text == one.text)
-        #expect(renamed.generation == one.generation)
-        #expect(renamed.base == one.base)
-        #expect(renamed.baseRevision == one.baseRevision)
-        #expect(renamed.state == one.state)
-        #expect(try await sync.store.current(Draft(
-            accountID: account, githubUserID: SyncFixture.user, gist: gist, filename: "New.md",
-            text: "remote")).id == one.id)
+        let renamed = try await sync.store.rename(one, filename: "New.md")
+        #expect(renamed == one.renamed("New.md"))
+        #expect(try await sync.store.current(GistFileDraft(
+            accountID: account, gist: gist, filename: "New.md", text: "remote"))?.id == one.id)
     }
 
     @Test func aFilesEditTimeIsWhenYouTyped() async throws {
@@ -33,11 +25,10 @@ import Testing
         let opened = try await sync.open(gist, "Caf\u{e9}.md")
 
         let edited = try await sync.type("edit", in: opened)
-        #expect(edited.updatedAt != nil)
-        #expect(edited.updatedAt != opened.updatedAt)
-        let same = try await sync.store.save(opened, text: "edit", generation: 1)
-        #expect(same.updatedAt == edited.updatedAt)
-        #expect(try await GistFileDraftStore.open(url: url).draft(id: opened.id, accountID: account)?.updatedAt
-            == edited.updatedAt)
+        #expect(edited.editedAt > opened.editedAt)
+        let same = try await sync.type("edit", in: opened)
+        #expect(same.editedAt == edited.editedAt)
+        #expect(try await GistFileDraftStore.open(url: url).draft(id: opened.id, accountID: account)?.editedAt
+            == edited.editedAt)
     }
 }

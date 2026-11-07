@@ -28,8 +28,8 @@ struct OpeningFileView: View {
           }
         } else {
           MarkdownPreviewView(
-            markdown: file.draft.text, fileID: file.id,
-            generation: file.draft.generation, allowsTaskEdits: false
+            markdown: file.text, fileID: file.id,
+            generation: 0, allowsTaskEdits: false
           ) { event in
             if case .failure(let failure) = event { renderError = failure.localizedDescription }
           }

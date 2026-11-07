@@ -111,9 +111,9 @@ struct LibraryStateTests {
     }
 
     @Test func aFailedPublishOffersPublishEvenWithAutosaveOn() {
-        #expect(PublishState.failed(.network).showsPublish(isAutoSaveEnabled: true))
-        #expect(!PublishState.failed(.readOnly).showsPublish(isAutoSaveEnabled: true))
-        #expect(!PublishState.savedLocally.showsPublish(isAutoSaveEnabled: true))
-        #expect(PublishState.savedToGitHub.showsPublish(isAutoSaveEnabled: false))
+        #expect(PublishStatus.failed(.network).showsPublish(isAutoSaveEnabled: true))
+        #expect(!PublishStatus.failed(.readOnly).showsPublish(isAutoSaveEnabled: true))
+        #expect(!PublishStatus.unpublished.showsPublish(isAutoSaveEnabled: true))
+        #expect(PublishStatus.published.showsPublish(isAutoSaveEnabled: false))
     }
 }

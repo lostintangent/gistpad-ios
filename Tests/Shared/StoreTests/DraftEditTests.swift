@@ -8,22 +8,37 @@ import Testing
         let store = try GistFileDraftStore.open(inMemory: true)
         let account = UUID()
         let text = "- [ ] Task"
-        let opened = Draft(accountID: account, githubUserID: 42)
-        let typed = try await store.save(opened, text: text, generation: 1)
-        await #expect(throws: DraftError.staleGeneration) {
-            try await store.apply(DraftEdit(draft: opened, text: "x"))
+        let opened = GistFileDraft(accountID: account)
+        let typed = try await store.save(opened, text: text, github: nil)
+        await #expect(throws: DraftError.changed) {
+            try await store.apply(DraftEdit(draft: opened, text: "x"), github: nil)
         }
         #expect(try await store.draft(id: typed.id, accountID: account)?.text == text)
     }
 
-    /// Earlier builds also kept drafts with nothing GitHub lacks, which go when the store opens.
-    @Test func schemaChangesKeepDraftsAndDropRetiredRows() async throws {
+    /// A publish can land between keystrokes, after the editor read the draft, so the next
+    /// keystroke starts from what GitHub now has.
+    @Test func aKeystrokeAfterAPublishStartsFromGitHubsText() async throws {
+        let store = try GistFileDraftStore.open(inMemory: true)
+        let older = GitHubVersion(text: "one", revision: "a")
+        let opened = GistFileDraft(accountID: UUID(), gistID: "abc123", text: "one", base: older)
+        let typed = try await store.save(opened, text: "one two", github: older)
+        let published = GitHubVersion(text: "one two", revision: "b")
+        #expect(try await store.confirm(typed, gistID: "abc123", base: published).isDisposable)
+
+        let next = try await store.save(typed, text: "one two three", github: published)
+        #expect(next.base == published)
+    }
+
+    /// Earlier builds stored a publish state, whose conflict still waits for you after an update.
+    @Test func schemaChangesKeepDraftsAndTheirConflicts() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("drafts.store")
         let account = UUID()
         let id = UUID()
+        let conflicted = UUID()
         do {
             let schema = Schema([
                 RetiredSchema.StoredDraft.self, RetiredSchema.StoredRecovery.self,
@@ -37,21 +52,16 @@ import Testing
                 id: id, accountID: account, githubUserID: 42, gistID: "abc123",
                 filename: "README.md", description: "Note", text: "unsynced source",
                 baseContent: "remote base", baseRevision: "one",
-                stateData: try JSONEncoder().encode(PublishState.savedLocally)
+                stateData: Data(#"{"savedLocally":{}}"#.utf8)
             )
             draft.generation = 7
             draft.autosavePaused = true
             context.insert(draft)
             context.insert(RetiredSchema.StoredDraft(
-                id: UUID(), accountID: account, githubUserID: 42, gistID: "abc123",
-                filename: "Opened.md", description: "Note", text: "as published",
-                baseContent: "as published", baseRevision: "one",
-                stateData: try JSONEncoder().encode(PublishState.savedLocally)))
-            context.insert(RetiredSchema.StoredDraft(
-                id: UUID(), accountID: account, githubUserID: 42, gistID: "daily",
-                filename: "2026-11-06.md", description: DailyNote.gistDescription, text: "# 2026-11-06\n\n",
-                baseContent: nil, baseRevision: "one",
-                stateData: try JSONEncoder().encode(PublishState.savedLocally)))
+                id: conflicted, accountID: account, githubUserID: 42, gistID: "abc123",
+                filename: "Other.md", description: "Note", text: "mine",
+                baseContent: "base", baseRevision: "one",
+                stateData: Data(#"{"conflict":{"_0":{"remote":"theirs","remoteRevision":"two"}}}"#.utf8)))
             context.insert(RetiredSchema.StoredRecovery(
                 draft: draft, sent: "older source", generation: 6, remote: "remote base"
             ))
@@ -59,14 +69,14 @@ import Testing
             try context.save()
         }
         let upgraded = try GistFileDraftStore.open(url: url)
-        #expect(try await upgraded.drafts(accountID: account).map(\.id) == [id])
         let draft = try #require(try await upgraded.draft(id: id, accountID: account))
         #expect(draft.text == "unsynced source")
-        #expect(draft.generation == 7)
-        #expect(draft.state == .savedLocally)
-        #expect(draft.base == "remote base")
+        #expect(draft.base == GitHubVersion(text: "remote base", revision: "one"))
+        #expect(draft.conflict == nil)
+        #expect(try await upgraded.draft(id: conflicted, accountID: account)?.conflict
+            == GitHubVersion(text: "theirs", revision: "two"))
         try GistCache(accountID: account).save(to: upgraded.modelContainer)
-        #expect(try await upgraded.apply(DraftEdit(draft: draft, text: " accepted")).text
+        #expect(try await upgraded.apply(DraftEdit(draft: draft, text: " accepted"), github: nil).text
             == "unsynced source accepted")
         #expect(try GistCache.load(accountID: account, from: upgraded.modelContainer) != nil)
     }

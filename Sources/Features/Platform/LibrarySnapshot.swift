@@ -36,7 +36,7 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
     let recents: [GistEntity]
 
     public static func make(
-        account: GistPadAccount?, cache: GistCache?, drafts: [Draft],
+        account: GistPadAccount?, cache: GistCache?, drafts: [GistFileDraft],
         visibleText: (String) -> String = { $0 }
     ) -> Self {
         var gists: [(entity: GistEntity, isRecent: Bool)] = []
@@ -50,8 +50,8 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
                     let draft = drafts.first { $0.gistID == gist.id && $0.filename == filename }
                     let text = draft?.text ?? cache?.text(of: filename, in: gist)
                     let body = text.map(visibleText)
-                    // Opening a gist starts its draft, so only typing that GitHub doesn't have yet is newer.
-                    let editedAt = draft?.hasUnpublishedEdits == true ? draft?.updatedAt : nil
+                    // A draft is typing GitHub doesn't have yet, so it's newer.
+                    let editedAt = draft?.editedAt
                     gists.append((
                         GistEntity(
                             title: isDefault ? gist.displayName : Gist.File.displayName(filename),
@@ -76,7 +76,7 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
                         title: Gist.File.displayName(draft.filename),
                         excerpt: excerpt(body),
                         tags: preferences?.tagNames(gistID: gistID) ?? [],
-                        updatedAt: draft.updatedAt,
+                        updatedAt: draft.editedAt,
                         link: .gist(id: gistID, filename: draft.filename),
                         accountID: accountID, folderName: gist.displayName,
                         body: nil,
@@ -88,12 +88,12 @@ public struct LibrarySnapshot: Codable, Equatable, Sendable {
                 let body = visibleText(text)
                 gists.append((
                     GistEntity(
-                        title: draft.description.isEmpty ? String(localized: "Untitled") : draft.description,
-                        excerpt: excerpt(body), tags: [], updatedAt: draft.updatedAt,
+                        title: draft.newGistName ?? String(localized: "Untitled"),
+                        excerpt: excerpt(body), tags: [], updatedAt: draft.editedAt,
                         link: .unpublishedGist(accountID: accountID, draftID: draft.id),
                         accountID: accountID, folderName: nil,
                         body: nil, pinned: false),
-                    draft.description != DailyNote.gistDescription))
+                    draft.newGistName != DailyNote.gistDescription))
             }
         }
         gists.sort {

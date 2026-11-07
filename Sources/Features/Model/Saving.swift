@@ -17,31 +17,37 @@ public enum EditError: LocalizedError {
 
 extension GistPadModel {
   /// Records a draft as this iPhone now has it: stored, or let go once GitHub has its text.
-  private func record(_ draft: Draft) {
+  private func record(_ draft: GistFileDraft) {
     localDraftRecords += 1
     localDrafts.removeAll { $0.id == draft.id }
-    if draft.isSaved { localDrafts.append(draft) }
+    if !draft.isDisposable { localDrafts.append(draft) }
   }
 
-  /// The draft as this iPhone has it now, stored or not.
-  public func current(_ draft: Draft) async throws -> Draft {
+  /// The file's stored draft, if you've typed in it since GitHub last had its text.
+  public func current(_ draft: GistFileDraft) async throws -> GistFileDraft? {
     try await draftStore.current(draft)
   }
 
-  /// Saves your typing on this iPhone.
-  func save(_ draft: Draft, text: String, generation: UInt64) async throws -> Draft {
-    let saved = try await draftStore.save(draft, text: text, generation: generation)
+  /// GitHub's last text for the file, which a draft starts from when it's what you typed over.
+  private func github(_ draft: GistFileDraft) -> GitHubVersion? {
+    guard account?.id == draft.accountID, let gistID = draft.gistID else { return nil }
+    return gistCache?.version(of: draft.filename, gistID: gistID)
+  }
+
+  /// Saves your typing over `draft` on this iPhone.
+  func save(_ draft: GistFileDraft, text: String) async throws -> GistFileDraft {
+    let saved = try await draftStore.save(draft, text: text, github: github(draft))
     if account?.id == draft.accountID {
       record(saved)
-      if saved.isSaved { updateLibraryExcerpt(for: saved) } else { projectLibrary() }
+      if saved.isDisposable { projectLibrary() } else { updateLibraryExcerpt(for: saved) }
       updateToday()
     }
     return saved
   }
 
   /// Adds to a file from outside the app, such as Add to Today, and saves it on this iPhone.
-  public func apply(_ edit: DraftEdit) async throws -> Draft {
-    let applied = try await draftStore.apply(edit)
+  public func apply(_ edit: DraftEdit) async throws -> GistFileDraft {
+    let applied = try await draftStore.apply(edit, github: github(edit.draft))
     if account?.id == applied.accountID {
       record(applied)
       updateLibraryExcerpt(for: applied)
@@ -51,15 +57,13 @@ extension GistPadModel {
   }
 
   /// Stores a new gist you named outside the app, such as in Shortcuts, before it has any edits.
-  public func createGist(named name: String, text: String? = nil) async throws -> Draft {
+  public func createGist(named name: String, text: String? = nil) async throws -> GistFileDraft {
     guard let account, pendingAccount == nil else { throw AccountError.accountChanged }
-    guard let userID = account.githubUserID else { throw AccountError.reconnectGitHub }
-    return try await keep(
-      Draft(accountID: account.id, githubUserID: userID, description: name, content: text))
+    return try await keep(GistFileDraft(accountID: account.id, newGistName: name, content: text))
   }
 
   /// Stores a note before you type in it.
-  func keep(_ draft: Draft) async throws -> Draft {
+  func keep(_ draft: GistFileDraft) async throws -> GistFileDraft {
     let kept = try await draftStore.keep(draft)
     if account?.id == draft.accountID {
       record(kept)
@@ -71,26 +75,30 @@ extension GistPadModel {
 }
 
 extension GistFileEditor {
+  /// Adds `edit` to the end of the open file, only while the editor shows the text it was made for.
   public func applyDurableEdit(
     _ edit: DraftEdit,
-    commit: @MainActor () async throws -> Draft
+    commit: @MainActor () async throws -> GistFileDraft
   ) async throws {
-    guard edit.draft.accountID == draft.accountID, edit.draft.id == draft.id else {
+    guard edit.draft.accountID == file.accountID, edit.draft.id == file.current.id else {
       throw AccountError.accountChanged
     }
+    guard sourceEqual(edit.draft.text, editor.text) else { throw DraftError.changed }
     try await commitMutation(
       Edit(
         range: NSRange(location: editor.text.utf16.count, length: 0), expected: "",
         replacement: edit.text),
-      expectedGeneration: edit.draft.generation, commit: commit)
+      expectedGeneration: editor.generation, commit: commit)
   }
 
+  /// Commits a change you didn't type, such as GitHub's newer text, then shows it in the editor.
+  /// Typing since `expectedGeneration` refuses it.
   func commitMutation(
     _ edit: Edit, expectedGeneration: UInt64,
-    commit: @MainActor () async throws -> Draft
+    commit: @MainActor () async throws -> GistFileDraft
   ) async throws {
     guard canMutate else { throw Edit.MutationError.compositionActive }
-    guard editor.generation == expectedGeneration else { throw DraftError.staleGeneration }
+    guard editor.generation == expectedGeneration else { throw DraftError.changed }
     let result = try edit.applying(to: editor.text)
     let changed = !result.utf8.elementsEqual(editor.text.utf8)
     let wasEditing = editor.isEditing
@@ -103,12 +111,11 @@ extension GistFileEditor {
     }
     guard await waitForLocalSave() else { throw EditError.localPersistenceFailed }
     guard editor.generation == expectedGeneration, editor.isSettled
-    else { throw DraftError.staleGeneration }
-    let committed = try await commit()
+    else { throw DraftError.changed }
+    file.update(try await commit())
     if changed {
       try editor.apply(edit, generation: expectedGeneration)
     }
-    adopt(committed)
     guard await waitForLocalSave() else { throw EditError.localPersistenceFailed }
   }
 
@@ -122,7 +129,8 @@ extension GistFileEditor {
       _ = await previous?.value
       guard let self else { return false }
       do {
-        draft = try await model.save(draft, text: text, generation: generation)
+        file.update(try await model.save(file.current, text: text))
+        savedGeneration = generation
         failure = nil
         return true
       } catch {
