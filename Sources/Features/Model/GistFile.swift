@@ -16,15 +16,11 @@ public struct GistFile: Equatable, Sendable, Identifiable {
   /// GitHub's text, for a file you haven't typed in.
   public private(set) var published: GitHubVersion?
   public var isDeletedOnGitHub: Bool
-  var libraryRowID: String?
-  var editingRequestID: UUID?
-  public var revealsDetail = true
 
   public var text: String { draft?.text ?? published?.text ?? "" }
   public var gistID: String? { gist?.id ?? draft?.gistID }
   /// A new gist, a new day or an empty file, which opens for writing.
   public var isNew: Bool { (draft?.base ?? published) == nil || text.isEmpty }
-  public var activationID: String { editingRequestID?.uuidString ?? id.uuidString }
 
   /// The draft your next keystroke saves: yours, or one starting from GitHub's text.
   public var nextDraft: GistFileDraft {
@@ -81,12 +77,9 @@ public struct GistFile: Equatable, Sendable, Identifiable {
     if let gistID { .gist(id: gistID, filename: filename) } else { .draft(id: id) }
   }
 
-  public var rowID: String {
-    if let libraryRowID { return libraryRowID }
-    if let gist, gist.isDailyNote {
-      return "\(gist.id)/\(filename)"
-    }
-    return gist?.id ?? id.uuidString
+  /// The file's own row in the library: its day, its gist, or its draft.
+  var rowID: String {
+    if let gist, gist.isDailyNote { "\(gist.id)/\(filename)" } else { gist?.id ?? id.uuidString }
   }
 
   func refersToSameFile(as other: GistFile) -> Bool {

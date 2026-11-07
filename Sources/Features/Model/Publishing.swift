@@ -18,12 +18,12 @@ extension GistPadModel {
       loadedFile?.id == saved.id
         || (loadedFile?.gist?.id == gist.id && loadedFile?.filename == saved.filename)
     else { return }
-    let wasSelected = state.selectedID == loadedFile?.rowID
+    let wasSelected = state.selectedID == loadedRowID
     loadedFile?.gist = gist
     loadedFile?.update(saved)
-    if loadedFile?.libraryRowID == saved.id.uuidString { loadedFile?.libraryRowID = nil }
+    if loadedRowID == saved.id.uuidString { loadedRowID = loadedFile?.rowID }
     if wasSelected, opening == nil {
-      state.selectedID = loadedFile?.rowID
+      state.selectedID = loadedRowID
       remember(.gist(id: gist.id, filename: saved.filename))
     }
   }

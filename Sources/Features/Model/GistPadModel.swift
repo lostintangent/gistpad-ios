@@ -13,6 +13,8 @@ public final class GistPadModel {
   /// Why the list couldn't read GitHub, until a refresh gets through.
   public internal(set) var problem: GitHubProblem?
   var loadedFile: GistFile?
+  /// The library row the loaded file is selected under.
+  public internal(set) var loadedRowID: String?
   /// The file opening in the detail column, until it's presented or fails.
   public internal(set) var opening: Opening?
   public internal(set) var drafts: [GistFileDraft] = []
@@ -182,11 +184,11 @@ public final class GistPadModel {
       known: gistCache != nil)
     // A note opened before GitHub's list arrives sits under its draft's row until the gist's row
     // replaces it, so keep it selected under the new row.
-    guard let file = loadedFile, !state.gists.contains(where: { $0.id == file.rowID }),
+    guard let file = loadedFile, !state.gists.contains(where: { $0.id == loadedRowID }),
       let rowID = unfilteredRowID(for: file)
     else { return }
-    let wasSelected = state.selectedID == file.rowID
-    loadedFile?.libraryRowID = rowID
+    let wasSelected = state.selectedID == loadedRowID
+    loadedRowID = rowID
     if wasSelected, opening == nil { state.selectedID = rowID }
   }
 

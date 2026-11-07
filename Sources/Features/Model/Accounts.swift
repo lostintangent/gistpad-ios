@@ -155,6 +155,7 @@ extension GistPadModel {
     self.account = account
     phase = account == nil ? .signedOut : .ready
     loadedFile = nil
+    loadedRowID = nil
     opening = nil
     editors = [:]
     drafts = []

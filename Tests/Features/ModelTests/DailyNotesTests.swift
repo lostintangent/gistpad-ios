@@ -32,7 +32,6 @@ struct DailyNotesTests {
     today.requestCreationFocus()
     #expect(today.mode == .preview)
     await phone.model.open(.today())
-    today.adoptPresentation(try #require(phone.model.loadedFile))
     today.requestCreationFocus()
     #expect(today.mode == .edit)
 
@@ -50,7 +49,7 @@ struct DailyNotesTests {
       date: Date(timeIntervalSince1970: 1_790_208_000), timeZone: TimeZone(secondsFromGMT: 0)!)
     try await phone.open(.today(target))
     #expect(phone.model.loadedFile?.filename == target.filename)
-    #expect(phone.model.loadedFile?.editingRequestID != nil)
+    #expect(phone.model.activeEditor?.focusRequest != nil)
   }
 
   /// When the web wrote the same day too, publishing shows the conflict instead of overwriting it.

@@ -19,6 +19,11 @@ public struct Opening: Equatable {
       case .gist, .draft: false
       }
     }
+
+    /// Restoring today without asking for it leaves the library showing.
+    var revealsDetail: Bool {
+      if case .today(_, false) = self { false } else { true }
+    }
   }
 
   public let request: Request
@@ -39,7 +44,7 @@ extension GistPadModel {
   public var visibleFile: GistFile? {
     if let opening { return opening.failure == nil ? cachedFile(rowID: opening.rowID) : nil }
     guard let selected = state.selectedID else { return loadedFile }
-    if loadedFile?.rowID == selected { return loadedFile }
+    if loadedRowID == selected { return loadedFile }
     return cachedFile(rowID: selected)
   }
 
@@ -51,7 +56,7 @@ extension GistPadModel {
 
   public var openingTitle: String? {
     if let opening { return opening.title }
-    guard let selected = state.selectedID, selected != loadedFile?.rowID else {
+    guard let selected = state.selectedID, selected != loadedRowID else {
       return nil
     }
     return placeholder(for: request(forRow: selected)).title
@@ -82,15 +87,13 @@ extension GistPadModel {
 
   func cachedFile(rowID: String) -> GistFile? {
     switch request(forRow: rowID) {
-    case .draft(let id, _): drafts.first { $0.id == id }.map { localFile($0, rowID: rowID) }
-    case .gist(let id, let filename, _): cachedFile(gistID: id, filename: filename, rowID: rowID)
+    case .draft(let id, _): drafts.first { $0.id == id }.map(localFile)
+    case .gist(let id, let filename, _): cachedFile(gistID: id, filename: filename)
     case .today, .new: nil
     }
   }
 
-  private func cachedFile(
-    gistID: String, filename: String? = nil, rowID: String? = nil
-  ) -> GistFile? {
+  private func cachedFile(gistID: String, filename: String? = nil) -> GistFile? {
     guard let account, phase.switchingTo == nil else { return nil }
     let gist = gistCache?.gists.first { $0.id == gistID }
     let selectedFilename: String?
@@ -107,23 +110,17 @@ extension GistPadModel {
     if let draft = drafts.first(where: {
       $0.accountID == account.id && $0.gistID == gistID && $0.filename == selectedFilename
     }) {
-      return localFile(draft, rowID: rowID)
+      return localFile(draft)
     }
     guard let gist, let text = gistCache?.text(of: selectedFilename, in: gist) else { return nil }
-    var file = GistFile(
+    return GistFile(
       accountID: account.id, gist: gist, filename: selectedFilename,
       published: GitHubVersion(text: text, revision: gist.revision))
-    file.libraryRowID = rowID
-    return file
   }
 
-  private func localFile(_ draft: GistFileDraft, rowID: String?) -> GistFile {
+  private func localFile(_ draft: GistFileDraft) -> GistFile {
     let gist = gistCache?.gists.first { $0.id == draft.gistID }
-    var file = GistFile(
-      draft: draft, gist: gist,
-      isDeletedOnGitHub: draft.gistID != nil && gist == nil)
-    file.libraryRowID = rowID
-    return file
+    return GistFile(draft: draft, gist: gist, isDeletedOnGitHub: draft.gistID != nil && gist == nil)
   }
 
   func request(forRow id: String) -> Opening.Request {
@@ -156,19 +153,23 @@ extension GistPadModel {
         ?? String(localized: "Gist"))
   }
 
-  func present(_ file: GistFile) {
-    var file = file
-    file.libraryRowID = unfilteredRowID(for: file)
+  func present(_ file: GistFile, as request: Opening.Request? = nil) {
     opening = nil
     loadedFile = file
-    state.selectedID = file.rowID
+    loadedRowID = unfilteredRowID(for: file) ?? file.rowID
+    state.selectedID = loadedRowID
     if file.isDeletedOnGitHub { openError = Self.recoveryMessage }
     remember(file.request)
-    if let fileEditor = editors.values.first(where: { $0.file.refersToSameFile(as: file) }) {
-      fileEditor.adoptPresentation(file)
+    let fileEditor: GistFileEditor
+    if let open = editors.values.first(where: { $0.file.refersToSameFile(as: file) }) {
+      fileEditor = open
     } else {
-      editors[file.id] = GistFileEditor(file: file, model: self)
+      fileEditor = GistFileEditor(file: file, model: self)
+      editors[file.id] = fileEditor
     }
+    fileEditor.present(
+      file, focusesEditor: request?.focusesEditor ?? false,
+      revealsDetail: request?.revealsDetail ?? true)
   }
 
   func unfilteredRowID(for file: GistFile) -> String? {
@@ -202,9 +203,9 @@ extension GistPadModel {
     do {
       let opened = try await file(for: request, account: account)
       guard token == fileRequest else { return }
-      present(opened)
+      present(opened, as: request)
     } catch is CancellationError {
-      if token == fileRequest { state.selectedID = loadedFile?.rowID }
+      if token == fileRequest { state.selectedID = loadedRowID }
     } catch {
       guard token == fileRequest else { return }
       report(error, operation: "open")
@@ -221,8 +222,8 @@ extension GistPadModel {
     for request: Opening.Request, account: GistPadAccount
   ) async throws -> GistFile {
     switch request {
-    case .gist(let id, let filename, let rowID):
-      if let cached = cachedFile(gistID: id, filename: filename, rowID: rowID) { return cached }
+    case .gist(let id, let filename, _):
+      if let cached = cachedFile(gistID: id, filename: filename) { return cached }
       let gist = try await gist(id: id, accountID: account.id)
       let filenames = gist.markdownFilenames
       let selected: String? =
@@ -242,40 +243,28 @@ extension GistPadModel {
       let published = GistFile(
         accountID: account.id, gist: gist, filename: selected,
         published: GitHubVersion(text: text, revision: gist.revision))
-      var file =
-        if let draft = try await current(published.nextDraft) {
-          GistFile(draft: draft, gist: gist)
-        } else {
-          published
-        }
-      file.libraryRowID = rowID
-      return file
-    case .draft(let id, let rowID):
+      if let draft = try await current(published.nextDraft) {
+        return GistFile(draft: draft, gist: gist)
+      }
+      return published
+    case .draft(let id, _):
       if !drafts.contains(where: { $0.id == id }) {
         try await reloadLocalState(accountID: account.id)
       }
       guard let draft = drafts.first(where: { $0.id == id }) else { throw DraftError.notFound }
-      return localFile(draft, rowID: rowID)
-    case .today(let target, let focusesEditor):
+      return localFile(draft)
+    case .today(let target, _):
       let daily = gistCache?.owned.first(where: \.isDailyNote)
       let day = DailyNote(day: target, cache: gistCache, drafts: drafts)
-      var file: GistFile
       if let draft = drafts.first(where: { $0.id == day.draftID }) {
-        file = GistFile(draft: draft, gist: daily)
-      } else if let daily,
-        let cached = cachedFile(gistID: daily.id, filename: target.filename)
-      {
-        file = cached
-      } else {
-        file = try await today(target)
+        return GistFile(draft: draft, gist: daily)
       }
-      file.editingRequestID = focusesEditor ? UUID() : nil
-      file.revealsDetail = focusesEditor
-      return file
+      if let daily, let cached = cachedFile(gistID: daily.id, filename: target.filename) {
+        return cached
+      }
+      return try await today(target)
     case .new:
-      var file = GistFile(draft: GistFileDraft(accountID: account.id))
-      file.editingRequestID = UUID()
-      return file
+      return GistFile(draft: GistFileDraft(accountID: account.id))
     }
   }
 
@@ -286,7 +275,10 @@ extension GistPadModel {
       state.selectedID == nil || visibleFile?.id != file.id
     else { return }
     editors[file.id] = nil
-    if loadedFile?.id == file.id { loadedFile = nil }
+    if loadedFile?.id == file.id {
+      loadedFile = nil
+      loadedRowID = nil
+    }
   }
 
   public func showLibrary() {
@@ -328,21 +320,24 @@ extension GistPadModel {
 }
 
 extension GistFileEditor {
+  /// Changes whenever an open asks for the caret, so the screen prepares the file again.
+  public var activationID: String { focusRequest?.uuidString ?? file.id.uuidString }
+
   public func requestCreationFocus() {
-    guard let request = file.editingRequestID, request != lastEditingRequestID, canMutate
-    else { return }
-    lastEditingRequestID = request
+    guard let request = focusRequest, request != lastFocusRequest, canMutate else { return }
+    lastFocusRequest = request
     mode = .edit
     editor.requestFocusAtEnd()
   }
 
-  func adoptPresentation(_ incoming: GistFile) {
+  /// Shows the file as it opens again: with its latest gist, and asking for the caret when the
+  /// open did.
+  func present(_ incoming: GistFile, focusesEditor: Bool, revealsDetail: Bool) {
     guard incoming.accountID == file.accountID,
       incoming.gist?.id == file.gist?.id, incoming.filename == file.filename
     else { return }
-    file.libraryRowID = incoming.libraryRowID
-    file.editingRequestID = incoming.editingRequestID
-    file.revealsDetail = incoming.revealsDetail
+    focusRequest = focusesEditor ? UUID() : nil
+    self.revealsDetail = revealsDetail
     if let gist = incoming.gist { file.gist = gist }
   }
 }

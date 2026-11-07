@@ -136,7 +136,7 @@ struct RootView: View {
     .background {
       // Keyed by activation instead of onChange, because SwiftUI drops onChange actions past a
       // few per frame. A launch link can restore today, open, and present a new note in one.
-      Color.clear.onAppear(perform: didActivate).id(active?.file.activationID)
+      Color.clear.onAppear(perform: didActivate).id(active?.activationID)
     }
     .onChange(of: active?.file.id) { previous, _ in
       if let previous, let outgoing = model.editors[previous] {
@@ -165,7 +165,7 @@ struct RootView: View {
     active.requestCreationFocus()
     openRequestedComments()
     // A completed restoration must not reopen detail after returning to Library.
-    if model.state.selectedID != nil, active.file.revealsDetail {
+    if model.state.selectedID != nil, active.revealsDetail {
       compactColumn = .detail
     }
     #if DEBUG
@@ -175,7 +175,7 @@ struct RootView: View {
 
   /// Opens the comments a library row asked for, once its file is the active one.
   private func openRequestedComments() {
-    guard let active, comments.requestedRowID == active.file.rowID,
+    guard let active, comments.requestedRowID == model.loadedRowID,
       comments.editorID == active.editor.id
     else { return }
     comments.requestedRowID = nil

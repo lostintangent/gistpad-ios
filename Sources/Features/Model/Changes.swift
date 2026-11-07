@@ -324,6 +324,7 @@ extension GistPadModel {
     }
     if let loaded = loadedFile, gone(loaded.request) {
       loadedFile = nil
+      loadedRowID = nil
       state.selectedID = nil
     }
     if let request = opening?.request, gone(request) {
