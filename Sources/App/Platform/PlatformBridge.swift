@@ -164,7 +164,7 @@ final class PlatformBridge: DailyNoteActions {
         throw PlatformError.accountChanged
       }
       // Today's file as you last saved it, started the same way the app starts today.
-      let draft = try await self.current(try await self.model.today(target).current)
+      let draft = try await self.current(try await self.model.today(target).nextDraft)
       try await self.apply(.addToToday(text, asTask: asTask, to: draft))
       return draft.gistID.map { .gist(id: $0, filename: draft.filename) }
         ?? .unpublishedGist(accountID: accountID, draftID: draft.id)
@@ -296,12 +296,12 @@ final class PlatformBridge: DailyNoteActions {
     guard fileEditor.canMutate, await fileEditor.waitForLocalSave() else {
       throw PlatformError.editingInProgress
     }
-    return fileEditor.file.current
+    return fileEditor.file.nextDraft
   }
 
   private func fileEditor(for draft: GistFileDraft) -> GistFileEditor? {
     model.editors.values.first { (fileEditor: GistFileEditor) in
-      let file = fileEditor.file.current
+      let file = fileEditor.file.nextDraft
       return file.id == draft.id
         || (file.gistID != nil && file.gistID == draft.gistID && file.filename == draft.filename)
     }

@@ -145,7 +145,7 @@ extension GistPadModel {
   public func addFile(named filename: String, to gistID: String) async throws {
     try Self.validateFilename(filename)
     try await change { account in
-      let (draft, gist) = try await serially {
+      let gist = try await serially {
         let (github, gist) = try await ownedGist(gistID, account: account)
         guard gist.files[filename] == nil else { throw ChangeError.filenameExists }
         let updated = try await github.updateGist(id: gistID, files: [filename: .content("")])
@@ -153,11 +153,13 @@ extension GistPadModel {
           $0.update(updated)
           $0.store("", of: filename, in: updated)
         }
-        let draft = GistFileDraft(accountID: account.id, gist: updated, filename: filename, text: "")
-        return (draft, updated)
+        return updated
       }
-      present(GistFile(unedited: draft, gist: gist))
-      try await editors[draft.id]?.refreshMetadata(gist: gist)
+      let file = GistFile(
+        accountID: account.id, gist: gist, filename: filename,
+        published: GitHubVersion(text: "", revision: gist.revision))
+      present(file)
+      try await editors[file.id]?.refreshMetadata(gist: gist)
     }
   }
 
@@ -167,10 +169,10 @@ extension GistPadModel {
   public func delete(_ deletion: Deletion) async throws {
     try await change(locking: { fileEditor in
       switch deletion {
-      case .localCopy(let draft): fileEditor.file.draftID == draft.id
+      case .localCopy(let draft): fileEditor.file.id == draft.id
       case .file(let gistID, _), .gist(let gistID):
         fileEditor.file.gistID == gistID
-          || drafts.contains { $0.id == fileEditor.file.draftID && $0.gistID == gistID }
+          || drafts.contains { $0.id == fileEditor.file.id && $0.gistID == gistID }
       }
     }) { account in
       switch deletion {
@@ -338,7 +340,7 @@ extension GistPadModel {
 extension GistFileEditor {
   /// What Delete on this file's screen removes, the same as its row in the list.
   public var deletion: Deletion? {
-    if file.isDeletedOnGitHub || file.current.gistID == nil { return .localCopy(file.current) }
+    if file.isDeletedOnGitHub || file.gistID == nil { return .localCopy(file.nextDraft) }
     guard let gist = file.gist, details.access.canEdit else { return nil }
     return gist.isDailyNote ? .file(gistID: gist.id, filename: file.filename) : .gist(id: gist.id)
   }

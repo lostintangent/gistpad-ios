@@ -36,9 +36,9 @@ public final class GistFileEditor {
     self.model = model
     self.autosaveDelay = autosaveDelay
     editor = Editor(
-      fileID: file.id, text: file.text,
+      fileID: file.id.uuidString, text: file.text,
       showsFrontMatter: model.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
-    if isNew { mode = .edit }
+    if file.isNew { mode = .edit }
     updateEditable()
     applyWritingPreferences()
     editor.onEdit = { [weak self] text, generation in
@@ -46,9 +46,6 @@ public final class GistFileEditor {
     }
     observeAutosave()
   }
-
-  /// A new gist, a new day or an empty file, which opens for writing.
-  public var isNew: Bool { file.current.base == nil || file.text.isEmpty }
 
   /// The gist's header and actions, always current with the library.
   public var details: GistDetails { model.details(for: file) }
@@ -61,12 +58,19 @@ public final class GistFileEditor {
     if isPublishing { return .publishing }
     if file.draft?.conflict != nil { return .conflict }
     if let failure { return .failed(failure) }
-    return file.current.isPublished && !hasUnpublishedChanges ? .published : .unpublished
+    return file.nextDraft.isPublished && !hasUnpublishedChanges ? .published : .unpublished
   }
 
   /// Whether you've written anything GitHub doesn't have, including typing still saving.
   var hasUnpublishedChanges: Bool {
-    file.draft != nil || editor.generation != savedGeneration
+    hasStoredDraft || editor.generation != savedGeneration
+  }
+
+  /// Whether this iPhone keeps the file's draft, which a new gist or day only has in memory until
+  /// there's something in it.
+  var hasStoredDraft: Bool {
+    guard let draft = file.draft else { return false }
+    return model.drafts.contains { $0.id == draft.id }
   }
 
   public var canMutate: Bool {
@@ -78,10 +82,10 @@ public final class GistFileEditor {
   /// Brings the note's name and gist up to date after a change. A file GitHub renamed before you
   /// typed in it takes `filename`.
   func refreshMetadata(gist: Gist? = nil, filename: String? = nil) async throws {
-    if let stored = try await model.current(file.current) {
+    if let stored = try await model.current(file.nextDraft) {
       file.update(stored)
     } else if let filename {
-      file.update(unedited: file.current.renamed(filename))
+      file.rename(filename)
     }
     if let gist { file.gist = gist }
     updateEditable()

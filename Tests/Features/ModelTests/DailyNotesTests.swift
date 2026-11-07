@@ -169,7 +169,7 @@ struct DailyNotesTests {
     await phone.model.publishDrafts()
     let gistID = try #require(phone.github.gists.first(where: \.isDailyNote)?.id)
     let today = try await phone.open(.today())
-    #expect(today.file.current.gistID == gistID)
+    #expect(today.file.nextDraft.gistID == gistID)
     try await phone.type("- [ ] Today's task", in: today)
     await today.publish()
     #expect(phone.onGitHub(gistID, "2026-10-23.md") == "The alpha day")

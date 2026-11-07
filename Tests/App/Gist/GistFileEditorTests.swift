@@ -42,7 +42,7 @@ struct GistFileEditorTests {
     let window = try EditorContinuityTests().host(fileEditor.editor)
     defer { window.isHidden = true }
     let image = "\n![Image](https://example.test/image.png)"
-    let insertion = DraftEdit(draft: fileEditor.file.current, text: image)
+    let insertion = DraftEdit(draft: fileEditor.file.nextDraft, text: image)
     try await fileEditor.applyDurableEdit(insertion) { try await fixture.store.apply(insertion, github: nil) }
     #expect(fileEditor.editor.text == "Base" + image)
     fileEditor.editor.textView.undoManager?.undo()
@@ -165,6 +165,6 @@ private extension ModelFixture {
 
   /// The editor's file as it's saved on this iPhone.
   func saved(_ fileEditor: GistFileEditor) async throws -> GistFileDraft {
-    try #require(try await store.current(fileEditor.file.current))
+    try #require(try await store.current(fileEditor.file.nextDraft))
   }
 }

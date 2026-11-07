@@ -113,7 +113,7 @@ final class Phone {
   }
 
   func name(_ fileEditor: GistFileEditor, _ title: String) async throws {
-    try await model.rename(fileEditor.file.current, to: title)
+    try await model.rename(fileEditor.file.nextDraft, to: title)
   }
 
   func rename(_ gistID: String, to title: String) async throws {

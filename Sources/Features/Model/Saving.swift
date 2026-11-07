@@ -80,7 +80,7 @@ extension GistFileEditor {
     _ edit: DraftEdit,
     commit: @MainActor () async throws -> GistFileDraft
   ) async throws {
-    guard edit.draft.accountID == file.accountID, edit.draft.id == file.current.id else {
+    guard edit.draft.accountID == file.accountID, edit.draft.id == file.nextDraft.id else {
       throw AccountError.accountChanged
     }
     guard sourceEqual(edit.draft.text, editor.text) else { throw DraftError.changed }
@@ -129,7 +129,7 @@ extension GistFileEditor {
       _ = await previous?.value
       guard let self else { return false }
       do {
-        file.update(try await model.save(file.current, text: text))
+        file.update(try await model.save(file.nextDraft, text: text))
         savedGeneration = generation
         failure = nil
         return true

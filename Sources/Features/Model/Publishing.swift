@@ -15,7 +15,7 @@ extension GistPadModel {
   /// Points the open file at the gist it published to, keeping it selected under its new row.
   private func apply(published saved: GistFileDraft, gist: Gist) {
     guard
-      loadedFile?.draftID == saved.id
+      loadedFile?.id == saved.id
         || (loadedFile?.gist?.id == gist.id && loadedFile?.filename == saved.filename)
     else { return }
     let wasSelected = state.selectedID == loadedFile?.rowID
@@ -256,7 +256,7 @@ extension GistFileEditor {
   /// Points the file at the gist its publish just cached, so a new note's first publish gives it one.
   private func adoptPublishedGist() {
     guard file.draft?.conflict == nil,
-      let gist = model.gistCache?.gists.first(where: { $0.id == file.current.gistID })
+      let gist = model.gistCache?.gists.first(where: { $0.id == file.gistID })
     else { return }
     file.gist = gist
   }
@@ -269,7 +269,7 @@ extension GistFileEditor {
   public func leave() async {
     editor.commitComposition()
     guard await waitForLocalSave() else { return }
-    if file.draft == nil, file.current.gistID == nil { return model.close(self) }
+    if !hasUnpublishedChanges, file.gistID == nil { return model.close(self) }
     guard hasUnpublishedChanges else { return }
     await publish(reason: .background)
   }
@@ -303,9 +303,9 @@ extension GistFileEditor {
     else { return }
     failure = nil
     do {
-      var draft = file.current
+      var draft = file.nextDraft
       // A new gist or a new day publishes when you ask, even before you type in it.
-      if reason == .manual, file.draft == nil, draft.gistID == nil {
+      if reason == .manual, !hasStoredDraft, draft.gistID == nil {
         draft = try await model.keep(draft)
       }
       if let result = try await model.publish(draft) { await adopt(result) }
@@ -317,7 +317,7 @@ extension GistFileEditor {
         failure = GitHubProblem(error)
       }
       // The publish may have recorded sent text or found its gist before it stopped.
-      if let stored = try? await model.current(file.current) { file.update(stored) }
+      if let stored = try? await model.current(file.nextDraft) { file.update(stored) }
     }
   }
 }

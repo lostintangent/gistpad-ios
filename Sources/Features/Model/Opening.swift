@@ -111,8 +111,8 @@ extension GistPadModel {
     }
     guard let gist, let text = gistCache?.text(of: selectedFilename, in: gist) else { return nil }
     var file = GistFile(
-      unedited: GistFileDraft(accountID: account.id, gist: gist, filename: selectedFilename, text: text),
-      gist: gist)
+      accountID: account.id, gist: gist, filename: selectedFilename,
+      published: GitHubVersion(text: text, revision: gist.revision))
     file.libraryRowID = rowID
     return file
   }
@@ -167,13 +167,13 @@ extension GistPadModel {
     if let fileEditor = editors.values.first(where: { $0.file.refersToSameFile(as: file) }) {
       fileEditor.adoptPresentation(file)
     } else {
-      editors[file.draftID] = GistFileEditor(file: file, model: self)
+      editors[file.id] = GistFileEditor(file: file, model: self)
     }
   }
 
   func unfilteredRowID(for file: GistFile) -> String? {
     state.gists.first {
-      $0.id == file.draftID.uuidString
+      $0.id == file.id.uuidString
         || ($0.gistID != nil && $0.gistID == file.gistID
           && ($0.filename == nil || $0.filename == file.filename))
     }?.id
@@ -239,12 +239,14 @@ extension GistPadModel {
       }
       // The read is cached on this iPhone, so the note opens from here next time.
       try await reloadLocalState(accountID: account.id)
-      let unedited = GistFileDraft(accountID: account.id, gist: gist, filename: selected, text: text)
+      let published = GistFile(
+        accountID: account.id, gist: gist, filename: selected,
+        published: GitHubVersion(text: text, revision: gist.revision))
       var file =
-        if let draft = try await current(unedited) {
+        if let draft = try await current(published.nextDraft) {
           GistFile(draft: draft, gist: gist)
         } else {
-          GistFile(unedited: unedited, gist: gist)
+          published
         }
       file.libraryRowID = rowID
       return file
@@ -271,7 +273,7 @@ extension GistPadModel {
       file.revealsDetail = focusesEditor
       return file
     case .new:
-      var file = GistFile(unedited: GistFileDraft(accountID: account.id))
+      var file = GistFile(draft: GistFileDraft(accountID: account.id))
       file.editingRequestID = UUID()
       return file
     }
@@ -280,11 +282,11 @@ extension GistPadModel {
   /// Closes a new note you left without writing in it, since nothing of it was kept.
   func close(_ fileEditor: GistFileEditor) {
     let file = fileEditor.file
-    guard file.draft == nil, file.current.gistID == nil,
-      state.selectedID == nil || visibleFile?.draftID != file.draftID
+    guard !fileEditor.hasUnpublishedChanges, file.gistID == nil,
+      state.selectedID == nil || visibleFile?.id != file.id
     else { return }
-    editors[file.draftID] = nil
-    if loadedFile?.draftID == file.draftID { loadedFile = nil }
+    editors[file.id] = nil
+    if loadedFile?.id == file.id { loadedFile = nil }
   }
 
   public func showLibrary() {

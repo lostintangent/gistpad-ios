@@ -39,7 +39,7 @@ struct PlatformTests {
     // Today's publish goes out and is cut off, so GitHub may or may not have it.
     fixture.fixture.fail("PATCH")
     await fileEditor.publish()
-    #expect(try await fixture.store.current(fileEditor.file.current)?.sent == typed)
+    #expect(try await fixture.store.current(fileEditor.file.nextDraft)?.sent == typed)
     fixture.fixture.restore()
 
     try await fixture.bridge.addToToday(text: "A thought", asTask: true, target: DailyNote.Day())
@@ -78,7 +78,7 @@ struct PlatformTests {
     #expect(note.content == nil)
     #expect(fixture.publishes.isEmpty)
     await fixture.model.open(.draft(id: draft.id))
-    #expect(fixture.model.activeEditor?.file.draftID == draft.id)
+    #expect(fixture.model.activeEditor?.file.id == draft.id)
   }
 
   @Test func siriCreatesANoteWithContentAndRejectsUnsupportedOptions() async throws {
@@ -148,7 +148,7 @@ struct PlatformTests {
     #expect(fileEditor.editor.text == original + "Pick up the dry cleaning\n")
     #expect(await fileEditor.waitForLocalSave())
     #expect(fixture.publishes.isEmpty)
-    #expect(try await fixture.store.current(fileEditor.file.current)?.text == fileEditor.editor.text)
+    #expect(try await fixture.store.current(fileEditor.file.nextDraft)?.text == fileEditor.editor.text)
   }
 
   @Test func siriAppendToAClosedFileKeepsItsFrontMatterAndDoesNotExposeTheBody() async throws {
@@ -260,7 +260,7 @@ struct PlatformTests {
     let url = try #require(URL(string: "https://example.com/assets/daily123/image.png"))
     var uploadedGistIDs: [String] = []
     let images = ImageUpload { _, file in
-      uploadedGistIDs.append(file.current.gistID ?? "")
+      uploadedGistIDs.append(file.nextDraft.gistID ?? "")
       return url
     }
     images.chooseImage(for: fileEditor)
@@ -317,7 +317,7 @@ private struct PlatformFixture {
 
   /// Today, opened from the Today button.
   func fileEditor() async throws -> GistFileEditor {
-    try #require(model.editors[try await today().draftID])
+    try #require(model.editors[try await today().id])
   }
 
   /// Typing in `session`, saved on this iPhone.

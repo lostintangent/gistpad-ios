@@ -137,14 +137,14 @@ extension GistFileEditor {
   /// takes GitHub's newer text, and one with edits shows the conflict.
   public func inspectRemoteChanges() async {
     guard GistPadModel.isStale(refreshedAt), !isInspectingRemote, !isPublishing, canMutate,
-      !file.isDeletedOnGitHub, file.current.gistID != nil, file.draft?.conflict == nil,
+      !file.isDeletedOnGitHub, file.gistID != nil, file.draft?.conflict == nil,
       model.account?.id == file.accountID, model.phase.switchingTo == nil
     else { return }
     isInspectingRemote = true
     defer { isInspectingRemote = false }
     guard await waitForLocalSave() else { return }
     let generation = editor.generation
-    let read = file.current
+    let read = file.nextDraft
     do {
       guard let ownerID = model.account?.githubUserID else { throw AccountError.reconnectGitHub }
       let github = await model.client(accountID: read.accountID)

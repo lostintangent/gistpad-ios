@@ -2,10 +2,9 @@ import CryptoKit
 import Foundation
 import SwiftData
 
-/// Why a publish didn't land.
 /// One file's writing that GitHub doesn't have yet: which file, what you wrote, and what GitHub had.
-/// The store keeps it from your first keystroke until GitHub has the text. Before that, the same
-/// value describes the file as you open it, so your first keystroke has a draft to save.
+/// The store keeps it from your first keystroke until GitHub has the text. A new gist's or day's
+/// draft starts when you open it, and the store keeps it once there's something in it.
 public struct GistFileDraft: Equatable, Sendable, Identifiable {
     /// The file on this iPhone: its account, gist or day, and filename. Each new gist is its own.
     public let id: UUID
@@ -60,13 +59,15 @@ public struct GistFileDraft: Equatable, Sendable, Identifiable {
 extension GistFileDraft {
     /// A note before you type in it: a gist's file, a new day or a new gist. Every copy of a file or a
     /// day shares one identity, so the draft your typing stores is the same one wherever you type.
+    /// A file that opened under another identity, such as a new gist that's since published, keeps
+    /// its `id`.
     public init(
-        accountID: UUID, gistID: String? = nil, newGistName: String? = nil,
+        id: UUID? = nil, accountID: UUID, gistID: String? = nil, newGistName: String? = nil,
         filename: String = "README.md", text: String = "", base: GitHubVersion? = nil
     ) {
         let file = gistID ?? (newGistName == DailyNote.gistDescription ? newGistName : nil)
         self.init(
-            id: file.map { UUID(naming: "\(accountID)/\($0)/\(filename)") } ?? UUID(),
+            id: id ?? file.map { UUID(naming: "\(accountID)/\($0)/\(filename)") } ?? UUID(),
             accountID: accountID, gistID: gistID, newGistName: newGistName, filename: filename,
             text: text, editedAt: .distantPast, base: base, sent: nil, conflict: nil)
     }

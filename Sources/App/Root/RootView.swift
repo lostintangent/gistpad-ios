@@ -138,7 +138,7 @@ struct RootView: View {
       // few per frame. A launch link can restore today, open, and present a new note in one.
       Color.clear.onAppear(perform: didActivate).id(active?.file.activationID)
     }
-    .onChange(of: active?.file.draftID) { previous, _ in
+    .onChange(of: active?.file.id) { previous, _ in
       if let previous, let outgoing = model.editors[previous] {
         Task { await outgoing.leave() }
       }
@@ -160,7 +160,7 @@ struct RootView: View {
   /// Prepares a file as it comes into the detail column.
   private func didActivate() {
     guard let active else { return }
-    active.mode = layout.initialMode(isUnpublished: active.isNew)
+    active.mode = layout.initialMode(isUnpublished: active.file.isNew)
     comments.activate(active)
     active.requestCreationFocus()
     openRequestedComments()
@@ -379,8 +379,8 @@ struct RootView: View {
         filename: fileEditor.file.filename == gist.defaultMarkdownFilename
           ? nil : fileEditor.file.filename)
     }
-    guard fileEditor.file.current.gistID == nil else { return nil }
-    return .unpublishedGist(accountID: fileEditor.file.accountID, draftID: fileEditor.file.draftID)
+    guard fileEditor.file.gistID == nil else { return nil }
+    return .unpublishedGist(accountID: fileEditor.file.accountID, draftID: fileEditor.file.id)
   }
 
   private func gistScreen(
@@ -710,7 +710,7 @@ struct RootView: View {
 
   private func rename(_ kind: RenameTarget.Kind, fileEditor: GistFileEditor) {
     sheet = .name(
-      RenameTarget(draft: fileEditor.file.current, title: fileEditor.details.title, kind: kind))
+      RenameTarget(draft: fileEditor.file.nextDraft, title: fileEditor.details.title, kind: kind))
   }
 
   private func nameEditor(_ target: RenameTarget) -> some View {

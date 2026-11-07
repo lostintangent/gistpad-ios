@@ -28,7 +28,7 @@ struct OpeningFileView: View {
           }
         } else {
           MarkdownPreviewView(
-            markdown: file.text, fileID: file.id,
+            markdown: file.text, fileID: file.id.uuidString,
             generation: 0, allowsTaskEdits: false
           ) { event in
             if case .failure(let failure) = event { renderError = failure.localizedDescription }

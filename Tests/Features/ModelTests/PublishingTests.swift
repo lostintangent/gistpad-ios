@@ -126,7 +126,7 @@ struct PublishingTests {
     let made = phone.github.gists.filter {
       $0.files[new.file.filename]?.content == "# Ideas\n\nFirst"
     }
-    #expect(made.map(\.id) == [new.file.current.gistID])
+    #expect(made.map(\.id) == [new.file.nextDraft.gistID])
     #expect(phone.publishes == ["POST /gists"])
   }
 

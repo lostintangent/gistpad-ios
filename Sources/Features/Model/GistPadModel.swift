@@ -217,13 +217,13 @@ public final class GistPadModel {
   public func details(for file: GistFile) -> GistDetails {
     let title =
       file.gist?.displayName
-      ?? file.current.newGistName
+      ?? file.draft?.newGistName
       ?? String(localized: "Untitled")
     guard let gist = file.gist, let account, account.id == file.accountID else {
       return GistDetails(
         title: title, files: [.init(id: file.filename, filename: file.filename)],
         selectedFileID: file.filename,
-        isDailyNote: file.gist?.isDailyNote ?? (file.current.newGistName == DailyNote.gistDescription),
+        isDailyNote: file.gist?.isDailyNote ?? (file.draft?.newGistName == DailyNote.gistDescription),
         isAutoSaveEnabled: account?.id == file.accountID
           && account?.preferences.isAutoSaveEnabled == true)
     }
