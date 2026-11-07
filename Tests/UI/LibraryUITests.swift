@@ -115,8 +115,9 @@ final class LibraryUITests: XCTestCase {
 
   func testDailyNoteRowsOnlyOfferDelete() throws {
     let app = launchGistPad()
+    // On the cover the collections start below the fold, where a lazy list has no rows yet.
+    try waitUntil("the Library") { app.element("library-list").exists }
     let dailyNotes = app.element("library-collection-dailyNotes")
-    try waitUntil("the Library") { dailyNotes.exists }
     dailyNotes.scrollIntoView(in: app)
     dailyNotes.tap()
     let day = app.libraryRows.matching(NSPredicate(format: "identifier BEGINSWITH 'library-note-daily/'")).firstMatch

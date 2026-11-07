@@ -118,6 +118,10 @@ extension XCTestCase {
   @MainActor
   func openNoteActions(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) throws {
     app.dismissSidebarOverlay()
+    // The title can land a frame before the toolbar's items.
+    try waitUntil("More", file: file, line: line) {
+      app.buttons["note-actions"].exists || app.buttons["TopOverflowBarButtonItem"].exists
+    }
     let more = app.moreButton
     let overflows = more.identifier == "TopOverflowBarButtonItem"
     try tap(more, "More", file: file, line: line)

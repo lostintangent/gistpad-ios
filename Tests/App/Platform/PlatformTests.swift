@@ -128,7 +128,8 @@ struct PlatformTests {
       $0.link == GistPadLink.gist(id: "daily123", filename: "another.md")
     })
     #expect(other.content == nil)
-    #expect(other.excerpt == nil)
+    // Opening Today read the whole gist, so its sibling's excerpt is known, without front matter.
+    #expect(other.excerpt == "Another note")
     let closed = try #require(try await fixture.bridge.noteEntities(for: [other.id]).first)
     #expect(closed.content == nil)
     fixture.model.isForeground = true
@@ -212,6 +213,10 @@ struct PlatformTests {
     window.makeKeyAndVisible()
     defer { window.isHidden = true }
     try await Task.sleep(for: .milliseconds(500))
+    // Launch restores the account before it returns to the app.
+    for _ in 0..<100 where !fixture.model.isForeground {
+      try await Task.sleep(for: .milliseconds(100))
+    }
     #expect(scene.activationState == .foregroundActive)
     #expect(fixture.model.state.selectedID != nil)
     #expect(fixture.model.isForeground)

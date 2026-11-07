@@ -43,7 +43,7 @@ final class DailyNotesUITests: XCTestCase {
 
     // Deleting the open file returns to the Library, or empties the note beside a hidden sidebar.
     try waitUntil("the day to close") { !app.navigationBars[Self.yesterdayTitle].exists }
-    app.showLibrary()
+    app.showSidebar()
     XCTAssertTrue(app.element("library-list").waitForExistence(timeout: 10))
     let dailyNotes = app.element("library-collection-dailyNotes")
     dailyNotes.scrollIntoView(in: app)
