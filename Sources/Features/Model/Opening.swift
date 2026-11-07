@@ -65,11 +65,11 @@ extension GistPadModel {
   /// Opens a library row, at once when its file is already on this iPhone.
   public func open(rowID id: String) {
     guard account != nil, phase.switchingTo == nil else {
-      openError = String(localized: "Reconnect GitHub to open this gist.")
+      alertMessage = String(localized: "Reconnect GitHub to open this gist.")
       return
     }
     fileRequest = UUID()
-    openError = nil
+    alertMessage = nil
     if let file = cachedFile(rowID: id) { return present(file) }
     opening = placeholder(for: request(forRow: id))
     state.selectedID = id
@@ -158,7 +158,7 @@ extension GistPadModel {
     loadedFile = file
     loadedRowID = unfilteredRowID(for: file) ?? file.rowID
     state.selectedID = loadedRowID
-    if file.isDeletedOnGitHub { openError = Self.recoveryMessage }
+    if file.isDeletedOnGitHub { alertMessage = Self.recoveryMessage }
     remember(file.request)
     let fileEditor: GistFileEditor
     if let open = editors.values.first(where: { $0.file.refersToSameFile(as: file) }) {
@@ -184,7 +184,7 @@ extension GistPadModel {
   /// one created.
   public func open(_ request: Opening.Request) async {
     guard let account, phase.switchingTo == nil else {
-      openError = String(localized: "Reconnect GitHub to open this gist.")
+      alertMessage = String(localized: "Reconnect GitHub to open this gist.")
       return
     }
     let focusesEditor = request.focusesEditor
@@ -194,7 +194,7 @@ extension GistPadModel {
     }
     let token = UUID()
     fileRequest = token
-    openError = nil
+    alertMessage = nil
     opening = placeholder(for: request)
     defer {
       if focusesEditor { isCreating = false }
@@ -210,7 +210,7 @@ extension GistPadModel {
       guard token == fileRequest else { return }
       report(error, operation: "open")
       if case .new = request {
-        openError = error.localizedDescription
+        alertMessage = error.localizedDescription
       } else {
         opening?.failure = error.localizedDescription
         state.selectedID = opening?.rowID

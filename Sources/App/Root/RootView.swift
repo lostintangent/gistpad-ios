@@ -210,7 +210,7 @@ struct RootView: View {
     workspaceLifecycle
     .alert("GistPad", isPresented: $model.isShowingError) {
     } message: {
-      Text(model.openError ?? "")
+      Text(model.alertMessage ?? "")
     }
     .sheet(item: $sheet) { sheet in
       switch sheet {
@@ -319,7 +319,7 @@ struct RootView: View {
     }
     actions.togglePin = { rowID in
       guard let account = model.account, let id = model.gistID(forRow: rowID) else {
-        model.openError = String(localized: "Save this local draft to GitHub before pinning it.")
+        model.alertMessage = String(localized: "Save this local draft to GitHub before pinning it.")
         return
       }
       let pinned = !account.preferences.pinnedGists.contains(id)
@@ -329,7 +329,7 @@ struct RootView: View {
       guard let id = model.gistID(forRow: rowID),
         let gist = model.gistCache?.gists.first(where: { $0.id == id })
       else {
-        model.openError = String(
+        model.alertMessage = String(
           localized: "A recovery or unpublished draft cannot be archived on GitHub.")
         return
       }
@@ -499,7 +499,7 @@ struct RootView: View {
         }) {
           open(gistID: gist.id)
         } else {
-          model.openError = String(localized: "No gist has that title.")
+          model.alertMessage = String(localized: "No gist has that title.")
         }
       })
       .id(fileEditor.editor.id)
@@ -637,7 +637,7 @@ struct RootView: View {
     if !fileEditor.file.isDeletedOnGitHub, let gist = fileEditor.file.gist {
       actions.openInGitHub = {
         do { openURL(try GistLinks(gist: gist).githubURL) } catch {
-          model.openError = error.localizedDescription
+          model.alertMessage = error.localizedDescription
         }
       }
     }
@@ -663,7 +663,7 @@ struct RootView: View {
 
   private func publish(_ fileEditor: GistFileEditor) {
     guard fileEditor.canMutate else {
-      model.openError = String(
+      model.alertMessage = String(
         localized: "Finish composition or Writing Tools before saving to GitHub.")
       return
     }
@@ -672,7 +672,7 @@ struct RootView: View {
 
   private func presentIntelligence(_ fileEditor: GistFileEditor) {
     guard fileEditor.editor.isSettled else {
-      model.openError = String(
+      model.alertMessage = String(
         localized: "Finish composition or Writing Tools before opening Intelligence.")
       return
     }
@@ -680,13 +680,13 @@ struct RootView: View {
       editor: fileEditor.editor, title: fileEditor.details.title,
       revealSource: { range in
         guard fileEditor.details.access.canEdit else {
-          model.openError = String(
+          model.alertMessage = String(
             localized: "This gist is read-only, so the reference can't open in the editor.")
           return
         }
         let generation = fileEditor.editor.generation
         guard Range(range, in: fileEditor.editor.text) != nil else {
-          model.openError = String(localized: "This reference no longer matches the file.")
+          model.alertMessage = String(localized: "This reference no longer matches the file.")
           return
         }
         layout.select(.edit)
@@ -694,7 +694,7 @@ struct RootView: View {
         Task { @MainActor in
           await Task.yield()
           guard fileEditor.editor.generation == generation else {
-            model.openError = String(localized: "This reference no longer matches the file.")
+            model.alertMessage = String(localized: "This reference no longer matches the file.")
             return
           }
           let view = fileEditor.editor.textView
@@ -812,7 +812,7 @@ struct RootView: View {
     guard let link = linkToOpen, let account = model.account else { return }
     sheet = nil
     intelligence.target = nil
-    model.openError = nil
+    model.alertMessage = nil
     switch link {
     case .today:
       // Like the Today button, a folded phone shows Today while it's staged.
@@ -826,7 +826,7 @@ struct RootView: View {
       await model.open(.gist(id: id, filename: filename))
     case .unpublishedGist(let accountID, let draftID):
       guard accountID == account.id else {
-        model.openError = "This draft belongs to another GitHub account. Switch accounts to open it."
+        model.alertMessage = "This draft belongs to another GitHub account. Switch accounts to open it."
         pending.link = nil
         return
       }

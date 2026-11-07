@@ -500,7 +500,7 @@ private struct NavigationHost {
           loaded: \(String(describing: model.loadedFile?.id))
           presented: \(String(describing: model.visibleFile?.id))
           opening: \(String(describing: model.opening))
-          error: \(String(describing: model.openError))
+          error: \(String(describing: model.alertMessage))
           link: \(String(describing: pending.link))
           library visible: \(isLibraryVisible)
           editors: \(descendants.compactMap { ($0 as? UITextView)?.text })

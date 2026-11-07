@@ -23,10 +23,10 @@ public final class GistPadModel {
   public internal(set) var gistCache: GistCache?
   var isCreating = false
   /// The one message the app shows in an alert, such as a failed open or change.
-  public var openError: String?
+  public var alertMessage: String?
   public var isShowingError: Bool {
-    get { openError != nil }
-    set { if !newValue { openError = nil } }
+    get { alertMessage != nil }
+    set { if !newValue { alertMessage = nil } }
   }
   /// The files opened this session, by draft. Returning to one keeps its caret, scroll and undo.
   public internal(set) var editors: [UUID: GistFileEditor] = [:]

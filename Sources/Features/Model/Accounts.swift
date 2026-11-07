@@ -54,7 +54,7 @@ extension GistPadModel {
       phase = account == nil ? .signedOut : .ready
       guard !(error is CancellationError) else { return }
       report(error, operation: "restore")
-      openError = error.localizedDescription
+      alertMessage = error.localizedDescription
     }
   }
 
@@ -82,7 +82,7 @@ extension GistPadModel {
       }
       libraryRequest = UUID()
       report(error, operation: "sign-in")
-      openError = error.localizedDescription
+      alertMessage = error.localizedDescription
     }
   }
 
@@ -102,7 +102,7 @@ extension GistPadModel {
       try await reloadLocalState(accountID: pendingAccount.id)
     } catch {
       report(error, operation: "reload-local")
-      openError = error.localizedDescription
+      alertMessage = error.localizedDescription
     }
     await refresh()
     await restoreLastOpened()
@@ -158,7 +158,7 @@ extension GistPadModel {
     editors = [:]
     drafts = []
     gistCache = nil
-    openError = nil
+    alertMessage = nil
     problem = nil
     state.replace(gists: [], known: false)
     state.selectedID = nil
