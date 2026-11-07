@@ -124,8 +124,6 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("a daily note") { day.exists }
     day.scrollIntoView(in: app)
 
-    day.swipeRight()
-    XCTAssertFalse(app.buttons["Pin"].firstMatch.waitForExistence(timeout: 2))
     day.swipeLeft()
     XCTAssertTrue(app.buttons["Delete"].firstMatch.waitForExistence(timeout: 5))
     XCTAssertFalse(app.buttons["Archive"].exists)
@@ -134,6 +132,13 @@ final class LibraryUITests: XCTestCase {
     day.press(forDuration: 0.8)
     XCTAssertTrue(app.buttons["Delete"].firstMatch.waitForExistence(timeout: 5))
     XCTAssertFalse(app.buttons["Pin"].exists || app.buttons["Archive"].exists)
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)).tap()
+    try waitUntil("the menu to close") { !app.buttons["Delete"].exists }
+
+    // With nothing on its leading edge, a right swipe ends as a tap and opens the day, as rows do
+    // in Settings, so this goes last.
+    day.swipeRight()
+    XCTAssertFalse(app.buttons["Pin"].firstMatch.waitForExistence(timeout: 2))
   }
 
   func testANewGistCanBeDeletedRightAfterYouLeaveIt() throws {
