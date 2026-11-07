@@ -270,7 +270,8 @@ public struct LibraryView: View {
                         isExpanded.wrappedValue.toggle()
                     }
                 } label: {
-                    label
+                    // A plain button only hits its ink, and Notes toggles from anywhere on the header.
+                    label.contentShape(.rect)
                 }
                 .buttonStyle(.plain)
             }
