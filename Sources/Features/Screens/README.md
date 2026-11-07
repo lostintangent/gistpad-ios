@@ -1,4 +1,4 @@
-# Interface
+# Screens
 
 The Library, the gist screen and their sheets, in SwiftUI for iOS 27.2. Screens
 take Sendable values and closures. The app owns navigation, sign-in, the editor,
@@ -39,7 +39,7 @@ the title menu switches files and the subtitle names any file but README.md.
 
 `GistActions` members that are nil hide their controls. Publish shows when
 autosave is off or a publish that can be retried didn't land, as
-`PublishState.showsPublish` decides. A conflict or lost sign-in shows a button
+`PublishStatus.showsPublish(isAutoSaveEnabled:)` decides. A conflict or lost sign-in shows a button
 that opens the diff or reconnects. Comments is a toggle with a quiet count from
 `ToolbarBadgeLabel`. The More menu holds Pin, Star, Share and Copy Link, then
 Rename, Tags, Files, Intelligence and Find and Replace, then Open in GitHub,

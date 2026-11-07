@@ -1,6 +1,6 @@
 # Comments
 
-Gist comments, shaped like the comments panel on gistpad.dev. The package uses only Foundation, so the editor, Preview, Interface and Sync share it without accounts or storage.
+Gist comments, shaped like the comments panel on gistpad.dev. The package uses only Foundation, so the editor, Preview, Screens and Store share it without accounts or storage.
 
 ```swift
 let threads = GistCommentThread.build(from: comments)

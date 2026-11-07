@@ -31,7 +31,7 @@ let package = Package(
       path: "Sources/Features/Screens", exclude: ["README.md"], resources: [.process("Resources")]),
     .target(
       name: "Model", dependencies: ["Comments", "Editor", "Screens", "Store"],
-      path: "Sources/Features/Model"),
+      path: "Sources/Features/Model", exclude: ["README.md"]),
     .target(
       name: "Platform", dependencies: ["Store", "Accent"], path: "Sources/Features/Platform",
       exclude: ["README.md"]),

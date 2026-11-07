@@ -91,7 +91,7 @@ xcodebuild -project GistPad.xcodeproj -scheme GistPad \
   -derivedDataPath DerivedData -parallel-testing-enabled NO test
 ```
 
-- UI tests drive the real app against the DEBUG fixture GitHub (`FixtureServer` in Sync), never a live account.
+- UI tests drive the real app against the DEBUG fixture GitHub (`FixtureServer` in Store), never a live account.
 - `simctl` can't fold the Duo, so tests and captures run in whatever posture is set. Physical fold transitions are left to the manual pass on the phone.
 - The Intelligence eval runs synthetic notes, and live gists you name, through the on-device model on the Mac: `bash scripts/evaluate-intelligence.sh 10`. See `scripts/intelligence-eval/README.md`.
 - `scripts/preview-renderer` builds Preview's web bundle from the sibling `gistpad.dev` checkout and has its own typecheck, tests and build. See its README.
@@ -130,28 +130,28 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 
 | Folder | What it does |
 |---|---|
-| `Sources/App/Root` | `GistPadApp`, `RootView` and `Library`, the model behind the whole app. |
-| `Sources/App/Library` | `GitHubSync`, the library's one actor for GitHub and drafts, plus ordered `Change`s, remote read problems and the last opened file. |
-| `Sources/App/Gist` | `File`, `FileSession`, Preview hosting, opening, renaming and conflict review. |
+| `Sources/App/Root` | `GistPadApp` and `RootView`, which starts the `GistPadModel` and shows the library and the open file. |
+| `Sources/App/Gist` | Preview hosting, the opening placeholder, renaming and conflict review. |
 | `Sources/App/DailyNotes` | The Add to Today sheet. |
 | `Sources/App/Comments` | The comments inspector and the services behind `CommentsModel`. |
 | `Sources/App/Intelligence` | Presents the Intelligence sheet. |
 | `Sources/App/Images` | The image picker and upload. |
 | `Sources/App/Settings` | Settings, account switching and layout preferences. |
-| `Sources/App/System` | `PlatformBridge` and App Shortcuts, which connect the library to intents, widgets and Spotlight. |
+| `Sources/App/Platform` | `PlatformBridge` and App Shortcuts, which connect the model to intents, widgets and Spotlight. |
 | `Sources/App/Captures` | DEBUG fixture launch arguments and the fixture library. |
 | `Sources/Extensions/Widgets` | The GistPad widgets and the Add to Today, Open Today and New Gist controls. |
 | `Sources/Features/Editor` | `Editor` and its TextKit 2 text view, `EditorView`, `KeyboardBar`, formatting, smart typing, highlighting, front matter and comment highlights. |
 | `Sources/Features/Intelligence` | The Ask, Edit and Review sheet and the on-device model. |
-| `Sources/Features/Interface` | `LibraryView`, `GistScreen`, comments, tags and the Today button. |
+| `Sources/Features/Model` | `GistPadModel`, `GistFile` and `GistFileEditor`: the account, the list, the files you've opened and every verb, one file per scenario. |
+| `Sources/Features/Screens` | `LibraryView`, `GistScreen`, comments, tags, the Today button and the GitHub status control. |
 | `Sources/Features/Platform` | App Intents, Spotlight, the widget view and `gistpad://` links. |
 | `Sources/Features/Preview` | The offline WebKit Markdown preview and its bridge. |
 | `Sources/Shared/Accent` | The personal accent color, its trait and the `isPaneVisible` environment value. |
 | `Sources/Shared/Comments` | Comment bodies, threads, quote matching and `CommentsModel`. |
-| `Sources/Shared/Sync` | The account, the GitHub client, drafts, publishing, daily notes, the library cache, photo storage, preferences and the DEBUG fixture GitHub. |
+| `Sources/Shared/Store` | The nouns and where they're kept: gists, the GitHub client, drafts, the cache, the account and its preferences, photo storage and the DEBUG fixture GitHub. |
 | `Tests/App` | App-hosted tests, in folders that mirror `Sources/App`. |
 | `Tests/UI` | UI tests for the Library, a gist, daily notes and comments. |
 | `scripts` | Developer tools: `capture-matrix.sh`, `evaluate-intelligence.sh`, which runs the on-device Intelligence eval, the root package's `IntelligenceEval` target in `intelligence-eval`, and `preview-renderer`, which builds Preview's web bundle from the sibling `gistpad.dev` checkout into `Sources/Features/Preview`. |
 | `Configuration` | `Public.xcconfig`. |
 
-Comments, Interface, Platform and Sync document their APIs in a README beside their sources.
+Comments, Model, Platform, Screens and Store document their APIs in a README beside their sources.
