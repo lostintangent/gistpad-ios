@@ -167,7 +167,7 @@ extension GistPadModel {
       case .localCopy(let draft): fileEditor.file.draftID == draft.id
       case .file(let gistID, _), .gist(let gistID):
         fileEditor.file.gistID == gistID
-          || localDrafts.contains { $0.id == fileEditor.file.draftID && $0.gistID == gistID }
+          || drafts.contains { $0.id == fileEditor.file.draftID && $0.gistID == gistID }
       }
     }) { account in
       switch deletion {
@@ -180,7 +180,7 @@ extension GistPadModel {
           try await draftStore.discardLocalCopy(id: draft.id, accountID: draft.accountID)
         }
         forget(gistID: draft.gistID, filename: draft.filename, drafts: [draft.id], accountID: account.id)
-        localDrafts.removeAll { $0.id == draft.id }
+        drafts.removeAll { $0.id == draft.id }
         projectLibrary()
       case .file(let gistID, let filename):
         try await deleteFile(filename, gistID: gistID, account: account)
@@ -299,7 +299,7 @@ extension GistPadModel {
   }
 
   private func forgetGist(_ id: String, accountID: UUID) {
-    let draftIDs = Set(localDrafts.filter { $0.gistID == id }.map(\.id))
+    let draftIDs = Set(drafts.filter { $0.gistID == id }.map(\.id))
     forget(gistID: id, drafts: draftIDs, accountID: accountID)
     // A refresh that started before the delete would bring the gist back.
     libraryRequest = UUID()
@@ -337,7 +337,7 @@ extension GistPadModel {
 extension GistFileEditor {
   /// What Delete on this file's screen removes, the same as its row in the list.
   public var deletion: Deletion? {
-    if file.isRecovery || file.current.gistID == nil { return .localCopy(file.current) }
+    if file.isDeletedOnGitHub || file.current.gistID == nil { return .localCopy(file.current) }
     guard let gist = file.gist, details.access.canEdit else { return nil }
     return gist.isDailyNote ? .file(gistID: gist.id, filename: file.filename) : .gist(id: gist.id)
   }

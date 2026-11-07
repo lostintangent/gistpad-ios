@@ -76,6 +76,6 @@ extension GistPadModel {
   }
 
   func updateToday() {
-    state.today = DailyNote(cache: gistCache, drafts: localDrafts)
+    state.today = DailyNote(cache: gistCache, drafts: drafts)
   }
 }

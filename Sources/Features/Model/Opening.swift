@@ -77,12 +77,12 @@ extension GistPadModel {
 
   /// The draft a row shows when GitHub doesn't list its gist.
   func draft(forRow rowID: String) -> GistFileDraft? {
-    UUID(uuidString: rowID).flatMap { id in localDrafts.first { $0.id == id } }
+    UUID(uuidString: rowID).flatMap { id in drafts.first { $0.id == id } }
   }
 
   func cachedFile(rowID: String) -> GistFile? {
     switch request(forRow: rowID) {
-    case .draft(let id, _): localDrafts.first { $0.id == id }.map { localFile($0, rowID: rowID) }
+    case .draft(let id, _): drafts.first { $0.id == id }.map { localFile($0, rowID: rowID) }
     case .gist(let id, let filename, _): cachedFile(gistID: id, filename: filename, rowID: rowID)
     case .today, .new: nil
     }
@@ -100,11 +100,11 @@ extension GistPadModel {
       guard gist.truncated != true || gist.isDailyNote else { return nil }
       selectedFilename = gist.isDailyNote ? DailyNote.filename() : gist.defaultMarkdownFilename
     } else {
-      let candidates = localDrafts.filter { $0.gistID == gistID }
+      let candidates = drafts.filter { $0.gistID == gistID }
       selectedFilename = candidates.count == 1 ? candidates.first?.filename : nil
     }
     guard let selectedFilename, selectedFilename.hasSuffix(".md") else { return nil }
-    if let draft = localDrafts.first(where: {
+    if let draft = drafts.first(where: {
       $0.accountID == account.id && $0.gistID == gistID && $0.filename == selectedFilename
     }) {
       return localFile(draft, rowID: rowID)
@@ -121,7 +121,7 @@ extension GistPadModel {
     let gist = gistCache?.gists.first { $0.id == draft.gistID }
     var file = GistFile(
       draft: draft, gist: gist,
-      isRecovery: draft.gistID != nil && gist == nil)
+      isDeletedOnGitHub: draft.gistID != nil && gist == nil)
     file.libraryRowID = rowID
     return file
   }
@@ -146,7 +146,7 @@ extension GistPadModel {
       case .gist(let id, _, let rowID):
         (rowID ?? id, gistCache?.gists.first { $0.id == id }?.displayName)
       case .draft(let id, let rowID):
-        (rowID ?? id.uuidString, localDrafts.first { $0.id == id }?.newGistName)
+        (rowID ?? id.uuidString, drafts.first { $0.id == id }?.newGistName)
       case .today(let target, _): ("today/\(target.filename)", String(localized: "Today"))
       case .new: ("new", String(localized: "Untitled"))
       }
@@ -162,7 +162,7 @@ extension GistPadModel {
     opening = nil
     loadedFile = file
     state.selectedID = file.rowID
-    if file.isRecovery { openError = Self.recoveryMessage }
+    if file.isDeletedOnGitHub { openError = Self.recoveryMessage }
     remember(file.request)
     if let fileEditor = editors.values.first(where: { $0.file.refersToSameFile(as: file) }) {
       fileEditor.adoptPresentation(file)
@@ -253,16 +253,16 @@ extension GistPadModel {
       file.libraryRowID = rowID
       return file
     case .draft(let id, let rowID):
-      if !localDrafts.contains(where: { $0.id == id }) {
+      if !drafts.contains(where: { $0.id == id }) {
         try await reloadLocalState(accountID: account.id)
       }
-      guard let draft = localDrafts.first(where: { $0.id == id }) else { throw DraftError.notFound }
+      guard let draft = drafts.first(where: { $0.id == id }) else { throw DraftError.notFound }
       return localFile(draft, rowID: rowID)
     case .today(let target, let focusesEditor):
       let daily = gistCache?.owned.first(where: \.isDailyNote)
-      let day = DailyNote(day: target, cache: gistCache, drafts: localDrafts)
+      let day = DailyNote(day: target, cache: gistCache, drafts: drafts)
       var file: GistFile
-      if let draft = localDrafts.first(where: { $0.id == day.draftID }) {
+      if let draft = drafts.first(where: { $0.id == day.draftID }) {
         file = GistFile(draft: draft, gist: daily)
       } else if let daily,
         let cached = cachedFile(gistID: daily.id, filename: target.filename)
@@ -320,7 +320,7 @@ extension GistPadModel {
     guard loadedFile == nil, state.selectedID == nil, opening == nil, let account,
       pendingAccount == nil, let saved = lastOpened(accountID: account.id)
     else { return }
-    if case .draft(let id, _) = saved, !localDrafts.contains(where: { $0.id == id }) { return }
+    if case .draft(let id, _) = saved, !drafts.contains(where: { $0.id == id }) { return }
     await open(saved)
   }
 

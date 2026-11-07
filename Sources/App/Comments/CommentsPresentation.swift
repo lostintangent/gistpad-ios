@@ -42,7 +42,7 @@ final class CommentsPresentation {
 
   static func supports(_ file: GistFile) -> Bool {
     guard let gist = file.gist else { return false }
-    return !gist.isDailyNote && !file.isRecovery
+    return !gist.isDailyNote && !file.isDeletedOnGitHub
   }
 
   func matches(_ file: GistFile) -> Bool {

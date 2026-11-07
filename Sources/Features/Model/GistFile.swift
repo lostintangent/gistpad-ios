@@ -9,7 +9,7 @@ public struct GistFile: Equatable, Sendable, Identifiable {
   public private(set) var draft: GistFileDraft?
   /// The file before you type: GitHub's text, or a new gist or day as it starts.
   public private(set) var unedited: GistFileDraft
-  public var isRecovery: Bool
+  public var isDeletedOnGitHub: Bool
   var libraryRowID: String?
   var editingRequestID: UUID?
   public var revealsDetail = true
@@ -28,15 +28,15 @@ public struct GistFile: Equatable, Sendable, Identifiable {
   init(unedited: GistFileDraft, gist: Gist? = nil) {
     self.unedited = unedited
     self.gist = gist
-    isRecovery = false
+    isDeletedOnGitHub = false
     draftID = unedited.id
   }
 
   /// A file with your stored draft.
-  init(draft: GistFileDraft, gist: Gist? = nil, isRecovery: Bool = false) {
+  init(draft: GistFileDraft, gist: Gist? = nil, isDeletedOnGitHub: Bool = false) {
     self.init(unedited: draft, gist: gist)
     self.draft = draft
-    self.isRecovery = isRecovery
+    self.isDeletedOnGitHub = isDeletedOnGitHub
   }
 
   /// Takes the store's word on the draft: kept, or let go with nothing left to keep.

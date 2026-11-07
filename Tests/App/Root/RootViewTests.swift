@@ -147,7 +147,7 @@ struct RootViewTests {
     let typed = ContinuousClock.now
     editor.insertText("Local ")
     try await host.waitUntil {
-      host.model.localDrafts.first { $0.gistID == "a" }?.text == "Local Current source"
+      host.model.drafts.first { $0.gistID == "a" }?.text == "Local Current source"
     }
     host.returnToLibrary()
     try await host.waitUntil { fixture.remote("a", "README.md") == "Local Current source" }
@@ -294,7 +294,7 @@ struct RootViewTests {
     defer { await host.close() }
     try await host.waitUntil { pending.link == nil && host.editor(text: "")?.isFirstResponder == true }
     let draft = try #require(host.model.visibleFile?.current)
-    #expect(!host.model.localDrafts.contains { $0.id == draft.id })
+    #expect(!host.model.drafts.contains { $0.id == draft.id })
     #expect(host.model.visibleFile?.gist == nil)
     #expect(fixture.publishes.isEmpty)
   }

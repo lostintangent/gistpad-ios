@@ -67,7 +67,7 @@ final class PlatformBridge: DailyNoteActions {
   /// Widgets, Spotlight and Shortcuts follow the library's account and the drafts on this iPhone.
   private func followLibrary() {
     withObservationTracking {
-      _ = (model.account, model.pendingAccount, model.localDrafts)
+      _ = (model.account, model.pendingAccount, model.drafts)
     } onChange: { [weak self] in
       Task { @MainActor in
         self?.scheduleRefresh()
@@ -106,7 +106,7 @@ final class PlatformBridge: DailyNoteActions {
     try Task.checkCancellation()
     let snapshot = LibrarySnapshot.make(
       account: account, cache: account == nil ? nil : model.gistCache,
-      drafts: account == nil ? [] : model.localDrafts, visibleText: Self.noteBody)
+      drafts: account == nil ? [] : model.drafts, visibleText: Self.noteBody)
     try snapshot.write()
     WidgetCenter.shared.reloadTimelines(ofKind: LauncherWidgetView.kind)
     indexInSpotlight(snapshot)
@@ -120,7 +120,7 @@ final class PlatformBridge: DailyNoteActions {
     guard let account = try await model.localAccount() else { throw PlatformError.accountChanged }
     let accountID = account.id
     let snapshot = LibrarySnapshot.make(
-      account: account, cache: model.gistCache, drafts: model.localDrafts,
+      account: account, cache: model.gistCache, drafts: model.drafts,
       visibleText: Self.noteBody)
     return snapshot.gists.filter { identifiers.contains($0.id) }.map { entity in
       guard let body = visibleBody(for: entity, accountID: accountID) else { return entity }
@@ -266,7 +266,7 @@ final class PlatformBridge: DailyNoteActions {
         let filename = filename ?? gist.defaultMarkdownFilename,
         filename.hasSuffix(".md")
       else { throw DraftError.readOnly }
-      if let existing = model.localDrafts.first(where: {
+      if let existing = model.drafts.first(where: {
         $0.gistID == id && $0.filename == filename
       }) {
         return try await current(existing)
@@ -278,7 +278,7 @@ final class PlatformBridge: DailyNoteActions {
         GistFileDraft(accountID: account.id, gist: gist, filename: filename, text: text))
     case .unpublishedGist(let owner, let id):
       guard owner == account.id else { throw PlatformError.accountChanged }
-      guard let draft = model.localDrafts.first(where: { $0.id == id }) else {
+      guard let draft = model.drafts.first(where: { $0.id == id }) else {
         throw DraftError.notFound
       }
       guard draft.gistID == nil else { throw DraftError.changed }
@@ -318,7 +318,7 @@ final class PlatformBridge: DailyNoteActions {
     if edit.draft.conflict != nil { throw PlatformError.editingInProgress }
     let fileEditor = fileEditor(for: edit.draft)
     if let fileEditor {
-      guard !fileEditor.file.isRecovery, fileEditor.canMutate else {
+      guard !fileEditor.file.isDeletedOnGitHub, fileEditor.canMutate else {
         throw PlatformError.editingInProgress
       }
       try await fileEditor.applyDurableEdit(edit) {

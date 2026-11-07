@@ -51,7 +51,7 @@ public enum RemoteRead {
 
 extension GistPadModel {
   public var remoteRefreshStatus: GitHubStatusState {
-    if let problem = remoteRefreshProblem, gistCache != nil || !localDrafts.isEmpty {
+    if let problem = remoteRefreshProblem, gistCache != nil || !drafts.isEmpty {
       return problem.status(
         heading: String(localized: "Couldn't update your gists"),
         detail: String(localized: "Your gists on this iPhone are unchanged."))
@@ -159,7 +159,7 @@ extension GistFileEditor {
   /// takes GitHub's newer text, and one with edits shows the conflict.
   public func inspectRemoteChanges() async {
     guard GistPadModel.isStale(refreshedAt), !isInspectingRemote, !isPublishing, canMutate,
-      !file.isRecovery, file.current.gistID != nil, file.draft?.conflict == nil,
+      !file.isDeletedOnGitHub, file.current.gistID != nil, file.draft?.conflict == nil,
       model.account?.id == file.accountID, model.pendingAccount == nil
     else { return }
     isInspectingRemote = true

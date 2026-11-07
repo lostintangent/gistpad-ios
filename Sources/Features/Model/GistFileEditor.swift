@@ -57,7 +57,7 @@ public final class GistFileEditor {
   /// runs, a conflict until you choose, then why the last publish failed, and otherwise whether
   /// GitHub has your text.
   public var status: PublishStatus {
-    if file.isRecovery { return .failed(.readOnly) }
+    if file.isDeletedOnGitHub { return .failed(.readOnly) }
     if isPublishing { return .publishing }
     if file.draft?.conflict != nil { return .conflict }
     if let failure { return .failed(failure) }

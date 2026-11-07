@@ -54,7 +54,7 @@ struct ConflictsTests {
     await phone.model.refresh()
     let row = try #require(phone.rows.first)
     #expect(phone.rows.count == 1)
-    #expect(row.isRecovery)
+    #expect(row.isDeletedOnGitHub)
     let kept = try await phone.open(.draft(id: try #require(UUID(uuidString: row.id))))
     #expect(phone.onScreen == "Mine")
     await kept.publish()

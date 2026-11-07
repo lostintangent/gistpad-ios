@@ -66,7 +66,7 @@ struct PlatformTests {
 
     _ = try await intent.perform()
 
-    let draft = try #require(fixture.model.localDrafts.first {
+    let draft = try #require(fixture.model.drafts.first {
       $0.gistID == nil && $0.newGistName == "Groceries"
     })
     #expect(draft.text == "# Groceries\n\n")
@@ -104,10 +104,10 @@ struct PlatformTests {
 
     _ = try await intent.perform()
 
-    let draft = try #require(fixture.model.localDrafts.first {
+    let draft = try #require(fixture.model.drafts.first {
       $0.gistID == nil && $0.newGistName == "Test Reading List"
     })
-    #expect(fixture.model.localDrafts.filter { $0.newGistName == "Test Reading List" }.count == 1)
+    #expect(fixture.model.drafts.filter { $0.newGistName == "Test Reading List" }.count == 1)
     #expect(draft.text == "# Ranked\n1. Vagabond\n")
     let note = try #require(try LibrarySnapshot.read()?.gists.first {
       $0.link == .unpublishedGist(accountID: fixture.account.id, draftID: draft.id)
@@ -162,7 +162,7 @@ struct PlatformTests {
     let updated = try await fixture.bridge.appendToNote(note, text: "A new line")
 
     #expect(updated.content == nil)
-    let draft = try #require(fixture.model.localDrafts.first { $0.filename == "another.md" })
+    let draft = try #require(fixture.model.drafts.first { $0.filename == "another.md" })
     #expect(draft.text == "---\nsecret: hide this from Siri\n---\n\nAnother note\nA new line\n")
     #expect(fixture.publishes.isEmpty)
   }

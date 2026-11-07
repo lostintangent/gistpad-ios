@@ -144,7 +144,7 @@ extension GistPadModel {
     loadedFile = nil
     opening = nil
     editors = [:]
-    localDrafts = []
+    drafts = []
     gistCache = nil
     openError = nil
     remoteRefreshProblem = nil

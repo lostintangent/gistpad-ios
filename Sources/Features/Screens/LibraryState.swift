@@ -47,7 +47,7 @@ public struct GistItem: Equatable, Identifiable, Sendable {
     public var updatedAt: Date?
     public var owner: String?
     public var isOwned: Bool
-    public var isRecovery: Bool
+    public var isDeletedOnGitHub: Bool
     public var isSecret: Bool
     public var isPinned: Bool
     public var isStarred: Bool
@@ -66,7 +66,7 @@ public struct GistItem: Equatable, Identifiable, Sendable {
     public var supportsComments: Bool { gistID != nil && !isDailyNote }
 
     /// Pin and Archive organize whole gists. A daily note is one file, so it only deletes.
-    var canPinAndArchive: Bool { isOwned && !isRecovery && !isDailyNote }
+    var canPinAndArchive: Bool { isOwned && !isDeletedOnGitHub && !isDailyNote }
 
     /// A daily note reads as its day, "Friday, Nov 6".
     func displayTitle(now: Date, locale: Locale, calendar: Calendar) -> String {
@@ -81,7 +81,7 @@ public struct GistItem: Equatable, Identifiable, Sendable {
 
     public init(
         id: String, title: String, updatedAt: Date?, gistID: String? = nil, owner: String? = nil,
-        isOwned: Bool = true, isRecovery: Bool = false,
+        isOwned: Bool = true, isDeletedOnGitHub: Bool = false,
         isSecret: Bool = true, isPinned: Bool = false,
         isStarred: Bool = false, isArchived: Bool = false, isDailyNote: Bool = false,
         tagIDs: Set<String> = [], filename: String? = nil,
@@ -94,7 +94,7 @@ public struct GistItem: Equatable, Identifiable, Sendable {
         self.updatedAt = updatedAt
         self.owner = owner
         self.isOwned = isOwned
-        self.isRecovery = isRecovery
+        self.isDeletedOnGitHub = isDeletedOnGitHub
         self.isSecret = isSecret
         self.isPinned = isPinned
         self.isStarred = isStarred

@@ -16,7 +16,7 @@ public final class GistPadModel {
   public internal(set) var isStarting = false
   /// The file opening in the detail column, until it's presented or fails.
   public internal(set) var opening: Opening?
-  public internal(set) var localDrafts: [GistFileDraft] = []
+  public internal(set) var drafts: [GistFileDraft] = []
   /// Counts drafts recorded in memory, so a local read that started earlier knows it's stale.
   var localDraftRecords = 0
   public internal(set) var gistCache: GistCache?
@@ -164,12 +164,12 @@ public final class GistPadModel {
 
   func reloadLocalState(accountID: UUID) async throws {
     let records = localDraftRecords
-    let drafts = try await draftStore.drafts(accountID: accountID)
+    let stored = try await draftStore.drafts(accountID: accountID)
     let cache = try cache(accountID)
     guard account?.id == accountID, pendingAccount == nil else { return }
     // A draft saved while this read ran is newer than the read, so read again.
     if localDraftRecords != records { return try await reloadLocalState(accountID: accountID) }
-    localDrafts = drafts
+    drafts = stored
     gistCache = cache
     projectLibrary()
     updateToday()
@@ -179,7 +179,7 @@ public final class GistPadModel {
     guard let account else { return }
     let contents = Self.libraryContents(
       owned: gistCache?.owned ?? [], starred: gistCache?.starred ?? [],
-      account: account, drafts: localDrafts, cached: gistCache)
+      account: account, drafts: drafts, cached: gistCache)
     state.replace(
       gists: contents.gists, tags: contents.tags, dailyNoteCount: contents.dailyNoteCount,
       known: gistCache != nil)
@@ -230,7 +230,7 @@ public final class GistPadModel {
         isAutoSaveEnabled: account?.id == file.accountID
           && account?.preferences.isAutoSaveEnabled == true)
     }
-    let files = Self.filenames(of: gist, drafts: localDrafts)
+    let files = Self.filenames(of: gist, drafts: drafts)
     return GistDetails(
       title: title,
       files: files.map { .init(id: $0, filename: $0) }, selectedFileID: file.filename,
@@ -243,7 +243,7 @@ public final class GistPadModel {
       },
       isAutoSaveEnabled: account.preferences.isAutoSaveEnabled,
       commentCount: gist.isDailyNote ? nil : gist.commentCount,
-      shareURL: file.isRecovery || gist.files[file.filename] == nil
+      shareURL: file.isDeletedOnGitHub || gist.files[file.filename] == nil
         ? nil : try? GistLinks(gist: gist, filename: file.filename).shareURL)
   }
 
@@ -311,7 +311,7 @@ public final class GistPadModel {
         : draft.newGistName ?? String(localized: "Untitled")
       var item = GistItem(
         id: draft.id.uuidString, title: title,
-        updatedAt: draft.editedAt, isRecovery: draft.gistID != nil,
+        updatedAt: draft.editedAt, isDeletedOnGitHub: draft.gistID != nil,
         isSecret: true, isDailyNote: daily, filename: draft.filename,
         dailyDate: day)
       updateLibraryContent(&item, text: draft.text)

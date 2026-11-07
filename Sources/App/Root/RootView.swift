@@ -256,7 +256,7 @@ struct RootView: View {
           if model.account?.id == active?.file.accountID,
             model.pendingAccount == nil, model.state.loadState == .ready
           {
-            active?.didReconnect()
+            await active?.publish()
           }
         }
       },
@@ -305,7 +305,7 @@ struct RootView: View {
         if model.account?.id == active?.file.accountID,
           model.pendingAccount == nil, model.state.loadState == .ready
         {
-          active?.didReconnect()
+          await active?.publish()
         }
       }
     }
@@ -372,7 +372,7 @@ struct RootView: View {
       horizontalSizeClass != .compact || compactColumn == .detail,
       model.state.selectedID != nil, sheet == nil,
       model.account?.id == fileEditor.file.accountID, model.pendingAccount == nil,
-      !fileEditor.file.isRecovery
+      !fileEditor.file.isDeletedOnGitHub
     else { return nil }
     if let gist = fileEditor.file.gist {
       return .gist(
@@ -448,7 +448,7 @@ struct RootView: View {
                 guard model.account?.id == fileEditor.file.accountID,
                   model.pendingAccount == nil
                 else { return }
-                fileEditor.didReconnect()
+                await fileEditor.publish()
               }
               await fileEditor.inspectRemoteChanges()
             }
@@ -588,7 +588,7 @@ struct RootView: View {
         if model.account?.id == fileEditor.file.accountID,
           model.pendingAccount == nil, model.state.loadState == .ready
         {
-          fileEditor.didReconnect()
+          await fileEditor.publish()
         }
       }
     }
@@ -600,9 +600,9 @@ struct RootView: View {
             accountID: fileEditor.file.accountID, gistID: gistID,
             selected: Set(fileEditor.details.tags.map(\.id)),
             canEdit: model.account?.id == fileEditor.file.accountID
-              && model.pendingAccount == nil && !fileEditor.file.isRecovery))
+              && model.pendingAccount == nil && !fileEditor.file.isDeletedOnGitHub))
       }
-      if !fileEditor.file.isRecovery {
+      if !fileEditor.file.isDeletedOnGitHub {
         actions.togglePin = {
           let pinned = !fileEditor.details.isPinned
           model.run {
@@ -620,7 +620,7 @@ struct RootView: View {
         }
       }
     }
-    if fileEditor.details.access.canEdit, !fileEditor.file.isRecovery {
+    if fileEditor.details.access.canEdit, !fileEditor.file.isDeletedOnGitHub {
       actions.rename = { rename(.title, fileEditor: fileEditor) }
     }
     if fileEditor.deletion != nil {
@@ -635,7 +635,7 @@ struct RootView: View {
       fileEditor.editor.find(replacing: true)
     }
     actions.intelligence = { presentIntelligence(fileEditor) }
-    if !fileEditor.file.isRecovery, let gist = fileEditor.file.gist {
+    if !fileEditor.file.isDeletedOnGitHub, let gist = fileEditor.file.gist {
       actions.openInGitHub = {
         do { openURL(try GistLinks(gist: gist).githubURL) } catch {
           model.openError = error.localizedDescription

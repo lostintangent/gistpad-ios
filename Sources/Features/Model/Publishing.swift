@@ -32,7 +32,7 @@ extension GistPadModel {
   /// first offline result stops the sweep, and the next launch or return to the app retries it.
   public func publishDrafts() async {
     guard let accountID = account?.id, pendingAccount == nil else { return }
-    for draft in localDrafts {
+    for draft in drafts {
       guard !Task.isCancelled else { break }
       if let fileEditor = editors[draft.id] {
         await fileEditor.publish(reason: .background)
@@ -201,7 +201,7 @@ extension GistFileEditor {
     model.isForeground && model.account?.id == file.accountID && model.pendingAccount == nil
       && model.state.loadState == .ready
       && model.account?.preferences.isAutoSaveEnabled == true
-      && canMutate && !file.isRecovery
+      && canMutate && !file.isDeletedOnGitHub
   }
 
   private func publicationAllowed(reason: PublishReason) -> Bool {
@@ -247,10 +247,6 @@ extension GistFileEditor {
     return autosaveTask
   }
 
-  public func didReconnect() {
-    failure = nil
-  }
-
   /// Points the file at the gist its publish just cached, so a new note's first publish gives it one.
   private func adoptPublishedGist() {
     guard file.draft?.conflict == nil,
@@ -279,6 +275,8 @@ extension GistFileEditor {
     guard !Task.isCancelled, shouldContinue() else { return }
     if reason == .background { await waitForPublication() }
     guard !Task.isCancelled, shouldContinue(), publicationAllowed(reason: reason) else { return }
+    // Publishing again, as after reconnecting, retries whatever stopped the last publish.
+    if reason == .manual { failure = nil }
     if reason != .manual, !hasUnpublishedChanges { return }
     guard canMutate, status.canPublish else { return }
     autosaveTask?.cancel()
