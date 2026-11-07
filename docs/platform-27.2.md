@@ -24,7 +24,6 @@ Nothing in 27.2 changes a visible GistPad surface that the Designer needs to app
 - **BackgroundAssets, CoreMotion, CoreImage, HealthKit, LiveCommunicationKit, MarketplaceKit, Matter, NowPlaying, SharedWithYou.** No GistPad use.
 - **WidgetKit, CoreSpotlight, AppIntents core.** The 27.2 SDK adds no WidgetKit or CoreSpotlight API. Keep the current IndexedEntity and interactive widget design.
 - **WritingTools.** No 27.2 change. `writingToolsBehavior` (iOS 18) and the AppIntents `_ModelDelegationConfiguration.writingTools` (27.0) are unchanged, so the current `UIWritingToolsCoordinator` setup stays.
-- **`.xcproj` JSON project format.** Not needed for v1.
 - **`Date` comparison operators.** Already back-deployed, so no change.
 
 ## macOS
