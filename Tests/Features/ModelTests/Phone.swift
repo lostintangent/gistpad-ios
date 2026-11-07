@@ -28,29 +28,22 @@ final class Phone {
   // MARK: Coming and going
 
   func launch() async {
-    model.isForeground = true
     await model.start()
-    await model.publishDrafts()
+    await model.returnToApp()
   }
 
   /// The app quitting and launching again, with the same files on this iPhone.
   func relaunch() async {
-    model.isForeground = false
     model = fixture.relaunch()
     await launch()
   }
 
   func leaveApp() async {
-    model.isForeground = false
-    await GistFileEditor.publishOnBackground(Array(model.editors.values), shouldContinue: { true })
+    await model.leaveApp()
   }
 
   func returnToApp() async {
-    model.isForeground = true
-    await model.publishDrafts()
-    await model.refreshOnReturn()
-    model.updateCalendar()
-    await model.activeEditor?.inspectRemoteChanges()
+    await model.returnToApp()
   }
 
   func goOffline() { fixture.fail() }
@@ -74,7 +67,7 @@ final class Phone {
   /// Taps a row in the list.
   @discardableResult
   func open(row id: String) async throws -> GistFileEditor {
-    await model.openRow(id: id)
+    await model.open(model.request(forRow: id))
     return try #require(model.activeEditor)
   }
 
@@ -124,15 +117,16 @@ final class Phone {
   }
 
   func rename(_ gistID: String, to title: String) async throws {
-    try await model.rename(gistID: gistID, to: title)
+    try await model.rename(GistFileDraft(accountID: accountID, gistID: gistID), to: title)
   }
 
   func rename(_ gistID: String, _ filename: String, to newFilename: String) async throws {
-    try await model.renameFile(filename, to: newFilename, gistID: gistID)
+    try await model.renameFile(
+      GistFileDraft(accountID: accountID, gistID: gistID, filename: filename), to: newFilename)
   }
 
   func add(_ filename: String, to gistID: String) async throws {
-    try await model.addFile(filename, to: gistID)
+    try await model.addFile(named: filename, to: gistID)
   }
 
   func star(_ gistID: String) async throws {

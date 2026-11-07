@@ -57,9 +57,12 @@ struct RefreshingTests {
     #expect(phone.status == nil)
 
     // A relaunch shows this iPhone's copy first, then GitHub's newer text.
-    await phone.relaunch()
+    let read = phone.fixture.hold("GET /gists/a")
+    let relaunching = Task { await phone.relaunch() }
+    try await read.arrival()
     #expect(phone.onScreen == "One, from the web")
-    await phone.model.activeEditor?.inspectRemoteChanges()
+    read.open()
+    await relaunching.value
     #expect(phone.onScreen == "Changed again")
     #expect(phone.publishes.isEmpty)
   }

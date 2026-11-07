@@ -79,7 +79,7 @@ extension GistPadModel {
 
   /// Refreshes as the app comes back, like the web on focus, when the list is stale or leaving cut
   /// its refresh off.
-  public func refreshOnReturn() async {
+  func refreshOnReturn() async {
     guard account != nil, !isStarting, isRefreshingRemote || Self.isStale(refreshedAt) else {
       return
     }

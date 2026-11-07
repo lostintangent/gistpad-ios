@@ -28,9 +28,31 @@ extension GistPadModel {
     }
   }
 
+  /// Coming back to the app, or launching it, publishes what's waiting, reads GitHub again when
+  /// the list is stale, moves Today to the new day and checks the open file.
+  public func returnToApp() async {
+    isForeground = true
+    await publishDrafts()
+    await refreshOnReturn()
+    updateCalendar()
+    await activeEditor?.inspectRemoteChanges()
+  }
+
+  /// Leaving the app saves every open file on this iPhone first, then publishes them one by one
+  /// for as long as the system lets the app keep running.
+  public func leaveApp(shouldContinue: @escaping @MainActor @Sendable () -> Bool = { true }) async {
+    isForeground = false
+    let editors = Array(editors.values)
+    for fileEditor in editors { _ = await fileEditor.waitForLocalSave() }
+    for fileEditor in editors {
+      guard !Task.isCancelled, shouldContinue() else { return }
+      await fileEditor.publish(reason: .background, shouldContinue: shouldContinue)
+    }
+  }
+
   /// Publishes each file with unpublished edits, in order, through its editor when it's open. The
   /// first offline result stops the sweep, and the next launch or return to the app retries it.
-  public func publishDrafts() async {
+  func publishDrafts() async {
     guard let accountID = account?.id, pendingAccount == nil else { return }
     for draft in drafts {
       guard !Task.isCancelled else { break }
@@ -312,19 +334,6 @@ extension GistFileEditor {
       }
       // The publish may have recorded sent text or found its gist before it stopped.
       if let stored = try? await model.current(file.current) { file.update(stored) }
-    }
-  }
-
-  /// Leaving the app saves every open file on this iPhone first, then publishes them one by one
-  /// for as long as the system lets the app keep running.
-  public static func publishOnBackground(
-    _ editors: [GistFileEditor],
-    shouldContinue: @escaping @MainActor @Sendable () -> Bool
-  ) async {
-    for fileEditor in editors { _ = await fileEditor.waitForLocalSave() }
-    for fileEditor in editors {
-      guard !Task.isCancelled, shouldContinue() else { return }
-      await fileEditor.publish(reason: .background, shouldContinue: shouldContinue)
     }
   }
 }

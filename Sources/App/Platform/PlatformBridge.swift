@@ -230,7 +230,7 @@ final class PlatformBridge: DailyNoteActions {
           guard self.model.gistCache?.owned.first(where: { $0.id == id })?.isDailyNote != true else {
             throw PlatformError.unsupportedNoteUpdate
           }
-          try await model.rename(gistID: id, to: name)
+          try await model.rename(draft, to: name)
         case .unpublishedGist:
           try await model.rename(draft, to: name)
         case .gist, .today, .addToToday, .newGist:

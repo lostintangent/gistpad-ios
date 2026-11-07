@@ -39,7 +39,7 @@ struct RootViewTests {
     var retained: UITextView?
     for id in ["reading", "other", "reading"] {
       let text = id == "reading" ? source : other
-      host.model.select(rowID: id)
+      host.model.open(rowID: id)
       try await host.waitUntil {
         host.model.visibleFile?.gist?.id == id && host.editor(text: text) != nil
           && host.picker != nil
@@ -173,14 +173,14 @@ struct RootViewTests {
     }
     let host = try await NavigationHost(fixture: fixture)
     defer { await host.close() }
-    host.model.select(rowID: "a")
+    host.model.open(rowID: "a")
     try await host.waitUntil { host.editor(text: "First note source") != nil }
     let first = try #require(host.editor(text: "First note source"))
     try #require(first.becomeFirstResponder())
     first.selectedRange = NSRange(location: 0, length: 0)
     first.setMarkedText("にほんご", selectedRange: NSRange(location: 4, length: 0))
     try #require(first.markedTextRange != nil)
-    host.model.select(rowID: "b")
+    host.model.open(rowID: "b")
     try await host.waitUntil { host.editor(text: "Second note source") != nil }
     #expect(first.markedTextRange == nil)
     #expect(first.text == "にほんごFirst note source")

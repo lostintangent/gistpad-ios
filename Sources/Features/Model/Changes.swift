@@ -85,8 +85,9 @@ extension GistPadModel {
   }
 
   /// Renames a gist on GitHub, or names a new one that's only on this iPhone.
+  /// Renames a file's gist: on GitHub once it has one, else the new gist you're writing.
   public func rename(_ draft: GistFileDraft, to title: String) async throws {
-    if let gistID = draft.gistID { return try await rename(gistID: gistID, to: title) }
+    if let gistID = draft.gistID { return try await renameGist(gistID, to: title) }
     try Self.validateTitle(title)
     try await change { _ in
       let renamed = try await serially {
@@ -101,7 +102,7 @@ extension GistPadModel {
   }
 
   /// Renames a gist on GitHub and its drafts on this iPhone.
-  public func rename(gistID: String, to title: String) async throws {
+  private func renameGist(_ gistID: String, to title: String) async throws {
     try Self.validateTitle(title)
     try await change { account in
       try await landed(
@@ -117,7 +118,9 @@ extension GistPadModel {
     }
   }
 
-  public func renameFile(_ filename: String, to newFilename: String, gistID: String) async throws {
+  public func renameFile(_ draft: GistFileDraft, to newFilename: String) async throws {
+    guard let gistID = draft.gistID else { throw GistLinks.Error.notPublished }
+    let filename = draft.filename
     try Self.validateFilename(newFilename)
     try await change { account in
       let gist = try await serially {
@@ -139,7 +142,7 @@ extension GistPadModel {
   }
 
   /// Adds an empty Markdown file to a gist and opens it.
-  public func addFile(_ filename: String, to gistID: String) async throws {
+  public func addFile(named filename: String, to gistID: String) async throws {
     try Self.validateFilename(filename)
     try await change { account in
       let (draft, gist) = try await serially {

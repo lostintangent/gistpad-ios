@@ -58,7 +58,7 @@ extension GistPadModel {
   }
 
   /// Opens a library row, at once when its file is already on this iPhone.
-  public func select(rowID id: String) {
+  public func open(rowID id: String) {
     guard account != nil, pendingAccount == nil else {
       openError = String(localized: "Reconnect GitHub to open this gist.")
       return
@@ -71,7 +71,7 @@ extension GistPadModel {
     let request = fileRequest
     Task {
       guard request == fileRequest else { return }
-      await openRow(id: id)
+      await open(self.request(forRow: id))
     }
   }
 
@@ -215,10 +215,6 @@ extension GistPadModel {
         state.selectedID = opening?.rowID
       }
     }
-  }
-
-  func openRow(id: String) async {
-    await open(request(forRow: id))
   }
 
   func file(

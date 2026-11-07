@@ -32,7 +32,7 @@ public final class GistPadModel {
   /// The files opened this session, by draft. Returning to one keeps its caret, scroll and undo.
   public internal(set) var editors: [UUID: GistFileEditor] = [:]
   /// Autosave runs only while the app is in the foreground.
-  public var isForeground = false
+  public internal(set) var isForeground = false
   var isApplying = false
 
   /// The gist each new gist or day published into, by draft, so deleting one you confirmed while it

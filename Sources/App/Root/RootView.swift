@@ -120,7 +120,7 @@ struct RootView: View {
     navigation
     .task {
       await model.start()
-      await model.publishDrafts()
+      await model.returnToApp()
     }
     .task(id: linkToOpen) { await openPendingLink() }
     #if DEBUG
@@ -183,15 +183,9 @@ struct RootView: View {
 
   private var workspaceLifecycle: some View {
     workspaceNavigationLifecycle
-    .onChange(of: scenePhase, initial: true) { model.isForeground = scenePhase == .active }
     .onChange(of: scenePhase) { _, phase in
-      if phase == .background { publishOnBackground() }
-      if phase == .active {
-        Task { await model.publishDrafts() }
-        Task { await model.refreshOnReturn() }
-        model.updateCalendar()
-        Task { await active?.inspectRemoteChanges() }
-      }
+      if phase == .background { leaveApp() }
+      if phase == .active { Task { await model.returnToApp() } }
     }
     .onChange(of: settledAccountID) {
       comments.reset()
@@ -658,7 +652,7 @@ struct RootView: View {
   }
 
   private func selectRow(_ id: String) {
-    model.select(rowID: id)
+    model.open(rowID: id)
     compactColumn = .detail
   }
 
@@ -731,10 +725,10 @@ struct RootView: View {
         try await model.rename(draft, to: value)
       case .filename:
         guard let gistID = draft.gistID else { throw GistLinks.Error.notPublished }
-        try await model.renameFile(draft.filename, to: value, gistID: gistID)
+        try await model.renameFile(draft, to: value)
       case .addFile:
         guard let gistID = draft.gistID else { throw GistLinks.Error.notPublished }
-        try await model.addFile(value, to: gistID)
+        try await model.addFile(named: value, to: gistID)
       }
     }
   }
@@ -840,11 +834,10 @@ struct RootView: View {
     pending.link = nil
   }
 
-  private func publishOnBackground() {
+  private func leaveApp() {
     let lease = BackgroundLease()
-    let editors = Array(model.editors.values)
     let publishing = Task {
-      await GistFileEditor.publishOnBackground(editors, shouldContinue: { lease.isActive })
+      await model.leaveApp(shouldContinue: { lease.isActive })
       lease.end()
     }
     lease.onExpiration = { publishing.cancel() }
