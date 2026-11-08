@@ -19,7 +19,7 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 - Every sign-in button says **Sign in with GitHub**, as text with no mark, cased like Apple's Sign in with Apple.
 - `ContentUnavailableView` titles and alert titles are title case. Messages are sentence case and end with a period.
 - Failures use `exclamationmark.circle`.
-- Commands that open a dialog or sheet end with "…".
+- Menu items and buttons never end with "…", even when they open a dialog or sheet. Progress text like "Answering…" keeps it.
 - Authored titles and emoji appear exactly as written.
 
 ## Layout
@@ -32,7 +32,7 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 
 Use size classes and the container's geometry, never device names. Respect the Duo's asymmetric safe areas. Folding or unfolding never changes the mode, the caret or Undo.
 
-**Sheet buttons.** Every sheet closes with the system X in `.cancellationAction`: `Button(role: .cancel)` when closing throws away an edit, `Button(role: .close)` when there's nothing to lose. A sheet that saves confirms with `Button(role: .confirm)` in `.confirmationAction`, the system's blue glass checkmark. The roles supply the symbol, color and VoiceOver label, so neither sets text, an accessibility label, a tint or a button style. While saving, the checkmark becomes a `ProgressView`. Both stay visible while a field has focus, so on the Closed Duo they sit in the trailing rail like Comments' X. This covers Rename Gist…, Rename File…, Add File…, Add Link, Add to Today and the tag sheets.
+**Sheet buttons.** Every sheet closes with the system X in `.cancellationAction`: `Button(role: .cancel)` when closing throws away an edit, `Button(role: .close)` when there's nothing to lose. A sheet that saves confirms with `Button(role: .confirm)` in `.confirmationAction`, the system's blue glass checkmark. The roles supply the symbol, color and VoiceOver label, so neither sets text, an accessibility label, a tint or a button style. While saving, the checkmark becomes a `ProgressView`. Both stay visible while a field has focus, so on the Closed Duo they sit in the trailing rail like Comments' X. This covers Rename Gist, Rename File, Add File, Add Link, Add to Today and the tag sheets.
 
 Launch restores the last open file. With none, nothing opens, because today's note only starts when you ask for it. Existing files open in Preview. New gists and today's note open in Edit with the caret ready. Their row appears, selected, with your first keystroke. Leave one untyped and it closes without a trace, like an empty note in Notes. The mode you pick sticks.
 
@@ -83,7 +83,7 @@ The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and
 
 ## The gist screen
 
-**Title.** The title floats at the leading end of the bar, like Toy Box's channel title: the gist's title in `.headline` over its file name in `.caption` `secondaryLabel`, one line each, with no file name for README.md. It's a `.topBarLeading` toolbar item in place of the system title, which `.toolbar(removing: .title)` hides while `.navigationTitle` still names the screen for Back and VoiceOver. Every title is the same glass capsule with no chevron, in every gist, every daily note and every state, because a bar where some titles are glass and some aren't looks broken. In a gist it's a `Menu` with its indicator hidden. In your own gist the menu lists the files, the current one checked, when there are two or more, then **Rename File…** and **Add File…**. In someone else's gist it lists just the files, even when there's one. VoiceOver reads the title, then the file name. A daily note's capsule holds its day exactly as its row reads ("Friday, Nov 6"), with no file name and no menu, and reads as a heading. You move between days in the Daily Notes section, like the web. The title is never wider than "x coding agent culture" set in its own `.headline`, measured by the system rather than in points, so the cap grows with Dynamic Type. Shorter titles hug their text, and longer ones end in "…" inside the capsule, as does a long file name. It's the same cap in every posture, so the capsule never disappears into the overflow menu and never pushes Mode, Comments or More there. The page's top scroll edge is soft in every mode, so the words blur under the floating title and buttons with no bar, hairline or hard edge. From the first frame, a note that's opening or can't open shows the title it will have once it's open: the same capsule, title and file name in the same spot. Nothing in the bar changes when the note arrives, and a gist's capsule opens its menu from then on.
+**Title.** The title floats at the leading end of the bar, like Toy Box's channel title: the gist's title in `.headline` over its file name in `.caption` `secondaryLabel`, one line each, with no file name for README.md. It's a `.topBarLeading` toolbar item in place of the system title, which `.toolbar(removing: .title)` hides while `.navigationTitle` still names the screen for Back and VoiceOver. Every title is the same glass capsule with no chevron, in every gist, every daily note and every state, because a bar where some titles are glass and some aren't looks broken. In a gist it's a `Menu` with its indicator hidden. In your own gist the menu lists the files, the current one checked, when there are two or more, then **Rename File** and **Add File**. In someone else's gist it lists just the files, even when there's one. VoiceOver reads the title, then the file name. A daily note's capsule holds its day exactly as its row reads ("Friday, Nov 6"), with no file name and no menu, and reads as a heading. You move between days in the Daily Notes section, like the web. The title is never wider than "x coding agent culture" set in its own `.headline`, measured by the system rather than in points, so the cap grows with Dynamic Type. Shorter titles hug their text, and longer ones end in "…" inside the capsule, as does a long file name. It's the same cap in every posture, so the capsule never disappears into the overflow menu and never pushes Mode, Comments or More there. The page's top scroll edge is soft in every mode, so the words blur under the floating title and buttons with no bar, hairline or hard edge. From the first frame, a note that's opening or can't open shows the title it will have once it's open: the same capsule, title and file name in the same spot. Nothing in the bar changes when the note arrives, and a gist's capsule opens its menu from then on.
 
 **Mode.** A segmented, icon-only picker: Edit `square.and.pencil`, Split `rectangle.split.2x1` (only when it fits) and Preview `eye`, each with its spoken name.
 
@@ -92,11 +92,11 @@ The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and
 **More**, in native sections:
 
 1. A compact row: Pin, Star, Share and Copy Link, which confirms with "Link copied". Share is the system share sheet, headed by the gist's title and the GistPad artwork. While Comments is a sheet on iPhone, Share hides, because the system can't present over it. Copy Link stays.
-2. Rename Gist…, Tags, Intelligence…, Find and Replace. Files live only in the title.
+2. Rename Gist, Tags, Intelligence, Find and Replace. Files live only in the title.
 3. Archive or Unarchive.
-4. **Delete Gist…**, or **Delete Daily Note…** on a daily note.
+4. **Delete Gist**, or **Delete Daily Note** on a daily note.
 
-A daily note is a file, not a gist, so it leaves out everything that acts on the gist: Pin, Star, Rename Gist…, Tags and Archive. Its More menu keeps Share and Copy Link, Intelligence… and Find and Replace, and Delete Daily Note…, each in its usual section. Share is headed by the day.
+A daily note is a file, not a gist, so it leaves out everything that acts on the gist: Pin, Star, Rename Gist, Tags and Archive. Its More menu keeps Share and Copy Link, Intelligence and Find and Replace, and Delete Daily Note, each in its usual section. Share is headed by the day.
 
 **Delete.** Title **Delete “[title]”?** Message: **This deletes the gist from this iPhone and GitHub, including changes that haven't been published. This can't be undone.** A daily note is titled by its day, **Delete “Friday, Nov 6”?**, and says **the daily note** instead of the gist. Buttons Cancel and a destructive Delete. Deleting a daily note removes that day's file, or the gist when it's the last file.
 
@@ -108,16 +108,16 @@ A daily note is a file, not a gist, so it leaves out everything that acts on the
 
 - **Aa:** Bold, Italic, Body, Heading 1 to 6.
 - **Lists:** Bulleted, Numbered, Checklist, Increase Indent, Decrease Indent.
-- **Insert:** Link…, Inline Code, Code Block, Quote, Image…
+- **Insert:** Link, Inline Code, Code Block, Quote, Image
 - **Intelligence** and **Hide Keyboard**.
 
 Find is the system find bar, from More or Command-F.
 
-**Images.** Insert → Image… opens the system picker, with no notice first. A toolbar `ProgressView` labeled "Uploading Image" shows during upload. Failure is **Couldn't Add Image** with Try Again and Cancel.
+**Images.** Insert → Image opens the system picker, with no notice first. A toolbar `ProgressView` labeled "Uploading Image" shows during upload. Failure is **Couldn't Add Image** with Try Again and Cancel.
 
 ## Tags and Settings
 
-The tag editor and filter are one family: searchable sheets at medium and large (large at accessibility sizes) with inline titles. The editor, **Tags**, has a Close that asks **Discard tag changes?** when there are edits, a checkmark Save, and Search and **New Tag** at the bottom. **Edit Tag…** lives in swipe and context menus. The tag form is **New Tag** or **Edit Tag**, with Tag name, Color, Use Default Color, a preview, **Delete Tag** and **Save Tag**. **Filter by tags** shows each tag's gist count in secondary before its check, whose space is always reserved, and **Clear tag filters**. Picker rows show a swatch, the name in `label` and a neutral check, never a tinted row.
+The tag editor and filter are one family: searchable sheets at medium and large (large at accessibility sizes) with inline titles. The editor, **Tags**, has a Close that asks **Discard tag changes?** when there are edits, a checkmark Save, and Search and **New Tag** at the bottom. **Edit Tag** lives in swipe and context menus. The tag form is **New Tag** or **Edit Tag**, with Tag name, Color, Use Default Color, a preview, **Delete Tag** and **Save Tag**. **Filter by tags** shows each tag's gist count in secondary before its check, whose space is always reserved, and **Clear tag filters**. Picker rows show a swatch, the name in `label` and a neutral check, never a tinted row.
 
 Settings is a small Form:
 
@@ -189,7 +189,7 @@ No page-wide sideways scrolling, tap flash or hover-only controls.
 
 ## Apple Intelligence
 
-A medium and large sheet opens from the keyboard bar or **More → Intelligence…**, with an **Ask**, **Edit** and **Review** segmented control. Ask prompts "Ask about this file", Edit "What would you like to change?" and Review says "Find errors and unclear wording." One button named for the action becomes **Stop** while it runs, over a plain phase line. Ask answers with citations and **Show in File**. Edit shows each change as Before and After, with added words semibold and underlined and removed words struck through, then one **Apply Edit**. Only task changes get a headline, like "Mark this task complete." Review lists comments. A read-only gist says "This gist is read-only. You can ask and review, but not apply changes." An unsupported device says "This device doesn't support Apple Intelligence." Edit on a file too long for one pass says "This file is too long to edit at once. Select a section and use Writing Tools." Failures show in the sheet with `exclamationmark.circle`.
+A medium and large sheet opens from the keyboard bar or **More → Intelligence**, with an **Ask**, **Edit** and **Review** segmented control. Ask prompts "Ask about this file", Edit "What would you like to change?" and Review says "Find errors and unclear wording." One button named for the action becomes **Stop** while it runs, over a plain phase line. Ask answers with citations and **Show in File**. Edit shows each change as Before and After, with added words semibold and underlined and removed words struck through, then one **Apply Edit**. Only task changes get a headline, like "Mark this task complete." Review lists comments. A read-only gist says "This gist is read-only. You can ask and review, but not apply changes." An unsupported device says "This device doesn't support Apple Intelligence." Edit on a file too long for one pass says "This file is too long to edit at once. Select a section and use Writing Tools." Failures show in the sheet with `exclamationmark.circle`.
 
 ## Comments
 
