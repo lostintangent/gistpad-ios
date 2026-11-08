@@ -41,7 +41,7 @@ Rename File and Add File in your own gist, or just the files in someone else's.
 A daily note's capsule holds its day, exactly as its row reads, with no filename
 and no menu. The opening and failed screens show the same capsule with
 `gistTitle(_:)` from the first frame. The title is never wider than
-"x coding agent culture" in its own font, so it grows with Dynamic Type and a
+"🤖 Coding Agent Culture" in its own font, so it grows with Dynamic Type and a
 longer one ends in "…" rather than moving Mode, Comments or More to the
 overflow menu.
 

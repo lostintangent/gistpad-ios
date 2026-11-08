@@ -57,8 +57,8 @@ private struct GistTitle<Choices: View>: ViewModifier {
 
     private var label: some View {
         TemplateWidth {
-            // The user's measure for the longest title the bar shows before it ends in "…".
-            Text(verbatim: "x coding agent culture")
+            // The user's measure for the longest title the bar shows in full, before it ends in "…".
+            Text(verbatim: "🤖 Coding Agent Culture")
                 .font(.headline)
                 .hidden()
             VStack(alignment: .leading, spacing: 0) {
