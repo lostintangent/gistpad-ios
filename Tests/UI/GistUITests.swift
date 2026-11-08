@@ -49,7 +49,7 @@ final class GistUITests: XCTestCase {
     app.dismissSidebarOverlay()
     try tap(editor, "the editor")
     try tap(app.buttons["editor-insert-menu"], "Insert")
-    try tap(app.buttons["Link…"].firstMatch, "Link…")
+    try tap(app.buttons["Link"].firstMatch, "Link")
     let url = app.textFields["URL"]
     try waitUntil("Add Link with its keyboard") { url.exists && app.keyboards.firstMatch.exists }
 

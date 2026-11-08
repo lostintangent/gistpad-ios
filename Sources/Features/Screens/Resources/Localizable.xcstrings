@@ -122,9 +122,6 @@
     "Delete Comment" : {
 
     },
-    "Delete Comment…" : {
-
-    },
     "Edit Comment" : {
 
     },
@@ -215,16 +212,16 @@
     "Accent Color" : {
 
     },
-    "Add File…" : {
+    "Add File" : {
 
     },
     "Clear Tag Filter" : {
 
     },
-    "Delete Gist…" : {
+    "Delete Gist" : {
 
     },
-    "Delete Daily Note…" : {
+    "Delete Daily Note" : {
 
     },
     "This deletes the gist from this iPhone and GitHub, including changes that haven’t been published. This can’t be undone." : {
@@ -236,7 +233,7 @@
     "Files" : {
 
     },
-    "Intelligence…" : {
+    "Intelligence" : {
 
     },
     "Your knowledge and daily notes, kept in GitHub gists." : {
@@ -245,10 +242,10 @@
     "No tags yet." : {
 
     },
-    "Rename File…" : {
+    "Rename File" : {
 
     },
-    "Rename Gist…" : {
+    "Rename Gist" : {
 
     },
     "Settings" : {
@@ -336,9 +333,6 @@
     "Edit Tag %@" : {
 
     },
-    "Edit Tag…" : {
-
-    },
     "Expanded" : {
 
     },
@@ -367,9 +361,6 @@
 
     },
     "No Gists Yet" : {
-
-    },
-    "Open in GitHub" : {
 
     },
     "Pin" : {
@@ -463,9 +454,6 @@
 
     },
     "View" : {
-
-    },
-    "Publish" : {
 
     },
     "Split" : {

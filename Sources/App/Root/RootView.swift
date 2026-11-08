@@ -20,7 +20,6 @@ struct RootView: View {
   @State private var comments: CommentsPresentation
   @State private var images: ImageUpload
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-  @Environment(\.openURL) private var openURL
   @Environment(\.undoManager) private var undoManager
   @Environment(\.scenePhase) private var scenePhase
 
@@ -99,16 +98,16 @@ struct RootView: View {
       NavigationStack {
         GeometryReader { geometry in
           if let opening = model.opening, let failure = opening.failure {
-            OpenFailedView(opening: opening, message: failure) {
+            OpenFailedView(gist: openingDetails(title: opening.title), message: failure) {
               Task { await model.open(opening.request) }
             }
           } else if let active {
             fileScreen(active, availableWidth: geometry.size.width)
           } else if let file = model.visibleFile {
-            OpeningFileView(title: model.details(for: file).title, file: file)
+            OpeningFileView(gist: model.details(for: file), file: file)
               .id(file.id)
           } else if let title = model.openingTitle {
-            OpeningFileView(title: title)
+            OpeningFileView(gist: openingDetails(title: title))
               .id(model.opening?.rowID ?? model.state.selectedID)
           }
         }
@@ -576,7 +575,6 @@ struct RootView: View {
         }
       }
     }
-    actions.save = { publish(fileEditor) }
     actions.reviewChanges = {
       guard let review = fileEditor.file.draft, review.conflict != nil else { return }
       sheet = .review(.init(fileEditor: fileEditor, review: review))
@@ -634,13 +632,6 @@ struct RootView: View {
       fileEditor.editor.find(replacing: true)
     }
     actions.intelligence = { presentIntelligence(fileEditor) }
-    if !fileEditor.file.isDeletedOnGitHub, let gist = fileEditor.file.gist {
-      actions.openInGitHub = {
-        do { openURL(try GistLinks(gist: gist).githubURL) } catch {
-          model.alertMessage = error.localizedDescription
-        }
-      }
-    }
     actions.intelligence = afterCommentsClose(actions.intelligence)
     actions.tags = afterCommentsClose(actions.tags)
     actions.rename = afterCommentsClose(actions.rename)
@@ -656,18 +647,32 @@ struct RootView: View {
     Task { await model.open(.gist(id: gistID, filename: filename)) }
   }
 
+  /// What a note on its way will show once it's open, from its row and the gist this iPhone
+  /// has, so the bar doesn't change when it arrives.
+  private func openingDetails(title: String) -> GistDetails {
+    let opening = model.opening
+    let row = model.state.gists.first { $0.id == (opening?.rowID ?? model.state.selectedID) }
+    var gistID = row.map { $0.gistID ?? $0.id }
+    var isDailyNote = row?.isDailyNote ?? false
+    switch opening?.request {
+    case .gist(let id, _, _): gistID = id
+    case .today: isDailyNote = true
+    default: break
+    }
+    let gist = model.gistCache?.gists.first { $0.id == gistID }
+    isDailyNote = isDailyNote || gist?.isDailyNote == true
+    let filename =
+      opening?.filename ?? row?.filename
+      ?? (isDailyNote ? DailyNote.filename() : gist?.defaultMarkdownFilename) ?? ""
+    let filenames = Set((gist?.markdownFilenames ?? []) + [filename]).sorted()
+    return GistDetails(
+      title: title, files: filenames.map { .init(id: $0, filename: $0) },
+      selectedFileID: filename, isDailyNote: isDailyNote)
+  }
+
   private func selectRow(_ id: String) {
     model.open(rowID: id)
     compactColumn = .detail
-  }
-
-  private func publish(_ fileEditor: GistFileEditor) {
-    guard fileEditor.canMutate else {
-      model.alertMessage = String(
-        localized: "Finish composition or Writing Tools before saving to GitHub.")
-      return
-    }
-    Task { await fileEditor.publish() }
   }
 
   private func presentIntelligence(_ fileEditor: GistFileEditor) {

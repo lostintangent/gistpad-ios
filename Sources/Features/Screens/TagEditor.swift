@@ -115,10 +115,11 @@ public struct TagEditor: View {
         .accessibilityAction(named: Text("Edit Tag \(tag.name)", bundle: .module)) { editingTag = tag }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: draft.selectedTagIDs.contains(tag.id))
         .contextMenu {
-            Button(String(localized: "Edit Tag…", bundle: .module), systemImage: "pencil") { editingTag = tag }
+            Button(String(localized: "Edit Tag", bundle: .module), systemImage: "pencil") { editingTag = tag }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(String(localized: "Edit Tag…", bundle: .module), systemImage: "pencil") { editingTag = tag }
+            Button(String(localized: "Edit Tag", bundle: .module), systemImage: "pencil") { editingTag = tag }
+                .labelStyle(.iconOnly)
         }
     }
 

@@ -25,12 +25,6 @@ public enum PublishStatus: Equatable, Sendable {
         default: false
         }
     }
-
-    /// Publish shows when autosave is off or a publish that can be retried didn't land.
-    func showsPublish(isAutoSaveEnabled: Bool) -> Bool {
-        if case .failed = self, canPublish { return true }
-        return !isAutoSaveEnabled
-    }
 }
 
 public enum FileAccess: Equatable, Sendable {
@@ -106,12 +100,10 @@ public struct GistDetails: Equatable, Sendable {
 /// Actions every gist has. Optional members are capabilities only some gists have.
 @MainActor
 public struct GistActions {
-    public var save: () -> Void = {}
     public var reconnect: () -> Void = {}
     public var reviewChanges: () -> Void = {}
     public var find: () -> Void = {}
     public var intelligence: () -> Void = {}
-    public var openInGitHub: (() -> Void)?
     public var comments: (() -> Void)?
     public var tags: (() -> Void)?
     public var rename: (() -> Void)?

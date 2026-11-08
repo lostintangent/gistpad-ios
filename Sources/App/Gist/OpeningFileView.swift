@@ -5,7 +5,7 @@ import OSLog
 import SwiftUI
 
 struct OpeningFileView: View {
-  let title: String
+  let gist: GistDetails
   var file: GistFile?
   @State private var renderError: String?
   @State private var reload = 0
@@ -39,9 +39,9 @@ struct OpeningFileView: View {
         }
       } else {
         ZStack {
-          if progressTitle == title {
+          if progressTitle == gist.title {
             ProgressView()
-              .accessibilityLabel(Text("Opening \(title)"))
+              .accessibilityLabel(Text("Opening \(gist.title)"))
               .accessibilityIdentifier("opening-note-progress")
           }
         }
@@ -49,14 +49,14 @@ struct OpeningFileView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
     }
-    .gistTitle(title)
+    .gistTitle(gist)
     .background(Color(uiColor: .systemBackground))
-    .task(id: file == nil ? title : nil) {
+    .task(id: file == nil ? gist.title : nil) {
       progressTitle = nil
       guard file == nil else { return }
       do {
         try await Task.sleep(for: .milliseconds(350))
-        progressTitle = title
+        progressTitle = gist.title
       } catch is CancellationError {
         return
       } catch {
@@ -68,7 +68,7 @@ struct OpeningFileView: View {
 }
 
 struct OpenFailedView: View {
-  let opening: Opening
+  let gist: GistDetails
   let message: String
   let retry: () -> Void
 
@@ -82,6 +82,6 @@ struct OpenFailedView: View {
         .buttonStyle(.borderedProminent)
         .accessibilityIdentifier("note-open-retry")
     }
-    .gistTitle(opening.title, filename: opening.filename)
+    .gistTitle(gist)
   }
 }

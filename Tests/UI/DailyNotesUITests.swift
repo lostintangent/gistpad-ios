@@ -35,7 +35,7 @@ final class DailyNotesUITests: XCTestCase {
     let app = launchGistPad(open: "daily/\(Self.yesterdayFilename)")
     try waitUntil("the day") { app.navigationBars[Self.yesterdayTitle].exists }
     try openNoteActions(in: app)
-    try tap(app.buttons["Delete Daily Note…"].firstMatch, "Delete Daily Note…")
+    try tap(app.buttons["Delete Daily Note"].firstMatch, "Delete Daily Note")
     try waitUntil("a confirmation that names the day") {
       app.staticTexts["Delete “\(Self.yesterdayTitle)”?"].exists
     }
@@ -54,9 +54,9 @@ final class DailyNotesUITests: XCTestCase {
     let app = launchGistPad(open: "daily/\(Self.yesterdayFilename)")
     try waitUntil("the day as the title") { app.navigationBars[Self.yesterdayTitle].exists }
     try openNoteActions(in: app)
-    try waitUntil("the More menu") { app.buttons["Delete Daily Note…"].exists }
+    try waitUntil("the More menu") { app.buttons["Delete Daily Note"].exists }
     XCTAssertTrue(app.buttons["Copy Link"].exists)
-    for gistAction in ["Pin", "Star", "Archive", "Rename Gist…", "Tags", "Files"] {
+    for gistAction in ["Pin", "Star", "Archive", "Rename Gist", "Tags", "Files"] {
       XCTAssertFalse(app.buttons[gistAction].exists, gistAction)
     }
   }

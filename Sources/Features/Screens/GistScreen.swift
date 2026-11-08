@@ -25,9 +25,8 @@ public struct GistScreen<Source: View, Preview: View>: View {
         showingSplit ? AnyLayout(HStackLayout(spacing: 1)) : AnyLayout(ZStackLayout())
     }
     private var title: String { gist.displayTitle(now: .now, locale: locale, calendar: calendar) }
-    private var switchesFiles: Bool { gist.files.count > 1 && actions.selectFile != nil }
-    private var showsFiles: Bool {
-        switchesFiles || (gist.access.canEdit && (actions.addFile != nil || actions.renameFile != nil))
+    private var editsFiles: Bool {
+        gist.access.canEdit && (actions.renameFile != nil || actions.addFile != nil)
     }
 
     public init(
@@ -69,25 +68,11 @@ public struct GistScreen<Source: View, Preview: View>: View {
             }
         }
         .background(Color(uiColor: .systemBackground))
-        .gistTitle(
-            title, filename: gist.headerFilename, pinnedWidth: pickerWidth, buttons: trailingButtons,
-            menu: showsFiles ? fileChoices : nil)
+        .gistTitle(gist, menu: gist.isDailyNote ? nil : fileChoices)
         .toolbar {
             primaryToolbar
             secondaryToolbar
         }
-    }
-
-    /// The room the mode picker takes beside the title.
-    private var pickerWidth: CGFloat {
-        gist.access.canEdit ? minimumModeSegmentWidth * CGFloat(allowsSplit ? 3 : 2) + 8 : 0
-    }
-
-    /// Publish, GitHub needs attention, Comments and More.
-    private var trailingButtons: Int {
-        let publishes = gist.access.canEdit && status.showsPublish(isAutoSaveEnabled: gist.isAutoSaveEnabled)
-        return [publishes, gist.access.canEdit && needsYou != nil, actions.comments != nil, true]
-            .filter(\.self).count
     }
 
     @ToolbarContentBuilder
@@ -100,13 +85,6 @@ public struct GistScreen<Source: View, Preview: View>: View {
                     .layoutPriority(1)
             }
             .sharedBackgroundVisibility(.hidden)
-        }
-        if gist.access.canEdit, status.showsPublish(isAutoSaveEnabled: gist.isAutoSaveEnabled) {
-            ToolbarItem(placement: .primaryAction) {
-                Button(String(localized: "Publish", bundle: .module), systemImage: "arrow.up.doc", action: actions.save)
-                    .disabled(!status.canPublish)
-                    .accessibilityIdentifier("note-publish")
-            }
         }
         if gist.access.canEdit, let needsYou {
             ToolbarItem(placement: .primaryAction) {
@@ -201,7 +179,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
                 Section {
                     if let rename = actions.rename, gist.access.canEdit {
                         Button(
-                            String(localized: "Rename Gist…", bundle: .module),
+                            String(localized: "Rename Gist", bundle: .module),
                             systemImage: "pencil", action: rename
                         )
                         .accessibilityIdentifier("note-rename")
@@ -210,7 +188,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
                         Button(String(localized: "Tags", bundle: .module), systemImage: "tag", action: tags)
                     }
                     Button(
-                        String(localized: "Intelligence…", bundle: .module),
+                        String(localized: "Intelligence", bundle: .module),
                         systemImage: "sparkles", action: actions.intelligence
                     )
                     .accessibilityIdentifier("note-intelligence")
@@ -218,16 +196,11 @@ public struct GistScreen<Source: View, Preview: View>: View {
                         Button(String(localized: "Find and Replace", bundle: .module), systemImage: "text.magnifyingglass", action: actions.find)
                     }
                 }
-                if let open = actions.openInGitHub {
-                    Section {
-                        Button(String(localized: "Open in GitHub", bundle: .module), systemImage: "arrow.up.right", action: open)
-                    }
-                }
                 if let archive = actions.toggleArchive {
                     Section {
                         Button(
                             gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
-                            systemImage: "archivebox", action: archive
+                            systemImage: gist.isArchived ? "arrow.up.bin" : "archivebox", action: archive
                         )
                     }
                 }
@@ -235,8 +208,8 @@ public struct GistScreen<Source: View, Preview: View>: View {
                     Section {
                         Button(
                             gist.isDailyNote
-                                ? String(localized: "Delete Daily Note…", bundle: .module)
-                                : String(localized: "Delete Gist…", bundle: .module),
+                                ? String(localized: "Delete Daily Note", bundle: .module)
+                                : String(localized: "Delete Gist", bundle: .module),
                             systemImage: "trash", role: .destructive
                         ) {
                             confirmingDeletion = true
@@ -261,30 +234,32 @@ public struct GistScreen<Source: View, Preview: View>: View {
         return title + ", " + String(localized: "\(count) comments", bundle: .module)
     }
 
+    /// The files when there's a choice, or when the menu has nothing else to offer, then the
+    /// file commands of a gist you own.
     @ViewBuilder
     private var fileChoices: some View {
-        if switchesFiles, let selectFile = actions.selectFile {
+        if gist.files.count > 1 || !editsFiles {
             Picker(
                 String(localized: "Files", bundle: .module),
                 selection: Binding(
                     get: { gist.selectedFileID },
-                    set: { if $0 != gist.selectedFileID { selectFile($0) } })
+                    set: { if $0 != gist.selectedFileID { actions.selectFile?($0) } })
             ) {
                 ForEach(gist.files) { Text(verbatim: $0.filename).tag($0.id) }
             }
             .pickerStyle(.inline)
         }
-        if gist.access.canEdit && (actions.renameFile != nil || actions.addFile != nil) {
+        if editsFiles {
             Section {
                 if let rename = actions.renameFile {
                     Button(
-                        String(localized: "Rename File…", bundle: .module),
+                        String(localized: "Rename File", bundle: .module),
                         systemImage: "pencil", action: rename
                     )
                     .accessibilityIdentifier("note-rename-file")
                 }
                 if let add = actions.addFile {
-                    Button(String(localized: "Add File…", bundle: .module), systemImage: "doc.badge.plus", action: add)
+                    Button(String(localized: "Add File", bundle: .module), systemImage: "doc.badge.plus", action: add)
                         .accessibilityIdentifier("note-add-file")
                 }
             }

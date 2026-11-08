@@ -126,7 +126,7 @@
         },
       ]
       var insert: [UIMenuElement] = [
-        action(String(localized: "Link…", bundle: .module), image: "link") { $0.actions.link() },
+        action(String(localized: "Link", bundle: .module), image: "link") { $0.actions.link() },
         action(
           String(localized: "Inline Code", bundle: .module),
           image: "chevron.left.forwardslash.chevron.right"
@@ -140,7 +140,7 @@
           $0.actions.format(.quote)
         },
       ]
-      let image = action(String(localized: "Image…", bundle: .module), image: "photo") {
+      let image = action(String(localized: "Image", bundle: .module), image: "photo") {
         $0.actions.image?()
       }
       image.attributes = configuration.canInsertImage ? [] : .disabled

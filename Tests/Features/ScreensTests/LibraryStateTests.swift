@@ -109,11 +109,4 @@ struct LibraryStateTests {
         #expect(FileAccess.editable.canEdit)
         #expect(!FileAccess.readOnly.canEdit)
     }
-
-    @Test func aFailedPublishOffersPublishEvenWithAutosaveOn() {
-        #expect(PublishStatus.failed(.offline).showsPublish(isAutoSaveEnabled: true))
-        #expect(!PublishStatus.failed(.rejected).showsPublish(isAutoSaveEnabled: true))
-        #expect(!PublishStatus.unpublished.showsPublish(isAutoSaveEnabled: true))
-        #expect(PublishStatus.published.showsPublish(isAutoSaveEnabled: false))
-    }
 }

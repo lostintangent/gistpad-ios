@@ -288,7 +288,7 @@ private struct CommentThreadContent: View {
                     if comment.canDelete(as: currentUserID, gistOwnerID: gistOwnerID),
                        actions.delete != nil {
                         Button(
-                            String(localized: "Delete Comment…", bundle: .module),
+                            String(localized: "Delete Comment", bundle: .module),
                             systemImage: "trash", role: .destructive
                         ) { requestDelete(comment) }
                     }

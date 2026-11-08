@@ -173,7 +173,7 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("the Tags sheet") { ideas.isHittable }
 
     ideas.swipeLeft()
-    try tap(app.buttons["Edit Tag…"].firstMatch, "Edit Tag…")
+    try tap(app.buttons["Edit Tag"].firstMatch, "Edit Tag")
     let name = app.textFields["Tag name"]
     try waitUntil("the tag form") { name.isHittable }
     name.tap()
@@ -183,7 +183,7 @@ final class LibraryUITests: XCTestCase {
 
     let design = app.buttons["tag-choice-design"]
     design.swipeLeft()
-    try tap(app.buttons["Edit Tag…"].firstMatch, "Edit Tag…")
+    try tap(app.buttons["Edit Tag"].firstMatch, "Edit Tag")
     let delete = app.buttons["Delete Tag"].firstMatch
     try waitUntil("Delete Tag") { delete.isHittable }
     delete.tap()

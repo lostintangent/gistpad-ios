@@ -34,26 +34,27 @@ New and Today sit beside the open gist. Pass a `GitHubStatusProblem` as
 
 `GistScreen` keeps the injected editor and Preview mounted and switches between
 Edit, Split and Preview with `FileMode`. The app passes `allowsSplit` from the
-width it has, and a read-only gist shows Preview only. The title leads the bar,
-with any file but README.md named under it. In your own gist it's a glass button
-whose menu lists the files when there are two or more, then Rename File… and Add
-File…. Someone else's gist with more than one file lists only the files. Any
-other title is plain text, and the opening and failed screens show it in the same
-spot with `gistTitle(_:filename:)`. A long title truncates before Mode, Comments
-or More would move to the overflow menu.
+width it has, and a read-only gist shows Preview only. The title leads the bar
+in the same glass capsule in every note, with any file but README.md named under
+it. In a gist it opens a menu: the files, when there are two or more, then
+Rename File and Add File in your own gist, or just the files in someone else's.
+A daily note's capsule holds its day, exactly as its row reads, with no filename
+and no menu. The opening and failed screens show the same capsule with
+`gistTitle(_:)` from the first frame. The title is never wider than
+"x coding agent culture" in its own font, so it grows with Dynamic Type and a
+longer one ends in "…" rather than moving Mode, Comments or More to the
+overflow menu.
 
-`GistActions` members that are nil hide their controls. Publish shows when
-autosave is off or a publish that can be retried didn't land, as
-`PublishStatus.showsPublish(isAutoSaveEnabled:)` decides. A conflict or lost sign-in shows a button
-that opens the diff or reconnects. Comments is a toggle with a quiet count from
-`ToolbarBadgeLabel`. The More menu holds Pin, Star, Share and Copy Link, then
-Rename, Tags, Intelligence and Find and Replace, then Open in GitHub, Archive
-and Delete. A daily note is a file, not a gist. Its title is its day, exactly as
-its row reads, with no filename. `GistActions.dailyNote` drops Pin, Star,
-Archive, Tags, Rename and the title menu, and its Library row offers
-only Delete. Share hides while Comments is a sheet in compact width, because the
-share sheet can't present over it. Delete confirms with the title, the day for a
-daily note, before it calls `delete`.
+`GistActions` members that are nil hide their controls. Edits publish by
+themselves, so there's no Publish button. A conflict or lost sign-in shows a
+button that opens the diff or reconnects. Comments is a toggle with a quiet count
+from `ToolbarBadgeLabel`. The More menu holds Pin, Star, Share and Copy Link,
+then Rename, Tags, Intelligence and Find and Replace, then Archive and Delete.
+Menu items never end in "…". A daily note is a file, not a gist.
+`GistActions.dailyNote` drops Pin, Star, Archive, Tags, Rename and the title
+menu, and its Library row offers only Delete. Share hides while Comments is a
+sheet in compact width, because the share sheet can't present over it. Delete
+confirms with the title, the day for a daily note, before it calls `delete`.
 
 ## Sheets
 

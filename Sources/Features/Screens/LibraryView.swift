@@ -467,6 +467,7 @@ public struct LibraryView: View {
                 Button(String(localized: "Delete", bundle: .module), systemImage: "trash") {
                     pendingDeletion = gist.id
                 }
+                .labelStyle(.iconOnly)
                 .tint(.red)
             }
             if gist.canPinAndArchive {
@@ -475,9 +476,10 @@ public struct LibraryView: View {
                 } label: {
                     Label(
                         gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
-                        systemImage: "archivebox"
+                        systemImage: gist.isArchived ? "arrow.up.bin" : "archivebox"
                     )
                 }
+                .labelStyle(.iconOnly)
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
@@ -490,6 +492,7 @@ public struct LibraryView: View {
                         systemImage: gist.isPinned ? "pin.slash" : "pin"
                     )
                 }
+                .labelStyle(.iconOnly)
             }
         }
     }
@@ -508,7 +511,7 @@ public struct LibraryView: View {
             ) { actions.togglePin(gist.id) }
             Button(
                 gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
-                systemImage: "archivebox"
+                systemImage: gist.isArchived ? "arrow.up.bin" : "archivebox"
             ) { actions.toggleArchive(gist.id) }
         }
         if gist.isOwned {
