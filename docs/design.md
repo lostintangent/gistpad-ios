@@ -62,7 +62,7 @@ Headers use the system header font with `.headerProminence(.increased)` and a se
 
 No excerpts, thumbnails or cards. Vertical padding is 14 pt, scaled with Body, and the compact horizontal inset is 16 pt. At accessibility sizes the row stacks: title, metadata, then tags.
 
-Swipe trailing for **Delete** (red, confirmed) and **Archive** or **Unarchive** (system gray). Swipe leading for **Pin** or **Unpin**. The context menu offers Open Comments, Pin, Archive and Delete. A daily note is a file, not a gist, so it only offers Delete: no leading swipe, and no Pin or Archive anywhere. A pin, star or archive that doesn't go through shows the standard alert with the system's reason, and nothing retries it.
+Swipe trailing for **Delete** (red, confirmed) and **Archive** or **Unarchive** (system gray). Swipe leading for **Pin** or **Unpin**. Swipe actions show only their symbols, with no title under them, as in Mail: `trash`, `archivebox`, `arrow.up.bin` for Unarchive, `pin` and `pin.slash`. VoiceOver still reads each name. Unarchive is `arrow.up.bin` everywhere it appears, in swipes, the context menu and More, so it never looks like Archive. The context menu offers Open Comments, Pin, Archive and Delete. A daily note is a file, not a gist, so it only offers Delete: no leading swipe, and no Pin or Archive anywhere. A pin, star or archive that doesn't go through shows the standard alert with the system's reason, and nothing retries it.
 
 ### Search, filters and toolbars
 
@@ -117,7 +117,7 @@ Find is the system find bar, from More or Command-F.
 
 ## Tags and Settings
 
-The tag editor and filter are one family: searchable sheets at medium and large (large at accessibility sizes) with inline titles. The editor, **Tags**, has a Close that asks **Discard tag changes?** when there are edits, a checkmark Save, and Search and **New Tag** at the bottom. **Edit Tag** lives in swipe and context menus. The tag form is **New Tag** or **Edit Tag**, with Tag name, Color, Use Default Color, a preview, **Delete Tag** and **Save Tag**. **Filter by tags** shows each tag's gist count in secondary before its check, whose space is always reserved, and **Clear tag filters**. Picker rows show a swatch, the name in `label` and a neutral check, never a tinted row.
+The tag editor and filter are one family: searchable sheets at medium and large (large at accessibility sizes) with inline titles. The editor, **Tags**, has a Close that asks **Discard tag changes?** when there are edits, a checkmark Save, and Search and **New Tag** at the bottom. **Edit Tag** (`pencil`) lives in swipe and context menus, and its swipe is icon-only like the gist list's. The tag form is **New Tag** or **Edit Tag**, with Tag name, Color, Use Default Color, a preview, **Delete Tag** and **Save Tag**. **Filter by tags** shows each tag's gist count in secondary before its check, whose space is always reserved, and **Clear tag filters**. Picker rows show a swatch, the name in `label` and a neutral check, never a tinted row.
 
 Settings is a small Form:
 
