@@ -83,7 +83,7 @@ The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and
 
 ## The gist screen
 
-**Title.** The gist's title, with the file name as its subtitle, except README.md. With more than one file, the title is a menu of files, the current one checked, then **Rename File…** and **Add File…**. A daily note's title is its day, exactly as its row reads ("Friday, Nov 6"), with no subtitle and no menu. You move between days in the Daily Notes section, like the web.
+**Title.** The title floats at the leading end of the bar, like Toy Box's channel title: the gist's title in `.headline` over its file name in `.caption` `secondaryLabel`, one line each, with no file name for README.md. It's a `.topBarLeading` toolbar item in place of the system title, which `.toolbar(removing: .title)` hides while `.navigationTitle` still names the screen for Back and VoiceOver. When it has a menu, it's a `Menu` with its indicator hidden, so the bar's shared glass makes it a capsule with no chevron. In your own gist the menu lists the files, the current one checked, when there are two or more, then **Rename File…** and **Add File…**. In someone else's gist with two or more files it lists just the files. VoiceOver reads the title, then the file name. With nothing to choose, the title isn't a button, so it drops the glass with `.sharedBackgroundVisibility(.hidden)` and reads as a heading, the same words in the same spot. That's someone else's one-file gist, and a daily note, whose title is its day exactly as its row reads ("Friday, Nov 6"), with no file name. You move between days in the Daily Notes section, like the web. A long title truncates at its end inside the capsule, and Mode, Comments and More never move to the overflow menu to make room. The page's top scroll edge is soft in every mode, so the words blur under the floating title and buttons with no bar, hairline or hard edge. While a note opens or can't open, its title sits in the same spot without glass, and the glass arrives with the note.
 
 **Mode.** A segmented, icon-only picker: Edit `square.and.pencil`, Split `rectangle.split.2x1` (only when it fits) and Preview `eye`, each with its spoken name.
 
@@ -92,12 +92,12 @@ The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and
 **More**, in native sections:
 
 1. A compact row: Pin, Star, Share and Copy Link, which confirms with "Link copied". Share is the system share sheet, headed by the gist's title and the GistPad artwork. While Comments is a sheet on iPhone, Share hides, because the system can't present over it. Copy Link stays.
-2. Rename Gist…, Tags, Files, Intelligence…, Find and Replace.
+2. Rename Gist…, Tags, Intelligence…, Find and Replace. Files live only in the title.
 3. Open in GitHub.
 4. Archive or Unarchive.
 5. **Delete Gist…**, or **Delete Daily Note…** on a daily note.
 
-A daily note is a file, not a gist, so it leaves out everything that acts on the gist: Pin, Star, Rename Gist…, Tags, Files and Archive. Its More menu keeps Share and Copy Link, Intelligence… and Find and Replace, Open in GitHub and Delete Daily Note…, each in its usual section. Share is headed by the day.
+A daily note is a file, not a gist, so it leaves out everything that acts on the gist: Pin, Star, Rename Gist…, Tags and Archive. Its More menu keeps Share and Copy Link, Intelligence… and Find and Replace, Open in GitHub and Delete Daily Note…, each in its usual section. Share is headed by the day.
 
 **Delete.** Title **Delete “[title]”?** Message: **This deletes the gist from this iPhone and GitHub, including changes that haven't been published. This can't be undone.** A daily note is titled by its day, **Delete “Friday, Nov 6”?**, and says **the daily note** instead of the gist. Buttons Cancel and a destructive Delete. Deleting a daily note removes that day's file, or the gist when it's the last file.
 
