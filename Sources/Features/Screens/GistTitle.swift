@@ -59,7 +59,6 @@ private struct GistTitle<Choices: View>: ViewModifier {
                         .menuIndicator(.hidden)
                         .accessibilityLabel(title)
                         .accessibilityValue(filename ?? "")
-                        .accessibilityHint(Text("Shows the gist's files", bundle: .module))
                         .accessibilityIdentifier("note-title")
                     }
                 } else {
