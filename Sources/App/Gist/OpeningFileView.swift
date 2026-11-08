@@ -49,8 +49,7 @@ struct OpeningFileView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
     }
-    .navigationTitle(title)
-    .navigationBarTitleDisplayMode(.inline)
+    .gistTitle(title)
     .background(Color(uiColor: .systemBackground))
     .task(id: file == nil ? title : nil) {
       progressTitle = nil
@@ -83,8 +82,6 @@ struct OpenFailedView: View {
         .buttonStyle(.borderedProminent)
         .accessibilityIdentifier("note-open-retry")
     }
-    .navigationTitle(opening.title)
-    .navigationSubtitle(opening.filename ?? "")
-    .navigationBarTitleDisplayMode(.inline)
+    .gistTitle(opening.title, filename: opening.filename)
   }
 }

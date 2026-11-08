@@ -30,14 +30,16 @@ final class GistUITests: XCTestCase {
   func testSwitchingFiles() throws {
     let app = launchGistPad(open: "shape/README.md", mode: "edit")
     let editor = app.textViews["source-editor"]
+    let title = app.buttons["note-title"]
     // README.md is the gist's front page, so the title stands alone without a filename.
     try waitUntil("README.md") { (editor.value as? String)?.hasPrefix("# A considered") == true }
+    XCTAssertEqual(title.value as? String, "")
+    app.dismissSidebarOverlay()
 
-    try openNoteActions(in: app)
-    try tap(app.buttons["Files"].firstMatch, "Files")
+    try tap(title, "the title")
     try tap(app.buttons["Ideas.md"].firstMatch, "Ideas.md")
     try waitUntil("Ideas.md") { (editor.value as? String)?.hasPrefix("# Ideas") == true }
-    XCTAssertTrue(app.navigationBars.staticTexts["Ideas.md"].exists)
+    XCTAssertEqual(title.value as? String, "Ideas.md")
   }
 
   func testAddLinkOpensReadyForItsURL() throws {

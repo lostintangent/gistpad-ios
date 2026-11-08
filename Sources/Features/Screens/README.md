@@ -34,18 +34,23 @@ New and Today sit beside the open gist. Pass a `GitHubStatusProblem` as
 
 `GistScreen` keeps the injected editor and Preview mounted and switches between
 Edit, Split and Preview with `FileMode`. The app passes `allowsSplit` from the
-width it has, and a read-only gist shows Preview only. With more than one file,
-the title menu switches files and the subtitle names any file but README.md.
+width it has, and a read-only gist shows Preview only. The title leads the bar,
+with any file but README.md named under it. In your own gist it's a glass button
+whose menu lists the files when there are two or more, then Rename File… and Add
+File…. Someone else's gist with more than one file lists only the files. Any
+other title is plain text, and the opening and failed screens show it in the same
+spot with `gistTitle(_:filename:)`. A long title truncates before Mode, Comments
+or More would move to the overflow menu.
 
 `GistActions` members that are nil hide their controls. Publish shows when
 autosave is off or a publish that can be retried didn't land, as
 `PublishStatus.showsPublish(isAutoSaveEnabled:)` decides. A conflict or lost sign-in shows a button
 that opens the diff or reconnects. Comments is a toggle with a quiet count from
 `ToolbarBadgeLabel`. The More menu holds Pin, Star, Share and Copy Link, then
-Rename, Tags, Files, Intelligence and Find and Replace, then Open in GitHub,
-Archive and Delete. A daily note is a file, not a gist. Its title is its day,
-exactly as its row reads, with no subtitle. `GistActions.dailyNote` drops Pin,
-Star, Archive, Tags, Rename and the file switcher, and its Library row offers
+Rename, Tags, Intelligence and Find and Replace, then Open in GitHub, Archive
+and Delete. A daily note is a file, not a gist. Its title is its day, exactly as
+its row reads, with no filename. `GistActions.dailyNote` drops Pin, Star,
+Archive, Tags, Rename and the title menu, and its Library row offers
 only Delete. Share hides while Comments is a sheet in compact width, because the
 share sheet can't present over it. Delete confirms with the title, the day for a
 daily note, before it calls `delete`.

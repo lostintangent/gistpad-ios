@@ -69,14 +69,25 @@ public struct GistScreen<Source: View, Preview: View>: View {
             }
         }
         .background(Color(uiColor: .systemBackground))
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationSubtitle(gist.headerFilename ?? "")
-        .modifier(FileMenu(isEnabled: switchesFiles) { fileChoices })
+        .gistTitle(
+            title, filename: gist.headerFilename, pinnedWidth: pickerWidth, buttons: trailingButtons,
+            menu: showsFiles ? fileChoices : nil)
         .toolbar {
             primaryToolbar
             secondaryToolbar
         }
+    }
+
+    /// The room the mode picker takes beside the title.
+    private var pickerWidth: CGFloat {
+        gist.access.canEdit ? minimumModeSegmentWidth * CGFloat(allowsSplit ? 3 : 2) + 8 : 0
+    }
+
+    /// Publish, GitHub needs attention, Comments and More.
+    private var trailingButtons: Int {
+        let publishes = gist.access.canEdit && status.showsPublish(isAutoSaveEnabled: gist.isAutoSaveEnabled)
+        return [publishes, gist.access.canEdit && needsYou != nil, actions.comments != nil, true]
+            .filter(\.self).count
     }
 
     @ToolbarContentBuilder
@@ -198,13 +209,6 @@ public struct GistScreen<Source: View, Preview: View>: View {
                     if let tags = actions.tags {
                         Button(String(localized: "Tags", bundle: .module), systemImage: "tag", action: tags)
                     }
-                    if showsFiles {
-                        Menu {
-                            fileChoices
-                        } label: {
-                            Label(String(localized: "Files", bundle: .module), systemImage: "doc.on.doc")
-                        }
-                    }
                     Button(
                         String(localized: "Intelligence…", bundle: .module),
                         systemImage: "sparkles", action: actions.intelligence
@@ -259,7 +263,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
 
     @ViewBuilder
     private var fileChoices: some View {
-        if let selectFile = actions.selectFile {
+        if switchesFiles, let selectFile = actions.selectFile {
             Picker(
                 String(localized: "Files", bundle: .module),
                 selection: Binding(
@@ -284,20 +288,6 @@ public struct GistScreen<Source: View, Preview: View>: View {
                         .accessibilityIdentifier("note-add-file")
                 }
             }
-        }
-    }
-}
-
-private struct FileMenu<Items: View>: ViewModifier {
-    let isEnabled: Bool
-    @ViewBuilder var items: () -> Items
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content.toolbarTitleMenu(content: items)
-        } else {
-            content
         }
     }
 }
