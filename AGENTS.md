@@ -124,7 +124,7 @@ xcodebuild -project GistPad.xcodeproj -scheme GistPad \
 Code lives in three groups. This is the house style for our Apple projects.
 
 - **App and Extensions** are the Xcode targets that ship: `Sources/App` and `Sources/Extensions/<Name>`. They own signing, entitlements and Info.plist, and wire the modules together.
-- **Features** are the user-facing slices, in `Sources/Features/<Domain>`. A feature builds on Shared, and on another feature only when it extends it, as Intelligence extends Editor.
+- **Features** are the user-facing slices, in `Sources/Features/<Domain>`. A feature builds on Shared, and on another feature only when it extends it, as Intelligence extends Editor. The one exception is Model, which builds the view state Screens defines, such as `LibraryState` and `GistDetails`. That keeps Screens buildable and testable without Model, so views that need Model live in App.
 - **Shared** is the core every feature builds on, in `Sources/Shared/<Domain>`. Shared never imports a feature.
 
 Features and Shared are modules of the root `Package.swift`, named by domain, so a folder, its module and its `import` share one name. Each has a compiler-enforced public API. Tests mirror the sources in `Tests/App`, `Tests/UI`, `Tests/Features/<Domain>Tests` and `Tests/Shared/<Domain>Tests`, and `swift test` runs every module's tests on macOS without the simulator or the slot.
