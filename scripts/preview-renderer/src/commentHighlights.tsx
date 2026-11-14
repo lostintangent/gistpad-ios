@@ -14,11 +14,11 @@ interface Highlight {
   segment: number;
   start: number;
   end: number;
-  commentIDs: number[];
+  threadIDs: number[];
 }
 export interface HighlightState {
   highlights: Highlight[];
-  selectedCommentID: number | null;
+  selectedThreadID: number | null;
   revealRevision: number;
   showsInlineComments: boolean;
   allowsInteraction: boolean;
@@ -36,7 +36,7 @@ export class CommentHighlightController {
     private readonly activate: (message: CommentThreadActivation) => void,
   ) {
     this.state = {
-      highlights: [], selectedCommentID: null, revealRevision: 0,
+      highlights: [], selectedThreadID: null, revealRevision: 0,
       showsInlineComments: true, allowsInteraction: false, accent: "#0EA5E9",
     };
   }
@@ -128,7 +128,7 @@ export function CommentText({ controller, segment, text }: {
     const before = text.slice(cursor, highlight.start);
     const quote = text.slice(highlight.start, highlight.end);
     cursor = highlight.end;
-    const selected = state.selectedCommentID !== null && highlight.commentIDs.includes(state.selectedCommentID);
+    const selected = state.selectedThreadID !== null && highlight.threadIDs.includes(state.selectedThreadID);
     if (before || !selected) selectedRun = undefined;
     children.push(before);
     const fragment = state.showsInlineComments || selected
@@ -214,7 +214,7 @@ function CommentFragment({ controller, highlight, state, selected, children }: {
   }, [state.accent]);
   useEffect(() => {
     if (!selected) return;
-    const first = state.highlights.find((span) => span.commentIDs.includes(state.selectedCommentID!));
+    const first = state.highlights.find((span) => span.threadIDs.includes(state.selectedThreadID!));
     if (first !== highlight) return;
     for (let ancestor = ref.current?.parentElement; ancestor; ancestor = ancestor.parentElement) {
       if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
@@ -227,15 +227,15 @@ function CommentFragment({ controller, highlight, state, selected, children }: {
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [selected, state.selectedCommentID, state.revealRevision]);
+  }, [selected, state.selectedThreadID, state.revealRevision]);
   return <span ref={ref} className={`comment-highlight${selected ? " comment-selected" : ""}`}
-    data-comment-ids={highlight.commentIDs.join(" ")}
+    data-comment-ids={highlight.threadIDs.join(" ")}
     role={state.allowsInteraction ? "button" : undefined} tabIndex={state.allowsInteraction ? 0 : undefined}
     aria-label={state.allowsInteraction ? children : undefined}
     aria-description={state.allowsInteraction
-      ? `${selected ? "Selected comment. " : ""}${highlight.commentIDs.length > 1 ? "Choose comment thread" : "View comment"}`
+      ? `${selected ? "Selected comment. " : ""}${highlight.threadIDs.length > 1 ? "Choose comment thread" : "View comment"}`
       : undefined}
-    aria-haspopup={state.allowsInteraction && highlight.commentIDs.length > 1 ? "dialog" : undefined}
+    aria-haspopup={state.allowsInteraction && highlight.threadIDs.length > 1 ? "dialog" : undefined}
     aria-current={selected ? "true" : undefined}
     onClick={state.allowsInteraction ? (event) => {
       event.preventDefault();

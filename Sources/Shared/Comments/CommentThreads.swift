@@ -10,7 +10,7 @@ public struct GistCommentThread: Equatable, Identifiable, Sendable {
 
     public var quotedPassage: CommentQuote? {
         guard let quote = comment.parsedBody.quote, !quote.isEmpty else { return nil }
-        return CommentQuote(commentID: id, quote: quote)
+        return CommentQuote(threadID: id, quote: quote)
     }
 
     /// Threads sort newest first, and a reply whose parent is gone becomes a thread of its own.

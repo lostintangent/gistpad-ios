@@ -47,10 +47,10 @@
 
     func configure(_ configuration: CommentHighlightConfiguration, actions: CommentHighlightActions?) {
       let needsInitialReport = self.actions == nil && actions != nil
-      if self.configuration.selectedCommentID != configuration.selectedCommentID
+      if self.configuration.selectedThreadID != configuration.selectedThreadID
         || self.configuration.revealRevision != configuration.revealRevision
       {
-        needsSelectedScroll = configuration.selectedCommentID != nil
+        needsSelectedScroll = configuration.selectedThreadID != nil
         scrollTask?.cancel()
         scrollTask = nil
       }
@@ -73,7 +73,7 @@
         quotes: configuration.quotes, segments: [editor.text]
       ).filter { $0.start >= editor.contentStart }
       verifiedHighlights = highlights
-      publish(Set(highlights.flatMap(\.commentIDs)))
+      publish(Set(highlights.flatMap(\.threadIDs)))
       updateAccessibility()
       guard !highlights.isEmpty, !suspendsForFind, !suspendsForWritingTools else {
         return
@@ -89,7 +89,7 @@
         preconditionFailure("Comment highlights require an opaque native page.")
       }
       for highlight in highlights {
-        let selected = configuration.selectedCommentID.map(highlight.commentIDs.contains) ?? false
+        let selected = configuration.selectedThreadID.map(highlight.threadIDs.contains) ?? false
         guard configuration.showsInlineComments || selected else { continue }
         let fill: UIColor
         if selected {
@@ -115,7 +115,7 @@
         passages.append((highlight, fill, selected))
         storage.addAttributes(
           [
-            Self.annotationKey: highlight.commentIDs.map(String.init).joined(separator: ","),
+            Self.annotationKey: highlight.threadIDs.map(String.init).joined(separator: ","),
           ], range: highlight.range)
       }
       applySelectedInk(in: storage)
@@ -264,7 +264,7 @@
             ? NSLocationInRange(range.location, highlight.range)
             : NSIntersectionRange(range, highlight.range).length > 0
         }
-      }.flatMap(\.commentIDs).filter { seen.insert($0).inserted }
+      }.flatMap(\.threadIDs).filter { seen.insert($0).inserted }
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch)
@@ -298,7 +298,7 @@
           return !contains
         }
         if contains {
-          ids += passage.highlight.commentIDs.filter { seen.insert($0).inserted }
+          ids += passage.highlight.threadIDs.filter { seen.insert($0).inserted }
         }
       }
       return ids
@@ -353,9 +353,9 @@
         defer { if !Task.isCancelled { self.scrollTask = nil } }
         guard self.needsSelectedScroll,
           !self.suspendsForFind, !self.suspendsForWritingTools, self.editor.isSettled,
-          let selectedID = self.configuration.selectedCommentID,
+          let selectedID = self.configuration.selectedThreadID,
           let highlight = self.verifiedHighlights.first(where: {
-            $0.commentIDs.contains(selectedID)
+            $0.threadIDs.contains(selectedID)
           }),
           self.editor.textView.window != nil, !self.editor.textView.isHidden
         else { return }
@@ -443,9 +443,9 @@
     private func updateAccessibility() {
       let view = editor.view
       guard !suspendsForFind, !suspendsForWritingTools,
-        let selectedID = configuration.selectedCommentID,
-        verifiedHighlights.contains(where: { $0.commentIDs.contains(selectedID) }),
-        let quote = configuration.quotes.first(where: { $0.commentID == selectedID })?.quote
+        let selectedID = configuration.selectedThreadID,
+        verifiedHighlights.contains(where: { $0.threadIDs.contains(selectedID) }),
+        let quote = configuration.quotes.first(where: { $0.threadID == selectedID })?.quote
       else {
         view.accessibilityCustomContent = []
         return

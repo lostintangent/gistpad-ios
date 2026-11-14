@@ -2,16 +2,16 @@ import Foundation
 
 public struct CommentHighlightConfiguration: Equatable, Sendable {
     public var quotes: [CommentQuote]
-    public var selectedCommentID: Int64?
+    public var selectedThreadID: Int64?
     public var revealRevision: UInt64
     public var showsInlineComments: Bool
 
     public init(
-        quotes: [CommentQuote] = [], selectedCommentID: Int64? = nil, revealRevision: UInt64 = 0,
+        quotes: [CommentQuote] = [], selectedThreadID: Int64? = nil, revealRevision: UInt64 = 0,
         showsInlineComments: Bool = true
     ) {
         self.quotes = quotes
-        self.selectedCommentID = selectedCommentID
+        self.selectedThreadID = selectedThreadID
         self.revealRevision = revealRevision
         self.showsInlineComments = showsInlineComments
     }
@@ -40,7 +40,7 @@ public struct CommentQuoteHighlight: Equatable, Sendable {
     public let segment: Int
     public let start: Int
     public let end: Int
-    public let commentIDs: [Int64]
+    public let threadIDs: [Int64]
     public var range: NSRange { NSRange(location: start, length: end - start) }
 }
 
@@ -57,17 +57,17 @@ extension CommentQuoteMatcher {
                 var seen: Set<Int64> = []
                 let ids = matches.compactMap { match -> Int64? in
                     guard match.range.location <= start, NSMaxRange(match.range) >= end,
-                          seen.insert(match.commentID).inserted else { return nil }
-                    return match.commentID
+                          seen.insert(match.threadID).inserted else { return nil }
+                    return match.threadID
                 }
                 guard !ids.isEmpty else { continue }
                 if let previous = highlights.last, previous.segment == segment,
-                   previous.end == start, previous.commentIDs == ids {
+                   previous.end == start, previous.threadIDs == ids {
                     highlights[highlights.count - 1] = CommentQuoteHighlight(
-                        segment: segment, start: previous.start, end: end, commentIDs: ids)
+                        segment: segment, start: previous.start, end: end, threadIDs: ids)
                 } else {
                     highlights.append(CommentQuoteHighlight(
-                        segment: segment, start: start, end: end, commentIDs: ids))
+                        segment: segment, start: start, end: end, threadIDs: ids))
                 }
             }
         }

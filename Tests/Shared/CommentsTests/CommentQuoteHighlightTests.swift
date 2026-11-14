@@ -6,8 +6,8 @@ struct CommentQuoteHighlightTests {
     @Test func overlappingPassagesRetainEveryThreadInInputOrder() {
         let spans = CommentQuoteMatcher.highlights(
             quotes: [
-                CommentQuote(commentID: 10, quote: "one two"),
-                CommentQuote(commentID: 20, quote: "two three")
+                CommentQuote(threadID: 10, quote: "one two"),
+                CommentQuote(threadID: 20, quote: "two three")
             ],
             segments: ["one two three"])
         #expect(spans.map(\.range) == [
@@ -15,15 +15,15 @@ struct CommentQuoteHighlightTests {
             NSRange(location: 4, length: 3),
             NSRange(location: 7, length: 6)
         ])
-        #expect(spans.map(\.commentIDs) == [[10], [10, 20], [20]])
+        #expect(spans.map(\.threadIDs) == [[10], [10, 20], [20]])
     }
 
     @Test func missingRepeatedAndShortQuotesStayUnlinked() {
         let spans = CommentQuoteMatcher.highlights(
             quotes: [
-                CommentQuote(commentID: 10, quote: "native"),
-                CommentQuote(commentID: 20, quote: "missing"),
-                CommentQuote(commentID: 30, quote: "na")
+                CommentQuote(threadID: 10, quote: "native"),
+                CommentQuote(threadID: 20, quote: "missing"),
+                CommentQuote(threadID: 30, quote: "na")
             ],
             segments: ["native", "native"])
         #expect(spans.isEmpty)

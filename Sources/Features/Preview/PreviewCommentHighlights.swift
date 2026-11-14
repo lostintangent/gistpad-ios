@@ -26,7 +26,7 @@ enum PreviewCommentActivation {
               let highlight = highlights.first(where: {
                   $0.segment == message.segment && $0.start == message.start && $0.end == message.end
               }) else { throw PreviewBridge.invalidMessage }
-        return highlight.commentIDs
+        return highlight.threadIDs
     }
 }
 
@@ -152,9 +152,9 @@ final class PreviewCommentHighlights {
                 }
                 let payload: [String: Any] = [
                     "highlights": self.highlights.map {
-                        ["segment": $0.segment, "start": $0.start, "end": $0.end, "commentIDs": $0.commentIDs]
+                        ["segment": $0.segment, "start": $0.start, "end": $0.end, "threadIDs": $0.threadIDs]
                     },
-                    "selectedCommentID": configuration.selectedCommentID.map { $0 as Any } ?? NSNull(),
+                    "selectedThreadID": configuration.selectedThreadID.map { $0 as Any } ?? NSNull(),
                     "revealRevision": configuration.revealRevision,
                     "showsInlineComments": configuration.showsInlineComments,
                     "allowsInteraction": allowsInteraction, "accent": accent
@@ -164,7 +164,7 @@ final class PreviewCommentHighlights {
                     "window.gistpadPreview.setCommentHighlights(payload);",
                     arguments: ["payload": payload], in: nil, contentWorld: .page)
                 guard !Task.isCancelled else { return }
-                self.publish(Set(self.highlights.flatMap(\.commentIDs)))
+                self.publish(Set(self.highlights.flatMap(\.threadIDs)))
             } catch {
                 guard !Task.isCancelled else { return }
                 Logger.preview.error("Comment highlights couldn't be updated: \(error.localizedDescription)")

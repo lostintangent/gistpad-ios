@@ -479,7 +479,7 @@ struct RootView: View {
     else { return .init() }
     return .init(
       quotes: conversation.threads.compactMap(\.quotedPassage),
-      selectedCommentID: comments.selectedRootID,
+      selectedThreadID: comments.selectedRootID,
       revealRevision: comments.revealRevision,
       showsInlineComments:
         model.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true)

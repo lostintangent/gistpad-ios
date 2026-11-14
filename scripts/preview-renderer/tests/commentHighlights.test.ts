@@ -15,10 +15,10 @@ describe("comment highlights", () => {
     controller.catalogPlugin()({ type: "root", children: [{ type: "text", value: request.markdown }] });
     controller.setHighlights({
       highlights: [
-        { segment: 0, start: 2, end: 8, commentIDs: [10] },
-        { segment: 0, start: 8, end: 13, commentIDs: [10, 20] },
+        { segment: 0, start: 2, end: 8, threadIDs: [10] },
+        { segment: 0, start: 8, end: 13, threadIDs: [10, 20] },
       ],
-      selectedCommentID: 10, revealRevision: 0,
+      selectedThreadID: 10, revealRevision: 0,
       showsInlineComments: true, allowsInteraction: true, accent: "#FACC15",
     });
     const html = renderToStaticMarkup(createElement(CommentText, {

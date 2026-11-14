@@ -45,12 +45,12 @@ struct CommentCompatibilityFixtures: Decodable {
     @Test func matchesWebLiteralWordBoundariesAndUTF16Offsets() throws {
         for fixture in try CommentCompatibilityFixtures.load().quotes {
             let actual = CommentQuoteMatcher.matches(
-                quotes: [.init(commentID: 7, quote: fixture.quote)], segments: fixture.segments)
+                quotes: [.init(threadID: 7, quote: fixture.quote)], segments: fixture.segments)
             #expect(actual.map {
                 CommentCompatibilityFixtures.Quote.Match(
                     segment: $0.segment, start: $0.range.location, end: NSMaxRange($0.range))
             } == fixture.matches, Comment(rawValue: fixture.quote))
-            #expect(actual.allSatisfy { $0.commentID == 7 })
+            #expect(actual.allSatisfy { $0.threadID == 7 })
             for match in actual {
                 #expect((fixture.segments[match.segment] as NSString).substring(with: match.range) == fixture.quote)
             }
