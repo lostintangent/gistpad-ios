@@ -77,6 +77,8 @@ The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and
 | Load failed | **Couldn't Load Your Gists** / the reason / Try Again |
 | Sign-in lapsed | **Reconnect GitHub** / the reason / Sign in with GitHub |
 
+When one of these explains a problem, **GitHub needs attention** stays out of the toolbar, so the problem is said once. With gists still listed, or while a filter or search shows nothing, the toolbar control carries it.
+
 ### Today and Comments buttons
 
 **Today** is a `calendar` toolbar toggle, tinted primary. It takes the system's on fill once today's note has a page, and a badge counting today's unfinished tasks, up to 99+. Zero or unknown shows no badge. VoiceOver says "Today, 3 unfinished tasks". **Comments** is the same kind of toggle with `text.bubble` and the comment count, filled while Comments is open. Both stay quiet: no accent, red or progress ring.
