@@ -2,13 +2,13 @@ import Foundation
 import Editor
 
 extension FileSnapshot {
-  package init(parsing source: String, fileID: String, sessionID: UUID, generation: UInt64) {
+  package init(parsing source: String, sessionID: UUID, generation: UInt64) {
     let outline = Syntax.outline(in: source)
     let text = source as NSString
     let headings = outline.blocks.filter { $0.kind == .heading }
       .map { text.lineRange(for: $0.range) }
     self.init(
-      fileID: fileID, sessionID: sessionID, generation: generation, source: source,
+      sessionID: sessionID, generation: generation, source: source,
       headingOffsets: headings.map(\.location),
       tasks: ModelTask.indexed(
         in: source, markers: outline.taskMarkers, headings: headings))
@@ -27,7 +27,7 @@ extension FileSnapshot {
             bundle: .module))
       }
       return FileSnapshot(
-        parsing: text, fileID: fileID, sessionID: id, generation: generation)
+        parsing: text, sessionID: id, generation: generation)
     }
 
     @discardableResult

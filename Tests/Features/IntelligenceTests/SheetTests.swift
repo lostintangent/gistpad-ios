@@ -64,15 +64,15 @@
     }
 
     enum AskFailure: Sendable {
-      case unavailable, error(IntelligenceError), answer([ModelAnswerPart])
+      case unavailable, error(IntelligenceError), answer(ModelAnswer)
     }
 
     @Test(arguments: [
       AskFailure.unavailable, .error(.refused), .error(.timedOut), .error(.rateLimited),
-      .error(.insufficientContext), .error(.unavailable("")), .answer([]),
-      .answer([ModelAnswerPart(kind: .prose, text: " \r\n\t")]),
-      .answer([ModelAnswerPart(kind: .quote, text: "Invented source")]),
-      .answer([ModelAnswerPart(kind: .prose, text: "The user leaves at 9am.")]),
+      .error(.insufficientContext), .error(.unavailable("")), .answer(ModelAnswer(prose: "")),
+      .answer(ModelAnswer(prose: " \r\n\t")),
+      .answer(ModelAnswer(prose: "", quotes: ["Invented source"])),
+      .answer(ModelAnswer(prose: "The user leaves at 9am.")),
     ])
     func everyFailedAskShowsAReasonAndKeepsTheRequestAndFile(failure: AskFailure) async {
       let editor = Editor(fileID: "failed-ask", text: source)
@@ -82,7 +82,7 @@
       switch failure {
       case .unavailable: fixture.unavailableReason = "Apple Intelligence is turned off."
       case .error(let error): fixture.failure = error
-      case .answer(let parts): fixture.answer = parts
+      case .answer(let answer): fixture.answer = answer
       }
       let model = IntelligenceState(editor: editor, backend: fixture)
       model.askPrompt = "When do I leave?"
@@ -152,10 +152,8 @@
       let editor = Editor(
         fileID: "front-matter", text: text, generation: 8, showsFrontMatter: shown)
       let fixture = FixtureModel()
-      fixture.answer = [
-        ModelAnswerPart(kind: .prose, text: "You retained this thought."),
-        ModelAnswerPart(kind: .quote, text: "e\u{301} 👩🏽‍💻"),
-      ]
+      fixture.answer = ModelAnswer(
+        prose: "You retained this thought.", quotes: ["e\u{301} 👩🏽‍💻"])
       let model = IntelligenceState(editor: editor, backend: fixture)
       model.askPrompt = "What thought did I retain?"
       await model.checkAvailability()

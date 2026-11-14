@@ -65,8 +65,7 @@ enum Evaluator {
           return Double(duration.seconds) + Double(duration.attoseconds) / 1e18
         }
         let snapshot = snapshot(item.source)
-        let request = IntelligenceRequest(
-          snapshot: snapshot, action: action, instruction: item.prompt)
+        let request = IntelligenceRequest(snapshot: snapshot, instruction: item.prompt)
         let backend = RecordingModel()
         let engine = Intelligence(backend: backend)
         var answerSeconds: Double?
@@ -112,7 +111,7 @@ enum Evaluator {
             }
           } else {
             let review =
-              request.action == .review
+              action == .review
               ? try await engine.review(request) : try await engine.edit(request)
             answerSeconds = elapsed()
             let application = try review.application(to: request.snapshot)
@@ -182,8 +181,7 @@ enum Evaluator {
   }
 
   private static func snapshot(_ source: String) -> FileSnapshot {
-    FileSnapshot(
-      parsing: source, fileID: "local-evaluation", sessionID: UUID(), generation: 0)
+    FileSnapshot(parsing: source, sessionID: UUID(), generation: 0)
   }
 
   private static func addedTaskPasses(
@@ -405,13 +403,12 @@ final class RecordingModel: IntelligenceModel {
   }
   func streamAnswer(
     for pass: ModelPass, onUpdate: @MainActor (String) -> Void
-  ) async throws -> [ModelAnswerPart] {
+  ) async throws -> ModelAnswer {
     answerCalls += 1
-    let parts = try await model.streamAnswer(for: pass, onUpdate: onUpdate)
-    let prose = parts.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
-    if AnswerIssue.check(prose, source: pass.source, instruction: pass.instruction) != nil {
-      rejectedAnswers.append(prose)
+    let answer = try await model.streamAnswer(for: pass, onUpdate: onUpdate)
+    if AnswerIssue.check(answer.prose, source: pass.source, instruction: pass.instruction) != nil {
+      rejectedAnswers.append(answer.prose)
     }
-    return parts
+    return answer
   }
 }

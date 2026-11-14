@@ -1,7 +1,6 @@
 import Foundation
 
 package struct FileSnapshot: Sendable, Equatable {
-  let fileID: String
   let sessionID: UUID
   let generation: UInt64
   package let source: String
@@ -9,8 +8,8 @@ package struct FileSnapshot: Sendable, Equatable {
   package var tasks: [ModelTask] = []
 
   package static func == (lhs: Self, rhs: Self) -> Bool {
-    lhs.fileID == rhs.fileID && lhs.sessionID == rhs.sessionID
-      && lhs.generation == rhs.generation && lhs.source.utf8.elementsEqual(rhs.source.utf8)
+    lhs.sessionID == rhs.sessionID && lhs.generation == rhs.generation
+      && lhs.source.utf8.elementsEqual(rhs.source.utf8)
   }
 }
 
@@ -29,16 +28,11 @@ package enum IntelligenceAction: String, CaseIterable, Sendable {
 package struct IntelligenceRequest: Sendable {
   package let id: UUID
   package let snapshot: FileSnapshot
-  package let action: IntelligenceAction
   let instruction: String
 
-  package init(
-    snapshot: FileSnapshot, action: IntelligenceAction, instruction: String = "",
-    id: UUID = UUID()
-  ) {
+  package init(snapshot: FileSnapshot, instruction: String = "", id: UUID = UUID()) {
     self.id = id
     self.snapshot = snapshot
-    self.action = action
     self.instruction = instruction
   }
 }
@@ -179,17 +173,15 @@ package enum ModelEdit: Sendable {
   case setTaskStates(ids: [Int]?, isComplete: Bool)
   case insertTask(listID: Int, text: String)
   case deleteTasks(ids: [Int])
-  /// The whole note as the model revised it, which the app compares line by line.
-  case rewrite(String)
-  /// A selected body block, using a UTF-16 range relative to the model pass.
+  /// A region as the model revised it, using a UTF-16 range relative to the model pass.
+  /// The app compares it line by line.
   case rewriteRegion(NSRange, revised: String)
   case replaceRegion(NSRange, ModelReplacement)
 }
 
-package struct ModelAnswerPart: Sendable, Equatable {
-  package enum Kind: Sendable { case prose, quote }
-  package let kind: Kind
-  package let text: String
+package struct ModelAnswer: Sendable, Equatable {
+  package var prose: String
+  var quotes: [String] = []
 }
 
 /// An answer's prose, or a quotation verified at its ranges in the note.
@@ -214,5 +206,5 @@ package protocol IntelligenceModel {
   func excerpts(for pass: ModelPass) async throws -> [String]
   func streamAnswer(
     for pass: ModelPass, onUpdate: @MainActor (String) -> Void
-  ) async throws -> [ModelAnswerPart]
+  ) async throws -> ModelAnswer
 }

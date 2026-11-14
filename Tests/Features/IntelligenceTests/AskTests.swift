@@ -19,11 +19,10 @@ struct AskTests {
 
   @Test func askAnswersFromTheWholeFileShortOrLong() async throws {
     let fixture = FixtureModel()
-    fixture.answer = [
-      ModelAnswerPart(kind: .prose, text: "You are reading two series and have two next reads."),
-      ModelAnswerPart(kind: .quote, text: "1. Frieren, volume 8"),
-    ]
-    let short = request(manga, .ask, "Summarize my reading list")
+    fixture.answer = ModelAnswer(
+      prose: "You are reading two series and have two next reads.",
+      quotes: ["1. Frieren, volume 8"])
+    let short = request(manga, "Summarize my reading list")
     let answer = try await Intelligence(backend: fixture).ask(short)
     #expect(answer.count == 2)
     #expect(fixture.passes.map(\.source) == [manga])
@@ -33,9 +32,9 @@ struct AskTests {
     let reader = FixtureModel()
     reader.contextSize = 1_536
     reader.excerpts = { $0.source.contains("needle") ? ["needle"] : [] }
-    reader.answer = [ModelAnswerPart(kind: .quote, text: "needle")]
+    reader.answer = ModelAnswer(prose: "", quotes: ["needle"])
     let found = try await Intelligence(backend: reader).ask(
-      request(long, .ask, "Find needle"))
+      request(long, "Find needle"))
     let reads = reader.passes.filter { $0.purpose == .extract }
     #expect(reads.map(\.source).joined().utf8.elementsEqual(long.utf8))
     #expect(reader.passes.filter { $0.purpose == .answer }.map(\.evidenceBlocks) == [["needle"]])
@@ -44,9 +43,9 @@ struct AskTests {
 
   @Test func aCitationCarriesTheExactPassageForShowInFile() async throws {
     let fixture = FixtureModel()
-    fixture.answer = [ModelAnswerPart(kind: .quote, text: "👩🏽‍💻")]
+    fixture.answer = ModelAnswer(prose: "", quotes: ["👩🏽‍💻"])
     let answer = try await Intelligence(backend: fixture).ask(
-      request("Hello 👩🏽‍💻\r\n", .ask, "Quote the emoji"))
+      request("Hello 👩🏽‍💻\r\n", "Quote the emoji"))
     #expect(
       answer == [.quotation("👩🏽‍💻", ranges: [NSRange(location: 6, length: "👩🏽‍💻".utf16.count)])])
 
@@ -55,7 +54,7 @@ struct AskTests {
     #expect(blocks.map(\.text).joined().utf8.elementsEqual(original.utf8))
     let parts = try OnDeviceModel.parseAnswer(
       "The second section answers.\n[Sources: 2]", blocks: blocks)
-    #expect(parts.last == ModelAnswerPart(kind: .quote, text: blocks[1].text))
+    #expect(parts.quotes == [blocks[1].text])
     let plain = try OnDeviceModel.parseAnswer(
       "The second section answers.\nSources: 2", blocks: blocks)
     #expect(plain == parts)
@@ -84,13 +83,11 @@ struct AskTests {
   @Test func answerStreamsProseBeforeVerifiedCitations() async throws {
     let fixture = FixtureModel()
     fixture.partialAnswers = ["Your", "Your note says"]
-    fixture.answer = [
-      ModelAnswerPart(kind: .prose, text: "Your note says the route is south."),
-      ModelAnswerPart(kind: .quote, text: "The route is south."),
-    ]
+    fixture.answer = ModelAnswer(
+      prose: "Your note says the route is south.", quotes: ["The route is south."])
     var updates: [String] = []
     let response = try await Intelligence(backend: fixture).ask(
-      request("The route is south.", .ask, "Which route?"),
+      request("The route is south.", "Which route?"),
       onPartialAnswer: { updates.append($0) })
     #expect(updates == ["", "Your", "Your note says"])
     #expect(response.count == 2)
@@ -104,10 +101,10 @@ struct AskTests {
   @Test func anUnverifiedSourceIDGetsOneCleanRetry() async throws {
     let fixture = FixtureModel()
     fixture.nextFailure = IntelligenceError.unverifiedQuotation
-    fixture.answer = [ModelAnswerPart(kind: .prose, text: "The route is south.")]
+    fixture.answer = ModelAnswer(prose: "The route is south.")
     var updates: [String] = []
     let answer = try await Intelligence(backend: fixture).ask(
-      request("The route is south.", .ask, "Which route?"),
+      request("The route is south.", "Which route?"),
       onPartialAnswer: { updates.append($0) })
     #expect(fixture.passes.map(\.purpose) == [.answer, .answer])
     #expect(updates == ["", "", "The route is south."])
@@ -118,8 +115,8 @@ struct AskTests {
     let prefix = "---\r\nprivate: A hidden fact 👩🏽‍💻\r\n---\r\n\r\n"
     let body = "# Content\r\n\r\nA visible fact 👩🏽‍💻.\r\n"
     let fixture = FixtureModel()
-    fixture.answer = [ModelAnswerPart(kind: .quote, text: "A visible fact 👩🏽‍💻.")]
-    let input = request(prefix + body, .ask, "What is visible?")
+    fixture.answer = ModelAnswer(prose: "", quotes: ["A visible fact 👩🏽‍💻."])
+    let input = request(prefix + body, "What is visible?")
     let answer = try await Intelligence(backend: fixture).ask(input)
     #expect(fixture.passes.map(\.source) == [body])
     #expect(
@@ -133,7 +130,7 @@ struct AskTests {
           ])
       ])
 
-    fixture.answer = [ModelAnswerPart(kind: .quote, text: "A hidden fact 👩🏽‍💻")]
+    fixture.answer = ModelAnswer(prose: "", quotes: ["A hidden fact 👩🏽‍💻"])
     await #expect(throws: IntelligenceError.unverifiedQuotation) {
       try await Intelligence(backend: fixture).ask(input)
     }
@@ -142,9 +139,9 @@ struct AskTests {
     let reader = FixtureModel()
     reader.contextSize = 1_536
     reader.excerpts = { $0.source.contains("needle") ? ["needle"] : [] }
-    reader.answer = [ModelAnswerPart(kind: .quote, text: "needle")]
+    reader.answer = ModelAnswer(prose: "", quotes: ["needle"])
     _ = try await Intelligence(backend: reader).ask(
-      request(prefix + longBody, .ask, "Find needle"))
+      request(prefix + longBody, "Find needle"))
     #expect(
       reader.passes.filter { $0.purpose == .extract }
         .map(\.source).joined().utf8.elementsEqual(longBody.utf8))
@@ -157,7 +154,7 @@ struct AskTests {
     await #expect(throws: IntelligenceError.noEvidence) {
       try await Intelligence(backend: fixture).ask(
         request(
-          String(repeating: manga + "\n\n", count: 20), .ask, "Summarize my reading list"))
+          String(repeating: manga + "\n\n", count: 20), "Summarize my reading list"))
     }
     #expect(!fixture.passes.contains { $0.purpose == .answer })
   }

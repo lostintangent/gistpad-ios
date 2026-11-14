@@ -19,26 +19,24 @@ package final class Intelligence {
     _ request: IntelligenceRequest,
     progress: @MainActor (IntelligenceProgress) -> Void = { _ in }
   ) async throws -> Review {
-    guard request.action == .edit else { throw IntelligenceError.invalidResponse }
-    return try await generate(request, progress: progress)
+    try validate(request)
+    return try await generate(request, purpose: .edit, progress: progress)
   }
 
   package func review(
     _ request: IntelligenceRequest,
     progress: @MainActor (IntelligenceProgress) -> Void = { _ in }
   ) async throws -> Review {
-    guard request.action == .review else { throw IntelligenceError.invalidResponse }
-    return try await generate(request, progress: progress)
+    try await generate(request, purpose: .review, progress: progress)
   }
 
   /// Review starts chunked; Edit starts with the whole body and splits only on context failure.
   private func generate(
-    _ request: IntelligenceRequest, progress: @MainActor (IntelligenceProgress) -> Void
+    _ request: IntelligenceRequest, purpose: ModelPass.Purpose,
+    progress: @MainActor (IntelligenceProgress) -> Void
   ) async throws -> Review {
-    try validate(request)
     try Task.checkCancellation()
     let model = try await backend.modelInfo()
-    let purpose: ModelPass.Purpose = request.action == .edit ? .edit : .review
     let chunks =
       purpose == .edit
       ? [content(in: request)]
@@ -50,13 +48,13 @@ package final class Intelligence {
       try Task.checkCancellation()
       progress(
         IntelligenceProgress(
-          phase: request.action == .edit ? .editing : .reviewing,
+          phase: purpose == .edit ? .editing : .reviewing,
           current: completed + 1, total: completed + pending.count + 1))
       do {
         let input = pass(
           request, purpose: purpose, source: chunk.source, model: model, scope: chunk.range)
         let operations: [ModelEdit]
-        if request.action == .edit {
+        if purpose == .edit {
           operations = try await backend.editOperations(for: input)
         } else {
           operations = try await backend.replacements(for: input).map(ModelEdit.replace)
@@ -65,13 +63,12 @@ package final class Intelligence {
         for operation in operations {
           switch operation {
           case .replace(let candidate):
-            if request.action == .edit, candidate.replacement == nil {
+            if purpose == .edit, candidate.replacement == nil {
               throw IntelligenceError.invalidResponse
             }
             candidates.append((candidate, chunk.range))
           case .setTaskStates(let ids, let isComplete):
-            guard request.action == .edit,
-              ids.map({ !$0.isEmpty && Set($0).count == $0.count }) ?? true
+            guard ids.map({ !$0.isEmpty && Set($0).count == $0.count }) ?? true
             else { throw IntelligenceError.invalidResponse }
             let selected =
               ids.map { identifiers in
@@ -149,19 +146,8 @@ package final class Intelligence {
                   reason: String(localized: "Add this task.", bundle: .module)),
                 NSRange(location: offset, length: 0)
               ))
-          case .rewrite(let revised):
-            guard request.action == .edit else { throw IntelligenceError.invalidResponse }
-            let start = min(
-              max(chunk.range.location, Syntax.contentStart(in: request.snapshot.source)),
-              NSMaxRange(chunk.range))
-            candidates += try Revision.candidates(
-              in: request.snapshot.source,
-              visible: NSRange(location: start, length: NSMaxRange(chunk.range) - start),
-              revised: revised)
           case .rewriteRegion(let relative, let revised):
-            guard request.action == .edit,
-              relative.location >= 0, relative.length > 0,
-              NSMaxRange(relative) <= chunk.range.length
+            guard relative.location >= 0, NSMaxRange(relative) <= chunk.range.length
             else { throw IntelligenceError.invalidResponse }
             candidates += try Revision.candidates(
               in: request.snapshot.source,
@@ -169,8 +155,7 @@ package final class Intelligence {
                 location: chunk.range.location + relative.location, length: relative.length),
               revised: revised)
           case .replaceRegion(let relative, let candidate):
-            guard request.action == .edit,
-              relative.location >= 0, relative.length > 0,
+            guard relative.location >= 0, relative.length > 0,
               NSMaxRange(relative) <= chunk.range.length,
               candidate.replacement != nil,
               candidate.quote.utf8.elementsEqual(
@@ -207,7 +192,6 @@ package final class Intelligence {
     progress: @MainActor (IntelligenceProgress) -> Void = { _ in },
     onPartialAnswer: @MainActor (String) -> Void = { _ in }
   ) async throws -> [AnswerPart] {
-    guard request.action == .ask else { throw IntelligenceError.invalidResponse }
     try validate(request)
     try Task.checkCancellation()
     let model = try await backend.modelInfo()
@@ -249,7 +233,7 @@ package final class Intelligence {
       input = try await combine(evidence, request: request, model: model, progress: progress)
     }
     progress(IntelligenceProgress(phase: .answering, current: 1, total: 1))
-    var generated: [ModelAnswerPart] = []
+    var generated = ModelAnswer(prose: "")
     for attempt in 1...2 {
       try Task.checkCancellation()
       onPartialAnswer("")
@@ -266,10 +250,9 @@ package final class Intelligence {
         )
         continue
       }
-      let prose = generated.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
       guard
         let issue = AnswerIssue.check(
-          prose, source: input.source, instruction: input.instruction)
+          generated.prose, source: input.source, instruction: input.instruction)
       else { break }
       logger.notice(
         "request=\(request.id.uuidString, privacy: .public) answerRejected=\(issue.rawValue, privacy: .public) attempt=\(attempt)"
@@ -277,22 +260,19 @@ package final class Intelligence {
       if attempt == 2 { throw IntelligenceError.invalidAnswer(issue) }
     }
     try Task.checkCancellation()
-    let visible = generated.filter {
-      !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-    guard !visible.isEmpty else { throw IntelligenceError.emptyAnswer }
-    return try visible.map { part -> AnswerPart in
-      switch part.kind {
-      case .prose: return .prose(part.text)
-      case .quote:
-        let bodyStart = Syntax.contentStart(in: request.snapshot.source)
-        let ranges = Anchors.matches(part.text, in: request.snapshot.source).filter {
+    let prose: [AnswerPart] =
+      generated.prose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      ? [] : [.prose(generated.prose)]
+    guard !prose.isEmpty || !generated.quotes.isEmpty else { throw IntelligenceError.emptyAnswer }
+    let bodyStart = Syntax.contentStart(in: request.snapshot.source)
+    return try prose
+      + generated.quotes.map { quote in
+        let ranges = Anchors.matches(quote, in: request.snapshot.source).filter {
           $0.location >= bodyStart
         }
         guard !ranges.isEmpty else { throw IntelligenceError.unverifiedQuotation }
-        return .quotation(part.text, ranges: ranges)
+        return .quotation(quote, ranges: ranges)
       }
-    }
   }
 
   private func combine(
@@ -318,10 +298,10 @@ package final class Intelligence {
           if !batch.isEmpty { batches.append(batch) }
           batch = []
           let snapshot = FileSnapshot(
-            fileID: request.snapshot.fileID, sessionID: request.snapshot.sessionID,
-            generation: request.snapshot.generation, source: excerpt)
+            sessionID: request.snapshot.sessionID, generation: request.snapshot.generation,
+            source: excerpt)
           let extraction = IntelligenceRequest(
-            snapshot: snapshot, action: .ask, instruction: request.instruction, id: request.id)
+            snapshot: snapshot, instruction: request.instruction, id: request.id)
           let parts = try await chunks(for: extraction, purpose: .extract, model: model)
           batches.append(contentsOf: parts.map { [$0.source] })
         }
@@ -463,9 +443,7 @@ package final class Intelligence {
   }
 
   private func validate(_ request: IntelligenceRequest) throws {
-    if request.action != .review
-      && request.instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    {
+    if request.instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       throw IntelligenceError.emptyInstruction
     }
   }

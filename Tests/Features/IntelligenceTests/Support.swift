@@ -3,13 +3,16 @@ import Foundation
 @testable import Intelligence
 
 func note(_ source: String) -> FileSnapshot {
-  FileSnapshot(parsing: source, fileID: "note.md", sessionID: UUID(), generation: 0)
+  FileSnapshot(parsing: source, sessionID: UUID(), generation: 0)
 }
 
-func request(
-  _ source: String, _ action: IntelligenceAction, _ instruction: String = ""
-) -> IntelligenceRequest {
-  IntelligenceRequest(snapshot: note(source), action: action, instruction: instruction)
+func request(_ source: String, _ instruction: String = "") -> IntelligenceRequest {
+  IntelligenceRequest(snapshot: note(source), instruction: instruction)
+}
+
+/// The model revising everything it was shown.
+func rewrite(_ revised: String) -> (ModelPass) -> [ModelEdit] {
+  { [.rewriteRegion(NSRange(location: 0, length: $0.source.utf16.count), revised: revised)] }
 }
 
 func change(_ quote: String, _ replacement: String?) -> ModelReplacement {
@@ -28,7 +31,6 @@ extension Review {
 
 extension FileSnapshot {
   func edited(to source: String) -> FileSnapshot {
-    FileSnapshot(
-      fileID: fileID, sessionID: sessionID, generation: generation + 1, source: source)
+    FileSnapshot(sessionID: sessionID, generation: generation + 1, source: source)
   }
 }

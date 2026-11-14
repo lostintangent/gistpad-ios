@@ -185,7 +185,7 @@ extension Review {
 
     func remainingReview(on snapshot: FileSnapshot) throws -> Review {
       let original = review.snapshot
-      guard snapshot.fileID == original.fileID, snapshot.sessionID == original.sessionID,
+      guard snapshot.sessionID == original.sessionID,
         snapshot.generation == original.generation &+ 1,
         snapshot.source.utf8.elementsEqual(source.utf8)
       else { throw IntelligenceError.staleSnapshot }

@@ -54,8 +54,8 @@ package final class OnDeviceModel: IntelligenceModel {
       if isRelocating(pass.instruction, in: pass.source) {
         let edits = try await editOperations(.text, for: pass)
         guard edits.count >= 2 || edits.contains(where: {
-          if case .rewrite = $0 { return true }
-          return false
+          guard case .rewriteRegion(let range, _) = $0 else { return false }
+          return range == NSRange(location: 0, length: pass.source.utf16.count)
         }) else { throw IntelligenceError.invalidEdit }
         return edits
       }
@@ -191,7 +191,8 @@ package final class OnDeviceModel: IntelligenceModel {
     if try await tokenCount(for: pass) >= pass.responseTokens {
       return try await sectionEdits(for: pass)
     }
-    return [.rewrite(try await revisedText(for: pass))]
+    let whole = NSRange(location: 0, length: pass.source.utf16.count)
+    return [.rewriteRegion(whole, revised: try await revisedText(for: pass))]
   }
 
   private func revisedText(for pass: ModelPass) async throws -> String {
@@ -760,7 +761,7 @@ package final class OnDeviceModel: IntelligenceModel {
 
   package func streamAnswer(
     for pass: ModelPass, onUpdate: @MainActor (String) -> Void
-  ) async throws -> [ModelAnswerPart] {
+  ) async throws -> ModelAnswer {
     try await perform(pass: pass) {
       let stream = Self.session(model: model, pass: pass).streamResponse(
         to: try Self.prompt(for: pass),
@@ -783,9 +784,7 @@ package final class OnDeviceModel: IntelligenceModel {
     }
   }
 
-  static func parseAnswer(_ content: String, blocks: [SourceBlock] = []) throws
-    -> [ModelAnswerPart]
-  {
+  static func parseAnswer(_ content: String, blocks: [SourceBlock] = []) throws -> ModelAnswer {
     let response = content.trimmingCharacters(in: .whitespacesAndNewlines)
     let marker = /(?i)(?:\n|[ \t]+)\[?sources:\s*([0-9]+(?:\s*,\s*[0-9]+)*)\]?\s*$/
     let match = response.firstMatch(of: marker)
@@ -814,9 +813,7 @@ package final class OnDeviceModel: IntelligenceModel {
     } else {
       ids = []
     }
-    let quotes = try SourceBlock.quotations(ids: ids, from: blocks)
-    return [ModelAnswerPart(kind: .prose, text: prose)]
-      + quotes.map { ModelAnswerPart(kind: .quote, text: $0) }
+    return ModelAnswer(prose: prose, quotes: try SourceBlock.quotations(ids: ids, from: blocks))
   }
 
   static func visibleAnswer(_ content: String) -> String {

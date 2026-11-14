@@ -12,10 +12,8 @@
     var delay: Duration?
     var failure: (any Error)?
     var nextFailure: (any Error)?
-    var answer = [
-      ModelAnswerPart(kind: .prose, text: "You leave at 9am, an hour after the cafe opens."),
-      ModelAnswerPart(kind: .quote, text: "Leave at 9am"),
-    ]
+    var answer = ModelAnswer(
+      prose: "You leave at 9am, an hour after the cafe opens.", quotes: ["Leave at 9am"])
     var partialAnswers: [String] = []
     var changes: (ModelPass) -> [ModelEdit] = { _ in
       [
@@ -60,10 +58,9 @@
 
     func streamAnswer(
       for pass: ModelPass, onUpdate: @MainActor (String) -> Void
-    ) async throws -> [ModelAnswerPart] {
+    ) async throws -> ModelAnswer {
       try await record(pass)
-      let prose = answer.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
-      for partial in partialAnswers.isEmpty ? [prose] : partialAnswers {
+      for partial in partialAnswers.isEmpty ? [answer.prose] : partialAnswers {
         onUpdate(partial)
       }
       return answer

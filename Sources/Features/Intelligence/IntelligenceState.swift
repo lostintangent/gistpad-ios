@@ -40,8 +40,7 @@
 
     var isStale: Bool {
       guard let snapshot else { return false }
-      return editor.id != snapshot.sessionID || editor.fileID != snapshot.fileID
-        || editor.generation != snapshot.generation
+      return editor.id != snapshot.sessionID || editor.generation != snapshot.generation
         || !editor.text.utf8.elementsEqual(snapshot.source.utf8)
     }
 
@@ -104,7 +103,7 @@
           let snapshot = try self.editor.snapshot()
           self.snapshot = snapshot
           let request = IntelligenceRequest(
-            snapshot: snapshot, action: selectedAction, instruction: instruction, id: requestID)
+            snapshot: snapshot, instruction: instruction, id: requestID)
           switch selectedAction {
           case .ask:
             self.answerParts = try await self.engine.ask(

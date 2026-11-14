@@ -27,10 +27,10 @@ struct AnswerIssueTests {
     prose: String, issue: AnswerIssue
   ) async {
     let fixture = FixtureModel()
-    fixture.answer = [ModelAnswerPart(kind: .prose, text: prose)]
+    fixture.answer = ModelAnswer(prose: prose)
     await #expect(throws: IntelligenceError.invalidAnswer(issue)) {
       try await Intelligence(backend: fixture).ask(
-        request(source, .ask, "What do I like?"))
+        request(source, "What do I like?"))
     }
   }
 
@@ -39,7 +39,7 @@ struct AnswerIssueTests {
     fixture.failure = IntelligenceError.responseTooLarge
     await #expect(throws: IntelligenceError.responseTooLarge) {
       try await Intelligence(backend: fixture).ask(
-        request(source, .ask, "What do I like?"))
+        request(source, "What do I like?"))
     }
     #expect(fixture.passes.map(\.purpose) == [.answer, .answer])
   }
