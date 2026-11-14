@@ -146,7 +146,7 @@ struct RootView: View {
       if horizontalSizeClass == .compact {
         comments.hide()
         model.showLibrary()
-        active?.editor.textView.resignFirstResponder()
+        active?.editor.endEditing()
       }
       if let outgoing = active { Task { await outgoing.leave() } }
     }
@@ -340,9 +340,7 @@ struct RootView: View {
   private func fileScreen(
     _ fileEditor: GistFileEditor, availableWidth: CGFloat
   ) -> some View {
-    let identifier = onScreenNote(for: fileEditor).map {
-      EntityIdentifier(for: GistEntity.self, identifier: $0.url.absoluteString)
-    }
+    let identifier = entityIdentifier(for: fileEditor)
     return gistScreen(fileEditor, availableWidth: availableWidth)
       .imagePicker(images)
       .userActivity("dev.gistpad.GistPad.note", isActive: identifier != nil) { activity in
@@ -352,13 +350,19 @@ struct RootView: View {
         activity.appEntityIdentifier = identifier
       }
       .onChange(of: identifier, initial: true) { _, value in
-        fileEditor.editor.textView.appEntityIdentifier = value
+        fileEditor.editor.entityIdentifier = value
         PlatformBridge.shared?.setVisibleNote(value?.identifier, fileEditor: fileEditor)
       }
       .onDisappear {
-        fileEditor.editor.textView.appEntityIdentifier = nil
+        fileEditor.editor.entityIdentifier = nil
         PlatformBridge.shared?.setVisibleNote(nil, fileEditor: fileEditor)
       }
+  }
+
+  private func entityIdentifier(for fileEditor: GistFileEditor) -> EntityIdentifier? {
+    onScreenNote(for: fileEditor).map {
+      EntityIdentifier(for: GistEntity.self, identifier: $0.url.absoluteString)
+    }
   }
 
   private func onScreenNote(for fileEditor: GistFileEditor) -> GistPadLink? {
@@ -401,7 +405,7 @@ struct RootView: View {
         if $0 == .edit {
           fileEditor.editor.requestFocusAtContentStart()
         } else if $0 == .preview {
-          fileEditor.editor.textView.resignFirstResponder()
+          fileEditor.editor.endEditing()
         }
       })
     var details = fileEditor.details
@@ -471,10 +475,7 @@ struct RootView: View {
   }
 
   private func preview(_ fileEditor: GistFileEditor) -> some View {
-    let identifier = onScreenNote(for: fileEditor).map {
-      EntityIdentifier(for: GistEntity.self, identifier: $0.url.absoluteString)
-    }
-    return FilePreview(
+    FilePreview(
       editor: fileEditor.editor, allowsMutations: fileEditor.details.isOwned,
       comments: commentConfiguration(fileEditor),
       commentActions: commentActions(fileEditor, origin: .preview),
@@ -488,7 +489,7 @@ struct RootView: View {
         }
       })
       .id(fileEditor.editor.id)
-      .appEntityIdentifier(identifier)
+      .appEntityIdentifier(entityIdentifier(for: fileEditor))
   }
 
   private func commentConfiguration(
@@ -658,41 +659,7 @@ struct RootView: View {
   }
 
   private func presentIntelligence(_ fileEditor: GistFileEditor) {
-    guard fileEditor.editor.isSettled else {
-      model.alertMessage = String(
-        localized: "Finish composition or Writing Tools before opening Intelligence.")
-      return
-    }
-    intelligence.present(
-      editor: fileEditor.editor, title: fileEditor.details.title,
-      revealSource: { range in
-        guard fileEditor.details.isOwned else {
-          model.alertMessage = String(
-            localized: "This gist is read-only, so the reference can't open in the editor.")
-          return
-        }
-        let generation = fileEditor.editor.generation
-        guard Range(range, in: fileEditor.editor.text) != nil else {
-          model.alertMessage = String(localized: "This reference no longer matches the file.")
-          return
-        }
-        layout.select(.edit)
-        fileEditor.mode = .edit
-        Task { @MainActor in
-          await Task.yield()
-          guard fileEditor.editor.generation == generation else {
-            model.alertMessage = String(localized: "This reference no longer matches the file.")
-            return
-          }
-          let view = fileEditor.editor.textView
-          view.selectedRange = range
-          view.layoutIfNeeded()
-          view.scrollRangeToVisible(range)
-          if !view.becomeFirstResponder() {
-            fileEditor.editor.inputError = String(localized: "Tap the file to resume writing.")
-          }
-        }
-      })
+    intelligence.present(fileEditor, model: model) { layout.select(.edit) }
   }
 
   private func rename(_ kind: RenameTarget.Kind, fileEditor: GistFileEditor) {

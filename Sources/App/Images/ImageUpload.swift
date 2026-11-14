@@ -33,7 +33,7 @@ final class ImageUpload {
   func chooseImage(for fileEditor: GistFileEditor) {
     guard canChooseImage(for: fileEditor) else { return }
     self.fileEditor = fileEditor
-    fileEditor.editor.textView.resignFirstResponder()
+    fileEditor.editor.endEditing()
     isShowingPicker = true
   }
 
@@ -66,7 +66,7 @@ final class ImageUpload {
       let editor = fileEditor.editor
       try editor.apply(
         Edit(
-          range: NSRange(location: NSMaxRange(editor.textView.selectedRange), length: 0), expected: "",
+          range: NSRange(location: NSMaxRange(editor.selection), length: 0), expected: "",
           replacement: markdown),
         generation: editor.generation)
     } catch {

@@ -78,9 +78,9 @@ final class CommentsPresentation {
     guard editorID == next.editor.id, Self.supports(next.file) else { return }
     let opening = !isPresented
     if opening {
-      returnsToEditing = next.editor.textView.isFirstResponder
-      if returnsToEditing { next.editor.textView.resignFirstResponder() }
-      fileMode = origin ?? (returnsToEditing || next.editor.isEditing ? .edit : next.mode)
+      returnsToEditing = next.editor.isEditing
+      next.editor.endEditing()
+      fileMode = origin ?? (returnsToEditing ? .edit : next.mode)
       if fileMode == .split { fileMode = .preview }
     } else if let origin {
       fileMode = origin
@@ -136,12 +136,7 @@ final class CommentsPresentation {
     }
     let resumesEditing = returnsToEditing
     returnsToEditing = false
-    guard resumesEditing, let fileEditor, fileEditor.editor.canFormat,
-      !fileEditor.editor.textView.isHidden, fileEditor.editor.textView.window != nil
-    else { return }
-    if !fileEditor.editor.textView.becomeFirstResponder() {
-      fileEditor.editor.inputError = String(localized: "Tap the file to resume writing.")
-    }
+    if resumesEditing { fileEditor?.editor.focus() }
   }
 
   func performAfterClosing(_ action: @escaping () -> Void) {

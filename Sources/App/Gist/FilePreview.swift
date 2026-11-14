@@ -16,7 +16,7 @@ struct FilePreview: View {
   var body: some View {
     ZStack {
       MarkdownPreviewView(
-        markdown: editor.text, fileID: editor.fileID,
+        markdown: editor.text, fileID: editor.id.uuidString,
         generation: editor.generation, allowsTaskEdits: allowsMutations,
         comments: comments, commentActions: commentActions, onEvent: handle
       )

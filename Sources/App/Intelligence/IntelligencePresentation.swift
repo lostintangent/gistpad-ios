@@ -1,5 +1,6 @@
 import Editor
 import Intelligence
+import Model
 import Observation
 import SwiftUI
 import UIKit
@@ -10,13 +11,48 @@ final class IntelligencePresentation {
   var target: Target?
   private var retainedTarget: Target?
 
+  /// Opens Intelligence on the file. A reference the sheet returns opens in the editor once it closes.
+  func present(
+    _ fileEditor: GistFileEditor, model: GistPadModel,
+    showEditor: @escaping @MainActor () -> Void
+  ) {
+    let editor = fileEditor.editor
+    guard editor.isSettled else {
+      model.alertMessage = String(
+        localized: "Finish composition or Writing Tools before opening Intelligence.")
+      return
+    }
+    present(editor: editor, title: fileEditor.details.title) { range in
+      guard fileEditor.details.isOwned else {
+        model.alertMessage = String(
+          localized: "This gist is read-only, so the reference can't open in the editor.")
+        return
+      }
+      let generation = editor.generation
+      guard Range(range, in: editor.text) != nil else {
+        model.alertMessage = String(localized: "This reference no longer matches the file.")
+        return
+      }
+      showEditor()
+      fileEditor.mode = .edit
+      Task { @MainActor in
+        await Task.yield()
+        guard editor.generation == generation else {
+          model.alertMessage = String(localized: "This reference no longer matches the file.")
+          return
+        }
+        editor.select(range)
+      }
+    }
+  }
+
   func present(
     editor: Editor, title: String,
     revealSource: @escaping @MainActor (NSRange) -> Void
   ) {
     let target = Target(editor: editor, title: title, revealSource: revealSource)
     retainedTarget = target
-    editor.textView.resignFirstResponder()
+    editor.endEditing()
     self.target = target
   }
 
@@ -27,13 +63,7 @@ final class IntelligencePresentation {
       target.revealSource(reference)
       return
     }
-    let editor = target.editor
-    let view = editor.textView
-    if target.wasEditing, editor.canFormat, view.window != nil {
-      if !view.becomeFirstResponder() {
-        editor.inputError = String(localized: "Tap the file to resume writing.")
-      }
-    }
+    if target.wasEditing { target.editor.focus() }
   }
 
   @MainActor
@@ -52,7 +82,7 @@ final class IntelligencePresentation {
       self.editor = editor
       self.title = title
       self.revealSource = revealSource
-      wasEditing = editor.textView.isFirstResponder
+      wasEditing = editor.isEditing
     }
   }
 }

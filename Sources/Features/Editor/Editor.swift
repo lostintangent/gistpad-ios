@@ -1,6 +1,7 @@
 #if canImport(UIKit)
   import Accessibility
   import Accent
+  import AppIntents
   import Comments
   import Observation
   import SwiftUI
@@ -129,9 +130,37 @@
       set { textView.spellCheckingType = newValue ? .yes : .no }
     }
 
-    /// Brings the keyboard back where the caret is, as after a lock lifts.
+    /// Brings the keyboard back where the caret is, as after a sheet closes or a lock lifts.
     public func focus() {
-      textView.becomeFirstResponder()
+      guard canFormat, !view.isHidden, view.window != nil else { return }
+      becomeFirstResponder()
+    }
+
+    /// Puts the keyboard away.
+    public func endEditing() {
+      view.resignFirstResponder()
+    }
+
+    public var selection: NSRange { view.selectedRange }
+
+    /// Selects `range` and brings it on screen, as when a citation or reference opens the note.
+    public func select(_ range: NSRange) {
+      view.selectedRange = range
+      view.layoutIfNeeded()
+      view.scrollRangeToVisible(range)
+      becomeFirstResponder()
+    }
+
+    /// The note Siri and Apple Intelligence see while you're in the editor.
+    public var entityIdentifier: EntityIdentifier? {
+      get { view.appEntityIdentifier }
+      set { view.appEntityIdentifier = newValue }
+    }
+
+    private func becomeFirstResponder() {
+      if !view.becomeFirstResponder() {
+        inputError = String(localized: "Tap the file to resume writing.", bundle: .module)
+      }
     }
 
     /// Keeps what the keyboard is composing as typed text, as leaving a note does in Notes.
