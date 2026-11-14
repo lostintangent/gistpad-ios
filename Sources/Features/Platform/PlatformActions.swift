@@ -12,3 +12,29 @@ public protocol PlatformActions: AnyObject, Sendable {
     func appendToNote(_ note: GistEntity, text: String) async throws -> GistEntity
     func updateNote(_ note: GistEntity, name: String?, isPinned: Bool?) async throws -> GistEntity
 }
+
+public enum PlatformError: LocalizedError, Equatable, Sendable {
+    case accountChanged
+    case editingInProgress
+    case emptyNoteText
+    case emptyNoteName
+    case unsupportedNoteCreation
+    case unsupportedNoteUpdate
+
+    public var errorDescription: String? {
+        switch self {
+        case .accountChanged:
+            String(localized: "Open GistPad and sign in to the account this action uses.")
+        case .editingInProgress:
+            String(localized: "Finish the current edit in GistPad, then try again.")
+        case .emptyNoteText:
+            String(localized: "Say or type something to add to this note.")
+        case .emptyNoteName:
+            String(localized: "Give the new note a name.")
+        case .unsupportedNoteCreation:
+            String(localized: "Siri can't create a pinned note, add attachments, or put it in an existing gist.")
+        case .unsupportedNoteUpdate:
+            String(localized: "Siri can't make that change to this gist. Open it in GistPad instead.")
+        }
+    }
+}

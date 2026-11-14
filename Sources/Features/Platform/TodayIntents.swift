@@ -43,4 +43,18 @@ public struct ShowAddToTodayIntent: AppIntent {
         return .result()
     }
 }
+
+public struct OpenTodayIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Open Today"
+    public static var supportedModes: IntentModes { .foreground(.immediate) }
+    public static var allowedExecutionTargets: IntentExecutionTargets { .main }
+    public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
+    public init() {}
+
+    @MainActor
+    public func perform() async throws -> some IntentResult {
+        PendingLink.shared.link = .today
+        return .result()
+    }
+}
 #endif
