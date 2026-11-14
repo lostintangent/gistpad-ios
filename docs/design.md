@@ -81,7 +81,7 @@ When one of these explains a problem, **GitHub needs attention** stays out of th
 
 ### Today and Comments buttons
 
-**Today** is a `calendar` toolbar toggle, tinted primary. It takes the system's on fill once today's note has a page, and a badge counting today's unfinished tasks, up to 99+. Zero or unknown shows no badge. VoiceOver says "Today, 3 unfinished tasks". **Comments** is the same kind of toggle with `text.bubble` and the comment count, filled while Comments is open. Both stay quiet: no accent, red or progress ring.
+**Today** is a `calendar` toolbar toggle, tinted primary. It takes the system's on fill once today's note has a page, and a badge counting today's unfinished tasks, up to 99+. Zero or unknown shows no badge. VoiceOver says "Today, 3 unfinished tasks". **Comments** is the same kind of toggle with `text.bubble` and the comment count, filled while Comments is open. Both stay quiet: no accent, red or progress ring. The count is our own small neutral badge, because on iOS 27.2 the system's toolbar `.badge` stays red even with `.badgeProminence(.decreased)`, and a toggle doesn't show it at all.
 
 ## The gist screen
 
