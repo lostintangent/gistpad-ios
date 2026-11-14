@@ -79,8 +79,8 @@ struct RootViewTests {
           #expect(rendered)
         } else {
           try await host.waitForKeyboard(visible: true)
-          let position = try #require(editor.selectedTextRange?.end)
-          let caret = editor.convert(editor.caretRect(for: position), to: host.window)
+          let caret = try host.caret(in: editor)
+          #expect(caret.maxY <= host.keyboardFrame.minY)
           let bar = try #require(host.descendants.compactMap { $0 as? UINavigationBar }.last)
           let top = bar.convert(bar.bounds, to: host.window).maxY
           #expect(editor.isFirstResponder)
@@ -113,6 +113,8 @@ struct RootViewTests {
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     #expect(host.editor(text: "")?.selectedRange == NSRange(location: 0, length: 0))
     try await host.waitForKeyboard(visible: true)
+    let blank = try #require(host.editor(text: ""))
+    #expect(try host.caret(in: blank).maxY <= host.keyboardFrame.minY)
     fixture.restore()
     host.pending.link = .gist(id: "kept", filename: nil)
     try await host.waitUntil {
@@ -125,6 +127,8 @@ struct RootViewTests {
     let second = try #require(host.model.activeEditor?.file.nextDraft)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     try await host.waitForKeyboard(visible: true)
+    let secondBlank = try #require(host.editor(text: ""))
+    #expect(try host.caret(in: secondBlank).maxY <= host.keyboardFrame.minY)
     host.returnToLibrary()
     try await host.waitUntil { host.isLibraryVisible && host.model.activeEditor == nil }
     let stored = try await fixture.store.drafts(accountID: fixture.account.id).map(\.id)
@@ -453,11 +457,19 @@ private struct NavigationHost {
       .contains(view.convert(view.bounds, to: window))
   }
 
-  private var keyboardFrame: CGRect {
+  var keyboardFrame: CGRect {
     guard let view = window.rootViewController?.view else { return .null }
     return view.convert(view.keyboardLayoutGuide.layoutFrame, to: window)
   }
 
+  func caret(in editor: UITextView) throws -> CGRect {
+    let position = try #require(editor.selectedTextRange?.end)
+    return editor.convert(editor.caretRect(for: position), to: window)
+  }
+
+  /// Waits for the keyboard to settle. The simulator's keyboard outlives each test and may be the
+  /// software keyboard, a hardware keyboard's bar, or placed beside a host narrower than the
+  /// scene, so tests check the caret against whichever frame settles.
   func waitForKeyboard(visible: Bool, resigning: Bool = false) async throws {
     let deadline = ContinuousClock.now.advanced(by: .seconds(5))
     var previous: CGRect?
@@ -466,10 +478,8 @@ private struct NavigationHost {
       if resigning { window.endEditing(true) }
       window.rootViewController?.view.layoutIfNeeded()
       let frame = keyboardFrame
-      let matches = visible
-        ? frame.height > 100
-          && window.bounds.insetBy(dx: -0.5, dy: -0.5).contains(frame)
-        : !frame.isNull && frame.height <= window.safeAreaInsets.bottom + 1
+      let isUp = frame.height > window.safeAreaInsets.bottom + 1
+      let matches = !frame.isNull && isUp == visible
       if matches {
         if previous == frame {
           if ContinuousClock.now - stableSince >= .milliseconds(350) { return }
