@@ -146,15 +146,12 @@ public struct GistScreen<Source: View, Preview: View>: View {
             Menu {
                 ControlGroup {
                     if let pin = actions.togglePin {
-                        Button(
-                            gist.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
-                            systemImage: gist.isPinned ? "pin.fill" : "pin", action: pin
-                        )
+                        Button(pinned: gist.isPinned, action: pin)
                     }
                     if let star = actions.toggleStar {
                         Button(
                             gist.isStarred ? String(localized: "Unstar", bundle: .module) : String(localized: "Star", bundle: .module),
-                            systemImage: gist.isStarred ? "star.fill" : "star", action: star
+                            systemImage: gist.isStarred ? "star.slash" : "star", action: star
                         )
                     }
                     if let url = gist.shareURL {
@@ -196,10 +193,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
                 }
                 if let archive = actions.toggleArchive {
                     Section {
-                        Button(
-                            gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
-                            systemImage: gist.isArchived ? "arrow.up.bin" : "archivebox", action: archive
-                        )
+                        Button(archived: gist.isArchived, action: archive)
                     }
                 }
                 if actions.delete != nil, gist.isOwned {

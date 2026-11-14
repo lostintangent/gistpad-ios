@@ -40,7 +40,6 @@ struct RenameSheet: View {
           Section {
             Label(error, systemImage: "exclamationmark.circle")
               .foregroundStyle(.primary)
-            Button("Try Again", action: commit)
           }
         }
       }

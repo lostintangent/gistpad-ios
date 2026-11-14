@@ -467,28 +467,14 @@ public struct LibraryView: View {
                 .tint(.red)
             }
             if gist.canPinAndArchive {
-                Button {
-                    actions.toggleArchive(gist.id)
-                } label: {
-                    Label(
-                        gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
-                        systemImage: gist.isArchived ? "arrow.up.bin" : "archivebox"
-                    )
-                }
-                .labelStyle(.iconOnly)
+                Button(archived: gist.isArchived) { actions.toggleArchive(gist.id) }
+                    .labelStyle(.iconOnly)
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             if gist.canPinAndArchive {
-                Button {
-                    actions.togglePin(gist.id)
-                } label: {
-                    Label(
-                        gist.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
-                        systemImage: gist.isPinned ? "pin.slash" : "pin"
-                    )
-                }
-                .labelStyle(.iconOnly)
+                Button(pinned: gist.isPinned) { actions.togglePin(gist.id) }
+                    .labelStyle(.iconOnly)
             }
         }
     }
@@ -501,14 +487,8 @@ public struct LibraryView: View {
             ) { actions.openComments(gist.id) }
         }
         if gist.canPinAndArchive {
-            Button(
-                gist.isPinned ? String(localized: "Unpin", bundle: .module) : String(localized: "Pin", bundle: .module),
-                systemImage: gist.isPinned ? "pin.slash" : "pin"
-            ) { actions.togglePin(gist.id) }
-            Button(
-                gist.isArchived ? String(localized: "Unarchive", bundle: .module) : String(localized: "Archive", bundle: .module),
-                systemImage: gist.isArchived ? "arrow.up.bin" : "archivebox"
-            ) { actions.toggleArchive(gist.id) }
+            Button(pinned: gist.isPinned) { actions.togglePin(gist.id) }
+            Button(archived: gist.isArchived) { actions.toggleArchive(gist.id) }
         }
         if gist.isOwned {
             Divider()

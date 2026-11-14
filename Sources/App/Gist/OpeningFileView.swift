@@ -6,36 +6,18 @@ import SwiftUI
 struct OpeningFileView: View {
   let gist: GistDetails
   var file: GistFile?
-  @State private var renderError: String?
-  @State private var reload = 0
   @State private var progressTitle: String?
 
   var body: some View {
     Group {
       if let file {
-        if let renderError {
-          ContentUnavailableView {
-            Label("Preview Unavailable", systemImage: "exclamationmark.circle")
-          } description: {
-            Text(renderError)
-          } actions: {
-            Button("Try Again") {
-              self.renderError = nil
-              reload += 1
-            }
-            .frame(minHeight: 44)
-          }
-        } else {
-          MarkdownPreviewView(
-            markdown: file.text, fileID: file.id.uuidString,
-            generation: 0, allowsTaskEdits: false
-          ) { event in
-            if case .failure(let failure) = event { renderError = failure.localizedDescription }
-          }
-          .id(reload)
-          .allowsHitTesting(false)
-          .accessibilityIdentifier("opening-cached-note")
-        }
+        // A failed render shows once the note opens, in its own Preview.
+        MarkdownPreviewView(
+          markdown: file.text, fileID: file.id.uuidString,
+          generation: 0, allowsTaskEdits: false
+        ) { _ in }
+        .allowsHitTesting(false)
+        .accessibilityIdentifier("opening-cached-note")
       } else {
         ZStack {
           if progressTitle == gist.title {
