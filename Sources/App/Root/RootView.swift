@@ -655,7 +655,7 @@ struct RootView: View {
   private func tagEditor(_ target: TagTarget) -> some View {
     TagEditor(
       gistID: target.gistID, tags: model.state.tags, selectedTagIDs: target.selected,
-      save: target.canEdit ? { try await model.updatePreferences($0) } : nil)
+      save: target.canEdit ? model.updatePreferences : nil)
   }
 
   /// Archiving is absolute, so its undo is the opposite archive, registered with the scene so
