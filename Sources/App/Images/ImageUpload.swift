@@ -56,7 +56,7 @@ final class ImageUpload {
     isUploading = true
     defer { isUploading = false }
     if fileEditor.file.gistID == nil { await fileEditor.publish() }
-    guard let gistID = fileEditor.file.gistID else {
+    guard fileEditor.file.gistID != nil else {
       failure = Failure(message: String(localized: "Publish this gist to upload the image."), image: image)
       return
     }

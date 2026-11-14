@@ -222,8 +222,7 @@ final class PlatformBridge: DailyNoteActions {
       let renames = name != nil && name != String(note.name.characters)
       let changesPin = isPinned != nil && isPinned != note.isPinned
       guard !(renames && changesPin) else { throw PlatformError.unsupportedNoteUpdate }
-      if renames {
-        guard let name else { throw PlatformError.unsupportedNoteUpdate }
+      if renames, let name {
         guard !name.isEmpty else { throw PlatformError.unsupportedNoteUpdate }
         switch note.link {
         case .gist(let id, nil):
@@ -237,8 +236,7 @@ final class PlatformBridge: DailyNoteActions {
           throw PlatformError.unsupportedNoteUpdate
         }
       }
-      if changesPin {
-        guard let isPinned else { throw PlatformError.unsupportedNoteUpdate }
+      if changesPin, let isPinned {
         guard case .gist(let id, _) = note.link else {
           throw PlatformError.unsupportedNoteUpdate
         }

@@ -106,19 +106,15 @@ public struct GistEntityQuery: EntityStringQuery {
     }
 
     public func suggestedEntities() async throws -> [GistEntity] {
-        try await Array(currentSnapshot()?.gists.prefix(12) ?? [])
+        try await Array(notesSnapshot(validating: dailyNotes)?.gists.prefix(12) ?? [])
     }
 
     public func entities(matching string: String) async throws -> [GistEntity] {
         let terms = string.split(whereSeparator: \.isWhitespace).map(String.init)
-        return try await currentSnapshot()?.gists.filter { gist in
+        return try await notesSnapshot(validating: dailyNotes)?.gists.filter { gist in
             let content = ([gist.title] + gist.tags).joined(separator: " ")
             return terms.allSatisfy { content.localizedStandardContains($0) }
         } ?? []
-    }
-
-    private func currentSnapshot() async throws -> LibrarySnapshot? {
-        try await notesSnapshot(validating: dailyNotes)
     }
 }
 
@@ -142,12 +138,12 @@ extension GistEntityQuery: IndexedEntityQuery {
     public func reindexEntities(
         for identifiers: [String], indexDescription: CSSearchableIndexDescription
     ) async throws {
-        let notes = try await currentSnapshot()?.gists.filter { identifiers.contains($0.id) } ?? []
-        try await GistSpotlightIndex.index.indexAppEntities(notes)
+        let notes = try await notesSnapshot(validating: dailyNotes)?.gists ?? []
+        try await GistSpotlightIndex.index.indexAppEntities(notes.filter { identifiers.contains($0.id) })
     }
 
     public func reindexAllEntities(indexDescription: CSSearchableIndexDescription) async throws {
-        try await GistSpotlightIndex.index.indexAppEntities(currentSnapshot()?.gists ?? [])
+        try await GistSpotlightIndex.index.indexAppEntities(notesSnapshot(validating: dailyNotes)?.gists ?? [])
     }
 
 }
