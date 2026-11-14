@@ -6,7 +6,7 @@
 - **Cache** is the phone's copy of GitHub: the gist list, plus the text of today's note and of each file you've opened.
 - **Draft** is one file's unpublished text, plus two more texts:
   - **base** is GitHub's text when you started typing. A new gist or a new day has none.
-  - **sent** is the text of a publish GitHub hasn't confirmed yet.
+  - **sent** is the text of a publish GitHub hasn't confirmed yet. Leaving the app publishes, and iOS can suspend GitHub's reply, so the next Publish recognizes sent as yours instead of calling it a conflict.
 
 ## Rules
 
