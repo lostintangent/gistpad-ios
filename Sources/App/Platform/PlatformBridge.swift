@@ -112,6 +112,17 @@ final class PlatformBridge: PlatformActions {
     indexInSpotlight(snapshot)
   }
 
+  /// Widgets and Spotlight show an accepted change before the intent returns, or soon after.
+  private func refreshNow() async {
+    do {
+      try await refresh()
+    } catch {
+      logger.error(
+        "Accepted change needs presentation refresh: \(String(reflecting: type(of: error)), privacy: .public)")
+      scheduleRefresh()
+    }
+  }
+
   nonisolated private static func noteBody(_ source: String) -> String {
     (source as NSString).substring(from: Syntax.contentStart(in: source))
   }
@@ -179,13 +190,7 @@ final class PlatformBridge: PlatformActions {
         throw PlatformError.accountChanged
       }
       let draft = try await self.model.createGist(named: name, text: content)
-      do {
-        try await self.refresh()
-      } catch {
-        self.logger.error(
-          "Created note needs presentation refresh: \(String(reflecting: type(of: error)), privacy: .public)")
-        self.scheduleRefresh()
-      }
+      await self.refreshNow()
       let link = GistPadLink.unpublishedGist(accountID: accountID, draftID: draft.id)
       guard let entity = try await self.noteEntities(for: [link.url.absoluteString]).first else {
         throw DraftError.notFound
@@ -205,10 +210,7 @@ final class PlatformBridge: PlatformActions {
       let addition = (draft.text.isEmpty || draft.text.last?.isNewline == true ? "" : newline)
         + text + (text.last?.isNewline == true ? "" : newline)
       try await self.apply(DraftEdit(draft: draft, text: addition))
-      guard let body = self.visibleBody(for: note, accountID: draft.accountID) else {
-        return note.withoutBody()
-      }
-      return note.withBody(body)
+      return note.withBody(self.visibleBody(for: note, accountID: draft.accountID))
     }
   }
 
@@ -242,13 +244,7 @@ final class PlatformBridge: PlatformActions {
         }
         try await model.updatePreferences([.setPinned(gistID: id, pinned: isPinned)])
       }
-      do {
-        try await self.refresh()
-      } catch {
-        self.logger.error(
-          "Updated note needs presentation refresh: \(String(reflecting: type(of: error)), privacy: .public)")
-        self.scheduleRefresh()
-      }
+      await self.refreshNow()
       return note.withMetadata(
         name: renames ? name : nil, isPinned: changesPin ? isPinned : nil)
     }
@@ -327,13 +323,7 @@ final class PlatformBridge: PlatformActions {
       try validateAccount(accountID)
       _ = try await model.apply(edit)
     }
-    do {
-      try await refresh()
-    } catch {
-      logger.error(
-        "Accepted system edit needs presentation refresh: \(String(reflecting: type(of: error)), privacy: .public)")
-      scheduleRefresh()
-    }
+    await refreshNow()
     if UIApplication.shared.applicationState != .active {
       let lease = BackgroundLease()
       defer { lease.end() }

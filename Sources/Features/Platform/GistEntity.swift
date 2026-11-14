@@ -9,15 +9,15 @@ import UniformTypeIdentifiers
 public struct GistEntity: Codable, Equatable, Identifiable, Sendable {
     public static let defaultQuery = GistEntityQuery()
     public var id: String { link.url.absoluteString }
-    let title: String
-    let excerpt: String?
+    var title: String
+    var excerpt: String?
     let tags: [String]
     let updatedAt: Date?
     public let link: GistPadLink
     public let accountID: UUID?
-    let folderName: String?
-    let body: String?
-    let pinned: Bool?
+    var folderName: String?
+    var body: String?
+    var pinned: Bool?
 
     public var name: AttributedString { AttributedString(title) }
     public var content: AttributedString? { body.map(AttributedString.init) }
@@ -36,23 +36,20 @@ public struct GistEntity: Codable, Equatable, Identifiable, Sendable {
             image: .init(systemName: "doc.text"))
     }
 
-    public func withBody(_ body: String) -> Self {
-        Self(
-            title: title, excerpt: LibrarySnapshot.excerpt(body), tags: tags, updatedAt: updatedAt,
-            link: link, accountID: accountID, folderName: folderName, body: body, pinned: pinned)
-    }
-
-    public func withoutBody() -> Self {
-        Self(
-            title: title, excerpt: excerpt, tags: tags, updatedAt: updatedAt,
-            link: link, accountID: accountID, folderName: folderName, body: nil, pinned: pinned)
+    /// A copy showing `body`, or no body when the open note's text isn't known.
+    public func withBody(_ body: String?) -> Self {
+        var entity = self
+        entity.body = body
+        if let body { entity.excerpt = LibrarySnapshot.excerpt(body) }
+        return entity
     }
 
     public func withMetadata(name: String?, isPinned: Bool?) -> Self {
-        Self(
-            title: name ?? title, excerpt: excerpt, tags: tags, updatedAt: updatedAt,
-            link: link, accountID: accountID, folderName: name ?? folderName, body: nil,
-            pinned: isPinned ?? pinned)
+        var entity = withBody(nil)
+        entity.title = name ?? title
+        entity.folderName = name ?? folderName
+        entity.pinned = isPinned ?? pinned
+        return entity
     }
 }
 
