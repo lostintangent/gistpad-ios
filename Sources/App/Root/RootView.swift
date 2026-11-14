@@ -4,7 +4,6 @@ import Editor
 import Screens
 import Model
 import Observation
-import OSLog
 import Platform
 import SwiftUI
 import Store
@@ -208,7 +207,7 @@ struct RootView: View {
       switch sheet {
       case .settings: settingsSheet
       case .addToToday: AddToTodaySheet()
-      case .tags(let target): tagEditor(target)
+      case .tags(let target): TagEditor(target, model: model)
       case .rename(let target): renameSheet(target)
       case .review(let target):
         ConflictReview(fileEditor: target.fileEditor, review: target.review)
@@ -481,14 +480,7 @@ struct RootView: View {
     actions.reconnect = { Task { await model.reconnect() } }
     if let gistID = fileEditor.file.gist?.id {
       actions.selectFile = { open(gistID: gistID, filename: $0) }
-      actions.tags = {
-        sheet = .tags(
-          TagTarget(
-            accountID: fileEditor.file.accountID, gistID: gistID,
-            selected: Set(model.account?.preferences.gistTags[gistID] ?? []),
-            canEdit: model.account?.id == fileEditor.file.accountID
-              && model.phase.switchingTo == nil && !fileEditor.file.isDeletedOnGitHub))
-      }
+      actions.tags = { sheet = .tags(TagTarget(fileEditor, gistID: gistID, model: model)) }
       if !fileEditor.file.isDeletedOnGitHub {
         actions.togglePin = {
           let pinned = !fileEditor.details.isPinned
@@ -564,12 +556,6 @@ struct RootView: View {
         try await model.addFile(named: value, to: gistID)
       }
     }
-  }
-
-  private func tagEditor(_ target: TagTarget) -> some View {
-    TagEditor(
-      gistID: target.gistID, tags: model.state.tags, selectedTagIDs: target.selected,
-      save: target.canEdit ? model.updatePreferences : nil)
   }
 
   /// Archiving is absolute, so its undo is the opposite archive, registered with the scene so
@@ -659,41 +645,5 @@ struct RootView: View {
       lease.end()
     }
     lease.onExpiration = { publishing.cancel() }
-  }
-}
-
-@MainActor
-final class BackgroundLease {
-  private var identifier = UIBackgroundTaskIdentifier.invalid
-  private var expired = false
-  var onExpiration: (() -> Void)?
-
-  var isActive: Bool { !expired && identifier != .invalid }
-
-  init() {
-    identifier = UIApplication.shared.beginBackgroundTask(
-      withName: "Publish changes"
-    ) {
-      [weak self] in
-      Task { @MainActor in
-        Logger(subsystem: "dev.gistpad.GistPad", category: "Library")
-          .info("Background publish time expired. Local drafts are retained.")
-        self?.expire()
-      }
-    }
-  }
-
-  func expire() {
-    guard !expired else { return }
-    expired = true
-    onExpiration?()
-    end()
-  }
-
-  func end() {
-    onExpiration = nil
-    guard identifier != .invalid else { return }
-    UIApplication.shared.endBackgroundTask(identifier)
-    identifier = .invalid
   }
 }

@@ -98,11 +98,3 @@ struct RenameTarget: Identifiable {
     }
   }
 }
-
-struct TagTarget: Identifiable {
-  var id: String { "\(accountID.uuidString)/\(gistID)" }
-  let accountID: UUID
-  let gistID: String
-  let selected: Set<String>
-  let canEdit: Bool
-}
