@@ -141,26 +141,26 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 
 | Folder | What it does |
 |---|---|
-| `Sources/App/Root` | `GistPadApp` and `RootView`, which starts the `GistPadModel` and shows the library and the open file. |
-| `Sources/App/Gist` | Preview hosting, the opening placeholder, renaming and conflict review. |
+| `Sources/App/Root` | `GistPadApp` and `RootView`, which starts the `GistPadModel` and shows the library and the open file, with the layout preferences and the background time that lets a publish finish. |
+| `Sources/App/Gist` | Preview hosting, the opening placeholder and conflict review. |
 | `Sources/App/DailyNotes` | The Add to Today sheet. |
-| `Sources/App/Comments` | The comments inspector and the services behind `CommentsModel`. |
+| `Sources/App/Comments` | `CommentsPresentation`, the comments inspector with its conversation and composer, and the services behind `CommentsModel`. |
+| `Sources/App/Tags` | Presents the tag editor for the open gist. |
 | `Sources/App/Intelligence` | Presents the Intelligence sheet. |
 | `Sources/App/Images` | The image picker and upload. |
-| `Sources/App/Settings` | Settings, account switching and layout preferences. |
 | `Sources/App/Platform` | `PlatformBridge` and App Shortcuts, which connect the model to intents, widgets and Spotlight. |
 | `Sources/App/Captures` | DEBUG fixture launch arguments and the fixture library. |
 | `Sources/Extensions/Widgets` | The GistPad widgets and the Add to Today, Open Today and New Gist controls. |
 | `Sources/Features/Editor` | `Editor` and its TextKit 2 text view, `EditorView`, `KeyboardBar`, formatting, smart typing, highlighting, front matter and comment highlights. |
-| `Sources/Features/Intelligence` | The Ask, Edit and Review sheet and the on-device model. |
+| `Sources/Features/Intelligence` | The Ask, Edit and Review sheet and the on-device model, foldered as `Ask`, `Edit` and `Review`, the `Model` they share and the `Sheet`. |
 | `Sources/Features/Model` | `GistPadModel`, `GistFile` and `GistFileEditor`: the account, the list, the files you've opened and every verb, one file per scenario. |
-| `Sources/Features/Screens` | `LibraryView`, `GistScreen`, comments, tags, the Today button and the GitHub status control. |
-| `Sources/Features/Platform` | App Intents, Spotlight, the widget view and `gistpad://` links. |
+| `Sources/Features/Screens` | The views, foldered by capability: `Library` with the Today button, `Gist` with renaming, `Tags`, and `Settings` with account switching. The GitHub status control and toolbar toggles both screens use stay at the root. |
+| `Sources/Features/Platform` | App Intents and Siri's notes schema, Spotlight, the widget view and `gistpad://` links, a file for each system surface. |
 | `Sources/Features/Preview` | The offline WebKit Markdown preview and its bridge. |
-| `Sources/Shared/Accent` | The personal accent color, its trait and the `isPaneVisible` environment value. |
-| `Sources/Shared/Comments` | Comment bodies, threads, quote matching and `CommentsModel`. |
+| `Sources/Shared/Appearance` | The personal accent color, its trait and `.accent(savedHex:)` modifier, and the `isPaneVisible` environment value. |
+| `Sources/Shared/Comments` | Comment bodies, threads, quotes and their highlights, and `CommentsModel`. |
 | `Sources/Shared/Store` | The nouns and where they're kept: gists, the GitHub client, drafts, the cache, the account and its preferences, photo storage and the DEBUG fixture GitHub. |
-| `Tests/App` | App-hosted tests, in folders that mirror `Sources/App`. |
+| `Tests/App` | App-hosted tests, foldered by the capability they cover. |
 | `Tests/UI` | UI tests for the Library, a gist, daily notes and comments. |
 | `scripts` | Developer tools: `capture-matrix.sh`, `evaluate-intelligence.sh`, which runs the on-device Intelligence eval, the root package's `IntelligenceEval` target in `intelligence-eval`, and `preview-renderer`, which builds Preview's web bundle from the sibling `gistpad.dev` checkout into `Sources/Features/Preview`. |
 | `Configuration` | `Public.xcconfig`. |
