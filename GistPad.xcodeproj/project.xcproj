@@ -14,12 +14,6 @@
     {
       "kind": "local",
       "path": ".",
-    }, {
-      "kind": "remote",
-      "repository": "https://github.com/supabase/supabase-swift.git",
-      "version": {
-        "version": "2.55.4",
-      },
     },
   ],
   "files": [
@@ -180,49 +174,6 @@
         "compile-sources",
         "frameworks",
         "resources",
-      ],
-      "package-product-members": [
-        {
-          "package": ".",
-          "product-name": "Appearance",
-          "build-phase": { "build-phase": "frameworks" },
-        }, {
-          "package": ".",
-          "product-name": "Comments",
-          "build-phase": { "build-phase": "frameworks" },
-        }, {
-          "package": ".",
-          "product-name": "Editor",
-          "build-phase": { "build-phase": "frameworks" },
-        }, {
-          "package": ".",
-          "product-name": "Intelligence",
-          "build-phase": { "build-phase": "frameworks" },
-        }, {
-          "package": ".",
-          "product-name": "Model",
-          "build-phase": { "build-phase": "frameworks" },
-        }, {
-          "package": ".",
-          "product-name": "Platform",
-          "build-phase": { "build-phase": "frameworks" },
-        }, {
-          "package": ".",
-          "product-name": "Preview",
-          "build-phase": { "build-phase": "frameworks" },
-        }, {
-          "package": ".",
-          "product-name": "Screens",
-          "build-phase": { "build-phase": "frameworks" },
-        }, {
-          "package": ".",
-          "product-name": "Store",
-          "build-phase": { "build-phase": "frameworks" },
-        }, {
-          "package": "supabase-swift",
-          "product-name": "Auth",
-          "build-phase": { "build-phase": "frameworks" },
-        },
       ],
       "build-settings": {
         "BUNDLE_LOADER": "$(TEST_HOST)",

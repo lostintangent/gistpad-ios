@@ -110,7 +110,6 @@ xcodebuild -workspace GistPad.xcworkspace -scheme GistPad \
 - Preserve unknown Supabase metadata fields and value shapes, so the web app keeps working.
 - Sign-in redirects to `gistpad://auth-callback`, which is already configured in Supabase.
 - The key in `Configuration/Public.xcconfig` is the same one gistpad.dev ships in `src/shared/supabase.ts`. If it ever changes, copy the new one in by hand.
-- Supabase is pinned to one exact version in `Package.swift` and in the Xcode project, because `GistPadTests` links `Auth` directly. Change both together.
 
 ## Captures
 
@@ -121,8 +120,6 @@ xcodebuild -workspace GistPad.xcworkspace -scheme GistPad \
   scripts/capture-matrix.sh --name shape-split \
     -- --fixture standard --open shape --mode split
   ```
-
-- Widget and control taps in UI tests need a plain `xcodebuild build` after `build-for-testing` and before `test-without-building`. `build-for-testing` links the modules as shared frameworks, and the system then fails every widget intent with "There is no metadata for … Intent". Shipping builds link them statically. Don't do this before app-hosted tests: the plain build gives the app its own copy of every module, so `GistPadTests` then sees two of each type and singleton.
 
 ## Module map
 

@@ -72,5 +72,3 @@ stripping, and the widget's recent gists counting your unpublished edits.
 create and append on open and closed files, metadata updates, and photo upload
 at the cursor. Installed widgets, Control Center, Siri on the phone, Spotlight
 launches and provisioning need device checks.
-Widget and control intents only run from a plain build. `build-for-testing` links
-the packages as shared frameworks, which the system can't find intents in.
