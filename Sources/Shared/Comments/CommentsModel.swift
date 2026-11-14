@@ -121,7 +121,10 @@ public final class CommentsModel {
     }
 
     private func create(_ body: String) async throws {
-        comments?.append(try await remote.createComment(gistID: gistID, body: body))
+        // Awaiting inside `comments?.append(…)` would hold the observed mutation open across the
+        // request, so views would re-read the old comments and miss the new one.
+        let created = try await remote.createComment(gistID: gistID, body: body)
+        comments?.append(created)
     }
 
     private func finishEditing() {
