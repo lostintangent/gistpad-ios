@@ -62,11 +62,7 @@ struct RootView: View {
     Group {
       if model.account == nil {
         NavigationStack {
-          LibraryView(
-            state: model.state, actions: libraryActions, isSidebar: horizontalSizeClass == .regular,
-            isSignedOut: isSignedOut, isLoading: isLoadingLibrary,
-            status: model.remoteRefreshStatus,
-            expandedSections: librarySections, isPinnedExpanded: pinnedExpanded)
+          library
         }
       } else {
         splitView
@@ -79,17 +75,20 @@ struct RootView: View {
 
   private var isLoadingLibrary: Bool { model.phase == .loading || model.phase == .refreshing }
 
+  private var library: some View {
+    LibraryView(
+      state: model.state, actions: libraryActions, isSidebar: horizontalSizeClass == .regular,
+      isSignedOut: isSignedOut, isLoading: isLoadingLibrary, status: model.remoteRefreshStatus,
+      expandedSections: librarySections, isPinnedExpanded: pinnedExpanded
+    )
+    .id(model.account?.id)
+  }
+
   private var splitView: some View {
     NavigationSplitView(
       columnVisibility: $columnVisibility, preferredCompactColumn: $compactColumn
     ) {
-      LibraryView(
-        state: model.state, actions: libraryActions,
-        isSidebar: horizontalSizeClass == .regular,
-        isSignedOut: isSignedOut, isLoading: isLoadingLibrary, status: model.remoteRefreshStatus,
-        expandedSections: librarySections,
-        isPinnedExpanded: pinnedExpanded)
-        .id(model.account?.id)
+      library
     } detail: {
       NavigationStack {
         GeometryReader { geometry in
@@ -212,7 +211,7 @@ struct RootView: View {
       case .settings: settingsSheet
       case .addToToday: AddToTodaySheet()
       case .tags(let target): tagEditor(target)
-      case .name(let target): nameEditor(target)
+      case .rename(let target): renameSheet(target)
       case .review(let target):
         ConflictReview(fileEditor: target.fileEditor, review: target.review)
       }
@@ -223,7 +222,7 @@ struct RootView: View {
   private enum Sheet: Identifiable {
     case settings, addToToday
     case tags(TagTarget)
-    case name(RenameTarget)
+    case rename(RenameTarget)
     case review(ConflictTarget)
 
     var id: String {
@@ -231,7 +230,7 @@ struct RootView: View {
       case .settings: "settings"
       case .addToToday: "addToToday"
       case .tags(let target): "tags/\(target.id)"
-      case .name(let target): "name/\(target.id)"
+      case .rename(let target): "rename/\(target.id)"
       case .review(let target): "review/\(target.id)"
       }
     }
@@ -246,14 +245,7 @@ struct RootView: View {
       },
       connect: {
         sheet = nil
-        Task {
-          await model.signIn()
-          if model.account?.id == active?.file.accountID,
-            model.phase == .ready, model.problem == nil
-          {
-            await active?.publish()
-          }
-        }
+        Task { await model.reconnect() }
       },
       signOut: { try await model.signOut() }
     ) {
@@ -294,22 +286,14 @@ struct RootView: View {
       openRequestedComments()
     }
     actions.account = { sheet = .settings }
-    let reconnect: @MainActor () -> Void = {
-      Task {
-        await model.signIn()
-        if model.account?.id == active?.file.accountID,
-          model.phase == .ready, model.problem == nil
-        {
-          await active?.publish()
-        }
-      }
-    }
-    actions.reconnect = reconnect
+    actions.reconnect = { Task { await model.reconnect() } }
     actions.recoverStatus = {
-      if model.problem == .reconnect {
-        reconnect()
-      } else {
-        Task { await model.refresh() }
+      Task {
+        if model.problem == .reconnect {
+          await model.reconnect()
+        } else {
+          await model.refresh()
+        }
       }
     }
     actions.togglePin = { rowID in
@@ -421,7 +405,8 @@ struct RootView: View {
       EditorView(
         editor: fileEditor.editor, title: details.title,
         insertImage: images.canChooseImage(for: fileEditor)
-          ? { comments.performAfterClosing { images.chooseImage(for: fileEditor) } } : nil,
+          ? { @MainActor in comments.performAfterClosing { images.chooseImage(for: fileEditor) } }
+          : nil,
         intelligence: { comments.performAfterClosing { presentIntelligence(fileEditor) } },
         comments: commentConfiguration(fileEditor),
         commentActions: commentActions(fileEditor, origin: .edit))
@@ -436,13 +421,7 @@ struct RootView: View {
             state: fileEditor.remoteInspectionStatus
           ) {
             Task {
-              if fileEditor.remoteInspectionProblem == .reconnect {
-                await model.signIn()
-                guard model.account?.id == fileEditor.file.accountID,
-                  model.phase.switchingTo == nil
-                else { return }
-                await fileEditor.publish()
-              }
+              if fileEditor.remoteInspectionProblem == .reconnect { await model.reconnect() }
               await fileEditor.inspectRemoteChanges()
             }
           }
@@ -563,16 +542,7 @@ struct RootView: View {
       guard let review = fileEditor.file.draft, review.conflict != nil else { return }
       sheet = .review(.init(fileEditor: fileEditor, review: review))
     }
-    actions.reconnect = {
-      Task {
-        await model.signIn()
-        if model.account?.id == fileEditor.file.accountID,
-          model.phase == .ready, model.problem == nil
-        {
-          await fileEditor.publish()
-        }
-      }
-    }
+    actions.reconnect = { Task { await model.reconnect() } }
     if let gistID = fileEditor.file.gist?.id {
       actions.selectFile = { open(gistID: gistID, filename: $0) }
       actions.tags = {
@@ -663,21 +633,12 @@ struct RootView: View {
   }
 
   private func rename(_ kind: RenameTarget.Kind, fileEditor: GistFileEditor) {
-    sheet = .name(
+    sheet = .rename(
       RenameTarget(draft: fileEditor.file.nextDraft, title: fileEditor.details.title, kind: kind))
   }
 
-  private func nameEditor(_ target: RenameTarget) -> some View {
-    RenameSheet(
-      title: target.kind == .title
-        ? String(localized: "Rename Gist")
-        : (target.kind == .filename
-          ? String(localized: "Rename File") : String(localized: "Add File")),
-      fieldTitle: target.kind == .title ? String(localized: "Name") : String(localized: "Filename"),
-      initialValue: target.kind == .title
-        ? target.title : (target.kind == .filename ? target.draft.filename : ""),
-      isFilename: target.kind != .title
-    ) { value in
+  private func renameSheet(_ target: RenameTarget) -> some View {
+    RenameSheet(target) { value in
       let draft = target.draft
       switch target.kind {
       case .title:

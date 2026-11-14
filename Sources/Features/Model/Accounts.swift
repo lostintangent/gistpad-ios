@@ -86,6 +86,16 @@ extension GistPadModel {
     }
   }
 
+  /// Signs in again after GitHub refused the session, then publishes the open file if it's this
+  /// account's, so the edits that waited go out.
+  public func reconnect() async {
+    await signIn()
+    guard let activeEditor, account?.id == activeEditor.file.accountID, phase == .ready,
+      problem == nil
+    else { return }
+    await activeEditor.publish()
+  }
+
   /// Switches to the account that just signed in, once every open file is saved on this iPhone.
   public func switchAccount() async throws {
     guard let pendingAccount = phase.switchingTo else { return }

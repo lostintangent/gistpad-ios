@@ -2,9 +2,7 @@ import Store
 import SwiftUI
 
 struct RenameSheet: View {
-  let title: String
-  let fieldTitle: String
-  let isFilename: Bool
+  let target: RenameTarget
   let save: @MainActor (String) async throws -> Void
   @State private var value: String
   @State private var isSaving = false
@@ -12,22 +10,20 @@ struct RenameSheet: View {
   @FocusState private var isFocused: Bool
   @Environment(\.dismiss) private var dismiss
 
-  init(
-    title: String, fieldTitle: String, initialValue: String, isFilename: Bool = false,
-    save: @escaping @MainActor (String) async throws -> Void
-  ) {
-    self.title = title
-    self.fieldTitle = fieldTitle
-    self.isFilename = isFilename
+  init(_ target: RenameTarget, save: @escaping @MainActor (String) async throws -> Void) {
+    self.target = target
     self.save = save
-    _value = State(initialValue: initialValue)
+    _value = State(initialValue: target.initialValue)
   }
+
+  private var isFilename: Bool { target.kind != .title }
 
   var body: some View {
     NavigationStack {
       Form {
         Section {
-          TextField(fieldTitle, text: $value)
+          TextField(
+            isFilename ? String(localized: "Filename") : String(localized: "Name"), text: $value)
             .textInputAutocapitalization(isFilename ? .never : .sentences)
             .autocorrectionDisabled(isFilename)
             .focused($isFocused)
@@ -43,7 +39,7 @@ struct RenameSheet: View {
           }
         }
       }
-      .navigationTitle(title)
+      .navigationTitle(target.heading)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -85,6 +81,22 @@ struct RenameTarget: Identifiable {
   let draft: GistFileDraft
   let title: String
   let kind: Kind
+
+  var heading: String {
+    switch kind {
+    case .title: String(localized: "Rename Gist")
+    case .filename: String(localized: "Rename File")
+    case .addFile: String(localized: "Add File")
+    }
+  }
+
+  var initialValue: String {
+    switch kind {
+    case .title: title
+    case .filename: draft.filename
+    case .addFile: ""
+    }
+  }
 }
 
 struct TagTarget: Identifiable {
