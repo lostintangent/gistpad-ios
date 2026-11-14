@@ -648,15 +648,10 @@ package final class OnDeviceModel: IntelligenceModel {
       for try await snapshot in stream {
         try Task.checkCancellation()
         latest = snapshot.content
-        if #available(iOS 27, macOS 27, watchOS 27, visionOS 27, *),
-          snapshot.usage.output.totalTokenCount >= pass.responseTokens
-        {
+        guard snapshot.usage.output.totalTokenCount < pass.responseTokens else {
           throw IntelligenceError.responseTooLarge
         }
         onUpdate(Self.visibleAnswer(latest))
-      }
-      guard try await model.tokenCount(for: latest) < pass.responseTokens else {
-        throw IntelligenceError.responseTooLarge
       }
       return try Self.parseAnswer(latest, blocks: Self.blocks(for: pass))
     }
@@ -906,20 +901,6 @@ package final class OnDeviceModel: IntelligenceModel {
         Reading order and volume counts do not measure preference.
         """
         : ""
-      let comparison =
-        ["higher", "lower", "compare", "versus"].contains(where: { question.contains($0) })
-        ? """
-
-        Compare only the candidates named in the question, not the global #1.
-        """
-        : ""
-      let nameOnly = question.contains("name only")
-        ? """
-
-        The entire answer must be the exact requested name. No "you", "ranked",
-        comparison, punctuation, preface or explanation in the prose.
-        """
-        : "\nAddress the reader as you/your."
       let summary =
         question.contains("summary") || question.contains("summarize")
         ? """
@@ -939,7 +920,7 @@ package final class OnDeviceModel: IntelligenceModel {
         If the evidence cannot answer, explain the limit instead of guessing.
         Finish with [Sources: 1, 2] on its own line, using up to three supporting
         block IDs. Omit it if none support the answer. Never put IDs in prose.
-        """ + preference + comparison + nameOnly + summary
+        """ + preference + "\nAddress the reader as you/your." + summary
     case .extract:
       let preference = asksForFavorite(pass.instruction)
         ? """
