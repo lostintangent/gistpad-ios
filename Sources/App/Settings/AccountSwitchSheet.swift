@@ -1,4 +1,3 @@
-import Screens
 import SwiftUI
 
 struct AccountSwitchSheet: View {

@@ -340,10 +340,6 @@ public struct LibraryView: View {
         }
     }
 
-    private var statusProblem: GitHubStatusProblem? {
-        isSearchPresented ? nil : status
-    }
-
     private var searchScope: some View {
         Section {
             HStack(alignment: .center, spacing: 12) {
@@ -528,10 +524,10 @@ public struct LibraryView: View {
         if !isSignedOut {
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             if !isSearchPresented {
-                if let statusProblem {
+                if let status {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
                     ToolbarItem(placement: .bottomBar) {
-                        GitHubStatusControl(state: .problem(statusProblem), recover: actions.recoverStatus)
+                        GitHubStatusControl(state: .problem(status), recover: actions.recoverStatus)
                     }
                     .axisBehavior(.verticalPreferred)
                     .sharedBackgroundVisibility(.hidden)

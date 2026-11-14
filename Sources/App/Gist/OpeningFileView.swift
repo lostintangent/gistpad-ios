@@ -1,7 +1,6 @@
 import Screens
 import Model
 import Preview
-import OSLog
 import SwiftUI
 
 struct OpeningFileView: View {
@@ -54,15 +53,9 @@ struct OpeningFileView: View {
     .task(id: file == nil ? gist.title : nil) {
       progressTitle = nil
       guard file == nil else { return }
-      do {
-        try await Task.sleep(for: .milliseconds(350))
-        progressTitle = gist.title
-      } catch is CancellationError {
-        return
-      } catch {
-        Logger(subsystem: "dev.gistpad.GistPad", category: "Opening")
-          .error("The opening progress delay failed: \(error.localizedDescription, privacy: .public)")
-      }
+      try? await Task.sleep(for: .milliseconds(350))
+      guard !Task.isCancelled else { return }
+      progressTitle = gist.title
     }
   }
 }

@@ -2,18 +2,6 @@
 import Store
 import SwiftUI
 
-private struct TaskCompletionMark: View {
-    let size: CGFloat
-
-    var body: some View {
-        Image(systemName: "checkmark.circle.fill")
-            .font(.system(size: size))
-            .foregroundStyle(.green)
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
-    }
-}
-
 struct TaskProgressLabel: View {
     let progress: TaskProgress
     var isOverdue = false
@@ -24,7 +12,11 @@ struct TaskProgressLabel: View {
     var body: some View {
         HStack(spacing: spacing) {
             if progress.remaining == 0 {
-                TaskCompletionMark(size: ringSize)
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: ringSize))
+                    .foregroundStyle(.green)
+                    .frame(width: ringSize, height: ringSize)
+                    .accessibilityHidden(true)
             } else {
                 ZStack {
                     Circle().strokeBorder(Color(uiColor: .separator), lineWidth: 2)

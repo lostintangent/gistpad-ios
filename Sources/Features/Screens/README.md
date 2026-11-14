@@ -75,5 +75,5 @@ and `scripts/capture-matrix.sh` captures them for Designer's review.
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-  swift test --filter InterfaceTests
+  swift test --filter ScreensTests
 ```

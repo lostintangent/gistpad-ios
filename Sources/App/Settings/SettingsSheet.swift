@@ -1,4 +1,3 @@
-import Screens
 import Store
 import SwiftUI
 
@@ -66,8 +65,6 @@ struct SettingsSheet<Appearance: View>: View {
               .accessibilityIdentifier("settings-front-matter")
           }
           Section("Appearance") { appearance() }
-        }
-        if account != nil {
           Section {
             Button("Switch GitHub Account", action: connect)
               .accessibilityIdentifier("settings-switch-account")
