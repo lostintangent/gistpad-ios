@@ -63,12 +63,14 @@ The machine overloads, so the whole channel shares one simulator and one heavy j
 
 ## Building and testing
 
-Everything here except package tests needs the slot. Use a `-derivedDataPath` inside your worktree. `DEVICE_ID` is the slot simulator's ID above.
+Everything here except `swift test` needs the slot. Use a `-derivedDataPath` inside your worktree. `DEVICE_ID` is the slot simulator's ID above.
+
+`GistPad.xcworkspace` holds the project and the root package, because a project alone can't run its own package's tests. Open it in Xcode, and pass `-workspace GistPad.xcworkspace` to every `xcodebuild`.
 
 **Build and run** on the booted slot simulator. The build is also the typecheck.
 
 ```sh
-xcodebuild -project GistPad.xcodeproj -scheme GistPad \
+xcodebuild -workspace GistPad.xcworkspace -scheme GistPad \
   -configuration Debug -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO build
 xcrun simctl install booted DerivedData/Build/Products/Debug-iphonesimulator/GistPad.app
@@ -77,26 +79,18 @@ xcrun simctl launch booted dev.gistpad.GistPad
 
 Debug builds take fixture launch arguments, such as `--fixture standard --open shape --mode split`. A fixture runs against an in-memory GitHub, with no account. `docs/capture-matrix.md` is the contract for these flags.
 
-**Package tests** run on macOS from the repo root and don't need the slot. `swift test` runs every module's tests. Add `--filter EditorTests` to run one module's.
+There are two test commands.
+
+**`swift test`** runs every module's package tests on macOS from the repo root, without the slot. Add `--filter EditorTests` to run one module's. Tests that need UIKit, in Editor, Intelligence, Preview and Screens, compile only for iOS, so it skips them.
 
 ```sh
 swift test
 ```
 
-Package tests that need UIKit, in Editor, Intelligence, Preview and Screens, compile only for iOS, so `swift test` skips them. They run on the slot simulator through the package's own `GistPad-Package` scheme, which `-workspace .` opens:
+**The simulator suite** runs the app tests, the UI tests and those iOS package tests in one command on the slot simulator. Add `-only-testing:` with `GistPadTests`, `GistPadUITests` or a package test target such as `EditorTests` to run one. Leave signing on, because the app group comes from the signed entitlements and `PlatformTests` fail without it.
 
 ```sh
-xcodebuild -workspace . -scheme GistPad-Package \
-  -destination 'platform=iOS Simulator,id=DEVICE_ID' \
-  -derivedDataPath DerivedData/Package \
-  -only-testing:EditorTests -only-testing:IntelligenceTests \
-  -only-testing:PreviewTests -only-testing:ScreensTests test
-```
-
-**App and UI tests** run on the slot simulator. Add `-only-testing:GistPadTests` or `-only-testing:GistPadUITests` to run one target. Leave signing on, because the app group comes from the signed entitlements and `PlatformTests` fail without it.
-
-```sh
-xcodebuild -project GistPad.xcodeproj -scheme GistPad \
+xcodebuild -workspace GistPad.xcworkspace -scheme GistPad \
   -destination 'platform=iOS Simulator,id=DEVICE_ID' \
   -derivedDataPath DerivedData -parallel-testing-enabled NO test
 ```
@@ -107,7 +101,7 @@ xcodebuild -project GistPad.xcodeproj -scheme GistPad \
 - The Intelligence eval runs synthetic notes, and live gists you name, through the on-device model on the Mac: `bash scripts/evaluate-intelligence.sh 10`. See `scripts/intelligence-eval/README.md`.
 - `scripts/preview-renderer` builds Preview's web bundle from the sibling `gistpad.dev` checkout and has its own typecheck, tests and build. See its README.
 - The project file is `GistPad.xcodeproj/project.xcproj`, Xcode 27's JSON format. Change settings with `xcrun xcodeproj` rather than by hand. The build number is set once for the whole project and committed with each build: `xcrun xcodeproj setting set CURRENT_PROJECT_VERSION <build>`.
-- Device builds use Release, `generic/platform=iOS`, team `RHFNBL7EG4` and `-allowProvisioningUpdates`. Install with `xcrun devicectl device install app --device 00008160-00041D6C0A200036 <path to GistPad.app>`. The bundle ID is `dev.gistpad.GistPad`.
+- Device builds use the workspace, Release, `generic/platform=iOS`, team `RHFNBL7EG4` and `-allowProvisioningUpdates`. Install with `xcrun devicectl device install app --device 00008160-00041D6C0A200036 <path to GistPad.app>`. The bundle ID is `dev.gistpad.GistPad`.
 
 ## Data and secrets
 

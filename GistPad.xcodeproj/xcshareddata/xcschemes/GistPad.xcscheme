@@ -15,9 +15,25 @@
       <TestableReference skipped="NO" parallelizable="NO">
         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="F80000000000000000000020" BuildableName="GistPadUITests.xctest" BlueprintName="GistPadUITests" ReferencedContainer="container:GistPad.xcodeproj"/>
       </TestableReference>
+      <TestableReference skipped="NO">
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="EditorTests" BuildableName="EditorTests" BlueprintName="EditorTests" ReferencedContainer="container:"/>
+      </TestableReference>
+      <TestableReference skipped="NO">
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="IntelligenceTests" BuildableName="IntelligenceTests" BlueprintName="IntelligenceTests" ReferencedContainer="container:"/>
+      </TestableReference>
+      <TestableReference skipped="NO">
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="PreviewTests" BuildableName="PreviewTests" BlueprintName="PreviewTests" ReferencedContainer="container:"/>
+      </TestableReference>
+      <TestableReference skipped="NO">
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ScreensTests" BuildableName="ScreensTests" BlueprintName="ScreensTests" ReferencedContainer="container:"/>
+      </TestableReference>
     </Testables>
+    <MacroExpansion>
+      <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A00000000000000000000020" BuildableName="GistPad.app" BlueprintName="GistPad" ReferencedContainer="container:GistPad.xcodeproj"/>
+    </MacroExpansion>
     <EnvironmentVariables>
       <EnvironmentVariable key="GISTPAD_TESTING" value="1" isEnabled="YES"/>
+      <EnvironmentVariable key="PACKAGE_RESOURCE_BUNDLE_PATH" value="$(BUILT_PRODUCTS_DIR)" isEnabled="YES"/>
     </EnvironmentVariables>
   </TestAction>
   <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" debugServiceExtension="internal" allowLocationSimulation="YES">

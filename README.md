@@ -16,6 +16,6 @@ A native iPhone app for [GistPad](https://gistpad.dev), the notebook that keeps 
 ## Developing
 
 1. Install Xcode 27.2 with the iOS 27.2 SDK, and Node.js.
-2. Open `GistPad.xcodeproj` and run the GistPad scheme on an iPhone or simulator running iOS 27.2 or later.
+2. Open `GistPad.xcworkspace` and run the GistPad scheme on an iPhone or simulator running iOS 27.2 or later.
 
 See [AGENTS.md](AGENTS.md) for building, testing, the module map and how a change ships. [docs/design.md](docs/design.md) is the design spec and [docs/sync.md](docs/sync.md) is the sync contract.
