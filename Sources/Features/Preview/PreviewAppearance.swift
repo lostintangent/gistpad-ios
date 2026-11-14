@@ -9,9 +9,9 @@ struct PreviewAppearance: Equatable {
     let colorScheme: String
 
     @MainActor
-    init(traits: UITraitCollection, boldText: Bool? = nil) {
+    init(traits: UITraitCollection, boldText: Bool) {
         increasedContrast = traits.accessibilityContrast == .high
-        self.boldText = boldText ?? UIAccessibility.isBoldTextEnabled
+        self.boldText = boldText
         let dark = traits.userInterfaceStyle == .dark
         colorScheme = dark ? "dark" : "light"
         let accent = traits[AccentTrait.self].roles(traits: traits)
@@ -56,7 +56,6 @@ struct PreviewAppearance: Equatable {
             values["--gp-\(name)-size"] = "\(font.pointSize)px"
             values["--gp-\(name)-line-height"] = "\(font.lineHeight)px"
         }
-        values["--gp-code-size"] = values["--gp-body-size"]
         variables = values
     }
 

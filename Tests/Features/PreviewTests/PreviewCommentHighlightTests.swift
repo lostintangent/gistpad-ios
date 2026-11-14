@@ -6,7 +6,7 @@ struct PreviewCommentHighlightTests {
     @Test func catalogKeepsLongNodesIntactAndUsesUTF16() throws {
         let text = "🫧 " + String(repeating: "native ", count: 4_000)
         let catalog: PreviewCommentCatalog = try PreviewBridge.decode([
-            "documentID": "comments-fixture", "generation": 1, "segments": [text, "One separate node"]
+            "fileID": "comments-fixture", "generation": 1, "segments": [text, "One separate node"]
         ])
         #expect(catalog.segments == [text, "One separate node"])
         #expect(catalog.segments[0].utf16.count == 28_003)

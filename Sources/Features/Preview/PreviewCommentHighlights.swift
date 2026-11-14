@@ -11,7 +11,7 @@ struct PreviewCommentSelection: Decodable {
 
 enum PreviewCommentActivation {
     private struct Envelope: Decodable {
-        let documentID: String
+        let fileID: String
         let generation: UInt64
         let segment: Int
         let start: Int
@@ -22,7 +22,7 @@ enum PreviewCommentActivation {
         _ value: Any, file: PreviewFile, highlights: [CommentQuoteHighlight]
     ) throws -> [Int64] {
         let message: Envelope = try PreviewBridge.decode(value)
-        guard message.documentID == file.id, message.generation == file.generation,
+        guard message.fileID == file.id, message.generation == file.generation,
               let highlight = highlights.first(where: {
                   $0.segment == message.segment && $0.start == message.start && $0.end == message.end
               }) else { throw PreviewBridge.invalidMessage }

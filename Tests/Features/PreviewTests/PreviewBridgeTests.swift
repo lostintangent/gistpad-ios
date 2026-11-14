@@ -12,7 +12,7 @@ struct PreviewBridgeTests {
 
     private func toggle(at location: Int, expected: String, replacement: String) -> [String: Any] {
         [
-            "type": "taskToggle", "documentID": "fixture", "generation": 7,
+            "type": "taskToggle", "fileID": "fixture", "generation": 7,
             "edit": ["location": location, "length": 3, "expectedMarker": expected, "replacementMarker": replacement]
         ]
     }
@@ -42,7 +42,7 @@ struct PreviewBridgeTests {
     @Test("Only approved external URL schemes are accepted")
     func links() throws {
         func link(_ target: String) -> [String: Any] {
-            ["type": "link", "documentID": "fixture", "generation": 7, "kind": "external", "target": target]
+            ["type": "link", "fileID": "fixture", "generation": 7, "kind": "external", "target": target]
         }
         for target in ["javascript:alert(1)", "file:///private/a", "https://user:secret@example.com", "data:text/html,hello", ""] {
             #expect(throws: PreviewFailure.self) { try PreviewBridge.decode(link(target), file: file()) }

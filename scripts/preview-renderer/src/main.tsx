@@ -31,7 +31,7 @@ window.gistpadPreview = Object.freeze({
       window.webkit?.messageHandlers?.gistpadComments?.postMessage(message));
     root.render(
       <QueryClientProvider client={queryClient}>
-        <PreviewErrorBoundary key={request.documentID} request={request}>
+        <PreviewErrorBoundary key={request.fileID} request={request}>
           <Preview request={request} comments={comments} />
         </PreviewErrorBoundary>
       </QueryClientProvider>,

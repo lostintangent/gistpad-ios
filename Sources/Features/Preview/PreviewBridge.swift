@@ -6,15 +6,15 @@ struct PreviewFile: Equatable, Sendable {
     let generation: UInt64
     let allowsTaskEdits: Bool
 
-    /// The renderer's protocol names the file's ID `documentID`.
     var arguments: [String: Any] {
-        ["documentID": id, "generation": generation, "markdown": text, "allowsTaskEdits": allowsTaskEdits]
+        ["fileID": id, "generation": generation, "markdown": text, "allowsTaskEdits": allowsTaskEdits]
     }
 }
 
 enum PreviewBridge {
     enum Message: Equatable {
         case ready
+        case rendered
         case event(PreviewEvent)
     }
 
@@ -26,7 +26,7 @@ enum PreviewBridge {
             let replacementMarker: String
         }
         let type: String
-        let documentID: String?
+        let fileID: String?
         let generation: UInt64?
         let edit: Edit?
         let kind: String?
@@ -45,13 +45,12 @@ enum PreviewBridge {
     static func decode(_ body: Any, file: PreviewFile) throws -> Message? {
         let message: Envelope = try decode(body)
         if message.type == "ready" { return .ready }
-        guard message.documentID == file.id, message.generation == file.generation else { return nil }
+        guard message.fileID == file.id, message.generation == file.generation else { return nil }
         switch message.type {
         case "taskToggle":
             guard file.allowsTaskEdits else { return nil }
             guard let edit = message.edit else { throw invalidMessage }
             let task = TaskToggleEdit(
-                fileID: file.id,
                 generation: file.generation,
                 range: NSRange(location: edit.location, length: edit.length),
                 expectedMarker: edit.expectedMarker,
@@ -71,11 +70,9 @@ enum PreviewBridge {
                     throw invalidMessage
                 }
             }
-            return .event(.linkTapped(PreviewLink(
-                fileID: file.id, generation: file.generation, kind: kind, target: target
-            )))
+            return .event(.linkTapped(PreviewLink(kind: kind, target: target)))
         case "rendered":
-            return .event(.rendered(fileID: file.id, generation: file.generation))
+            return .rendered
         case "failure":
             return .event(.failure(PreviewFailure(message.message ?? "The preview couldn't be rendered.")))
         default:

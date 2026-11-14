@@ -12,7 +12,7 @@ import rehypeToc from "@gistpad/rehype-toc";
 import Mermaid from "../../../../gistpad.dev/src/features/markdown/Mermaid";
 import { taskRangePlugins } from "./tasks";
 import { toString } from "hast-util-to-string";
-import type { PreviewMessage, RenderRequest, TaskEdit } from "./protocol";
+import { identity, type PreviewMessage, type RenderRequest, type TaskEdit } from "./protocol";
 import { CommentText, type CommentHighlightController } from "./commentHighlights";
 
 const emojis = new Map(
@@ -110,15 +110,11 @@ export class PreviewErrorBoundary extends Component<
   }
 }
 
-export function identity(request: RenderRequest) {
-  return { documentID: request.documentID, generation: request.generation };
-}
-
 export function Preview({ request, comments }: { request: RenderRequest; comments: CommentHighlightController }) {
   const taskPlugins = useMemo(() => taskRangePlugins(request.markdown), [request]);
-  const contents = useRef({ documentID: request.documentID, open: false });
-  if (contents.current.documentID !== request.documentID) {
-    contents.current = { documentID: request.documentID, open: false };
+  const contents = useRef({ fileID: request.fileID, open: false });
+  if (contents.current.fileID !== request.fileID) {
+    contents.current = { fileID: request.fileID, open: false };
   }
   const components = useMemo<Components>(() => {
     const link = (kind: "external" | "wikilink" | "anchor", target: string) => {

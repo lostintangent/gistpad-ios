@@ -27,7 +27,6 @@
   --gp-headline-line-height: 22px;
   --gp-footnote-size: 13px;
   --gp-footnote-line-height: 18px;
-  --gp-code-size: 17px;
   --background: var(--gp-page);
   --foreground: var(--gp-text);
   --muted: var(--gp-surface);
@@ -58,7 +57,7 @@ p { margin-block: 1.25em; }
 .prose a { color: var(--primary); text-decoration: underline; }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
-pre, code { font: var(--gp-code-size) ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--gp-syntax-code); direction: ltr; unicode-bidi: isolate; }
+pre, code { font: var(--gp-body-size) ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--gp-syntax-code); direction: ltr; unicode-bidi: isolate; }
 pre { background: var(--muted); padding: 14px; border-radius: 12px; white-space: pre; overflow-x: auto; overflow-wrap: normal; }
 blockquote { border-inline-start: 3px solid var(--border); padding-inline-start: 16px; margin-inline: 0; color: var(--foreground); }
 ul, ol { margin-block: 1.25em; padding-inline-start: 1.625em; }

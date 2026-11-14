@@ -1,25 +1,10 @@
 import Foundation
 
 public struct TaskToggleEdit: Equatable, Sendable {
-    public let fileID: String
     public let generation: UInt64
     public let range: NSRange
     public let expectedMarker: String
     public let replacementMarker: String
-
-    public init(
-        fileID: String,
-        generation: UInt64,
-        range: NSRange,
-        expectedMarker: String,
-        replacementMarker: String
-    ) {
-        self.fileID = fileID
-        self.generation = generation
-        self.range = range
-        self.expectedMarker = expectedMarker
-        self.replacementMarker = replacementMarker
-    }
 
     /// The web view is the untrusted side, so a toggle may only flip one task marker in the current text.
     func isValid(in text: String) -> Bool {
@@ -38,8 +23,6 @@ public struct PreviewLink: Equatable, Sendable {
         case anchor
     }
 
-    public let fileID: String
-    public let generation: UInt64
     public let kind: Kind
     public let target: String
 }
@@ -60,6 +43,5 @@ public struct PreviewFailure: LocalizedError, Equatable, Sendable {
 public enum PreviewEvent: Equatable, Sendable {
     case taskToggle(TaskToggleEdit)
     case linkTapped(PreviewLink)
-    case rendered(fileID: String, generation: UInt64)
     case failure(PreviewFailure)
 }

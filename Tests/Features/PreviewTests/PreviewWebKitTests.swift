@@ -104,7 +104,7 @@ struct PreviewWebKitTests {
         try await waitFor("wikilink message") { receiver.bodies.contains { $0["kind"] as? String == "wikilink" } }
         let wikilink = try #require(receiver.bodies.last { $0["kind"] as? String == "wikilink" })
         #expect(try PreviewBridge.decode(wikilink, file: editable) == .event(.linkTapped(PreviewLink(
-            fileID: editable.id, generation: editable.generation, kind: .wikilink, target: "Ideas"))))
+            kind: .wikilink, target: "Ideas"))))
         #expect(!receiver.bodies.contains { $0["type"] as? String == "failure" })
     }
 
@@ -144,12 +144,11 @@ struct PreviewWebKitTests {
             window.rootViewController = nil
         }
         try await waitFor("long native reading document") {
-            events.contains {
-                if case .rendered(fileID: "reading-resize", generation: 0) = $0 { return true }
-                return false
-            }
+            (findWebView(in: controller.view)?.scrollView.contentSize.height ?? 0) > 4_000
         }
         let webView = try #require(findWebView(in: controller.view))
+        // Let the preview's own initial scroll to the top land first.
+        try await settle(webView)
         webView.scrollView.setContentOffset(CGPoint(x: 0, y: 2_500), animated: false)
         _ = try await webView.callAsyncJavaScript(
             """

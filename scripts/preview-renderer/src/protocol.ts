@@ -1,8 +1,14 @@
 export interface RenderRequest {
-  documentID: string;
+  fileID: string;
   generation: number;
   markdown: string;
   allowsTaskEdits: boolean;
+}
+
+export type Identity = Pick<RenderRequest, "fileID" | "generation">;
+
+export function identity(request: RenderRequest): Identity {
+  return { fileID: request.fileID, generation: request.generation };
 }
 
 export interface TaskEdit {
@@ -14,7 +20,7 @@ export interface TaskEdit {
 
 export type PreviewMessage =
   | { type: "ready" }
-  | (Pick<RenderRequest, "documentID" | "generation"> &
+  | (Identity &
       (
         | { type: "taskToggle"; edit: TaskEdit }
         | { type: "link"; kind: "external" | "wikilink" | "anchor"; target: string }

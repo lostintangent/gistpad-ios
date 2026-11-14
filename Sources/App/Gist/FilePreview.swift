@@ -56,8 +56,6 @@ struct FilePreview: View {
       }
     case .failure(let failure):
       renderError = failure.localizedDescription
-    case .rendered:
-      break
     }
   }
 }

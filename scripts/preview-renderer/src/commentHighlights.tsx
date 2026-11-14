@@ -1,10 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import type { Element as HASTElement, Root } from "hast";
-import type { RenderRequest } from "./protocol";
+import { identity, type Identity, type RenderRequest } from "./protocol";
 import { contrastRatio, type RGB } from "./appearance";
 
-type Identity = Pick<RenderRequest, "documentID" | "generation">;
 export interface CommentThreadActivation extends Identity {
   type: "commentActivate";
   segment: number;
@@ -40,10 +39,6 @@ export class CommentHighlightController {
       highlights: [], selectedCommentID: null, revealRevision: 0,
       showsInlineComments: true, allowsInteraction: false, accent: "#0EA5E9",
     };
-  }
-
-  private identity(): Identity {
-    return { documentID: this.request.documentID, generation: this.request.generation };
   }
 
   readonly subscribe = (listener: () => void) => {
@@ -86,7 +81,7 @@ export class CommentHighlightController {
 
   catalog() {
     if (!this.segments) throw new Error("The preview has not finished rendering.");
-    return { ...this.identity(), segments: this.segments.slice() };
+    return { ...identity(this.request), segments: this.segments.slice() };
   }
 
   selection() {
@@ -98,7 +93,7 @@ export class CommentHighlightController {
     const quote = selection && selection.rangeCount === 1 && !selection.isCollapsed &&
       belongs(selection.anchorNode) && belongs(selection.focusNode)
       ? selection.toString() : null;
-    return { ...this.identity(), quote };
+    return { ...identity(this.request), quote };
   }
 
   setHighlights(state: HighlightState) {
@@ -115,7 +110,7 @@ export class CommentHighlightController {
   open(highlight: Highlight) {
     if (!this.state.allowsInteraction || !this.state.highlights.includes(highlight)) return;
     this.activate({
-      ...this.identity(), type: "commentActivate",
+      ...identity(this.request), type: "commentActivate",
       segment: highlight.segment, start: highlight.start, end: highlight.end,
     });
   }

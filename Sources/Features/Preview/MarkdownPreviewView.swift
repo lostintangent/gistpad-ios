@@ -190,9 +190,10 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                     ready = true
                     update(file)
                 case .event(let event):
-                    guard case .rendered = event, needsInitialScroll else {
-                        if case .rendered = event { commentHighlights.rendered(file) }
-                        onEvent(event)
+                    onEvent(event)
+                case .rendered:
+                    guard needsInitialScroll else {
+                        commentHighlights.rendered(file)
                         return
                     }
                     let rendered = file
@@ -210,7 +211,6 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                             self.needsInitialScroll = false
                         }
                         self.commentHighlights.rendered(rendered)
-                        self.onEvent(event)
                     }
                 case nil:
                     Logger.preview.debug("Dropped a preview message for an older generation.")
