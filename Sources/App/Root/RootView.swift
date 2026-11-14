@@ -93,17 +93,13 @@ struct RootView: View {
       NavigationStack {
         GeometryReader { geometry in
           if let opening = model.opening, let failure = opening.failure {
-            OpenFailedView(gist: openingDetails(title: opening.title), message: failure) {
+            OpenFailedView(gist: opening.details, message: failure) {
               Task { await model.open(opening.request) }
             }
+          } else if let opening = model.opening {
+            OpeningFileView(gist: opening.details).id(opening.rowID)
           } else if let active {
             fileScreen(active, availableWidth: geometry.size.width)
-          } else if let file = model.visibleFile {
-            OpeningFileView(gist: model.details(for: file), file: file)
-              .id(file.id)
-          } else if let title = model.openingTitle {
-            OpeningFileView(gist: openingDetails(title: title))
-              .id(model.opening?.rowID ?? model.state.selectedID)
           }
         }
         .libraryRail(
@@ -128,9 +124,9 @@ struct RootView: View {
     .onChange(of: pending.link) { presentFixtureSheet() }
     #endif
     .background {
-      // Keyed by activation instead of onChange, because SwiftUI drops onChange actions past a
-      // few per frame. A launch link can restore today, open, and present a new note in one.
-      Color.clear.onAppear(perform: didActivate).id(active?.activationID)
+      // Keyed by the active editor instead of onChange, because SwiftUI drops onChange actions
+      // past a few per frame. A launch link can restore today, open, and present a new note in one.
+      Color.clear.onAppear(perform: didActivate).id(active?.editor.id)
     }
     .onChange(of: active?.file.id) { previous, _ in
       if let previous, let outgoing = model.editors[previous] {
@@ -154,9 +150,11 @@ struct RootView: View {
   /// Prepares a file as it comes into the detail column.
   private func didActivate() {
     guard let active else { return }
-    active.mode = layout.initialMode(isUnpublished: active.file.isNew)
+    // A new gist or day already asked for the caret, so it stays in Edit.
+    if !active.editor.isEditing, !active.editor.isFocusPending {
+      active.mode = layout.initialMode(isUnpublished: active.file.isNew)
+    }
     comments.activate(active)
-    active.requestCreationFocus()
     openRequestedComments()
     // A completed restoration must not reopen detail after returning to Library.
     if model.state.selectedID != nil, active.revealsDetail {
@@ -169,7 +167,7 @@ struct RootView: View {
 
   /// Opens the comments a library row asked for, once its file is the active one.
   private func openRequestedComments() {
-    guard let active, comments.requestedRowID == model.loadedRowID,
+    guard let active, comments.requestedRowID == model.state.selectedID,
       comments.editorID == active.editor.id
     else { return }
     comments.requestedRowID = nil
@@ -539,28 +537,6 @@ struct RootView: View {
     Task { await model.open(.gist(id: gistID, filename: filename)) }
   }
 
-  /// What a note on its way will show once it's open, from its row and the gist this iPhone
-  /// has, so the bar doesn't change when it arrives.
-  private func openingDetails(title: String) -> GistDetails {
-    let opening = model.opening
-    let row = model.state.gists.first { $0.id == (opening?.rowID ?? model.state.selectedID) }
-    var gistID = row.map { $0.gistID ?? $0.id }
-    var isDailyNote = row?.isDailyNote ?? false
-    switch opening?.request {
-    case .gist(let id, _, _): gistID = id
-    case .today: isDailyNote = true
-    default: break
-    }
-    let gist = model.gistCache?.gists.first { $0.id == gistID }
-    isDailyNote = isDailyNote || gist?.isDailyNote == true
-    let filename =
-      opening?.filename ?? row?.filename
-      ?? (isDailyNote ? DailyNote.filename() : gist?.defaultMarkdownFilename) ?? ""
-    let filenames = Set((gist?.markdownFilenames ?? []) + [filename]).sorted()
-    return GistDetails(
-      title: title, filenames: filenames, filename: filename, isDailyNote: isDailyNote)
-  }
-
   private func selectRow(_ id: String) {
     model.open(rowID: id)
     compactColumn = .detail
@@ -670,7 +646,7 @@ struct RootView: View {
       await model.open(.draft(id: draftID))
     }
     guard !Task.isCancelled, pending.link == link else { return }
-    if model.visibleFile != nil || model.opening?.failure != nil {
+    if model.activeEditor != nil || model.opening?.failure != nil {
       compactColumn = .detail
     }
     pending.link = nil

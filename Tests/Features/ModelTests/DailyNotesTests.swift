@@ -25,14 +25,10 @@ struct DailyNotesTests {
     #expect(phone.onScreen == "# \(date)\n\n- [ ] Plan \(date)\n")
     #expect(phone.publishes.isEmpty)
 
-    // A Today tap focuses the editor once, and again only for a fresh tap.
-    today.requestCreationFocus()
+    // A Today tap opens the day in Edit, and so does every fresh tap.
     #expect(today.mode == .edit)
     today.mode = .preview
-    today.requestCreationFocus()
-    #expect(today.mode == .preview)
     await phone.model.open(.today())
-    today.requestCreationFocus()
     #expect(today.mode == .edit)
 
     try await phone.type("- [ ] One task", in: today)
@@ -48,8 +44,8 @@ struct DailyNotesTests {
     let target = DailyNote.Day(
       date: Date(timeIntervalSince1970: 1_790_208_000), timeZone: TimeZone(secondsFromGMT: 0)!)
     try await phone.open(.today(target))
-    #expect(phone.model.loadedFile?.filename == target.filename)
-    #expect(phone.model.activeEditor?.focusRequest != nil)
+    #expect(phone.model.activeEditor?.file.filename == target.filename)
+    #expect(phone.model.activeEditor?.mode == .edit)
   }
 
   /// When the web wrote the same day too, publishing shows the conflict instead of overwriting it.

@@ -1,43 +1,25 @@
 import Screens
-import Model
-import Preview
 import SwiftUI
 
+/// A file on its way, under the bar it will have, with a spinner once it takes a moment.
 struct OpeningFileView: View {
   let gist: GistDetails
-  var file: GistFile?
-  @State private var progressTitle: String?
+  @State private var isSlow = false
 
   var body: some View {
-    Group {
-      if let file {
-        // A failed render shows once the note opens, in its own Preview.
-        MarkdownPreviewView(
-          markdown: file.text, fileID: file.id.uuidString,
-          generation: 0, allowsTaskEdits: false
-        ) { _ in }
-        .allowsHitTesting(false)
-        .accessibilityIdentifier("opening-cached-note")
-      } else {
-        ZStack {
-          if progressTitle == gist.title {
-            ProgressView()
-              .accessibilityLabel(Text("Opening \(gist.title)"))
-              .accessibilityIdentifier("opening-note-progress")
-          }
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    ZStack {
+      if isSlow {
+        ProgressView()
+          .accessibilityLabel(Text("Opening \(gist.title)"))
+          .accessibilityIdentifier("opening-note-progress")
       }
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
     .gistTitle(gist)
     .background(Color(uiColor: .systemBackground))
-    .task(id: file == nil ? gist.title : nil) {
-      progressTitle = nil
-      guard file == nil else { return }
+    .task {
       try? await Task.sleep(for: .milliseconds(350))
-      guard !Task.isCancelled else { return }
-      progressTitle = gist.title
+      isSlow = !Task.isCancelled
     }
   }
 }

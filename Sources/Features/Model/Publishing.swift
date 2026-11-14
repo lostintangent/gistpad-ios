@@ -14,18 +14,14 @@ public enum PublishReason: Equatable, Sendable {
 extension GistPadModel {
   /// Points the open file at the gist it published to, keeping it selected under its new row.
   private func apply(published saved: GistFileDraft, gist: Gist) {
-    guard
-      loadedFile?.id == saved.id
-        || (loadedFile?.gist?.id == gist.id && loadedFile?.filename == saved.filename)
+    guard var file = presented?.file,
+      file.id == saved.id || (file.gist?.id == gist.id && file.filename == saved.filename),
+      opening == nil, state.selectedID != nil
     else { return }
-    let wasSelected = state.selectedID == loadedRowID
-    loadedFile?.gist = gist
-    loadedFile?.update(saved)
-    if loadedRowID == saved.id.uuidString { loadedRowID = loadedFile?.rowID }
-    if wasSelected, opening == nil {
-      state.selectedID = loadedRowID
-      remember(.gist(id: gist.id, filename: saved.filename))
-    }
+    file.gist = gist
+    file.update(saved)
+    state.selectedID = rowID(for: file)
+    remember(.gist(id: gist.id, filename: saved.filename))
   }
 
   /// Coming back to the app, or launching it, publishes what's waiting, reads GitHub again when

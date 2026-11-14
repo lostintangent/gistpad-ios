@@ -27,7 +27,8 @@
     @ObservationIgnored var hosts: [TextViewHost.Reference] = []
     @ObservationIgnored public var onEdit: ((String, UInt64) -> Void)?
     @ObservationIgnored private var highlightTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingFocusRequest = false
+    /// A caret placed by a focus request, waiting for the text view to reach a window.
+    @ObservationIgnored public private(set) var isFocusPending = false
     @ObservationIgnored lazy var commentHighlights = CommentHighlights(editor: self)
 
     public init(
@@ -183,7 +184,7 @@
       }
       textView.selectedRange = NSRange(location: offset, length: 0)
       if resetReadingAnchor { view.resetReadingAnchor(to: offset) }
-      pendingFocusRequest = true
+      isFocusPending = true
       completeFocusRequestIfAttached()
     }
 
@@ -223,8 +224,8 @@
     }
 
     fileprivate func completeFocusRequestIfAttached() {
-      guard pendingFocusRequest, textView.window != nil else { return }
-      pendingFocusRequest = false
+      guard isFocusPending, textView.window != nil else { return }
+      isFocusPending = false
       textView.becomeFirstResponder()
       textView.scrollRangeToVisible(textView.selectedRange)
     }

@@ -162,8 +162,7 @@ extension GistPadModel {
     fileRequest = UUID()
     self.account = account
     phase = account == nil ? .signedOut : .ready
-    loadedFile = nil
-    loadedRowID = nil
+    presented = nil
     opening = nil
     editors = [:]
     drafts = []

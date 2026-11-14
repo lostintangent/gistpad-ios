@@ -16,6 +16,7 @@ GistPadModel
   state: LibraryState             the list, built from the cache and drafts
   editors: [UUID: GistFileEditor] every file opened since launch
   opening: Opening?               the file on its way to the detail column
+  activeEditor: GistFileEditor?   the file in the detail column, once nothing is opening
 
 GistFile                          a file as it is on this iPhone
   gist  filename  draft?  published?  text  nextDraft

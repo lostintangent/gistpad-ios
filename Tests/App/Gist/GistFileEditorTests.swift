@@ -97,7 +97,7 @@ struct GistFileEditorTests {
     let model = fixture.model
     await model.start()
     await model.open(.gist(id: "frontmatter"))
-    let file = try #require(model.loadedFile)
+    let file = try #require(model.activeEditor?.file)
     let fileEditor = GistFileEditor(file: file, model: model)
     let editor = fileEditor.editor
     let generation = editor.generation
@@ -164,7 +164,7 @@ private extension ModelFixture {
     if model.account == nil { await model.start() }
     await model.open(.gist(id: "a"))
     return GistFileEditor(
-      file: try #require(model.loadedFile), model: model, autosaveDelay: .milliseconds(30))
+      file: try #require(model.activeEditor?.file), model: model, autosaveDelay: .milliseconds(30))
   }
 
   /// The editor's file as it's saved on this iPhone.

@@ -41,7 +41,7 @@ struct RootViewTests {
       let text = id == "reading" ? source : other
       host.model.open(rowID: id)
       try await host.waitUntil {
-        host.model.visibleFile?.gist?.id == id && host.editor(text: text) != nil
+        host.model.activeEditor?.file.gist?.id == id && host.editor(text: text) != nil
           && host.picker != nil
       }
       let editor = try #require(host.editor(text: text))
@@ -109,7 +109,7 @@ struct RootViewTests {
     // Creating is local, so it works offline.
     fixture.fail()
     await host.model.open(.new)
-    let first = try #require(host.model.visibleFile?.nextDraft)
+    let first = try #require(host.model.activeEditor?.file.nextDraft)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     #expect(host.editor(text: "")?.selectedRange == NSRange(location: 0, length: 0))
     try await host.waitForKeyboard(visible: true)
@@ -122,11 +122,11 @@ struct RootViewTests {
     #expect(host.model.state.selectedID == "kept")
 
     await host.model.open(.new)
-    let second = try #require(host.model.visibleFile?.nextDraft)
+    let second = try #require(host.model.activeEditor?.file.nextDraft)
     try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
     try await host.waitForKeyboard(visible: true)
     host.returnToLibrary()
-    try await host.waitUntil { host.isLibraryVisible && host.model.loadedFile == nil }
+    try await host.waitUntil { host.isLibraryVisible && host.model.activeEditor == nil }
     let stored = try await fixture.store.drafts(accountID: fixture.account.id).map(\.id)
     #expect(!stored.contains(first.id) && !stored.contains(second.id))
     #expect(fixture.publishes.isEmpty)
@@ -193,7 +193,7 @@ struct RootViewTests {
     let host = try await NavigationHost(fixture: fixture)
     defer { await host.close() }
     await host.model.open(.today())
-    let draft = try #require(host.model.visibleFile?.nextDraft)
+    let draft = try #require(host.model.activeEditor?.file.nextDraft)
     #expect(!draft.text.isEmpty)
     try await host.waitUntil { host.editor(text: draft.text)?.isFirstResponder == true }
     let editor = try #require(host.editor(text: draft.text))
@@ -214,8 +214,8 @@ struct RootViewTests {
     try await host.waitUntil {
       pending.link == nil && host.editor(text: "Routed file source") != nil
     }
-    #expect(host.model.loadedFile?.filename == "Ideas.md")
-    #expect(host.model.loadedFile?.gist?.id == "b")
+    #expect(host.model.activeEditor?.file.filename == "Ideas.md")
+    #expect(host.model.activeEditor?.file.gist?.id == "b")
   }
 
   /// A widget's Today opens on a folded phone at a cold launch without waiting for GitHub: at once
@@ -248,7 +248,7 @@ struct RootViewTests {
     try await host.waitUntil { !host.isLibraryVisible }
     if !writtenOnThisIPhone { github.open() }
     try await host.waitUntil {
-      pending.link == nil && host.model.visibleFile?.filename == today
+      pending.link == nil && host.model.activeEditor?.file.filename == today
         && host.editor(text: text)?.isFirstResponder == true
     }
   }
@@ -279,7 +279,7 @@ struct RootViewTests {
     }
     try await refresh.arrival()
     try await host.waitUntil {
-      pending.link == nil && host.model.visibleFile?.filename == today
+      pending.link == nil && host.model.activeEditor?.file.filename == today
         && host.editor(text: "Started on the web") != nil
     }
   }
@@ -293,9 +293,9 @@ struct RootViewTests {
     let host = try await NavigationHost(fixture: fixture, pending: pending)
     defer { await host.close() }
     try await host.waitUntil { pending.link == nil && host.editor(text: "")?.isFirstResponder == true }
-    let draft = try #require(host.model.visibleFile?.nextDraft)
+    let draft = try #require(host.model.activeEditor?.file.nextDraft)
     #expect(!host.model.drafts.contains { $0.id == draft.id })
-    #expect(host.model.visibleFile?.gist == nil)
+    #expect(host.model.activeEditor?.file.gist == nil)
     #expect(fixture.publishes.isEmpty)
   }
 
@@ -320,9 +320,9 @@ struct RootViewTests {
     try await host.model.open(#require(host.model.opening).request)
     try await host.waitUntil { host.editor(text: "Retried source") != nil }
     #expect(accessibilityElement("note-open-retry", in: host.window) == nil)
-    #expect(host.model.loadedFile?.gist?.id == "b")
+    #expect(host.model.activeEditor?.file.gist?.id == "b")
     #expect(host.model.state.selectedID == "b")
-    #expect(host.model.loadedFile?.filename == "Other.md")
+    #expect(host.model.activeEditor?.file.filename == "Other.md")
   }
 
   @Test func sourceIntelligenceOpensTheLiveSheetForTheRetainedEditor() async throws {
@@ -497,8 +497,7 @@ private struct NavigationHost {
           """
           phase: \(model.phase)
           selected: \(String(describing: model.state.selectedID))
-          loaded: \(String(describing: model.loadedFile?.id))
-          presented: \(String(describing: model.visibleFile?.id))
+          active: \(String(describing: model.activeEditor?.file.id))
           opening: \(String(describing: model.opening))
           error: \(String(describing: model.alertMessage))
           link: \(String(describing: pending.link))

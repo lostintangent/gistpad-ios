@@ -330,9 +330,8 @@ extension GistPadModel {
       case .today, .new: false
       }
     }
-    if let loaded = loadedFile, gone(loaded.request) {
-      loadedFile = nil
-      loadedRowID = nil
+    if let presented, gone(presented.file.request) {
+      self.presented = nil
       state.selectedID = nil
     }
     if let request = opening?.request, gone(request) {

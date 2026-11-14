@@ -21,13 +21,10 @@ public final class GistFileEditor {
   public var mode: FileMode = .preview
   /// Whether opening the file shows it, rather than restoring it behind the library.
   public internal(set) var revealsDetail = true
-  /// Asks for the caret once, when a new gist or day opens.
-  var focusRequest: UUID?
   @ObservationIgnored let model: GistPadModel
   @ObservationIgnored var persistence: Task<Bool, Never>?
   @ObservationIgnored var autosaveTask: Task<Void, Never>?
   @ObservationIgnored var scheduledAutosave: AutosaveRequest?
-  @ObservationIgnored var lastFocusRequest: UUID?
   @ObservationIgnored let autosaveDelay: Duration
   @ObservationIgnored var isInspectingRemote = false
   /// When this note last read GitHub, so opening it again reads only once that's stale.
