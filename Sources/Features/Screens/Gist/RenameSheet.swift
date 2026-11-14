@@ -1,7 +1,8 @@
+#if os(iOS)
 import Store
 import SwiftUI
 
-struct RenameSheet: View {
+public struct RenameSheet: View {
   let target: RenameTarget
   let save: @MainActor (String) async throws -> Void
   @State private var value: String
@@ -10,7 +11,7 @@ struct RenameSheet: View {
   @FocusState private var isFocused: Bool
   @Environment(\.dismiss) private var dismiss
 
-  init(_ target: RenameTarget, save: @escaping @MainActor (String) async throws -> Void) {
+  public init(_ target: RenameTarget, save: @escaping @MainActor (String) async throws -> Void) {
     self.target = target
     self.save = save
     _value = State(initialValue: target.initialValue)
@@ -18,19 +19,22 @@ struct RenameSheet: View {
 
   private var isFilename: Bool { target.kind != .title }
 
-  var body: some View {
+  public var body: some View {
     NavigationStack {
       Form {
         Section {
           TextField(
-            isFilename ? String(localized: "Filename") : String(localized: "Name"), text: $value)
+            isFilename
+              ? String(localized: "Filename", bundle: .module)
+              : String(localized: "Name", bundle: .module),
+            text: $value)
             .textInputAutocapitalization(isFilename ? .never : .sentences)
             .autocorrectionDisabled(isFilename)
             .focused($isFocused)
             .submitLabel(.done)
             .onSubmit(commit)
         } footer: {
-          if isFilename { Text("Use a Markdown filename ending in .md.") }
+          if isFilename { Text("Use a Markdown filename ending in .md.", bundle: .module) }
         }
         if let error {
           Section {
@@ -75,22 +79,28 @@ struct RenameSheet: View {
   }
 }
 
-struct RenameTarget: Identifiable {
-  enum Kind { case title, filename, addFile }
-  let id = UUID()
-  let draft: GistFileDraft
-  let title: String
-  let kind: Kind
+public struct RenameTarget: Identifiable {
+  public enum Kind { case title, filename, addFile }
+  public let id = UUID()
+  public let draft: GistFileDraft
+  public let title: String
+  public let kind: Kind
 
-  var heading: String {
+  public init(draft: GistFileDraft, title: String, kind: Kind) {
+    self.draft = draft
+    self.title = title
+    self.kind = kind
+  }
+
+  public var heading: String {
     switch kind {
-    case .title: String(localized: "Rename Gist")
-    case .filename: String(localized: "Rename File")
-    case .addFile: String(localized: "Add File")
+    case .title: String(localized: "Rename Gist", bundle: .module)
+    case .filename: String(localized: "Rename File", bundle: .module)
+    case .addFile: String(localized: "Add File", bundle: .module)
     }
   }
 
-  var initialValue: String {
+  public var initialValue: String {
     switch kind {
     case .title: title
     case .filename: draft.filename
@@ -98,3 +108,4 @@ struct RenameTarget: Identifiable {
     }
   }
 }
+#endif
