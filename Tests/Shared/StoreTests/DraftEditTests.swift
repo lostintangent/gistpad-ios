@@ -30,15 +30,14 @@ import Testing
         #expect(next.base == published)
     }
 
-    /// Earlier builds stored a publish state, whose conflict still waits for you after an update.
-    @Test func schemaChangesKeepDraftsAndTheirConflicts() async throws {
+    /// A store from earlier builds, with attributes and models since removed, opens with its drafts.
+    @Test func schemaChangesKeepDrafts() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("drafts.store")
         let account = UUID()
         let id = UUID()
-        let conflicted = UUID()
         do {
             let schema = Schema([
                 RetiredSchema.StoredDraft.self, RetiredSchema.StoredRecovery.self,
@@ -57,11 +56,6 @@ import Testing
             draft.generation = 7
             draft.autosavePaused = true
             context.insert(draft)
-            context.insert(RetiredSchema.StoredDraft(
-                id: conflicted, accountID: account, githubUserID: 42, gistID: "abc123",
-                filename: "Other.md", description: "Note", text: "mine",
-                baseContent: "base", baseRevision: "one",
-                stateData: Data(#"{"conflict":{"_0":{"remote":"theirs","remoteRevision":"two"}}}"#.utf8)))
             context.insert(RetiredSchema.StoredRecovery(
                 draft: draft, sent: "older source", generation: 6, remote: "remote base"
             ))
@@ -73,8 +67,6 @@ import Testing
         #expect(draft.text == "unsynced source")
         #expect(draft.base == GitHubVersion(text: "remote base", revision: "one"))
         #expect(draft.conflict == nil)
-        #expect(try await upgraded.drafts(accountID: account).first { $0.id == conflicted }?.conflict
-            == GitHubVersion(text: "theirs", revision: "two"))
         try GistCache(accountID: account).save(to: upgraded.modelContainer)
         #expect(try await upgraded.append(" accepted", to: draft, github: nil).text
             == "unsynced source accepted")
@@ -82,7 +74,8 @@ import Testing
     }
 }
 
-// The persisted schema before recovery history, the autosave pause and command receipts were removed.
+// The persisted schema before recovery history, the autosave pause, command receipts and the
+// draft's generations and GitHub user ID were removed.
 // It exists only so the test can prove those stores still open with their drafts intact.
 enum RetiredSchema {
     @Model

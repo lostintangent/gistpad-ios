@@ -119,10 +119,6 @@ extension DraftError: LocalizedError {
 final class StoredDraft {
     @Attribute(.unique) var id: UUID
     var accountID: UUID
-    // Earlier builds read these three. They're kept so their stores open unchanged.
-    var githubUserID: Int64
-    var generation: UInt64
-    @Attribute(originalName: "attemptedGeneration") var sentGeneration: UInt64?
     var gistID: String?
     var filename: String
     /// The new gist's name. Earlier builds kept every gist's description here.
@@ -139,8 +135,6 @@ final class StoredDraft {
     init(_ draft: GistFileDraft) {
         id = draft.id
         accountID = draft.accountID
-        githubUserID = 0
-        generation = 0
         gistID = draft.gistID
         filename = draft.filename
         gistDescription = draft.newGistName ?? ""
@@ -158,11 +152,11 @@ final class StoredDraft {
             newGistName: gistDescription.isEmpty ? nil : gistDescription, filename: filename,
             text: text, editedAt: updatedAt ?? .distantPast,
             base: base.map { GitHubVersion(text: $0, revision: baseRevision) }, sent: sent,
-            conflict: Self.decode(stateData))
+            conflict: conflict)
     }
 
     var conflict: GitHubVersion? {
-        get { Self.decode(stateData) }
+        get { try? JSONDecoder().decode(GitHubVersion.self, from: stateData) }
         set { stateData = Self.encode(newValue) }
     }
 
@@ -179,23 +173,6 @@ final class StoredDraft {
 
     private static func encode(_ conflict: GitHubVersion?) -> Data {
         (try? JSONEncoder().encode(conflict)) ?? Data("null".utf8)
-    }
-
-    /// Earlier builds stored a publish state, whose conflict carried GitHub's text and revision.
-    /// Any other state has no conflict.
-    private static func decode(_ data: Data) -> GitHubVersion? {
-        struct Legacy: Decodable {
-            struct State: Decodable { let _0: Conflict }
-            struct Conflict: Decodable {
-                let remote: String?
-                let remoteRevision: String?
-            }
-            let conflict: State
-        }
-        if let version = try? JSONDecoder().decode(GitHubVersion.self, from: data) { return version }
-        return (try? JSONDecoder().decode(Legacy.self, from: data)).map {
-            GitHubVersion(text: $0.conflict._0.remote ?? "", revision: $0.conflict._0.remoteRevision)
-        }
     }
 }
 
