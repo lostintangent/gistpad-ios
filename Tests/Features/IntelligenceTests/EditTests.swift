@@ -181,31 +181,6 @@ struct EditTests {
   }
 
   @Test(arguments: ["\n", "\r\n"])
-  func deletingAUniquelyNamedParagraphLeavesAdjacentContentUntouched(newline: String)
-    async throws
-  {
-    let original = "# Draft\n\nEarly prototypes changed citations.\nThey also moved tasks."
-      + "\n\nLeave this paragraph untouched.\n\n## Next\n\nKeep this section.\n"
-    let source = original.replacingOccurrences(of: "\n", with: newline)
-    let instruction = "delete the paragraph about early prototypes"
-    let fixture = FixtureLanguageModel()
-    let deletion = try #require(OnDeviceModel.anchoredParagraphDeletion(
-      in: source, instruction: instruction))
-    fixture.changes = { _ in [deletion] }
-    let input = request(source, instruction)
-    let result = try await IntelligenceEngine(backend: fixture).edit(input)
-      .application(to: input.snapshot).source
-    let expected = "# Draft\n\nLeave this paragraph untouched.\n\n## Next\n\nKeep this section.\n"
-      .replacingOccurrences(of: "\n", with: newline)
-    #expect(result == expected)
-
-    let ambiguous = "# Draft\n\nEarly prototypes changed citations.\n\n"
-      + "Early prototypes also moved tasks.\n"
-    #expect(OnDeviceModel.anchoredParagraphDeletion(
-      in: ambiguous, instruction: instruction) == nil)
-  }
-
-  @Test(arguments: ["\n", "\r\n"])
   func misplacedPureInsertionsMoveToTheRequestedMarkdownAnchor(newline: String) throws {
     let cases: [(String, String, String, String)] = [
       (
@@ -244,70 +219,6 @@ struct EditTests {
         try proposal.application(to: snapshot).source
           == expected.replacingOccurrences(of: "\n", with: newline))
       #expect(Revision.insertedText(in: change("Keep", "Kept\n\nNew")) == nil)
-    }
-  }
-
-  @Test func aRequestedAmountStaysInTheTablesAmountColumn() {
-    let table = """
-      ## Costs
-
-      | Item | Estimate | Owner | Status |
-      | --- | ---: | --- | --- |
-      | Contingency | $300 | Mara | Reserved |
-      """
-    let request = "add a $75 cabinet-handle row to the cost estimate table"
-    #expect(
-      OnDeviceModel.placedTableAmount(
-        "| $75 cabinet-handle | | | |", instruction: request, section: table)
-        == "| cabinet-handle | $75 |  |  |")
-    #expect(
-      OnDeviceModel.placedTableAmount(
-        "| cabinet-handle | $75 | | |", instruction: request, section: table)
-        == "| cabinet-handle | $75 |  |  |")
-    #expect(
-      OnDeviceModel.placedTableAmount(
-        "| cabinet-handle | | | |", instruction: request, section: table) == nil)
-  }
-
-  @Test func anchoredListMovePreservesTheItemAndEveryOtherLine() throws {
-    let cases: [(String, String, String)] = [
-      (
-        "## Kitchen\n\n- [ ] Paint the window trim\n- [ ] Replace the trap\n\n"
-          + "## Entry\n\n- [ ] Patch the wall\n",
-        "move Paint the window trim from Kitchen to Entry",
-        "## Kitchen\n\n- [ ] Replace the trap\n\n"
-          + "## Entry\n\n- [ ] Patch the wall\n- [ ] Paint the window trim\n"
-      ),
-      (
-        "## Currently reading (volume)\n\n### In progress\n\n"
-          + "1. Harbor Signal (7)\n2. Paper Observatory (2)\n\n"
-          + "## Started but stopped\n\n1. Tin Compass (2)\n",
-        "move Paper Observatory from Currently reading to Started but stopped",
-        "## Currently reading (volume)\n\n### In progress\n\n"
-          + "1. Harbor Signal (7)\n\n"
-          + "## Started but stopped\n\n1. Tin Compass (2)\n2. Paper Observatory (2)\n"
-      ),
-    ]
-    for (original, instruction, revised) in cases {
-      for newline in ["\n", "\r\n"] {
-        let source = original.replacingOccurrences(of: "\n", with: newline)
-        let expected = revised.replacingOccurrences(of: "\n", with: newline)
-        let operations = try #require(
-          OnDeviceModel.anchoredListMove(in: source, instruction: instruction))
-        #expect(operations.count == 2)
-        let candidates: [(ModelReplacement, NSRange)] = try operations.map { operation in
-          switch operation {
-          case .replaceRegion(let range, let change):
-            return (change, range)
-          default:
-            throw IntelligenceError.invalidResponse
-          }
-        }
-        let snapshot = note(source)
-        let proposal = Proposal(
-          snapshot: snapshot, scopedCandidates: candidates, safetyInstruction: instruction)
-        #expect(try proposal.application(to: snapshot).source == expected)
-      }
     }
   }
 

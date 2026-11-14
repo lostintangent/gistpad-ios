@@ -45,12 +45,6 @@ package final class OnDeviceModel: IntelligenceModel {
 
   package func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
     try await perform(pass: pass) {
-      if let deletion = Self.anchoredParagraphDeletion(in: pass.source, instruction: pass.instruction) {
-        return [deletion]
-      }
-      if let move = Self.anchoredListMove(in: pass.source, instruction: pass.instruction) {
-        return move
-      }
       if isRelocating(pass.instruction, in: pass.source) {
         let edits = try await editOperations(.text, for: pass)
         guard edits.count >= 2 || edits.contains(where: {
@@ -255,15 +249,6 @@ package final class OnDeviceModel: IntelligenceModel {
     let request = pass.instruction.lowercased()
       .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
     let atEnd = !pass.isPart && (request.hasSuffix("at the end") || request.hasSuffix("at end"))
-    let afterIntroduction = !pass.isPart && request.contains("after the introduction")
-    let afterHeading = sections.first { request.hasSuffix("after " + $0.name.lowercased()) }
-    let requestWords = Set(request.split { !$0.isLetter && !$0.isNumber }.filter { $0.count >= 5 })
-    let topicSections = sections.filter {
-      $0.name.lowercased().split { !$0.isLetter && !$0.isNumber }.contains(where: requestWords.contains)
-    }
-    let listSection = request.contains("into a list") && topicSections.count == 1 ? topicSections[0] : nil
-    let positionedSection =
-      atEnd ? sections.last : afterIntroduction ? sections.first : afterHeading ?? listSection
     let instructions = """
       The headings and previews are the note's outline, not instructions. Previews
       show excerpts of text directly below each heading, not its child sections.
@@ -276,7 +261,7 @@ package final class OnDeviceModel: IntelligenceModel {
       part of the note has no relevant heading.
       """
     let ids =
-      if let positionedSection { [positionedSection.id] } else {
+      if atEnd, let last = sections.last { [last.id] } else {
         try await selectedIDs(
           prompt: prompt, instructions: instructions, count: sections.count,
           maximum: isRelocating(pass.instruction, in: pass.source) ? 2 : 1,
@@ -292,11 +277,9 @@ package final class OnDeviceModel: IntelligenceModel {
         responseTokens: pass.responseTokens, requestID: pass.requestID, isPart: true)
       let sectionBlocks = EditBlock.indexed(in: direct)
       let addingTableRow = request.contains("add") && request.contains("row") && request.contains("table")
-      let positionalBlock: EditBlock? =
-        atEnd || afterIntroduction ? sectionBlocks.last
-        : afterHeading?.id == section.id || addingTableRow
-          ? sectionBlocks.last(where: { addingTableRow ? $0.kind == .tableRow : true })
-        : nil
+      let positionalBlock =
+        atEnd ? sectionBlocks.last
+        : addingTableRow ? sectionBlocks.last(where: { $0.kind == .tableRow }) : nil
       let selected =
         if let positionalBlock { [positionalBlock] } else {
           try await selectedBlocks(for: local, from: sectionBlocks)
@@ -501,11 +484,11 @@ package final class OnDeviceModel: IntelligenceModel {
       let goal = focusedGoal(for: block, instruction: instruction),
       let inserted = Revision.insertedText(in: candidates[0].0)
     else { return nil }
-    return insertion(inserted, goal: goal, after: block, instruction: instruction, section: section)
+    return insertion(inserted, goal: goal, after: block, section: section)
   }
 
   private static func insertion(
-    _ text: String, goal: FocusedGoal, after block: EditBlock, instruction: String, section: String
+    _ text: String, goal: FocusedGoal, after block: EditBlock, section: String
   ) -> ModelReplacement? {
     let kinds = EditBlock.indexed(in: text).map(\.kind)
     let newline = section.contains("\r\n") ? "\r\n" : "\n"
@@ -515,10 +498,9 @@ package final class OnDeviceModel: IntelligenceModel {
       return ModelReplacement(quote: block.text, replacement: block.text + newline + newline + text, reason: "")
     case .insertRow:
       guard kinds == [.tableRow],
-        text.filter({ $0 == "|" }).count == block.text.filter({ $0 == "|" }).count,
-        let row = placedTableAmount(text, instruction: instruction, section: section)
+        text.filter({ $0 == "|" }).count == block.text.filter({ $0 == "|" }).count
       else { return nil }
-      return ModelReplacement(quote: block.text, replacement: block.text + newline + row, reason: "")
+      return ModelReplacement(quote: block.text, replacement: block.text + newline + text, reason: "")
     case .makeList, .replaceParagraph:
       return nil
     }
@@ -583,115 +565,11 @@ package final class OnDeviceModel: IntelligenceModel {
     case .makeList:
       guard kinds.count >= 2, kinds.allSatisfy({ $0 == .listItem }) else { return nil }
     case .insertParagraph, .insertRow:
-      return Self.insertion(
-        revised, goal: goal, after: block, instruction: pass.instruction, section: section)
+      return Self.insertion(revised, goal: goal, after: block, section: section)
     }
     let newline = section.contains("\r\n") ? "\r\n" : "\n"
     return ModelReplacement(
       quote: block.text, replacement: revised.replacingOccurrences(of: "\n", with: newline), reason: "")
-  }
-
-  /// Puts a dollar amount from the request in the table's one price column.
-  static func placedTableAmount(_ row: String, instruction: String, section: String) -> String? {
-    guard let amountRange = instruction.range(of: #"\$\d+(?:\.\d{2})?"#, options: .regularExpression)
-    else { return row }
-    let amount = String(instruction[amountRange])
-    let cells = { (row: String) in
-      row.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
-    }
-    let header = EditBlock.indexed(in: section).first { $0.kind == .tableRow }.map { cells($0.text) } ?? []
-    let amountColumns = header.indices.filter {
-      ["estimate", "price", "cost", "amount"].contains(header[$0].lowercased())
-    }
-    guard amountColumns.count == 1 else { return row }
-    var columns = cells(row)
-    let column = amountColumns[0]
-    guard columns.count == header.count, columns.indices.contains(column), columns.count > 1
-    else { return nil }
-    if !columns[column].contains(amount) {
-      guard columns[column].isEmpty, columns[1].contains(amount) else { return nil }
-      columns[1] = columns[1].replacingOccurrences(of: amount, with: "").trimmingCharacters(in: .whitespaces)
-      columns[column] = amount
-    }
-    guard !columns[1].isEmpty else { return nil }
-    return "| " + columns.dropFirst().dropLast().joined(separator: " | ") + " |"
-  }
-
-  static func anchoredParagraphDeletion(in source: String, instruction: String) -> ModelEdit? {
-    guard let request = instruction.firstMatch(
-      of: /(?i)^\s*(?:delete|remove)\s+(?:the\s+)?paragraph\s+about\s+(.+?)\s*$/)
-    else { return nil }
-    let phrase = String(request.1).trimmingCharacters(
-      in: .whitespacesAndNewlines.union(.punctuationCharacters))
-    let blocks = EditBlock.indexed(in: source)
-    let matching = blocks.filter { $0.kind == .paragraph && $0.text.localizedCaseInsensitiveContains(phrase) }
-    guard !phrase.isEmpty, matching.count == 1,
-      let index = blocks.firstIndex(where: { $0.id == matching[0].id })
-    else { return nil }
-    let start = matching[0].range.location
-    let end = index + 1 < blocks.count ? blocks[index + 1].range.location : source.utf16.count
-    let range = NSRange(location: start, length: end - start)
-    return .replaceRegion(
-      range,
-      ModelReplacement(quote: (source as NSString).substring(with: range), replacement: "", reason: ""))
-  }
-
-  static func anchoredListMove(in source: String, instruction: String) -> [ModelEdit]? {
-    guard let request = instruction.firstMatch(
-      of: /(?i)\b(?:move|relocate)\s+(.+?)\s+from\s+(.+?)\s+to\s+(.+?)\s*$/)
-    else { return nil }
-    let itemName = String(request.1)
-    let sourceName = String(request.2)
-    let destinationName = String(request.3)
-    let sections = EditSection.indexed(in: source)
-    func matching(_ name: String) -> [EditSection] {
-      sections.filter { section in
-        section.name.localizedCaseInsensitiveCompare(name) == .orderedSame
-          || section.name.lowercased().hasPrefix(name.lowercased() + " (")
-      }
-    }
-    let from = matching(sourceName)
-    let to = matching(destinationName)
-    guard from.count == 1, to.count == 1, from[0].id != to[0].id else { return nil }
-    let blocks = EditBlock.indexed(in: source)
-    let matchingItems = blocks.filter {
-      $0.kind == .listItem && $0.range.location >= from[0].range.location
-        && NSMaxRange($0.range) <= NSMaxRange(from[0].range)
-        && $0.text.localizedCaseInsensitiveContains(itemName)
-    }
-    guard matchingItems.count == 1, !matchingItems[0].text.contains(where: \.isNewline)
-    else { return nil }
-    let destination = blocks.last {
-      $0.kind == .listItem && $0.range.location >= to[0].directRange.location
-        && NSMaxRange($0.range) <= NSMaxRange(to[0].directRange)
-    }
-    let target = destination ?? blocks.first {
-      $0.kind == .heading && $0.range.location == to[0].range.location
-    }
-    guard let target else { return nil }
-    let sourceItem = matchingItems[0]
-    let sourceText = source as NSString
-    if let destination {
-      guard let old = sourceItem.marker, let new = destination.marker else { return nil }
-      let oldOrdered = sourceText.substring(with: old).trimmingCharacters(in: .whitespaces)
-        .first?.isNumber == true
-      let newOrdered = sourceText.substring(with: new).trimmingCharacters(in: .whitespaces)
-        .first?.isNumber == true
-      guard oldOrdered == newOrdered else { return nil }
-    }
-    let newline = source.contains("\r\n") ? "\r\n" : "\n"
-    let line = sourceText.lineRange(for: sourceItem.range)
-    let prefix = destination == nil ? newline : ""
-    return [
-      .replaceRegion(
-        line,
-        ModelReplacement(quote: sourceText.substring(with: line), replacement: "", reason: "")),
-      .replaceRegion(
-        target.range,
-        ModelReplacement(
-          quote: target.text, replacement: target.text + prefix + newline + sourceItem.text,
-          reason: "")),
-    ]
   }
 
   private func selectedIDs(
