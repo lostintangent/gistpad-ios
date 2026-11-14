@@ -208,7 +208,7 @@ struct RootView: View {
       case .settings: settingsSheet
       case .addToToday: AddToTodaySheet()
       case .tags(let target): TagEditor(target, model: model)
-      case .rename(let target): renameSheet(target)
+      case .rename(let target): RenameSheet(target, model: model)
       case .review(let target):
         ConflictReview(fileEditor: target.fileEditor, review: target.review)
       }
@@ -216,7 +216,7 @@ struct RootView: View {
   }
 
   /// The one sheet over the app. A link or another account replaces it.
-  private enum Sheet: Identifiable {
+  enum Sheet: Identifiable {
     case settings, addToToday
     case tags(TagTarget)
     case rename(RenameTarget)
@@ -271,51 +271,11 @@ struct RootView: View {
     }
   }
 
-  var libraryActions: LibraryActions {
-    var actions = LibraryActions(
-      refresh: { await model.refresh() },
-      create: { createGist() },
-      today: { openToday() })
-    actions.select = { selectRow($0) }
-    actions.openComments = { rowID in
-      comments.requestedRowID = rowID
-      selectRow(rowID)
-      openRequestedComments()
-    }
-    actions.account = { sheet = .settings }
-    actions.reconnect = { Task { await model.reconnect() } }
-    actions.recoverStatus = {
-      Task {
-        if model.problem == .reconnect {
-          await model.reconnect()
-        } else {
-          await model.refresh()
-        }
-      }
-    }
-    actions.togglePin = { rowID in
-      guard let account = model.account, let id = model.gistID(forRow: rowID) else {
-        model.alertMessage = String(localized: "Save this local draft to GitHub before pinning it.")
-        return
-      }
-      let pinned = !account.preferences.pinnedGists.contains(id)
-      model.run { try await model.updatePreferences([.setPinned(gistID: id, pinned: pinned)]) }
-    }
-    actions.toggleArchive = { rowID in
-      guard let id = model.gistID(forRow: rowID),
-        let gist = model.gistCache?.gists.first(where: { $0.id == id })
-      else {
-        model.alertMessage = String(
-          localized: "A recovery or unpublished draft cannot be archived on GitHub.")
-        return
-      }
-      setArchived(!gist.isArchived, gistID: id)
-    }
-    actions.delete = { rowID in
-      guard let deletion = model.deletion(forRow: rowID) else { return }
-      model.run { try await model.delete(deletion) }
-    }
-    return actions
+  private var libraryActions: LibraryActions {
+    LibraryActions(
+      model: model, undoManager: undoManager,
+      select: { selectRow($0) }, openComments: { openComments(rowID: $0) },
+      today: { openToday() }, settings: { sheet = .settings })
   }
 
   private func fileScreen(
@@ -454,75 +414,10 @@ struct RootView: View {
       .appEntityIdentifier(entityIdentifier(for: fileEditor))
   }
 
-  private func afterCommentsClose(_ action: (() -> Void)?) -> (() -> Void)? {
-    action.map(afterCommentsClose)
-  }
-
-  private func afterCommentsClose(_ action: @escaping () -> Void) -> () -> Void {
-    { comments.performAfterClosing(action) }
-  }
-
   private func gistActions(_ fileEditor: GistFileEditor) -> GistActions {
-    var actions = GistActions()
-    if CommentsPresentation.supports(fileEditor.file) {
-      actions.comments = {
-        if comments.isPresented {
-          comments.hide()
-        } else {
-          comments.open(for: fileEditor)
-        }
-      }
-    }
-    actions.reviewChanges = {
-      guard let review = fileEditor.file.draft, review.conflict != nil else { return }
-      sheet = .review(.init(fileEditor: fileEditor, review: review))
-    }
-    actions.reconnect = { Task { await model.reconnect() } }
-    if let gistID = fileEditor.file.gist?.id {
-      actions.selectFile = { open(gistID: gistID, filename: $0) }
-      actions.tags = { sheet = .tags(TagTarget(fileEditor, gistID: gistID, model: model)) }
-      if !fileEditor.file.isDeletedOnGitHub {
-        actions.togglePin = {
-          let pinned = !fileEditor.details.isPinned
-          model.run {
-            try await model.updatePreferences([.setPinned(gistID: gistID, pinned: pinned)])
-          }
-        }
-        actions.toggleStar = {
-          let starred = !fileEditor.details.isStarred
-          model.run { try await model.setStarred(starred, gistID: gistID) }
-        }
-        if fileEditor.details.isOwned {
-          actions.toggleArchive = { setArchived(!fileEditor.details.isArchived, gistID: gistID) }
-          actions.addFile = { rename(.addFile, fileEditor: fileEditor) }
-          actions.renameFile = { rename(.filename, fileEditor: fileEditor) }
-        }
-      }
-    }
-    if fileEditor.details.isOwned, !fileEditor.file.isDeletedOnGitHub {
-      actions.rename = { rename(.title, fileEditor: fileEditor) }
-    }
-    if fileEditor.deletion != nil {
-      actions.delete = {
-        // Read at confirmation, so a file that published meanwhile deletes from GitHub.
-        guard let deletion = fileEditor.deletion else { return }
-        model.run { try await model.delete(deletion) }
-      }
-    }
-    actions.find = {
-      fileEditor.mode = .edit
-      fileEditor.editor.find(replacing: true)
-    }
-    actions.intelligence = { presentIntelligence(fileEditor) }
-    actions.intelligence = afterCommentsClose(actions.intelligence)
-    actions.tags = afterCommentsClose(actions.tags)
-    actions.rename = afterCommentsClose(actions.rename)
-    actions.renameFile = afterCommentsClose(actions.renameFile)
-    actions.addFile = afterCommentsClose(actions.addFile)
-    actions.find = afterCommentsClose(actions.find)
-    actions.reviewChanges = afterCommentsClose(actions.reviewChanges)
-    actions.delete = afterCommentsClose(actions.delete)
-    return actions
+    GistActions(
+      fileEditor, model: model, comments: comments, undoManager: undoManager,
+      present: { sheet = $0 }, intelligence: { presentIntelligence(fileEditor) })
   }
 
   private func open(gistID: String, filename: String? = nil) {
@@ -534,43 +429,14 @@ struct RootView: View {
     compactColumn = .detail
   }
 
+  private func openComments(rowID: String) {
+    comments.requestedRowID = rowID
+    selectRow(rowID)
+    openRequestedComments()
+  }
+
   private func presentIntelligence(_ fileEditor: GistFileEditor) {
     intelligence.present(fileEditor, model: model) { layout.select(.edit) }
-  }
-
-  private func rename(_ kind: RenameTarget.Kind, fileEditor: GistFileEditor) {
-    sheet = .rename(
-      RenameTarget(draft: fileEditor.file.nextDraft, title: fileEditor.details.title, kind: kind))
-  }
-
-  private func renameSheet(_ target: RenameTarget) -> some View {
-    RenameSheet(target) { value in
-      let draft = target.draft
-      switch target.kind {
-      case .title:
-        try await model.rename(draft, to: value)
-      case .filename:
-        try await model.renameFile(draft, to: value)
-      case .addFile:
-        guard let gistID = draft.gistID else { throw ChangeError.publicationInProgress }
-        try await model.addFile(named: value, to: gistID)
-      }
-    }
-  }
-
-  /// Archiving is absolute, so its undo is the opposite archive, registered with the scene so
-  /// shake to undo and the undo gesture reverse it.
-  private func setArchived(_ archived: Bool, gistID: String) {
-    model.run { try await model.setArchived(archived, gistID: gistID) }
-    undoManager?.registerUndo(withTarget: model) { _ in
-      setArchived(!archived, gistID: gistID)
-    }
-    undoManager?.setActionName(
-      archived ? String(localized: "Archive") : String(localized: "Unarchive"))
-  }
-
-  private func createGist() {
-    Task { await model.open(.new) }
   }
 
   private func openToday() {
