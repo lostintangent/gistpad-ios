@@ -1,7 +1,8 @@
+#if os(iOS)
 import Store
 import SwiftUI
 
-struct SettingsSheet<Appearance: View>: View {
+public struct SettingsSheet<Appearance: View>: View {
   let account: GistPadAccount?
   let savePreference: @MainActor (BooleanPreference, Bool) async throws -> Void
   let connect: @MainActor () -> Void
@@ -9,12 +10,26 @@ struct SettingsSheet<Appearance: View>: View {
   @ViewBuilder var appearance: () -> Appearance
   @State private var pendingPreference: (key: BooleanPreference, value: Bool)?
   @State private var saveError: String?
-  @State private var errorTitle = String(localized: "Couldn't Confirm Setting")
+  @State private var errorTitle = String(localized: "Couldn't Confirm Setting", bundle: .module)
   @State private var confirmingSignOut = false
   @State private var isSigningOut = false
   @Environment(\.dismiss) private var dismiss
 
-  var body: some View {
+  public init(
+    account: GistPadAccount?,
+    savePreference: @escaping @MainActor (BooleanPreference, Bool) async throws -> Void,
+    connect: @escaping @MainActor () -> Void,
+    signOut: @escaping @MainActor () async throws -> Void,
+    @ViewBuilder appearance: @escaping () -> Appearance
+  ) {
+    self.account = account
+    self.savePreference = savePreference
+    self.connect = connect
+    self.signOut = signOut
+    self.appearance = appearance
+  }
+
+  public var body: some View {
     NavigationStack {
       Form {
         Section {
@@ -46,36 +61,36 @@ struct SettingsSheet<Appearance: View>: View {
               .accessibilityElement(children: .combine)
               .accessibilityIdentifier("settings-account")
           } else {
-            Label("Connect GitHub", systemImage: "person.crop.circle")
-            Text("Sign in to open your GitHub gists, daily notes and saved tags.")
+            Label(String(localized: "Connect GitHub", bundle: .module), systemImage: "person.crop.circle")
+            Text("Sign in to open your GitHub gists, daily notes and saved tags.", bundle: .module)
               .foregroundStyle(.secondary)
-            Button("Sign in with GitHub", action: connect)
+            Button(String(localized: "Sign in with GitHub", bundle: .module), action: connect)
               .accessibilityIdentifier("settings-sign-in")
           }
         } header: {
-          Text("Account")
+          Text("Account", bundle: .module)
         }
         if account != nil {
-          Section("Writing") {
-            Toggle("Autosave While Writing", isOn: preference(.isAutoSaveEnabled, default: true))
+          Section(String(localized: "Writing", bundle: .module)) {
+            Toggle(String(localized: "Autosave While Writing", bundle: .module), isOn: preference(.isAutoSaveEnabled, default: true))
               .accessibilityIdentifier("settings-autosave")
-            Toggle("Check Spelling", isOn: preference(.isSpellcheckEnabled, default: true))
+            Toggle(String(localized: "Check Spelling", bundle: .module), isOn: preference(.isSpellcheckEnabled, default: true))
               .accessibilityIdentifier("settings-spelling")
-            Toggle("Show Front Matter", isOn: preference(.showFrontmatter, default: false))
+            Toggle(String(localized: "Show Front Matter", bundle: .module), isOn: preference(.showFrontmatter, default: false))
               .accessibilityIdentifier("settings-front-matter")
           }
-          Section("Appearance") { appearance() }
+          Section(String(localized: "Appearance", bundle: .module)) { appearance() }
           Section {
-            Button("Switch GitHub Account", action: connect)
+            Button(String(localized: "Switch GitHub Account", bundle: .module), action: connect)
               .accessibilityIdentifier("settings-switch-account")
           } footer: {
-            Text("Drafts stay on this iPhone with their original account. Switching never publishes them.")
+            Text("Drafts stay on this iPhone with their original account. Switching never publishes them.", bundle: .module)
           }
           Section {
             if isSigningOut {
-              ProgressView("Signing Out")
+              ProgressView(String(localized: "Signing Out", bundle: .module))
             } else {
-              Button("Sign Out", role: .destructive) { confirmingSignOut = true }
+              Button(String(localized: "Sign Out", bundle: .module), role: .destructive) { confirmingSignOut = true }
                 .accessibilityIdentifier("settings-sign-out")
             }
           }
@@ -83,30 +98,30 @@ struct SettingsSheet<Appearance: View>: View {
       }
       .disabled(isWorking)
       .interactiveDismissDisabled(isWorking)
-      .navigationTitle("Settings")
+      .navigationTitle(Text("Settings", bundle: .module))
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
           Button(role: .close) { dismiss() }
-            .accessibilityLabel("Close Settings")
+            .accessibilityLabel(Text("Close Settings", bundle: .module))
             .disabled(isWorking)
         }
       }
       .alert(
-        "Sign Out?",
+        Text("Sign Out?", bundle: .module),
         isPresented: $confirmingSignOut
       ) {
-        Button("Sign Out", role: .destructive, action: confirmSignOut)
-        Button("Cancel", role: .cancel) {}
+        Button(String(localized: "Sign Out", bundle: .module), role: .destructive, action: confirmSignOut)
+        Button(String(localized: "Cancel", bundle: .module), role: .cancel) {}
       } message: {
-        Text("Drafts for @\(account?.github.login ?? "") stay on this iPhone. Nothing is published.")
+        Text("Drafts for @\(account?.github.login ?? "") stay on this iPhone. Nothing is published.", bundle: .module)
       }
       .alert(
         errorTitle,
         isPresented: Binding(
           get: { saveError != nil }, set: { if !$0 { saveError = nil } })
       ) {
-        Button("OK") { saveError = nil }
+        Button(String(localized: "OK", bundle: .module)) { saveError = nil }
       } message: {
         Text(saveError ?? "")
       }
@@ -119,7 +134,7 @@ struct SettingsSheet<Appearance: View>: View {
     guard !isWorking else { return }
     isSigningOut = true
     saveError = nil
-    errorTitle = String(localized: "Couldn't Sign Out")
+    errorTitle = String(localized: "Couldn't Sign Out", bundle: .module)
     Task {
       defer { isSigningOut = false }
       do {
@@ -141,7 +156,7 @@ struct SettingsSheet<Appearance: View>: View {
         guard pendingPreference == nil else { return }
         pendingPreference = (key, value)
         saveError = nil
-        errorTitle = String(localized: "Couldn't Confirm Setting")
+        errorTitle = String(localized: "Couldn't Confirm Setting", bundle: .module)
         Task {
           defer { pendingPreference = nil }
           do {
@@ -153,3 +168,4 @@ struct SettingsSheet<Appearance: View>: View {
       })
   }
 }
+#endif

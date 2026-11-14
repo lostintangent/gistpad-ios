@@ -1,6 +1,7 @@
+#if os(iOS)
 import SwiftUI
 
-struct AccountSwitchSheet: View {
+public struct AccountSwitchSheet: View {
   let current: String
   let replacement: String
   let switchAccount: @MainActor () async throws -> Void
@@ -9,22 +10,33 @@ struct AccountSwitchSheet: View {
   @State private var error: String?
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-  var body: some View {
+  public init(
+    current: String, replacement: String,
+    switchAccount: @escaping @MainActor () async throws -> Void,
+    keepCurrent: @escaping @MainActor () -> Void
+  ) {
+    self.current = current
+    self.replacement = replacement
+    self.switchAccount = switchAccount
+    self.keepCurrent = keepCurrent
+  }
+
+  public var body: some View {
     NavigationStack {
       Form {
         Section {
-          LabeledContent("Current", value: "@\(current)")
-          LabeledContent("New account", value: "@\(replacement)")
+          LabeledContent(String(localized: "Current", bundle: .module), value: "@\(current)")
+          LabeledContent(String(localized: "New account", bundle: .module), value: "@\(replacement)")
         } footer: {
-          Text("Your drafts stay on this iPhone with their original account. Switching never publishes them.")
+          Text("Your drafts stay on this iPhone with their original account. Switching never publishes them.", bundle: .module)
         }
         Section {
-          Button("Switch to @\(replacement)") {
+          Button(String(localized: "Switch to @\(replacement)", bundle: .module)) {
             work { try await switchAccount() }
           }
           .accessibilityIdentifier("account-switch-confirm")
         } footer: {
-          Text("Reconnect the original account to return to its drafts.")
+          Text("Reconnect the original account to return to its drafts.", bundle: .module)
         }
         if let error {
           Section {
@@ -32,7 +44,7 @@ struct AccountSwitchSheet: View {
           }
         }
       }
-      .navigationTitle("Switch Account")
+      .navigationTitle(Text("Switch Account", bundle: .module))
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -59,3 +71,4 @@ struct AccountSwitchSheet: View {
     }
   }
 }
+#endif
