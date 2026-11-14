@@ -73,7 +73,7 @@ Authored bullets and numbers match the web's `prose-neutral` / `prose-invert` pa
 
 Task-checkbox borders/checked fills retain `--gp-list-marker`: native secondary-label gray composited against the page, then adjusted toward native label ink only enough to reach 4.5:1 normally or 7:1 with Increased Contrast. Raw Edit's task brackets use `secondaryLabel`. Task text stays primary ink, checked boxes retain a contrasting page-colored checkmark, and targets stay at least 44 points. These roles remain independent of the personal accent and do not recolor secondary captions. Numbering, nesting, wrapping, task state and generated Contents are unchanged.
 
-`PreviewFixtures.mangaReading` is a reading-list excerpt with a synthetic H2 section of numbered and nested bulleted lists, and `PreviewFixtures.listMarkers` is a short list for checking marker ink. Use them for renderer checks of list markers, rules and bullets.
+`PreviewFixtures.listMarkers` is a short list for checking marker ink, rules and bullets.
 
 Calculation results retain the original exact values and selection/copy exclusion, with accessible current/previous labels, semantic surfaces and tabular numerals. Tables retain authored alignment and native table semantics, with horizontal rules instead of boxes, vertical grids or zebra fills. Real `details`/`summary` disclosures have a stroked chevron, a 44-point row and keyboard/pressed/focus behavior. `try PreviewFixtures.readingPolish` loads a focused synthetic fixture covering these treatments, neutral and authored diagrams, all five alerts and a locally scrolling twelve-column table.
 

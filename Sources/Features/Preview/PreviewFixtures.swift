@@ -11,10 +11,6 @@ public enum PreviewFixtures {
         get throws { try load("reading-polish") }
     }
 
-    public static var mangaReading: String {
-        get throws { try load("manga-reading") }
-    }
-
     public static var listMarkers: String {
         get throws { try load("list-markers") }
     }

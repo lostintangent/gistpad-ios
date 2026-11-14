@@ -20,7 +20,6 @@ struct PreviewAppearance: Equatable {
         var values = [
             "--gp-page": Self.css(UIColor.systemBackground.resolvedColor(with: traits)),
             "--gp-surface": Self.css(UIColor.secondarySystemBackground.resolvedColor(with: traits)),
-            "--gp-surface-raised": Self.css(UIColor.tertiarySystemBackground.resolvedColor(with: traits)),
             "--gp-text": Self.css(UIColor.label.resolvedColor(with: traits)),
             "--gp-syntax-code": code,
             "--gp-text-secondary": Self.css(UIColor.secondaryLabel.resolvedColor(with: traits)),
@@ -30,8 +29,6 @@ struct PreviewAppearance: Equatable {
             "--gp-link": Self.css(UIColor.link.resolvedColor(with: traits)),
             "--gp-separator": Self.css(UIColor.separator.resolvedColor(with: traits)),
             "--gp-boundary": Self.css(UIColor.opaqueSeparator.resolvedColor(with: traits)),
-            "--gp-error": Self.css(UIColor.systemRed.resolvedColor(with: traits)),
-            "--gp-success": Self.css(UIColor.systemGreen.resolvedColor(with: traits)),
             "--gp-accent-text": accent.text.hex,
             "--gp-accent-fill": accent.fill.hex,
             "--gp-on-accent": accent.onFill.hex,

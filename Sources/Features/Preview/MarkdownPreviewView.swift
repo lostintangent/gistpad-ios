@@ -372,9 +372,7 @@ final class PreviewResourceHandler: NSObject, WKURLSchemeHandler {
         do {
             guard let url = urlSchemeTask.request.url,
                   url.scheme == "gistpad-preview", url.host == "bundle",
-                  let base = Bundle.module.url(forResource: "Web", withExtension: nil),
-                  !url.path.contains("\\"),
-                  !url.pathComponents.contains("..") else {
+                  let base = Bundle.module.url(forResource: "Web", withExtension: nil) else {
                 throw PreviewFailure("Invalid preview resource URL.")
             }
             let file = base.appendingPathComponent(url.path.dropFirst().description).standardizedFileURL
