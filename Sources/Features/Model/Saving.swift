@@ -7,7 +7,6 @@ import Store
 extension GistPadModel {
   /// Records a draft as this iPhone now has it: stored, or let go once GitHub has its text.
   private func record(_ draft: GistFileDraft) {
-    localDraftRecords += 1
     drafts.removeAll { $0.id == draft.id }
     if !draft.isDisposable { drafts.append(draft) }
   }

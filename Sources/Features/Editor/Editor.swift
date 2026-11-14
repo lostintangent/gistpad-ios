@@ -29,7 +29,6 @@
     @ObservationIgnored public var onEdit: ((String, UInt64) -> Void)?
     @ObservationIgnored private var highlightTask: Task<Void, Never>?
     @ObservationIgnored private var pendingFocusRequest = false
-    @ObservationIgnored private var pendingShowsFrontMatter: Bool?
     @ObservationIgnored lazy var commentHighlights = CommentHighlights(editor: self)
 
     public init(
@@ -190,13 +189,10 @@
       completeFocusRequestIfAttached()
     }
 
+    /// Shows or hides the note's front matter, keeping what the keyboard is composing.
     public func setShowsFrontMatter(_ value: Bool) {
-      guard isSettled else {
-        pendingShowsFrontMatter = value
-        return
-      }
-      pendingShowsFrontMatter = nil
       guard value != showsFrontMatter else { return }
+      commitComposition()
       showsFrontMatter = value
       updateHiddenFrontMatter()
       commentHighlights.frontMatterVisibilityDidChange()
@@ -297,7 +293,6 @@
       isComposing = textView.markedTextRange != nil
       if isComposing { view.cancelEditingCaretReveal() }
       commentHighlights.selectionDidChange()
-      if !isComposing, let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
       if !isComposing { scheduleHighlight() }
     }
 
@@ -313,7 +308,6 @@
       isWritingToolsActive = false
       commentHighlights.resumeAfterWritingTools()
       synchronizeText()
-      if let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
       view.rememberReadingAnchor()
     }
 
@@ -491,7 +485,6 @@
         view.requestEditingCaretReveal()
         onEdit?(text, generation)
       }
-      if !isComposing, let pendingShowsFrontMatter { setShowsFrontMatter(pendingShowsFrontMatter) }
       scheduleHighlight()
     }
 

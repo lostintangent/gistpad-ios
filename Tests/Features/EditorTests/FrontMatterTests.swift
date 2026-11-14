@@ -141,7 +141,7 @@ struct FrontMatterRangeTests {
         #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
       }
 
-      @Test func showingMetadataWaitsForCompositionAndDoesNotChangeSourceGeneration() throws {
+      @Test func showingMetadataKeepsCompositionAndDoesNotChangeSourceGeneration() throws {
         let prefix = "---\nkey: value\n---\n\n"
         let editor = Editor(fileID: "frontmatter-composition", text: prefix + "Body")
         let view = editor.textView
@@ -154,15 +154,12 @@ struct FrontMatterRangeTests {
         #expect(view.selectedRange == composingSelection)
         #expect(view.markedTextRange != nil)
         #expect(editor.inputError != nil)
-        editor.setShowsFrontMatter(true)
-        #expect(!editor.showsFrontMatter)
-        #expect(editor.contentStart == prefix.utf16.count)
-        view.unmarkText()
-        editor.textViewDidChange(view)
         let generation = editor.generation
+        editor.setShowsFrontMatter(true)
+        #expect(view.markedTextRange == nil)
         #expect(editor.showsFrontMatter)
         #expect(editor.contentStart == 0)
-        #expect(editor.text.hasPrefix(prefix))
+        #expect(editor.text == prefix + "日本Body")
         editor.setShowsFrontMatter(false)
         #expect(editor.generation == generation)
         #expect(editor.contentStart == prefix.utf16.count)
@@ -192,14 +189,11 @@ struct FrontMatterRangeTests {
         #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
       }
 
-      @Test func visibilityChangesWaitForWritingToolsAndDoNotAddAnUndoStep() {
+      @Test func visibilityChangesDoNotAddAnUndoStep() {
         let source = "---\nkey: value\n---\n\nBody"
-        let editor = Editor(fileID: "frontmatter-writing-tools", text: source)
+        let editor = Editor(fileID: "frontmatter-undo", text: source)
         let view = editor.textView
-        editor.textViewWritingToolsWillBegin(view)
         editor.setShowsFrontMatter(true)
-        #expect(!editor.showsFrontMatter)
-        editor.textViewWritingToolsDidEnd(view)
         #expect(editor.showsFrontMatter)
         #expect(editor.contentStart == 0)
         #expect(editor.text.utf8.elementsEqual(source.utf8))

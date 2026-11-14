@@ -18,8 +18,6 @@ public final class GistPadModel {
   /// The file opening in the detail column, until it's presented or fails.
   public internal(set) var opening: Opening?
   public internal(set) var drafts: [GistFileDraft] = []
-  /// Counts drafts recorded in memory, so a local read that started earlier knows it's stale.
-  var localDraftRecords = 0
   public internal(set) var gistCache: GistCache?
   var isCreating = false
   /// The one message the app shows in an alert, such as a failed open or change.
@@ -162,12 +160,9 @@ public final class GistPadModel {
   }
 
   func reloadLocalState(accountID: UUID) async throws {
-    let records = localDraftRecords
     let stored = try await draftStore.drafts(accountID: accountID)
     let cache = try cache(accountID)
     guard account?.id == accountID, phase.switchingTo == nil else { return }
-    // A draft saved while this read ran is newer than the read, so read again.
-    if localDraftRecords != records { return try await reloadLocalState(accountID: accountID) }
     drafts = stored
     gistCache = cache
     projectLibrary()
