@@ -32,7 +32,7 @@ import Testing
                 headers: ["Link": "<https://example.com/gists/abc123/comments?page=2>; rel=\"next\""],
                 data: try commentsData([1]))
         }) { "fake" }
-        await #expect(throws: GitHubClientError.unsafeURL) {
+        await #expect(throws: GitHubClientError.invalidResponse) {
             try await offGitHub.listComments(gistID: "abc123")
         }
     }

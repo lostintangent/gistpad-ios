@@ -12,7 +12,6 @@ struct PreferencesTests {
         #expect(empty.booleanValue(.isSpellcheckEnabled))
         #expect(!empty.booleanValue(.showFrontmatter, default: false))
         #expect(empty.accentColor == nil)
-        #expect(empty.profileDisplayName == nil)
         #expect(empty.pinnedGists.isEmpty)
 
         let saved = GistPadPreferences(metadata: [
@@ -29,7 +28,8 @@ struct PreferencesTests {
         ])
         #expect(!saved.isAutoSaveEnabled)
         #expect(saved.accentColor == "#facc15")
-        #expect(saved.profileDisplayName == "Octavia")
+        #expect(GistPadAccount(id: UUID(), github: FixtureServer.you, preferences: empty).displayName == nil)
+        #expect(GistPadAccount(id: UUID(), github: FixtureServer.you, preferences: saved).displayName == "Octavia")
         #expect(saved.pinnedGists == ["one"])
         #expect(saved.tagNames(gistID: "one") == ["Ideas"])
         let ideas = try #require(saved.tags.first { $0.id == "ideas" })
@@ -45,7 +45,7 @@ struct PreferencesTests {
         let server = FixtureServer()
         let accounts = try server.accounts()
         let id = FixtureServer.accountID
-        try await server.signIn(accounts)
+        try await accounts.signIn()
         server.mergeMetadata([
             "future": ["web-edit": 7], "accentColor": "#facc15", "pinnedGists": ["web-pin"],
             "tags": ["a": ["name": "A", "color": "gold", "future": true], "b": ["name": "B"]],

@@ -115,18 +115,6 @@ extension DraftError: LocalizedError {
     }
 }
 
-/// Text added to the end of a draft from outside the editor, like Add to Today. It lands only while
-/// the draft is still as `draft` has it, so a stale or repeated addition can't change newer text.
-public struct DraftEdit: Equatable, Sendable {
-    public let draft: GistFileDraft
-    public let text: String
-
-    public init(draft: GistFileDraft, text: String) {
-        self.draft = draft
-        self.text = text
-    }
-}
-
 @Model
 final class StoredDraft {
     @Attribute(.unique) var id: UUID
@@ -295,27 +283,22 @@ public actor GistFileDraftStore {
         return try settle(row)
     }
 
-    /// Forgets the drafts of a gist deleted on GitHub, or of one of its files.
-    public func removeDrafts(gistID: String, filename: String? = nil, accountID: UUID) throws {
-        for draft in try modelContext.fetch(FetchDescriptor<StoredDraft>(
-            predicate: #Predicate { $0.accountID == accountID && $0.gistID == gistID }
-        )) where filename == nil || draft.filename == filename {
-            modelContext.delete(draft)
+    /// Forgets the account's drafts that `matches`, such as a gist or file deleted on GitHub, or a
+    /// gist that's only on the phone.
+    public func removeDrafts(accountID: UUID, where matches: @Sendable (GistFileDraft) -> Bool) throws {
+        for row in try modelContext.fetch(FetchDescriptor<StoredDraft>(
+            predicate: #Predicate { $0.accountID == accountID }
+        )) where matches(row.draft) {
+            modelContext.delete(row)
         }
         try commit()
     }
 
-    public func discardLocalCopy(id: UUID, accountID: UUID) throws {
-        guard let draft = try stored(id, accountID: accountID) else { return }
-        modelContext.delete(draft)
-        try commit()
-    }
-
-    /// Adds text to the end of the draft, only while it's still as `edit` read it.
-    public func apply(_ edit: DraftEdit, github: GitHubVersion?) throws -> GistFileDraft {
-        guard sourceEqual(try stored(edit.draft)?.text ?? edit.draft.text, edit.draft.text)
-        else { throw DraftError.changed }
-        return try save(edit.draft, text: edit.draft.text + edit.text, github: github)
+    /// Adds `text` to the end of `draft` from outside the editor, like Add to Today. It lands only
+    /// while the draft is still as `draft` has it, so a stale or repeated addition can't change newer text.
+    public func append(_ text: String, to draft: GistFileDraft, github: GitHubVersion?) throws -> GistFileDraft {
+        guard sourceEqual(try stored(draft)?.text ?? draft.text, draft.text) else { throw DraftError.changed }
+        return try save(draft, text: draft.text + text, github: github)
     }
 
     /// Records the text a publish sends, so the next publish or open can tell whether a publish cut

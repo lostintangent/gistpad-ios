@@ -100,7 +100,7 @@ public final class GistPadModel {
   }
 
   /// Keeps GitHub's copy of a file, which is never wrong to cache.
-  func cache(_ remote: RemoteFile, filename: String, accountID: UUID) throws {
+  func cache(_ remote: (gist: Gist, content: String?), filename: String, accountID: UUID) throws {
     try updateCache(accountID) { cache in
       cache.update(remote.gist)
       if let content = remote.content { cache.store(content, of: filename, in: remote.gist) }
@@ -292,7 +292,7 @@ public final class GistPadModel {
           updateLibraryContent(
             &item,
             text: gistDrafts.first { $0.filename == filename }?.text
-              ?? cached?.text(of: filename, in: gist) ?? inline)
+              ?? cached?.version(of: filename, gistID: gist.id)?.text ?? inline)
         }
         return item
       }

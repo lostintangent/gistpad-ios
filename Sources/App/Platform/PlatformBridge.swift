@@ -176,7 +176,7 @@ final class PlatformBridge: PlatformActions {
       }
       // Today's file as you last saved it, started the same way the app starts today.
       let draft = try await self.current(try await self.model.today(target).nextDraft)
-      try await self.apply(.addToToday(text, asTask: asTask, to: draft))
+      try await self.append(DailyNote.addition(text, asTask: asTask, after: draft.text), to: draft)
       return draft.gistID.map { .gist(id: $0, filename: draft.filename) }
         ?? .unpublishedGist(accountID: accountID, draftID: draft.id)
     }
@@ -209,7 +209,7 @@ final class PlatformBridge: PlatformActions {
       let newline = draft.text.contains("\r\n") ? "\r\n" : "\n"
       let addition = (draft.text.isEmpty || draft.text.last?.isNewline == true ? "" : newline)
         + text + (text.last?.isNewline == true ? "" : newline)
-      try await self.apply(DraftEdit(draft: draft, text: addition))
+      try await self.append(addition, to: draft)
       return note.withBody(self.visibleBody(for: note, accountID: draft.accountID))
     }
   }
@@ -307,21 +307,21 @@ final class PlatformBridge: PlatformActions {
     }
   }
 
-  private func apply(_ edit: DraftEdit) async throws {
-    let accountID = edit.draft.accountID
-    if edit.draft.conflict != nil { throw PlatformError.editingInProgress }
-    let fileEditor = fileEditor(for: edit.draft)
+  private func append(_ text: String, to draft: GistFileDraft) async throws {
+    let accountID = draft.accountID
+    if draft.conflict != nil { throw PlatformError.editingInProgress }
+    let fileEditor = fileEditor(for: draft)
     if let fileEditor {
       guard !fileEditor.file.isDeletedOnGitHub, fileEditor.canEdit else {
         throw PlatformError.editingInProgress
       }
-      try await fileEditor.applyDurableEdit(edit) {
+      try await fileEditor.applyDurableEdit(appending: text, to: draft) {
         try self.validateAccount(accountID)
-        return try await self.model.apply(edit)
+        return try await self.model.append(text, to: draft)
       }
     } else {
       try validateAccount(accountID)
-      _ = try await model.apply(edit)
+      _ = try await model.append(text, to: draft)
     }
     await refreshNow()
     if UIApplication.shared.applicationState != .active {

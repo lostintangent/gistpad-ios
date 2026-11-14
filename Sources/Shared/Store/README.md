@@ -76,9 +76,9 @@ exactly the draft's text with nothing sent or in conflict, and the store lets
 such a draft go. So does `isDisposable`: a new gist with no name or writing.
 
 `save(_:text:github:)` stores typing. `keep` stores a note before you type in
-it, such as a gist you named. `apply(_:github:)` takes a `DraftEdit` from
-outside the editor, such as Add to Today, and adds its text to the end only if
-the draft hasn't changed since it was read.
+it, such as a gist you named. `append(_:to:github:)` adds text from outside the
+editor, such as Add to Today, to the end only if the draft hasn't changed since
+it was read.
 
 Publishing steps through `recordSent`, `confirm` and `forgetSent`.
 `compareWithGitHub` decides everything about GitHub's copy, for both opening a
@@ -86,8 +86,8 @@ note and publishing: a copy that matches the draft or its sent text is
 confirmed, and any other change from `base` is a conflict, including a file
 deleted on GitHub. `resolveConflict` makes GitHub's text the new base with the
 text you chose. `join` makes a new day a file of the Daily notes gist, `rename`
-follows a rename, `removeDrafts` forgets a gist or file deleted on GitHub, and
-`discardLocalCopy` deletes a gist that's only on the phone.
+follows a rename, and `removeDrafts(accountID:where:)` forgets a gist or file
+deleted on GitHub, or a gist that's only on the phone.
 
 ## Cache
 
@@ -102,7 +102,7 @@ refresh rebuilds it.
 `DailyNote.Day` pins the date and time zone when an action starts.
 `DailyNote(cache:drafts:)` reads a day from the cache and drafts for the widget,
 and `TaskProgress` counts tasks with the web's markers.
-`DraftEdit.addToToday` appends a paragraph or one task per line.
+`DailyNote.addition` is what Add to Today appends: a paragraph or one task per line.
 
 ## Links and photos
 

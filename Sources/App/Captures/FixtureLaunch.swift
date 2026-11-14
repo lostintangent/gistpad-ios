@@ -54,7 +54,7 @@
       if fixture == .showcase { FixtureLibrary.seedShowcase(server) }
       let accounts = try server.accounts()
       if fixture != .signedOut {
-        let account = try await server.signIn(accounts)
+        let account = try await accounts.signIn()
         let seeded =
           switch fixture {
           case .empty: [GistPadPreferences.Change]()

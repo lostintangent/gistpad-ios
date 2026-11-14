@@ -35,8 +35,8 @@ Open Gist, Open Today, Add to Today and New Gist are App Shortcuts. Add to Today
 Open Today and New Gist are also controls. The Open Today control opens today's
 note and the New Gist control opens a blank gist. The Add to Today control opens
 the capture sheet, and shortcut-provided text skips it. Captures start
-today the way the app does, append Store's `addToToday` edit through the same
-`DraftEdit` path as the editor, then leave publishing to autosave.
+today the way the app does, append Store's `DailyNote.addition` through the same
+`append(_:to:)` path as the editor, then leave publishing to autosave.
 The notes-schema create uses the same local draft as New Gist and opens it
 through its saved link. Its content can be supplied when creating; adding
 attachments, pinning immediately or placing it in an existing gist is

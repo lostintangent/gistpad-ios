@@ -38,12 +38,7 @@ public struct GistCache: Codable, Equatable, Sendable {
         }
     }
 
-    /// The file's last text from GitHub, to show right away.
-    public func text(of filename: String, in gist: Gist) -> String? {
-        texts[Self.key(gist.id, filename)]?.text
-    }
-
-    /// The file's last text and revision from GitHub.
+    /// The file's last text and revision from GitHub, to show right away.
     public func version(of filename: String, gistID: String) -> GitHubVersion? {
         texts[Self.key(gistID, filename)]
     }

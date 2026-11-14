@@ -112,7 +112,7 @@ extension GistPadModel {
     }) {
       return localFile(draft)
     }
-    guard let gist, let text = gistCache?.text(of: selectedFilename, in: gist) else { return nil }
+    guard let gist, let text = gistCache?.version(of: selectedFilename, gistID: gist.id)?.text else { return nil }
     return GistFile(
       accountID: account.id, gist: gist, filename: selectedFilename,
       published: GitHubVersion(text: text, revision: gist.revision))

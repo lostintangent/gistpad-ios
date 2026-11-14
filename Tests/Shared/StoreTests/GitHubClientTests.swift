@@ -42,9 +42,9 @@ import Testing
                 headers: ["Link": "<https://example.com/gists?page=2>; rel=\"next\""], data: Data("[]".utf8))
         }
         let client = GitHubClient(session: session) { "fake" }
-        await #expect(throws: GitHubClientError.unsafeURL) { try await client.listGists() }
+        await #expect(throws: GitHubClientError.invalidResponse) { try await client.listGists() }
         #expect(try await client.content(gist: rawGist(), filename: "README.md") == "raw")
-        await #expect(throws: GitHubClientError.unsafeURL) {
+        await #expect(throws: GitHubClientError.invalidResponse) {
             try await client.content(gist: rawGist(url: "https://example.com/raw/README.md"), filename: "README.md")
         }
         #expect(hosts.withLock { $0 } == ["api.github.com", "gist.githubusercontent.com"])
@@ -119,7 +119,7 @@ import Testing
 
     @Test func aTestThatReachesForTheRealNetworkFails() async {
         await #expect(processExitsWith: .failure) {
-            _ = GitHubClient { "a real token" }
+            _ = GitHubClient.makeSession()
         }
     }
 }

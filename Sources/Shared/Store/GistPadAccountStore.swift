@@ -33,7 +33,12 @@ public struct GistPadAccount: Codable, Equatable, Sendable, Identifiable {
     public let id: UUID
     public let github: GitHubUser
     public let preferences: GistPadPreferences
-    public var displayName: String? { preferences.profileDisplayName }
+    /// Your name as GitHub gave it to Supabase.
+    public var displayName: String? {
+        ["full_name", "name"].lazy
+            .compactMap { self.preferences.metadata[$0]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
 
     public init(id: UUID, github: GitHubUser, preferences: GistPadPreferences) {
         self.id = id
@@ -112,23 +117,13 @@ public actor GistPadAccountStore {
     private var updatingPreferences = false
 
     /// Stands in for the system web session: it gets the sign-in URL and returns the callback.
-    typealias LaunchFlow = @MainActor @Sendable (URL) async throws -> URL
+    public typealias LaunchFlow = @MainActor @Sendable (URL) async throws -> URL
 
+    /// An account store whose `signIn()` goes through `launchFlow` when there is one, as the
+    /// fixture server's does, and through the system web session otherwise.
     public init(
-        publishableKey: String,
-        credentials: any AuthLocalStorage = Keychain(),
-        session: URLSession? = nil,
-        automaticallyRefreshesToken: Bool = true
-    ) throws {
-        try self.init(
-            publishableKey: publishableKey, credentials: credentials, session: session,
-            automaticallyRefreshesToken: automaticallyRefreshesToken, launchFlow: nil)
-    }
-
-    /// An account whose `signIn()` goes through `launchFlow`. The fixture server uses this.
-    init(
-        publishableKey: String, credentials: any AuthLocalStorage, session: URLSession?,
-        automaticallyRefreshesToken: Bool, launchFlow: LaunchFlow?
+        publishableKey: String, credentials: any AuthLocalStorage = Keychain(), session: URLSession? = nil,
+        automaticallyRefreshesToken: Bool = true, launchFlow: LaunchFlow? = nil
     ) throws {
         guard Self.isPublishableKey(publishableKey) else {
             throw AccountError.invalidConfiguration
@@ -187,12 +182,6 @@ public actor GistPadAccountStore {
 
     @discardableResult
     public func signIn() async throws -> GistPadAccount {
-        try await signIn(launchFlow: launchFlow)
-    }
-
-    /// Signs in through `launchFlow` instead of the system web session.
-    @discardableResult
-    func signIn(launchFlow: LaunchFlow?) async throws -> GistPadAccount {
         guard !signingIn, !signingOut, !updatingPreferences else { throw AccountError.busy }
         signingIn = true
         defer { signingIn = false }

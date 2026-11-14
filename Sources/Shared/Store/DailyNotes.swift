@@ -36,7 +36,7 @@ public struct DailyNote: Codable, Equatable, Sendable {
         }
         self.init(
             day: day, gistID: gist?.id, draftID: draft?.id,
-            text: draft?.text ?? gist.flatMap { cache?.text(of: day.filename, in: $0) })
+            text: draft?.text ?? gist.flatMap { cache?.version(of: day.filename, gistID: $0.id) }?.text)
     }
 }
 
@@ -79,10 +79,9 @@ extension DailyNote {
     }
 }
 
-extension DraftEdit {
-    /// Adds `text` to the end of the day's draft: a paragraph, or with `asTask`, one task per line.
-    public static func addToToday(_ text: String, asTask: Bool, to draft: GistFileDraft) -> Self {
-        let source = draft.text
+extension DailyNote {
+    /// What Add to Today appends to `source`: a paragraph, or with `asTask`, one task per line.
+    public static func addition(_ text: String, asTask: Bool, after source: String) -> String {
         let content = asTask
             ? text.split(whereSeparator: \.isNewline)
                 .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -92,7 +91,7 @@ extension DraftEdit {
             : text.trimmingCharacters(in: .newlines)
         let separator = source.isEmpty || source.hasSuffix(asTask ? "\n" : "\n\n") ? ""
             : asTask || source.hasSuffix("\n") ? "\n" : "\n\n"
-        return Self(draft: draft, text: separator + content + "\n")
+        return separator + content + "\n"
     }
 }
 

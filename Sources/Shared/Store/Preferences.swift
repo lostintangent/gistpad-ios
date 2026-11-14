@@ -23,16 +23,6 @@ public struct GistPadPreferences: Codable, Equatable, Sendable {
         metadata[preference.rawValue]?.boolValue ?? fallback
     }
 
-    public var profileDisplayName: String? {
-        for key in ["full_name", "name"] {
-            if let value = metadata[key]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !value.isEmpty {
-                return value
-            }
-        }
-        return nil
-    }
-
     public var tags: [Tag] {
         tagMetadata.map { id, value in
             Tag(

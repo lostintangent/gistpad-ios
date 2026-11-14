@@ -10,18 +10,18 @@ public struct ImageStorage: Sendable {
         case http(status: Int)
     }
 
-    public typealias TokenProvider = @Sendable () async throws -> String?
+    public typealias TokenProvider = @Sendable () async throws -> String
     private let publishableKey: String
     private let token: TokenProvider
     private let session: URLSession
 
     public init(
-        publishableKey: String, session: URLSession? = nil,
+        publishableKey: String, session: URLSession,
         token: @escaping TokenProvider
     ) throws {
         guard GistPadAccountStore.isPublishableKey(publishableKey) else { throw AccountError.invalidConfiguration }
         self.publishableKey = publishableKey
-        self.session = session ?? GitHubClient.makeSession()
+        self.session = session
         self.token = token
     }
 
@@ -34,7 +34,7 @@ public struct ImageStorage: Sendable {
         request.httpMethod = "POST"
         request.httpBody = image
         request.setValue(publishableKey, forHTTPHeaderField: "apikey")
-        request.setValue("Bearer \(credential ?? publishableKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
         request.setValue(type.preferredMIMEType, forHTTPHeaderField: "Content-Type")
         request.setValue("max-age=3600", forHTTPHeaderField: "Cache-Control")
         let (_, response) = try await session.data(for: request)

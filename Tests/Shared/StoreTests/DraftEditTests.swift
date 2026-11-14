@@ -11,7 +11,7 @@ import Testing
         let opened = GistFileDraft(accountID: account)
         let typed = try await store.save(opened, text: text, github: nil)
         await #expect(throws: DraftError.changed) {
-            try await store.apply(DraftEdit(draft: opened, text: "x"), github: nil)
+            try await store.append("x", to: opened, github: nil)
         }
         #expect(try await store.drafts(accountID: account).first { $0.id == typed.id }?.text == text)
     }
@@ -76,7 +76,7 @@ import Testing
         #expect(try await upgraded.drafts(accountID: account).first { $0.id == conflicted }?.conflict
             == GitHubVersion(text: "theirs", revision: "two"))
         try GistCache(accountID: account).save(to: upgraded.modelContainer)
-        #expect(try await upgraded.apply(DraftEdit(draft: draft, text: " accepted"), github: nil).text
+        #expect(try await upgraded.append(" accepted", to: draft, github: nil).text
             == "unsynced source accepted")
         #expect(try GistCache.load(accountID: account, from: upgraded.modelContainer) != nil)
     }

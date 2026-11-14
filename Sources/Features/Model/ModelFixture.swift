@@ -23,7 +23,7 @@
     ) async throws {
       try seed(server)
       accounts = try server.accounts()
-      var account = try await server.signIn(accounts)
+      var account = try await accounts.signIn()
       let operations = preferences + (autosave ? [] : [.setBoolean(.isAutoSaveEnabled, false)])
       if !operations.isEmpty { account = try await accounts.update(operations, accountID: account.id) }
       self.account = account

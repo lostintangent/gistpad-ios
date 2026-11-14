@@ -188,7 +188,7 @@ extension GistPadModel {
           return try await deleteFile(draft.filename, gistID: gistID, account: account)
         }
         try await serially {
-          try await draftStore.discardLocalCopy(id: draft.id, accountID: draft.accountID)
+          try await draftStore.removeDrafts(accountID: draft.accountID) { $0.id == draft.id }
         }
         forget(gistID: draft.gistID, filename: draft.filename, drafts: [draft.id], accountID: account.id)
         drafts.removeAll { $0.id == draft.id }
@@ -200,7 +200,7 @@ extension GistPadModel {
           let (github, _) = try await ownedGist(id, account: account)
           try await github.deleteGist(id: id)
           try updateCache(account.id) { $0.remove(gistID: id) }
-          try await draftStore.removeDrafts(gistID: id, accountID: account.id)
+          try await draftStore.removeDrafts(accountID: account.id) { $0.gistID == id }
         }
         forgetGist(id, accountID: account.id)
       }
@@ -291,7 +291,7 @@ extension GistPadModel {
       if gist.files[filename] != nil, gist.files.count == 1 {
         try await github.deleteGist(id: gistID)
         try updateCache(account.id) { $0.remove(gistID: gistID) }
-        try await draftStore.removeDrafts(gistID: gistID, accountID: account.id)
+        try await draftStore.removeDrafts(accountID: account.id) { $0.gistID == gistID }
         return nil
       }
       // A file that's already gone from GitHub only needs its copy on this iPhone removed.
@@ -299,7 +299,9 @@ extension GistPadModel {
         gist.files[filename] == nil
         ? gist : try await github.updateGist(id: gistID, files: [filename: .delete])
       try updateCache(account.id) { $0.remove(gistID: gistID, filename: filename, updated: updated) }
-      try await draftStore.removeDrafts(gistID: gistID, filename: filename, accountID: account.id)
+      try await draftStore.removeDrafts(accountID: account.id) {
+        $0.gistID == gistID && $0.filename == filename
+      }
       return updated
     }
     guard let left else { return forgetGist(gistID, accountID: account.id) }

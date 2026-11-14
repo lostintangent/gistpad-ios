@@ -2,14 +2,11 @@ import Foundation
 import Comments
 
 public enum GitHubClientError: Error, Equatable, Sendable {
-    case invalidIdentifier
     case invalidResponse
-    case unsafeURL
     case http(status: Int)
     case incompleteGist
     case missingFile
     case fileTooLarge
-    case invalidUTF8
 }
 
 extension GitHubClientError: LocalizedError {
@@ -23,7 +20,7 @@ extension GitHubClientError: LocalizedError {
             String(localized: "GitHub returned an incomplete gist. It can't be edited safely.")
         case .missingFile: String(localized: "This file is no longer in the gist.")
         case .fileTooLarge: String(localized: "This file is too large to open.")
-        case .invalidIdentifier, .invalidResponse, .unsafeURL, .invalidUTF8, .http:
+        case .invalidResponse, .http:
             String(localized: "GitHub couldn't complete the request. Try again.")
         }
     }
@@ -50,23 +47,13 @@ public enum GitHubProblem: Equatable, Sendable {
     }
 }
 
-public struct RemoteFile: Sendable {
-    public let gist: Gist
-    public let content: String?
-
-    public init(gist: Gist, content: String?) {
-        self.gist = gist
-        self.content = content
-    }
-}
-
 public actor GitHubClient {
     public typealias TokenProvider = @Sendable () async throws -> String
     private let session: URLSession
     private let token: TokenProvider
 
-    public init(session: URLSession? = nil, token: @escaping TokenProvider) {
-        self.session = session ?? Self.makeSession()
+    public init(session: URLSession, token: @escaping TokenProvider) {
+        self.session = session
         self.token = token
     }
 
@@ -105,7 +92,7 @@ public actor GitHubClient {
         }
         guard let url = file.rawURL, url.scheme == "https",
               url.host == "gist.githubusercontent.com", url.user == nil, url.password == nil,
-              url.port == nil else { throw GitHubClientError.unsafeURL }
+              url.port == nil else { throw GitHubClientError.invalidResponse }
         guard (file.size ?? 0) <= 10_000_000 else { throw GitHubClientError.fileTooLarge }
         // Raw URLs are unlisted, not credentials. Never forward the API token to this host.
         let (data, response) = try await session.data(from: url)
@@ -114,17 +101,19 @@ public actor GitHubClient {
             throw GitHubClientError.http(status: response.statusCode)
         }
         guard data.count <= 10_000_000 else { throw GitHubClientError.fileTooLarge }
-        guard let content = String(data: data, encoding: .utf8) else { throw GitHubClientError.invalidUTF8 }
+        guard let content = String(data: data, encoding: .utf8) else { throw GitHubClientError.invalidResponse }
         return Gist.File.decodeContent(content)
     }
 
     /// Fetches a gist and one file, enforcing ownership and completeness. `content` is nil when the file is gone.
-    public func remoteFile(gistID: String, ownerID: Int64, filename: String) async throws -> RemoteFile {
+    public func remoteFile(
+        gistID: String, ownerID: Int64, filename: String
+    ) async throws -> (gist: Gist, content: String?) {
         let gist = try await gist(id: gistID)
         guard gist.owner?.id == ownerID else { throw DraftError.readOnly }
         guard gist.truncated != true else { throw GitHubClientError.incompleteGist }
-        guard gist.files[filename] != nil else { return RemoteFile(gist: gist, content: nil) }
-        return RemoteFile(gist: gist, content: try await content(gist: gist, filename: filename))
+        guard gist.files[filename] != nil else { return (gist, nil) }
+        return (gist, try await content(gist: gist, filename: filename))
     }
 
     public func createGist(
@@ -202,7 +191,7 @@ public actor GitHubClient {
     }
 
     private func commentPath(gistID: String, commentID: Int64) throws -> String {
-        guard commentID > 0 else { throw GitHubClientError.invalidIdentifier }
+        guard commentID > 0 else { throw GitHubClientError.invalidResponse }
         return "/gists/\(try identifier(gistID))/comments/\(commentID)"
     }
 
@@ -220,7 +209,7 @@ public actor GitHubClient {
     private func identifier(_ value: String) throws -> String {
         guard !value.isEmpty,
               value.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0)
-                  || (97...122).contains($0) }) else { throw GitHubClientError.invalidIdentifier }
+                  || (97...122).contains($0) }) else { throw GitHubClientError.invalidResponse }
         return value
     }
 
@@ -275,7 +264,7 @@ public actor GitHubClient {
     }
 
     private func request(path: String, method: String = "GET", body: Data? = nil) async throws -> (Data, String?) {
-        guard let url = URL(string: "https://api.github.com\(path)") else { throw GitHubClientError.unsafeURL }
+        guard let url = URL(string: "https://api.github.com\(path)") else { throw GitHubClientError.invalidResponse }
         return try await request(url: url, method: method, body: body)
     }
 
@@ -283,7 +272,7 @@ public actor GitHubClient {
         guard url.scheme == "https", url.host == "api.github.com", url.port == nil,
               url.user == nil, url.password == nil,
               url.path == "/gists" || url.path.hasPrefix("/gists/") else {
-            throw GitHubClientError.unsafeURL
+            throw GitHubClientError.invalidResponse
         }
     }
 

@@ -11,9 +11,11 @@ private func dailyData() throws -> Data {
     @Test func addToTodayAppendsAParagraphOrOneTaskPerLine() async throws {
         let store = try GistFileDraftStore.open(inMemory: true)
         var draft = GistFileDraft(accountID: UUID(), text: "# Today\n\nA thought")
-        draft = try await store.apply(.addToToday("A second thought", asTask: false, to: draft), github: nil)
-        draft = try await store.apply(
-            .addToToday("First task\n  \t\n日本語 👩🏽‍💻\n", asTask: true, to: draft), github: nil)
+        draft = try await store.append(
+            DailyNote.addition("A second thought", asTask: false, after: draft.text), to: draft, github: nil)
+        draft = try await store.append(
+            DailyNote.addition("First task\n  \t\n日本語 👩🏽‍💻\n", asTask: true, after: draft.text),
+            to: draft, github: nil)
         #expect(draft.text == "# Today\n\nA thought\n\nA second thought\n- [ ] First task\n- [ ] 日本語 👩🏽‍💻\n")
     }
 

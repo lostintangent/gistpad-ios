@@ -42,8 +42,10 @@ struct GistFileEditorTests {
     let window = try EditorContinuityTests().host(fileEditor.editor)
     defer { window.isHidden = true }
     let image = "\n![Image](https://example.test/image.png)"
-    let insertion = DraftEdit(draft: fileEditor.file.nextDraft, text: image)
-    try await fileEditor.applyDurableEdit(insertion) { try await fixture.store.apply(insertion, github: nil) }
+    let draft = fileEditor.file.nextDraft
+    try await fileEditor.applyDurableEdit(appending: image, to: draft) {
+      try await fixture.store.append(image, to: draft, github: nil)
+    }
     #expect(fileEditor.editor.text == "Base" + image)
     fileEditor.editor.textView.undoManager?.undo()
     #expect(fileEditor.editor.text == "Base")
@@ -51,7 +53,9 @@ struct GistFileEditorTests {
     edit(fileEditor, to: "Newer 日本語")
     #expect(await fileEditor.waitForLocalSave())
     await #expect(throws: DraftError.changed) {
-      try await fileEditor.applyDurableEdit(insertion) { try await fixture.store.apply(insertion, github: nil) }
+      try await fileEditor.applyDurableEdit(appending: image, to: draft) {
+        try await fixture.store.append(image, to: draft, github: nil)
+      }
     }
     #expect(fileEditor.editor.text == "Newer 日本語")
     #expect(try await fixture.saved(fileEditor).text == "Newer 日本語")

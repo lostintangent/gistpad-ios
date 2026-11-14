@@ -11,13 +11,12 @@ import Testing
 
     @Test func signInRequestsGistScopeAndSurvivesRelaunch() async throws {
         let server = FixtureServer()
-        let accounts = try server.accounts()
         await #expect(throws: (any Error).self) {
-            try await accounts.signIn { _ in throw CancellationError() }
+            try await server.accounts { _ in throw CancellationError() }.signIn()
         }
-        #expect(try await accounts.connectedAccount() == nil)
+        #expect(try await server.accounts().connectedAccount() == nil)
 
-        let account = try await accounts.signIn { url in
+        let accounts = try server.accounts { url in
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
             #expect(url.host == GistPadAccountStore.projectURL.host)
             #expect(query.first { $0.name == "provider" }?.value == "github")
@@ -27,6 +26,7 @@ import Testing
             #expect(query.first { $0.name == "code_challenge" }?.value?.isEmpty == false)
             return URL(string: "gistpad://auth-callback?code=fixture")!
         }
+        let account = try await accounts.signIn()
         #expect(account.id == id)
         #expect(account.github == FixtureServer.you)
         #expect(try await accounts.githubToken(accountID: id) == "fixture-github")
@@ -46,7 +46,7 @@ import Testing
     func signOutClearsTheAccountEvenWithoutNetwork(sessionRevoked: Bool) async throws {
         let server = FixtureServer()
         let accounts = try server.accounts()
-        try await server.signIn(accounts)
+        try await accounts.signIn()
         if sessionRevoked { try server.credentials.remove(key: sessionKey) }
         let attempts = Mutex<[String]>([])
         server.intercept { request in
@@ -68,7 +68,7 @@ import Testing
     @Test func onlyAFailingGitHubTokenAsksToReconnect() async throws {
         let server = FixtureServer()
         let accounts = try server.accounts()
-        try await server.signIn(accounts)
+        try await accounts.signIn()
         // The SDK drops its session when Supabase revokes it, and GitHub keeps working.
         try server.credentials.remove(key: sessionKey)
         #expect(try await accounts.cachedAccount() == nil)
@@ -83,7 +83,7 @@ import Testing
 
     @Test func connectedAccountLaunchesFromTheSnapshotWithoutSupabaseOrNetwork() async throws {
         let server = FixtureServer()
-        try await server.signIn(server.accounts())
+        try await server.accounts().signIn()
         try server.credentials.remove(key: sessionKey)
         let attempts = Mutex(0)
         server.intercept { _ in

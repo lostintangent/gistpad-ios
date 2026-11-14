@@ -30,7 +30,7 @@ private func listed(_ gist: Gist) throws -> Gist {
         let store = try GistFileDraftStore.open(url: url)
         var cache = GistCache(accountID: account)
         cache.replaceLists(owned: [try listed(full)], starred: [])
-        #expect(cache.text(of: "README.md", in: try listed(full)) == nil)
+        #expect(cache.version(of: "README.md", gistID: try listed(full).id) == nil)
         cache.update(full)
         try cache.save(to: store.modelContainer)
 

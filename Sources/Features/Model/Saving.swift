@@ -35,8 +35,8 @@ extension GistPadModel {
   }
 
   /// Adds to a file from outside the app, such as Add to Today, and saves it on this iPhone.
-  public func apply(_ edit: DraftEdit) async throws -> GistFileDraft {
-    let applied = try await draftStore.apply(edit, github: github(edit.draft))
+  public func append(_ text: String, to draft: GistFileDraft) async throws -> GistFileDraft {
+    let applied = try await draftStore.append(text, to: draft, github: github(draft))
     if account?.id == applied.accountID {
       record(applied)
       updateRow(for: applied)
@@ -64,19 +64,19 @@ extension GistPadModel {
 }
 
 extension GistFileEditor {
-  /// Adds `edit` to the end of the open file, only while the editor shows the text it was made for.
+  /// Adds `text` to the end of the open file, only while the editor shows `draft`'s text.
   public func applyDurableEdit(
-    _ edit: DraftEdit,
+    appending text: String, to draft: GistFileDraft,
     commit: @MainActor () async throws -> GistFileDraft
   ) async throws {
-    guard edit.draft.accountID == file.accountID, edit.draft.id == file.nextDraft.id else {
+    guard draft.accountID == file.accountID, draft.id == file.nextDraft.id else {
       throw AccountError.accountChanged
     }
-    guard sourceEqual(edit.draft.text, editor.text) else { throw DraftError.changed }
+    guard sourceEqual(draft.text, editor.text) else { throw DraftError.changed }
     try await commitMutation(
       Edit(
         range: NSRange(location: editor.text.utf16.count, length: 0), expected: "",
-        replacement: edit.text),
+        replacement: text),
       expectedGeneration: editor.generation, commit: commit)
   }
 

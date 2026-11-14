@@ -137,7 +137,7 @@ extension GistFileEditor {
   /// takes GitHub's newer text, and one with edits shows the conflict.
   public func inspectRemoteChanges() async {
     guard GistPadModel.isStale(refreshedAt), !isInspectingRemote, !isPublishing, canEdit,
-      !file.isDeletedOnGitHub, file.gistID != nil, file.draft?.conflict == nil,
+      !file.isDeletedOnGitHub, let gistID = file.gistID, file.draft?.conflict == nil,
       model.account?.id == file.accountID, model.phase.switchingTo == nil
     else { return }
     isInspectingRemote = true
@@ -151,14 +151,13 @@ extension GistFileEditor {
       let (stored, remote) = try await model.serially {
         let stored = try await model.current(read)
         let current = stored ?? read
-        guard let gistID = current.gistID else { return (stored, RemoteFile?.none) }
         let remote = try await github.remoteFile(
           gistID: gistID, ownerID: ownerID, filename: current.filename)
         try model.cache(remote, filename: current.filename, accountID: current.accountID)
         return (stored, remote)
       }
       try await model.reloadLocalState(accountID: read.accountID)
-      guard let remote, editor.generation == generation, !isPublishing, canEdit else { return }
+      guard editor.generation == generation, !isPublishing, canEdit else { return }
       if let stored {
         // The store refuses this if you typed after the fetch.
         await adopt(
