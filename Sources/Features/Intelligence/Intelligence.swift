@@ -2,13 +2,14 @@ import Foundation
 import Editor
 import OSLog
 
+let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
+
 @MainActor
 package final class Intelligence {
   let backend: any IntelligenceModel
   private let framingReserve = 96
   /// Real answers use under 120 tokens. A runaway repeats itself until this limit stops it.
   private let answerTokens = 384
-  private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 
   package init(backend: any IntelligenceModel) {
     self.backend = backend
@@ -433,11 +434,7 @@ package final class Intelligence {
   }
 
   private func fits(_ pass: ModelPass, model: ModelInfo) async throws -> Bool {
-    guard model.contextSize > 0, pass.responseTokens > 0 else {
-      throw IntelligenceError.insufficientContext
-    }
     let count = try await backend.tokenCount(for: pass)
-    guard count >= 0 else { throw IntelligenceError.invalidResponse }
     let fits = count <= model.contextSize - pass.responseTokens - framingReserve
     logger.notice(
       "request=\(pass.requestID.uuidString, privacy: .public) phase=\(pass.purpose.rawValue, privacy: .public) inputTokens=\(count) responseTokens=\(pass.responseTokens) context=\(model.contextSize) fits=\(fits)"

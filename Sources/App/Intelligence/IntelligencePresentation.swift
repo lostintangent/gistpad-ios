@@ -1,4 +1,3 @@
-import Accent
 import Editor
 import Intelligence
 import Observation
@@ -66,7 +65,6 @@ extension View {
 
 private struct IntelligenceSheetModifier: ViewModifier {
   @Bindable var presentation: IntelligencePresentation
-  @Environment(\.accent) private var accent
 
   func body(content: Content) -> some View {
     content
@@ -75,7 +73,6 @@ private struct IntelligenceSheetModifier: ViewModifier {
           editor: target.editor, title: target.title,
           revealSource: { target.reference = $0 }
         )
-        .environment(\.accent, accent)
       }
   }
 }

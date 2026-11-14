@@ -16,6 +16,14 @@ package struct FileSnapshot: Sendable, Equatable {
 
 package enum IntelligenceAction: String, CaseIterable, Sendable {
   case ask, edit, review
+
+  var title: String {
+    switch self {
+    case .ask: String(localized: "Ask", bundle: .module)
+    case .edit: String(localized: "Edit", bundle: .module)
+    case .review: String(localized: "Review", bundle: .module)
+    }
+  }
 }
 
 package struct IntelligenceRequest: Sendable {

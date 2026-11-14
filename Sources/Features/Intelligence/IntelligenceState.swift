@@ -22,10 +22,8 @@
     var review: Review?
     var appliedEdit: Review?
     var appliedCount = 0
-    var applyFeedback = 0
     private(set) var snapshot: FileSnapshot?
     private let engine: Intelligence
-    private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
     @ObservationIgnored private(set) var task: Task<Void, Never>?
 
     init(editor: Editor, backend: any IntelligenceModel = OnDeviceModel()) {
@@ -128,7 +126,7 @@
           let failure =
             (error as? IntelligenceError).map { String(describing: $0) }
             ?? String(reflecting: type(of: error))
-          self.logger.error(
+          logger.error(
             "request=\(requestID.uuidString, privacy: .public) failure=\(failure, privacy: .public)")
         }
       }
@@ -150,9 +148,8 @@
     }
 
     func apply(commentID: UUID? = nil) {
-      guard let review else { return }
+      guard let review, !isRunning else { return }
       do {
-        guard !isRunning, !isStale else { throw IntelligenceError.staleSnapshot }
         let count = review.comments.filter {
           $0.canApply && (commentID == nil || $0.id == commentID)
         }.count
@@ -161,7 +158,6 @@
         self.review = remaining
         snapshot = remaining.snapshot
         appliedCount += count
-        applyFeedback &+= 1
         errorMessage = nil
         notice = String(
           localized: "Applied. The editor's Undo restores your text.", bundle: .module)

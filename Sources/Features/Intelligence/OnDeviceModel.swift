@@ -5,8 +5,6 @@ import OSLog
 @MainActor
 package final class OnDeviceModel: IntelligenceModel {
   private let model = SystemLanguageModel.default
-  private var loggedModel = false
-  private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 
   package init() {}
 
@@ -32,13 +30,7 @@ package final class OnDeviceModel: IntelligenceModel {
       throw IntelligenceError.unavailable(
         String(localized: "Apple Intelligence is currently unavailable.", bundle: .module))
     }
-    let info = ModelInfo(variant: model.variant.displayName, contextSize: model.contextSize)
-    if !loggedModel {
-      logger.debug(
-        "On-device model: \(info.variant, privacy: .public), context: \(info.contextSize)")
-      loggedModel = true
-    }
-    return info
+    return ModelInfo(variant: model.variant.displayName, contextSize: model.contextSize)
   }
 
   package func tokenCount(for pass: ModelPass) async throws -> Int {

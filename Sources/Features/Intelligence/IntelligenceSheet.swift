@@ -27,10 +27,10 @@
         Form {
           Section {
             Picker(String(localized: "Action", bundle: .module), selection: $model.action) {
-              Text("Ask", bundle: .module).tag(IntelligenceAction.ask)
-              Text("Edit", bundle: .module).tag(IntelligenceAction.edit)
-                .disabled(!model.editor.textView.isEditable)
-              Text("Review", bundle: .module).tag(IntelligenceAction.review)
+              ForEach(IntelligenceAction.allCases, id: \.self) { action in
+                Text(action.title).tag(action)
+                  .disabled(action == .edit && !model.editor.textView.isEditable)
+              }
             }
             .pickerStyle(.segmented)
             .disabled(model.isRunning)
@@ -51,10 +51,10 @@
                 .accessibilityIdentifier("intelligence-progress")
             }
           }
-          if model.isStale, model.snapshot != nil {
+          if model.isStale {
             Section {
               Label(
-                String(localized: "This file has changed since this result.", bundle: .module),
+                IntelligenceError.staleSnapshot.localizedDescription,
                 systemImage: "arrow.clockwise")
             }
           }
@@ -86,7 +86,7 @@
               .disabled(model.isCancelling)
               .accessibilityIdentifier("intelligence-cancel")
             } else {
-              Button(verb, role: .confirm) {
+              Button(model.action.title, role: .confirm) {
                 promptFocused = false
                 model.generate()
               }
@@ -98,7 +98,7 @@
       }
       .presentationDetents([.medium, .large], selection: $detent)
       .presentationDragIndicator(.visible)
-      .sensoryFeedback(.success, trigger: model.applyFeedback)
+      .sensoryFeedback(.success, trigger: model.appliedCount) { old, new in new > old }
       .task {
         if dynamicTypeSize.isAccessibilitySize { detent = .large }
         await model.checkAvailability()
@@ -116,14 +116,6 @@
       }
       .onDisappear { model.cancel() }
       .accessibilityIdentifier("note-intelligence-sheet")
-    }
-
-    private var verb: String {
-      switch model.action {
-      case .ask: String(localized: "Ask", bundle: .module)
-      case .edit: String(localized: "Edit", bundle: .module)
-      case .review: String(localized: "Review", bundle: .module)
-      }
     }
 
     @ViewBuilder
