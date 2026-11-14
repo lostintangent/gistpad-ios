@@ -126,7 +126,7 @@
 
     @Test func aReadOnlyFileAllowsAskAndReviewButNotEditOrApply() async {
       let editor = Editor(fileID: "read-only", text: source)
-      editor.textView.isEditable = false
+      editor.isEditable = false
       let state = IntelligenceState(editor: editor, backend: FixtureLanguageModel())
       await state.checkAvailability()
       state.askPrompt = "When do I leave?"

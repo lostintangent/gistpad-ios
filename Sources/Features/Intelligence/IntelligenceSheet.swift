@@ -29,7 +29,7 @@
             Picker(String(localized: "Action", bundle: .module), selection: $state.action) {
               ForEach(IntelligenceAction.allCases, id: \.self) { action in
                 Text(action.title).tag(action)
-                  .disabled(action == .edit && !state.editor.textView.isEditable)
+                  .disabled(action == .edit && !state.editor.isEditable)
               }
             }
             .pickerStyle(.segmented)
@@ -141,7 +141,7 @@
           .accessibilityIdentifier("intelligence-prompt")
         }
       } footer: {
-        if !state.editor.textView.isEditable {
+        if !state.editor.isEditable {
           Text(
             "This gist is read-only. You can ask and review, but not apply changes.",
             bundle: .module)

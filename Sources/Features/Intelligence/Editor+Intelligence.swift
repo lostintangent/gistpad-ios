@@ -34,7 +34,7 @@ extension FileSnapshot {
     func apply(
       _ proposal: Proposal, changeID: UUID? = nil
     ) throws -> Proposal {
-      guard textView.isEditable else {
+      guard isEditable else {
         throw IntelligenceError.unavailable(
           String(
             localized: "This gist is read-only, so changes can't be applied.",
@@ -45,7 +45,7 @@ extension FileSnapshot {
       let edit = Edit(
         range: NSRange(location: 0, length: snapshot.source.utf16.count),
         expected: snapshot.source, replacement: application.source,
-        selection: try application.mappedSelection(textView.selectedRange))
+        selection: try application.mappedSelection(selection))
       try apply(edit, generation: snapshot.generation)
       return try application.remaining(on: self.snapshot())
     }

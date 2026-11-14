@@ -47,7 +47,7 @@
     var canGenerate: Bool {
       available && !isRunning
         && (action == .review || !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        && (action != .edit || editor.textView.isEditable)
+        && (action != .edit || editor.isEditable)
     }
 
     var canApply: Bool {
