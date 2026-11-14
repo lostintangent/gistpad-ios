@@ -1,6 +1,6 @@
 #if os(iOS)
 import UIKit
-import Accent
+import Appearance
 
 struct PreviewAppearance: Equatable {
     let variables: [String: String]

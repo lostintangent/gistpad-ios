@@ -2,7 +2,7 @@
 import SwiftUI
 import WebKit
 import OSLog
-import Accent
+import Appearance
 import Comments
 
 public struct MarkdownPreviewView: View {

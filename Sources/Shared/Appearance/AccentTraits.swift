@@ -29,6 +29,12 @@ extension EnvironmentValues {
     @Entry public var isPaneVisible = true
 }
 
+extension View {
+    public func accent(savedHex: String?) -> some View {
+        environment(\.accent, Accent(savedHex: savedHex))
+    }
+}
+
 extension RGBColor {
     public var uiColor: UIColor {
         UIColor(red: CGFloat(red) / 255, green: CGFloat(green) / 255, blue: CGFloat(blue) / 255, alpha: 1)

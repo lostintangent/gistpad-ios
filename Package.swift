@@ -3,7 +3,7 @@ import PackageDescription
 
 // GistPad.xcodeproj builds the app and its extensions from Sources/App and Sources/Extensions,
 // and links these modules. Shared is the core that features build on.
-let shared = ["Accent", "Comments", "Store"]
+let shared = ["Appearance", "Comments", "Store"]
 let features = ["Editor", "Intelligence", "Model", "Platform", "Preview", "Screens"]
 
 let package = Package(
@@ -14,32 +14,32 @@ let package = Package(
     .package(url: "https://github.com/supabase/supabase-swift.git", exact: "2.55.4")
   ],
   targets: [
-    .target(name: "Accent", path: "Sources/Shared/Accent"),
+    .target(name: "Appearance", path: "Sources/Shared/Appearance"),
     .target(name: "Comments", path: "Sources/Shared/Comments", exclude: ["README.md"]),
     .target(
       name: "Store", dependencies: ["Comments", .product(name: "Auth", package: "supabase-swift")],
       path: "Sources/Shared/Store", exclude: ["README.md"]),
 
     .target(
-      name: "Editor", dependencies: ["Accent", "Comments"], path: "Sources/Features/Editor",
+      name: "Editor", dependencies: ["Appearance", "Comments"], path: "Sources/Features/Editor",
       resources: [.process("Resources")]),
     .target(
       name: "Intelligence", dependencies: ["Editor"], path: "Sources/Features/Intelligence",
       resources: [.process("Resources")]),
     .target(
-      name: "Screens", dependencies: ["Accent", "Store"],
+      name: "Screens", dependencies: ["Appearance", "Store"],
       path: "Sources/Features/Screens", exclude: ["README.md"], resources: [.process("Resources")]),
     .target(
       name: "Model", dependencies: ["Comments", "Editor", "Screens", "Store"],
       path: "Sources/Features/Model", exclude: ["README.md"]),
     .target(
-      name: "Platform", dependencies: ["Store", "Accent"], path: "Sources/Features/Platform",
+      name: "Platform", dependencies: ["Store", "Appearance"], path: "Sources/Features/Platform",
       exclude: ["README.md"]),
     .target(
-      name: "Preview", dependencies: ["Accent", "Comments"], path: "Sources/Features/Preview",
+      name: "Preview", dependencies: ["Appearance", "Comments"], path: "Sources/Features/Preview",
       resources: [.copy("Resources/Web"), .copy("Resources/Fixtures")]),
 
-    .testTarget(name: "AccentTests", dependencies: ["Accent"], path: "Tests/Shared/AccentTests"),
+    .testTarget(name: "AppearanceTests", dependencies: ["Appearance"], path: "Tests/Shared/AppearanceTests"),
     .testTarget(
       name: "CommentsTests", dependencies: ["Comments"], path: "Tests/Shared/CommentsTests",
       resources: [.copy("Fixtures")]),
@@ -60,7 +60,7 @@ let package = Package(
       name: "PlatformTests", dependencies: ["Platform", "Store", "Editor"],
       path: "Tests/Features/PlatformTests"),
     .testTarget(
-      name: "PreviewTests", dependencies: ["Preview", "Accent", "Comments"],
+      name: "PreviewTests", dependencies: ["Preview", "Appearance", "Comments"],
       path: "Tests/Features/PreviewTests"),
 
     // The on-device Intelligence eval, which reaches the pipeline through `package` access.

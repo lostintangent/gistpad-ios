@@ -1,5 +1,5 @@
 #if os(iOS)
-import Accent
+import Appearance
 import SwiftUI
 
 public struct AccentColorRow: View {
@@ -43,12 +43,6 @@ public struct AccentColorRow: View {
                 .foregroundStyle(.red)
                 .accessibilityIdentifier("settings-accent-error")
         }
-    }
-}
-
-extension View {
-    public func accent(savedHex: String?) -> some View {
-        environment(\.accent, Accent(savedHex: savedHex))
     }
 }
 #endif

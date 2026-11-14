@@ -1,8 +1,8 @@
 import SwiftUI
 import Testing
-@testable import Accent
+@testable import Appearance
 // macOS QuickDraw also declares an `RGBColor`.
-import struct Accent.RGBColor
+import struct Appearance.RGBColor
 
 struct AccentTests {
     @Test("A picked color saves as the web's sRGB hex")

@@ -1,6 +1,6 @@
 #if canImport(UIKit)
   import Accessibility
-  import Accent
+  import Appearance
   import AppIntents
   import Comments
   import Observation

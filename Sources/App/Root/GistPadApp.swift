@@ -1,3 +1,4 @@
+import Appearance
 import Model
 import Platform
 import SwiftUI

@@ -1,5 +1,5 @@
 #if canImport(UIKit)
-  import Accent
+  import Appearance
   import Comments
   import SwiftUI
   import UIKit

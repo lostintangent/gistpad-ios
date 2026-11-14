@@ -1,5 +1,5 @@
 #if os(iOS)
-import Accent
+import Appearance
 import SwiftUI
 import WidgetKit
 

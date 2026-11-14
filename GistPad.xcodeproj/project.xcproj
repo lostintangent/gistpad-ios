@@ -111,7 +111,7 @@
       "package-product-members": [
         {
           "package": ".",
-          "product-name": "Accent",
+          "product-name": "Appearance",
           "build-phase": { "build-phase": "frameworks" },
         }, {
           "package": ".",
@@ -184,7 +184,7 @@
       "package-product-members": [
         {
           "package": ".",
-          "product-name": "Accent",
+          "product-name": "Appearance",
           "build-phase": { "build-phase": "frameworks" },
         }, {
           "package": ".",
