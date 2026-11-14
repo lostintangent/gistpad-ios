@@ -30,7 +30,7 @@ struct RootView: View {
     self.model = model
     self.pending = pending
     _layout = State(initialValue: layout)
-    _comments = State(initialValue: CommentsPresentation(model: model))
+    _comments = State(initialValue: CommentsPresentation(app: model))
     _images = State(initialValue: ImageUpload(upload: model.uploadImage))
   }
 
@@ -394,7 +394,7 @@ struct RootView: View {
       })
     var details = fileEditor.details
     if comments.matches(fileEditor.file) {
-      details.commentCount = comments.conversation?.comments?.count ?? details.commentCount
+      details.commentCount = comments.model?.comments?.count ?? details.commentCount
     }
     return GistScreen(
       gist: details, mode: mode,
@@ -402,14 +402,14 @@ struct RootView: View {
       allowsSplit: !comments.isPresented && LayoutPreferences.allowsSplit(availableWidth: availableWidth),
       areCommentsPresented: comments.isPresented && comments.matches(fileEditor.file)
     ) {
+      let highlights = comments.highlights(for: fileEditor, origin: .edit)
       EditorView(
         editor: fileEditor.editor, title: details.title,
         insertImage: images.canChooseImage(for: fileEditor)
           ? { @MainActor in comments.performAfterClosing { images.chooseImage(for: fileEditor) } }
           : nil,
         intelligence: { comments.performAfterClosing { presentIntelligence(fileEditor) } },
-        comments: commentConfiguration(fileEditor),
-        commentActions: commentActions(fileEditor, origin: .edit))
+        comments: highlights.configuration, commentActions: highlights.actions)
     } preview: {
       preview(fileEditor)
     }
@@ -431,21 +431,7 @@ struct RootView: View {
       }
     }
     .task(id: fileEditor.editor.id) { await fileEditor.inspectRemoteChanges() }
-    .task(id: CommentReadInput(
-      editorID: fileEditor.editor.id, gistID: fileEditor.file.gist?.id,
-      knownTotal: fileEditor.file.gist?.commentCount,
-      isReady: model.account?.id == fileEditor.file.accountID
-        && !model.phase.isChangingAccount,
-      allowsComments: CommentsPresentation.supports(fileEditor.file),
-      showsInline: model.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true)
-    ) {
-      guard model.account?.id == fileEditor.file.accountID, !model.phase.isChangingAccount
-      else { return }
-      comments.activate(fileEditor)
-      await comments.prepareAnnotations(
-        for: fileEditor,
-        showsInline: model.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true)
-    }
+    .task(id: comments.tracking(fileEditor)) { await comments.track(fileEditor) }
     .onChange(of: LayoutPreferences.allowsSplit(availableWidth: availableWidth)) { _, allows in
       if !allows, layout.preferredMode == .split, fileEditor.editor.isEditing {
         fileEditor.mode = .edit
@@ -454,10 +440,10 @@ struct RootView: View {
   }
 
   private func preview(_ fileEditor: GistFileEditor) -> some View {
-    FilePreview(
+    let highlights = comments.highlights(for: fileEditor, origin: .preview)
+    return FilePreview(
       editor: fileEditor.editor, allowsMutations: fileEditor.details.isOwned,
-      comments: commentConfiguration(fileEditor),
-      commentActions: commentActions(fileEditor, origin: .preview),
+      comments: highlights.configuration, commentActions: highlights.actions,
       openWikilink: { target in
         if let gist = model.state.gists.first(where: {
           $0.title.localizedStandardCompare(target) == .orderedSame
@@ -471,60 +457,12 @@ struct RootView: View {
       .appEntityIdentifier(entityIdentifier(for: fileEditor))
   }
 
-  private func commentConfiguration(
-    _ fileEditor: GistFileEditor
-  ) -> CommentHighlightConfiguration {
-    guard CommentsPresentation.supports(fileEditor.file),
-      comments.matches(fileEditor.file), let conversation = comments.conversation
-    else { return .init() }
-    return .init(
-      quotes: conversation.threads.compactMap(\.quotedPassage),
-      selectedThreadID: comments.selectedRootID,
-      revealRevision: comments.revealRevision,
-      showsInlineComments:
-        model.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true)
-  }
-
-  private func commentActions(
-    _ fileEditor: GistFileEditor, origin: FileMode
-  ) -> CommentHighlightActions? {
-    guard CommentsPresentation.supports(fileEditor.file) else { return nil }
-    let isCurrent = { comments.editorID == fileEditor.editor.id }
-    return CommentHighlightActions(
-      open: { ids in
-        guard isCurrent() else { return }
-        if ids.count == 1, let id = ids.first {
-          comments.open(for: fileEditor, origin: origin, rootID: id)
-        } else {
-          comments.fileMode = origin
-          comments.overlappingIDs = ids
-        }
-      },
-      linked: { ids in
-        guard isCurrent() else { return }
-        if origin == .preview { comments.previewLinkedIDs = ids } else { comments.sourceLinkedIDs = ids }
-      },
-      add: { selection in
-        guard isCurrent() else { return }
-        comments.open(for: fileEditor, origin: origin, quote: selection)
-      })
-  }
-
   private func afterCommentsClose(_ action: (() -> Void)?) -> (() -> Void)? {
     action.map(afterCommentsClose)
   }
 
   private func afterCommentsClose(_ action: @escaping () -> Void) -> () -> Void {
     { comments.performAfterClosing(action) }
-  }
-
-  private struct CommentReadInput: Hashable {
-    let editorID: UUID
-    let gistID: String?
-    let knownTotal: Int?
-    let isReady: Bool
-    let allowsComments: Bool
-    let showsInline: Bool
   }
 
   private func gistActions(_ fileEditor: GistFileEditor) -> GistActions {

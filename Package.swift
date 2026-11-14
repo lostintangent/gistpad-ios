@@ -27,7 +27,7 @@ let package = Package(
       name: "Intelligence", dependencies: ["Editor"], path: "Sources/Features/Intelligence",
       resources: [.process("Resources")]),
     .target(
-      name: "Screens", dependencies: ["Accent", "Comments", "Store"],
+      name: "Screens", dependencies: ["Accent", "Store"],
       path: "Sources/Features/Screens", exclude: ["README.md"], resources: [.process("Resources")]),
     .target(
       name: "Model", dependencies: ["Comments", "Editor", "Screens", "Store"],

@@ -1,36 +1,23 @@
 import Comments
-import Screens
 import Model
 import SwiftUI
 
 struct CommentsInspector: View {
-  @Bindable var conversation: CommentsModel
-  let selectedRootID: Int64?
-  var threadRevealRevision: UInt64 = 0
-  let linkedRootIDs: Set<Int64>?
-  @Binding var isComposerFocused: Bool
-  let close: () -> Void
-  let revealPassage: (Int64) -> Void
-  let didFocus: () -> Void
+  let comments: CommentsPresentation
+  let model: CommentsModel
   @State private var linkFailure: String?
 
   var body: some View {
     NavigationStack {
-      CommentsConversation(
-        comments: conversation.comments, currentUserID: conversation.userID,
-        gistOwnerID: conversation.gistOwnerID, selectedRootID: selectedRootID,
-        selectedRootRevision: threadRevealRevision,
-        linkedRootIDs: linkedRootIDs, isRefreshing: conversation.isRefreshing,
-        failure: conversation.failure == .load ? conversation.failure?.interfaceDescription : nil,
-        actions: actions)
+      CommentsConversation(comments: comments, model: model)
         .safeAreaBar(edge: .bottom, spacing: 0) {
-          composer
+          CommentsComposer(comments: comments, model: model)
         }
         .navigationTitle("Comments")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
-            Button(role: .close, action: close)
+            Button(role: .close) { comments.hide() }
               .accessibilityIdentifier("comments-close")
           }
         }
@@ -52,54 +39,6 @@ struct CommentsInspector: View {
       Text(verbatim: linkFailure ?? "")
     }
     .accessibilityIdentifier("comments-inspector")
-  }
-
-  private var actions: CommentsConversationActions {
-    var actions = CommentsConversationActions(refresh: { await conversation.refresh() })
-    actions.areActionsEnabled = !conversation.isPosting
-    actions.reply = { id in
-      conversation.beginReply(to: id)
-      focusComposer()
-    }
-    actions.edit = { id in
-      conversation.beginEditing(id)
-      focusComposer()
-    }
-    actions.delete = { id in Task { await conversation.delete(id) } }
-    actions.revealPassage = revealPassage
-    return actions
-  }
-
-  private var composer: some View {
-    CommentsComposer(
-      text: $conversation.draft, context: composerContext, canPost: conversation.canPost,
-      isPosting: conversation.isPosting,
-      failure: conversation.failure == .load ? nil : conversation.failure?.interfaceDescription,
-      isFocused: $isComposerFocused,
-      post: { Task { await conversation.post() } },
-      removeContext: {
-        if case .edit = conversation.target { isComposerFocused = false } else { focusComposer() }
-        conversation.removeContext()
-      },
-      didFocus: didFocus)
-  }
-
-  private var composerContext: CommentsComposerContext {
-    switch conversation.target {
-    case .root:
-      .root
-    case .quote(let text, let filename):
-      .quote(text: text, filename: filename)
-    case .reply(let id):
-      .reply(author: conversation.comments?.first { $0.id == id }?.user?.login)
-    case .edit:
-      .editing
-    }
-  }
-
-  private func focusComposer() {
-    didFocus()
-    isComposerFocused = true
   }
 }
 
@@ -127,7 +66,7 @@ private struct CommentsInspectorHost: ViewModifier {
   }
 
   private var commentCount: CommentCount? {
-    guard let scope = comments.scope, let total = comments.conversation?.comments?.count else { return nil }
+    guard let scope = comments.scope, let total = comments.model?.comments?.count else { return nil }
     return .init(scope: scope, total: total)
   }
 
@@ -173,7 +112,7 @@ private struct CommentsInspectorHost: ViewModifier {
       }
       .onChange(of: commentCount, initial: true) { _, count in
         if let count {
-          comments.model.recordCommentCount(
+          comments.app.recordCommentCount(
             accountID: count.scope.accountID, gistID: count.scope.gistID, total: count.total)
         }
       }
@@ -189,16 +128,8 @@ private struct CommentsInspectorHost: ViewModifier {
   @ViewBuilder
   private var panel: some View {
     Group {
-      if let conversation = comments.conversation {
-        CommentsInspector(
-          conversation: conversation, selectedRootID: comments.selectedRootID,
-          threadRevealRevision: comments.threadRevealRevision,
-          linkedRootIDs: comments.fileMode == .edit
-            ? comments.sourceLinkedIDs : comments.previewLinkedIDs,
-          isComposerFocused: $comments.isComposerFocused,
-          close: { comments.hide() },
-          revealPassage: comments.revealPassage,
-          didFocus: { comments.detent = .large })
+      if let model = comments.model {
+        CommentsInspector(comments: comments, model: model)
       } else {
         NavigationStack {
           Group {
@@ -239,25 +170,25 @@ private struct CommentsInspectorHost: ViewModifier {
 
   private func choicePresented(inInspector: Bool) -> Binding<Bool> {
     Binding(
-      get: { comments.isPresented == inInspector && !comments.overlappingIDs.isEmpty },
+      get: { comments.isPresented == inInspector && !comments.overlappingThreadIDs.isEmpty },
       set: { presented in
-        if !presented, comments.isPresented == inInspector { comments.overlappingIDs = [] }
+        if !presented, comments.isPresented == inInspector { comments.overlappingThreadIDs = [] }
       })
   }
 
   @ViewBuilder
   private var choices: some View {
-    ForEach(comments.overlappingIDs, id: \.self) { id in
-      if let thread = comments.conversation?.threads.first(where: { $0.id == id }),
+    ForEach(comments.overlappingThreadIDs, id: \.self) { id in
+      if let thread = comments.model?.threads.first(where: { $0.id == id }),
         let active {
         let author = thread.comment.user?.login ?? String(localized: "Unknown author")
         let excerpt = String(thread.comment.parsedBody.text.prefix(80))
         Button("\(author): \(excerpt)") {
-          comments.overlappingIDs = []
-          comments.open(for: active, origin: comments.fileMode, rootID: id)
+          comments.overlappingThreadIDs = []
+          comments.open(for: active, origin: comments.fileMode, threadID: id)
         }
       }
     }
-    Button("Cancel", role: .cancel) { comments.overlappingIDs = [] }
+    Button("Cancel", role: .cancel) { comments.overlappingThreadIDs = [] }
   }
 }

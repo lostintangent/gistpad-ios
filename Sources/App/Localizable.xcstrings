@@ -9,7 +9,60 @@
     "Unknown author" : {},
     "Comments couldn’t be opened" : {},
     "Opening comments" : {},
-    "Show Front Matter" : {}
+    "Show Front Matter" : {},
+    "%lld replies" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reply"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld replies"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Comment actions" : {},
+    "Comments couldn’t be loaded" : {},
+    "Loading comments" : {},
+    "this author" : {},
+    "Delete %@’s comment from GitHub?" : {},
+    "Delete Comment" : {},
+    "Edit Comment" : {},
+    "“%@”\n\nOnly this comment is deleted. Its replies stay in the conversation." : {},
+    "Reply" : {},
+    "Reply to %@" : {},
+    "%@, reply to %@" : {},
+    "Show Passage" : {},
+    "Show Full Quote" : {},
+    "Show Less" : {},
+    "Not linked in this view" : {},
+    "Write a reply" : {},
+    "Write a comment" : {},
+    "Edit your comment" : {},
+    "Replying to @%@" : {},
+    "Replying to a comment" : {},
+    "Selected from %@: %@" : {},
+    "Editing your comment" : {},
+    "Cancel editing comment" : {},
+    "Remove comment context" : {},
+    "Post" : {},
+    "Couldn’t reach GitHub. Check your connection and try again." : {},
+    "Your comment couldn’t be posted. Check your connection and try again." : {},
+    "Your edit couldn’t be saved. Check your connection and try again." : {},
+    "The comment couldn’t be deleted. Check your connection and try again." : {},
+    "Cancel" : {},
+    "Try Again" : {}
   },
   "version" : "1.0"
 }

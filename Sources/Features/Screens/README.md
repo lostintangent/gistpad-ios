@@ -64,9 +64,7 @@ until Save, then sends the preference changes in order: upserts, memberships,
 deletions.
 A retry resends the same edits, and the sheet closes only after `save` succeeds.
 `AccentColorRow` saves the personal color, and `.accent(savedHex:)` applies it
-to content, never to navigation or commands. `CommentsConversation` and
-`CommentsComposer` show a gist's threads and the composer, while the app owns
-the conversation from Comments.
+to content, never to navigation or commands.
 
 ## Validation
 

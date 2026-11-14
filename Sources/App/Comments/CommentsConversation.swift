@@ -1,83 +1,42 @@
-#if os(iOS)
 import Accent
 import Comments
 import SwiftUI
 
-@MainActor
-public struct CommentsConversationActions {
-    public var refresh: () async -> Void
-    public var reply: ((Int64) -> Void)?
-    public var edit: ((Int64) -> Void)?
-    public var delete: ((Int64) -> Void)?
-    public var revealPassage: ((Int64) -> Void)?
-    public var areActionsEnabled = true
-
-    public init(refresh: @escaping () async -> Void) {
-        self.refresh = refresh
-    }
-}
-
-public struct CommentsConversation: View {
-    private let comments: [GistComment]?
-    private let currentUserID: Int64?
-    private let gistOwnerID: Int64?
-    private let selectedRootID: Int64?
-    private let selectedRootRevision: UInt64
-    private let linkedRootIDs: Set<Int64>?
-    private let isRefreshing: Bool
-    private let failure: String?
-    private let actions: CommentsConversationActions
+struct CommentsConversation: View {
+    let comments: CommentsPresentation
+    let model: CommentsModel
     @State private var deletionTarget: GistComment?
     @State private var position = ScrollPosition(idType: Int64.self, edge: .top)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var threadSpacing = 16
 
-    public init(
-        comments: [GistComment]?, currentUserID: Int64?, gistOwnerID: Int64?,
-        selectedRootID: Int64? = nil, selectedRootRevision: UInt64 = 0,
-        linkedRootIDs: Set<Int64>? = nil,
-        isRefreshing: Bool = false, failure: String? = nil,
-        actions: CommentsConversationActions
-    ) {
-        self.comments = comments
-        self.currentUserID = currentUserID
-        self.gistOwnerID = gistOwnerID
-        self.selectedRootID = selectedRootID
-        self.selectedRootRevision = selectedRootRevision
-        self.linkedRootIDs = linkedRootIDs
-        self.isRefreshing = isRefreshing
-        self.failure = failure
-        self.actions = actions
-    }
-
-    private var threads: [GistCommentThread] {
-        comments.map(GistCommentThread.build(from:)) ?? []
+    private var failure: String? {
+        model.failure == .load ? model.failure?.interfaceDescription : nil
     }
 
     /// A new selection, or its thread arriving, scrolls the thread to the top once.
-    private var reveal: Reveal {
+    private func reveal(in threads: [GistCommentThread]) -> Reveal {
         .init(
-            id: selectedRootID, revision: selectedRootRevision,
-            exists: threads.contains { $0.id == selectedRootID })
+            id: comments.selectedThreadID, revision: comments.threadRevealRevision,
+            exists: threads.contains { $0.id == comments.selectedThreadID })
     }
 
-    public var body: some View {
+    var body: some View {
+        let threads = model.threads
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if comments != nil, let failure {
+                if model.comments != nil, let failure {
                     refreshFailure(failure)
                 }
                 ForEach(threads) { thread in
                     CommentThreadContent(
-                        thread: thread, parentLogin: nil, currentUserID: currentUserID,
-                        gistOwnerID: gistOwnerID, selectedRootID: selectedRootID,
-                        linkedRootIDs: linkedRootIDs, actions: actions,
+                        comments: comments, model: model, thread: thread, parentLogin: nil,
                         requestDelete: { deletionTarget = $0 })
                         .padding(.horizontal, 20)
                         .padding(.vertical, threadSpacing / 2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background {
-                            if thread.id == selectedRootID {
+                            if thread.id == comments.selectedThreadID {
                                 RoundedRectangle(cornerRadius: 12)
                                     .fill(Color(.tertiarySystemFill))
                                     .padding(.horizontal, 8)
@@ -85,14 +44,14 @@ public struct CommentsConversation: View {
                         }
                         .accessibilityElement(children: .contain)
                         .accessibilityAddTraits(
-                            thread.id == selectedRootID ? .isSelected : [])
+                            thread.id == comments.selectedThreadID ? .isSelected : [])
                         .accessibilityIdentifier("comment-thread-\(thread.id)")
                 }
             }
             .scrollTargetLayout()
         }
         .scrollPosition($position)
-        .onChange(of: reveal, initial: true) { previous, reveal in
+        .onChange(of: reveal(in: threads), initial: true) { previous, reveal in
             guard reveal.exists, let id = reveal.id else { return }
             withAnimation(previous == reveal || reduceMotion ? nil : .snappy) {
                 position.scrollTo(id: id, anchor: .top)
@@ -100,44 +59,42 @@ public struct CommentsConversation: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .scrollEdgeEffectStyle(.soft, for: .bottom)
-        .refreshable { await actions.refresh() }
+        .refreshable { await model.refresh() }
         .overlay { emptyState }
         .tint(.primary)
         .accessibilityIdentifier("comments-conversation")
         .confirmationDialog(
             String(
-                localized: "Delete \(deletionTarget?.user?.login ?? String(localized: "this author", bundle: .module))’s comment from GitHub?",
-                bundle: .module),
+                localized: "Delete \(deletionTarget?.user?.login ?? String(localized: "this author"))’s comment from GitHub?"),
             isPresented: Binding(
                 get: { deletionTarget != nil },
                 set: { if !$0 { deletionTarget = nil } }),
             titleVisibility: .visible
         ) {
-            if let target = deletionTarget, let delete = actions.delete {
-                Button(String(localized: "Delete Comment", bundle: .module), role: .destructive) {
+            if let target = deletionTarget {
+                Button(String(localized: "Delete Comment"), role: .destructive) {
                     deletionTarget = nil
-                    delete(target.id)
+                    Task { await model.delete(target.id) }
                 }
             }
-            Button(String(localized: "Cancel", bundle: .module), role: .cancel) {
+            Button(String(localized: "Cancel"), role: .cancel) {
                 deletionTarget = nil
             }
         } message: {
             if let target = deletionTarget {
                 Text(
-                    "“\(String(target.parsedBody.text.prefix(140)))”\n\nOnly this comment is deleted. Its replies stay in the conversation.",
-                    bundle: .module)
+                    "“\(String(target.parsedBody.text.prefix(140)))”\n\nOnly this comment is deleted. Its replies stay in the conversation.")
             }
         }
     }
 
     @ViewBuilder
     private var emptyState: some View {
-        if comments == nil {
+        if model.comments == nil {
             if let failure {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Comments couldn’t be loaded", bundle: .module).font(.headline)
+                        Text("Comments couldn’t be loaded").font(.headline)
                         Text(verbatim: failure)
                         retry
                     }
@@ -145,7 +102,7 @@ public struct CommentsConversation: View {
                     .padding(20)
                 }
             } else {
-                ProgressView(String(localized: "Loading comments", bundle: .module))
+                ProgressView(String(localized: "Loading comments"))
                     .accessibilityIdentifier("comments-loading")
             }
         }
@@ -162,11 +119,11 @@ public struct CommentsConversation: View {
     }
 
     private var retry: some View {
-        Button(String(localized: "Try Again", bundle: .module)) {
-            Task { await actions.refresh() }
+        Button(String(localized: "Try Again")) {
+            Task { await model.refresh() }
         }
         .buttonStyle(.glass)
-        .disabled(isRefreshing)
+        .disabled(model.isRefreshing)
         .accessibilityIdentifier("comments-retry")
     }
 
@@ -178,13 +135,10 @@ public struct CommentsConversation: View {
 }
 
 private struct CommentThreadContent: View {
+    let comments: CommentsPresentation
+    let model: CommentsModel
     let thread: GistCommentThread
     let parentLogin: String?
-    let currentUserID: Int64?
-    let gistOwnerID: Int64?
-    let selectedRootID: Int64?
-    let linkedRootIDs: Set<Int64>?
-    let actions: CommentsConversationActions
     let requestDelete: (GistComment) -> Void
     @State private var showsReplies = false
     @State private var showsFullQuote = false
@@ -198,7 +152,7 @@ private struct CommentThreadContent: View {
     private var comment: GistComment { thread.comment }
     private var parsed: GistCommentBody { comment.parsedBody }
     private var login: String {
-        comment.user?.login ?? String(localized: "Unknown author", bundle: .module)
+        comment.user?.login ?? String(localized: "Unknown author")
     }
 
     var body: some View {
@@ -208,10 +162,8 @@ private struct CommentThreadContent: View {
                 DisclosureGroup(isExpanded: $showsReplies) {
                     ForEach(thread.replies) { reply in
                         CommentThreadContent(
-                            thread: reply, parentLogin: login,
-                            currentUserID: currentUserID, gistOwnerID: gistOwnerID,
-                            selectedRootID: selectedRootID, linkedRootIDs: linkedRootIDs,
-                            actions: actions, requestDelete: requestDelete)
+                            comments: comments, model: model, thread: reply, parentLogin: login,
+                            requestDelete: requestDelete)
                             .padding(.leading, dynamicTypeSize.isAccessibilitySize ? 0 : 12)
                             .padding(.top, quoteSpacing)
                     }
@@ -219,7 +171,7 @@ private struct CommentThreadContent: View {
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("comment-\(comment.id)")
                 } label: {
-                    Text("\(thread.replies.count) replies", bundle: .module)
+                    Text("\(thread.replies.count) replies")
                         .font(.subheadline)
                         .frame(minHeight: 44, alignment: .leading)
                 }
@@ -239,12 +191,13 @@ private struct CommentThreadContent: View {
                 .tint(Color(uiColor: .systemBlue))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if thread.canReply, let reply = actions.reply {
+            if thread.canReply {
                 Button {
-                    reply(comment.id)
+                    model.beginReply(to: comment.id)
+                    comments.focusComposer()
                 } label: {
                     Label {
-                        Text("Reply", bundle: .module)
+                        Text("Reply")
                             .fixedSize(horizontal: false, vertical: true)
                     } icon: {
                         Image(systemName: "arrowshape.turn.up.left")
@@ -257,8 +210,8 @@ private struct CommentThreadContent: View {
                 .foregroundStyle(.secondary)
                 .buttonStyle(.borderless)
                 .padding(.vertical, -8)
-                .disabled(!actions.areActionsEnabled)
-                .accessibilityLabel(Text("Reply to \(login)", bundle: .module))
+                .disabled(model.isPosting)
+                .accessibilityLabel(Text("Reply to \(login)"))
                 .accessibilityIdentifier("comment-reply-\(comment.id)")
             }
         }
@@ -271,41 +224,42 @@ private struct CommentThreadContent: View {
                 Text(verbatim: login)
                     .font(.subheadline.weight(.semibold))
                     .accessibilityLabel(
-                        parentLogin.map { Text("\(login), reply to \($0)", bundle: .module) }
+                        parentLogin.map { Text("\(login), reply to \($0)") }
                             ?? Text(verbatim: login))
                 Text(comment.createdAt, format: .relative(presentation: .named))
                     .font(.caption)
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: 0)
-            if showsMenu {
+            if canEdit || canDelete {
                 Menu {
-                    if comment.canEdit(as: currentUserID), let edit = actions.edit {
-                        Button(
-                            String(localized: "Edit Comment", bundle: .module), systemImage: "pencil"
-                        ) { edit(comment.id) }
+                    if canEdit {
+                        Button(String(localized: "Edit Comment"), systemImage: "pencil") {
+                            model.beginEditing(comment.id)
+                            comments.focusComposer()
+                        }
                     }
-                    if comment.canDelete(as: currentUserID, gistOwnerID: gistOwnerID),
-                       actions.delete != nil {
+                    if canDelete {
                         Button(
-                            String(localized: "Delete Comment", bundle: .module),
+                            String(localized: "Delete Comment"),
                             systemImage: "trash", role: .destructive
                         ) { requestDelete(comment) }
                     }
                 } label: {
-                    Label(String(localized: "Comment actions", bundle: .module), systemImage: "ellipsis")
+                    Label(String(localized: "Comment actions"), systemImage: "ellipsis")
                         .labelStyle(.iconOnly)
                         .frame(minWidth: 44, minHeight: 44)
                 }
-                .disabled(!actions.areActionsEnabled)
+                .disabled(model.isPosting)
                 .accessibilityIdentifier("comment-actions-\(comment.id)")
             }
         }
     }
 
-    private var showsMenu: Bool {
-        (comment.canEdit(as: currentUserID) && actions.edit != nil)
-            || (comment.canDelete(as: currentUserID, gistOwnerID: gistOwnerID) && actions.delete != nil)
+    private var canEdit: Bool { comment.canEdit(as: model.userID) }
+
+    private var canDelete: Bool {
+        comment.canDelete(as: model.userID, gistOwnerID: model.gistOwnerID)
     }
 
     private func quotedPassage(_ quote: String) -> some View {
@@ -338,13 +292,12 @@ private struct CommentThreadContent: View {
                                 }
                                 .accessibilityHidden(true)
                         }
-                    if linkedRootIDs?.contains(comment.id) == true,
-                       let reveal = actions.revealPassage {
+                    if comments.linkedThreadIDs?.contains(comment.id) == true {
                         Button {
-                            reveal(comment.id)
+                            comments.revealPassage(comment.id)
                         } label: {
                             Label(
-                                String(localized: "Show Passage", bundle: .module),
+                                String(localized: "Show Passage"),
                                 systemImage: "text.viewfinder")
                                 .labelStyle(.iconOnly)
                                 .frame(minWidth: 44, minHeight: 44)
@@ -354,7 +307,7 @@ private struct CommentThreadContent: View {
                         // Keeps the 44-point target without letting it stretch the quote rule.
                         .padding(.vertical, -10)
                         .accessibilityAddTraits(
-                            selectedRootID == comment.id ? .isSelected : [])
+                            comments.selectedThreadID == comment.id ? .isSelected : [])
                         .accessibilityIdentifier("comment-passage-\(comment.id)")
                     }
                 }
@@ -365,8 +318,8 @@ private struct CommentThreadContent: View {
                         Label {
                             Text(
                                 showsFullQuote
-                                    ? String(localized: "Show Less", bundle: .module)
-                                    : String(localized: "Show Full Quote", bundle: .module)
+                                    ? String(localized: "Show Less")
+                                    : String(localized: "Show Full Quote")
                             )
                             .fixedSize(horizontal: false, vertical: true)
                         } icon: {
@@ -381,9 +334,9 @@ private struct CommentThreadContent: View {
                     .buttonStyle(.borderless)
                     .padding(.vertical, -8)
                 }
-                if let linkedRootIDs {
-                    if !linkedRootIDs.contains(comment.id) {
-                        Text("Not linked in this view", bundle: .module)
+                if let linkedThreadIDs = comments.linkedThreadIDs {
+                    if !linkedThreadIDs.contains(comment.id) {
+                        Text("Not linked in this view")
                             .font(.footnote)
                     }
                 }
@@ -432,4 +385,3 @@ private struct CommentAvatar: View {
         .accessibilityHidden(true)
     }
 }
-#endif

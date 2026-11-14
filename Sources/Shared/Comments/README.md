@@ -1,6 +1,6 @@
 # Comments
 
-Gist comments, shaped like the comments panel on gistpad.dev. The package uses only Foundation, so the editor, Preview, Screens and Store share it without accounts or storage.
+Gist comments, shaped like the comments panel on gistpad.dev. The package uses only Foundation, so the editor, Preview, Store and the app share it without accounts or storage.
 
 ```swift
 let threads = GistCommentThread.build(from: comments)
@@ -15,6 +15,6 @@ let highlights = CommentQuoteMatcher.highlights(quotes: quotes, segments: [sourc
 - `CommentHighlightConfiguration` carries the quotes, the selected comment and the inline toggle to the editor and Preview, and `CommentHighlightActions` carries what a passage does when it's tapped, verified or quoted. Nil actions mean the file has no comments.
 - `CommentsModel` is the open gist's `@MainActor` `@Observable` conversation. It loads through a `CommentsRemote`, which `GitHubClient` implements. `comments` is nil until the first load succeeds. One in-memory `draft` has a `Target`: root, quote, reply or edit. Editing a comment borrows the composer, and the unsent draft returns when the edit ends. A failed load, post, edit or delete sets `failure` and keeps the draft.
 
-The app's `CommentsPresentation` creates one `CommentsModel` per signed-in account and published gist. Daily notes and recovery files have no comments.
+The app's `CommentsPresentation` creates one `CommentsModel` per signed-in account and published gist, gives the editor and Preview their highlights, and hosts the inspector with its conversation and composer. Daily notes, unpublished notes and notes deleted on GitHub have no comments.
 
 `Tests/Shared/CommentsTests/Fixtures/WebCompatibility.json` pins body parsing and quote matching to `gistpad.dev/src/features/comments/threads.ts`. Run `swift test --filter CommentsTests`.
