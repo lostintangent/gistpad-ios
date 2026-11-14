@@ -117,11 +117,13 @@ import Testing
         ])
     }
 
+    #if os(macOS)
     @Test func aTestThatReachesForTheRealNetworkFails() async {
         await #expect(processExitsWith: .failure) {
             _ = GitHubClient.makeSession()
         }
     }
+    #endif
 }
 
 /// A gist whose README lives only behind its raw URL, the way GitHub serves large files.

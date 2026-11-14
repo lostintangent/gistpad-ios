@@ -83,6 +83,16 @@ Debug builds take fixture launch arguments, such as `--fixture standard --open s
 swift test
 ```
 
+Package tests that need UIKit, in Editor, Intelligence, Preview and Screens, compile only for iOS, so `swift test` skips them. They run on the slot simulator through the package's own `GistPad-Package` scheme, which `-workspace .` opens:
+
+```sh
+xcodebuild -workspace . -scheme GistPad-Package \
+  -destination 'platform=iOS Simulator,id=DEVICE_ID' \
+  -derivedDataPath DerivedData/Package \
+  -only-testing:EditorTests -only-testing:IntelligenceTests \
+  -only-testing:PreviewTests -only-testing:ScreensTests test
+```
+
 **App and UI tests** run on the slot simulator. Add `-only-testing:GistPadTests` or `-only-testing:GistPadUITests` to run one target. Leave signing on, because the app group comes from the signed entitlements and `PlatformTests` fail without it.
 
 ```sh
