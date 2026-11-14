@@ -43,7 +43,7 @@ struct PreferencesTests {
     /// A write sends only the fields it changes, keeps everything the web wrote, and survives a relaunch.
     @Test func writesChangeOnlyTheirFieldsKeepTheWebsAndPersist() async throws {
         let server = FixtureServer()
-        let accounts = try server.accounts()
+        let accounts = server.accounts()
         let id = FixtureServer.accountID
         try await accounts.signIn()
         server.mergeMetadata([
@@ -103,7 +103,6 @@ struct PreferencesTests {
         await #expect(throws: (any Error).self) {
             try await accounts.update([.setBoolean(.isAutoSaveEnabled, true)], accountID: id)
         }
-        try server.credentials.remove(key: "gistpad-supabase-session")
         #expect(try await server.accounts().connectedAccount() == deleted)
     }
 }

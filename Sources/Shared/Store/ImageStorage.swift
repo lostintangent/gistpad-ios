@@ -18,8 +18,7 @@ public struct ImageStorage: Sendable {
     public init(
         publishableKey: String, session: URLSession,
         token: @escaping TokenProvider
-    ) throws {
-        guard GistPadAccountStore.isPublishableKey(publishableKey) else { throw AccountError.invalidConfiguration }
+    ) {
         self.publishableKey = publishableKey
         self.session = session
         self.token = token

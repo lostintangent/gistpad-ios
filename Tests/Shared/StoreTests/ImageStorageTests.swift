@@ -26,7 +26,7 @@ func testImage(_ type: UTType) throws -> Data {
         let bytes = try testImage(.jpeg)
         let asset = try #require(UUID(uuidString: "12345678-ABCD-4000-8000-123456789ABC"))
         let requests = Mutex<[String]>([])
-        let storage = try ImageStorage(
+        let storage = ImageStorage(
             publishableKey: "sb_publishable_fake",
             session: FakeURLProtocol.session { request in
                 requests.withLock { $0.append(request.httpMethod ?? "") }

@@ -217,7 +217,7 @@ extension GistPadModel {
         try await serially { try await accountStore.signOut(accountID: account.id) }
       } catch {
         // A sign-out that already removed this iPhone's session still signs you out here.
-        if try await accountStore.cachedAccount() == nil, self.account?.id == account.id {
+        if try await accountStore.connectedAccount() == nil, self.account?.id == account.id {
           reset(to: nil)
         }
         throw error

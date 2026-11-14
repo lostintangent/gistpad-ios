@@ -22,7 +22,7 @@
       lastOpened: Opening.Request? = nil, seed: (FixtureServer) throws -> Void = { _ in }
     ) async throws {
       try seed(server)
-      accounts = try server.accounts()
+      accounts = server.accounts()
       var account = try await accounts.signIn()
       let operations = preferences + (autosave ? [] : [.setBoolean(.isAutoSaveEnabled, false)])
       if !operations.isEmpty { account = try await accounts.update(operations, accountID: account.id) }

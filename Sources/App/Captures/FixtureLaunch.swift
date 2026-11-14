@@ -52,7 +52,7 @@
       let server = FixtureServer()
       if fixture == .standard || fixture == .offline { try FixtureLibrary.seed(server) }
       if fixture == .showcase { FixtureLibrary.seedShowcase(server) }
-      let accounts = try server.accounts()
+      let accounts = server.accounts()
       if fixture != .signedOut {
         let account = try await accounts.signIn()
         let seeded =

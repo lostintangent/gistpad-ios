@@ -30,14 +30,15 @@ with whatever the phone writes.
 `GistPadAccountStore` signs in with GitHub through Supabase, using PKCE, the
 `gist` scope and `gistpad://auth-callback`. `Keychain` holds the Supabase
 session and each account's GitHub token, available after first unlock and never
-synced off this device. `connectedAccount()` restores at launch without the
-network, and `refreshAccount()` fetches the latest metadata. An account whose
-GitHub identity has no user ID throws `reconnectGitHub`. Pass only a publishable
-or anon key.
+synced off this device. `connectedAccount()` is the account in Supabase's
+session, read at launch without the network, and `refreshAccount()` fetches the
+latest metadata. A sign-out on the web ends the session, so the phone asks you to
+sign in again. An account whose GitHub identity has no user ID throws
+`reconnectGitHub`.
 
 `githubClient(accountID:)` and `imageStorage(accountID:)` are bound to one
-account. A missing GitHub token is `reconnectGitHub`. Signing out keeps that
-account's drafts on the phone.
+account. Without a session they throw `signedOut`, and a missing GitHub token is
+`reconnectGitHub`. Signing out keeps that account's drafts on the phone.
 
 ## Preferences
 
