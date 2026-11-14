@@ -67,11 +67,8 @@ package struct Proposal: Sendable {
     self.safetyInstruction = safetyInstruction
   }
 
-  func dismissing(changeID: UUID) throws -> Proposal {
-    guard changes.contains(where: { $0.id == changeID }) else {
-      throw IntelligenceError.noApplicableChanges
-    }
-    return Proposal(
+  func dismissing(changeID: UUID) -> Proposal {
+    Proposal(
       snapshot: snapshot, changes: changes.filter { $0.id != changeID },
       safetyInstruction: safetyInstruction)
   }
@@ -174,21 +171,14 @@ extension Proposal {
     package let source: String
     package let applied: [Change]
 
-    func mappedSelection(_ selection: NSRange) throws -> NSRange {
-      guard Range(selection, in: proposal.snapshot.source) != nil else {
-        throw IntelligenceError.invalidSelection
-      }
+    func mappedSelection(_ selection: NSRange) -> NSRange {
       let start = mappedOffset(selection.location, trailing: selection.length == 0)
       let end = mappedOffset(NSMaxRange(selection), trailing: true)
       return NSRange(location: start, length: max(0, end - start))
     }
 
-    func remaining(on snapshot: FileSnapshot) throws -> Proposal {
-      let original = proposal.snapshot
-      guard snapshot.sessionID == original.sessionID,
-        snapshot.generation == original.generation &+ 1,
-        snapshot.source.utf8.elementsEqual(source.utf8)
-      else { throw IntelligenceError.staleSnapshot }
+    /// The changes left on the note this application produced, re-verified at their new ranges.
+    func remaining(on snapshot: FileSnapshot) -> Proposal {
       let appliedIDs = Set(applied.map(\.id))
       let remaining = proposal.changes.filter { !appliedIDs.contains($0.id) }.map { change in
         let range = change.range.map {

@@ -29,10 +29,6 @@ final class IntelligencePresentation {
         return
       }
       let generation = editor.generation
-      guard Range(range, in: editor.text) != nil else {
-        model.alertMessage = String(localized: "This reference no longer matches the file.")
-        return
-      }
       showEditor()
       fileEditor.mode = .edit
       Task { @MainActor in

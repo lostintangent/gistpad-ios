@@ -37,7 +37,7 @@ struct EditTests {
     ).application(to: mixed)
     #expect(application.source == "👩🏽‍💻 good\r\n")
     #expect(
-      try application.mappedSelection(NSRange(location: mixed.source.utf16.count, length: 0))
+      application.mappedSelection(NSRange(location: mixed.source.utf16.count, length: 0))
         == NSRange(location: application.source.utf16.count, length: 0))
 
     let empty = note("")

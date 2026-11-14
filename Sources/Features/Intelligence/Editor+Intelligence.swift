@@ -19,35 +19,19 @@ extension FileSnapshot {
   import UIKit
 
   extension Editor {
-    func snapshot() throws -> FileSnapshot {
-      guard isSettled else {
-        throw IntelligenceError.unavailable(
-          String(
-            localized: "Finish typing or wait for Writing Tools, then try again.",
-            bundle: .module))
-      }
-      return FileSnapshot(
-        parsing: text, sessionID: id, generation: generation)
+    func snapshot() -> FileSnapshot {
+      FileSnapshot(parsing: text, sessionID: id, generation: generation)
     }
 
-    @discardableResult
-    func apply(
-      _ proposal: Proposal, changeID: UUID? = nil
-    ) throws -> Proposal {
-      guard isEditable else {
-        throw IntelligenceError.unavailable(
-          String(
-            localized: "This gist is read-only, so changes can't be applied.",
-            bundle: .module))
-      }
-      let snapshot = try snapshot()
+    func apply(_ proposal: Proposal, changeID: UUID? = nil) throws -> Proposal {
+      let snapshot = snapshot()
       let application = try proposal.application(to: snapshot, changeID: changeID)
       let edit = Edit(
         range: NSRange(location: 0, length: snapshot.source.utf16.count),
         expected: snapshot.source, replacement: application.source,
-        selection: try application.mappedSelection(selection))
+        selection: application.mappedSelection(selection))
       try apply(edit, generation: snapshot.generation)
-      return try application.remaining(on: self.snapshot())
+      return application.remaining(on: self.snapshot())
     }
   }
 #endif

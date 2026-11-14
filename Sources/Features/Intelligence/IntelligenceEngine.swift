@@ -19,8 +19,7 @@ package final class IntelligenceEngine {
     _ request: IntelligenceRequest,
     progress: @MainActor (IntelligenceProgress) -> Void = { _ in }
   ) async throws -> Proposal {
-    try validate(request)
-    return try await generate(request, purpose: .edit, progress: progress)
+    try await generate(request, purpose: .edit, progress: progress)
   }
 
   package func review(
@@ -40,7 +39,7 @@ package final class IntelligenceEngine {
     let chunks =
       purpose == .edit
       ? [content(in: request)]
-      : try await chunks(for: request, purpose: purpose, model: model)
+      : try await split(content(in: request), request: request, purpose: purpose, model: model)
     var candidates: [(ModelReplacement, NSRange)] = []
     var pending = Array(chunks.reversed())
     var completed = 0
@@ -78,17 +77,11 @@ package final class IntelligenceEngine {
               throw IntelligenceError.invalidResponse
             }
             for task in selected where task.isComplete != isComplete {
-              guard let range = Range(task.range, in: request.snapshot.source) else {
-                throw IntelligenceError.invalidResponse
-              }
-              let quote = String(request.snapshot.source[range])
-              guard quote == "[ ]" || quote == "[x]" || quote == "[X]" else {
-                throw IntelligenceError.invalidResponse
-              }
               candidates.append(
                 (
                   ModelReplacement(
-                    quote: quote, replacement: isComplete ? "[x]" : "[ ]",
+                    quote: (request.snapshot.source as NSString).substring(with: task.range),
+                    replacement: isComplete ? "[x]" : "[ ]",
                     reason: isComplete
                       ? String(localized: "Mark this task complete.", bundle: .module)
                       : String(localized: "Mark this task incomplete.", bundle: .module)),
@@ -192,7 +185,6 @@ package final class IntelligenceEngine {
     progress: @MainActor (IntelligenceProgress) -> Void = { _ in },
     onPartialAnswer: @MainActor (String) -> Void = { _ in }
   ) async throws -> [AnswerPart] {
-    try validate(request)
     try Task.checkCancellation()
     let model = try await backend.modelInfo()
     logger.notice(
@@ -208,7 +200,8 @@ package final class IntelligenceEngine {
     if wholeFits {
       input = whole
     } else {
-      let chunks = try await chunks(for: request, purpose: .extract, model: model)
+      let chunks = try await split(
+        content(in: request), request: request, purpose: .extract, model: model)
       var evidence: [String] = []
       for (index, chunk) in chunks.enumerated() {
         try Task.checkCancellation()
@@ -302,7 +295,8 @@ package final class IntelligenceEngine {
             source: excerpt)
           let extraction = IntelligenceRequest(
             snapshot: snapshot, instruction: request.instruction, id: request.id)
-          let parts = try await chunks(for: extraction, purpose: .extract, model: model)
+          let parts = try await split(
+            content(in: extraction), request: extraction, purpose: .extract, model: model)
           batches.append(contentsOf: parts.map { [$0.source] })
         }
       }
@@ -347,12 +341,6 @@ package final class IntelligenceEngine {
       range: NSRange(location: start, length: source.length - start))
   }
 
-  private func chunks(
-    for request: IntelligenceRequest, purpose: ModelPass.Purpose, model: ModelInfo
-  ) async throws -> [Chunk] {
-    try await split(content(in: request), request: request, purpose: purpose, model: model)
-  }
-
   private func split(
     _ chunk: Chunk, request: IntelligenceRequest, purpose: ModelPass.Purpose,
     model: ModelInfo, force: Bool = false
@@ -373,8 +361,7 @@ package final class IntelligenceEngine {
     }
     let heading = headings.min { abs($0 - midpoint) < abs($1 - midpoint) }
     var offset: Int
-    if let heading, Range(NSRange(location: heading, length: 0), in: request.snapshot.source) != nil
-    {
+    if let heading {
       offset = heading - chunk.range.location
     } else {
       let indices = Array(chunk.source.indices)
@@ -398,17 +385,14 @@ package final class IntelligenceEngine {
     guard offset > 0, offset < chunk.range.length else {
       throw IntelligenceError.insufficientContext
     }
-    let leftRange = NSRange(location: chunk.range.location, length: offset)
-    let rightRange = NSRange(
-      location: chunk.range.location + offset, length: chunk.range.length - offset)
-    guard let left = Range(leftRange, in: request.snapshot.source),
-      let right = Range(rightRange, in: request.snapshot.source)
-    else { throw IntelligenceError.invalidResponse }
+    let source = request.snapshot.source as NSString
+    let left = NSRange(location: chunk.range.location, length: offset)
+    let right = NSRange(location: NSMaxRange(left), length: chunk.range.length - offset)
     let first = try await split(
-      Chunk(source: String(request.snapshot.source[left]), range: leftRange),
+      Chunk(source: source.substring(with: left), range: left),
       request: request, purpose: purpose, model: model)
     let second = try await split(
-      Chunk(source: String(request.snapshot.source[right]), range: rightRange),
+      Chunk(source: source.substring(with: right), range: right),
       request: request, purpose: purpose, model: model)
     return first + second
   }
@@ -440,12 +424,6 @@ package final class IntelligenceEngine {
             && NSMaxRange(task.range) <= NSMaxRange(scope)
         } : [], evidenceBlocks: evidenceBlocks,
       isPart: scope.map { $0.length < bodyLength } ?? false)
-  }
-
-  private func validate(_ request: IntelligenceRequest) throws {
-    if request.instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      throw IntelligenceError.emptyInstruction
-    }
   }
 
   private func unique(_ strings: [String]) -> [String] {

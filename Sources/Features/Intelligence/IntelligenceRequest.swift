@@ -39,7 +39,6 @@ package struct IntelligenceRequest: Sendable {
 
 package enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
   case unavailable(String)
-  case emptyInstruction
   case insufficientContext
   case invalidResponse
   case emptyAnswer
@@ -51,7 +50,6 @@ package enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
   case noEvidence
   case staleSnapshot
   case noApplicableChanges
-  case invalidSelection
   case refused
   case rateLimited
   case timedOut
@@ -59,8 +57,6 @@ package enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
   package var errorDescription: String? {
     switch self {
     case .unavailable(let reason): reason
-    case .emptyInstruction:
-      String(localized: "Enter what you would like to ask or change.", bundle: .module)
     case .insufficientContext:
       String(
         localized:
@@ -105,10 +101,6 @@ package enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
         bundle: .module)
     case .noApplicableChanges:
       String(localized: "There are no verified changes to apply.", bundle: .module)
-    case .invalidSelection:
-      String(
-        localized: "The editor selection is no longer valid. Your file is unchanged.",
-        bundle: .module)
     case .refused:
       String(
         localized: "Apple Intelligence couldn't complete this request. Your file is unchanged.",

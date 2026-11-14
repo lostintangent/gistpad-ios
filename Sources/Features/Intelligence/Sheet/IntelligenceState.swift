@@ -11,7 +11,6 @@
     var action = IntelligenceAction.ask
     var askPrompt = ""
     var editPrompt = ""
-    var isRunning = false
     var isCancelling = false
     var available = false
     var availabilityReason: String?
@@ -24,7 +23,7 @@
     var appliedCount = 0
     private(set) var snapshot: FileSnapshot?
     private let engine: IntelligenceEngine
-    @ObservationIgnored private(set) var task: Task<Void, Never>?
+    private(set) var task: Task<Void, Never>?
 
     init(editor: Editor, backend: any IntelligenceModel = OnDeviceModel()) {
       self.editor = editor
@@ -37,6 +36,8 @@
         if action == .edit { editPrompt = newValue } else { askPrompt = newValue }
       }
     }
+
+    var isRunning: Bool { task != nil }
 
     var isStale: Bool {
       guard let snapshot else { return false }
@@ -65,7 +66,7 @@
         availabilityReason = nil
       } catch {
         available = false
-        availabilityReason = Self.message(for: error)
+        availabilityReason = error.localizedDescription
       }
     }
 
@@ -83,7 +84,6 @@
     func generate() {
       guard canGenerate else { return }
       clearResults()
-      isRunning = true
       isCancelling = false
       let selectedAction = action
       let instruction = selectedAction == .review ? "" : prompt
@@ -94,13 +94,12 @@
       task = Task { [weak self] in
         guard let self else { return }
         defer {
-          self.isRunning = false
           self.isCancelling = false
           self.progress = nil
           self.task = nil
         }
         do {
-          let snapshot = try self.editor.snapshot()
+          let snapshot = self.editor.snapshot()
           self.snapshot = snapshot
           let request = IntelligenceRequest(
             snapshot: snapshot, instruction: instruction, id: requestID)
@@ -121,7 +120,7 @@
           self.notice = String(localized: "Cancelled. Your file is unchanged.", bundle: .module)
         } catch {
           if selectedAction == .ask { self.answerParts = [] }
-          self.errorMessage = Self.message(for: error)
+          self.errorMessage = error.localizedDescription
           let failure =
             (error as? IntelligenceError).map { String(describing: $0) }
             ?? String(reflecting: type(of: error))
@@ -131,15 +130,6 @@
       }
     }
 
-    private static func message(for error: any Error) -> String {
-      let message = error.localizedDescription
-      return message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        ? String(
-          localized:
-            "Apple Intelligence couldn't complete this request. Try again. Your file is unchanged.",
-          bundle: .module) : message
-    }
-
     func cancel() {
       guard isRunning else { return }
       isCancelling = true
@@ -147,7 +137,7 @@
     }
 
     func apply(changeID: UUID? = nil) {
-      guard let proposal, !isRunning else { return }
+      guard let proposal, canApply else { return }
       do {
         let count = proposal.changes.filter {
           $0.canApply && (changeID == nil || $0.id == changeID)
@@ -166,18 +156,8 @@
     }
 
     func dismiss(changeID: UUID) {
-      guard let proposal else { return }
-      do {
-        self.proposal = try proposal.dismissing(changeID: changeID)
-        errorMessage = nil
-      } catch {
-        errorMessage = error.localizedDescription
-      }
-    }
-
-    func canReveal(_ range: NSRange) -> Bool {
-      guard !isStale, let snapshot else { return false }
-      return Range(range, in: snapshot.source) != nil
+      proposal = proposal?.dismissing(changeID: changeID)
+      errorMessage = nil
     }
   }
 #endif

@@ -28,7 +28,7 @@ struct ReviewTests {
     let applied = try proposal.application(to: snapshot, changeID: try #require(changes["bad"]).id)
     let updated = snapshot.edited(to: applied.source)
     #expect(throws: IntelligenceError.self) { try proposal.application(to: updated) }
-    let remaining = try applied.remaining(on: updated)
+    let remaining = applied.remaining(on: updated)
       .dismissing(changeID: try #require(changes["typo"]).id)
     #expect(remaining.snapshot == updated)
     #expect(Set(remaining.changes.map(\.quote)) == ["odd", "Clear", "text"])

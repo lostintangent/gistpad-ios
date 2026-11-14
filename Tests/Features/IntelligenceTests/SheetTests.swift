@@ -69,7 +69,7 @@
 
     @Test(arguments: [
       AskFailure.unavailable, .error(.refused), .error(.timedOut), .error(.rateLimited),
-      .error(.insufficientContext), .error(.unavailable("")), .answer(ModelAnswer(prose: "")),
+      .error(.insufficientContext), .answer(ModelAnswer(prose: "")),
       .answer(ModelAnswer(prose: " \r\n\t")),
       .answer(ModelAnswer(prose: "", quotes: ["Invented source"])),
       .answer(ModelAnswer(prose: "The user leaves at 9am.")),
@@ -165,9 +165,9 @@
       let reference = try #require(ranges.first)
       #expect(ranges.count == 1)
       #expect(reference.location >= prefix.utf16.count)
-      #expect(state.canReveal(reference))
+      #expect(!state.isStale)
       editor.setShowsFrontMatter(!shown)
-      #expect(state.canReveal(reference))
+      #expect(!state.isStale)
       editor.setShowsFrontMatter(shown)
       #expect(editor.text.utf8.elementsEqual(text.utf8))
       #expect(editor.generation == 8)

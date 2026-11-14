@@ -185,7 +185,7 @@
               Button(
                 String(localized: "Show in File", bundle: .module), systemImage: "arrow.up.forward"
               ) { reveal(range) }
-              .disabled(!state.canReveal(range))
+              .disabled(state.isStale)
             } else if ranges.count > 1 {
               Menu(
                 String(localized: "Show in File", bundle: .module), systemImage: "arrow.up.forward"
@@ -194,7 +194,7 @@
                   Button(String(localized: "Match \(index + 1)", bundle: .module)) {
                     reveal(range)
                   }
-                  .disabled(!state.canReveal(range))
+                  .disabled(state.isStale)
                 }
               }
             }
@@ -297,7 +297,6 @@
     }
 
     private func reveal(_ range: NSRange) {
-      guard state.canReveal(range) else { return }
       revealSource(range)
       dismiss()
     }
