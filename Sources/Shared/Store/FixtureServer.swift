@@ -97,7 +97,7 @@ public final class FixtureServer: Sendable {
             state.comments[id] = comments.enumerated().map { index, body in
                 GistComment(
                     id: Int64(index + 1), body: body, user: .init(id: owner.id, login: owner.login),
-                    createdAt: gist.updatedAt, updatedAt: gist.updatedAt)
+                    createdAt: gist.updatedAt)
             }
             return gist
         }
@@ -202,7 +202,7 @@ private extension FixtureServer.State {
             let created = GistComment(
                 id: (comments[id, default: []].map(\.id).max() ?? 0) + 1, body: posted["body"] ?? "",
                 user: .init(id: FixtureServer.you.id, login: FixtureServer.you.login),
-                createdAt: Date.now.wholeSeconds, updatedAt: Date.now.wholeSeconds)
+                createdAt: Date.now.wholeSeconds)
             comments[id, default: []].append(created)
             return try json(created, status: 201)
         case "DELETE /gists/:id/comments/:comment":

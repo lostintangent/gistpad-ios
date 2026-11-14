@@ -77,7 +77,7 @@ import Testing
 private func comment(_ id: Int64, _ body: String) -> GistComment {
     let date = Date(timeIntervalSince1970: Double(id))
     return GistComment(
-        id: id, body: body, user: .init(id: 42, login: "me"), createdAt: date, updatedAt: date)
+        id: id, body: body, user: .init(id: 42, login: "me"), createdAt: date)
 }
 
 private actor FakeRemote: CommentsRemote {

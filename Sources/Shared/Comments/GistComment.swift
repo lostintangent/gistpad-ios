@@ -22,22 +22,19 @@ public struct GistComment: Codable, Equatable, Identifiable, Sendable {
     public let body: String
     public let user: Author?
     public let createdAt: Date
-    public let updatedAt: Date
 
     public init(
-        id: Int64, body: String, user: Author?, createdAt: Date, updatedAt: Date
+        id: Int64, body: String, user: Author?, createdAt: Date
     ) {
         self.id = id
         self.body = body
         self.user = user
         self.createdAt = createdAt
-        self.updatedAt = updatedAt
     }
 
     enum CodingKeys: String, CodingKey {
         case id, body, user
         case createdAt = "created_at"
-        case updatedAt = "updated_at"
     }
 
     public var parsedBody: GistCommentBody { GistCommentBody(body) }

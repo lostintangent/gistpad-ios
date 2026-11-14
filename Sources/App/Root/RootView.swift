@@ -527,12 +527,9 @@ struct RootView: View {
       guard comments.editorID == fileEditor.editor.id else { return }
       if ids.count == 1, let id = ids.first {
         comments.open(for: fileEditor, origin: origin, rootID: id)
-      } else if !ids.isEmpty {
+      } else {
         comments.fileMode = origin
         comments.overlappingIDs = ids
-      } else {
-        Logger(subsystem: "dev.gistpad.GistPad", category: "Comments")
-          .error("A comment activation arrived without a thread identifier.")
       }
     }
   }

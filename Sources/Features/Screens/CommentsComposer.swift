@@ -13,7 +13,6 @@ public struct CommentsComposer: View {
     @Binding private var text: String
     private let context: CommentsComposerContext
     private let canPost: Bool
-    private let isEditable: Bool
     private let isPosting: Bool
     private let failure: String?
     @Binding private var isFocused: Bool
@@ -25,14 +24,13 @@ public struct CommentsComposer: View {
 
     public init(
         text: Binding<String>, context: CommentsComposerContext = .root,
-        canPost: Bool, isEditable: Bool = true, isPosting: Bool = false, failure: String? = nil,
+        canPost: Bool, isPosting: Bool = false, failure: String? = nil,
         isFocused: Binding<Bool> = .constant(false), post: @escaping () -> Void, removeContext: (() -> Void)? = nil,
         didFocus: @escaping () -> Void = {}
     ) {
         self._text = text
         self.context = context
         self.canPost = canPost
-        self.isEditable = isEditable
         self.isPosting = isPosting
         self.failure = failure
         self._isFocused = isFocused
@@ -60,7 +58,7 @@ public struct CommentsComposer: View {
                 .lineLimit(1...maximumLines)
                 .textFieldStyle(.plain)
                 .focused($focus)
-                .disabled(!isEditable || isPosting)
+                .disabled(isPosting)
                 .accessibilityIdentifier("comment-composer-text")
             }
             .padding(.horizontal, 14)
@@ -150,7 +148,7 @@ public struct CommentsComposer: View {
                         .contentShape(.rect.inset(by: -13))
                 }
                 .buttonStyle(.plain)
-                .disabled(!isEditable || isPosting)
+                .disabled(isPosting)
                 .accessibilityIdentifier("comment-remove-context")
             }
         }

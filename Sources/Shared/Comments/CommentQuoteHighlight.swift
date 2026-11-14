@@ -32,10 +32,7 @@ extension CommentQuoteMatcher {
         let matches = matches(quotes: quotes, segments: segments)
         let grouped = Dictionary(grouping: matches, by: \.segment)
         var highlights: [CommentQuoteHighlight] = []
-        for segment in grouped.keys.sorted() {
-            guard let matches = grouped[segment] else {
-                preconditionFailure("A grouped quote segment must contain its matches.")
-            }
+        for (segment, matches) in grouped.sorted(by: { $0.key < $1.key }) {
             let boundaries = Set(matches.flatMap { [$0.range.location, NSMaxRange($0.range)] }).sorted()
             for (start, end) in zip(boundaries, boundaries.dropFirst()) {
                 var seen: Set<Int64> = []

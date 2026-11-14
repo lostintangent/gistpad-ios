@@ -17,7 +17,7 @@ import Testing
     @Test func permissionsDistinguishAuthorshipFromGistOwnership() {
         let authored = GistComment(
             id: 1, body: "Body", user: .init(id: 42, login: "author"),
-            createdAt: .distantPast, updatedAt: .distantPast)
+            createdAt: .distantPast)
         #expect(authored.canEdit(as: 42))
         #expect(!authored.canEdit(as: 7))
         #expect(authored.canDelete(as: 42, gistOwnerID: 7))
@@ -33,6 +33,6 @@ import Testing
     ) -> GistComment {
         let body = body ?? parent.map { "> [comment:\($0)]\n\nReply" } ?? "Body"
         let date = Date(timeIntervalSince1970: date ?? Double(id))
-        return GistComment(id: id, body: body, user: nil, createdAt: date, updatedAt: date)
+        return GistComment(id: id, body: body, user: nil, createdAt: date)
     }
 }

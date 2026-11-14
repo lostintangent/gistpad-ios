@@ -150,10 +150,6 @@ final class CommentsPresentation {
     hide()
   }
 
-  func discard(gistID: String, accountID: UUID) {
-    if scope == .init(accountID: accountID, gistID: gistID) { reset() }
-  }
-
   func reset() {
     hide()
     afterDismiss = nil
