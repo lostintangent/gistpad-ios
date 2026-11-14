@@ -55,7 +55,7 @@ public struct LibraryActions {
     public var today: @MainActor () -> Void
     public var select: (String) -> Void = { _ in }
     public var reconnect: () -> Void = {}
-    public var recoverStatus: () -> Void = {}
+    public var recoverStatus: @MainActor () -> Void = {}
     public var account: () -> Void = {}
     public var togglePin: (String) -> Void = { _ in }
     public var toggleArchive: (String) -> Void = { _ in }
