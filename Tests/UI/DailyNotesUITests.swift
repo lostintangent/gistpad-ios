@@ -8,25 +8,25 @@ final class DailyNotesUITests: XCTestCase {
     let app = launchGistPad()
     let today = app.element("library-today")
     try waitUntil("Today with its unfinished tasks") {
-      today.isHittable && today.label == "Today, 2 unfinished tasks"
+      today.isTappable && today.label == "Today, 2 unfinished tasks"
     }
     app.dismissSidebarOverlay()
     today.tap()
     let editor = app.textViews["source-editor"]
     try waitUntil("today's note, ready to write") {
-      editor.isHittable && app.keyboards.firstMatch.exists
-        && (editor.value as? String)?.contains("Morning pages") == true
+      editor.isTappable && app.keyboards.firstMatch.exists
+        && editor.text?.contains("Morning pages") == true
     }
   }
 
   func testTodayStartsTheDayInAnEmptyLibrary() throws {
     let app = launchGistPad("empty")
     let today = app.element("library-today")
-    try waitUntil("Today") { today.isHittable }
+    try waitUntil("Today") { today.isTappable }
     app.dismissSidebarOverlay()
     today.tap()
     let editor = app.textViews["source-editor"]
-    try waitUntil("a new day, ready to write") { editor.isHittable && app.keyboards.firstMatch.exists }
+    try waitUntil("a new day, ready to write") { editor.isTappable && app.keyboards.firstMatch.exists }
     editor.typeText("First thought of the day")
     XCTAssertTrue((editor.value as? String)?.contains("First thought of the day") == true)
   }
@@ -82,7 +82,7 @@ final class DailyNotesUITests: XCTestCase {
   func testAddToTodayAppendsATask() throws {
     let app = launchGistPad(sheet: "today")
     let input = app.textFields["today-capture-input"]
-    try waitUntil("Add to Today") { input.isHittable && app.keyboards.firstMatch.exists }
+    try waitUntil("Add to Today") { input.isTappable && app.keyboards.firstMatch.exists }
     app.segmentedControls["today-capture-kind"].buttons["Task"].tap()
     input.tap()
     input.typeText("Pick up the dry cleaning")

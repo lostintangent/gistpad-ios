@@ -102,6 +102,7 @@ xcodebuild -project GistPad.xcodeproj -scheme GistPad \
 ```
 
 - UI tests drive the real app against the DEBUG fixture GitHub (`FixtureServer` in Store), never a live account.
+- UI tests poll with `isTappable` and `text`, never `isHittable` or `value`, which fail the test instead of returning false while an element is missing or off screen.
 - `simctl` can't fold the Duo, so tests and captures run in whatever posture is set. Turning a display off with `simctl io screenConfig power` doesn't fold it either, and it can leave the simulator stuck in its compact posture. Change posture by hand with Device Hub's display switch. Physical fold transitions are left to the manual pass on the phone.
 - The Intelligence eval runs synthetic notes, and live gists you name, through the on-device model on the Mac: `bash scripts/evaluate-intelligence.sh 10`. See `scripts/intelligence-eval/README.md`.
 - `scripts/preview-renderer` builds Preview's web bundle from the sibling `gistpad.dev` checkout and has its own typecheck, tests and build. See its README.

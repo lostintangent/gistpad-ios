@@ -23,7 +23,7 @@ final class GistUITests: XCTestCase {
     }
 
     modes.buttons["Edit"].tap()
-    try waitUntil("Edit again") { modes.buttons["Edit"].isSelected && app.textViews["source-editor"].isHittable }
+    try waitUntil("Edit again") { modes.buttons["Edit"].isSelected && app.textViews["source-editor"].isTappable }
     XCTAssertTrue(title.exists)
   }
 
@@ -32,13 +32,13 @@ final class GistUITests: XCTestCase {
     let editor = app.textViews["source-editor"]
     let title = app.buttons["note-title"]
     // README.md is the gist's front page, so the title stands alone without a filename.
-    try waitUntil("README.md") { (editor.value as? String)?.hasPrefix("# A considered") == true }
+    try waitUntil("README.md") { editor.text?.hasPrefix("# A considered") == true }
     XCTAssertEqual(title.value as? String, "")
     app.dismissSidebarOverlay()
 
     try tap(title, "the title")
     try tap(app.buttons["Ideas.md"].firstMatch, "Ideas.md")
-    try waitUntil("Ideas.md") { (editor.value as? String)?.hasPrefix("# Ideas") == true }
+    try waitUntil("Ideas.md") { editor.text?.hasPrefix("# Ideas") == true }
     XCTAssertEqual(title.value as? String, "Ideas.md")
   }
 

@@ -11,18 +11,18 @@ final class CommentsUITests: XCTestCase {
     // With the sidebar hidden, Comments is the only thing that changes the reading width.
     app.dismissSidebarOverlay()
     let hideSidebar = app.buttons["Hide Sidebar"].firstMatch
-    if hideSidebar.isHittable {
+    if hideSidebar.isTappable {
       hideSidebar.tap()
-      try waitUntil("the hidden sidebar") { app.buttons["Show Sidebar"].firstMatch.isHittable }
+      try waitUntil("the hidden sidebar") { app.buttons["Show Sidebar"].firstMatch.isTappable }
     }
-    for _ in 0..<6 where !late.isHittable { app.webViews.firstMatch.swipeUp() }
-    try waitUntil("the late passage on screen") { late.isHittable }
+    for _ in 0..<6 where !late.isTappable { app.webViews.firstMatch.swipeUp() }
+    try waitUntil("the late passage on screen") { late.isTappable }
     try alignToTop(late, in: app)
     let before = late.frame
 
     app.element("note-comments").tap()
     let close = app.buttons["comments-close"]
-    try waitUntil("Comments") { close.isHittable && app.element("comment-thread-1").exists }
+    try waitUntil("Comments") { close.isTappable && app.element("comment-thread-1").exists }
     try waitUntil("the passage on the same line beside Comments") { abs(late.frame.minY - before.minY) <= 8 }
     close.tap()
     try waitUntil("Comments to close") { !close.exists }
@@ -56,7 +56,7 @@ final class CommentsUITests: XCTestCase {
   func testTappingAHighlightSelectsItsThread() throws {
     let app = launchGistPad(open: "highlights", mode: "preview")
     let careful = app.buttons["careful"].firstMatch
-    try waitUntil("the highlight") { careful.isHittable }
+    try waitUntil("the highlight") { careful.isTappable }
     app.dismissSidebarOverlay()
     careful.tap()
     let thread = app.element("comment-thread-2")

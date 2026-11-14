@@ -42,11 +42,11 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("the open gist") { app.navigationBars["The shape of a gist"].exists }
     guard app.isRegularWidth else { throw XCTSkip("The sidebar only shows when the Duo is open.") }
     let showSidebar = app.buttons.matching(NSPredicate(format: "label == 'Show Sidebar'")).firstMatch
-    if !app.element("library-note-shape").isHittable && showSidebar.isHittable { showSidebar.tap() }
+    if !app.element("library-note-shape").isTappable && showSidebar.isTappable { showSidebar.tap() }
     let column = app.navigationBars["GistPad"]
     let field = app.searchFields.firstMatch
     let tags = app.buttons["library-filter-tags"]
-    try waitUntil("the sidebar's search field and Tags") { column.exists && field.isHittable && tags.isHittable }
+    try waitUntil("the sidebar's search field and Tags") { column.exists && field.isTappable && tags.isTappable }
     XCTAssertGreaterThanOrEqual(field.frame.minX, column.frame.minX)
     XCTAssertLessThan(field.frame.maxX, tags.frame.minX)
     XCTAssertLessThanOrEqual(tags.frame.maxX, column.frame.maxX)
@@ -59,7 +59,7 @@ final class LibraryUITests: XCTestCase {
     let result = app.element("library-note-weekend")
     // The open note stays listed while filtering, so only other gists must leave.
     try waitUntil("the match") {
-      result.isHittable && !app.element("library-note-shape").exists && !app.element("library-note-words").exists
+      result.isTappable && !app.element("library-note-shape").exists && !app.element("library-note-words").exists
     }
     result.tap()
     try waitUntil("the matching gist") { app.noteShows("Farmers market") }
@@ -70,7 +70,7 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("the Library") { app.element("library-note-weekend").exists }
     app.buttons["library-filter-tags"].tap()
     let ideas = app.buttons["library-tag-filter-ideas"]
-    try waitUntil("the tag filter") { ideas.isHittable }
+    try waitUntil("the tag filter") { ideas.isTappable }
     ideas.tap()
     app.buttons["library-tag-filter-close"].tap()
     try waitUntil("the Ideas gists") {
@@ -93,7 +93,7 @@ final class LibraryUITests: XCTestCase {
   func testSwipeAndContextMenuPinArchiveAndDelete() throws {
     let app = launchGistPad()
     let weekend = app.element("library-note-weekend")
-    try waitUntil("the Library") { weekend.isHittable }
+    try waitUntil("the Library") { weekend.isTappable }
 
     weekend.swipeRight()
     try tap(app.buttons["Pin"].firstMatch, "Pin")
@@ -144,11 +144,11 @@ final class LibraryUITests: XCTestCase {
   func testANewGistCanBeDeletedRightAfterYouLeaveIt() throws {
     let app = launchGistPad()
     let create = app.buttons["library-create"].firstMatch
-    try waitUntil("New Gist") { create.isHittable }
+    try waitUntil("New Gist") { create.isTappable }
     app.dismissSidebarOverlay()
     create.tap()
     let editor = app.textViews["source-editor"]
-    try waitUntil("the new gist's editor") { editor.isHittable && app.keyboards.firstMatch.exists }
+    try waitUntil("the new gist's editor") { editor.isTappable && app.keyboards.firstMatch.exists }
     editor.typeText("# Gone soon\n\nA thought to delete.")
 
     // Leaving for the Library (or another gist, in the sidebar) publishes the new gist.
@@ -159,7 +159,7 @@ final class LibraryUITests: XCTestCase {
     }
     let published = app.libraryRows.matching(
       NSPredicate(format: "identifier MATCHES 'library-note-f[0-9a-f]{7}'")).firstMatch
-    try waitUntil("the published gist in the Library") { published.isHittable }
+    try waitUntil("the published gist in the Library") { published.isTappable }
     let id = published.identifier
     published.swipeLeft()
     try tap(app.buttons["Delete"].firstMatch, "Delete")
@@ -170,12 +170,12 @@ final class LibraryUITests: XCTestCase {
   func testRenameAndDeleteATag() throws {
     let app = launchGistPad(open: "shape/README.md", sheet: "tags")
     let ideas = app.buttons["tag-choice-ideas"]
-    try waitUntil("the Tags sheet") { ideas.isHittable }
+    try waitUntil("the Tags sheet") { ideas.isTappable }
 
     ideas.swipeLeft()
     try tap(app.buttons["Edit Tag"].firstMatch, "Edit Tag")
     let name = app.textFields["Tag name"]
-    try waitUntil("the tag form") { name.isHittable }
+    try waitUntil("the tag form") { name.isTappable }
     name.tap()
     name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 8) + "Big Ideas")
     app.buttons["tag-form-save"].tap()
@@ -185,7 +185,7 @@ final class LibraryUITests: XCTestCase {
     design.swipeLeft()
     try tap(app.buttons["Edit Tag"].firstMatch, "Edit Tag")
     let delete = app.buttons["Delete Tag"].firstMatch
-    try waitUntil("Delete Tag") { delete.isHittable }
+    try waitUntil("Delete Tag") { delete.isTappable }
     delete.tap()
     try waitUntil("the delete confirmation") { app.buttons.matching(identifier: "Delete Tag").count > 1 }
     app.buttons.matching(identifier: "Delete Tag").allElementsBoundByIndex.last?.tap()
@@ -195,7 +195,7 @@ final class LibraryUITests: XCTestCase {
     try waitUntil("the saved tags") { !app.buttons["tag-save"].exists }
     try openNoteActions(in: app)
     try tap(app.buttons["Tags"].firstMatch, "Tags")
-    try waitUntil("the reopened Tags sheet") { ideas.isHittable }
+    try waitUntil("the reopened Tags sheet") { ideas.isTappable }
     XCTAssertTrue(ideas.label.contains("Big Ideas"))
     XCTAssertFalse(design.exists)
   }
@@ -205,7 +205,7 @@ extension XCUIElement {
   /// Scrolls the Library until this element sits clear of the bottom search bar.
   func scrollIntoView(in app: XCUIApplication) {
     let list = app.element("library-list")
-    for _ in 0..<8 where !(isHittable && frame.maxY < list.frame.maxY - 100) { list.swipeUp() }
+    for _ in 0..<8 where !(isTappable && frame.maxY < list.frame.maxY - 100) { list.swipeUp() }
   }
 
   /// A section header's count, without its Expanded or Collapsed state.

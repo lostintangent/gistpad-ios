@@ -25,6 +25,19 @@ extension XCUIElement {
     descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'library-note-'"))
   }
 
+  /// Whether the element can be tapped now. Reading `isHittable` fails the test, rather than
+  /// returning false, while the element is missing or laid out off screen mid-transition.
+  var isTappable: Bool {
+    guard let frame = try? snapshot().frame, !frame.isEmpty,
+      XCUIApplication(bundleIdentifier: "dev.gistpad.GistPad").windows.firstMatch.frame
+        .contains(CGPoint(x: frame.midX, y: frame.midY))
+    else { return false }
+    return isHittable
+  }
+
+  /// The element's value as text, or nil while it's missing, which reading `value` fails on.
+  var text: String? { (try? snapshot())?.value as? String }
+
   /// A web view element whose text starts with `prefix`.
   func passage(_ prefix: String) -> XCUIElement {
     webViews.firstMatch.descendants(matching: .any)
@@ -38,7 +51,7 @@ extension XCUIApplication {
   /// Opens Library search and types `text`.
   func search(_ text: String) {
     let field = searchFields.firstMatch
-    if !field.isHittable { buttons["Search"].firstMatch.tap() }
+    if !field.isTappable { buttons["Search"].firstMatch.tap() }
     XCTAssertTrue(field.waitForExistence(timeout: 5))
     field.tap()
     field.typeText(text)
@@ -46,7 +59,7 @@ extension XCUIApplication {
 
   /// Whether the open note shows `text` in its editor or its Preview.
   func noteShows(_ text: String) -> Bool {
-    if let source = textViews["source-editor"].value as? String, source.contains(text) { return true }
+    if textViews["source-editor"].text?.contains(text) == true { return true }
     return webViews.firstMatch.staticTexts
       .matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch.exists
   }
@@ -56,10 +69,10 @@ extension XCUIApplication {
   func dismissSidebarOverlay() {
     let sidebar = element("library-list")
     let note = navigationBars.matching(NSPredicate(format: "identifier != 'GistPad'")).firstMatch
-    guard isRegularWidth, sidebar.isHittable, note.exists, note.frame.minX < sidebar.frame.maxX else { return }
+    guard isRegularWidth, sidebar.isTappable, note.exists, note.frame.minX < sidebar.frame.maxX else { return }
     buttons.matching(NSPredicate(format: "label == 'Hide Sidebar'")).allElementsBoundByIndex
-      .first(where: \.isHittable)?.tap()
-    XCTAssertTrue(sidebar.wait(for: \.isHittable, toEqual: false, timeout: 5), "The sidebar still covers the note")
+      .first(where: \.isTappable)?.tap()
+    XCTAssertTrue(sidebar.wait(for: \.isTappable, toEqual: false, timeout: 5), "The sidebar still covers the note")
   }
 
   /// The note's More button, or the system's overflow button when the toolbar is too narrow for
@@ -72,7 +85,7 @@ extension XCUIApplication {
   /// Shows the sidebar when the unfolded Duo hides it, as it does once the overlay is dismissed.
   func showSidebar() {
     let show = buttons.matching(NSPredicate(format: "label == 'Show Sidebar'")).firstMatch
-    guard isRegularWidth, show.waitForExistence(timeout: 2), show.isHittable else { return }
+    guard isRegularWidth, show.waitForExistence(timeout: 2), show.isTappable else { return }
     show.tap()
     XCTAssertTrue(element("library-list").waitForExistence(timeout: 5), "The sidebar never showed")
   }
@@ -82,7 +95,7 @@ extension XCUIApplication {
     guard !isRegularWidth else { return showSidebar() }
     // The Duo's cover floats Back beside the bar, outside the navigation bar's subtree.
     let back = buttons["BackButton"].firstMatch
-    XCTAssertTrue(back.wait(for: \.isHittable, toEqual: true, timeout: 10), "Back never became tappable")
+    XCTAssertTrue(back.wait(for: \.isTappable, toEqual: true, timeout: 10), "Back never became tappable")
     back.tap()
   }
 }
@@ -109,7 +122,7 @@ extension XCTestCase {
   func tap(
     _ element: XCUIElement, _ description: String, file: StaticString = #filePath, line: UInt = #line
   ) throws {
-    try waitUntil(description, file: file, line: line) { element.isHittable }
+    try waitUntil(description, file: file, line: line) { element.isTappable }
     element.tap()
   }
 
@@ -136,7 +149,7 @@ extension XCTestCase {
   func confirmDeletion(in app: XCUIApplication) throws {
     var confirm: XCUIElement?
     try waitUntil("the delete confirmation") {
-      confirm = app.buttons.matching(identifier: "Delete").allElementsBoundByIndex.last(where: \.isHittable)
+      confirm = app.buttons.matching(identifier: "Delete").allElementsBoundByIndex.last(where: \.isTappable)
       return confirm != nil
     }
     confirm?.tap()
