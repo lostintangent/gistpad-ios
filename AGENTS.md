@@ -117,7 +117,7 @@ xcodebuild -project GistPad.xcodeproj -scheme GistPad \
     -- --fixture standard --open shape --mode split
   ```
 
-- Widget and control taps need a plain `xcodebuild build` after `build-for-testing` and before `test-without-building`. `build-for-testing` links the modules as shared frameworks, and the system then fails every widget intent with "There is no metadata for … Intent". Shipping builds link them statically.
+- Widget and control taps in UI tests need a plain `xcodebuild build` after `build-for-testing` and before `test-without-building`. `build-for-testing` links the modules as shared frameworks, and the system then fails every widget intent with "There is no metadata for … Intent". Shipping builds link them statically. Don't do this before app-hosted tests: the plain build gives the app its own copy of every module, so `GistPadTests` then sees two of each type and singleton.
 
 ## Module map
 
