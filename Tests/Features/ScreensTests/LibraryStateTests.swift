@@ -110,3 +110,43 @@ struct LibraryStateTests {
         #expect(!FileAccess.readOnly.canEdit)
     }
 }
+
+private enum SampleLibrary {
+    static let referenceDate = Date(timeIntervalSince1970: 1_792_800_000)
+
+    static let gists: [GistItem] = [
+        GistItem(
+            id: "shape", title: "The shape of a gist", updatedAt: referenceDate, gistID: "shape",
+            isPinned: true, tagIDs: ["ideas", "design"], fileCount: 2
+        ),
+        GistItem(
+            id: "weekend", title: "A slower weekend", updatedAt: referenceDate.addingTimeInterval(-3_600), gistID: "weekend",
+            tagIDs: ["personal"]
+        ),
+        GistItem(
+            id: "words", title: "Words worth keeping", updatedAt: referenceDate.addingTimeInterval(-86_400), gistID: "words",
+            tagIDs: ["ideas"]
+        ),
+        GistItem(
+            id: "mixed", title: "日本語のメモ · أفكار صغيرة", updatedAt: referenceDate.addingTimeInterval(-172_800), gistID: "mixed",
+            tagIDs: ["personal"]
+        ),
+        GistItem(
+            id: "daily", title: "Daily notes", updatedAt: referenceDate, gistID: "daily", isDailyNote: true
+        ),
+        GistItem(
+            id: "starred", title: "An excellent Markdown field guide", updatedAt: referenceDate, gistID: "starred",
+            owner: "notebook-friend", isOwned: false, isSecret: false, isStarred: true
+        ),
+        GistItem(
+            id: "archived", title: "A finished chapter", updatedAt: referenceDate.addingTimeInterval(-604_800), gistID: "archived",
+            isArchived: true
+        )
+    ]
+
+    static let tags: [Store.Tag] = [
+        .init(id: "ideas", name: "Ideas", colorHex: "#EBC85A"),
+        .init(id: "design", name: "Design", colorHex: "#548C80"),
+        .init(id: "personal", name: "Personal", colorHex: "#A88EB5")
+    ]
+}
