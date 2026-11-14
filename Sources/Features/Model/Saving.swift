@@ -28,7 +28,7 @@ extension GistPadModel {
     let saved = try await draftStore.save(draft, text: text, github: github(draft))
     if account?.id == draft.accountID {
       record(saved)
-      if saved.isDisposable { projectLibrary() } else { updateLibraryExcerpt(for: saved) }
+      if saved.isDisposable { projectLibrary() } else { updateRow(for: saved) }
       updateToday()
     }
     return saved
@@ -39,7 +39,7 @@ extension GistPadModel {
     let applied = try await draftStore.apply(edit, github: github(edit.draft))
     if account?.id == applied.accountID {
       record(applied)
-      updateLibraryExcerpt(for: applied)
+      updateRow(for: applied)
       updateToday()
     }
     return applied
@@ -86,15 +86,15 @@ extension GistFileEditor {
     _ edit: Edit, expectedGeneration: UInt64,
     commit: @MainActor () async throws -> GistFileDraft
   ) async throws {
-    guard canMutate else { throw Edit.MutationError.compositionActive }
+    guard canEdit else { throw Edit.Failure.compositionActive }
     guard editor.generation == expectedGeneration else { throw DraftError.changed }
     let result = try edit.applying(to: editor.text)
     let changed = !result.utf8.elementsEqual(editor.text.utf8)
     let wasEditing = editor.isEditing
-    isApplyingDurableEdit = true
+    isLanding = true
     updateEditable()
     defer {
-      isApplyingDurableEdit = false
+      isLanding = false
       updateEditable()
       if wasEditing { editor.focus() }
     }

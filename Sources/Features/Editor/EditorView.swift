@@ -9,7 +9,6 @@
     /// What VoiceOver calls the text view: the title the screen shows.
     private let title: String?
     private let insertImage: (@MainActor () -> Void)?
-    private let canInsertImage: Bool
     private let intelligence: (@MainActor () -> Void)?
     private let comments: CommentHighlightConfiguration
     private let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
@@ -21,7 +20,6 @@
       editor: Editor,
       title: String? = nil,
       insertImage: (@MainActor () -> Void)? = nil,
-      canInsertImage: Bool = false,
       intelligence: (@MainActor () -> Void)? = nil,
       comments: CommentHighlightConfiguration = .init(),
       onOpenCommentThreads: (@MainActor ([Int64]) -> Void)? = nil,
@@ -31,7 +29,6 @@
       self.editor = editor
       self.title = title
       self.insertImage = insertImage
-      self.canInsertImage = canInsertImage
       self.intelligence = intelligence
       self.comments = comments
       self.onOpenCommentThreads = onOpenCommentThreads
@@ -47,14 +44,11 @@
           onLinkedCommentIDsChange: onLinkedCommentIDsChange,
           onAddComment: onAddComment,
           actions: KeyboardBarActions(
+            canFormat: editor.canFormat,
             format: format, link: beginLink, indent: indent,
             image: insertImage,
-            intelligence: intelligence,
-            dismiss: { editor.textView.resignFirstResponder() }),
-          configuration: KeyboardBarConfiguration(
-            canFormat: editor.canFormat,
-            canInsertImage: canInsertImage && insertImage != nil,
-            canUseIntelligence: editor.isSettled && intelligence != nil)
+            intelligence: editor.isSettled ? intelligence : nil,
+            dismiss: { editor.textView.resignFirstResponder() })
         )
         .id(editor.id)
         .ignoresSafeArea([.container, .keyboard], edges: .vertical)
@@ -98,7 +92,7 @@
         {
           try editor.apply(edit, generation: editor.generation)
         }
-      } catch Edit.MutationError.compositionActive {
+      } catch Edit.Failure.compositionActive {
         editor.inputError = String(
           localized: "Finish typing or wait for Writing Tools, then try again.", bundle: .module)
       } catch {
@@ -138,7 +132,6 @@
     let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
     let onAddComment: (@MainActor (String) -> Void)?
     let actions: KeyboardBarActions
-    let configuration: KeyboardBarConfiguration
     @Environment(\.isPaneVisible) private var isPaneVisible
     @Environment(\.accent) private var accent
 
@@ -159,7 +152,7 @@
         view.isAccessibilityElement = isPaneVisible
         view.accessibilityElementsHidden = !isPaneVisible
         view.accessibilityLabel = title
-        accessory.update(actions: actions, configuration: configuration)
+        accessory.update(actions: actions)
         accessory.textView = view
         if view.inputAccessoryView !== accessory {
           view.inputAccessoryView = accessory

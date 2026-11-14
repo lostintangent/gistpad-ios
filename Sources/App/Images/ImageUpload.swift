@@ -27,7 +27,7 @@ final class ImageUpload {
   }
 
   func canChooseImage(for fileEditor: GistFileEditor) -> Bool {
-    !isUploading && fileEditor.canMutate && !fileEditor.file.isDeletedOnGitHub
+    !isUploading && fileEditor.canEdit && !fileEditor.file.isDeletedOnGitHub
   }
 
   func chooseImage(for fileEditor: GistFileEditor) {

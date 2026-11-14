@@ -80,11 +80,11 @@ import Testing
 
 @Test func invalidOrStaleSourceIsRejected() {
   let source = "📝 - [ ] task"
-  #expect(throws: Edit.MutationError.invalidRange) {
+  #expect(throws: Edit.Failure.invalidRange) {
     try Edit(range: NSRange(location: 1, length: 1), expected: "", replacement: "x")
       .applying(to: source)
   }
-  #expect(throws: Edit.MutationError.sourceChanged) {
+  #expect(throws: Edit.Failure.sourceChanged) {
     try Edit(range: NSRange(location: 0, length: 2), expected: "[ ]", replacement: "[x]")
       .applying(to: source)
   }
@@ -92,7 +92,7 @@ import Testing
 
 @Test func canonicallyEquivalentButDifferentSourceIsNotAnExactMatch() {
   let source = "cafe\u{301}"
-  #expect(throws: Edit.MutationError.sourceChanged) {
+  #expect(throws: Edit.Failure.sourceChanged) {
     try Edit(
       range: NSRange(location: 0, length: source.utf16.count),
       expected: "caf\u{e9}", replacement: "coffee"

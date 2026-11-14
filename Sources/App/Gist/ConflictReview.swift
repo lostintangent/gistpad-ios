@@ -84,8 +84,8 @@ struct ConflictReview: View {
             Button("Use GitHub's") { isConfirmingRemote = true }
               .buttonStyle(.bordered)
           }
-          .disabled(isStale || !fileEditor.canMutate)
-          if !fileEditor.canMutate {
+          .disabled(isStale || !fileEditor.canEdit)
+          if !fileEditor.canEdit {
             Text("Finish the current edit to apply this version.")
           }
         }

@@ -136,7 +136,7 @@ extension GistFileEditor {
   /// Reads this note from GitHub as it opens or the app comes back. A note you haven't typed in
   /// takes GitHub's newer text, and one with edits shows the conflict.
   public func inspectRemoteChanges() async {
-    guard GistPadModel.isStale(refreshedAt), !isInspectingRemote, !isPublishing, canMutate,
+    guard GistPadModel.isStale(refreshedAt), !isInspectingRemote, !isPublishing, canEdit,
       !file.isDeletedOnGitHub, file.gistID != nil, file.draft?.conflict == nil,
       model.account?.id == file.accountID, model.phase.switchingTo == nil
     else { return }
@@ -158,7 +158,7 @@ extension GistFileEditor {
         return (stored, remote)
       }
       try await model.reloadLocalState(accountID: read.accountID)
-      guard let remote, editor.generation == generation, !isPublishing, canMutate else { return }
+      guard let remote, editor.generation == generation, !isPublishing, canEdit else { return }
       if let stored {
         // The store refuses this if you typed after the fetch.
         await adopt(

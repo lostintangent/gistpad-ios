@@ -57,7 +57,7 @@ struct FormattingTests {
       NSRange(location: -1, length: 0), NSRange(location: 0, length: 9),
       NSRange(location: 1, length: 0), NSRange(location: 0, length: 1),
     ] {
-      #expect(throws: Edit.MutationError.invalidRange) {
+      #expect(throws: Edit.Failure.invalidRange) {
         try Formatting.edit(.bold, in: "📝", selection: selection)
       }
     }

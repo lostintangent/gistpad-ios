@@ -207,7 +207,7 @@ extension GistFileEditor {
     model.isForeground && model.account?.id == file.accountID
       && model.phase == .ready && model.problem == nil
       && model.account?.preferences.isAutoSaveEnabled == true
-      && canMutate && !file.isDeletedOnGitHub
+      && canEdit && !file.isDeletedOnGitHub
   }
 
   private func publicationAllowed(reason: PublishReason) -> Bool {
@@ -284,7 +284,7 @@ extension GistFileEditor {
     // Publishing again, as after reconnecting, retries whatever stopped the last publish.
     if reason == .manual { failure = nil }
     if reason != .manual, !hasUnpublishedChanges { return }
-    guard canMutate, status.canPublish else { return }
+    guard canEdit, status.canPublish else { return }
     autosaveTask?.cancel()
     autosaveTask = nil
     let task = Task {
@@ -298,7 +298,7 @@ extension GistFileEditor {
   private func send(
     reason: PublishReason, shouldContinue: @escaping @MainActor @Sendable () -> Bool
   ) async {
-    guard await waitForLocalSave(), !Task.isCancelled, shouldContinue(), canMutate,
+    guard await waitForLocalSave(), !Task.isCancelled, shouldContinue(), canEdit,
       publicationAllowed(reason: reason)
     else { return }
     failure = nil

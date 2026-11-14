@@ -353,13 +353,13 @@ extension GistFileEditor {
   }
 
   func beginDestructiveAction() throws {
-    guard canMutate, !isPublishing else { throw ChangeError.publicationInProgress }
-    isPerformingDestructiveAction = true
+    guard canEdit, !isPublishing else { throw ChangeError.publicationInProgress }
+    isLanding = true
     updateEditable()
   }
 
   func endDestructiveAction() {
-    isPerformingDestructiveAction = false
+    isLanding = false
     updateEditable()
   }
 }

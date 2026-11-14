@@ -74,8 +74,8 @@
 
     /// Applies one change as an undoable step. A nil selection keeps the caret where it was.
     public func apply(_ edit: Edit, generation: UInt64) throws {
-      guard isSettled else { throw Edit.MutationError.compositionActive }
-      guard self.generation == generation else { throw Edit.MutationError.staleGeneration }
+      guard isSettled else { throw Edit.Failure.compositionActive }
+      guard self.generation == generation else { throw Edit.Failure.staleGeneration }
       _ = try edit.applying(to: text)
       let previousSelection = textView.selectedRange
       let inverse = Edit(
@@ -242,7 +242,7 @@
     }
 
     func indent(outdent: Bool) throws {
-      guard canFormat else { throw Edit.MutationError.compositionActive }
+      guard canFormat else { throw Edit.Failure.compositionActive }
       if let edit = try Typing.indent(
         in: text, selection: textView.selectedRange, outdent: outdent)
       {
@@ -783,7 +783,7 @@
     }
 
     public func apply(_ edit: Edit, generation: UInt64) throws {
-      guard self.generation == generation else { throw Edit.MutationError.staleGeneration }
+      guard self.generation == generation else { throw Edit.Failure.staleGeneration }
       let result = try edit.applying(to: text)
       guard !result.utf8.elementsEqual(text.utf8) else { return }
       text = result

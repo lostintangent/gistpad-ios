@@ -132,7 +132,7 @@ public final class GistPadModel {
     return state.gists.first { $0.id == rowID && $0.isDailyNote }?.gistID
   }
 
-  func updateLibraryExcerpt(for draft: GistFileDraft) {
+  func updateRow(for draft: GistFileDraft) {
     let gist = gistCache?.gists.first { $0.id == draft.gistID }
     let isDaily = gist?.isDailyNote == true
       || draft.newGistName == DailyNote.gistDescription

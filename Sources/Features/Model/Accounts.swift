@@ -90,10 +90,10 @@ extension GistPadModel {
   public func switchAccount() async throws {
     guard let pendingAccount = phase.switchingTo else { return }
     for fileEditor in editors.values {
-      guard !fileEditor.isPublishing, !fileEditor.isApplyingDurableEdit else {
+      guard !fileEditor.isPublishing, !fileEditor.isLanding else {
         throw ChangeError.publicationInProgress
       }
-      guard fileEditor.editor.isSettled else { throw Edit.MutationError.compositionActive }
+      guard fileEditor.editor.isSettled else { throw Edit.Failure.compositionActive }
       guard await fileEditor.waitForLocalSave() else { throw ChangeError.notSaved }
     }
     guard phase.switchingTo == pendingAccount else { return }

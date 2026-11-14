@@ -287,7 +287,7 @@ final class PlatformBridge: PlatformActions {
     guard let fileEditor = fileEditor(for: draft) else {
       return try await model.current(draft) ?? draft
     }
-    guard fileEditor.canMutate, await fileEditor.waitForLocalSave() else {
+    guard fileEditor.canEdit, await fileEditor.waitForLocalSave() else {
       throw PlatformError.editingInProgress
     }
     return fileEditor.file.nextDraft
@@ -312,7 +312,7 @@ final class PlatformBridge: PlatformActions {
     if edit.draft.conflict != nil { throw PlatformError.editingInProgress }
     let fileEditor = fileEditor(for: edit.draft)
     if let fileEditor {
-      guard !fileEditor.file.isDeletedOnGitHub, fileEditor.canMutate else {
+      guard !fileEditor.file.isDeletedOnGitHub, fileEditor.canEdit else {
         throw PlatformError.editingInProgress
       }
       try await fileEditor.applyDurableEdit(edit) {

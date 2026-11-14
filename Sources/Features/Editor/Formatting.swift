@@ -45,7 +45,7 @@ public struct Edit: Sendable {
 
   public func applying(to source: String) throws -> String {
     guard try Self.text(in: source, at: range).utf8.elementsEqual(expected.utf8) else {
-      throw MutationError.sourceChanged
+      throw Failure.sourceChanged
     }
     return (source as NSString).replacingCharacters(in: range, with: replacement)
   }
@@ -55,12 +55,12 @@ public struct Edit: Sendable {
     let utf16 = source as NSString
     guard range.location >= 0, range.length >= 0, range.location <= utf16.length,
       range.length <= utf16.length - range.location
-    else { throw MutationError.invalidRange }
+    else { throw Failure.invalidRange }
     for boundary in [range.location, NSMaxRange(range)]
     where boundary > 0 && boundary < utf16.length {
       guard !(0xD800...0xDBFF).contains(utf16.character(at: boundary - 1))
         || !(0xDC00...0xDFFF).contains(utf16.character(at: boundary))
-      else { throw MutationError.invalidRange }
+      else { throw Failure.invalidRange }
     }
     return utf16.substring(with: range)
   }
@@ -71,7 +71,7 @@ public struct Edit: Sendable {
     return range.location + min(offset - range.location, replacementLength)
   }
 
-  public enum MutationError: Error, Equatable {
+  public enum Failure: Error, Equatable {
     case invalidRange
     case sourceChanged
     case staleGeneration
@@ -79,7 +79,7 @@ public struct Edit: Sendable {
   }
 }
 
-extension Edit.MutationError: LocalizedError {
+extension Edit.Failure: LocalizedError {
   public var errorDescription: String? {
     switch self {
     case .compositionActive:

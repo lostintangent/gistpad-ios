@@ -44,7 +44,7 @@
           try Formatting.edit(
             .link(label: "note", destination: "https://example.com"),
             in: editor.text, selection: NSRange(location: 0, length: 4)))
-        #expect(throws: Edit.MutationError.staleGeneration) {
+        #expect(throws: Edit.Failure.staleGeneration) {
           try editor.apply(edit, generation: 1)
         }
         #expect(editor.text == "note")
@@ -63,7 +63,7 @@
         #expect(editor.inputError != nil)
         #expect(editor.textView.findInteraction?.isFindNavigatorVisible == false)
         editor.inputError = nil
-        #expect(throws: Edit.MutationError.compositionActive) {
+        #expect(throws: Edit.Failure.compositionActive) {
           try editor.apply(edit, generation: 0)
         }
         editor.textViewWritingToolsDidEnd(editor.textView)
@@ -72,7 +72,7 @@
         editor.find()
         #expect(editor.inputError != nil)
         #expect(editor.textView.findInteraction?.isFindNavigatorVisible == false)
-        #expect(throws: Edit.MutationError.compositionActive) {
+        #expect(throws: Edit.Failure.compositionActive) {
           try editor.apply(edit, generation: 0)
         }
         editor.textView.unmarkText()
@@ -125,9 +125,9 @@
         #expect(editor.textView.undoManager?.canUndo == false)
       }
 
-      @Test func keyboardBarBoldEditsTheSessionAndImageNeedsTheCapability() throws {
+      @Test func keyboardBarBoldEditsTheSessionAndImageNeedsAnAction() throws {
         let editor = Editor(fileID: "accessory", text: "A note")
-        let window = hostEditor(editor, insertImage: {}, canInsertImage: false)
+        let window = hostEditor(editor)
         defer { window.isHidden = true }
         let toolbar = try #require(editor.textView.inputAccessoryView as? KeyboardBar)
         let items = toolbar.buttons.arrangedSubviews.compactMap { $0 as? UIButton }

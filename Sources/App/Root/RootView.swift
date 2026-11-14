@@ -420,8 +420,8 @@ struct RootView: View {
     ) {
       EditorView(
         editor: fileEditor.editor, title: details.title,
-        insertImage: { comments.performAfterClosing { images.chooseImage(for: fileEditor) } },
-        canInsertImage: images.canChooseImage(for: fileEditor),
+        insertImage: images.canChooseImage(for: fileEditor)
+          ? { comments.performAfterClosing { images.chooseImage(for: fileEditor) } } : nil,
         intelligence: { comments.performAfterClosing { presentIntelligence(fileEditor) } },
         comments: commentConfiguration(fileEditor),
         onOpenCommentThreads: commentOpener(fileEditor, origin: .edit),

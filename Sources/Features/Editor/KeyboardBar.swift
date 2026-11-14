@@ -1,20 +1,19 @@
 #if canImport(UIKit)
   import UIKit
 
+  /// What the bar's buttons do. Formatting is off while `canFormat` is false, and a missing
+  /// image or Intelligence action disables its button.
   @MainActor
   struct KeyboardBarActions {
+    let canFormat: Bool
     let format: @MainActor (Format) -> Void
     let link: @MainActor () -> Void
     let indent: @MainActor (Bool) -> Void
     let image: (@MainActor () -> Void)?
     let intelligence: (@MainActor () -> Void)?
     let dismiss: @MainActor () -> Void
-  }
 
-  struct KeyboardBarConfiguration: Equatable {
-    let canFormat: Bool
-    let canInsertImage: Bool
-    let canUseIntelligence: Bool
+    fileprivate var enabled: [Bool] { [canFormat, image != nil, intelligence != nil] }
   }
 
   /// The glass capsule above the keyboard. Its buttons call the latest actions SwiftUI passed in.
@@ -28,7 +27,7 @@
     private lazy var columnLeft = column.leftAnchor.constraint(equalTo: leftAnchor)
     private lazy var columnRight = column.rightAnchor.constraint(equalTo: rightAnchor)
     private var actions: KeyboardBarActions
-    private var configuration: KeyboardBarConfiguration?
+    private var enabled: [Bool]?
 
     override var intrinsicContentSize: CGSize {
       CGSize(width: UIView.noIntrinsicMetric, height: 72)
@@ -96,10 +95,10 @@
       super.layoutSubviews()
     }
 
-    func update(actions: KeyboardBarActions, configuration: KeyboardBarConfiguration) {
+    func update(actions: KeyboardBarActions) {
       self.actions = actions
-      guard self.configuration != configuration else { return }
-      self.configuration = configuration
+      guard enabled != actions.enabled else { return }
+      enabled = actions.enabled
       var headings = [
         action(String(localized: "Body", bundle: .module)) { $0.actions.format(.heading(0)) }
       ]
@@ -143,7 +142,7 @@
       let image = action(String(localized: "Image", bundle: .module), image: "photo") {
         $0.actions.image?()
       }
-      image.attributes = configuration.canInsertImage ? [] : .disabled
+      image.attributes = actions.image == nil ? .disabled : []
       insert.append(UIMenu(options: .displayInline, children: [image]))
       let emphasis = [
         action(String(localized: "Bold", bundle: .module), image: "bold") {
@@ -166,12 +165,12 @@
         $0.actions.intelligence?()
       }
       intelligence.accessibilityIdentifier = "editor-intelligence"
-      intelligence.isEnabled = configuration.canUseIntelligence
+      intelligence.isEnabled = actions.intelligence != nil
       let dismiss = command("Hide Keyboard", image: "keyboard.chevron.compact.down") {
         $0.actions.dismiss()
       }
       for item in [style, list, insertion] {
-        item.isEnabled = configuration.canFormat
+        item.isEnabled = actions.canFormat
       }
       for view in buttons.arrangedSubviews { view.removeFromSuperview() }
       for item in [style, list, insertion, intelligence, dismiss] {

@@ -324,7 +324,7 @@ extension GistFileEditor {
   public var activationID: String { focusRequest?.uuidString ?? file.id.uuidString }
 
   public func requestCreationFocus() {
-    guard let request = focusRequest, request != lastFocusRequest, canMutate else { return }
+    guard let request = focusRequest, request != lastFocusRequest, canEdit else { return }
     lastFocusRequest = request
     mode = .edit
     editor.requestFocusAtEnd()
