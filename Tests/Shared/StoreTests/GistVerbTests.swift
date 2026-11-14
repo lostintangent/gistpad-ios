@@ -28,7 +28,7 @@ import Testing
         #expect(edited.editedAt > opened.editedAt)
         let same = try await sync.type("edit", in: opened)
         #expect(same.editedAt == edited.editedAt)
-        #expect(try await GistFileDraftStore.open(url: url).draft(id: opened.id, accountID: account)?.editedAt
+        #expect(try await GistFileDraftStore.open(url: url).drafts(accountID: account).first { $0.id == opened.id }?.editedAt
             == edited.editedAt)
     }
 }

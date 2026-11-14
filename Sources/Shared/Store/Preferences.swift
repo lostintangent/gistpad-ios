@@ -1,8 +1,6 @@
 import Auth
 import Foundation
 
-public typealias MetadataValue = AnyJSON
-
 /// A tag you give gists, with its name and color, as GistPad keeps it in your preferences.
 public struct Tag: Equatable, Identifiable, Sendable {
     public let id: String
@@ -17,17 +15,9 @@ public struct Tag: Equatable, Identifiable, Sendable {
 }
 
 public struct GistPadPreferences: Codable, Equatable, Sendable {
-    public let metadata: [String: MetadataValue]
+    public let metadata: [String: AnyJSON]
 
-    public init(metadata: [String: MetadataValue]) { self.metadata = metadata }
-
-    public var isEmpty: Bool { metadata.isEmpty }
-
-    public init(isAutoSaveEnabled: Bool, accentColor: String?) {
-        var metadata: [String: MetadataValue] = ["isAutoSaveEnabled": .bool(isAutoSaveEnabled)]
-        metadata["accentColor"] = accentColor.map(MetadataValue.string)
-        self.init(metadata: metadata)
-    }
+    public init(metadata: [String: AnyJSON]) { self.metadata = metadata }
 
     public func booleanValue(_ preference: BooleanPreference, default fallback: Bool = true) -> Bool {
         metadata[preference.rawValue]?.boolValue ?? fallback
@@ -60,7 +50,7 @@ public struct GistPadPreferences: Codable, Equatable, Sendable {
     public var pinnedGists: [String] {
         metadata["pinnedGists"]?.arrayValue?.compactMap(\.stringValue) ?? []
     }
-    private var tagMetadata: [String: MetadataValue] { metadata["tags"]?.objectValue ?? [:] }
+    private var tagMetadata: [String: AnyJSON] { metadata["tags"]?.objectValue ?? [:] }
     public var gistTags: [String: [String]] {
         (metadata["gistTags"]?.objectValue ?? [:]).mapValues {
             $0.arrayValue?.compactMap(\.stringValue) ?? []
@@ -91,9 +81,7 @@ extension PreferenceError: LocalizedError {
 }
 
 public enum BooleanPreference: String, Sendable {
-    case isAutoSaveEnabled, showDiffs, showFrontmatter, showLineNumbers, isSpellcheckEnabled
-    case pasteImagesAsHtml, showArchivedGists, showStarredGists, showInlineComments
-    case showFormattingToolbar
+    case isAutoSaveEnabled, isSpellcheckEnabled, showFrontmatter, showInlineComments
 }
 
 extension GistPadPreferences {
@@ -106,7 +94,7 @@ extension GistPadPreferences {
         case deleteTag(id: String)
         case setTag(gistID: String, tagID: String, included: Bool)
 
-        public func changes(in metadata: [String: MetadataValue]) throws -> [String: MetadataValue] {
+        public func changes(in metadata: [String: AnyJSON]) throws -> [String: AnyJSON] {
             switch self {
             case .setBoolean(let preference, let value):
                 return [preference.rawValue: .bool(value)]
@@ -121,13 +109,13 @@ extension GistPadPreferences {
                 var pins = try strings(metadata["pinnedGists"], key: "pinnedGists")
                 if pinned, !pins.contains(gistID) { pins.append(gistID) }
                 if !pinned { pins.removeAll { $0 == gistID } }
-                return ["pinnedGists": .array(pins.map(MetadataValue.string))]
+                return ["pinnedGists": .array(pins.map(AnyJSON.string))]
             case .upsertTag(let id, let name, let color):
                 try requireID(id)
                 var tags = try object(metadata["tags"], key: "tags")
                 var tag = try object(tags[id], key: "tags.\(id)")
                 tag["name"] = .string(name)
-                tag["color"] = color.map(MetadataValue.string)
+                tag["color"] = color.map(AnyJSON.string)
                 tags[id] = .object(tag)
                 return ["tags": .object(tags)]
             case .deleteTag(let id):
@@ -138,7 +126,7 @@ extension GistPadPreferences {
                 for (gist, value) in gistTags {
                     let ids = try strings(value, key: "gistTags.\(gist)").filter { $0 != id }
                     if ids.isEmpty { gistTags.removeValue(forKey: gist) }
-                    else { gistTags[gist] = .array(ids.map(MetadataValue.string)) }
+                    else { gistTags[gist] = .array(ids.map(AnyJSON.string)) }
                 }
                 return ["tags": .object(tags), "gistTags": .object(gistTags)]
             case .setTag(let gistID, let tagID, let included):
@@ -151,7 +139,7 @@ extension GistPadPreferences {
                 if included, !ids.contains(tagID) { ids.append(tagID) }
                 if !included { ids.removeAll { $0 == tagID } }
                 if ids.isEmpty { gistTags.removeValue(forKey: gistID) }
-                else { gistTags[gistID] = .array(ids.map(MetadataValue.string)) }
+                else { gistTags[gistID] = .array(ids.map(AnyJSON.string)) }
                 return ["gistTags": .object(gistTags)]
             }
         }
@@ -160,13 +148,13 @@ extension GistPadPreferences {
             guard !value.isEmpty else { throw PreferenceError.invalidIdentifier }
         }
 
-        private func object(_ value: MetadataValue?, key: String) throws -> [String: MetadataValue] {
+        private func object(_ value: AnyJSON?, key: String) throws -> [String: AnyJSON] {
             guard let value else { return [:] }
             guard case .object(let result) = value else { throw PreferenceError.invalidShape(key) }
             return result
         }
 
-        private func strings(_ value: MetadataValue?, key: String) throws -> [String] {
+        private func strings(_ value: AnyJSON?, key: String) throws -> [String] {
             guard let value else { return [] }
             guard case .array(let values) = value,
                   values.allSatisfy({ $0.stringValue != nil }) else { throw PreferenceError.invalidShape(key) }

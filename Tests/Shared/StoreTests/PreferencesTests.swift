@@ -1,3 +1,4 @@
+import Auth
 import Foundation
 import Synchronization
 import Testing
@@ -9,7 +10,7 @@ struct PreferencesTests {
         let empty = GistPadPreferences(metadata: [:])
         #expect(empty.isAutoSaveEnabled)
         #expect(empty.booleanValue(.isSpellcheckEnabled))
-        #expect(!empty.booleanValue(.showDiffs, default: false))
+        #expect(!empty.booleanValue(.showFrontmatter, default: false))
         #expect(empty.accentColor == nil)
         #expect(empty.profileDisplayName == nil)
         #expect(empty.pinnedGists.isEmpty)
@@ -54,7 +55,7 @@ struct PreferencesTests {
         server.intercept { request in
             if request.httpMethod == "PUT" {
                 let body = try JSONDecoder().decode(
-                    [String: MetadataValue].self, from: FixtureServer.body(of: request))
+                    [String: AnyJSON].self, from: FixtureServer.body(of: request))
                 sent.withLock { $0.append(body["data"]?.objectValue?.keys.sorted() ?? []) }
             }
             return nil

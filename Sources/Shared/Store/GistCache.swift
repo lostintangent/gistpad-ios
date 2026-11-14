@@ -21,7 +21,6 @@ public struct GistCache: Codable, Equatable, Sendable {
     public private(set) var starred: [Gist] = []
     /// Each file's last text from GitHub, by `gistID/filename`.
     public private(set) var texts: [String: GitHubVersion] = [:]
-    public private(set) var cachedAt = Date.now
 
     /// A cache of GitHub's lists, with the text of any file they include.
     public init(accountID: UUID, owned: [Gist] = [], starred: [Gist] = []) {
@@ -61,7 +60,7 @@ public struct GistCache: Codable, Equatable, Sendable {
 
     /// Takes GitHub's fresh lists, which are the authority on what exists. A gist GitHub hasn't
     /// changed keeps the revision this cache read for it.
-    public mutating func replaceLists(owned: [Gist], starred: [Gist], at date: Date = .now) {
+    public mutating func replaceLists(owned: [Gist], starred: [Gist]) {
         let known = Dictionary(gists.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let keep: (Gist) -> Gist = { listed in
             guard let cached = known[listed.id], cached.updatedAt == listed.updatedAt else { return listed }
@@ -71,7 +70,6 @@ public struct GistCache: Codable, Equatable, Sendable {
         self.starred = starred.map(keep)
         let ids = Set(gists.map(\.id))
         texts = texts.filter { ids.contains(String($0.key.prefix(while: { $0 != "/" }))) }
-        cachedAt = date
     }
 
     /// A gist as GitHub just returned it, with the text of every file it includes.

@@ -54,15 +54,11 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
     public var markdownFilenames: [String] { files.keys.filter { $0.hasSuffix(".md") }.sorted() }
     public var defaultMarkdownFilename: String? {
         if let dated = datedFiles {
-            return dated.values.max { $0.value < $1.value }?.key
+            return dated.max { $0.value < $1.value }?.key
         }
         return files["README.md"] != nil ? "README.md" : markdownFilenames.first
     }
-    public var fileDatesForGrouping: [String: Date] {
-        guard let dated = datedFiles, dated.format != .year else { return [:] }
-        return dated.values
-    }
-    private var datedFiles: (format: FilenameDateFormat, values: [String: Date])? {
+    private var datedFiles: [String: Date]? {
         let dated = markdownFilenames.filter { $0.lowercased() != "readme.md" }
         if !dated.isEmpty {
             for format in FilenameDateFormat.allCases {
@@ -70,7 +66,7 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
                     format.date(filename: name).map { (filename: name, date: $0) }
                 }
                 if values.count == dated.count {
-                    return (format, Dictionary(uniqueKeysWithValues: values))
+                    return Dictionary(uniqueKeysWithValues: values)
                 }
             }
         }

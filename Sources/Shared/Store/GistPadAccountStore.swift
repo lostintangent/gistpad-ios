@@ -270,7 +270,7 @@ public actor GistPadAccountStore {
             throw AccountError.accountChanged
         }
         var metadata = user.userMetadata
-        var written: [String: MetadataValue] = [:]
+        var written: [String: AnyJSON] = [:]
         for change in changes {
             let values = try change.changes(in: metadata)
             metadata.merge(values) { _, new in new }

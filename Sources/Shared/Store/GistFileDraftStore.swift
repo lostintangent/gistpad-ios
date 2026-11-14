@@ -244,10 +244,6 @@ public actor GistFileDraftStore {
         )).map(\.draft)
     }
 
-    public func draft(id: UUID, accountID: UUID) throws -> GistFileDraft? {
-        try stored(id, accountID: accountID)?.draft
-    }
-
     /// The stored draft of `draft`'s file, if you've typed in it since GitHub last had its text.
     public func current(_ draft: GistFileDraft) throws -> GistFileDraft? {
         try stored(draft)?.draft

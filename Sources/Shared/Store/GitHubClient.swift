@@ -282,7 +282,7 @@ public actor GitHubClient {
     private func validate(_ url: URL) throws {
         guard url.scheme == "https", url.host == "api.github.com", url.port == nil,
               url.user == nil, url.password == nil,
-              url.path == "/user" || url.path == "/gists" || url.path.hasPrefix("/gists/") else {
+              url.path == "/gists" || url.path.hasPrefix("/gists/") else {
             throw GitHubClientError.unsafeURL
         }
     }

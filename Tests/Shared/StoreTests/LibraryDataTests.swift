@@ -69,6 +69,6 @@ private func listed(_ gist: Gist) throws -> Gist {
         #expect(throws: GistLinks.Error.invalidFilename) {
             try GistLinks(gist: gist, filename: "not-published.md")
         }
-        #expect(try await store.draft(id: local.id, accountID: account)?.isPublished == false)
+        #expect(try await store.drafts(accountID: account).first { $0.id == local.id }?.isPublished == false)
     }
 }

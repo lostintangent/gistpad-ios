@@ -13,7 +13,7 @@ import Testing
         await #expect(throws: DraftError.changed) {
             try await store.apply(DraftEdit(draft: opened, text: "x"), github: nil)
         }
-        #expect(try await store.draft(id: typed.id, accountID: account)?.text == text)
+        #expect(try await store.drafts(accountID: account).first { $0.id == typed.id }?.text == text)
     }
 
     /// A publish can land between keystrokes, after the editor read the draft, so the next
@@ -69,11 +69,11 @@ import Testing
             try context.save()
         }
         let upgraded = try GistFileDraftStore.open(url: url)
-        let draft = try #require(try await upgraded.draft(id: id, accountID: account))
+        let draft = try #require(try await upgraded.drafts(accountID: account).first { $0.id == id })
         #expect(draft.text == "unsynced source")
         #expect(draft.base == GitHubVersion(text: "remote base", revision: "one"))
         #expect(draft.conflict == nil)
-        #expect(try await upgraded.draft(id: conflicted, accountID: account)?.conflict
+        #expect(try await upgraded.drafts(accountID: account).first { $0.id == conflicted }?.conflict
             == GitHubVersion(text: "theirs", revision: "two"))
         try GistCache(accountID: account).save(to: upgraded.modelContainer)
         #expect(try await upgraded.apply(DraftEdit(draft: draft, text: " accepted"), github: nil).text
