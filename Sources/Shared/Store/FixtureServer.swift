@@ -215,19 +215,18 @@ private extension FixtureServer.State {
 
     /// The gist as GitHub serves it. Lists omit file contents.
     func served(_ gist: Gist, listed: Bool = false) -> Gist {
-        Gist(
-            id: gist.id, description: gist.description,
-            files: gist.files.mapValues {
-                Gist.File(
-                    filename: $0.filename, language: $0.language, content: listed ? nil : $0.content,
-                    truncated: listed ? nil : $0.truncated,
-                    rawURL: URL(string: "https://gist.githubusercontent.com")!
-                        .appending(components: gist.owner?.login ?? "", gist.id, "raw", $0.filename),
-                    size: $0.size)
-            },
-            updatedAt: gist.updatedAt, createdAt: gist.createdAt, isPublic: gist.isPublic, owner: gist.owner,
-            truncated: gist.truncated, history: listed ? nil : gist.history,
-            commentCount: comments[gist.id]?.count ?? 0)
+        var served = gist
+        for filename in gist.files.keys {
+            served.files[filename]?.rawURL = URL(string: "https://gist.githubusercontent.com")!
+                .appending(components: gist.owner?.login ?? "", gist.id, "raw", filename)
+            if listed {
+                served.files[filename]?.content = nil
+                served.files[filename]?.truncated = nil
+            }
+        }
+        if listed { served.history = nil }
+        served.commentCount = comments[gist.id]?.count ?? 0
+        return served
     }
 
     /// A file's raw text, which lists link to instead of including.
@@ -268,21 +267,20 @@ private extension FixtureServer.State {
 
     mutating func update(_ id: String, with change: Change) -> Gist? {
         guard let index = gists.firstIndex(where: { $0.id == id }) else { return nil }
-        let gist = gists[index]
-        var files = gist.files
+        var gist = gists[index]
         for (name, file) in change.files ?? [:] {
-            let content = file?.content ?? files[name]?.content
-            files[name] = nil
+            let content = file?.content ?? gist.files[name]?.content
+            gist.files[name] = nil
             guard file != nil, let content, !content.isEmpty else { continue }
             let filename = file?.filename ?? name
-            files[filename] = .fixture(filename, content: content)
+            gist.files[filename] = .fixture(filename, content: content)
         }
-        gists[index] = Gist(
-            id: id, description: change.description ?? gist.description, files: files,
-            updatedAt: Date.now.wholeSeconds, createdAt: gist.createdAt, isPublic: gist.isPublic,
-            owner: gist.owner, truncated: false,
-            history: [GistRevision(version: newID())] + (gist.history ?? []), commentCount: gist.commentCount)
-        return gists[index]
+        gist.description = change.description ?? gist.description
+        gist.updatedAt = Date.now.wholeSeconds
+        gist.truncated = false
+        gist.history = [GistRevision(version: newID())] + (gist.history ?? [])
+        gists[index] = gist
+        return gist
     }
 
     func json<Value: Encodable>(_ value: Value?, status: Int = 200) throws -> FixtureServer.Response {

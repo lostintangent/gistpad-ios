@@ -1,8 +1,8 @@
 import Foundation
-import Store
 import Testing
 
 @testable import Model
+@testable import Store
 
 @MainActor
 struct DailyNotesTests {

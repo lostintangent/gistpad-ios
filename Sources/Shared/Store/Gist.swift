@@ -23,16 +23,16 @@ public struct GistRevision: Codable, Equatable, Sendable {
 }
 
 public struct Gist: Codable, Equatable, Identifiable, Sendable {
-    public let id: String
-    public let description: String?
-    public let files: [String: File]
-    public let updatedAt: Date
-    public let createdAt: Date
-    public let isPublic: Bool
-    public let owner: GitHubUser?
-    public let truncated: Bool?
-    public let history: [GistRevision]?
-    public let commentCount: Int?
+    public internal(set) var id: String
+    public internal(set) var description: String?
+    public internal(set) var files: [String: File]
+    public internal(set) var updatedAt: Date
+    public internal(set) var createdAt: Date
+    public internal(set) var isPublic: Bool
+    public internal(set) var owner: GitHubUser?
+    public internal(set) var truncated: Bool?
+    public internal(set) var history: [GistRevision]?
+    public internal(set) var commentCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, description, files, owner, truncated, history
@@ -80,6 +80,16 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
     }
     public var revision: String? { history?.first?.version }
 
+    /// The gistpad.dev link that shares `filename`, or nil when the gist doesn't have that file.
+    public func shareURL(filename: String) -> URL? {
+        guard files[filename] != nil,
+              let path = filename.addingPercentEncoding(withAllowedCharacters: Self.unreserved) else { return nil }
+        return URL(string: "https://gistpad.dev/#/share/\(id)/\(path)")
+    }
+
+    private static let unreserved = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+
     func matchesWebMarkdownFilter(allowImages: Bool) -> Bool {
         files.values.allSatisfy {
             $0.language == "Markdown" || $0.filename.hasSuffix(".tldraw")
@@ -91,12 +101,12 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
 extension Gist {
     /// GitHub's data for one file in a gist. It never holds your edits.
     public struct File: Codable, Equatable, Sendable {
-        public let filename: String
-        public let language: String?
-        public let content: String?
-        public let truncated: Bool?
-        public let rawURL: URL?
-        public let size: Int?
+        public internal(set) var filename: String
+        public internal(set) var language: String?
+        public internal(set) var content: String?
+        public internal(set) var truncated: Bool?
+        public internal(set) var rawURL: URL?
+        public internal(set) var size: Int?
 
         enum CodingKeys: String, CodingKey {
             case filename, language, content, truncated, size

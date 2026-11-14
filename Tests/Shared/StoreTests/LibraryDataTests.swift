@@ -61,14 +61,9 @@ private func listed(_ gist: Gist) throws -> Gist {
         let local = try await store.save(
             GistFileDraft(accountID: account, gist: gist, filename: filename, text: "base"),
             text: "unpublished", github: nil)
-        let links = try GistLinks(gist: gist, filename: filename)
-        #expect(links.shareURL.absoluteString == "https://gistpad.dev/#/share/abc123/R%C3%A9sum%C3%A9%20%231%3F%20100%25.md")
-        #expect(links.githubURL.absoluteString == "https://gist.github.com/abc123")
-        #expect(links.isSecret)
-        #expect(try GistLinks(gist: gist).shareURL.absoluteString == "https://gistpad.dev/#/share/abc123")
-        #expect(throws: GistLinks.Error.invalidFilename) {
-            try GistLinks(gist: gist, filename: "not-published.md")
-        }
+        #expect(gist.shareURL(filename: filename)?.absoluteString
+            == "https://gistpad.dev/#/share/abc123/R%C3%A9sum%C3%A9%20%231%3F%20100%25.md")
+        #expect(gist.shareURL(filename: "not-published.md") == nil)
         #expect(try await store.drafts(accountID: account).first { $0.id == local.id }?.isPublished == false)
     }
 }

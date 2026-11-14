@@ -15,7 +15,6 @@ public struct DailyNote: Codable, Equatable, Sendable {
         Self.date(filename: day.filename, timeZone: TimeZone(identifier: day.timeZoneIdentifier) ?? .current)
     }
 
-    public var tasks: [FileTask] { text.map(FileTask.tasks(in:)) ?? [] }
     public var progress: TaskProgress? { text.map(TaskProgress.init(markdown:)) }
 
     public init(
@@ -94,5 +93,21 @@ extension DraftEdit {
         let separator = source.isEmpty || source.hasSuffix(asTask ? "\n" : "\n\n") ? ""
             : asTask || source.hasSuffix("\n") ? "\n" : "\n\n"
         return Self(draft: draft, text: separator + content + "\n")
+    }
+}
+
+/// How many of a note's Markdown tasks are done. This matches the web's `- \[[ x]\]` exactly, so
+/// tasks count anywhere on a line and inside code fences, and only a lowercase `x` is checked.
+public struct TaskProgress: Equatable, Sendable {
+    public let completed: Int
+    public let total: Int
+    public var remaining: Int { total - completed }
+}
+
+extension TaskProgress {
+    public init(markdown: String) {
+        let markers = markdown.matches(of: /- \[([ x])\]/)
+        total = markers.count
+        completed = markers.count { $0.output.1 == "x" }
     }
 }

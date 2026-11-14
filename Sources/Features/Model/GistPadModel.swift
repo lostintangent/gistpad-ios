@@ -241,8 +241,7 @@ public final class GistPadModel {
       },
       isAutoSaveEnabled: account.preferences.isAutoSaveEnabled,
       commentCount: gist.isDailyNote ? nil : gist.commentCount,
-      shareURL: file.isDeletedOnGitHub || gist.files[file.filename] == nil
-        ? nil : try? GistLinks(gist: gist, filename: file.filename).shareURL)
+      shareURL: file.isDeletedOnGitHub ? nil : gist.shareURL(filename: file.filename))
   }
 
   static func libraryContents(

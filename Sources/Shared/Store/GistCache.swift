@@ -64,7 +64,9 @@ public struct GistCache: Codable, Equatable, Sendable {
         let known = Dictionary(gists.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let keep: (Gist) -> Gist = { listed in
             guard let cached = known[listed.id], cached.updatedAt == listed.updatedAt else { return listed }
-            return listed.with(history: cached.history)
+            var kept = listed
+            kept.history = cached.history
+            return kept
         }
         self.owned = owned.map(keep)
         self.starred = starred.map(keep)
@@ -115,9 +117,8 @@ public struct GistCache: Codable, Equatable, Sendable {
     }
 
     public mutating func setCommentCount(_ total: Int, gistID: String) {
-        let update: (Gist) -> Gist = { $0.id == gistID ? $0.withCommentCount(total) : $0 }
-        owned = owned.map(update)
-        starred = starred.map(update)
+        for index in owned.indices where owned[index].id == gistID { owned[index].commentCount = total }
+        for index in starred.indices where starred[index].id == gistID { starred[index].commentCount = total }
     }
 
     private static func key(_ gistID: String, _ filename: String) -> String { "\(gistID)/\(filename)" }
@@ -157,23 +158,10 @@ final class StoredLibrary {
 }
 
 extension Gist {
-    fileprivate func with(history: [GistRevision]?) -> Gist {
-        Gist(
-            id: id, description: description, files: files, updatedAt: updatedAt, createdAt: createdAt,
-            isPublic: isPublic, owner: owner, truncated: truncated, history: history,
-            commentCount: commentCount)
-    }
-
     /// The gist without its files' text, which the cache keeps once, in `texts`.
     fileprivate var withoutContent: Gist {
-        Gist(
-            id: id, description: description,
-            files: files.mapValues {
-                Gist.File(
-                    filename: $0.filename, language: $0.language, content: nil, truncated: $0.truncated,
-                    rawURL: $0.rawURL, size: $0.size)
-            },
-            updatedAt: updatedAt, createdAt: createdAt, isPublic: isPublic, owner: owner,
-            truncated: truncated, history: history, commentCount: commentCount)
+        var gist = self
+        for filename in files.keys { gist.files[filename]?.content = nil }
+        return gist
     }
 }

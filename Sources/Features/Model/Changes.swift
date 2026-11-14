@@ -125,7 +125,7 @@ extension GistPadModel {
   }
 
   public func renameFile(_ draft: GistFileDraft, to newFilename: String) async throws {
-    guard let gistID = draft.gistID else { throw GistLinks.Error.notPublished }
+    guard let gistID = draft.gistID else { throw ChangeError.publicationInProgress }
     let filename = draft.filename
     try Self.validateFilename(newFilename)
     try await change { account in

@@ -26,13 +26,9 @@ private func dailyData() throws -> Data {
         #expect(DailyNote.date(filename: "2026-02-30.md") == nil)
 
         let markdown = "🌅 - [ ] Wake up \r\n- [x] Done\n- [X] Shouting\n```\n- [ ] Fenced\n```"
-        let tasks = FileTask.tasks(in: markdown)
-        #expect(tasks.map(\.title) == ["Wake up", "Done", "Fenced"])
-        #expect(tasks.map(\.isChecked) == [false, true, false])
-        #expect(tasks[0].markerRange == NSRange(location: 5, length: 3))
-        #expect((markdown as NSString).substring(with: tasks[0].lineRange) == "🌅 - [ ] Wake up ")
-        #expect((markdown as NSString).substring(with: tasks[1].markerRange) == "[x]")
-        #expect(TaskProgress(markdown: markdown) == TaskProgress(completed: 1, total: 3))
+        let progress = TaskProgress(markdown: markdown)
+        #expect(progress.completed == 1)
+        #expect(progress.total == 3)
 
         let day = DailyNote.Day(date: instant, timeZone: utc)
         let cache = { (truncated: Bool) in

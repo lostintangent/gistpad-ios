@@ -721,10 +721,9 @@ struct RootView: View {
       case .title:
         try await model.rename(draft, to: value)
       case .filename:
-        guard let gistID = draft.gistID else { throw GistLinks.Error.notPublished }
         try await model.renameFile(draft, to: value)
       case .addFile:
-        guard let gistID = draft.gistID else { throw GistLinks.Error.notPublished }
+        guard let gistID = draft.gistID else { throw ChangeError.publicationInProgress }
         try await model.addFile(named: value, to: gistID)
       }
     }

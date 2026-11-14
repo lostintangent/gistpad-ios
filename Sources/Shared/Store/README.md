@@ -101,13 +101,13 @@ refresh rebuilds it.
 
 `DailyNote.Day` pins the date and time zone when an action starts.
 `DailyNote(cache:drafts:)` reads a day from the cache and drafts for the widget,
-and `FileTask` and `TaskProgress` read tasks with the web's markers.
+and `TaskProgress` counts tasks with the web's markers.
 `DraftEdit.addToToday` appends a paragraph or one task per line.
 
 ## Links and photos
 
-`GistLinks(gist:filename:)` gives the gistpad.dev share link and the GitHub
-link, and whether the gist is secret. A gist that isn't published has no link.
+`Gist.shareURL(filename:)` gives a file's gistpad.dev share link, or nil when the
+gist doesn't have that file. A draft that isn't published has no gist, so no link.
 
 `ImageStorage.check(_:)` accepts an image under 50 MB, typed by its own bytes.
 `upload(_:gistID:)` posts it to `assets/<gist>/<uuid>.<extension>` the way the web does and
