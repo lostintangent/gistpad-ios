@@ -11,9 +11,7 @@
     private let insertImage: (@MainActor () -> Void)?
     private let intelligence: (@MainActor () -> Void)?
     private let comments: CommentHighlightConfiguration
-    private let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
-    private let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
-    private let onAddComment: (@MainActor (String) -> Void)?
+    private let commentActions: CommentHighlightActions?
     @State private var linkRequest: LinkRequest?
 
     public init(
@@ -22,27 +20,21 @@
       insertImage: (@MainActor () -> Void)? = nil,
       intelligence: (@MainActor () -> Void)? = nil,
       comments: CommentHighlightConfiguration = .init(),
-      onOpenCommentThreads: (@MainActor ([Int64]) -> Void)? = nil,
-      onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)? = nil,
-      onAddComment: (@MainActor (String) -> Void)? = nil
+      commentActions: CommentHighlightActions? = nil
     ) {
       self.editor = editor
       self.title = title
       self.insertImage = insertImage
       self.intelligence = intelligence
       self.comments = comments
-      self.onOpenCommentThreads = onOpenCommentThreads
-      self.onLinkedCommentIDsChange = onLinkedCommentIDsChange
-      self.onAddComment = onAddComment
+      self.commentActions = commentActions
     }
 
     public var body: some View {
       GeometryReader { _ in
         TextViewRepresentable(
           editor: editor, title: title,
-          comments: comments, onOpenCommentThreads: onOpenCommentThreads,
-          onLinkedCommentIDsChange: onLinkedCommentIDsChange,
-          onAddComment: onAddComment,
+          comments: comments, commentActions: commentActions,
           actions: KeyboardBarActions(
             canFormat: editor.canFormat,
             format: format, link: beginLink, indent: indent,
@@ -128,9 +120,7 @@
     let editor: Editor
     let title: String?
     let comments: CommentHighlightConfiguration
-    let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
-    let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
-    let onAddComment: (@MainActor (String) -> Void)?
+    let commentActions: CommentHighlightActions?
     let actions: KeyboardBarActions
     @Environment(\.isPaneVisible) private var isPaneVisible
     @Environment(\.accent) private var accent
@@ -159,9 +149,7 @@
           if view.isFirstResponder { view.reloadInputViews() }
         }
         view.traitOverrides[AccentTrait.self] = accent
-        editor.setCommentHighlights(
-          comments, onOpenCommentThreads: onOpenCommentThreads,
-          onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment)
+        editor.setCommentHighlights(comments, actions: commentActions)
       }
     }
 

@@ -313,14 +313,9 @@
     }
 
     public func setCommentHighlights(
-      _ configuration: CommentHighlightConfiguration,
-      onOpenCommentThreads: (@MainActor ([Int64]) -> Void)? = nil,
-      onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)? = nil,
-      onAddComment: (@MainActor (String) -> Void)? = nil
+      _ configuration: CommentHighlightConfiguration, actions: CommentHighlightActions? = nil
     ) {
-      commentHighlights.configure(
-        configuration, onOpen: onOpenCommentThreads, onLinkedIDs: onLinkedCommentIDsChange,
-        onAdd: onAddComment)
+      commentHighlights.configure(configuration, actions: actions)
     }
 
     public func textView(

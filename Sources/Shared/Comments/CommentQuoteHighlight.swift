@@ -17,6 +17,25 @@ public struct CommentHighlightConfiguration: Equatable, Sendable {
     }
 }
 
+/// What a highlighted passage does when you interact with it. A surface without actions has no comments.
+public struct CommentHighlightActions: Sendable {
+    /// Opens the threads under a tapped passage.
+    public var open: @MainActor ([Int64]) -> Void
+    /// Reports which threads still find their passage in the text.
+    public var linked: @MainActor (Set<Int64>) -> Void
+    /// Starts a thread that quotes the selected text.
+    public var add: @MainActor (String) -> Void
+
+    public init(
+        open: @escaping @MainActor ([Int64]) -> Void, linked: @escaping @MainActor (Set<Int64>) -> Void,
+        add: @escaping @MainActor (String) -> Void
+    ) {
+        self.open = open
+        self.linked = linked
+        self.add = add
+    }
+}
+
 public struct CommentQuoteHighlight: Equatable, Sendable {
     public let segment: Int
     public let start: Int

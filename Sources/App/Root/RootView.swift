@@ -424,12 +424,7 @@ struct RootView: View {
           ? { comments.performAfterClosing { images.chooseImage(for: fileEditor) } } : nil,
         intelligence: { comments.performAfterClosing { presentIntelligence(fileEditor) } },
         comments: commentConfiguration(fileEditor),
-        onOpenCommentThreads: commentOpener(fileEditor, origin: .edit),
-        onLinkedCommentIDsChange: { ids in
-          guard comments.editorID == fileEditor.editor.id else { return }
-          comments.sourceLinkedIDs = ids
-        },
-        onAddComment: commentComposer(fileEditor, origin: .edit))
+        commentActions: commentActions(fileEditor, origin: .edit))
     } preview: {
       preview(fileEditor)
     }
@@ -486,12 +481,7 @@ struct RootView: View {
     return FilePreview(
       editor: fileEditor.editor, allowsMutations: fileEditor.details.access.canEdit,
       comments: commentConfiguration(fileEditor),
-      onOpenCommentThreads: commentOpener(fileEditor, origin: .preview),
-      onLinkedCommentIDsChange: { ids in
-        guard comments.editorID == fileEditor.editor.id else { return }
-        comments.previewLinkedIDs = ids
-      },
-      onAddComment: commentComposer(fileEditor, origin: .preview),
+      commentActions: commentActions(fileEditor, origin: .preview),
       openWikilink: { target in
         if let gist = model.state.gists.first(where: {
           $0.title.localizedStandardCompare(target) == .orderedSame
@@ -519,29 +509,29 @@ struct RootView: View {
         model.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true)
   }
 
-  private func commentOpener(
+  private func commentActions(
     _ fileEditor: GistFileEditor, origin: FileMode
-  ) -> (@MainActor ([Int64]) -> Void)? {
+  ) -> CommentHighlightActions? {
     guard CommentsPresentation.supports(fileEditor.file) else { return nil }
-    return { ids in
-      guard comments.editorID == fileEditor.editor.id else { return }
-      if ids.count == 1, let id = ids.first {
-        comments.open(for: fileEditor, origin: origin, rootID: id)
-      } else {
-        comments.fileMode = origin
-        comments.overlappingIDs = ids
-      }
-    }
-  }
-
-  private func commentComposer(
-    _ fileEditor: GistFileEditor, origin: FileMode
-  ) -> (@MainActor (String) -> Void)? {
-    guard CommentsPresentation.supports(fileEditor.file) else { return nil }
-    return { selection in
-      guard comments.editorID == fileEditor.editor.id else { return }
-      comments.open(for: fileEditor, origin: origin, quote: selection)
-    }
+    let isCurrent = { comments.editorID == fileEditor.editor.id }
+    return CommentHighlightActions(
+      open: { ids in
+        guard isCurrent() else { return }
+        if ids.count == 1, let id = ids.first {
+          comments.open(for: fileEditor, origin: origin, rootID: id)
+        } else {
+          comments.fileMode = origin
+          comments.overlappingIDs = ids
+        }
+      },
+      linked: { ids in
+        guard isCurrent() else { return }
+        if origin == .preview { comments.previewLinkedIDs = ids } else { comments.sourceLinkedIDs = ids }
+      },
+      add: { selection in
+        guard isCurrent() else { return }
+        comments.open(for: fileEditor, origin: origin, quote: selection)
+      })
   }
 
   private func afterCommentsClose(_ action: (() -> Void)?) -> (() -> Void)? {

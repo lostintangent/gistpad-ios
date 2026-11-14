@@ -10,9 +10,7 @@
     private unowned let editor: Editor
     private let backgroundLayer = CALayer()
     private var configuration = CommentHighlightConfiguration()
-    private var onOpen: (@MainActor ([Int64]) -> Void)?
-    private var onLinkedIDs: (@MainActor (Set<Int64>) -> Void)?
-    private var onAdd: (@MainActor (String) -> Void)?
+    private var actions: CommentHighlightActions?
     private var linkedIDs: Set<Int64>?
     private var passages: [(highlight: CommentQuoteHighlight, fill: UIColor, selected: Bool)] = []
     private var verifiedHighlights: [CommentQuoteHighlight] = []
@@ -47,13 +45,8 @@
       editor.textView.addGestureRecognizer(tap)
     }
 
-    func configure(
-      _ configuration: CommentHighlightConfiguration,
-      onOpen: (@MainActor ([Int64]) -> Void)?,
-      onLinkedIDs: (@MainActor (Set<Int64>) -> Void)?,
-      onAdd: (@MainActor (String) -> Void)?
-    ) {
-      let needsInitialReport = self.onLinkedIDs == nil && onLinkedIDs != nil
+    func configure(_ configuration: CommentHighlightConfiguration, actions: CommentHighlightActions?) {
+      let needsInitialReport = self.actions == nil && actions != nil
       if self.configuration.selectedCommentID != configuration.selectedCommentID
         || self.configuration.revealRevision != configuration.revealRevision
       {
@@ -61,9 +54,7 @@
         scrollTask?.cancel()
         scrollTask = nil
       }
-      self.onOpen = onOpen
-      self.onLinkedIDs = onLinkedIDs
-      self.onAdd = onAdd
+      self.actions = actions
       if self.configuration != configuration {
         self.configuration = configuration
         editor.highlight()
@@ -241,7 +232,7 @@
     }
 
     private func addAction(ranges: [NSRange]) -> UIAction? {
-      guard onAdd != nil, !suspendsForFind, !suspendsForWritingTools,
+      guard actions != nil, !suspendsForFind, !suspendsForWritingTools,
         ranges.count == 1, let range = ranges.first, editor.isSettled,
         let quote = try? Edit.text(in: editor.text, at: range),
         CommentQuoteMatcher.isEligibleSelection(quote)
@@ -250,17 +241,17 @@
         title: String(localized: "Add Comment", bundle: .module),
         image: UIImage(systemName: "text.bubble")
       ) { [weak self] _ in
-        self?.onAdd?(quote)
+        self?.actions?.add(quote)
       }
     }
 
     private func openAction(ids: [Int64]) -> UIAction? {
-      guard !ids.isEmpty, onOpen != nil else { return nil }
+      guard !ids.isEmpty, actions != nil else { return nil }
       return UIAction(
         title: String(localized: "View Comment", bundle: .module),
         image: UIImage(systemName: "text.bubble")
       ) { [weak self] _ in
-        self?.onOpen?(ids)
+        self?.actions?.open(ids)
       }
     }
 
@@ -279,7 +270,7 @@
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch)
       -> Bool
     {
-      guard !editor.textView.isFirstResponder, onOpen != nil,
+      guard !editor.textView.isFirstResponder, actions != nil,
         !suspendsForFind, !suspendsForWritingTools, editor.isSettled
       else { return false }
       let ids = threadIDs(at: touch.location(in: editor.textView))
@@ -335,7 +326,7 @@
     @objc private func openTappedPassage() {
       guard let pendingTap else { return }
       self.pendingTap = nil
-      onOpen?(pendingTap)
+      actions?.open(pendingTap)
     }
 
     @objc private func selectTappedWord() {
@@ -473,7 +464,7 @@
       publication = Task { @MainActor [weak self] in
         guard !Task.isCancelled, let self else { return }
         self.publication = nil
-        self.onLinkedIDs?(ids)
+        self.actions?.linked(ids)
       }
     }
   }

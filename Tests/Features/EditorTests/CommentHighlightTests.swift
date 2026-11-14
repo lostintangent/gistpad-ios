@@ -48,7 +48,7 @@
           .init(quotes: [
             CommentQuote(commentID: 10, quote: "one two"),
             CommentQuote(commentID: 20, quote: "two three"),
-          ]), onOpenCommentThreads: { opened.append($0) })
+          ]), actions: actions(open: { opened.append($0) }))
         #expect(
           editor.textView.textStorage.attribute(
             CommentHighlights.annotationKey, at: 5, effectiveRange: nil) != nil)
@@ -89,7 +89,7 @@
           .init(quotes: [
             CommentQuote(commentID: 10, quote: "quiet native"),
             CommentQuote(commentID: 20, quote: "native note"),
-          ]), onOpenCommentThreads: { _ in }, onAddComment: { quotes.append($0) })
+          ]), actions: actions(add: { quotes.append($0) }))
         editor.textView.layoutIfNeeded()
         let range = (source as NSString).range(of: "native")
         let start = try #require(
@@ -159,7 +159,7 @@
         #expect(
           editor.textView(
             editor.textView, editMenuForTextInRanges: [range], suggestedActions: []) == nil)
-        editor.setCommentHighlights(.init(), onAddComment: { _ in })
+        editor.setCommentHighlights(.init(), actions: actions())
         #expect(
           editor.textView(
             editor.textView,
@@ -186,7 +186,7 @@
               CommentQuote(commentID: 10, quote: "one two"),
               CommentQuote(commentID: 20, quote: "two three"),
             ], selectedCommentID: 20, showsInlineComments: false),
-          onOpenCommentThreads: { _ in })
+          actions: actions())
         #expect(
           editor.textView.textStorage.attribute(
             CommentHighlights.annotationKey, at: 1, effectiveRange: nil) == nil)
@@ -210,7 +210,7 @@
             CommentQuote(commentID: 20, quote: "title: native"),
             CommentQuote(commentID: 30, quote: "missing"),
             CommentQuote(commentID: 40, quote: "native note"),
-          ]), onLinkedCommentIDsChange: { linked = $0 })
+          ]), actions: actions(linked: { linked = $0 }))
         await Task.yield()
         #expect(linked == [40])
         #expect(
@@ -268,6 +268,14 @@
         #expect(content.importance == .high)
         editor.setCommentHighlights(.init())
         #expect(provider.accessibilityCustomContent.isEmpty)
+      }
+
+      private func actions(
+        open: @escaping @MainActor ([Int64]) -> Void = { _ in },
+        linked: @escaping @MainActor (Set<Int64>) -> Void = { _ in },
+        add: @escaping @MainActor (String) -> Void = { _ in }
+      ) -> CommentHighlightActions {
+        CommentHighlightActions(open: open, linked: linked, add: add)
       }
 
       private func settle(_ view: UITextView, until condition: () -> Bool) async throws {

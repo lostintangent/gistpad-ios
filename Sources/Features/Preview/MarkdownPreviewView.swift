@@ -8,9 +8,7 @@ import Comments
 public struct MarkdownPreviewView: View {
     private let file: PreviewFile
     private let comments: CommentHighlightConfiguration
-    private let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
-    private let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
-    private let onAddComment: (@MainActor (String) -> Void)?
+    private let commentActions: CommentHighlightActions?
     private let onEvent: @MainActor (PreviewEvent) -> Void
     @State private var viewportView = PreviewViewportView()
 
@@ -20,17 +18,13 @@ public struct MarkdownPreviewView: View {
         generation: UInt64,
         allowsTaskEdits: Bool = true,
         comments: CommentHighlightConfiguration = .init(),
-        onOpenCommentThreads: (@MainActor ([Int64]) -> Void)? = nil,
-        onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)? = nil,
-        onAddComment: (@MainActor (String) -> Void)? = nil,
+        commentActions: CommentHighlightActions? = nil,
         onEvent: @escaping @MainActor (PreviewEvent) -> Void
     ) {
         self.file = PreviewFile(
             text: markdown, id: fileID, generation: generation, allowsTaskEdits: allowsTaskEdits)
         self.comments = comments
-        self.onOpenCommentThreads = onOpenCommentThreads
-        self.onLinkedCommentIDsChange = onLinkedCommentIDsChange
-        self.onAddComment = onAddComment
+        self.commentActions = commentActions
         self.onEvent = onEvent
     }
 
@@ -38,9 +32,7 @@ public struct MarkdownPreviewView: View {
         GeometryReader { _ in
             NativeMarkdownPreview(
                 file: file, viewportView: viewportView, comments: comments,
-                onOpenCommentThreads: onOpenCommentThreads,
-                onLinkedCommentIDsChange: onLinkedCommentIDsChange,
-                onAddComment: onAddComment, onEvent: onEvent
+                commentActions: commentActions, onEvent: onEvent
             )
             .ignoresSafeArea(.container, edges: .vertical)
             // Resize in one step so WebKit's scroll anchoring keeps the reading passage.
@@ -54,9 +46,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     let file: PreviewFile
     let viewportView: PreviewViewportView
     let comments: CommentHighlightConfiguration
-    let onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
-    let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
-    let onAddComment: (@MainActor (String) -> Void)?
+    let commentActions: CommentHighlightActions?
     let onEvent: @MainActor (PreviewEvent) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorSchemeContrast) private var contrast
@@ -114,8 +104,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         }
         context.coordinator.appearance = PreviewAppearance(traits: traits, boldText: legibilityWeight == .bold)
         context.coordinator.commentHighlights.update(
-            file: file, configuration: comments, accent: accent.color.hex,
-            onOpen: onOpenCommentThreads, onLinkedIDs: onLinkedCommentIDsChange, onAdd: onAddComment)
+            file: file, configuration: comments, actions: commentActions, accent: accent.color.hex)
         context.coordinator.update(file)
     }
 

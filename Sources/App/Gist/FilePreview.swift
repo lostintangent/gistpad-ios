@@ -7,9 +7,7 @@ struct FilePreview: View {
   let editor: Editor
   var allowsMutations = true
   var comments = CommentHighlightConfiguration()
-  var onOpenCommentThreads: (@MainActor ([Int64]) -> Void)?
-  var onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
-  var onAddComment: (@MainActor (String) -> Void)?
+  var commentActions: CommentHighlightActions?
   var openWikilink: ((String) -> Void)?
   @State private var renderError: String?
   @State private var reload = 0
@@ -20,9 +18,7 @@ struct FilePreview: View {
       MarkdownPreviewView(
         markdown: editor.text, fileID: editor.fileID,
         generation: editor.generation, allowsTaskEdits: allowsMutations,
-        comments: comments, onOpenCommentThreads: onOpenCommentThreads,
-        onLinkedCommentIDsChange: onLinkedCommentIDsChange, onAddComment: onAddComment,
-        onEvent: handle
+        comments: comments, commentActions: commentActions, onEvent: handle
       )
       .id(reload)
       .accessibilityHidden(renderError != nil)

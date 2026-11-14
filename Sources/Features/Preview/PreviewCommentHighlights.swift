@@ -38,9 +38,7 @@ import WebKit
 @MainActor
 final class PreviewCommentHighlights {
     weak var webView: WKWebView?
-    private var onOpen: (@MainActor ([Int64]) -> Void)?
-    private var onLinkedIDs: (@MainActor (Set<Int64>) -> Void)?
-    private var onAdd: (@MainActor (String) -> Void)?
+    private var actions: CommentHighlightActions?
     private var file: PreviewFile?
     private var renderedFile: PreviewFile?
     private var configuration = CommentHighlightConfiguration()
@@ -52,16 +50,12 @@ final class PreviewCommentHighlights {
     private var task: Task<Void, Never>?
 
     func update(
-        file: PreviewFile, configuration: CommentHighlightConfiguration, accent: String,
-        onOpen: (@MainActor ([Int64]) -> Void)?,
-        onLinkedIDs: (@MainActor (Set<Int64>) -> Void)?,
-        onAdd: (@MainActor (String) -> Void)?
+        file: PreviewFile, configuration: CommentHighlightConfiguration, actions: CommentHighlightActions?,
+        accent: String
     ) {
-        let needsInitialReport = self.onLinkedIDs == nil && onLinkedIDs != nil
-        let changesInteraction = (self.onOpen == nil) != (onOpen == nil)
-        self.onOpen = onOpen
-        self.onLinkedIDs = onLinkedIDs
-        self.onAdd = onAdd
+        let needsInitialReport = self.actions == nil && actions != nil
+        let changesInteraction = (self.actions == nil) != (actions == nil)
+        self.actions = actions
         let changed = changesInteraction || self.file != file || self.configuration != configuration ||
             self.accent != accent
         if self.file != file {
@@ -82,11 +76,11 @@ final class PreviewCommentHighlights {
 
     func activate(_ body: Any) throws {
         guard let file, renderedFile == file else { return }
-        onOpen?(try PreviewCommentActivation.decode(body, file: file, highlights: highlights))
+        actions?.open(try PreviewCommentActivation.decode(body, file: file, highlights: highlights))
     }
 
     func addCommentMenu() -> UIDeferredMenuElement? {
-        guard onAdd != nil, let file, renderedFile == file else { return nil }
+        guard actions != nil, let file, renderedFile == file else { return nil }
         return .uncached { [weak self] completion in
             Task { @MainActor in
                 guard let self, let webView = self.webView else { return completion([]) }
@@ -102,7 +96,7 @@ final class PreviewCommentHighlights {
                         image: UIImage(systemName: "text.bubble")
                     ) { [weak self] _ in
                         guard let self, self.renderedFile == file else { return }
-                        self.onAdd?(quote)
+                        self.actions?.add(quote)
                     }
                     completion([action])
                 } catch {
@@ -128,7 +122,7 @@ final class PreviewCommentHighlights {
         guard let file, renderedFile == file, let webView else { return }
         let configuration = configuration
         let accent = accent
-        let allowsInteraction = onOpen != nil
+        let allowsInteraction = actions != nil
         if configuration.quotes.isEmpty, highlights.isEmpty {
             matchedQuotes = []
             publish([])
@@ -187,7 +181,7 @@ final class PreviewCommentHighlights {
         let file = file
         Task { @MainActor [weak self] in
             guard let self, self.file == file, self.linkedIDs == ids else { return }
-            self.onLinkedIDs?(ids)
+            self.actions?.linked(ids)
         }
     }
 }
