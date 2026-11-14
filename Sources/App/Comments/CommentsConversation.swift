@@ -17,7 +17,7 @@ struct CommentsConversation: View {
     /// A new selection, or its thread arriving, scrolls the thread to the top once.
     private func reveal(in threads: [GistCommentThread]) -> Reveal {
         .init(
-            id: comments.selectedThreadID, revision: comments.threadRevealRevision,
+            id: comments.selectedThreadID, revision: comments.revealRevision,
             exists: threads.contains { $0.id == comments.selectedThreadID })
     }
 

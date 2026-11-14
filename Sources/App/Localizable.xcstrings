@@ -2,13 +2,10 @@
   "sourceLanguage" : "en",
   "strings" : {
     "Comments" : {},
-    "All files in this gist" : {},
     "Only web links can be opened from a comment." : {},
     "Couldn’t Open Link" : {},
     "Choose Comment" : {},
     "Unknown author" : {},
-    "Comments couldn’t be opened" : {},
-    "Opening comments" : {},
     "Show Front Matter" : {},
     "%lld replies" : {
       "localizations" : {

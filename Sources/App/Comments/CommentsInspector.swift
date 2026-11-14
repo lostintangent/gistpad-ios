@@ -4,23 +4,28 @@ import SwiftUI
 
 struct CommentsInspector: View {
   let comments: CommentsPresentation
-  let model: CommentsModel
   @State private var linkFailure: String?
 
   var body: some View {
     NavigationStack {
-      CommentsConversation(comments: comments, model: model)
-        .safeAreaBar(edge: .bottom, spacing: 0) {
-          CommentsComposer(comments: comments, model: model)
+      Group {
+        if let model = comments.model {
+          CommentsConversation(comments: comments, model: model)
+            .safeAreaBar(edge: .bottom, spacing: 0) {
+              CommentsComposer(comments: comments, model: model)
+            }
+        } else {
+          ProgressView("Loading comments")
         }
-        .navigationTitle("Comments")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-          ToolbarItem(placement: .cancellationAction) {
-            Button(role: .close) { comments.hide() }
-              .accessibilityIdentifier("comments-close")
-          }
+      }
+      .navigationTitle("Comments")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button(role: .close) { comments.hide() }
+            .accessibilityIdentifier("comments-close")
         }
+      }
     }
     .environment(\.openURL, OpenURLAction { url in
       guard url.scheme == "https" || url.scheme == "http" else {
@@ -57,6 +62,7 @@ private struct CommentsInspectorHost: ViewModifier {
   @Bindable var comments: CommentsPresentation
   let active: GistFileEditor?
   @Binding var columnVisibility: NavigationSplitViewVisibility
+  @State private var sidebarBeforeOpening: NavigationSplitViewVisibility?
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -84,8 +90,8 @@ private struct CommentsInspectorHost: ViewModifier {
           .presentationDragIndicator(.visible)
           .presentationBackgroundInteraction(.enabled(upThrough: .medium))
           .onDisappear {
-            if !comments.isPresented, let previous = comments.sidebarBeforeOpening {
-              comments.sidebarBeforeOpening = nil
+            if !comments.isPresented, let previous = sidebarBeforeOpening {
+              sidebarBeforeOpening = nil
               columnVisibility = previous
             }
             comments.didDismiss()
@@ -93,19 +99,19 @@ private struct CommentsInspectorHost: ViewModifier {
       }
       .onChange(of: comments.isPresented) { _, presented in
         if presented, horizontalSizeClass == .regular {
-          if comments.sidebarBeforeOpening == nil {
-            comments.sidebarBeforeOpening = columnVisibility
+          if sidebarBeforeOpening == nil {
+            sidebarBeforeOpening = columnVisibility
           }
           columnVisibility = .detailOnly
-        } else if !presented, comments.sidebarBeforeOpening != nil {
+        } else if !presented, sidebarBeforeOpening != nil {
           // Dismiss any temporary overlay before restoring the pinned column at native completion.
           columnVisibility = .detailOnly
         }
       }
       .onChange(of: horizontalSizeClass) { _, sizeClass in
         if comments.isPresented, sizeClass == .regular {
-          if comments.sidebarBeforeOpening == nil {
-            comments.sidebarBeforeOpening = columnVisibility
+          if sidebarBeforeOpening == nil {
+            sidebarBeforeOpening = columnVisibility
           }
           columnVisibility = .detailOnly
         }
@@ -125,47 +131,18 @@ private struct CommentsInspectorHost: ViewModifier {
       }
   }
 
-  @ViewBuilder
   private var panel: some View {
-    Group {
-      if let model = comments.model {
-        CommentsInspector(comments: comments, model: model)
-      } else {
-        NavigationStack {
-          Group {
-            if let failure = comments.preparationFailure {
-              VStack(alignment: .leading, spacing: 12) {
-                Text("Comments couldn’t be opened").font(.headline)
-                Text(verbatim: failure)
-                Button("Try Again") { comments.retryOpening() }
-                  .buttonStyle(.glass)
-              }
-              .padding(20)
-            } else {
-              ProgressView("Opening comments")
-            }
-          }
-          .navigationTitle("Comments")
-          .navigationSubtitle("All files in this gist")
-          .navigationBarTitleDisplayMode(.inline)
-          .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-              Button(role: .close) { comments.hide() }
-            }
-          }
-        }
+    CommentsInspector(comments: comments)
+      .onChange(of: dynamicTypeSize, initial: true) { _, size in
+        if size.isAccessibilitySize { comments.detent = .large }
       }
-    }
-    .onChange(of: dynamicTypeSize, initial: true) { _, size in
-      if size.isAccessibilitySize { comments.detent = .large }
-    }
-    .confirmationDialog(
-      String(localized: "Choose Comment"),
-      isPresented: choicePresented(inInspector: true),
-      titleVisibility: .visible
-    ) {
-      choices
-    }
+      .confirmationDialog(
+        String(localized: "Choose Comment"),
+        isPresented: choicePresented(inInspector: true),
+        titleVisibility: .visible
+      ) {
+        choices
+      }
   }
 
   private func choicePresented(inInspector: Bool) -> Binding<Bool> {

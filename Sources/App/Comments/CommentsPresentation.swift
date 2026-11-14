@@ -3,7 +3,6 @@ import Editor
 import Screens
 import Model
 import Observation
-import OSLog
 import SwiftUI
 
 /// Comments for the open gist: one in-memory `CommentsModel`, dropped when another gist opens.
@@ -18,28 +17,24 @@ final class CommentsPresentation {
   /// What `track(_:)` reads, so a file's tracking restarts when any of it changes.
   struct Tracking: Hashable {
     let editorID: UUID
-    let gistID: String?
+    let scope: Scope?
     let knownTotal: Int?
     let isReady: Bool
-    let allowsComments: Bool
     let showsInlineComments: Bool
   }
 
   var isPresented = false
   private(set) var model: CommentsModel?
   var selectedThreadID: Int64?
-  var passageRevealRevision: UInt64 = 0
-  var threadRevealRevision: UInt64 = 0
-  var editorLinkedThreadIDs: Set<Int64>?
-  var previewLinkedThreadIDs: Set<Int64>?
+  /// Asks the conversation and the file to show the selected thread again.
+  private(set) var revealRevision: UInt64 = 0
+  /// The threads each mode's surface finds a passage for.
+  private var linkedThreadIDsByMode: [FileMode: Set<Int64>] = [:]
   var fileMode: FileMode = .preview
   var detent = PresentationDetent.medium
   var isComposerFocused = false
-  var preparationFailure: String?
   var overlappingThreadIDs: [Int64] = []
-  var sidebarBeforeOpening: NavigationSplitViewVisibility?
   var requestedRowID: String?
-  private(set) var editorID: UUID?
   private(set) var scope: Scope?
   @ObservationIgnored let app: GistPadModel
   @ObservationIgnored private var fileEditor: GistFileEditor?
@@ -50,10 +45,11 @@ final class CommentsPresentation {
     self.app = app
   }
 
+  /// The editor of the file Comments follows, once it's activated.
+  var editorID: UUID? { fileEditor?.editor.id }
+
   /// The threads whose passages the current file mode links.
-  var linkedThreadIDs: Set<Int64>? {
-    fileMode == .edit ? editorLinkedThreadIDs : previewLinkedThreadIDs
-  }
+  var linkedThreadIDs: Set<Int64>? { linkedThreadIDsByMode[fileMode] }
 
   private var showsInlineComments: Bool {
     app.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true
@@ -64,39 +60,40 @@ final class CommentsPresentation {
     return !gist.isDailyNote && !file.isDeletedOnGitHub
   }
 
+  private static func scope(for file: GistFile) -> Scope? {
+    guard supports(file), let gist = file.gist else { return nil }
+    return .init(accountID: file.accountID, gistID: gist.id)
+  }
+
   func matches(_ file: GistFile) -> Bool {
     guard let gistID = file.gist?.id else { return false }
     return scope == .init(accountID: file.accountID, gistID: gistID)
   }
 
   func activate(_ next: GistFileEditor) {
-    let nextScope = Self.supports(next.file)
-      ? next.file.gist.map { Scope(accountID: next.file.accountID, gistID: $0.id) } : nil
-    guard editorID != next.editor.id || scope != nextScope else { return }
+    let nextScope = Self.scope(for: next.file)
+    guard fileEditor !== next || scope != nextScope else { return }
     if scope != nextScope {
       hide()
       model = nil
     }
     scope = nextScope
     fileEditor = next
-    editorID = next.editor.id
-    editorLinkedThreadIDs = nil
-    previewLinkedThreadIDs = nil
-    preparationFailure = nil
+    linkedThreadIDsByMode = [:]
   }
 
   func tracking(_ fileEditor: GistFileEditor) -> Tracking {
     .init(
-      editorID: fileEditor.editor.id, gistID: fileEditor.file.gist?.id,
+      editorID: fileEditor.editor.id, scope: Self.scope(for: fileEditor.file),
       knownTotal: fileEditor.file.gist?.commentCount, isReady: isReady(for: fileEditor.file),
-      allowsComments: Self.supports(fileEditor.file), showsInlineComments: showsInlineComments)
+      showsInlineComments: showsInlineComments)
   }
 
   /// Follows the open file, loading its comments when passages show inline.
   func track(_ fileEditor: GistFileEditor) async {
     guard isReady(for: fileEditor.file) else { return }
     activate(fileEditor)
-    guard showsInlineComments, editorID == fileEditor.editor.id else { return }
+    guard showsInlineComments else { return }
     await prepare()?.refresh()
   }
 
@@ -109,9 +106,9 @@ final class CommentsPresentation {
     if matches(fileEditor.file), let model {
       configuration = .init(
         quotes: model.threads.compactMap(\.quotedPassage), selectedThreadID: selectedThreadID,
-        revealRevision: passageRevealRevision, showsInlineComments: showsInlineComments)
+        revealRevision: revealRevision, showsInlineComments: showsInlineComments)
     }
-    let isCurrent = { self.editorID == fileEditor.editor.id }
+    let isCurrent = { self.fileEditor === fileEditor }
     let actions = CommentHighlightActions(
       open: { ids in
         guard isCurrent() else { return }
@@ -124,7 +121,7 @@ final class CommentsPresentation {
       },
       linked: { ids in
         guard isCurrent() else { return }
-        if origin == .preview { self.previewLinkedThreadIDs = ids } else { self.editorLinkedThreadIDs = ids }
+        self.linkedThreadIDsByMode[origin] = ids
       },
       add: { selection in
         guard isCurrent() else { return }
@@ -137,7 +134,7 @@ final class CommentsPresentation {
     for next: GistFileEditor, origin: FileMode? = nil,
     threadID: Int64? = nil, quote: String? = nil
   ) {
-    guard editorID == next.editor.id, Self.supports(next.file) else { return }
+    guard fileEditor === next, Self.supports(next.file) else { return }
     let opening = !isPresented
     if opening {
       returnsToEditing = next.editor.isEditing
@@ -150,7 +147,7 @@ final class CommentsPresentation {
     if !next.details.isOwned { fileMode = .preview }
     detent = quote == nil ? .medium : .large
     selectedThreadID = threadID
-    preparationFailure = nil
+    if threadID != nil { revealRevision &+= 1 }
     isPresented = true
     let filename = next.file.filename
     Task {
@@ -159,18 +156,8 @@ final class CommentsPresentation {
         model.beginQuote(quote, filename: filename)
         isComposerFocused = true
       }
-      if model.comments == nil {
-        await model.refresh()
-      } else if opening {
-        Task { await model.refresh() }
-      }
-      if threadID != nil { threadRevealRevision &+= 1 }
+      if opening || model.comments == nil { await model.refresh() }
     }
-  }
-
-  func retryOpening() {
-    preparationFailure = nil
-    Task { await prepare()?.refresh() }
   }
 
   func hide() {
@@ -190,7 +177,7 @@ final class CommentsPresentation {
     selectedThreadID = id
     isComposerFocused = false
     detent = .medium
-    passageRevealRevision &+= 1
+    revealRevision &+= 1
   }
 
   func didDismiss() {
@@ -219,10 +206,8 @@ final class CommentsPresentation {
     model = nil
     fileEditor = nil
     scope = nil
-    editorID = nil
     requestedRowID = nil
-    editorLinkedThreadIDs = nil
-    previewLinkedThreadIDs = nil
+    linkedThreadIDsByMode = [:]
   }
 
   private func isReady(for file: GistFile) -> Bool {
@@ -231,19 +216,11 @@ final class CommentsPresentation {
 
   private func prepare() async -> CommentsModel? {
     if let model { return model }
-    guard let scope, let gist = fileEditor?.file.gist else { return nil }
-    do {
-      let created = try await app.comments(for: gist)
-      guard self.scope == scope else { return nil }
-      if let model { return model }
-      model = created
-      return created
-    } catch {
-      guard self.scope == scope else { return nil }
-      preparationFailure = error.localizedDescription
-      Logger(subsystem: "dev.gistpad.GistPad", category: "Comments")
-        .error("Comments preparation failed: \(String(reflecting: type(of: error)), privacy: .public)")
-      return nil
-    }
+    // Only an account change stops the client, and that resets Comments.
+    guard let scope, let gist = fileEditor?.file.gist,
+      let created = try? await app.comments(for: gist), self.scope == scope
+    else { return nil }
+    if model == nil { model = created }
+    return model
   }
 }
