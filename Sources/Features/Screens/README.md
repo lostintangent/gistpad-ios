@@ -27,8 +27,9 @@ state. The Library confirms first, then calls `delete` with the row's ID, and th
 app decides what that removes. The Library owns its search, so it stays in the
 Library column through folds and rotations. Apply
 `.libraryRail(isVisible:today:create:openToday:)` to regular detail content, so
-New and Today sit beside the open gist. Pass a `GitHubStatusProblem` as
-`problem` to show `GitHubStatusControl` in the bottom bar.
+New and Today sit beside the open gist. Pass the account's `GitHubStatusState`
+as `status`. A problem shows `GitHubStatusControl` in the bottom bar, or the
+empty state explains it when there's nothing to list.
 
 ## Gist screen
 
@@ -58,8 +59,9 @@ confirms with the title, the day for a daily note, before it calls `delete`.
 
 ## Sheets
 
-`TagEditor(tags:selectedTagIDs:save:)` keeps every choice in the sheet until
-Save, then sends `TagEdit` operations in order: upserts, memberships, deletions.
+`TagEditor(gistID:tags:selectedTagIDs:save:)` keeps every choice in the sheet
+until Save, then sends the preference changes in order: upserts, memberships,
+deletions.
 A retry resends the same edits, and the sheet closes only after `save` succeeds.
 `AccentColorRow` saves the personal color, and `.accent(savedHex:)` applies it
 to content, never to navigation or commands. `CommentsConversation` and

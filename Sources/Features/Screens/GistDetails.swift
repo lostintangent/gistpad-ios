@@ -27,71 +27,48 @@ public enum PublishStatus: Equatable, Sendable {
     }
 }
 
-public enum FileAccess: Equatable, Sendable {
-    case editable
-    case readOnly
-
-    public var canEdit: Bool { self == .editable }
-}
-
 public struct GistDetails: Equatable, Sendable {
-    public struct File: Equatable, Identifiable, Sendable {
-        public let id: String
-        public let filename: String
-
-        public init(id: String, filename: String) {
-            self.id = id
-            self.filename = filename
-        }
-    }
-
     public var title: String
-    public var files: [File]
-    public var selectedFileID: String
-    public var access: FileAccess
+    public var filenames: [String]
+    /// The open file.
+    public var filename: String
+    /// Your own gist, which you can edit, rather than one you starred.
+    public var isOwned: Bool
     public var isPinned: Bool
     public var isStarred: Bool
     public var isArchived: Bool
     public var isDailyNote: Bool
-    public var tags: [Tag]
-    public var isAutoSaveEnabled: Bool
     public var commentCount: Int?
     /// The gistpad.dev link to this file, once it's on GitHub.
     public var shareURL: URL?
 
     /// A daily note reads as its day, exactly like its Library row.
     func displayTitle(now: Date, locale: Locale, calendar: Calendar) -> String {
-        guard isDailyNote, let selectedFilename,
-              let day = DailyNote.date(filename: selectedFilename) else { return title }
+        guard isDailyNote, let day = DailyNote.date(filename: filename) else { return title }
         return DateLabels.dailyTitle(for: day, relativeTo: now, locale: locale, calendar: calendar)
     }
 
     /// The file among several, except README.md. A daily note's title already names its day.
     var headerFilename: String? {
-        guard !isDailyNote, files.count > 1,
-              let filename = selectedFilename,
+        guard !isDailyNote, filenames.count > 1,
               filename.caseInsensitiveCompare("README.md") != .orderedSame else { return nil }
         return filename
     }
 
-    private var selectedFilename: String? { files.first(where: { $0.id == selectedFileID })?.filename }
-
     public init(
-        title: String, files: [File], selectedFileID: String,
-        access: FileAccess = .editable, isPinned: Bool = false,
-        isStarred: Bool = false, isArchived: Bool = false, isDailyNote: Bool = false, tags: [Tag] = [],
-        isAutoSaveEnabled: Bool = false, commentCount: Int? = nil, shareURL: URL? = nil
+        title: String, filenames: [String], filename: String,
+        isOwned: Bool = true, isPinned: Bool = false,
+        isStarred: Bool = false, isArchived: Bool = false, isDailyNote: Bool = false,
+        commentCount: Int? = nil, shareURL: URL? = nil
     ) {
         self.title = title
-        self.files = files
-        self.selectedFileID = selectedFileID
-        self.access = access
+        self.filenames = filenames
+        self.filename = filename
+        self.isOwned = isOwned
         self.isPinned = isPinned
         self.isStarred = isStarred
         self.isArchived = isArchived
         self.isDailyNote = isDailyNote
-        self.tags = tags
-        self.isAutoSaveEnabled = isAutoSaveEnabled
         self.commentCount = commentCount
         self.shareURL = shareURL
     }

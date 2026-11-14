@@ -79,8 +79,7 @@ public struct LibraryView: View {
     private let isSidebar: Bool
     private let isSignedOut: Bool
     private let isLoading: Bool
-    private let problem: GitHubProblem?
-    private let status: GitHubStatusProblem?
+    private let status: GitHubStatusState
     @Binding private var expandedSections: Set<LibrarySection>
     @Binding private var isPinnedExpanded: Bool
     @State private var collapsedDateGroups: Set<DateGroup> = []
@@ -97,8 +96,7 @@ public struct LibraryView: View {
     /// `isSidebar` comes from the split view's owner, because a sidebar column always reads as compact.
     public init(
         state: LibraryState, actions: LibraryActions, isSidebar: Bool,
-        isSignedOut: Bool = false, isLoading: Bool = false, problem: GitHubProblem? = nil,
-        status: GitHubStatusProblem? = nil,
+        isSignedOut: Bool = false, isLoading: Bool = false, status: GitHubStatusState = .idle,
         expandedSections: Binding<Set<LibrarySection>>, isPinnedExpanded: Binding<Bool>
     ) {
         self.state = state
@@ -106,7 +104,6 @@ public struct LibraryView: View {
         self.isSidebar = isSidebar
         self.isSignedOut = isSignedOut
         self.isLoading = isLoading
-        self.problem = problem
         self.status = status
         _expandedSections = expandedSections
         _isPinnedExpanded = isPinnedExpanded
@@ -283,6 +280,9 @@ public struct LibraryView: View {
         .accessibilityIdentifier(id)
     }
 
+    /// With nothing to list, the empty state explains a problem instead of the toolbar.
+    private var explainsProblem: Bool { !isLoading && !state.hasFilters && !hasVisibleGists }
+
     private var hasVisibleGists: Bool {
         !state.matchingGists(in: .gists).isEmpty || !displayedSections.isEmpty
     }
@@ -391,7 +391,7 @@ public struct LibraryView: View {
     /// With no gists to show, the empty state is also where a failed first load explains itself.
     private var emptyState: some View {
         Section {
-            switch problem {
+            switch status.problem {
             case _ where state.hasFilters:
                 ContentUnavailableView.search(text: state.query)
             case .offline?, .rejected?:
@@ -524,10 +524,10 @@ public struct LibraryView: View {
         if !isSignedOut {
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             if !isSearchPresented {
-                if let status {
+                if status.problem != nil, !explainsProblem {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
                     ToolbarItem(placement: .bottomBar) {
-                        GitHubStatusControl(state: .problem(status), recover: actions.recoverStatus)
+                        GitHubStatusControl(state: status, recover: actions.recoverStatus)
                     }
                     .axisBehavior(.verticalPreferred)
                     .sharedBackgroundVisibility(.hidden)

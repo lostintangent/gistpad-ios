@@ -17,25 +17,13 @@ extension GitHubProblem {
     }
     return GitHubProblem(error)
   }
-
-  func status(heading: String, detail: String?) -> GitHubStatusState {
-    let message = switch self {
-    case .offline: String(localized: "GitHub couldn't be reached.")
-    case .reconnect: String(localized: "Reconnect GitHub to check for changes.")
-    case .rejected: String(localized: "GitHub declined the request.")
-    }
-    let recoveryTitle =
-      self == .reconnect ? String(localized: "Reconnect GitHub") : String(localized: "Try Again")
-    return .problem(
-      .init(heading: heading, message: message, recoveryTitle: recoveryTitle, detail: detail))
-  }
 }
 
 extension GistPadModel {
   public var remoteRefreshStatus: GitHubStatusState {
-    if let problem, gistCache != nil || !drafts.isEmpty {
-      return problem.status(
-        heading: String(localized: "Couldn't update your gists"),
+    if let problem {
+      return .problem(
+        problem, heading: String(localized: "Couldn't update your gists"),
         detail: String(localized: "Your gists on this iPhone are unchanged."))
     }
     return phase == .refreshing
@@ -128,8 +116,7 @@ extension GistFileEditor {
     case .failed, .conflict:
       return .idle
     default:
-      return problem.status(
-        heading: String(localized: "Couldn't check for updates"), detail: nil)
+      return .problem(problem, heading: String(localized: "Couldn't check for updates"))
     }
   }
 

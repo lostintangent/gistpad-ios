@@ -4,7 +4,7 @@ import Store
 import SwiftUI
 
 public struct TagEditor: View {
-    private let save: (@MainActor ([TagEdit]) async throws -> Void)?
+    private let save: (@MainActor ([GistPadPreferences.Change]) async throws -> Void)?
     @State private var draft: TagEditorDraft
     @State private var query = ""
     @State private var editingTag: Tag?
@@ -18,11 +18,11 @@ public struct TagEditor: View {
     @ScaledMetric(relativeTo: .body) private var swatchSize: CGFloat = 12
 
     public init(
-        tags: [Tag], selectedTagIDs: Set<String>,
-        save: (@MainActor ([TagEdit]) async throws -> Void)? = nil
+        gistID: String, tags: [Tag], selectedTagIDs: Set<String>,
+        save: (@MainActor ([GistPadPreferences.Change]) async throws -> Void)? = nil
     ) {
         self.save = save
-        _draft = State(initialValue: TagEditorDraft(tags: tags, selectedTagIDs: selectedTagIDs))
+        _draft = State(initialValue: TagEditorDraft(gistID: gistID, tags: tags, selectedTagIDs: selectedTagIDs))
     }
 
     public var body: some View {

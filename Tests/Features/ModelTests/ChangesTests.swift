@@ -107,7 +107,7 @@ struct ChangesTests {
     #expect(phone.onGitHub("a", "README.md") == nil)
 
     let shared = try await phone.open(.gist(id: "shared"))
-    #expect(!shared.details.access.canEdit)
+    #expect(!shared.details.isOwned)
     #expect(!shared.editor.isEditable)
     #expect(phone.model.deletion(forRow: "shared") == nil)
   }

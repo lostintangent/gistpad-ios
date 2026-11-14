@@ -79,7 +79,7 @@ public final class GistFileEditor {
 
   /// Whether a change can land in the note now: it's yours, nothing else is landing and you aren't composing.
   public var canEdit: Bool {
-    details.access.canEdit && !isLanding && editor.isSettled
+    details.isOwned && !isLanding && editor.isSettled
   }
 
   /// Brings the note's name and gist up to date after a change. A file GitHub renamed before you
@@ -97,7 +97,7 @@ public final class GistFileEditor {
 
   /// You can type in your own gists, except while a change is landing in the note.
   func updateEditable() {
-    editor.isEditable = details.access.canEdit && !isLanding
+    editor.isEditable = details.isOwned && !isLanding
   }
 
   private func applyWritingPreferences() {

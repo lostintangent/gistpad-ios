@@ -85,7 +85,7 @@ final class CommentsPresentation {
     } else if let origin {
       fileMode = origin
     }
-    if !next.details.access.canEdit { fileMode = .preview }
+    if !next.details.isOwned { fileMode = .preview }
     detent = quote == nil ? .medium : .large
     selectedRootID = rootID
     preparationFailure = nil

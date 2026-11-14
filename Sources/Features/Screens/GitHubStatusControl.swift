@@ -1,22 +1,15 @@
 import Foundation
+import Store
 
 public enum GitHubStatusState: Equatable, Sendable {
     case idle
     case checking(operation: String)
-    case problem(GitHubStatusProblem)
-}
+    /// `heading` names what didn't happen, and `detail` what's still safe.
+    case problem(GitHubProblem, heading: String, detail: String? = nil)
 
-public struct GitHubStatusProblem: Equatable, Sendable {
-    public let heading: String
-    public let message: String
-    public let recoveryTitle: String
-    public let detail: String?
-
-    public init(heading: String, message: String, recoveryTitle: String, detail: String? = nil) {
-        self.heading = heading
-        self.message = message
-        self.recoveryTitle = recoveryTitle
-        self.detail = detail
+    /// The problem, when there is one.
+    public var problem: GitHubProblem? {
+        if case .problem(let problem, _, _) = self { problem } else { nil }
     }
 }
 
@@ -46,7 +39,7 @@ public struct GitHubStatusControl: View {
                         .accessibilityLabel(operation)
                         .accessibilityIdentifier("github-status-checking")
                 }
-            case .problem(let problem):
+            case .problem(let problem, let heading, let detail):
                 Button(
                     String(localized: "GitHub needs attention", bundle: .module),
                     systemImage: "exclamationmark"
@@ -56,11 +49,11 @@ public struct GitHubStatusControl: View {
                 .labelStyle(.iconOnly)
                 .buttonStyle(.glass)
                 .controlSize(.large)
-                .accessibilityValue(problem.message)
+                .accessibilityValue(message(problem))
                 .accessibilityHint(Text("Shows details and recovery actions", bundle: .module))
                 .accessibilityIdentifier("github-status-attention")
                 .popover(isPresented: $showingDetails) {
-                    explanation(problem)
+                    explanation(problem, heading: heading, detail: detail)
                 }
             }
         }
@@ -80,19 +73,30 @@ public struct GitHubStatusControl: View {
         if case .checking(let operation) = state { operation } else { nil }
     }
 
-    private func explanation(_ problem: GitHubStatusProblem) -> some View {
+    private func message(_ problem: GitHubProblem) -> String {
+        switch problem {
+        case .offline: String(localized: "GitHub couldn't be reached.", bundle: .module)
+        case .reconnect: String(localized: "Reconnect GitHub to check for changes.", bundle: .module)
+        case .rejected: String(localized: "GitHub declined the request.", bundle: .module)
+        }
+    }
+
+    private func explanation(_ problem: GitHubProblem, heading: String, detail: String?) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(verbatim: problem.heading)
+                Text(verbatim: heading)
                     .font(.headline)
-                Text(verbatim: problem.message)
-                if let detail = problem.detail {
+                Text(verbatim: message(problem))
+                if let detail {
                     Text(verbatim: detail)
                         .foregroundStyle(.secondary)
                 }
-                Button(action: recover) {
-                    Text(verbatim: problem.recoveryTitle)
-                }
+                Button(
+                    problem == .reconnect
+                        ? String(localized: "Reconnect GitHub", bundle: .module)
+                        : String(localized: "Try Again", bundle: .module),
+                    action: recover
+                )
                 .buttonStyle(.glassProminent)
                 .controlSize(.large)
                 .accessibilityIdentifier("github-status-recover")

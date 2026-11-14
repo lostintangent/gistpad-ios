@@ -19,15 +19,13 @@ public struct GistScreen<Source: View, Preview: View>: View {
     // Match the native toolbar's settled segment size on its first layout.
     @ScaledMetric(relativeTo: .body) private var minimumModeSegmentWidth = 48
 
-    private var showingSplit: Bool { gist.access.canEdit && allowsSplit && mode == .split }
-    private var showingSource: Bool { gist.access.canEdit && (showingSplit || mode != .preview) }
+    private var showingSplit: Bool { gist.isOwned && allowsSplit && mode == .split }
+    private var showingSource: Bool { gist.isOwned && (showingSplit || mode != .preview) }
     private var paneLayout: AnyLayout {
         showingSplit ? AnyLayout(HStackLayout(spacing: 1)) : AnyLayout(ZStackLayout())
     }
     private var title: String { gist.displayTitle(now: .now, locale: locale, calendar: calendar) }
-    private var editsFiles: Bool {
-        gist.access.canEdit && (actions.renameFile != nil || actions.addFile != nil)
-    }
+    private var editsFiles: Bool { actions.renameFile != nil || actions.addFile != nil }
 
     public init(
         gist: GistDetails, mode: Binding<FileMode>, status: PublishStatus,
@@ -77,7 +75,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
 
     @ToolbarContentBuilder
     private var primaryToolbar: some ToolbarContent {
-        if gist.access.canEdit {
+        if gist.isOwned {
             ToolbarItem(placement: .topBarPinnedTrailing) {
                 modePicker
                     .frame(minWidth: minimumModeSegmentWidth * CGFloat(allowsSplit ? 3 : 2))
@@ -86,7 +84,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
             }
             .sharedBackgroundVisibility(.hidden)
         }
-        if gist.access.canEdit, let needsYou {
+        if gist.isOwned, let needsYou {
             ToolbarItem(placement: .primaryAction) {
                 Button(String(localized: "GitHub needs attention", bundle: .module), systemImage: "exclamationmark", action: needsYou)
                     .accessibilityIdentifier("note-needs-you")
@@ -177,7 +175,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
                 }
                 .controlGroupStyle(.compactMenu)
                 Section {
-                    if let rename = actions.rename, gist.access.canEdit {
+                    if let rename = actions.rename {
                         Button(
                             String(localized: "Rename Gist", bundle: .module),
                             systemImage: "pencil", action: rename
@@ -192,7 +190,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
                         systemImage: "sparkles", action: actions.intelligence
                     )
                     .accessibilityIdentifier("note-intelligence")
-                    if gist.access.canEdit {
+                    if gist.isOwned {
                         Button(String(localized: "Find and Replace", bundle: .module), systemImage: "text.magnifyingglass", action: actions.find)
                     }
                 }
@@ -204,7 +202,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
                         )
                     }
                 }
-                if actions.delete != nil, gist.access.canEdit {
+                if actions.delete != nil, gist.isOwned {
                     Section {
                         Button(
                             gist.isDailyNote
@@ -238,14 +236,14 @@ public struct GistScreen<Source: View, Preview: View>: View {
     /// file commands of a gist you own.
     @ViewBuilder
     private var fileChoices: some View {
-        if gist.files.count > 1 || !editsFiles {
+        if gist.filenames.count > 1 || !editsFiles {
             Picker(
                 String(localized: "Files", bundle: .module),
                 selection: Binding(
-                    get: { gist.selectedFileID },
-                    set: { if $0 != gist.selectedFileID { actions.selectFile?($0) } })
+                    get: { gist.filename },
+                    set: { if $0 != gist.filename { actions.selectFile?($0) } })
             ) {
-                ForEach(gist.files) { Text(verbatim: $0.filename).tag($0.id) }
+                ForEach(gist.filenames, id: \.self) { Text(verbatim: $0).tag($0) }
             }
             .pickerStyle(.inline)
         }

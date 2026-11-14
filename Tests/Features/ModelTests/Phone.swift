@@ -171,7 +171,7 @@ final class Phone {
     switch model.remoteRefreshStatus {
     case .idle: nil
     case .checking: "Checking"
-    case .problem(let problem): problem.heading
+    case .problem(_, let heading, _): heading
     }
   }
 

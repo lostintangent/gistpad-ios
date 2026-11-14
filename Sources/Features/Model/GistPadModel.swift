@@ -222,24 +222,15 @@ public final class GistPadModel {
       ?? String(localized: "Untitled")
     guard let gist = file.gist, let account, account.id == file.accountID else {
       return GistDetails(
-        title: title, files: [.init(id: file.filename, filename: file.filename)],
-        selectedFileID: file.filename,
-        isDailyNote: file.gist?.isDailyNote ?? (file.draft?.newGistName == DailyNote.gistDescription),
-        isAutoSaveEnabled: account?.id == file.accountID
-          && account?.preferences.isAutoSaveEnabled == true)
+        title: title, filenames: [file.filename], filename: file.filename,
+        isDailyNote: file.gist?.isDailyNote ?? (file.draft?.newGistName == DailyNote.gistDescription))
     }
-    let files = Self.filenames(of: gist, drafts: drafts)
     return GistDetails(
-      title: title,
-      files: files.map { .init(id: $0, filename: $0) }, selectedFileID: file.filename,
-      access: owns(gist) ? .editable : .readOnly,
+      title: title, filenames: Self.filenames(of: gist, drafts: drafts), filename: file.filename,
+      isOwned: owns(gist),
       isPinned: account.preferences.pinnedGists.contains(gist.id),
       isStarred: gistCache?.starred.contains(where: { $0.id == gist.id }) ?? false,
       isArchived: gist.isArchived, isDailyNote: gist.isDailyNote,
-      tags: state.tags.filter {
-        account.preferences.gistTags[gist.id]?.contains($0.id) == true
-      },
-      isAutoSaveEnabled: account.preferences.isAutoSaveEnabled,
       commentCount: gist.isDailyNote ? nil : gist.commentCount,
       shareURL: file.isDeletedOnGitHub ? nil : gist.shareURL(filename: file.filename))
   }

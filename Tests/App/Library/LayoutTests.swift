@@ -203,7 +203,7 @@ private struct LayoutFixture: View {
     GeometryReader { _ in
       NavigationStack {
         GistScreen(
-          gist: .init(title: "Retained draft", files: [], selectedFileID: ""),
+          gist: .init(title: "Retained draft", filenames: [], filename: ""),
           mode: Binding(
             get: {
               layout.presentedMode(

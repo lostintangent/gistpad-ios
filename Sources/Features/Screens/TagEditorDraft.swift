@@ -1,12 +1,6 @@
 import Foundation
 import Store
 
-public enum TagEdit: Equatable, Sendable {
-    case setMembership(tagID: String, included: Bool)
-    case upsert(Tag)
-    case delete(tagID: String)
-}
-
 enum TagEditingError: LocalizedError {
     case emptyName
     case duplicateName
@@ -20,12 +14,14 @@ enum TagEditingError: LocalizedError {
 }
 
 struct TagEditorDraft {
+    private let gistID: String
     private let originalTags: [Tag]
     private let originalSelection: Set<String>
     private(set) var tags: [Tag]
     var selectedTagIDs: Set<String>
 
-    init(tags: [Tag], selectedTagIDs: Set<String>) {
+    init(gistID: String, tags: [Tag], selectedTagIDs: Set<String>) {
+        self.gistID = gistID
         originalTags = tags
         originalSelection = selectedTagIDs
         self.tags = tags
@@ -53,14 +49,14 @@ struct TagEditorDraft {
     }
 
     /// Every save sends the whole difference from the original, so a retry resends it as is.
-    var edits: [TagEdit] {
+    var edits: [GistPadPreferences.Change] {
         let remaining = Set(tags.map(\.id))
-        var result = tags.filter { !originalTags.contains($0) }
-            .sorted { $0.id < $1.id }.map(TagEdit.upsert)
+        var result = tags.filter { !originalTags.contains($0) }.sorted { $0.id < $1.id }
+            .map { GistPadPreferences.Change.upsertTag(id: $0.id, name: $0.name, color: $0.colorHex) }
         for id in remaining.sorted() where originalSelection.contains(id) != selectedTagIDs.contains(id) {
-            result.append(.setMembership(tagID: id, included: selectedTagIDs.contains(id)))
+            result.append(.setTag(gistID: gistID, tagID: id, included: selectedTagIDs.contains(id)))
         }
-        result += Set(originalTags.map(\.id)).subtracting(remaining).sorted().map { .delete(tagID: $0) }
+        result += Set(originalTags.map(\.id)).subtracting(remaining).sorted().map { .deleteTag(id: $0) }
         return result
     }
 }

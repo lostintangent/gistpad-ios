@@ -395,8 +395,7 @@ private struct ReidentifiedSourceFixture: View {
     GistScreen(
       gist: .init(
         title: "A visible source",
-        files: [.init(id: "README.md", filename: "README.md")],
-        selectedFileID: "README.md"),
+        filenames: ["README.md"], filename: "README.md"),
       mode: $state.mode, status: .published
     ) {
       EditorView(editor: editor)

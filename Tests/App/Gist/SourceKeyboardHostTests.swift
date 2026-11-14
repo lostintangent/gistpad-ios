@@ -220,8 +220,7 @@ private final class SourceKeyboardFixture {
                 GistScreen(
                     gist: .init(
                         title: "A reachable source page",
-                        files: [.init(id: "README.md", filename: "README.md")],
-                        selectedFileID: "README.md"
+                        filenames: ["README.md"], filename: "README.md"
                     ),
                     mode: .constant(.edit), status: .published
                 ) {

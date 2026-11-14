@@ -36,7 +36,7 @@ struct LibraryTests {
     #expect(mine.commentCount == 2)
     #expect(phone.model.state.tags == [.init(id: "ideas", name: "Ideas", colorHex: "#EBC85A")])
     #expect(phone.row("b")?.isOwned == false)
-    #expect(try await phone.open(.gist(id: "a")).details.access == .editable)
+    #expect(try await phone.open(.gist(id: "a")).details.isOwned)
 
     phone.model.recordCommentCount(accountID: phone.accountID, gistID: "a", total: 3)
     #expect(phone.row("a")?.commentCount == 3)

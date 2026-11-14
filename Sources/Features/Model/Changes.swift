@@ -248,7 +248,7 @@ extension GistPadModel {
       isApplying = false
     }
     do {
-      for fileEditor in editors.values where locks(fileEditor) && fileEditor.details.access.canEdit {
+      for fileEditor in editors.values where locks(fileEditor) && fileEditor.details.isOwned {
         await fileEditor.waitForPublication()
         try fileEditor.beginDestructiveAction()
         locked.append(fileEditor)
@@ -350,7 +350,7 @@ extension GistFileEditor {
   /// What Delete on this file's screen removes, the same as its row in the list.
   public var deletion: Deletion? {
     if file.isDeletedOnGitHub || file.gistID == nil { return .localCopy(file.nextDraft) }
-    guard let gist = file.gist, details.access.canEdit else { return nil }
+    guard let gist = file.gist, details.isOwned else { return nil }
     return gist.isDailyNote ? .file(gistID: gist.id, filename: file.filename) : .gist(id: gist.id)
   }
 

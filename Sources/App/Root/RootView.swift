@@ -64,7 +64,8 @@ struct RootView: View {
         NavigationStack {
           LibraryView(
             state: model.state, actions: libraryActions, isSidebar: horizontalSizeClass == .regular,
-            isSignedOut: isSignedOut, isLoading: isLoadingLibrary, problem: model.problem,
+            isSignedOut: isSignedOut, isLoading: isLoadingLibrary,
+            status: model.remoteRefreshStatus,
             expandedSections: librarySections, isPinnedExpanded: pinnedExpanded)
         }
       } else {
@@ -78,10 +79,6 @@ struct RootView: View {
 
   private var isLoadingLibrary: Bool { model.phase == .loading || model.phase == .refreshing }
 
-  private var libraryProblem: GitHubStatusProblem? {
-    if case .problem(let problem) = model.remoteRefreshStatus { problem } else { nil }
-  }
-
   private var splitView: some View {
     NavigationSplitView(
       columnVisibility: $columnVisibility, preferredCompactColumn: $compactColumn
@@ -89,8 +86,7 @@ struct RootView: View {
       LibraryView(
         state: model.state, actions: libraryActions,
         isSidebar: horizontalSizeClass == .regular,
-        isSignedOut: isSignedOut, isLoading: isLoadingLibrary, problem: model.problem,
-        status: libraryProblem,
+        isSignedOut: isSignedOut, isLoading: isLoadingLibrary, status: model.remoteRefreshStatus,
         expandedSections: librarySections,
         isPinnedExpanded: pinnedExpanded)
         .id(model.account?.id)
@@ -393,7 +389,7 @@ struct RootView: View {
         return layout.presentedMode(
           availableWidth: availableWidth, sessionMode: fileEditor.mode,
           isEditing: fileEditor.editor.isEditing,
-          canEdit: fileEditor.details.access.canEdit)
+          canEdit: fileEditor.details.isOwned)
       },
       set: {
         if comments.isPresented, comments.matches(fileEditor.file) {
@@ -479,7 +475,7 @@ struct RootView: View {
       EntityIdentifier(for: GistEntity.self, identifier: $0.url.absoluteString)
     }
     return FilePreview(
-      editor: fileEditor.editor, allowsMutations: fileEditor.details.access.canEdit,
+      editor: fileEditor.editor, allowsMutations: fileEditor.details.isOwned,
       comments: commentConfiguration(fileEditor),
       commentActions: commentActions(fileEditor, origin: .preview),
       openWikilink: { target in
@@ -582,7 +578,7 @@ struct RootView: View {
         sheet = .tags(
           TagTarget(
             accountID: fileEditor.file.accountID, gistID: gistID,
-            selected: Set(fileEditor.details.tags.map(\.id)),
+            selected: Set(model.account?.preferences.gistTags[gistID] ?? []),
             canEdit: model.account?.id == fileEditor.file.accountID
               && model.phase.switchingTo == nil && !fileEditor.file.isDeletedOnGitHub))
       }
@@ -597,14 +593,14 @@ struct RootView: View {
           let starred = !fileEditor.details.isStarred
           model.run { try await model.setStarred(starred, gistID: gistID) }
         }
-        if fileEditor.details.access.canEdit {
+        if fileEditor.details.isOwned {
           actions.toggleArchive = { setArchived(!fileEditor.details.isArchived, gistID: gistID) }
           actions.addFile = { rename(.addFile, fileEditor: fileEditor) }
           actions.renameFile = { rename(.filename, fileEditor: fileEditor) }
         }
       }
     }
-    if fileEditor.details.access.canEdit, !fileEditor.file.isDeletedOnGitHub {
+    if fileEditor.details.isOwned, !fileEditor.file.isDeletedOnGitHub {
       actions.rename = { rename(.title, fileEditor: fileEditor) }
     }
     if fileEditor.deletion != nil {
@@ -653,8 +649,7 @@ struct RootView: View {
       ?? (isDailyNote ? DailyNote.filename() : gist?.defaultMarkdownFilename) ?? ""
     let filenames = Set((gist?.markdownFilenames ?? []) + [filename]).sorted()
     return GistDetails(
-      title: title, files: filenames.map { .init(id: $0, filename: $0) },
-      selectedFileID: filename, isDailyNote: isDailyNote)
+      title: title, filenames: filenames, filename: filename, isDailyNote: isDailyNote)
   }
 
   private func selectRow(_ id: String) {
@@ -671,7 +666,7 @@ struct RootView: View {
     intelligence.present(
       editor: fileEditor.editor, title: fileEditor.details.title,
       revealSource: { range in
-        guard fileEditor.details.access.canEdit else {
+        guard fileEditor.details.isOwned else {
           model.alertMessage = String(
             localized: "This gist is read-only, so the reference can't open in the editor.")
           return
@@ -730,24 +725,9 @@ struct RootView: View {
   }
 
   private func tagEditor(_ target: TagTarget) -> some View {
-    let save: (@MainActor @Sendable ([TagEdit]) async throws -> Void)?
-    if target.canEdit {
-      save = { edits in
-        let operations = edits.map { edit -> GistPadPreferences.Change in
-          switch edit {
-          case .setMembership(let id, let included):
-            .setTag(gistID: target.gistID, tagID: id, included: included)
-          case .upsert(let tag): .upsertTag(id: tag.id, name: tag.name, color: tag.colorHex)
-          case .delete(let id): .deleteTag(id: id)
-          }
-        }
-        try await model.updatePreferences(operations)
-      }
-    } else {
-      save = nil
-    }
-    return TagEditor(
-      tags: model.state.tags, selectedTagIDs: target.selected, save: save)
+    TagEditor(
+      gistID: target.gistID, tags: model.state.tags, selectedTagIDs: target.selected,
+      save: target.canEdit ? { try await model.updatePreferences($0) } : nil)
   }
 
   /// Archiving is absolute, so its undo is the opposite archive, registered with the scene so

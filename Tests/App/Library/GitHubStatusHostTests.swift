@@ -56,9 +56,9 @@ struct GitHubStatusHostTests {
     capture("scrolled")
     let generation = session.generation
     let states: [(String, GitHubStatusState)] = [
-      ("attention", .problem(problem())),
+      ("attention", problem()),
       ("checking", .checking(operation: "Checking GitHub for changes")),
-      ("unresolved", .problem(problem())),
+      ("unresolved", problem()),
       ("idle", .idle),
     ]
     for (stage, state) in states {
@@ -82,11 +82,10 @@ struct GitHubStatusHostTests {
     #expect(host.model.recoveries == 0)
   }
 
-  private func problem() -> GitHubStatusProblem {
-    .init(
-      heading: "Couldn't check for updates",
-      message: "A connection could not be established after retrying.",
-      recoveryTitle: "Try Again", detail: "Your gists on this iPhone are unchanged.")
+  private func problem() -> GitHubStatusState {
+    .problem(
+      .offline, heading: "Couldn't check for updates",
+      detail: "Your gists on this iPhone are unchanged.")
   }
 }
 
