@@ -335,7 +335,7 @@ final class PlatformBridge: PlatformActions {
         if let fileEditor {
           await fileEditor.publish(reason: .background, shouldContinue: { lease.isActive })
         } else {
-          _ = try await model.publish(edit.draft)
+          _ = try await model.publish(draft)
         }
         try await refresh()
       } catch {
