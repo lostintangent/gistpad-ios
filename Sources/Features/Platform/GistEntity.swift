@@ -98,20 +98,20 @@ extension GistEntity {
 
 public struct GistEntityQuery: EntityStringQuery {
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
-    @Dependency private var dailyNotes: any DailyNoteActions
+    @Dependency private var app: any PlatformActions
     public init() {}
 
     public func entities(for identifiers: [String]) async throws -> [GistEntity] {
-        try await dailyNotes.noteEntities(for: identifiers)
+        try await app.noteEntities(for: identifiers)
     }
 
     public func suggestedEntities() async throws -> [GistEntity] {
-        try await Array(notesSnapshot(validating: dailyNotes)?.gists.prefix(12) ?? [])
+        try await Array(notesSnapshot(validating: app)?.gists.prefix(12) ?? [])
     }
 
     public func entities(matching string: String) async throws -> [GistEntity] {
         let terms = string.split(whereSeparator: \.isWhitespace).map(String.init)
-        return try await notesSnapshot(validating: dailyNotes)?.gists.filter { gist in
+        return try await notesSnapshot(validating: app)?.gists.filter { gist in
             let content = ([gist.title] + gist.tags).joined(separator: " ")
             return terms.allSatisfy { content.localizedStandardContains($0) }
         } ?? []
@@ -138,12 +138,12 @@ extension GistEntityQuery: IndexedEntityQuery {
     public func reindexEntities(
         for identifiers: [String], indexDescription: CSSearchableIndexDescription
     ) async throws {
-        let notes = try await notesSnapshot(validating: dailyNotes)?.gists ?? []
+        let notes = try await notesSnapshot(validating: app)?.gists ?? []
         try await GistSpotlightIndex.index.indexAppEntities(notes.filter { identifiers.contains($0.id) })
     }
 
     public func reindexAllEntities(indexDescription: CSSearchableIndexDescription) async throws {
-        try await GistSpotlightIndex.index.indexAppEntities(notesSnapshot(validating: dailyNotes)?.gists ?? [])
+        try await GistSpotlightIndex.index.indexAppEntities(notesSnapshot(validating: app)?.gists ?? [])
     }
 
 }

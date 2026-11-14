@@ -19,11 +19,11 @@ public struct GistAccountEntity: Identifiable {
 
 public struct GistAccountQuery: EntityQuery {
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
-    @Dependency private var dailyNotes: any DailyNoteActions
+    @Dependency private var app: any PlatformActions
     public init() {}
 
     public func entities(for identifiers: [UUID]) async throws -> [GistAccountEntity] {
-        guard let id = try await notesSnapshot(validating: dailyNotes)?.accountID,
+        guard let id = try await notesSnapshot(validating: app)?.accountID,
               identifiers.contains(id) else { return [] }
         return [GistAccountEntity(id: id, name: "GitHub")]
     }
@@ -53,7 +53,7 @@ public struct GistFolderEntity: Identifiable {
 
 public struct GistFolderQuery: EntityStringQuery {
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
-    @Dependency private var dailyNotes: any DailyNoteActions
+    @Dependency private var app: any PlatformActions
     public init() {}
 
     public func entities(for identifiers: [String]) async throws -> [GistFolderEntity] {
@@ -69,7 +69,7 @@ public struct GistFolderQuery: EntityStringQuery {
     }
 
     private func folders() async throws -> [GistFolderEntity] {
-        let notes = try await notesSnapshot(validating: dailyNotes)?.gists ?? []
+        let notes = try await notesSnapshot(validating: app)?.gists ?? []
         return Dictionary(
             notes.compactMap(\.folder).map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -77,7 +77,7 @@ public struct GistFolderQuery: EntityStringQuery {
     }
 }
 
-func notesSnapshot(validating actions: any DailyNoteActions) async throws -> LibrarySnapshot? {
+func notesSnapshot(validating actions: any PlatformActions) async throws -> LibrarySnapshot? {
     let snapshot = try LibrarySnapshot.read()
     if let accountID = snapshot?.accountID {
         try await actions.validateAccount(accountID)

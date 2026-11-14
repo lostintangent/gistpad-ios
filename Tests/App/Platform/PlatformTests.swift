@@ -20,7 +20,7 @@ struct PlatformTests {
     let fileEditor = try await fixture.fileEditor()
     let previousLink = PendingLink.shared.link
     let intent = AddToTodayIntent()
-    intent.dailyNotes = fixture.bridge
+    intent.app = fixture.bridge
     intent.text = "A thought\nSecond task"
     intent.asTask = true
     _ = try await intent.perform()
@@ -59,7 +59,7 @@ struct PlatformTests {
     let previousLink = PendingLink.shared.link
     defer { PendingLink.shared.link = previousLink }
     let intent = CreateGistNoteIntent()
-    intent.dailyNotes = fixture.bridge
+    intent.app = fixture.bridge
     intent.name = AttributedString("Groceries")
     intent.attachments = []
     intent.isPinned = false
@@ -87,7 +87,7 @@ struct PlatformTests {
     let previousLink = PendingLink.shared.link
     defer { PendingLink.shared.link = previousLink }
     let intent = CreateGistNoteIntent()
-    intent.dailyNotes = fixture.bridge
+    intent.app = fixture.bridge
     intent.name = AttributedString("Test Reading List")
     intent.content = AttributedString("# Ranked\n1. Vagabond\n")
     intent.attachments = []
@@ -140,7 +140,7 @@ struct PlatformTests {
     #expect(visible.attributeSet.textContent == nil)
     let original = fileEditor.editor.text
     let intent = AppendToGistIntent()
-    intent.dailyNotes = fixture.bridge
+    intent.app = fixture.bridge
     intent.target = note
     intent.content = AttributedString("Pick up the dry cleaning")
 
@@ -237,7 +237,7 @@ struct PlatformTests {
       $0.link == GistPadLink.gist(id: "manga", filename: nil)
     })
     let intent = UpdateGistNoteIntent()
-    intent.dailyNotes = fixture.bridge
+    intent.app = fixture.bridge
     intent.target = note
     intent.name = AttributedString("Reading Library")
 

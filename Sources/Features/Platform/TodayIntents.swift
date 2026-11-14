@@ -14,7 +14,7 @@ public struct AddToTodayIntent: AppIntent {
     @Parameter(title: "Text", requestValueDialog: "What would you like to add to Today?")
     public var text: String
     @Parameter(title: "As Task", default: false) public var asTask: Bool
-    @Dependency var dailyNotes: any DailyNoteActions
+    @Dependency var app: any PlatformActions
 
     public static var parameterSummary: some ParameterSummary {
         Summary("Add \(\.$text) to Today") { \.$asTask }
@@ -24,7 +24,7 @@ public struct AddToTodayIntent: AppIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        try await dailyNotes.addToToday(text: text, asTask: asTask, target: DailyNote.Day())
+        try await app.addToToday(text: text, asTask: asTask, target: DailyNote.Day())
         return .result(dialog: "Added to Today.")
     }
 }

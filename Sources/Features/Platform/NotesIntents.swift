@@ -12,7 +12,7 @@ public struct CreateGistNoteIntent {
     public var attachments: [IntentFile]
     public var isPinned: Bool
     public var folder: GistFolderEntity?
-    @Dependency var dailyNotes: any DailyNoteActions
+    @Dependency var app: any PlatformActions
 
     public init() {}
 
@@ -21,7 +21,7 @@ public struct CreateGistNoteIntent {
         guard attachments.isEmpty, !isPinned, folder == nil else {
             throw PlatformError.unsupportedNoteCreation
         }
-        let note = try await dailyNotes.createNote(
+        let note = try await app.createNote(
             name: String(name.characters), content: content.map { String($0.characters) })
         return .result(value: note)
     }
@@ -34,13 +34,13 @@ public struct AppendToGistIntent {
 
     public var content: AttributedString
     public var target: GistEntity
-    @Dependency var dailyNotes: any DailyNoteActions
+    @Dependency var app: any PlatformActions
 
     public init() {}
 
     @MainActor
     public func perform() async throws -> some IntentResult & ReturnsValue<GistEntity> {
-        let updated = try await dailyNotes.appendToNote(target, text: String(content.characters))
+        let updated = try await app.appendToNote(target, text: String(content.characters))
         return .result(value: updated)
     }
 }
@@ -55,7 +55,7 @@ public struct UpdateGistNoteIntent {
     public var attachments: [IntentFile]?
     public var isPinned: Bool?
     public var folder: GistFolderEntity?
-    @Dependency var dailyNotes: any DailyNoteActions
+    @Dependency var app: any PlatformActions
 
     public init() {}
 
@@ -64,7 +64,7 @@ public struct UpdateGistNoteIntent {
         guard attachments?.isEmpty != false,
               folder == nil || folder?.id == target.folder?.id
         else { throw PlatformError.unsupportedNoteUpdate }
-        let updated = try await dailyNotes.updateNote(
+        let updated = try await app.updateNote(
             target, name: name.map { String($0.characters) }, isPinned: isPinned)
         return .result(value: updated)
     }

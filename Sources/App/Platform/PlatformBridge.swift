@@ -14,7 +14,7 @@ extension PlatformBridge {
   static var shared: PlatformBridge? { services?.bridge }
 
   static func install() {
-    AppDependencyManager.shared.add { () async throws -> any DailyNoteActions in
+    AppDependencyManager.shared.add { () async throws -> any PlatformActions in
       try await MainActor.run {
         guard let key = Bundle.main.object(forInfoDictionaryKey: "SupabasePublishableKey") as? String,
           !key.isEmpty, !key.contains("$(")
@@ -41,7 +41,7 @@ extension PlatformBridge {
 }
 
 @MainActor
-final class PlatformBridge: DailyNoteActions {
+final class PlatformBridge: PlatformActions {
   private struct WeakEditor {
     weak var value: GistFileEditor?
   }

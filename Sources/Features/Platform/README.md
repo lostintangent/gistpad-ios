@@ -54,7 +54,7 @@ atomically with protection until first unlock so StandBy can read it.
 No credentials are shared.
 
 Intents run in the main app (`allowedExecutionTargets = .main`), which provides
-`DailyNoteActions` through `AppDependencyManager`. An edit from an intent reaches
+`PlatformActions` through `AppDependencyManager`. An edit from an intent reaches
 an open editor as one Undo step.
 
 The GistPad widget is a launcher in small and medium. Its date opens Today, New
