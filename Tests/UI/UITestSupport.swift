@@ -56,7 +56,7 @@ extension XCUIApplication {
   func dismissSidebarOverlay() {
     let sidebar = element("library-list")
     let note = navigationBars.matching(NSPredicate(format: "identifier != 'GistPad'")).firstMatch
-    guard sidebar.isHittable, note.exists, note.frame.minX < sidebar.frame.maxX else { return }
+    guard isRegularWidth, sidebar.isHittable, note.exists, note.frame.minX < sidebar.frame.maxX else { return }
     buttons.matching(NSPredicate(format: "label == 'Hide Sidebar'")).allElementsBoundByIndex
       .first(where: \.isHittable)?.tap()
     XCTAssertTrue(sidebar.wait(for: \.isHittable, toEqual: false, timeout: 5), "The sidebar still covers the note")
