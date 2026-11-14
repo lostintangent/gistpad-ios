@@ -6,17 +6,6 @@ package struct ModelReplacement: Sendable {
   let reason: String
   var before = ""
   var after = ""
-  var isInsertion = false
-}
-
-extension ModelReplacement {
-  init(inserting text: String, reason: String) {
-    self.init(quote: "", replacement: text, reason: reason, isInsertion: true)
-  }
-}
-
-enum AnchorRejection: Sendable, Equatable {
-  case notFound, ambiguous, overlapping, invalidRange
 }
 
 package struct Review: Sendable {
@@ -24,16 +13,8 @@ package struct Review: Sendable {
   let comments: [Comment]
   fileprivate let safetyInstruction: String?
 
-  package var omittedCount: Int { comments.filter { $0.rejection != nil }.count }
+  package var omittedCount: Int { comments.filter { $0.range == nil }.count }
   var canApply: Bool { comments.contains { $0.canApply } }
-
-  init(snapshot: FileSnapshot, candidates: [ModelReplacement]) {
-    self.init(
-      snapshot: snapshot,
-      scopedCandidates: candidates.map {
-        ($0, NSRange(location: 0, length: snapshot.source.utf16.count))
-      })
-  }
 
   init(
     snapshot: FileSnapshot, scopedCandidates: [(ModelReplacement, NSRange)],
@@ -42,28 +23,16 @@ package struct Review: Sendable {
     self.snapshot = snapshot
     self.safetyInstruction = safetyInstruction
     var anchored = scopedCandidates.map { candidate, scope in
+      // An empty quote inserts at an empty scope.
       let matches =
-        candidate.isInsertion && scope.length == 0 && Range(scope, in: snapshot.source) != nil
-        ? [scope]
+        candidate.quote.isEmpty
+        ? (scope.length == 0 && Range(scope, in: snapshot.source) != nil ? [scope] : [])
         : Anchors.matches(
           candidate.quote, in: snapshot.source, within: scope,
-          before: candidate.before, after: candidate.after, allowEmptyNote: true)
-      let rejection: AnchorRejection?
-      if (candidate.quote.isEmpty && !snapshot.source.isEmpty && !candidate.isInsertion)
-        || Range(scope, in: snapshot.source) == nil
-      {
-        rejection = .invalidRange
-      } else if matches.isEmpty {
-        rejection = .notFound
-      } else if matches.count > 1 {
-        rejection = .ambiguous
-      } else {
-        rejection = nil
-      }
+          before: candidate.before, after: candidate.after)
       return Comment(
         id: UUID(), quote: candidate.quote, replacement: candidate.replacement,
-        reason: candidate.reason, range: rejection == nil ? matches.first : nil,
-        rejection: rejection)
+        reason: candidate.reason, range: matches.count == 1 ? matches[0] : nil)
     }
     var overlapping = Set<Int>()
     for first in anchored.indices {
@@ -85,7 +54,7 @@ package struct Review: Sendable {
       let comment = anchored[index]
       anchored[index] = Comment(
         id: comment.id, quote: comment.quote, replacement: comment.replacement,
-        reason: comment.reason, range: nil, rejection: .overlapping)
+        reason: comment.reason, range: nil)
     }
     comments = anchored
   }
@@ -191,10 +160,9 @@ extension Review {
     let replacement: String?
     let reason: String
     let range: NSRange?
-    let rejection: AnchorRejection?
 
     var canApply: Bool {
-      range != nil && rejection == nil
+      range != nil
         && replacement.map { !quote.utf8.elementsEqual($0.utf8) } == true
     }
   }
@@ -232,8 +200,7 @@ extension Review {
           } ?? false
         return Comment(
           id: comment.id, quote: comment.quote, replacement: comment.replacement,
-          reason: comment.reason, range: verified ? range : nil,
-          rejection: verified ? nil : (comment.rejection ?? .notFound))
+          reason: comment.reason, range: verified ? range : nil)
       }
       return Review(
         snapshot: snapshot, comments: remaining,
@@ -265,15 +232,11 @@ extension Review {
 enum Anchors {
   static func matches(
     _ quote: String, in source: String, within scope: NSRange? = nil,
-    before: String = "", after: String = "", allowEmptyNote: Bool = false
+    before: String = "", after: String = ""
   ) -> [NSRange] {
     let text = source as NSString
     let scope = scope ?? NSRange(location: 0, length: text.length)
-    guard Range(scope, in: source) != nil else { return [] }
-    if quote.isEmpty {
-      return allowEmptyNote && source.isEmpty && scope == NSRange(location: 0, length: 0)
-        && before.isEmpty && after.isEmpty ? [scope] : []
-    }
+    guard !quote.isEmpty, Range(scope, in: source) != nil else { return [] }
     var result: [NSRange] = []
     var cursor = scope.location
     while cursor < NSMaxRange(scope) {

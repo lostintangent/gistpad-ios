@@ -187,7 +187,6 @@
         case .prose(let text):
           Section { Text(text).textSelection(.enabled) }
         case .quotation(let quote, let ranges):
-          let ranges = ranges.filter { !model.isHiddenFrontMatterReference($0) }
           Section {
             Text(quote).textSelection(.enabled)
             if ranges.count == 1, let range = ranges.first {
@@ -264,7 +263,7 @@
       if !comment.reason.isEmpty { Text(comment.reason).font(.headline) }
       VStack(alignment: .leading, spacing: 6) {
         Text(
-          comment.rejection != nil
+          comment.range == nil
             ? String(localized: "Unverified Quote", bundle: .module)
             : String(localized: "Before", bundle: .module)
         )
@@ -287,7 +286,7 @@
           }
         }
       }
-      if comment.rejection != nil {
+      if comment.range == nil {
         Label(String(localized: "Can't Apply", bundle: .module), systemImage: "exclamationmark.circle")
           .foregroundStyle(.secondary)
       }

@@ -766,10 +766,6 @@ package final class OnDeviceModel: IntelligenceModel {
     }
   }
 
-  package func answer(for pass: ModelPass) async throws -> [ModelAnswerPart] {
-    try await streamAnswer(for: pass, onUpdate: { _ in })
-  }
-
   package func streamAnswer(
     for pass: ModelPass, onUpdate: @MainActor (String) -> Void
   ) async throws -> [ModelAnswerPart] {

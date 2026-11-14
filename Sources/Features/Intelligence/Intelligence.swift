@@ -144,7 +144,7 @@ package final class Intelligence {
             candidates.append(
               (
                 ModelReplacement(
-                  inserting: insertion,
+                  quote: "", replacement: insertion,
                   reason: String(localized: "Add this task.", bundle: .module)),
                 NSRange(location: offset, length: 0)
               ))

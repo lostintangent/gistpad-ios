@@ -7,46 +7,19 @@ struct EvalCase: Codable, Sendable {
   let action: String
   let source: String
   let prompt: String
-  let favorite: String?
-  let alternativeFavorites: [String]?
-  let expectedSource: String?
-  let addedTaskText: String?
-  let addedTaskListTitle: String?
-  let maximumAnswerWords: Int?
+  var favorite: String?
+  var alternativeFavorites: [String]?
+  var expectedSource: String?
+  var addedTaskText: String?
+  var addedTaskListTitle: String?
+  var maximumAnswerWords: Int?
   /// The acceptable short replies when a question explicitly says "Name only".
-  let exactAnswers: [String]?
+  var exactAnswers: [String]?
   /// Facts an answer must state: each group passes when the answer contains any of its phrases.
-  let mentions: [[String]]?
+  var mentions: [[String]]?
   /// Phrases a grounded answer can't contain, like a number the note never gives.
-  let avoids: [String]?
-  let editedRegion: EditedRegion?
-  /// The error a request must end in, like a note too long to rewrite.
-  let expectedError: String?
-
-  init(
-    id: String, action: String, source: String, prompt: String, favorite: String? = nil,
-    expectedSource: String? = nil, addedTaskText: String? = nil,
-    addedTaskListTitle: String? = nil, alternativeFavorites: [String]? = nil,
-    maximumAnswerWords: Int? = nil, exactAnswers: [String]? = nil,
-    mentions: [[String]]? = nil, avoids: [String]? = nil,
-    editedRegion: EditedRegion? = nil, expectedError: String? = nil
-  ) {
-    self.id = id
-    self.action = action
-    self.source = source
-    self.prompt = prompt
-    self.favorite = favorite
-    self.alternativeFavorites = alternativeFavorites
-    self.expectedSource = expectedSource
-    self.addedTaskText = addedTaskText
-    self.addedTaskListTitle = addedTaskListTitle
-    self.maximumAnswerWords = maximumAnswerWords
-    self.exactAnswers = exactAnswers
-    self.mentions = mentions
-    self.avoids = avoids
-    self.editedRegion = editedRegion
-    self.expectedError = expectedError
-  }
+  var avoids: [String]?
+  var editedRegion: EditedRegion?
 }
 
 struct EvalResult: Codable, Sendable {
@@ -76,10 +49,8 @@ struct EvalResult: Codable, Sendable {
 enum Evaluator {
   static func run(
     cases: [EvalCase], repeats: Int,
-    retainPrivateOutput: Bool = false,
     onResult: @MainActor ([EvalResult]) throws -> Void
   ) async throws {
-    guard repeats > 0 else { throw IntelligenceError.invalidResponse }
     _ = try await OnDeviceModel().modelInfo()
     var results: [EvalResult] = []
     for repeatIndex in 1...repeats {
@@ -146,9 +117,7 @@ enum Evaluator {
             answerSeconds = elapsed()
             let application = try review.application(to: request.snapshot)
             proposed = application.source
-            if item.expectedError != nil {
-              passed = false
-            } else if let expected = item.expectedSource {
+            if let expected = item.expectedSource {
               passed =
                 application.source.utf8.elementsEqual(expected.utf8)
                 && review.omittedCount == 0
@@ -183,10 +152,10 @@ enum Evaluator {
             qualityRejectionCount: backend.rejectedAnswers.count,
             qualityRetryCount: max(0, backend.answerCalls - 1),
             errorCode: passed ? nil : expectationFailure ?? "expectationMismatch", errorType: nil,
-            answer: retainPrivateOutput ? answer : nil,
-            proposedSource: retainPrivateOutput ? proposed : nil,
-            rejectedAnswers: retainPrivateOutput ? backend.rejectedAnswers : nil,
-            editOperations: retainPrivateOutput ? backend.operations : nil,
+            answer: answer,
+            proposedSource: proposed,
+            rejectedAnswers: backend.rejectedAnswers,
+            editOperations: backend.operations,
             inputTokens: backend.inputTokens,
             modelGrade: modelGrade, modelGradeError: modelGradeError)
         } catch {
@@ -194,15 +163,15 @@ enum Evaluator {
           let type = String(reflecting: type(of: error))
           result = EvalResult(
             caseID: item.id, repeatIndex: repeatIndex, requestID: request.id,
-            passed: item.expectedError == code, elapsedSeconds: elapsed(),
+            passed: false, elapsedSeconds: elapsed(),
             answerCompletionSeconds: answerSeconds,
             answerPreparationSeconds: preparationSeconds,
             firstVisibleSeconds: firstVisibleSeconds,
             qualityRejectionCount: backend.rejectedAnswers.count,
             qualityRetryCount: max(0, backend.answerCalls - 1),
             errorCode: code, errorType: type, answer: nil, proposedSource: nil,
-            rejectedAnswers: retainPrivateOutput ? backend.rejectedAnswers : nil,
-            editOperations: retainPrivateOutput ? backend.operations : nil,
+            rejectedAnswers: backend.rejectedAnswers,
+            editOperations: backend.operations,
             inputTokens: backend.inputTokens,
             modelGrade: nil, modelGradeError: nil)
         }
@@ -434,16 +403,6 @@ final class RecordingModel: IntelligenceModel {
   func excerpts(for pass: ModelPass) async throws -> [String] {
     try await model.excerpts(for: pass)
   }
-  func answer(for pass: ModelPass) async throws -> [ModelAnswerPart] {
-    answerCalls += 1
-    let parts = try await model.answer(for: pass)
-    let prose = parts.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n")
-    if AnswerIssue.check(prose, source: pass.source, instruction: pass.instruction) != nil {
-      rejectedAnswers.append(prose)
-    }
-    return parts
-  }
-
   func streamAnswer(
     for pass: ModelPass, onUpdate: @MainActor (String) -> Void
   ) async throws -> [ModelAnswerPart] {

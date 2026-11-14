@@ -18,9 +18,7 @@ struct Evaluate {
     print(
       "model=\(info.variant) context=\(info.contextSize) cases=\(cases.count) repeats=\(repeats)")
     var finalResults: [EvalResult] = []
-    try await Evaluator.run(
-      cases: cases, repeats: repeats, retainPrivateOutput: true
-    ) { results in
+    try await Evaluator.run(cases: cases, repeats: repeats) { results in
       finalResults = results
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

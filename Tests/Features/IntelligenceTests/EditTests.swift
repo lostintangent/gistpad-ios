@@ -10,7 +10,6 @@ struct EditTests {
     let rejected = Review(
       snapshot: literal,
       candidates: [change("same", "different"), change("absent", "present"), change("café", "x")])
-    #expect(rejected.comments.map(\.rejection) == [.ambiguous, .notFound, .notFound])
     #expect(rejected.omittedCount == 3)
     #expect(!rejected.canApply)
 
@@ -27,7 +26,7 @@ struct EditTests {
     let overlapping = Review(
       snapshot: overlap,
       candidates: [change("abcd", "one"), change("cdef", "two"), change("safe", "kept")])
-    #expect(overlapping.comments.prefix(2).allSatisfy { $0.rejection == .overlapping })
+    #expect(overlapping.comments.prefix(2).allSatisfy { $0.range == nil })
     #expect(try overlapping.application(to: overlap).source == "abcdef kept")
   }
 
@@ -625,14 +624,12 @@ struct EditTests {
       try review.application(to: dated.snapshot).source == "---\ndate: 2025-01-01\n---\n# Today\n")
 
     // A rewrite too long for one reply isn't retried in parts.
-    for failure in [IntelligenceError.noteTooLong, .responseTooLarge] {
-      let failing = FixtureModel()
-      failing.failure = failure
-      await #expect(throws: failure) {
-        try await Intelligence(backend: failing).edit(request("A\n\nB", .edit, "Edit"))
-      }
-      #expect(failing.passes.count == 1)
+    let failing = FixtureModel()
+    failing.failure = IntelligenceError.responseTooLarge
+    await #expect(throws: IntelligenceError.responseTooLarge) {
+      try await Intelligence(backend: failing).edit(request("A\n\nB", .edit, "Edit"))
     }
+    #expect(failing.passes.count == 1)
   }
 
   private func edited(_ input: IntelligenceRequest, _ edits: [ModelEdit]) async throws -> String {

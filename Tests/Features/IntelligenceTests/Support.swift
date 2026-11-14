@@ -16,6 +16,16 @@ func change(_ quote: String, _ replacement: String?) -> ModelReplacement {
   ModelReplacement(quote: quote, replacement: replacement, reason: "Improve")
 }
 
+extension Review {
+  init(snapshot: FileSnapshot, candidates: [ModelReplacement]) {
+    self.init(
+      snapshot: snapshot,
+      scopedCandidates: candidates.map {
+        ($0, NSRange(location: 0, length: snapshot.source.utf16.count))
+      })
+  }
+}
+
 extension FileSnapshot {
   func edited(to source: String) -> FileSnapshot {
     FileSnapshot(

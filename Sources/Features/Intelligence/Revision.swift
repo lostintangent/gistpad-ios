@@ -39,7 +39,8 @@ enum Revision {
       return [
         (
           ModelReplacement(
-            inserting: (needsBreak ? newline : "") + new.joined(separator: newline) + newline,
+            quote: "",
+            replacement: (needsBreak ? newline : "") + new.joined(separator: newline) + newline,
             reason: ""),
           NSRange(location: visible.location, length: 0)
         )

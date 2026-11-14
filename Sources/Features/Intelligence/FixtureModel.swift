@@ -58,11 +58,6 @@
       return excerpts(pass)
     }
 
-    func answer(for pass: ModelPass) async throws -> [ModelAnswerPart] {
-      try await record(pass)
-      return answer
-    }
-
     func streamAnswer(
       for pass: ModelPass, onUpdate: @MainActor (String) -> Void
     ) async throws -> [ModelAnswerPart] {

@@ -46,7 +46,6 @@ package enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
   case unsafeEdit
   case responseTooLarge
   case unverifiedQuotation
-  case noteTooLong
   case noEvidence
   case staleSnapshot
   case noApplicableChanges
@@ -92,10 +91,6 @@ package enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
       String(
         localized:
           "This edit repeats your instruction or would leave almost none of your file. Nothing was changed.",
-        bundle: .module)
-    case .noteTooLong:
-      String(
-        localized: "This file is too long to edit at once. Select a section and use Writing Tools.",
         bundle: .module)
     case .unverifiedQuotation:
       String(
@@ -209,22 +204,7 @@ package protocol IntelligenceModel {
   func replacements(for pass: ModelPass) async throws -> [ModelReplacement]
   func editOperations(for pass: ModelPass) async throws -> [ModelEdit]
   func excerpts(for pass: ModelPass) async throws -> [String]
-  func answer(for pass: ModelPass) async throws -> [ModelAnswerPart]
   func streamAnswer(
     for pass: ModelPass, onUpdate: @MainActor (String) -> Void
   ) async throws -> [ModelAnswerPart]
-}
-
-extension IntelligenceModel {
-  package func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
-    try await replacements(for: pass).map(ModelEdit.replace)
-  }
-
-  package func streamAnswer(
-    for pass: ModelPass, onUpdate: @MainActor (String) -> Void
-  ) async throws -> [ModelAnswerPart] {
-    let parts = try await answer(for: pass)
-    onUpdate(parts.filter { $0.kind == .prose }.map(\.text).joined(separator: "\n\n"))
-    return parts
-  }
 }

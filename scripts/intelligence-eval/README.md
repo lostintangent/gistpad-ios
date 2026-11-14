@@ -62,9 +62,8 @@ headings and fences outside the requested content in the measured run.
 The review is still required: a wrong selection can propose an unrelated change,
 and the eval checks every byte outside the requested region. Short notes retain
 their existing JSON input and whole-note rewrite; scoped content uses raw
-Markdown so model output does not echo JSON-escaped newlines. The `long-room`
-case now requires the exact retest-date change instead of accepting `noteTooLong`;
-all 35 cases expect an actual edit. Named list-item moves also require their
+Markdown so model output does not echo JSON-escaped newlines. All 35 cases
+expect an actual edit. Named list-item moves also require their
 exact expected insertion position, even when the request names only the
 destination heading. Task operations still work without rewriting
 the note. If even one selected block cannot fit, report the error rather than
