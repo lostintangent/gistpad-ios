@@ -64,11 +64,10 @@ extension Accent {
     }
 }
 
-public enum AccentRole: Sendable {
-    case text
-
-    public var uiColor: UIColor {
-        UIColor { traits in traits[AccentTrait.self].roles(traits: traits).text.uiColor }
+extension UIColor {
+    /// The personal accent's text color for the current traits.
+    public static let accentText = UIColor { traits in
+        traits[AccentTrait.self].roles(traits: traits).text.uiColor
     }
 }
 #endif

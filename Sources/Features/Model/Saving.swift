@@ -4,17 +4,6 @@ import Store
 
 // Every keystroke is saved on this iPhone first, so nothing you write waits on GitHub.
 
-public enum EditError: LocalizedError {
-  case localPersistenceFailed
-
-  public var errorDescription: String? {
-    String(
-      localized:
-        "Your latest changes couldn't be saved on this iPhone. Keep the editor open and retry the local save."
-    )
-  }
-}
-
 extension GistPadModel {
   /// Records a draft as this iPhone now has it: stored, or let go once GitHub has its text.
   private func record(_ draft: GistFileDraft) {
@@ -109,14 +98,14 @@ extension GistFileEditor {
       updateEditable()
       if wasEditing { editor.focus() }
     }
-    guard await waitForLocalSave() else { throw EditError.localPersistenceFailed }
+    guard await waitForLocalSave() else { throw ChangeError.notSaved }
     guard editor.generation == expectedGeneration, editor.isSettled
     else { throw DraftError.changed }
     file.update(try await commit())
     if changed {
       try editor.apply(edit, generation: expectedGeneration)
     }
-    guard await waitForLocalSave() else { throw EditError.localPersistenceFailed }
+    guard await waitForLocalSave() else { throw ChangeError.notSaved }
   }
 
   public func waitForLocalSave() async -> Bool {

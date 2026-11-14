@@ -102,9 +102,7 @@ struct AddToTodaySheet: View {
   }
 
   private static func message(for error: Error) -> String {
-    if let editError = error as? EditError,
-      case .localPersistenceFailed = editError
-    {
+    if error as? ChangeError == .notSaved {
       return String(localized: "Your text is still here. Tap Add to try again.")
     }
     return error.localizedDescription

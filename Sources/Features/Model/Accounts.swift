@@ -94,7 +94,7 @@ extension GistPadModel {
         throw ChangeError.publicationInProgress
       }
       guard fileEditor.editor.isSettled else { throw Edit.MutationError.compositionActive }
-      guard await fileEditor.waitForLocalSave() else { throw EditError.localPersistenceFailed }
+      guard await fileEditor.waitForLocalSave() else { throw ChangeError.notSaved }
     }
     guard phase.switchingTo == pendingAccount else { return }
     reset(to: pendingAccount)

@@ -311,7 +311,7 @@ private struct CommentThreadContent: View {
     private func quotedPassage(_ quote: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color(uiColor: AccentRole.text.uiColor))
+                .fill(Color(uiColor: .accentText))
                 .frame(width: 3)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: contentSpacing) {

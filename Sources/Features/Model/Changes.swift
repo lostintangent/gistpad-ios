@@ -19,6 +19,7 @@ public enum ChangeError: Error, Equatable {
   case filenameExists
   case publicationInProgress
   case staleReview
+  case notSaved
 }
 
 extension ChangeError: LocalizedError {
@@ -31,6 +32,11 @@ extension ChangeError: LocalizedError {
     case .publicationInProgress: String(localized: "You can change this after the gist publishes.")
     case .staleReview:
       String(localized: "Your draft changed while this review was open. Review the latest draft.")
+    case .notSaved:
+      String(
+        localized:
+          "Your latest changes couldn't be saved on this iPhone. Keep the editor open and retry the local save."
+      )
     }
   }
 }
@@ -248,7 +254,7 @@ extension GistPadModel {
         locked.append(fileEditor)
       }
       for fileEditor in editors.values {
-        guard await fileEditor.waitForLocalSave() else { throw EditError.localPersistenceFailed }
+        guard await fileEditor.waitForLocalSave() else { throw ChangeError.notSaved }
       }
       try Task.checkCancellation()
       guard self.account?.id == account.id, phase.switchingTo == nil else {

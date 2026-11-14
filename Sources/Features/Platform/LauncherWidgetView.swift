@@ -27,7 +27,7 @@ public struct LauncherWidgetView: View {
     }
 
     private var accent: Color {
-        renderingMode == .fullColor ? Color(uiColor: AccentRole.text.uiColor) : .primary
+        renderingMode == .fullColor ? Color(uiColor: .accentText) : .primary
     }
     private var recents: [GistEntity] {
         state == .available || state == .placeholder ? snapshot?.recents ?? [] : []

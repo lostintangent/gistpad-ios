@@ -16,7 +16,6 @@
     private let onLinkedCommentIDsChange: (@MainActor (Set<Int64>) -> Void)?
     private let onAddComment: (@MainActor (String) -> Void)?
     @State private var linkRequest: LinkRequest?
-    @State private var actionError: String?
 
     public init(
       editor: Editor,
@@ -81,20 +80,14 @@
       .alert(
         String(localized: "Couldn't Complete Action", bundle: .module),
         isPresented: Binding(
-          get: { actionError != nil || editor.inputError != nil },
-          set: {
-            if !$0 {
-              actionError = nil
-              editor.inputError = nil
-            }
-          })
+          get: { editor.inputError != nil },
+          set: { if !$0 { editor.inputError = nil } })
       ) {
         Button(String(localized: "OK", bundle: .module), role: .cancel) {
-          actionError = nil
           editor.inputError = nil
         }
       } message: {
-        Text(actionError ?? editor.inputError ?? "")
+        Text(editor.inputError ?? "")
       }
     }
 
@@ -106,10 +99,10 @@
           try editor.apply(edit, generation: editor.generation)
         }
       } catch Edit.MutationError.compositionActive {
-        actionError = String(
+        editor.inputError = String(
           localized: "Finish typing or wait for Writing Tools, then try again.", bundle: .module)
       } catch {
-        actionError = String(localized: "The file changed. Select the text again.", bundle: .module)
+        editor.inputError = String(localized: "The file changed. Select the text again.", bundle: .module)
       }
     }
 
@@ -117,7 +110,7 @@
       let selection = editor.textView.selectedRange
       guard editor.canFormat, let label = try? Edit.text(in: editor.text, at: selection)
       else {
-        actionError = String(
+        editor.inputError = String(
           localized: "Finish the current text edit, then select the link text again.",
           bundle: .module)
         return
@@ -130,7 +123,7 @@
       do {
         try editor.indent(outdent: outdent)
       } catch {
-        actionError = String(
+        editor.inputError = String(
           localized: "Finish the current text edit, then select the lines again.", bundle: .module)
       }
     }
