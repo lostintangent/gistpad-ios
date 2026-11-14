@@ -40,7 +40,7 @@ public final class GistFileEditor {
     self.model = model
     self.autosaveDelay = autosaveDelay
     editor = Editor(
-      fileID: file.id.uuidString, text: file.text,
+      text: file.text,
       showsFrontMatter: model.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
     if file.isNew { mode = .edit }
     updateEditable()

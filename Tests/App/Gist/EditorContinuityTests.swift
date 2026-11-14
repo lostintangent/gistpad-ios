@@ -25,7 +25,7 @@ struct EditorContinuityTests {
 
   @Test func sameTextViewSelectionAndUndoSurviveRepeatedResize() throws {
     let source = EditorFixture.markdown
-    let session = Editor(fileID: "test", text: source)
+    let session = Editor(text: source)
     let window = try host(session)
     defer { window.isHidden = true }
     session.textView.becomeFirstResponder()
@@ -47,7 +47,7 @@ struct EditorContinuityTests {
   }
 
   @Test func programmaticMarkedTextSurvivesResizeWithoutHighlighting() throws {
-    let session = Editor(fileID: "test", text: "日本語のノート\n👨‍👩‍👧‍👦")
+    let session = Editor(text: "日本語のノート\n👨‍👩‍👧‍👦")
     let window = try host(session)
     defer { window.isHidden = true }
     session.textView.becomeFirstResponder()
@@ -69,7 +69,7 @@ struct EditorContinuityTests {
 
   @Test func validatedMutationIsUndoableAndRejectsStaleOrComposingEdits() throws {
     let source = "- [ ] Duplicate\n- [ ] Duplicate"
-    let session = Editor(fileID: "test", text: source)
+    let session = Editor(text: source)
     let window = try host(session)
     defer { window.isHidden = true }
     session.textView.becomeFirstResponder()
@@ -91,7 +91,7 @@ struct EditorContinuityTests {
 
   @Test func previewMutationDoesNotNeedKeyboardAndPreservesSelection() throws {
     let source = "👨‍👩‍👧‍👦\n- [ ] Duplicate\n- [ ] Duplicate\n日本語"
-    let session = Editor(fileID: "test", text: source)
+    let session = Editor(text: source)
     let window = try host(session)
     defer { window.isHidden = true }
     session.textView.selectedRange = NSRange(location: 0, length: 0)
@@ -109,7 +109,7 @@ struct EditorContinuityTests {
 
   @Test func readingAnchorSurvivesReflow() async throws {
     let source = EditorFixture.markdown
-    let session = Editor(fileID: "test", text: source)
+    let session = Editor(text: source)
     let window = try host(session)
     defer { window.isHidden = true }
     let view = session.textView

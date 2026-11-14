@@ -8,7 +8,7 @@
     @MainActor
     struct EditorFormattingTests {
       @Test func formattingIsOneNativeUndoWithFinalSelection() throws {
-        let editor = Editor(fileID: "format", text: "A 日本語 note")
+        let editor = Editor(text: "A 日本語 note")
         let window = hostEditor(editor)
         defer { window.isHidden = true }
         let originalSelection = (editor.text as NSString).range(of: "日本語")
@@ -39,7 +39,7 @@
       }
 
       @Test func staleLinkNeverChangesSource() throws {
-        let editor = Editor(fileID: "link", text: "note")
+        let editor = Editor(text: "note")
         let edit = try #require(
           try Formatting.edit(
             .link(label: "note", destination: "https://example.com"),
@@ -52,7 +52,7 @@
       }
 
       @Test func compositionWritingToolsAndReadOnlyBlockFormatting() throws {
-        let editor = Editor(fileID: "blocked", text: "note")
+        let editor = Editor(text: "note")
         let window = hostEditor(editor)
         defer { window.isHidden = true }
         let edit = try #require(
@@ -83,13 +83,13 @@
 
       @Test func smartTypingYieldsToCompositionWritingToolsAndProtectedSyntax() {
         for source in ["```\n- code", "---\n- metadata", "Ordinary prose"] {
-          let editor = Editor(fileID: "protected", text: source)
+          let editor = Editor(text: source)
           let caret = NSRange(location: source.utf16.count, length: 0)
           #expect(
             editor.textView(editor.textView, shouldChangeTextIn: caret, replacementText: "\n"))
           #expect(editor.text == source)
         }
-        let editor = Editor(fileID: "composing", text: "- note")
+        let editor = Editor(text: "- note")
         let window = hostEditor(editor)
         defer { window.isHidden = true }
         editor.textViewWritingToolsWillBegin(editor.textView)
@@ -109,7 +109,7 @@
       }
 
       @Test func indentAndOutdentRetainSelectionAndNativeUndo() throws {
-        let editor = Editor(fileID: "indent", text: "- 日本語\n- next")
+        let editor = Editor(text: "- 日本語\n- next")
         let window = hostEditor(editor)
         defer { window.isHidden = true }
         let original = editor.text
@@ -126,7 +126,7 @@
       }
 
       @Test func keyboardBarBoldEditsTheSessionAndImageNeedsAnAction() throws {
-        let editor = Editor(fileID: "accessory", text: "A note")
+        let editor = Editor(text: "A note")
         let window = hostEditor(editor)
         defer { window.isHidden = true }
         let toolbar = try #require(editor.textView.inputAccessoryView as? KeyboardBar)
@@ -152,14 +152,14 @@
       }
 
       @Test func voiceOverNamesTheTextViewByTheScreensTitle() {
-        let editor = Editor(fileID: "label", text: "A note")
+        let editor = Editor(text: "A note")
         let window = hostEditor(editor, title: "Saturday walk")
         defer { window.isHidden = true }
         #expect(editor.textView.accessibilityLabel == "Saturday walk")
       }
 
       @Test func intelligenceAccessoryInvokesItsCallbackWithoutChangingSource() throws {
-        let editor = Editor(fileID: "intelligence-button", text: "A note")
+        let editor = Editor(text: "A note")
         var requests = 0
         let window = hostEditor(editor, intelligence: { requests += 1 })
         defer { window.isHidden = true }
@@ -178,7 +178,7 @@
       }
 
       @Test func nativeFindAndReplaceKeepsURLReplacementsLiteral() throws {
-        let editor = Editor(fileID: "find", text: "A note and another note")
+        let editor = Editor(text: "A note and another note")
         let window = hostEditor(editor)
         defer { window.isHidden = true }
         let interaction = try #require(editor.textView.findInteraction)

@@ -1,5 +1,5 @@
 #if canImport(UIKit)
-  import Editor
+  @testable import Editor
   import SwiftUI
   import Testing
   import UIKit
@@ -12,7 +12,7 @@
     private let source = FixtureLanguageModel.source
 
     @Test func nothingChangesUntilApplyAndApplyIsOneUndo() async throws {
-      let editor = Editor(fileID: "apply-undo", text: source)
+      let editor = Editor(text: source)
       let window = host(editor)
       defer { window.isHidden = true }
       let undo = try #require(editor.textView.undoManager)
@@ -75,7 +75,7 @@
       .answer(ModelAnswer(prose: "The user leaves at 9am.")),
     ])
     func everyFailedAskShowsAReasonAndKeepsTheRequestAndFile(failure: AskFailure) async {
-      let editor = Editor(fileID: "failed-ask", text: source)
+      let editor = Editor(text: source)
       var changes = 0
       editor.onEdit = { _, _ in changes += 1 }
       let fixture = FixtureLanguageModel()
@@ -100,7 +100,7 @@
     }
 
     @Test func cancelKeepsTheRequestAndTheFile() async {
-      let editor = Editor(fileID: "cancel", text: source)
+      let editor = Editor(text: source)
       let fixture = FixtureLanguageModel()
       fixture.delay = .seconds(5)
       let state = IntelligenceState(editor: editor, backend: fixture)
@@ -125,7 +125,7 @@
     }
 
     @Test func aReadOnlyFileAllowsAskAndReviewButNotEditOrApply() async {
-      let editor = Editor(fileID: "read-only", text: source)
+      let editor = Editor(text: source)
       editor.isEditable = false
       let state = IntelligenceState(editor: editor, backend: FixtureLanguageModel())
       await state.checkAvailability()
@@ -149,8 +149,7 @@
     func citationsOnlyLinkToVisibleBodyEvenWhenMetadataRepeatsTheQuote(shown: Bool) async throws {
       let prefix = "---\nkey: e\u{301} 👩🏽‍💻\n---\n\n"
       let text = prefix + "# Content\n\nA retained thought about e\u{301} 👩🏽‍💻."
-      let editor = Editor(
-        fileID: "front-matter", text: text, generation: 8, showsFrontMatter: shown)
+      let editor = Editor(text: text, generation: 8, showsFrontMatter: shown)
       let fixture = FixtureLanguageModel()
       fixture.answer = ModelAnswer(
         prose: "You retained this thought.", quotes: ["e\u{301} 👩🏽‍💻"])

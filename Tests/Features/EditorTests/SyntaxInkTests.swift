@@ -34,7 +34,7 @@
       for size in [UIContentSizeCategory.large, .accessibilityExtraLarge] {
         for appearance in [UIUserInterfaceStyle.light, .dark] {
           for contrast in [UIAccessibilityContrast.normal, .high] {
-            let editor = Editor(fileID: "theme", text: source)
+            let editor = Editor(text: source)
             editor.setShowsFrontMatter(true)
             let view = editor.textView
             view.traitOverrides.preferredContentSizeCategory = size

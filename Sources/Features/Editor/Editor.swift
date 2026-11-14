@@ -12,18 +12,17 @@
   public final class Editor: NSObject, Identifiable, UITextViewDelegate,
     @MainActor NSTextContentStorageDelegate
   {
-    public let fileID: String
     public let id = UUID()
     public private(set) var text: String
     public private(set) var generation: UInt64
-    public private(set) var isComposing = false
+    private(set) var isComposing = false
     public private(set) var isEditing = false
     public private(set) var isWritingToolsActive = false
     private(set) var showsFrontMatter = false
     public private(set) var contentStart = 0
     public var inputError: String?
     let view = TextView(usingTextLayoutManager: true)
-    public var textView: UITextView { view }
+    var textView: UITextView { view }
     @ObservationIgnored weak var host: TextViewHost?
     @ObservationIgnored var hosts: [TextViewHost.Reference] = []
     @ObservationIgnored public var onEdit: ((String, UInt64) -> Void)?
@@ -32,9 +31,8 @@
     @ObservationIgnored lazy var commentHighlights = CommentHighlights(editor: self)
 
     public init(
-      fileID: String, text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
+      text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
     ) {
-      self.fileID = fileID
       self.text = text
       self.generation = generation
       self.showsFrontMatter = showsFrontMatter
@@ -781,7 +779,6 @@
   @MainActor
   @Observable
   public final class Editor: Identifiable {
-    public let fileID: String
     public let id = UUID()
     public private(set) var text: String
     public private(set) var generation: UInt64
@@ -792,9 +789,8 @@
     @ObservationIgnored public var onEdit: ((String, UInt64) -> Void)?
 
     public init(
-      fileID: String, text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
+      text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
     ) {
-      self.fileID = fileID
       self.text = text
       self.generation = generation
     }

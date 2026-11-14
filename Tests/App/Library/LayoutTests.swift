@@ -1,4 +1,4 @@
-import Editor
+@testable import Editor
 import Screens
 import Store
 import SwiftUI
@@ -82,7 +82,7 @@ struct LayoutTests {
     let original = (1...80).map { "Paragraph \($0): a retained native notebook." }.joined(
       separator: "\n\n")
     let draft = GistFileDraft(accountID: accountID, text: original)
-    let session = Editor(fileID: draft.id.uuidString, text: draft.text)
+    let session = Editor(text: draft.text)
     var persistence: Task<GistFileDraft, any Error>?
     session.onEdit = { text, _ in
       persistence = Task { try await store.save(draft, text: text, github: nil) }

@@ -8,7 +8,7 @@
     @MainActor
     struct ViewportTests {
       @Test func actualViewportDoesNotCountTheKeyboardTwiceAfterTheEditorShrinks() {
-        let editor = Editor(fileID: "keyboard-viewport", text: "Keep writing here")
+        let editor = Editor(text: "Keep writing here")
         let root = UIViewController()
         let view = editor.textView
         let viewport = UIView()
@@ -38,7 +38,7 @@
       @Test func changingChromeInsetsPreservesTheCurrentPassage() throws {
         let source = String(
           repeating: "A retained paragraph in the native source editor.\n\n", count: 80)
-        let editor = Editor(fileID: "passage", text: source)
+        let editor = Editor(text: source)
         let window = host(editor, focused: false)
         defer { window.isHidden = true }
         let view = editor.textView

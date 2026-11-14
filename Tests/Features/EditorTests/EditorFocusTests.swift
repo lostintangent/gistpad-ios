@@ -9,7 +9,7 @@
     struct EditorFocusTests {
       @Test func focusRequestPlacesCaretNowAndFocusesOnWindowAttachment() {
         let source = "# Today\n\n日本語 👩🏽‍💻"
-        let editor = Editor(fileID: "new", text: source)
+        let editor = Editor(text: source)
         let end = NSRange(location: source.utf16.count, length: 0)
         editor.requestFocusAtEnd()
         #expect(editor.textView.selectedRange == end)
@@ -25,7 +25,7 @@
       }
 
       @Test func focusRequestIsConsumedOnceAndKeepsSourceAndNativeUndo() throws {
-        let editor = Editor(fileID: "one-shot", text: "note")
+        let editor = Editor(text: "note")
         editor.requestFocusAtEnd()
         let window = host(editor, focused: false)
         defer { window.isHidden = true }

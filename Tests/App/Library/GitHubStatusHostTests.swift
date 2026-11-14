@@ -1,4 +1,4 @@
-import Editor
+@testable import Editor
 import Screens
 import Observation
 import SwiftUI
@@ -141,7 +141,7 @@ private final class StatusHost {
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     previous = scene.windows.first(where: \.isKeyWindow)
-    session = Editor(fileID: "github-status-source", text: source)
+    session = Editor(text: source)
     window = UIWindow(windowScene: scene)
     window.rootViewController = UIHostingController(
       rootView: StatusFixture(model: model, session: session).accent(savedHex: "#FACC15"))

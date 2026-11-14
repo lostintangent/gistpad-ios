@@ -36,7 +36,7 @@ struct FrontMatterRangeTests {
       ) throws {
         let body = "# Visible content\n\n- [ ] A thought 日本語"
         let source = prefix + body
-        let editor = Editor(fileID: "frontmatter", text: source)
+        let editor = Editor(text: source)
         let view = editor.textView
         let window = host(editor, focused: false)
         defer { window.isHidden = true }
@@ -121,7 +121,7 @@ struct FrontMatterRangeTests {
         let prefix = "---\nkey: A longer value 👩🏽‍💻\n---\n\n"
         let body = "A retained thought"
         let source = prefix + body
-        let editor = Editor(fileID: "frontmatter-mutation", text: source)
+        let editor = Editor(text: source)
         let view = editor.textView
         let window = host(editor)
         defer { window.isHidden = true }
@@ -143,7 +143,7 @@ struct FrontMatterRangeTests {
 
       @Test func showingMetadataKeepsCompositionAndDoesNotChangeSourceGeneration() throws {
         let prefix = "---\nkey: value\n---\n\n"
-        let editor = Editor(fileID: "frontmatter-composition", text: prefix + "Body")
+        let editor = Editor(text: prefix + "Body")
         let view = editor.textView
         view.selectedRange = NSRange(location: prefix.utf16.count, length: 0)
         view.setMarkedText("日本", selectedRange: NSRange(location: 2, length: 0))
@@ -169,7 +169,7 @@ struct FrontMatterRangeTests {
       func replacingTheWholeSourceCanRemoveThePrefixAndUndoRestoresIt(replacement: String) throws {
         let prefix = "---\nkey: A longer metadata prefix\n---\n\n"
         let source = prefix + "A retained thought"
-        let editor = Editor(fileID: "frontmatter-replacement", text: source)
+        let editor = Editor(text: source)
         let view = editor.textView
         let window = host(editor)
         defer { window.isHidden = true }
@@ -191,7 +191,7 @@ struct FrontMatterRangeTests {
 
       @Test func visibilityChangesDoNotAddAnUndoStep() {
         let source = "---\nkey: value\n---\n\nBody"
-        let editor = Editor(fileID: "frontmatter-undo", text: source)
+        let editor = Editor(text: source)
         let view = editor.textView
         editor.setShowsFrontMatter(true)
         #expect(editor.showsFrontMatter)

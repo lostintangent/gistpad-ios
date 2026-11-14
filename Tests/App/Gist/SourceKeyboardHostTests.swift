@@ -34,7 +34,7 @@ struct SourceKeyboardHostTests {
                 generation: session.generation
             )
             session.highlight()
-            let expected = Editor(fileID: "expected-style", text: expectedText)
+            let expected = Editor(text: expectedText)
             expected.textView.traitOverrides.preferredContentSizeCategory =
                 session.textView.traitCollection.preferredContentSizeCategory
             expected.highlight()
@@ -211,7 +211,7 @@ private final class SourceKeyboardFixture {
             UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         )
         previousKeyWindow = scene.keyWindow
-        let session = Editor(fileID: "source-keyboard-\(size)", text: source)
+        let session = Editor(text: source)
         self.session = session
         let window = UIWindow(windowScene: scene)
         self.window = window

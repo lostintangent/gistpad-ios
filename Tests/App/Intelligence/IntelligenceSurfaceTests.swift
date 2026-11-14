@@ -1,5 +1,5 @@
 #if canImport(UIKit)
-  import Editor
+  @testable import Editor
   import SwiftUI
   import Testing
   import UIKit
@@ -13,7 +13,7 @@
       let source =
         "# Saturday walk\n\nTake teh river path.\n"
         + (1...120).map { "Stop \($0) on the river path." }.joined(separator: "\n")
-      let session = Editor(fileID: "intelligence-return", text: source)
+      let session = Editor(text: source)
       let editor = session.textView
       let selection = (source as NSString).range(of: "Stop 60 ")
       var changes = 0

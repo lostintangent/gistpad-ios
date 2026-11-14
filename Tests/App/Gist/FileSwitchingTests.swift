@@ -15,7 +15,7 @@ struct FileSwitchingTests {
   @Test(arguments: [false, true])
   func supersededContainersCannotReconfigureDetachOrReclaimTheEditor(composing: Bool) throws {
     let source = "# A retained source\nAn editable thought."
-    let editor = Editor(fileID: "owned-source", text: source)
+    let editor = Editor(text: source)
     let fixture = try SourceHostWindow()
     defer { fixture.close() }
     let outgoing = TextViewHost(editor: editor)
@@ -76,7 +76,7 @@ struct FileSwitchingTests {
 
   @Test(arguments: [false, true])
   func aReturningStaleHostCannotOrphanTheVisibleHost(dismantled: Bool) throws {
-    let editor = Editor(fileID: "stale-return", text: "# Still visible")
+    let editor = Editor(text: "# Still visible")
     let fixture = try SourceHostWindow()
     defer { fixture.close() }
     let stale = TextViewHost(editor: editor)
@@ -121,7 +121,7 @@ struct FileSwitchingTests {
   func anOwnerLeavingOrDismantlingImmediatelyReturnsTheEditorToThePreviousLiveHost(
     dismantled: Bool
   ) throws {
-    let editor = Editor(fileID: "owner-left", text: "# Still attached")
+    let editor = Editor(text: "# Still attached")
     let fixture = try SourceHostWindow()
     defer { fixture.close() }
     let previous = TextViewHost(editor: editor)
@@ -146,7 +146,7 @@ struct FileSwitchingTests {
 
   @Test(arguments: OwnerState.allCases)
   func anInWindowContainerRepairsMissingDetachedAndCurrentOwnership(owner: OwnerState) throws {
-    let editor = Editor(fileID: "reattached", text: "# Still here")
+    let editor = Editor(text: "# Still here")
     let fixture = try SourceHostWindow()
     defer { fixture.close() }
     let host = TextViewHost(editor: editor)
@@ -174,8 +174,7 @@ struct FileSwitchingTests {
 
   @Test(arguments: [false, true])
   func animatedIdentityAndModeChangesKeepTheEditorMounted(splitNavigation: Bool) async throws {
-    let editor = Editor(
-      fileID: "animated-source", text: "# A visible source\nAn editable thought.")
+    let editor = Editor(text: "# A visible source\nAn editable thought.")
     let state = ReidentifiedSourceState()
     let fixture = try SourceHostWindow()
     defer { fixture.close() }
@@ -223,9 +222,8 @@ struct FileSwitchingTests {
   }
 
   @Test func anOutgoingHostCannotDetachTheRetainedEditorFromItsNewHost() async throws {
-    let editor = Editor(
-      fileID: "retained", text: "# Still visible\nA retained source.")
-    let other = Editor(fileID: "other", text: "# A different source")
+    let editor = Editor(text: "# Still visible\nA retained source.")
+    let other = Editor(text: "# A different source")
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let previous = scene.keyWindow
@@ -289,8 +287,8 @@ struct FileSwitchingTests {
   }
 
   @Test func changingFilesMountsTheCorrectRetainedTextViewAndIsolatesUndo() async throws {
-    let daily = Editor(fileID: "daily", text: "# Today's note\nDaily source")
-    let note = Editor(fileID: "another-gist", text: "# Another gist\nIts raw source")
+    let daily = Editor(text: "# Today's note\nDaily source")
+    let note = Editor(text: "# Another gist\nIts raw source")
     let scene = try #require(
       UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     let window = UIWindow(windowScene: scene)

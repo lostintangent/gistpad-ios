@@ -1,6 +1,6 @@
 import AppIntents
 import Foundation
-import Editor
+@testable import Editor
 import Screens
 @testable import Platform
 import SwiftUI

@@ -9,7 +9,7 @@
     @MainActor
     struct CommentHighlightTests {
       @Test func annotationsPreserveExactSourceGenerationSelectionAndNativeUndo() throws {
-        let editor = Editor(fileID: "comments", text: "A native note", generation: 7)
+        let editor = Editor(text: "A native note", generation: 7)
         let window = host(editor)
         defer { window.isHidden = true }
         let undo = try #require(editor.textView.undoManager)
@@ -42,7 +42,7 @@
       }
 
       @Test func overlapMenuKeepsSystemActionsAndOpensEveryThread() throws {
-        let editor = Editor(fileID: "overlap", text: "one two three")
+        let editor = Editor(text: "one two three")
         var opened: [[Int64]] = []
         editor.setCommentHighlights(
           .init(quotes: [
@@ -81,7 +81,7 @@
         let added = "  cafe\u{0301} 🫧\r\n"
         let source =
           "# Comment notebook\n\n🫧 A quiet native note, with **careful** words.\n" + added
-        let editor = Editor(fileID: "hit-testing", text: source)
+        let editor = Editor(text: source)
         let window = host(editor, focused: false)
         defer { window.isHidden = true }
         var quotes: [String] = []
@@ -130,7 +130,7 @@
         let text =
           "# Start\n\n" + String(repeating: "Room for another thought.\n\n", count: 60)
           + "A late native passage."
-        let editor = Editor(fileID: "repeat-reveal", text: text)
+        let editor = Editor(text: text)
         let window = host(editor)
         defer { window.isHidden = true }
         editor.textView.resignFirstResponder()
@@ -154,7 +154,7 @@
       }
 
       @Test func addCommentRequiresOneEligibleSelectionAndAnExplicitCallback() {
-        let editor = Editor(fileID: "eligibility", text: "abc abcd 🫧🫧")
+        let editor = Editor(text: "abc abcd 🫧🫧")
         let range = NSValue(range: NSRange(location: 4, length: 4))
         #expect(
           editor.textView(
@@ -179,7 +179,7 @@
       }
 
       @Test func hidingIdleAnnotationsKeepsSelectionAndContextualDiscovery() throws {
-        let editor = Editor(fileID: "visibility", text: "one two three")
+        let editor = Editor(text: "one two three")
         editor.setCommentHighlights(
           .init(
             quotes: [
@@ -201,8 +201,7 @@
       }
 
       @Test func missingAmbiguousAndHiddenFrontMatterQuotesDoNotInventLinks() async {
-        let editor = Editor(
-          fileID: "frontmatter", text: "---\ntitle: native\n---\n\nA native note")
+        let editor = Editor(text: "---\ntitle: native\n---\n\nA native note")
         var linked: Set<Int64> = []
         editor.setCommentHighlights(
           .init(quotes: [
@@ -225,7 +224,7 @@
       }
 
       @Test func highlightsStepAsideForWritingToolsAndFindWithoutChangingSource() async throws {
-        let editor = Editor(fileID: "transient-ui", text: "A native note")
+        let editor = Editor(text: "A native note")
         let window = host(editor)
         defer { window.isHidden = true }
         let view = editor.textView
@@ -257,7 +256,7 @@
       }
 
       @Test func selectedCommentHasNativeAccessibilityStateWithoutChangingTheEditorRole() throws {
-        let editor = Editor(fileID: "accessibility", text: "A native note")
+        let editor = Editor(text: "A native note")
         let provider = try #require(editor.textView as? any AXCustomContentProvider)
         editor.setCommentHighlights(
           .init(

@@ -7,7 +7,7 @@ import UIKit
 extension EditorContinuityTests {
   @Test func completeWritingToolsUsesPlainSourceAndAbsoluteIgnoredRanges() {
     let source = "日本語 👩🏽‍💻 before ``a ` b`` after"
-    let session = Editor(fileID: "test", text: source)
+    let session = Editor(text: source)
     #expect(session.textView.writingToolsBehavior == .complete)
     #expect(session.textView.allowedWritingToolsResultOptions == .plainText)
     let enclosing = (source as NSString).range(of: "before ``a ` b`` after")
@@ -18,7 +18,7 @@ extension EditorContinuityTests {
 
   @Test func temporaryPreviewsCannotPersistOrAcceptExternalMutations() throws {
     let source = "Original 日本語 `source`"
-    let session = Editor(fileID: "test", text: source, generation: 7)
+    let session = Editor(text: source, generation: 7)
     var changes: [String] = []
     session.onEdit = { text, _ in changes.append(text) }
     session.textViewWritingToolsWillBegin(session.textView)
@@ -44,7 +44,7 @@ extension EditorContinuityTests {
 
   @Test func acceptedNativeReplacementIsOneUndoableEditAndSurvivesReflow() async throws {
     let source = "A rough sentence.\n日本語 👨‍👩‍👧‍👦 `protected`"
-    let session = Editor(fileID: "test", text: source)
+    let session = Editor(text: source)
     let window = try host(session)
     defer {
       session.textView.resignFirstResponder()
