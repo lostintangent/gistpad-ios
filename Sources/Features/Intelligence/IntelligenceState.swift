@@ -19,16 +19,16 @@
     var notice: String?
     var progress: IntelligenceProgress?
     var answerParts: [AnswerPart] = []
-    var review: Review?
-    var appliedEdit: Review?
+    var proposal: Proposal?
+    var appliedEdit: Proposal?
     var appliedCount = 0
     private(set) var snapshot: FileSnapshot?
-    private let engine: Intelligence
+    private let engine: IntelligenceEngine
     @ObservationIgnored private(set) var task: Task<Void, Never>?
 
     init(editor: Editor, backend: any IntelligenceModel = OnDeviceModel()) {
       self.editor = editor
-      engine = Intelligence(backend: backend)
+      engine = IntelligenceEngine(backend: backend)
     }
 
     var prompt: String {
@@ -51,11 +51,11 @@
     }
 
     var canApply: Bool {
-      !isRunning && !isStale && editor.canFormat && review?.canApply == true
+      !isRunning && !isStale && editor.canFormat && proposal?.canApply == true
     }
 
     var hasResults: Bool {
-      !answerParts.isEmpty || review != nil || appliedEdit != nil
+      !answerParts.isEmpty || proposal != nil || appliedEdit != nil
     }
 
     func checkAvailability() async {
@@ -74,7 +74,7 @@
       notice = nil
       progress = nil
       answerParts = []
-      review = nil
+      proposal = nil
       appliedEdit = nil
       appliedCount = 0
       snapshot = nil
@@ -112,9 +112,9 @@
                 self.answerParts = text.isEmpty ? [] : [.prose(text)]
               })
           case .edit:
-            self.review = try await self.engine.edit(request, progress: { self.progress = $0 })
+            self.proposal = try await self.engine.edit(request, progress: { self.progress = $0 })
           case .review:
-            self.review = try await self.engine.review(request, progress: { self.progress = $0 })
+            self.proposal = try await self.engine.review(request, progress: { self.progress = $0 })
           }
         } catch is CancellationError {
           if selectedAction == .ask { self.answerParts = [] }
@@ -146,15 +146,15 @@
       task?.cancel()
     }
 
-    func apply(commentID: UUID? = nil) {
-      guard let review, !isRunning else { return }
+    func apply(changeID: UUID? = nil) {
+      guard let proposal, !isRunning else { return }
       do {
-        let count = review.comments.filter {
-          $0.canApply && (commentID == nil || $0.id == commentID)
+        let count = proposal.changes.filter {
+          $0.canApply && (changeID == nil || $0.id == changeID)
         }.count
-        let remaining = try editor.apply(review, commentID: commentID)
-        if action == .edit { appliedEdit = review }
-        self.review = remaining
+        let remaining = try editor.apply(proposal, changeID: changeID)
+        if action == .edit { appliedEdit = proposal }
+        self.proposal = remaining
         snapshot = remaining.snapshot
         appliedCount += count
         errorMessage = nil
@@ -165,10 +165,10 @@
       }
     }
 
-    func dismiss(commentID: UUID) {
-      guard let review else { return }
+    func dismiss(changeID: UUID) {
+      guard let proposal else { return }
       do {
-        self.review = try review.dismissing(commentID: commentID)
+        self.proposal = try proposal.dismissing(changeID: changeID)
         errorMessage = nil
       } catch {
         errorMessage = error.localizedDescription

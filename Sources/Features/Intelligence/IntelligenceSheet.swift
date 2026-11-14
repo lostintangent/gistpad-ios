@@ -6,7 +6,7 @@
   public struct IntelligenceSheet: View {
     private let title: String
     private let revealSource: @MainActor (NSRange) -> Void
-    @State private var model: IntelligenceState
+    @State private var state: IntelligenceState
     @State private var detent = PresentationDetent.medium
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -18,40 +18,40 @@
     ) {
       self.title = title
       self.revealSource = revealSource
-      _model = State(initialValue: IntelligenceState(editor: editor))
+      _state = State(initialValue: IntelligenceState(editor: editor))
     }
 
     public var body: some View {
-      @Bindable var model = model
+      @Bindable var state = state
       NavigationStack {
         Form {
           Section {
-            Picker(String(localized: "Action", bundle: .module), selection: $model.action) {
+            Picker(String(localized: "Action", bundle: .module), selection: $state.action) {
               ForEach(IntelligenceAction.allCases, id: \.self) { action in
                 Text(action.title).tag(action)
-                  .disabled(action == .edit && !model.editor.textView.isEditable)
+                  .disabled(action == .edit && !state.editor.textView.isEditable)
               }
             }
             .pickerStyle(.segmented)
-            .disabled(model.isRunning)
+            .disabled(state.isRunning)
             .accessibilityIdentifier("intelligence-actions")
           }
           .listRowBackground(Color.clear)
           .listRowInsets(EdgeInsets())
           request
-          if let reason = model.availabilityReason {
+          if let reason = state.availabilityReason {
             Section { Label(reason, systemImage: "apple.intelligence") }
           }
-          if let error = model.errorMessage {
+          if let error = state.errorMessage {
             Section { Label(error, systemImage: "exclamationmark.circle") }
           }
-          if model.isRunning {
+          if state.isRunning {
             Section {
               LabeledContent(progressLabel) { ProgressView() }
                 .accessibilityIdentifier("intelligence-progress")
             }
           }
-          if model.isStale {
+          if state.isStale {
             Section {
               Label(
                 IntelligenceError.staleSnapshot.localizedDescription,
@@ -59,11 +59,11 @@
             }
           }
           answer
-          if let review = model.appliedEdit ?? model.review { changes(review) }
-          if let notice = model.notice {
+          if let proposal = state.appliedEdit ?? state.proposal { changes(proposal) }
+          if let notice = state.notice {
             Section {
               Label(
-                notice, systemImage: model.appliedCount > 0 ? "checkmark.circle" : "info.circle")
+                notice, systemImage: state.appliedCount > 0 ? "checkmark.circle" : "info.circle")
             }
           }
         }
@@ -73,24 +73,24 @@
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
             Button(role: .close) {
-              model.cancel()
+              state.cancel()
               dismiss()
             }
             .accessibilityIdentifier("intelligence-close")
           }
           ToolbarItem(placement: .confirmationAction) {
-            if model.isRunning {
+            if state.isRunning {
               Button(String(localized: "Stop", bundle: .module), systemImage: "stop.fill") {
-                model.cancel()
+                state.cancel()
               }
-              .disabled(model.isCancelling)
+              .disabled(state.isCancelling)
               .accessibilityIdentifier("intelligence-cancel")
             } else {
-              Button(model.action.title, role: .confirm) {
+              Button(state.action.title, role: .confirm) {
                 promptFocused = false
-                model.generate()
+                state.generate()
               }
-              .disabled(!model.canGenerate)
+              .disabled(!state.canGenerate)
               .accessibilityIdentifier("intelligence-generate")
             }
           }
@@ -98,50 +98,50 @@
       }
       .presentationDetents([.medium, .large], selection: $detent)
       .presentationDragIndicator(.visible)
-      .sensoryFeedback(.success, trigger: model.appliedCount) { old, new in new > old }
+      .sensoryFeedback(.success, trigger: state.appliedCount) { old, new in new > old }
       .task {
         if dynamicTypeSize.isAccessibilitySize { detent = .large }
-        await model.checkAvailability()
+        await state.checkAvailability()
       }
       .onChange(of: scenePhase) { _, phase in
-        if phase == .active { Task { await model.checkAvailability() } }
+        if phase == .active { Task { await state.checkAvailability() } }
       }
-      .onChange(of: model.action) {
-        model.clearResults()
-        Task { await model.checkAvailability() }
+      .onChange(of: state.action) {
+        state.clearResults()
+        Task { await state.checkAvailability() }
       }
-      .onChange(of: model.isRunning || model.review != nil || dynamicTypeSize.isAccessibilitySize)
+      .onChange(of: state.isRunning || state.proposal != nil || dynamicTypeSize.isAccessibilitySize)
       { _, expands in
         if expands { detent = .large }
       }
-      .onDisappear { model.cancel() }
+      .onDisappear { state.cancel() }
       .accessibilityIdentifier("note-intelligence-sheet")
     }
 
     @ViewBuilder
     private var request: some View {
-      @Bindable var model = model
+      @Bindable var state = state
       Section {
-        switch model.action {
+        switch state.action {
         case .review:
-          if !model.hasResults {
+          if !state.hasResults {
             Text("Find errors and unclear wording.", bundle: .module)
               .foregroundStyle(.secondary)
           }
         case .ask, .edit:
           TextField(
-            model.action == .ask
+            state.action == .ask
               ? String(localized: "Ask about this file", bundle: .module)
               : String(localized: "What would you like to change?", bundle: .module),
-            text: $model.prompt, axis: .vertical
+            text: $state.prompt, axis: .vertical
           )
           .lineLimit(1...5)
           .focused($promptFocused)
-          .disabled(model.isRunning)
+          .disabled(state.isRunning)
           .accessibilityIdentifier("intelligence-prompt")
         }
       } footer: {
-        if !model.editor.textView.isEditable {
+        if !state.editor.textView.isEditable {
           Text(
             "This gist is read-only. You can ask and review, but not apply changes.",
             bundle: .module)
@@ -150,8 +150,8 @@
     }
 
     private var progressLabel: String {
-      if model.isCancelling { return String(localized: "Stopping…", bundle: .module) }
-      guard let progress = model.progress else {
+      if state.isCancelling { return String(localized: "Stopping…", bundle: .module) }
+      guard let progress = state.progress else {
         return String(localized: "Preparing this file…", bundle: .module)
       }
       switch progress.phase {
@@ -174,7 +174,7 @@
     }
 
     private var answer: some View {
-      ForEach(Array(model.answerParts.enumerated()), id: \.offset) { _, part in
+      ForEach(Array(state.answerParts.enumerated()), id: \.offset) { _, part in
         switch part {
         case .prose(let text):
           Section { Text(text).textSelection(.enabled) }
@@ -185,7 +185,7 @@
               Button(
                 String(localized: "Show in File", bundle: .module), systemImage: "arrow.up.forward"
               ) { reveal(range) }
-              .disabled(!model.canReveal(range))
+              .disabled(!state.canReveal(range))
             } else if ranges.count > 1 {
               Menu(
                 String(localized: "Show in File", bundle: .module), systemImage: "arrow.up.forward"
@@ -194,7 +194,7 @@
                   Button(String(localized: "Match \(index + 1)", bundle: .module)) {
                     reveal(range)
                   }
-                  .disabled(!model.canReveal(range))
+                  .disabled(!state.canReveal(range))
                 }
               }
             }
@@ -204,71 +204,71 @@
     }
 
     @ViewBuilder
-    private func changes(_ review: Review) -> some View {
-      if review.omittedCount > 0 {
+    private func changes(_ proposal: Proposal) -> some View {
+      if proposal.omittedCount > 0 {
         Section {
           Label(
             String(
               localized:
-                "\(review.omittedCount) changes couldn't be found in your file and won't be applied.",
+                "\(proposal.omittedCount) changes couldn't be found in your file and won't be applied.",
               bundle: .module),
             systemImage: "exclamationmark.circle")
         }
       }
-      if review.comments.isEmpty, model.appliedCount == 0 {
+      if proposal.changes.isEmpty, state.appliedCount == 0 {
         Section {
           Text(
-            model.action == .edit
+            state.action == .edit
               ? String(localized: "No edits needed.", bundle: .module)
               : String(localized: "No comments.", bundle: .module)
           )
           .foregroundStyle(.secondary)
         }
       }
-      ForEach(Array(review.comments.enumerated()), id: \.element.id) { index, comment in
+      ForEach(Array(proposal.changes.enumerated()), id: \.element.id) { index, change in
         Section {
-          change(comment)
+          self.change(change)
         } header: {
-          if index == 0, model.action == .review {
+          if index == 0, state.action == .review {
             Text(
-              review.comments.count == 1
+              proposal.changes.count == 1
                 ? String(localized: "1 comment", bundle: .module)
-                : String(localized: "\(review.comments.count) comments", bundle: .module))
+                : String(localized: "\(proposal.changes.count) comments", bundle: .module))
           }
         }
       }
-      if model.action == .edit, model.appliedEdit == nil, review.canApply {
+      if state.action == .edit, state.appliedEdit == nil, proposal.canApply {
         Section {
           Button(String(localized: "Apply Edit", bundle: .module), systemImage: "checkmark") {
-            model.apply()
+            state.apply()
           }
-          .disabled(!model.canApply)
+          .disabled(!state.canApply)
           .accessibilityIdentifier("intelligence-apply")
         }
       }
     }
 
     @ViewBuilder
-    private func change(_ comment: Review.Comment) -> some View {
-      let comparison = comment.replacement.map { TextDiff(before: comment.quote, after: $0) }
+    private func change(_ change: Proposal.Change) -> some View {
+      let comparison = change.replacement.map { TextDiff(before: change.quote, after: $0) }
       // A rewrite's Before and After say what changes, so only task changes carry a headline.
-      if !comment.reason.isEmpty { Text(comment.reason).font(.headline) }
+      if !change.reason.isEmpty { Text(change.reason).font(.headline) }
       VStack(alignment: .leading, spacing: 6) {
         Text(
-          comment.range == nil
+          change.range == nil
             ? String(localized: "Unverified Quote", bundle: .module)
             : String(localized: "Before", bundle: .module)
         )
         .font(.caption).fontWeight(.semibold)
-        if comment.quote.isEmpty {
+        if change.quote.isEmpty {
           Text("Empty file", bundle: .module).foregroundStyle(.secondary)
         } else if let comparison {
           Text(DiffText.attributed(comparison.before)).textSelection(.enabled)
         } else {
-          Text(comment.quote).textSelection(.enabled)
+          Text(change.quote).textSelection(.enabled)
         }
       }
-      if let replacement = comment.replacement, let comparison {
+      if let replacement = change.replacement, let comparison {
         VStack(alignment: .leading, spacing: 6) {
           Text("After", bundle: .module).font(.caption).fontWeight(.semibold)
           if replacement.isEmpty {
@@ -278,26 +278,26 @@
           }
         }
       }
-      if comment.range == nil {
+      if change.range == nil {
         Label(String(localized: "Can't Apply", bundle: .module), systemImage: "exclamationmark.circle")
           .foregroundStyle(.secondary)
       }
-      if model.action == .review {
-        if comment.canApply {
+      if state.action == .review {
+        if change.canApply {
           Button(String(localized: "Apply", bundle: .module)) {
-            model.apply(commentID: comment.id)
+            state.apply(changeID: change.id)
           }
-          .disabled(!model.canApply)
+          .disabled(!state.canApply)
         }
         Button(String(localized: "Dismiss", bundle: .module)) {
-          model.dismiss(commentID: comment.id)
+          state.dismiss(changeID: change.id)
         }
-        .disabled(model.isRunning)
+        .disabled(state.isRunning)
       }
     }
 
     private func reveal(_ range: NSRange) {
-      guard model.canReveal(range) else { return }
+      guard state.canReveal(range) else { return }
       revealSource(range)
       dismiss()
     }

@@ -9,7 +9,7 @@
   @Suite(.serialized)
   @MainActor
   struct SheetTests {
-    private let source = FixtureModel.source
+    private let source = FixtureLanguageModel.source
 
     @Test func nothingChangesUntilApplyAndApplyIsOneUndo() async throws {
       let editor = Editor(fileID: "apply-undo", text: source)
@@ -24,13 +24,13 @@
       let typed = source + "!"
       var changes = 0
       editor.onEdit = { _, _ in changes += 1 }
-      let model = IntelligenceState(editor: editor, backend: FixtureModel())
-      model.action = .edit
-      model.editPrompt = "Fix the typo and the time"
-      await model.checkAvailability()
-      model.generate()
-      await model.task?.value
-      #expect(model.canApply)
+      let state = IntelligenceState(editor: editor, backend: FixtureLanguageModel())
+      state.action = .edit
+      state.editPrompt = "Fix the typo and the time"
+      await state.checkAvailability()
+      state.generate()
+      await state.task?.value
+      #expect(state.canApply)
       #expect(changes == 0)
       #expect(editor.text == typed)
 
@@ -39,10 +39,10 @@
       #expect(field.becomeFirstResponder())
       let selection = editor.textView.selectedRange
       let generation = editor.generation
-      model.apply()
+      state.apply()
       let edited = typed.replacingOccurrences(of: "teh", with: "the")
         .replacingOccurrences(of: "before the cafe", with: "after the cafe")
-      #expect(model.errorMessage == nil)
+      #expect(state.errorMessage == nil)
       #expect(editor.text == edited)
       #expect(editor.generation == generation + 1)
       #expect(changes == 1)
@@ -78,22 +78,22 @@
       let editor = Editor(fileID: "failed-ask", text: source)
       var changes = 0
       editor.onEdit = { _, _ in changes += 1 }
-      let fixture = FixtureModel()
+      let fixture = FixtureLanguageModel()
       switch failure {
       case .unavailable: fixture.unavailableReason = "Apple Intelligence is turned off."
       case .error(let error): fixture.failure = error
       case .answer(let answer): fixture.answer = answer
       }
-      let model = IntelligenceState(editor: editor, backend: fixture)
-      model.askPrompt = "When do I leave?"
-      await model.checkAvailability()
-      model.generate()
-      await model.task?.value
-      let reason = model.errorMessage ?? model.availabilityReason ?? ""
+      let state = IntelligenceState(editor: editor, backend: fixture)
+      state.askPrompt = "When do I leave?"
+      await state.checkAvailability()
+      state.generate()
+      await state.task?.value
+      let reason = state.errorMessage ?? state.availabilityReason ?? ""
       #expect(!reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-      #expect(!model.isRunning)
-      #expect(model.answerParts.isEmpty)
-      #expect(model.askPrompt == "When do I leave?")
+      #expect(!state.isRunning)
+      #expect(state.answerParts.isEmpty)
+      #expect(state.askPrompt == "When do I leave?")
       #expect(editor.text == source)
       #expect(editor.generation == 0)
       #expect(changes == 0)
@@ -101,25 +101,25 @@
 
     @Test func cancelKeepsTheRequestAndTheFile() async {
       let editor = Editor(fileID: "cancel", text: source)
-      let fixture = FixtureModel()
+      let fixture = FixtureLanguageModel()
       fixture.delay = .seconds(5)
-      let model = IntelligenceState(editor: editor, backend: fixture)
-      model.askPrompt = "When do I leave?"
-      await model.checkAvailability()
-      model.generate()
+      let state = IntelligenceState(editor: editor, backend: fixture)
+      state.askPrompt = "When do I leave?"
+      await state.checkAvailability()
+      state.generate()
       var spins = 0
       while fixture.passes.isEmpty, spins < 1_000 {
         spins += 1
         await Task.yield()
       }
-      #expect(model.isRunning)
-      model.cancel()
-      await model.task?.value
-      #expect(!model.isRunning)
-      #expect(model.answerParts.isEmpty)
-      #expect(model.notice != nil)
-      #expect(model.errorMessage == nil)
-      #expect(model.askPrompt == "When do I leave?")
+      #expect(state.isRunning)
+      state.cancel()
+      await state.task?.value
+      #expect(!state.isRunning)
+      #expect(state.answerParts.isEmpty)
+      #expect(state.notice != nil)
+      #expect(state.errorMessage == nil)
+      #expect(state.askPrompt == "When do I leave?")
       #expect(editor.text == source)
       #expect(editor.generation == 0)
     }
@@ -127,20 +127,20 @@
     @Test func aReadOnlyFileAllowsAskAndReviewButNotEditOrApply() async {
       let editor = Editor(fileID: "read-only", text: source)
       editor.textView.isEditable = false
-      let model = IntelligenceState(editor: editor, backend: FixtureModel())
-      await model.checkAvailability()
-      model.askPrompt = "When do I leave?"
-      #expect(model.canGenerate)
-      model.action = .edit
-      model.editPrompt = "Fix the typo"
-      #expect(!model.canGenerate)
-      model.action = .review
-      #expect(model.canGenerate)
-      model.generate()
-      await model.task?.value
-      #expect(model.review?.comments.count == 2)
-      #expect(!model.canApply)
-      model.apply()
+      let state = IntelligenceState(editor: editor, backend: FixtureLanguageModel())
+      await state.checkAvailability()
+      state.askPrompt = "When do I leave?"
+      #expect(state.canGenerate)
+      state.action = .edit
+      state.editPrompt = "Fix the typo"
+      #expect(!state.canGenerate)
+      state.action = .review
+      #expect(state.canGenerate)
+      state.generate()
+      await state.task?.value
+      #expect(state.proposal?.changes.count == 2)
+      #expect(!state.canApply)
+      state.apply()
       #expect(editor.text == source)
       #expect(editor.generation == 0)
     }
@@ -151,24 +151,24 @@
       let text = prefix + "# Content\n\nA retained thought about e\u{301} 👩🏽‍💻."
       let editor = Editor(
         fileID: "front-matter", text: text, generation: 8, showsFrontMatter: shown)
-      let fixture = FixtureModel()
+      let fixture = FixtureLanguageModel()
       fixture.answer = ModelAnswer(
         prose: "You retained this thought.", quotes: ["e\u{301} 👩🏽‍💻"])
-      let model = IntelligenceState(editor: editor, backend: fixture)
-      model.askPrompt = "What thought did I retain?"
-      await model.checkAvailability()
-      model.generate()
-      await model.task?.value
-      guard case .quotation(_, let ranges) = try #require(model.answerParts.last) else {
+      let state = IntelligenceState(editor: editor, backend: fixture)
+      state.askPrompt = "What thought did I retain?"
+      await state.checkAvailability()
+      state.generate()
+      await state.task?.value
+      guard case .quotation(_, let ranges) = try #require(state.answerParts.last) else {
         Issue.record("Expected a verified quotation")
         return
       }
       let reference = try #require(ranges.first)
       #expect(ranges.count == 1)
       #expect(reference.location >= prefix.utf16.count)
-      #expect(model.canReveal(reference))
+      #expect(state.canReveal(reference))
       editor.setShowsFrontMatter(!shown)
-      #expect(model.canReveal(reference))
+      #expect(state.canReveal(reference))
       editor.setShowsFrontMatter(shown)
       #expect(editor.text.utf8.elementsEqual(text.utf8))
       #expect(editor.generation == 8)

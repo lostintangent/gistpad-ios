@@ -26,19 +26,19 @@ struct AnswerIssueTests {
   func theGateRejectsInventedQuotesThirdPersonMarkupAndMetadata(
     prose: String, issue: AnswerIssue
   ) async {
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.answer = ModelAnswer(prose: prose)
     await #expect(throws: IntelligenceError.invalidAnswer(issue)) {
-      try await Intelligence(backend: fixture).ask(
+      try await IntelligenceEngine(backend: fixture).ask(
         request(source, "What do I like?"))
     }
   }
 
   @Test func aRunawayStopsAtTheResponseLimitAndIsRetriedOnce() async {
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.failure = IntelligenceError.responseTooLarge
     await #expect(throws: IntelligenceError.responseTooLarge) {
-      try await Intelligence(backend: fixture).ask(
+      try await IntelligenceEngine(backend: fixture).ask(
         request(source, "What do I like?"))
     }
     #expect(fixture.passes.map(\.purpose) == [.answer, .answer])

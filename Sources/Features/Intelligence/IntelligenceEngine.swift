@@ -5,7 +5,7 @@ import OSLog
 let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 
 @MainActor
-package final class Intelligence {
+package final class IntelligenceEngine {
   let backend: any IntelligenceModel
   private let framingReserve = 96
   /// Real answers use under 120 tokens. A runaway repeats itself until this limit stops it.
@@ -18,7 +18,7 @@ package final class Intelligence {
   package func edit(
     _ request: IntelligenceRequest,
     progress: @MainActor (IntelligenceProgress) -> Void = { _ in }
-  ) async throws -> Review {
+  ) async throws -> Proposal {
     try validate(request)
     return try await generate(request, purpose: .edit, progress: progress)
   }
@@ -26,7 +26,7 @@ package final class Intelligence {
   package func review(
     _ request: IntelligenceRequest,
     progress: @MainActor (IntelligenceProgress) -> Void = { _ in }
-  ) async throws -> Review {
+  ) async throws -> Proposal {
     try await generate(request, purpose: .review, progress: progress)
   }
 
@@ -34,7 +34,7 @@ package final class Intelligence {
   private func generate(
     _ request: IntelligenceRequest, purpose: ModelPass.Purpose,
     progress: @MainActor (IntelligenceProgress) -> Void
-  ) async throws -> Review {
+  ) async throws -> Proposal {
     try Task.checkCancellation()
     let model = try await backend.modelInfo()
     let chunks =
@@ -178,13 +178,13 @@ package final class Intelligence {
         pending.append(contentsOf: smaller.reversed())
       }
     }
-    let review = Review(
+    let proposal = Proposal(
       snapshot: request.snapshot, scopedCandidates: candidates,
       safetyInstruction: request.instruction)
-    if review.canApply {
-      _ = try review.application(to: request.snapshot)
+    if proposal.canApply {
+      _ = try proposal.application(to: request.snapshot)
     }
-    return review
+    return proposal
   }
 
   package func ask(

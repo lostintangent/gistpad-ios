@@ -7,14 +7,14 @@ import Testing
 struct EditTests {
   @Test func aChangeAppliesOnlyWhereItsTextMatchesExactlyOnce() throws {
     let literal = note("same same cafe\u{301}")
-    let rejected = Review(
+    let rejected = Proposal(
       snapshot: literal,
       candidates: [change("same", "different"), change("absent", "present"), change("café", "x")])
     #expect(rejected.omittedCount == 3)
     #expect(!rejected.canApply)
 
     let repeated = note("left same\nright same")
-    let disambiguated = Review(
+    let disambiguated = Proposal(
       snapshot: repeated,
       candidates: [
         ModelReplacement(
@@ -23,16 +23,16 @@ struct EditTests {
     #expect(try disambiguated.application(to: repeated).source == "left same\nright different")
 
     let overlap = note("abcdef safe")
-    let overlapping = Review(
+    let overlapping = Proposal(
       snapshot: overlap,
       candidates: [change("abcd", "one"), change("cdef", "two"), change("safe", "kept")])
-    #expect(overlapping.comments.prefix(2).allSatisfy { $0.range == nil })
+    #expect(overlapping.changes.prefix(2).allSatisfy { $0.range == nil })
     #expect(try overlapping.application(to: overlap).source == "abcdef kept")
   }
 
   @Test func applyingKeepsEveryOtherByte() async throws {
     let mixed = note("👩🏽‍💻 bad\r\nSecond line\r\n")
-    let application = try Review(
+    let application = try Proposal(
       snapshot: mixed, candidates: [change("bad", "good"), change("Second line\r\n", "")]
     ).application(to: mixed)
     #expect(application.source == "👩🏽‍💻 good\r\n")
@@ -42,47 +42,47 @@ struct EditTests {
 
     let empty = note("")
     #expect(
-      try Review(snapshot: empty, candidates: [change("", "A new paragraph")])
+      try Proposal(snapshot: empty, candidates: [change("", "A new paragraph")])
         .application(to: empty).source == "A new paragraph")
     #expect(
-      !Review(snapshot: empty, candidates: [change("", "First"), change("", "Second")])
+      !Proposal(snapshot: empty, candidates: [change("", "First"), change("", "Second")])
         .canApply)
 
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.changes = { _ in [.insertTask(listID: 1, text: "Next")] }
     let unterminated = request("# Today\n\n- [ ] First", "Add Next")
     #expect(
-      try await Intelligence(backend: fixture).edit(unterminated)
+      try await IntelligenceEngine(backend: fixture).edit(unterminated)
         .application(to: unterminated.snapshot).source == "# Today\n\n- [ ] First\n- [ ] Next")
     fixture.changes = { _ in [.insertTask(listID: 0, text: "First")] }
     let blank = request("", "Add First")
     #expect(
-      try await Intelligence(backend: fixture).edit(blank)
+      try await IntelligenceEngine(backend: fixture).edit(blank)
         .application(to: blank.snapshot).source == "- [ ] First\n")
   }
 
   @Test func aChangedFileRefusesTheApply() throws {
     let snapshot = note("cafe\u{301}")
-    let review = Review(snapshot: snapshot, candidates: [change(snapshot.source, "coffee")])
+    let proposal = Proposal(snapshot: snapshot, candidates: [change(snapshot.source, "coffee")])
     for changed in [
       snapshot.edited(to: snapshot.source),
       FileSnapshot(sessionID: UUID(), generation: 0, source: snapshot.source),
       FileSnapshot(sessionID: snapshot.sessionID, generation: 0, source: "café"),
     ] {
-      #expect(throws: IntelligenceError.self) { try review.application(to: changed) }
+      #expect(throws: IntelligenceError.self) { try proposal.application(to: changed) }
     }
   }
 
   @Test func aLongFileIsCoveredEndToEndWithoutSplittingATask() async throws {
     let prose = String(repeating: "# Section\nbad 👩🏽‍💻\r\n", count: 180)
-    let editor = FixtureModel()
+    let editor = FixtureLanguageModel()
     editor.contextSize = 1_536
     editor.nextFailure = IntelligenceError.insufficientContext
     editor.changes = { pass in
       [.replace(change(pass.source, pass.source.replacingOccurrences(of: "bad", with: "good")))]
     }
     let fix = request(prose, "Fix bad")
-    let fixed = try await Intelligence(backend: editor).edit(fix)
+    let fixed = try await IntelligenceEngine(backend: editor).edit(fix)
     #expect(editor.passes.count > 1)
     #expect(editor.passes.first?.source.utf8.elementsEqual(prose.utf8) == true)
     #expect(editor.passes.dropFirst().map(\.source).joined().utf8.elementsEqual(prose.utf8))
@@ -91,12 +91,12 @@ struct EditTests {
         == prose.replacingOccurrences(of: "bad", with: "good"))
 
     let list = (1...80).map { "- [ ] Task \($0) 👩🏽‍💻\r\n" }.joined()
-    let checker = FixtureModel()
+    let checker = FixtureLanguageModel()
     checker.contextSize = 512
     checker.nextFailure = IntelligenceError.insufficientContext
     checker.changes = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
     let all = request(list, "Check off everything")
-    let checked = try await Intelligence(backend: checker).edit(all)
+    let checked = try await IntelligenceEngine(backend: checker).edit(all)
     #expect(checker.passes.count > 1)
     #expect(checker.passes.dropFirst().flatMap(\.tasks).map(\.id) == Array(1...80))
     #expect(
@@ -134,7 +134,7 @@ struct EditTests {
       - [ ] Patch the wall
       """
     let snapshot = note(source)
-    let moved = Review(
+    let moved = Proposal(
       snapshot: snapshot,
       scopedCandidates: [
         (change("- [ ] Paint the window trim\n", ""), NSRange(location: 0, length: source.utf16.count)),
@@ -154,21 +154,21 @@ struct EditTests {
       [change("- [ ] Replace the trap", "- [ ] Replace the trap\n- [ ] Paint the window trim"),
         change("- [ ] Paint the window trim\n", "")],
     ] {
-      let review = Review(
+      let proposal = Proposal(
         snapshot: note(source),
         scopedCandidates: edits.map {
           ($0, NSRange(location: 0, length: source.utf16.count))
         },
         safetyInstruction: "move Paint the window trim from Kitchen to Entry")
       #expect(throws: IntelligenceError.invalidEdit) {
-        try review.application(to: review.snapshot)
+        try proposal.application(to: proposal.snapshot)
       }
     }
   }
 
   @Test func movingADateDoesNotRequireAListItem() throws {
     let snapshot = note("## Next check\n\nThe offline-pipe retest is scheduled for November 6.\n")
-    let review = Review(
+    let proposal = Proposal(
       snapshot: snapshot,
       scopedCandidates: [
         (change("November 6", "November 9"),
@@ -176,7 +176,7 @@ struct EditTests {
       ],
       safetyInstruction: "move the offline-pipe retest from November 6 to November 9")
     #expect(
-      try review.application(to: snapshot).source
+      try proposal.application(to: snapshot).source
         == "## Next check\n\nThe offline-pipe retest is scheduled for November 9.\n")
   }
 
@@ -188,12 +188,12 @@ struct EditTests {
       + "\n\nLeave this paragraph untouched.\n\n## Next\n\nKeep this section.\n"
     let source = original.replacingOccurrences(of: "\n", with: newline)
     let instruction = "delete the paragraph about early prototypes"
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     let deletion = try #require(OnDeviceModel.anchoredParagraphDeletion(
       in: source, instruction: instruction))
     fixture.changes = { _ in [deletion] }
     let input = request(source, instruction)
-    let result = try await Intelligence(backend: fixture).edit(input)
+    let result = try await IntelligenceEngine(backend: fixture).edit(input)
       .application(to: input.snapshot).source
     let expected = "# Draft\n\nLeave this paragraph untouched.\n\n## Next\n\nKeep this section.\n"
       .replacingOccurrences(of: "\n", with: newline)
@@ -238,10 +238,10 @@ struct EditTests {
       let insertion = try #require(OnDeviceModel.relocatedInsertion(
         from: candidates, for: anchor, instruction: instruction, section: source))
       let snapshot = note(source)
-      let review = Review(
+      let proposal = Proposal(
         snapshot: snapshot, scopedCandidates: [(insertion, anchor.range)])
       #expect(
-        try review.application(to: snapshot).source
+        try proposal.application(to: snapshot).source
           == expected.replacingOccurrences(of: "\n", with: newline))
       #expect(Revision.insertedText(in: change("Keep", "Kept\n\nNew")) == nil)
     }
@@ -304,9 +304,9 @@ struct EditTests {
           }
         }
         let snapshot = note(source)
-        let review = Review(
+        let proposal = Proposal(
           snapshot: snapshot, scopedCandidates: candidates, safetyInstruction: instruction)
-        #expect(try review.application(to: snapshot).source == expected)
+        #expect(try proposal.application(to: snapshot).source == expected)
       }
     }
   }
@@ -355,7 +355,7 @@ struct EditTests {
     let prefix = "---\r\nsecret: 👩🏽‍💻\r\n---\r\n"
     let body = "# Reading\r\n\r\n- Paper Observatory\r\n- River Engine\r\n\r\n## Notes\r\n\r\nKeep this.\r\n"
     let input = request(prefix + body, "Move Paper Observatory after River Engine")
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.changes = { pass in
       let blocks = EditBlock.indexed(in: pass.source)
       let source = blocks.first { $0.text == "- Paper Observatory" }!
@@ -368,12 +368,12 @@ struct EditTests {
         .rewriteRegion(destination.range, revised: "- River Engine\n- Paper Observatory"),
       ]
     }
-    let review = try await Intelligence(backend: fixture).edit(input)
+    let proposal = try await IntelligenceEngine(backend: fixture).edit(input)
     #expect(fixture.passes.map(\.source) == [body])
-    #expect(review.comments.count == 2)
-    #expect(review.omittedCount == 0)
+    #expect(proposal.changes.count == 2)
+    #expect(proposal.omittedCount == 0)
     #expect(
-      try review.application(to: input.snapshot).source
+      try proposal.application(to: input.snapshot).source
         == prefix + "# Reading\r\n\r\n- River Engine\r\n- Paper Observatory\r\n\r\n## Notes\r\n\r\nKeep this.\r\n")
 
     fixture.changes = { pass in
@@ -383,7 +383,7 @@ struct EditTests {
           heading.range, revised: "## Notes\n\nA new introduction for the section.")
       ]
     }
-    let inserted = try await Intelligence(backend: fixture).edit(input)
+    let inserted = try await IntelligenceEngine(backend: fixture).edit(input)
     #expect(
       try inserted.application(to: input.snapshot).source
         == prefix + body.replacingOccurrences(
@@ -393,21 +393,21 @@ struct EditTests {
   @Test func aScopedHunkKeepsRepeatedTextOutsideTheSelectedBlock() async throws {
     let input = request("# First\n\nKeep this.\n\n# Second\n\nKeep this.\n", "Change the second note")
     let target = (input.snapshot.source as NSString).range(of: "Keep this.", options: .backwards)
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.changes = { _ in
       [.replaceRegion(target, change("Keep this.", "Change this."))]
     }
-    let review = try await Intelligence(backend: fixture).edit(input)
-    #expect(review.omittedCount == 0)
+    let proposal = try await IntelligenceEngine(backend: fixture).edit(input)
+    #expect(proposal.omittedCount == 0)
     #expect(
-      try review.application(to: input.snapshot).source
+      try proposal.application(to: input.snapshot).source
         == "# First\n\nKeep this.\n\n# Second\n\nChange this.\n")
 
     fixture.changes = { _ in
       [.replaceRegion(target, change("Other text.", "Change this."))]
     }
     await #expect(throws: IntelligenceError.invalidResponse) {
-      try await Intelligence(backend: fixture).edit(input)
+      try await IntelligenceEngine(backend: fixture).edit(input)
     }
   }
 
@@ -419,8 +419,8 @@ struct EditTests {
         "- [ ] Recycle", "", "Keep  spacing.", ""].joined(separator: newline)
     let input = request(source, "Add a household task")
     #expect(input.snapshot.tasks.map(\.listID) == [1, 2, 2])
-    let fixture = FixtureModel()
-    let engine = Intelligence(backend: fixture)
+    let fixture = FixtureLanguageModel()
+    let engine = IntelligenceEngine(backend: fixture)
     fixture.changes = { _ in [.insertTask(listID: 2, text: "Clean the kitchen")] }
     let recycle = "- [ ] Recycle" + newline
     #expect(
@@ -445,21 +445,21 @@ struct EditTests {
   @Test func taskEditsDoNotShowTheModelFrontMatter() async throws {
     let prefix = "---\r\nexample: '- [ ] hidden'\r\n---\r\n\r\n"
     let body = "# Today\r\n\r\n- [ ] Visible 👩🏽‍💻\r\n"
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.changes = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
     let input = request(prefix + body, "Mark every task complete")
-    let review = try await Intelligence(backend: fixture).edit(input)
+    let proposal = try await IntelligenceEngine(backend: fixture).edit(input)
     #expect(input.snapshot.tasks.count == 1)
     #expect(fixture.passes.map(\.source) == [body])
     #expect(fixture.passes.flatMap(\.tasks).map(\.text) == ["- [ ] Visible 👩🏽‍💻"])
     #expect(
-      try review.application(to: input.snapshot).source
+      try proposal.application(to: input.snapshot).source
         == prefix + "# Today\r\n\r\n- [x] Visible 👩🏽‍💻\r\n")
   }
 
   @Test func editChecksUnchecksAndCompletesTheRightTasks() async throws {
-    let fixture = FixtureModel()
-    let engine = Intelligence(backend: fixture)
+    let fixture = FixtureLanguageModel()
+    let engine = IntelligenceEngine(backend: fixture)
     fixture.changes = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
     let daily = request("## 📆 2026-10-24\n\n- [ ]", "mark everything complete")
     #expect(
@@ -548,10 +548,10 @@ struct EditTests {
   func aRevisedNoteChangesOnlyItsChangedLines(newline: String) async throws {
     func revised(_ text: String, _ revision: String) async throws -> String {
       let source = text.replacingOccurrences(of: "\n", with: newline)
-      let fixture = FixtureModel()
+      let fixture = FixtureLanguageModel()
       fixture.changes = rewrite(revision)
       let input = request(source, "Edit")
-      return try await Intelligence(backend: fixture).edit(input)
+      return try await IntelligenceEngine(backend: fixture).edit(input)
         .application(to: input.snapshot).source.replacingOccurrences(of: newline, with: "\n")
     }
     let daily = "---\ntags: [daily]\n---\n# Today\n\n- [ ] Coffee\n- [ ] Walk\n\nNotes\n"
@@ -601,37 +601,37 @@ struct EditTests {
 
   @Test func aRevisionLetsItsDiffSpeakAndNeverSeesFrontMatter() async throws {
     func reasons(_ source: String, _ revision: String) async throws -> [String] {
-      let fixture = FixtureModel()
+      let fixture = FixtureLanguageModel()
       fixture.changes = rewrite(revision)
-      return try await Intelligence(backend: fixture).edit(request(source, "Edit"))
-        .comments.map(\.reason)
+      return try await IntelligenceEngine(backend: fixture).edit(request(source, "Edit"))
+        .changes.map(\.reason)
     }
     #expect(try await reasons("A\n\nB\n\nC\n\nD", "A2\n\nB\n\nC\n\nD2") == ["", ""])
     #expect(try await reasons("A", "A\n\nB") == [""])
     #expect(try await reasons("A\n\nB\n\nC", "A\n\nC") == [""])
 
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.changes = rewrite("# Today")
     let dated = request("---\ndate: 2025-01-01\n---\n# Note\n", "Rename it Today")
-    let review = try await Intelligence(backend: fixture).edit(dated)
+    let proposal = try await IntelligenceEngine(backend: fixture).edit(dated)
     #expect(fixture.passes.map(\.source) == ["# Note\n"])
     #expect(fixture.passes.map(\.isPart) == [false])
     #expect(
-      try review.application(to: dated.snapshot).source == "---\ndate: 2025-01-01\n---\n# Today\n")
+      try proposal.application(to: dated.snapshot).source == "---\ndate: 2025-01-01\n---\n# Today\n")
 
     // A rewrite too long for one reply isn't retried in parts.
-    let failing = FixtureModel()
+    let failing = FixtureLanguageModel()
     failing.failure = IntelligenceError.responseTooLarge
     await #expect(throws: IntelligenceError.responseTooLarge) {
-      try await Intelligence(backend: failing).edit(request("A\n\nB", "Edit"))
+      try await IntelligenceEngine(backend: failing).edit(request("A\n\nB", "Edit"))
     }
     #expect(failing.passes.count == 1)
   }
 
   private func edited(_ input: IntelligenceRequest, _ edits: [ModelEdit]) async throws -> String {
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.changes = { _ in edits }
-    return try await Intelligence(backend: fixture).edit(input).application(to: input.snapshot)
+    return try await IntelligenceEngine(backend: fixture).edit(input).application(to: input.snapshot)
       .source
   }
 }

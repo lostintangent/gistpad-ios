@@ -32,8 +32,8 @@ extension FileSnapshot {
 
     @discardableResult
     func apply(
-      _ review: Review, commentID: UUID? = nil
-    ) throws -> Review {
+      _ proposal: Proposal, changeID: UUID? = nil
+    ) throws -> Proposal {
       guard textView.isEditable else {
         throw IntelligenceError.unavailable(
           String(
@@ -41,13 +41,13 @@ extension FileSnapshot {
             bundle: .module))
       }
       let snapshot = try snapshot()
-      let application = try review.application(to: snapshot, commentID: commentID)
+      let application = try proposal.application(to: snapshot, changeID: changeID)
       let edit = Edit(
         range: NSRange(location: 0, length: snapshot.source.utf16.count),
         expected: snapshot.source, replacement: application.source,
         selection: try application.mappedSelection(textView.selectedRange))
       try apply(edit, generation: snapshot.generation)
-      return try application.remainingReview(on: self.snapshot())
+      return try application.remaining(on: self.snapshot())
     }
   }
 #endif

@@ -19,7 +19,7 @@ func change(_ quote: String, _ replacement: String?) -> ModelReplacement {
   ModelReplacement(quote: quote, replacement: replacement, reason: "Improve")
 }
 
-extension Review {
+extension Proposal {
   init(snapshot: FileSnapshot, candidates: [ModelReplacement]) {
     self.init(
       snapshot: snapshot,

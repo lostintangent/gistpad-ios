@@ -8,13 +8,13 @@ package struct ModelReplacement: Sendable {
   var after = ""
 }
 
-package struct Review: Sendable {
+package struct Proposal: Sendable {
   let snapshot: FileSnapshot
-  let comments: [Comment]
+  let changes: [Change]
   fileprivate let safetyInstruction: String?
 
-  package var omittedCount: Int { comments.filter { $0.range == nil }.count }
-  var canApply: Bool { comments.contains { $0.canApply } }
+  package var omittedCount: Int { changes.filter { $0.range == nil }.count }
+  var canApply: Bool { changes.contains { $0.canApply } }
 
   init(
     snapshot: FileSnapshot, scopedCandidates: [(ModelReplacement, NSRange)],
@@ -30,7 +30,7 @@ package struct Review: Sendable {
         : Anchors.matches(
           candidate.quote, in: snapshot.source, within: scope,
           before: candidate.before, after: candidate.after)
-      return Comment(
+      return Change(
         id: UUID(), quote: candidate.quote, replacement: candidate.replacement,
         reason: candidate.reason, range: matches.count == 1 ? matches[0] : nil)
     }
@@ -51,52 +51,52 @@ package struct Review: Sendable {
       }
     }
     for index in overlapping {
-      let comment = anchored[index]
-      anchored[index] = Comment(
-        id: comment.id, quote: comment.quote, replacement: comment.replacement,
-        reason: comment.reason, range: nil)
+      let change = anchored[index]
+      anchored[index] = Change(
+        id: change.id, quote: change.quote, replacement: change.replacement,
+        reason: change.reason, range: nil)
     }
-    comments = anchored
+    changes = anchored
   }
 
   init(
-    snapshot: FileSnapshot, comments: [Comment], safetyInstruction: String? = nil
+    snapshot: FileSnapshot, changes: [Change], safetyInstruction: String? = nil
   ) {
     self.snapshot = snapshot
-    self.comments = comments
+    self.changes = changes
     self.safetyInstruction = safetyInstruction
   }
 
-  func dismissing(commentID: UUID) throws -> Review {
-    guard comments.contains(where: { $0.id == commentID }) else {
+  func dismissing(changeID: UUID) throws -> Proposal {
+    guard changes.contains(where: { $0.id == changeID }) else {
       throw IntelligenceError.noApplicableChanges
     }
-    return Review(
-      snapshot: snapshot, comments: comments.filter { $0.id != commentID },
+    return Proposal(
+      snapshot: snapshot, changes: changes.filter { $0.id != changeID },
       safetyInstruction: safetyInstruction)
   }
 
   package func application(
-    to current: FileSnapshot, commentID: UUID? = nil
+    to current: FileSnapshot, changeID: UUID? = nil
   ) throws -> Applied {
     guard current == snapshot else { throw IntelligenceError.staleSnapshot }
-    let selected = comments.filter { $0.canApply && (commentID == nil || $0.id == commentID) }
+    let selected = changes.filter { $0.canApply && (changeID == nil || $0.id == changeID) }
     guard !selected.isEmpty else { throw IntelligenceError.noApplicableChanges }
     var source = snapshot.source
-    for comment in selected.sorted(by: { ($0.range?.location ?? 0) > ($1.range?.location ?? 0) }) {
-      guard let range = comment.range, let replacement = comment.replacement,
+    for change in selected.sorted(by: { ($0.range?.location ?? 0) > ($1.range?.location ?? 0) }) {
+      guard let range = change.range, let replacement = change.replacement,
         let swiftRange = Range(range, in: source),
-        source[swiftRange].utf8.elementsEqual(comment.quote.utf8)
+        source[swiftRange].utf8.elementsEqual(change.quote.utf8)
       else { throw IntelligenceError.staleSnapshot }
       source.replaceSubrange(swiftRange, with: replacement)
     }
     try validateApplication(source, changes: selected)
     return Applied(
-      review: self, source: source,
+      proposal: self, source: source,
       applied: selected.sorted { ($0.range?.location ?? 0) < ($1.range?.location ?? 0) })
   }
 
-  private func validateApplication(_ replacement: String, changes: [Comment]) throws {
+  private func validateApplication(_ replacement: String, changes: [Change]) throws {
     let source = snapshot.source
     guard let safetyInstruction, !source.isEmpty else { return }
     if let target = EditBlock.moveTarget(in: safetyInstruction) {
@@ -153,8 +153,8 @@ package struct Review: Sendable {
   }
 }
 
-extension Review {
-  package struct Comment: Identifiable, Sendable {
+extension Proposal {
+  package struct Change: Identifiable, Sendable {
     package let id: UUID
     let quote: String
     let replacement: String?
@@ -168,14 +168,14 @@ extension Review {
   }
 }
 
-extension Review {
+extension Proposal {
   package struct Applied: Sendable {
-    package let review: Review
+    package let proposal: Proposal
     package let source: String
-    package let applied: [Comment]
+    package let applied: [Change]
 
     func mappedSelection(_ selection: NSRange) throws -> NSRange {
-      guard Range(selection, in: review.snapshot.source) != nil else {
+      guard Range(selection, in: proposal.snapshot.source) != nil else {
         throw IntelligenceError.invalidSelection
       }
       let start = mappedOffset(selection.location, trailing: selection.length == 0)
@@ -183,28 +183,28 @@ extension Review {
       return NSRange(location: start, length: max(0, end - start))
     }
 
-    func remainingReview(on snapshot: FileSnapshot) throws -> Review {
-      let original = review.snapshot
+    func remaining(on snapshot: FileSnapshot) throws -> Proposal {
+      let original = proposal.snapshot
       guard snapshot.sessionID == original.sessionID,
         snapshot.generation == original.generation &+ 1,
         snapshot.source.utf8.elementsEqual(source.utf8)
       else { throw IntelligenceError.staleSnapshot }
       let appliedIDs = Set(applied.map(\.id))
-      let remaining = review.comments.filter { !appliedIDs.contains($0.id) }.map { comment in
-        let range = comment.range.map {
+      let remaining = proposal.changes.filter { !appliedIDs.contains($0.id) }.map { change in
+        let range = change.range.map {
           NSRange(location: mappedOffset($0.location, trailing: false), length: $0.length)
         }
         let verified =
           range.flatMap { Range($0, in: source) }.map {
-            source[$0].utf8.elementsEqual(comment.quote.utf8)
+            source[$0].utf8.elementsEqual(change.quote.utf8)
           } ?? false
-        return Comment(
-          id: comment.id, quote: comment.quote, replacement: comment.replacement,
-          reason: comment.reason, range: verified ? range : nil)
+        return Change(
+          id: change.id, quote: change.quote, replacement: change.replacement,
+          reason: change.reason, range: verified ? range : nil)
       }
-      return Review(
-        snapshot: snapshot, comments: remaining,
-        safetyInstruction: review.safetyInstruction)
+      return Proposal(
+        snapshot: snapshot, changes: remaining,
+        safetyInstruction: proposal.safetyInstruction)
     }
 
     private func mappedOffset(_ position: Int, trailing: Bool) -> Int {

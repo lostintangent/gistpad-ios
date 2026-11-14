@@ -67,7 +67,7 @@ enum Evaluator {
         let snapshot = snapshot(item.source)
         let request = IntelligenceRequest(snapshot: snapshot, instruction: item.prompt)
         let backend = RecordingModel()
-        let engine = Intelligence(backend: backend)
+        let engine = IntelligenceEngine(backend: backend)
         var answerSeconds: Double?
         var preparationSeconds: Double?
         var firstVisibleSeconds: Double?
@@ -110,19 +110,19 @@ enum Evaluator {
               }
             }
           } else {
-            let review =
+            let proposal =
               action == .review
               ? try await engine.review(request) : try await engine.edit(request)
             answerSeconds = elapsed()
-            let application = try review.application(to: request.snapshot)
+            let application = try proposal.application(to: request.snapshot)
             proposed = application.source
             if let expected = item.expectedSource {
               passed =
                 application.source.utf8.elementsEqual(expected.utf8)
-                && review.omittedCount == 0
+                && proposal.omittedCount == 0
             } else if let region = item.editedRegion {
               expectationFailure =
-                review.omittedCount > 0
+                proposal.omittedCount > 0
                 ? "omittedChanges" : region.failure(application.source, editing: item.source)
               passed = expectationFailure == nil
               if let written = region.written(in: application.source) {
@@ -185,10 +185,10 @@ enum Evaluator {
   }
 
   private static func addedTaskPasses(
-    application: Review.Applied, original: FileSnapshot, expectedText: String,
+    application: Proposal.Applied, original: FileSnapshot, expectedText: String,
     expectedList: String?
   ) -> Bool {
-    guard application.review.omittedCount == 0, application.applied.count == 1 else {
+    guard application.proposal.omittedCount == 0, application.applied.count == 1 else {
       return false
     }
     let source = application.source as NSString

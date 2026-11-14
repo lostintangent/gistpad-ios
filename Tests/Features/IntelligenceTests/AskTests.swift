@@ -18,22 +18,22 @@ struct AskTests {
     """
 
   @Test func askAnswersFromTheWholeFileShortOrLong() async throws {
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.answer = ModelAnswer(
       prose: "You are reading two series and have two next reads.",
       quotes: ["1. Frieren, volume 8"])
     let short = request(manga, "Summarize my reading list")
-    let answer = try await Intelligence(backend: fixture).ask(short)
+    let answer = try await IntelligenceEngine(backend: fixture).ask(short)
     #expect(answer.count == 2)
     #expect(fixture.passes.map(\.source) == [manga])
     #expect(fixture.passes.map(\.requestID) == [short.id])
 
     let long = String(repeating: "A background paragraph.\n\n", count: 100) + "needle"
-    let reader = FixtureModel()
+    let reader = FixtureLanguageModel()
     reader.contextSize = 1_536
     reader.excerpts = { $0.source.contains("needle") ? ["needle"] : [] }
     reader.answer = ModelAnswer(prose: "", quotes: ["needle"])
-    let found = try await Intelligence(backend: reader).ask(
+    let found = try await IntelligenceEngine(backend: reader).ask(
       request(long, "Find needle"))
     let reads = reader.passes.filter { $0.purpose == .extract }
     #expect(reads.map(\.source).joined().utf8.elementsEqual(long.utf8))
@@ -42,9 +42,9 @@ struct AskTests {
   }
 
   @Test func aCitationCarriesTheExactPassageForShowInFile() async throws {
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.answer = ModelAnswer(prose: "", quotes: ["👩🏽‍💻"])
-    let answer = try await Intelligence(backend: fixture).ask(
+    let answer = try await IntelligenceEngine(backend: fixture).ask(
       request("Hello 👩🏽‍💻\r\n", "Quote the emoji"))
     #expect(
       answer == [.quotation("👩🏽‍💻", ranges: [NSRange(location: 6, length: "👩🏽‍💻".utf16.count)])])
@@ -81,12 +81,12 @@ struct AskTests {
   }
 
   @Test func answerStreamsProseBeforeVerifiedCitations() async throws {
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.partialAnswers = ["Your", "Your note says"]
     fixture.answer = ModelAnswer(
       prose: "Your note says the route is south.", quotes: ["The route is south."])
     var updates: [String] = []
-    let response = try await Intelligence(backend: fixture).ask(
+    let response = try await IntelligenceEngine(backend: fixture).ask(
       request("The route is south.", "Which route?"),
       onPartialAnswer: { updates.append($0) })
     #expect(updates == ["", "Your", "Your note says"])
@@ -99,11 +99,11 @@ struct AskTests {
   }
 
   @Test func anUnverifiedSourceIDGetsOneCleanRetry() async throws {
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.nextFailure = IntelligenceError.unverifiedQuotation
     fixture.answer = ModelAnswer(prose: "The route is south.")
     var updates: [String] = []
-    let answer = try await Intelligence(backend: fixture).ask(
+    let answer = try await IntelligenceEngine(backend: fixture).ask(
       request("The route is south.", "Which route?"),
       onPartialAnswer: { updates.append($0) })
     #expect(fixture.passes.map(\.purpose) == [.answer, .answer])
@@ -114,10 +114,10 @@ struct AskTests {
   @Test func askNeverReadsOrCitesFrontMatter() async throws {
     let prefix = "---\r\nprivate: A hidden fact 👩🏽‍💻\r\n---\r\n\r\n"
     let body = "# Content\r\n\r\nA visible fact 👩🏽‍💻.\r\n"
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.answer = ModelAnswer(prose: "", quotes: ["A visible fact 👩🏽‍💻."])
     let input = request(prefix + body, "What is visible?")
-    let answer = try await Intelligence(backend: fixture).ask(input)
+    let answer = try await IntelligenceEngine(backend: fixture).ask(input)
     #expect(fixture.passes.map(\.source) == [body])
     #expect(
       answer == [
@@ -132,15 +132,15 @@ struct AskTests {
 
     fixture.answer = ModelAnswer(prose: "", quotes: ["A hidden fact 👩🏽‍💻"])
     await #expect(throws: IntelligenceError.unverifiedQuotation) {
-      try await Intelligence(backend: fixture).ask(input)
+      try await IntelligenceEngine(backend: fixture).ask(input)
     }
 
     let longBody = String(repeating: "# Part\nA visible paragraph.\n\n", count: 100) + "needle"
-    let reader = FixtureModel()
+    let reader = FixtureLanguageModel()
     reader.contextSize = 1_536
     reader.excerpts = { $0.source.contains("needle") ? ["needle"] : [] }
     reader.answer = ModelAnswer(prose: "", quotes: ["needle"])
-    _ = try await Intelligence(backend: reader).ask(
+    _ = try await IntelligenceEngine(backend: reader).ask(
       request(prefix + longBody, "Find needle"))
     #expect(
       reader.passes.filter { $0.purpose == .extract }
@@ -149,10 +149,10 @@ struct AskTests {
   }
 
   @Test func withNoEvidenceInTheFileAskSaysWhy() async {
-    let fixture = FixtureModel()
+    let fixture = FixtureLanguageModel()
     fixture.contextSize = 512
     await #expect(throws: IntelligenceError.noEvidence) {
-      try await Intelligence(backend: fixture).ask(
+      try await IntelligenceEngine(backend: fixture).ask(
         request(
           String(repeating: manga + "\n\n", count: 20), "Summarize my reading list"))
     }

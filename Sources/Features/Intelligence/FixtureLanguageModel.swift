@@ -3,7 +3,7 @@
 
   /// A scripted model for tests and capture fixtures. It never calls Apple Intelligence.
   @MainActor
-  final class FixtureModel: IntelligenceModel {
+  final class FixtureLanguageModel: IntelligenceModel {
     static let source =
       "# Saturday walk\n\nTake teh river path.\nLeave at 9am, before the cafe opens at 8am."
 
