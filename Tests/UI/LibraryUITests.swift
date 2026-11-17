@@ -109,8 +109,22 @@ final class LibraryUITests: XCTestCase {
     mixed.scrollIntoView(in: app)
     mixed.swipeLeft()
     try tap(app.buttons["Delete"].firstMatch, "Delete")
-    try confirmDeletion(in: app)
     try waitUntil("mixed to leave the Library") { !mixed.exists }
+  }
+
+  func testEditDeletesGistsFromTheirMinus() throws {
+    let app = launchGistPad()
+    let weekend = app.element("library-note-weekend")
+    try waitUntil("the Library") { weekend.isTappable }
+
+    let library = app.navigationBars["GistPad"]
+    try tap(library.buttons["Edit"], "Edit")
+    let minus = app.cells.containing(.any, identifier: "library-note-weekend").images["minus.circle.fill"].firstMatch
+    try tap(minus, "the red minus")
+    try tap(app.buttons["Delete"].firstMatch, "Delete")
+    try waitUntil("weekend to leave the Library") { !weekend.exists }
+    try tap(library.buttons["Done"], "Done")
+    try waitUntil("Edit") { library.buttons["Edit"].isTappable }
   }
 
   func testDailyNoteRowsOnlyOfferDelete() throws {
@@ -163,7 +177,6 @@ final class LibraryUITests: XCTestCase {
     let id = published.identifier
     published.swipeLeft()
     try tap(app.buttons["Delete"].firstMatch, "Delete")
-    try confirmDeletion(in: app)
     try waitUntil("the new gist to leave the Library") { !app.element(id).exists }
   }
 

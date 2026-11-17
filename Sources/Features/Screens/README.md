@@ -23,8 +23,9 @@ gist stays listed. `GistItem.gistID` is the published gist, nil for a draft or
 recovery copy.
 
 `LibraryActions` carries the row actions. Every owned row can be deleted in any
-state. The Library confirms first, then calls `delete` with the row's ID, and the
-app decides what that removes. The Library owns its search, so it stays in the
+state. A revealed Delete, from a swipe or Edit's minus, calls `delete` with the
+row's ID at once, and the context menu's confirms first. The app decides what
+that removes. The Library owns its search, so it stays in the
 Library column through folds and rotations. Apply
 `.libraryRail(isVisible:today:create:openToday:)` to regular detail content, so
 New and Today sit beside the open gist. Pass the account's `GitHubStatusState`

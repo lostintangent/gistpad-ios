@@ -198,7 +198,7 @@ public struct LibraryView: View {
 
     private func pinnedSection(now: Date) -> some View {
         disclosureSection(isExpanded: $isPinnedExpanded) {
-            ForEach(pinnedGists) { gistRow($0, now: now) }
+            rows(pinnedGists, now: now)
         } header: {
             sectionHeader(
                 Text("Pinned", bundle: .module), symbol: "pin", count: pinnedGists.count,
@@ -308,7 +308,7 @@ public struct LibraryView: View {
     private func librarySection(_ section: LibrarySection, now: Date) -> some View {
         let count = state.count(in: section)
         return disclosureSection(isExpanded: isExpanded(section)) {
-            ForEach(state.matchingGists(in: section)) { gistRow($0, now: now, section: section) }
+            rows(state.matchingGists(in: section), now: now, section: section)
         } header: {
             sectionHeader(
                 Text(verbatim: section.title), symbol: section.symbol, count: count,
@@ -325,12 +325,12 @@ public struct LibraryView: View {
     private func dateSection(_ section: DateSection, now: Date) -> some View {
         if section.group == .undated {
             Section {
-                ForEach(section.gists) { gistRow($0, now: now) }
+                rows(section.gists, now: now)
             }
         } else {
             let title = section.group.title(locale: locale, calendar: calendar)
             disclosureSection(isExpanded: isExpanded(section.group)) {
-                ForEach(section.gists) { gistRow($0, now: now) }
+                rows(section.gists, now: now)
             } header: {
                 sectionHeader(
                     Text(verbatim: title), count: section.gists.count,
@@ -428,8 +428,14 @@ public struct LibraryView: View {
         .listRowBackground(Color.clear)
     }
 
+    /// Gives Edit its red minus, which reveals the row's own Delete.
+    private func rows(_ gists: [GistItem], now: Date, section: LibrarySection = .gists) -> some View {
+        ForEach(gists) { gistRow($0, now: now, section: section) }
+            .onDelete { $0.forEach { actions.delete(gists[$0].id) } }
+    }
+
     private func gistRow(
-        _ gist: GistItem, now: Date, section: LibrarySection = .gists
+        _ gist: GistItem, now: Date, section: LibrarySection
     ) -> some View {
         NavigationLink(value: gist.id) {
             GistRow(
@@ -457,14 +463,13 @@ public struct LibraryView: View {
                 get: { pendingDeletion == gist.id },
                 set: { if !$0 { pendingDeletion = nil } }),
             delete: { actions.delete(gist.id) })
+        // Revealing Delete is its confirmation, so it deletes with no dialog.
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if gist.isOwned {
-                // The confirmation owns the destructive role, not this pending swipe.
-                Button(String(localized: "Delete", bundle: .module), systemImage: "trash") {
-                    pendingDeletion = gist.id
+                Button(String(localized: "Delete", bundle: .module), systemImage: "trash", role: .destructive) {
+                    actions.delete(gist.id)
                 }
                 .labelStyle(.iconOnly)
-                .tint(.red)
             }
             if gist.canPinAndArchive {
                 Button(archived: gist.isArchived) { actions.toggleArchive(gist.id) }
@@ -477,6 +482,7 @@ public struct LibraryView: View {
                     .labelStyle(.iconOnly)
             }
         }
+        .deleteDisabled(!gist.isOwned)
     }
 
     @ViewBuilder
@@ -502,6 +508,7 @@ public struct LibraryView: View {
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
         if !isSignedOut {
+            ToolbarItem(placement: .topBarLeading) { EditButton() }
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             if !isSearchPresented {
                 if status.problem != nil, !explainsProblem {
