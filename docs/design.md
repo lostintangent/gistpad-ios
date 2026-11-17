@@ -44,7 +44,7 @@ Opening a file:
 
 ## Library
 
-The title is the system large title **GistPad**, with the gist count as its subtitle ("12 gists"), collapsing on scroll. Compact width uses `.insetGrouped`, like Notes. The Open sidebar uses `.sidebar` with native neutral selection.
+The title is the system inline title **GistPad**, with the gist count as its subtitle ("12 gists"), with Edit before it. Compact width uses `.insetGrouped`, like Notes. The Open sidebar uses `.sidebar` with native neutral selection.
 
 Sections run **Pinned**, then the date groups (**Today**, **Yesterday**, **Previous 7 Days**, **Previous 30 Days**, month names this year, then years), then **Daily Notes**, **Starred Gists** and **Archived Gists**. Empty sections don't render. Each gist appears once, so a pinned gist lives only in Pinned.
 

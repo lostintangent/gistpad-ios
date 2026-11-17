@@ -113,7 +113,7 @@ public struct LibraryView: View {
         navigationList
             .navigationTitle(navigationTitle)
             .navigationSubtitle(navigationSubtitle)
-            .toolbarTitleDisplayMode(.large)
+            .toolbarTitleDisplayMode(.inline)
             .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 400)
             .refreshable { await actions.refresh() }
             .toolbar { libraryToolbar }
