@@ -8,6 +8,30 @@
   extension HostedEditorTests {
     @MainActor
     struct CommentHighlightTests {
+      @Test func typingKeepsPillsAndMutesANewListMarker() throws {
+        let editor = Editor(text: "A native note\n")
+        let window = host(editor)
+        defer { window.isHidden = true }
+        editor.setCommentHighlights(
+          .init(quotes: [CommentQuote(threadID: 10, quote: "native")]))
+        editor.textView.layoutIfNeeded()
+        #expect(editor.commentHighlights.hasBackgrounds)
+        editor.textView.selectedRange = NSRange(location: editor.text.utf16.count, length: 0)
+        editor.textView.insertText("- ")
+        editor.textView.layoutIfNeeded()
+        let storage = editor.textView.textStorage
+        let marker = (editor.text as NSString).range(of: "-")
+        let ink = try #require(
+          storage.attribute(.foregroundColor, at: marker.location, effectiveRange: nil) as? UIColor)
+        let traits = editor.textView.traitCollection
+        #expect(
+          ink.resolvedColor(with: traits).isEqual(
+            UIColor.secondaryLabel.resolvedColor(with: traits)))
+        #expect(
+          storage.attribute(CommentHighlights.annotationKey, at: 2, effectiveRange: nil) != nil)
+        #expect(editor.commentHighlights.hasBackgrounds)
+      }
+
       @Test func annotationsPreserveExactSourceGenerationSelectionAndNativeUndo() throws {
         let editor = Editor(text: "A native note", generation: 7)
         let window = host(editor)

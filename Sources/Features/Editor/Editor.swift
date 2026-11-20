@@ -26,7 +26,7 @@
     @ObservationIgnored weak var host: TextViewHost?
     @ObservationIgnored var hosts: [TextViewHost.Reference] = []
     @ObservationIgnored public var onEdit: ((String, UInt64) -> Void)?
-    @ObservationIgnored private var highlightTask: Task<Void, Never>?
+    @ObservationIgnored private var isHighlighting = false
     /// A caret placed by a focus request, waiting for the text view to reach a window.
     @ObservationIgnored public private(set) var isFocusPending = false
     @ObservationIgnored lazy var commentHighlights = CommentHighlights(editor: self)
@@ -233,7 +233,7 @@
     public func textViewDidBeginEditing(_ textView: UITextView) {
       isEditing = true
       view.requestEditingCaretReveal()
-      scheduleHighlight()
+      highlight()
     }
 
     public func textViewDidEndEditing(_ textView: UITextView) {
@@ -292,14 +292,12 @@
       isComposing = textView.markedTextRange != nil
       if isComposing { view.cancelEditingCaretReveal() }
       commentHighlights.selectionDidChange()
-      if !isComposing { scheduleHighlight() }
     }
 
     public func textViewWritingToolsWillBegin(_ textView: UITextView) {
       synchronizeText()
       commentHighlights.suspendForWritingTools()
       isWritingToolsActive = true
-      highlightTask?.cancel()
       view.cancelEditingCaretReveal()
     }
 
@@ -370,7 +368,9 @@
     }
 
     func highlight() {
-      guard isSettled else { return }
+      guard isSettled, !isHighlighting else { return }
+      isHighlighting = true
+      defer { isHighlighting = false }
       let anchor = view.beginAttributeUpdate()
       defer { view.endAttributeUpdate(anchor) }
       let storage: NSTextStorage
@@ -484,17 +484,7 @@
         view.requestEditingCaretReveal()
         onEdit?(text, generation)
       }
-      scheduleHighlight()
-    }
-
-    private func scheduleHighlight() {
-      highlightTask?.cancel()
-      guard !isComposing && !isWritingToolsActive else { return }
-      highlightTask = Task { [weak self] in
-        try? await Task.sleep(for: .milliseconds(100))
-        guard !Task.isCancelled else { return }
-        self?.highlight()
-      }
+      highlight()
     }
   }
 

@@ -65,10 +65,9 @@
 
     func paint(in storage: NSTextStorage) {
       passages = []
-      backgroundLayer.sublayers = nil
-      editor.textView.setNeedsLayout()
       originalInk = []
       paintedGeneration = editor.generation
+      editor.textView.setNeedsLayout()
       let highlights = CommentQuoteMatcher.highlights(
         quotes: configuration.quotes, segments: [editor.text]
       ).filter { $0.start >= editor.contentStart }
@@ -76,6 +75,7 @@
       publish(Set(highlights.flatMap(\.threadIDs)))
       updateAccessibility()
       guard !highlights.isEmpty, !suspendsForFind, !suspendsForWritingTools else {
+        backgroundLayer.sublayers = nil
         return
       }
       let traits = editor.textView.traitCollection
@@ -123,6 +123,8 @@
     }
 
     /// Comment fills are the only source ink that follows the personal accent.
+    var hasBackgrounds: Bool { backgroundLayer.sublayers?.isEmpty == false }
+
     func accentDidChange() {
       if !verifiedHighlights.isEmpty { editor.highlight() }
     }
@@ -159,10 +161,10 @@
       CATransaction.begin()
       CATransaction.setDisableActions(true)
       defer { CATransaction.commit() }
+      guard paintedGeneration == editor.generation, editor.isSettled else { return }
       backgroundLayer.sublayers = nil
       guard let manager = editor.textView.textLayoutManager,
-        paintedGeneration == editor.generation, !suspendsForFind, !suspendsForWritingTools,
-        editor.isSettled
+        !suspendsForFind, !suspendsForWritingTools
       else { return }
       let inset = editor.textView.textContainerInset
       var selectedFrames: [CGRect] = []
