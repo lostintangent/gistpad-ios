@@ -109,7 +109,7 @@ A daily note is a file, not a gist, so it leaves out everything that acts on the
 **Keyboard bar.** One floating `UIGlassEffect` capsule above the keyboard:
 
 - **Aa:** Bold, Italic, Body, Heading 1 to 6.
-- **Lists:** Bulleted, Numbered, Checklist, Increase Indent, Decrease Indent.
+- **Lists:** Bulleted, Numbered, Checklist, Increase Indent, Decrease Indent. Swipe right on a list line to indent it and left to outdent it, like Notes. That uses the same indent, and doesn't raise the keyboard or move the caret.
 - **Insert:** Link, Inline Code, Code Block, Quote, Image
 - **Intelligence** and **Hide Keyboard**.
 
@@ -205,7 +205,7 @@ The composer sits in the bottom safe-area bar, like Messages: a growing interact
 
 States: "Loading comments" shows only on a first load with nothing cached. Reopening Comments shows the loaded thread straight away and refreshes quietly, and pull to refresh uses the system spinner. Failures say "Comments couldn't be loaded" or "Couldn't reach GitHub. Check your connection and try again." with Try Again. An empty conversation is just the composer, with no message.
 
-In the gist, a commented passage gets a 50% accent highlight and no underline. Selected text offers **Add Comment** in the edit menu. Tapping a highlight, or **View Comment**, opens its thread.
+In the gist, a commented passage gets a 50% accent highlight and no underline. The highlight stays put while you type. Selected text offers **Add Comment** in the edit menu. Tapping a highlight, or **View Comment**, opens its thread.
 
 ## Widgets and shortcuts
 
