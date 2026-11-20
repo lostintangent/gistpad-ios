@@ -211,6 +211,53 @@ struct PreviewWebKitTests {
         })
     }
 
+    @Test("A terminated web process renders the same document again")
+    func aTerminatedWebProcessRendersAgain() async throws {
+        let (webView, window) = try await hostedPreview(markdown: "# Still here\n\nKeep this paragraph.")
+        defer { tearDown(window) }
+        #expect(try await heading(in: webView) == "Still here")
+        try killWebContent(of: webView)
+        try await waitFor("the preview to render again after the web process died") {
+            (try? await heading(in: webView)) == "Still here"
+        }
+    }
+
+    private func hostedPreview(markdown: String) async throws -> (WKWebView, UIWindow) {
+        let controller = UIHostingController(
+            rootView: MarkdownPreviewView(markdown: markdown, fileID: "blank-probe", generation: 1) { _ in }
+        )
+        let window = testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        try await waitFor("hosted preview to render") {
+            guard let webView = findWebView(in: controller.view) else { return false }
+            return (try? await heading(in: webView)) == "Still here"
+        }
+        return (try #require(findWebView(in: controller.view)), window)
+    }
+
+    private func tearDown(_ window: UIWindow) {
+        window.isHidden = true
+        window.rootViewController = nil
+    }
+
+    private func heading(in webView: WKWebView) async throws -> String? {
+        try await webView.callAsyncJavaScript(
+            "return document.querySelector('h1')?.textContent ?? null;",
+            arguments: [:], in: nil, contentWorld: .page) as? String
+    }
+
+    private func killWebContent(of webView: WKWebView) throws {
+        let selector = NSSelectorFromString("_webProcessIdentifier")
+        guard webView.responds(to: selector), let method = webView.method(for: selector) else {
+            throw PreviewFailure("WKWebView does not expose a web process identifier.")
+        }
+        typealias Identifier = @convention(c) (AnyObject, Selector) -> Int32
+        let pid = unsafeBitCast(method, to: Identifier.self)(webView, selector)
+        guard pid > 1 else { throw PreviewFailure("The preview has no web process.") }
+        #expect(kill(pid, SIGKILL) == 0)
+    }
+
     private func findWebView(in view: UIView) -> WKWebView? {
         if let webView = view as? WKWebView { return webView }
         return view.subviews.lazy.compactMap { findWebView(in: $0) }.first
@@ -232,9 +279,9 @@ struct PreviewWebKitTests {
         return UIWindow(frame: frame)
     }
 
-    private func waitFor(_ description: String, condition: () -> Bool) async throws {
+    private func waitFor(_ description: String, condition: () async -> Bool) async throws {
         for _ in 0..<300 {
-            if condition() { return }
+            if await condition() { return }
             try await Task.sleep(for: .milliseconds(50))
         }
         throw PreviewFailure("Timed out waiting for \(description).")

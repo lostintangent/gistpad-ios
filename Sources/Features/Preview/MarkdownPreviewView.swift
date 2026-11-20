@@ -86,7 +86,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         webView.onViewportChange = { [weak coordinator] in coordinator?.updateViewport($0) }
         viewportView.webView = webView
         webView.updateViewportView(viewportView)
-        webView.load(URLRequest(url: URL(string: "gistpad-preview://bundle/index.html")!))
+        webView.load(URLRequest(url: PreviewResourceHandler.pageURL))
         return webView
     }
 
@@ -242,7 +242,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             lastViewportInsets = nil
             commentHighlights.reset()
             needsInitialScroll = true
-            webView.reload()
+            // Crash recovery leaves about:blank, so reload() would bounce on an empty page.
+            webView.load(URLRequest(url: PreviewResourceHandler.pageURL))
         }
     }
 }
@@ -357,6 +358,8 @@ private final class InsetAwareWebView: WKWebView {
 
 @MainActor
 final class PreviewResourceHandler: NSObject, WKURLSchemeHandler {
+    static let pageURL = URL(string: "gistpad-preview://bundle/index.html")!
+
     func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
         do {
             guard let url = urlSchemeTask.request.url,
