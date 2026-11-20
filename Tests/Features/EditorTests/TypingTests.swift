@@ -174,6 +174,58 @@ import Testing
     #expect(try Typing.indent(in: source, selection: crossing, outdent: false) == nil)
   }
 
+  @Test func indentNestsOrderedItemsAtTheParentsContentColumn() throws {
+    let source = "1. a\n2. b"
+    let selection = NSRange(location: (source as NSString).range(of: "2. b").location, length: 0)
+    let edit = try #require(try Typing.indent(in: source, selection: selection, outdent: false))
+    #expect(try edit.applying(to: source) == "1. a\n   1. b")
+  }
+
+  @Test func indentNestsUnderTwoDigitNumbersAtFourSpaces() throws {
+    let source = "10. a\n11. b"
+    let selection = NSRange(location: (source as NSString).range(of: "11. b").location, length: 0)
+    let edit = try #require(try Typing.indent(in: source, selection: selection, outdent: false))
+    #expect(try edit.applying(to: source) == "10. a\n    1. b")
+  }
+
+  @Test func indentRenumbersTheListItLeaves() throws {
+    let source = "1. a\n2. b\n3. c"
+    let selection = NSRange(location: (source as NSString).range(of: "2. b").location, length: 0)
+    let edit = try #require(try Typing.indent(in: source, selection: selection, outdent: false))
+    #expect(try edit.applying(to: source) == "1. a\n   1. b\n2. c")
+  }
+
+  @Test func outdentRenumbersBothLists() throws {
+    let source = "1. a\n   1. b\n2. c"
+    let selection = NSRange(location: (source as NSString).range(of: "1. b").location, length: 0)
+    let edit = try #require(try Typing.indent(in: source, selection: selection, outdent: true))
+    #expect(try edit.applying(to: source) == "1. a\n2. b\n3. c")
+  }
+
+  @Test func indentNestsBulletsAtTwoSpaces() throws {
+    let source = "- a\n- b"
+    let selection = NSRange(location: (source as NSString).range(of: "- b").location, length: 0)
+    let edit = try #require(try Typing.indent(in: source, selection: selection, outdent: false))
+    #expect(try edit.applying(to: source) == "- a\n  - b")
+  }
+
+  @Test func indentKeepsRelativeStructureInAMultilineSelection() throws {
+    let source = "1. a\n2. b\n3. c\n4. d"
+    let start = (source as NSString).range(of: "2. b").location
+    let end = NSMaxRange((source as NSString).range(of: "3. c"))
+    let edit = try #require(
+      try Typing.indent(
+        in: source, selection: NSRange(location: start, length: end - start), outdent: false))
+    #expect(try edit.applying(to: source) == "1. a\n   1. b\n   2. c\n2. d")
+  }
+
+  @Test func indentTakesNestedChildrenAlong() throws {
+    let source = "1. a\n2. b\n   1. nested\n3. c"
+    let selection = NSRange(location: (source as NSString).range(of: "2. b").location, length: 0)
+    let edit = try #require(try Typing.indent(in: source, selection: selection, outdent: false))
+    #expect(try edit.applying(to: source) == "1. a\n   1. b\n      1. nested\n2. c")
+  }
+
   @Test func indentOutdentPreserveTheLogicalUTF16SelectionAndLineEndings() throws {
     let source = "- 日本語\r\n  - 👩🏽‍💻\r\nAfter"
     let selection = NSRange(location: 2, length: "- 日本語\r\n  - 👩🏽‍💻".utf16.count - 2)

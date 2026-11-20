@@ -32,13 +32,27 @@ enum Typing {
   }
 
   /// Call only outside composition and Writing Tools. Offsets and returned selection are UTF-16.
+  static func isListItem(in source: String, at offset: Int) -> Bool {
+    let text = source as NSString
+    guard offset >= 0, offset <= text.length else { return false }
+    let location = min(offset, max(0, text.length - 1))
+    return listLine(in: text, at: location) != nil
+  }
+
   static func indent(
-    in source: String, selection: NSRange, outdent: Bool
+    in source: String, selection: NSRange, outdent: Bool, keeping result: NSRange? = nil
   ) throws -> Edit? {
     _ = try Edit.text(in: source, at: selection)
     let text = source as NSString
     let block = Formatting.lineRange(in: text, selection: selection)
-    guard !isProtected(block, ranges: protectedRanges(in: source)) else { return nil }
+    let protected = protectedRanges(in: source)
+    let kept = result ?? selection
+    guard !isProtected(block, ranges: protected) else { return nil }
+    if let nested = nestList(
+      in: source, block: block, selection: kept, outdent: outdent, protected: protected)
+    {
+      return nested
+    }
     var changes: [(range: NSRange, replacement: String)] = []
     var offset = block.location
     repeat {
@@ -58,7 +72,7 @@ enum Typing {
     } while offset < NSMaxRange(block)
     guard !changes.isEmpty else { return nil }
     return Edit(
-      range: block, expected: text.substring(with: block), replacements: changes, selection: selection)
+      range: block, expected: text.substring(with: block), replacements: changes, selection: kept)
   }
 
   private static func continueList(
@@ -107,30 +121,208 @@ enum Typing {
     }
     let replacement = newline + prefix
     if !capture(6).isEmpty, let number = Int(capture(6)) {
-      return continuedNumberedList(
-        in: source, selection: selection, replacement: replacement, nextLine: lineEnd,
-        indentation: capture(1), delimiter: capture(7), nextNumber: number + 2, protected: protected
-      )
+      var changes: [(range: NSRange, replacement: String)] = [(selection, replacement)]
+      changes += renumberSiblings(
+        in: source, from: lineEnd, indentation: capture(1), delimiter: capture(7),
+        start: number + 2, protected: protected)
+      return edit(in: source, selection: selection, changes: changes)
     }
     return Edit(
       range: selection, expected: text.substring(with: selection), replacement: replacement,
       selection: NSRange(location: selection.location + replacement.utf16.count, length: 0))
   }
 
-  private static func continuedNumberedList(
-    in source: String, selection: NSRange, replacement: String, nextLine: Int,
-    indentation: String, delimiter: String, nextNumber: Int, protected: [NSRange]
-  ) -> Edit {
+  private struct ListLine {
+    let range: NSRange
+    let indent: String
+    let prefixLength: Int
+    let number: Int?
+    let delimiter: String
+    let digits: NSRange?
+  }
+
+  private static func nestList(
+    in source: String, block: NSRange, selection: NSRange, outdent: Bool, protected: [NSRange]
+  ) -> Edit? {
     let text = source as NSString
-    var changes: [(range: NSRange, replacement: String)] = [(selection, replacement)]
-    var offset = nextLine
-    var number = nextNumber
-    while offset < text.length, number <= 999_999_999 {
-      let range = text.lineRange(for: NSRange(location: offset, length: 0))
+    guard let current = listLine(in: text, at: block.location),
+      !isProtected(current.range, ranges: protected)
+    else { return nil }
+    if outdent {
+      return outdentList(
+        in: source, current: current, block: block, selection: selection, protected: protected)
+    }
+    guard let parent = sibling(above: current, in: text, protected: protected) else { return nil }
+    let target = String(repeating: " ", count: parent.prefixLength)
+    let extra = target.utf16.count - current.indent.utf16.count
+    guard extra > 0 else { return nil }
+    let end = itemBlockEnd(in: text, after: block, indent: current.indent)
+    var changes: [(range: NSRange, replacement: String)] = []
+    var offset = current.range.location
+    var number = nextNumber(
+      in: text, from: NSMaxRange(parent.range), before: current.range.location, indent: target,
+      delimiter: current.delimiter, start: 1)
+    while offset < end {
+      let line = text.lineRange(for: NSRange(location: offset, length: 0))
+      changes.append((NSRange(location: offset, length: 0), String(repeating: " ", count: extra)))
+      if let item = listLine(in: text, at: offset), item.indent == current.indent,
+        let digits = item.digits, let value = number, item.delimiter == current.delimiter
+      {
+        changes.append((digits, String(value)))
+        number = value + 1
+      }
+      offset = NSMaxRange(line)
+    }
+    if let vacated = current.number {
+      changes += renumberSiblings(
+        in: source, from: end, indentation: current.indent, delimiter: current.delimiter,
+        start: vacated, protected: protected)
+    }
+    return edit(in: source, selection: selection, changes: changes)
+  }
+
+  private static func outdentList(
+    in source: String, current: ListLine, block: NSRange, selection: NSRange, protected: [NSRange]
+  ) -> Edit? {
+    let text = source as NSString
+    guard let parent = ancestor(above: current, in: text, protected: protected) else { return nil }
+    let extra = current.indent.utf16.count - parent.indent.utf16.count
+    guard extra > 0 else { return nil }
+    let end = itemBlockEnd(in: text, after: block, indent: current.indent)
+    var changes: [(range: NSRange, replacement: String)] = []
+    var offset = current.range.location
+    var number = nextNumber(
+      in: text, from: NSMaxRange(parent.range), before: current.range.location,
+      indent: parent.indent,
+      delimiter: current.delimiter.isEmpty ? parent.delimiter : current.delimiter,
+      start: parent.number.map { $0 + 1 } ?? 1)
+    while offset < end {
+      let line = text.lineRange(for: NSRange(location: offset, length: 0))
+      changes.append((NSRange(location: offset, length: extra), ""))
+      if let item = listLine(in: text, at: offset), item.indent == current.indent,
+        let digits = item.digits, let value = number
+      {
+        changes.append((digits, String(value)))
+        number = value + 1
+      }
+      offset = NSMaxRange(line)
+    }
+    changes += renumberSiblings(
+      in: source, from: end, indentation: current.indent, delimiter: current.delimiter,
+      start: 1, protected: protected)
+    if let following = number {
+      changes += renumberSiblings(
+        in: source, from: end, indentation: parent.indent,
+        delimiter: current.delimiter.isEmpty ? parent.delimiter : current.delimiter,
+        start: following, protected: protected)
+    }
+    return edit(in: source, selection: selection, changes: changes)
+  }
+
+  private static func listLine(in text: NSString, at offset: Int) -> ListLine? {
+    let range = text.lineRange(for: NSRange(location: offset, length: 0))
+    let line = text.substring(with: range).trimmingCharacters(in: .newlines)
+    guard
+      let match = listPrefix.firstMatch(
+        in: line, range: NSRange(location: 0, length: (line as NSString).length))
+    else { return nil }
+    func capture(_ index: Int) -> String {
+      let group = match.range(at: index)
+      return group.location == NSNotFound ? "" : (line as NSString).substring(with: group)
+    }
+    let digits = match.range(at: 6)
+    let numberRange: NSRange?
+    let number: Int?
+    if digits.location != NSNotFound {
+      numberRange = NSRange(location: range.location + digits.location, length: digits.length)
+      number = Int((line as NSString).substring(with: digits))
+    } else {
+      numberRange = nil
+      number = nil
+    }
+    return ListLine(
+      range: range, indent: capture(1), prefixLength: match.range.length,
+      number: number, delimiter: capture(7), digits: numberRange)
+  }
+
+  private static func sibling(above current: ListLine, in text: NSString, protected: [NSRange])
+    -> ListLine?
+  {
+    var offset = current.range.location
+    while offset > 0 {
+      let previous = text.lineRange(for: NSRange(location: offset - 1, length: 0))
+      offset = previous.location
+      if isProtected(previous, ranges: protected) { return nil }
+      guard let item = listLine(in: text, at: offset) else { continue }
+      if item.indent.utf16.count < current.indent.utf16.count { return nil }
+      if item.indent == current.indent { return item }
+    }
+    return nil
+  }
+
+  private static func ancestor(above current: ListLine, in text: NSString, protected: [NSRange])
+    -> ListLine?
+  {
+    var offset = current.range.location
+    while offset > 0 {
+      let previous = text.lineRange(for: NSRange(location: offset - 1, length: 0))
+      offset = previous.location
+      if isProtected(previous, ranges: protected) { return nil }
+      guard let item = listLine(in: text, at: offset) else { continue }
+      if item.indent.utf16.count < current.indent.utf16.count { return item }
+    }
+    return nil
+  }
+
+  private static func itemBlockEnd(in text: NSString, after block: NSRange, indent: String) -> Int {
+    var offset = NSMaxRange(block)
+    var end = offset
+    while offset < text.length {
+      let line = text.lineRange(for: NSRange(location: offset, length: 0))
+      let value = text.substring(with: line)
+      let lineIndent = String(value.prefix { $0 == " " || $0 == "\t" })
+      if lineIndent.utf16.count > indent.utf16.count {
+        end = NSMaxRange(line)
+        offset = end
+      } else {
+        break
+      }
+    }
+    return end
+  }
+
+  private static func nextNumber(
+    in text: NSString, from startOffset: Int, before offset: Int, indent: String, delimiter: String,
+    start: Int
+  ) -> Int? {
+    guard !delimiter.isEmpty else { return nil }
+    var number = start
+    var scan = startOffset
+    while scan < offset {
+      if let item = listLine(in: text, at: scan), item.indent == indent, let value = item.number,
+        delimiter.isEmpty || item.delimiter == delimiter
+      {
+        number = value + 1
+      }
+      scan = NSMaxRange(text.lineRange(for: NSRange(location: scan, length: 0)))
+    }
+    return number
+  }
+
+  private static func renumberSiblings(
+    in source: String, from offset: Int, indentation: String, delimiter: String,
+    start number: Int, protected: [NSRange]
+  ) -> [(range: NSRange, replacement: String)] {
+    let text = source as NSString
+    var changes: [(range: NSRange, replacement: String)] = []
+    var cursor = offset
+    var value = number
+    while cursor < text.length, value <= 999_999_999 {
+      let range = text.lineRange(for: NSRange(location: cursor, length: 0))
       let line = text.substring(with: range).trimmingCharacters(in: .newlines)
       let indent = String(line.prefix { $0 == " " || $0 == "\t" })
       if indent.utf16.count > indentation.utf16.count {
-        offset = NSMaxRange(range)
+        cursor = NSMaxRange(range)
         continue
       }
       guard indent == indentation,
@@ -142,15 +334,23 @@ enum Typing {
       else { break }
       let digits = match.range(at: 6)
       changes.append(
-        (NSRange(location: offset + digits.location, length: digits.length), String(number)))
-      number += 1
-      offset = NSMaxRange(range)
+        (NSRange(location: cursor + digits.location, length: digits.length), String(value)))
+      value += 1
+      cursor = NSMaxRange(range)
     }
-    let end = max(NSMaxRange(selection), changes.map { NSMaxRange($0.range) }.max() ?? 0)
-    let range = NSRange(location: selection.location, length: end - selection.location)
+    return changes
+  }
+
+  private static func edit(
+    in source: String, selection: NSRange, changes: [(range: NSRange, replacement: String)]
+  ) -> Edit? {
+    guard !changes.isEmpty else { return nil }
+    let start = changes.map(\.range.location).min()!
+    let end = changes.map { NSMaxRange($0.range) }.max()!
+    let range = NSRange(location: start, length: end - start)
     return Edit(
-      range: range, expected: text.substring(with: range), replacements: changes,
-      selection: selection)
+      range: range, expected: (source as NSString).substring(with: range),
+      replacements: changes, selection: selection)
   }
 
   private static func protectedRanges(in source: String) -> [NSRange] {
