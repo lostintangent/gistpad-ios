@@ -8,7 +8,7 @@
   final class CommentHighlights: NSObject, UIGestureRecognizerDelegate {
     static let annotationKey = NSAttributedString.Key("dev.gistpad.comment.highlight")
     private unowned let editor: Editor
-    private let backgroundLayer = CALayer()
+    let backgroundLayer = CALayer()
     private var configuration = CommentHighlightConfiguration()
     private var actions: CommentHighlightActions?
     private var linkedIDs: Set<Int64>?
@@ -123,8 +123,6 @@
     }
 
     /// Comment fills are the only source ink that follows the personal accent.
-    var hasBackgrounds: Bool { backgroundLayer.sublayers?.isEmpty == false }
-
     func accentDidChange() {
       if !verifiedHighlights.isEmpty { editor.highlight() }
     }

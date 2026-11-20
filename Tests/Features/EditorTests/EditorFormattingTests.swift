@@ -146,6 +146,11 @@
         let after = editor.text
         #expect(!editor.indentSwipedLine(at: try point(at: "plain"), outdent: false))
         #expect(editor.text == after)
+        let swipe = try #require(
+          editor.textView.gestureRecognizers?.compactMap { $0 as? UISwipeGestureRecognizer }.first)
+        #expect(
+          editor.view.gestureRecognizer(
+            swipe, shouldRequireFailureOf: UIScreenEdgePanGestureRecognizer()))
       }
 
       @Test func keyboardBarBoldEditsTheSessionAndImageNeedsAnAction() throws {

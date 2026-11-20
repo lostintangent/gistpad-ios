@@ -277,8 +277,10 @@
 
     func indentSwipedLine(at point: CGPoint, outdent: Bool) -> Bool {
       guard canFormat, textView.findInteraction?.isFindNavigatorVisible != true,
-        let offset = offset(at: point), Typing.isListItem(in: text, at: offset)
+        let position = textView.closestPosition(to: point)
       else { return false }
+      let offset = textView.offset(from: textView.beginningOfDocument, to: position)
+      guard Typing.isListItem(in: text, at: offset) else { return false }
       do {
         guard
           let edit = try Typing.indent(
@@ -293,18 +295,6 @@
           localized: "Finish the current text edit, then try again.", bundle: .module)
         return false
       }
-    }
-
-    func canIndentSwipe(at point: CGPoint) -> Bool {
-      guard canFormat, textView.findInteraction?.isFindNavigatorVisible != true,
-        let offset = offset(at: point)
-      else { return false }
-      return Typing.isListItem(in: text, at: offset)
-    }
-
-    private func offset(at point: CGPoint) -> Int? {
-      guard let position = textView.closestPosition(to: point) else { return nil }
-      return textView.offset(from: textView.beginningOfDocument, to: position)
     }
 
     public func find(replacing: Bool = false) {
@@ -569,13 +559,11 @@
       _ = editor?.indentSwipedLine(at: swipe.location(in: self), outdent: swipe.direction == .left)
     }
 
-    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-      if let swipe = gestureRecognizer as? UISwipeGestureRecognizer, swipe.delegate === self {
-        let point = swipe.location(in: self)
-        if swipe.direction == .left, convert(point, to: window).x < 24 { return false }
-        return editor?.canIndentSwipe(at: point) == true
-      }
-      return super.gestureRecognizerShouldBegin(gestureRecognizer)
+    func gestureRecognizer(
+      _ gestureRecognizer: UIGestureRecognizer,
+      shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+      otherGestureRecognizer is UIScreenEdgePanGestureRecognizer
     }
 
     func resetReadingAnchor(to offset: Int) {

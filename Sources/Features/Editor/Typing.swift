@@ -31,7 +31,6 @@ enum Typing {
       selection: NSRange(location: selection.location + markdown.utf16.count, length: 0))
   }
 
-  /// Call only outside composition and Writing Tools. Offsets and returned selection are UTF-16.
   static func isListItem(in source: String, at offset: Int) -> Bool {
     let text = source as NSString
     guard offset >= 0, offset <= text.length else { return false }
@@ -39,6 +38,7 @@ enum Typing {
     return listLine(in: text, at: location) != nil
   }
 
+  /// Call only outside composition and Writing Tools. Offsets and returned selection are UTF-16.
   static func indent(
     in source: String, selection: NSRange, outdent: Bool, keeping result: NSRange? = nil
   ) throws -> Edit? {

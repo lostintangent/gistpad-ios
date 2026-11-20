@@ -15,7 +15,7 @@
         editor.setCommentHighlights(
           .init(quotes: [CommentQuote(threadID: 10, quote: "native")]))
         editor.textView.layoutIfNeeded()
-        #expect(editor.commentHighlights.hasBackgrounds)
+        #expect(editor.commentHighlights.backgroundLayer.sublayers?.isEmpty == false)
         editor.textView.selectedRange = NSRange(location: editor.text.utf16.count, length: 0)
         editor.textView.insertText("- ")
         editor.textView.layoutIfNeeded()
@@ -29,7 +29,7 @@
             UIColor.secondaryLabel.resolvedColor(with: traits)))
         #expect(
           storage.attribute(CommentHighlights.annotationKey, at: 2, effectiveRange: nil) != nil)
-        #expect(editor.commentHighlights.hasBackgrounds)
+        #expect(editor.commentHighlights.backgroundLayer.sublayers?.isEmpty == false)
       }
 
       @Test func annotationsPreserveExactSourceGenerationSelectionAndNativeUndo() throws {
