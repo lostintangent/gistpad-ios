@@ -28,4 +28,11 @@ struct CommentQuoteHighlightTests {
             segments: ["native", "native"])
         #expect(spans.isEmpty)
     }
+
+    @Test func twentyFourUniqueQuotesEachLinkOnce() {
+        let quotes = (1...24).map { CommentQuote(threadID: Int64($0), quote: "quote\($0)token") }
+        let note = quotes.map(\.quote).joined(separator: " and ") + "\n" + String(repeating: "Keep the useful things close. ", count: 280)
+        let spans = CommentQuoteMatcher.highlights(quotes: quotes, segments: [note])
+        #expect(Set(spans.flatMap(\.threadIDs)) == Set(1...24))
+    }
 }
