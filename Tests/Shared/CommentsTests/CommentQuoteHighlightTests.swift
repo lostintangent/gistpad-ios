@@ -29,6 +29,13 @@ struct CommentQuoteHighlightTests {
         #expect(spans.isEmpty)
     }
 
+    @Test func aRejectedHitStillFindsAnOverlappingMatch() {
+        let spans = CommentQuoteMatcher.highlights(
+            quotes: [CommentQuote(threadID: 10, quote: "a.a")],
+            segments: ["xa.a.a!"])
+        #expect(spans.map(\.range) == [NSRange(location: 3, length: 3)])
+    }
+
     @Test func twentyFourUniqueQuotesEachLinkOnce() {
         let quotes = (1...24).map { CommentQuote(threadID: Int64($0), quote: "quote\($0)token") }
         let note = quotes.map(\.quote).joined(separator: " and ") + "\n" + String(repeating: "Keep the useful things close. ", count: 280)

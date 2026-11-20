@@ -41,8 +41,10 @@ public enum CommentQuoteMatcher {
                 {
                     if found != nil { return nil }
                     found = (quote.threadID, segment, range)
+                    location = range.location + range.length
+                } else {
+                    location = range.location + 1
                 }
-                location = range.location + max(range.length, 1)
             }
         }
         return found
