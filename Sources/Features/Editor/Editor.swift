@@ -39,6 +39,7 @@
       self.showsFrontMatter = showsFrontMatter
       super.init()
       view.editor = self
+      view.installIndentSwipes()
       textView.delegate = self
       textView.text = text
       textView.font = .preferredFont(forTextStyle: .body)
@@ -274,6 +275,38 @@
       }
     }
 
+    func indentSwipedLine(at point: CGPoint, outdent: Bool) -> Bool {
+      guard canFormat, textView.findInteraction?.isFindNavigatorVisible != true,
+        let offset = offset(at: point), Typing.isListItem(in: text, at: offset)
+      else { return false }
+      do {
+        guard
+          let edit = try Typing.indent(
+            in: text, selection: NSRange(location: offset, length: 0), outdent: outdent,
+            keeping: textView.selectedRange)
+        else { return false }
+        try apply(edit, generation: generation)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        return true
+      } catch {
+        inputError = String(
+          localized: "Finish the current text edit, then try again.", bundle: .module)
+        return false
+      }
+    }
+
+    func canIndentSwipe(at point: CGPoint) -> Bool {
+      guard canFormat, textView.findInteraction?.isFindNavigatorVisible != true,
+        let offset = offset(at: point)
+      else { return false }
+      return Typing.isListItem(in: text, at: offset)
+    }
+
+    private func offset(at point: CGPoint) -> Int? {
+      guard let position = textView.closestPosition(to: point) else { return nil }
+      return textView.offset(from: textView.beginningOfDocument, to: position)
+    }
+
     public func find(replacing: Bool = false) {
       guard isSettled else {
         inputError = String(
@@ -488,7 +521,7 @@
     }
   }
 
-  final class TextView: UITextView, @MainActor AXCustomContentProvider {
+  final class TextView: UITextView, @MainActor AXCustomContentProvider, UIGestureRecognizerDelegate {
     var accessibilityCustomContent: [AXCustomContent]! = []
     enum AttributeUpdateAnchor {
       case reading(offset: Int, delta: CGFloat)
@@ -521,6 +554,28 @@
       guard contentStart == 0 || selectedRange.location > contentStart || selectedRange.length > 0
       else { return }
       super.deleteBackward()
+    }
+
+    func installIndentSwipes() {
+      for direction in [UISwipeGestureRecognizer.Direction.right, .left] {
+        let swipe = UISwipeGestureRecognizer(target: self, action: #selector(handleIndentSwipe))
+        swipe.direction = direction
+        swipe.delegate = self
+        addGestureRecognizer(swipe)
+      }
+    }
+
+    @objc private func handleIndentSwipe(_ swipe: UISwipeGestureRecognizer) {
+      _ = editor?.indentSwipedLine(at: swipe.location(in: self), outdent: swipe.direction == .left)
+    }
+
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+      if let swipe = gestureRecognizer as? UISwipeGestureRecognizer, swipe.delegate === self {
+        let point = swipe.location(in: self)
+        if swipe.direction == .left, convert(point, to: window).x < 24 { return false }
+        return editor?.canIndentSwipe(at: point) == true
+      }
+      return super.gestureRecognizerShouldBegin(gestureRecognizer)
     }
 
     func resetReadingAnchor(to offset: Int) {

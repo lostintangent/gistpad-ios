@@ -125,6 +125,29 @@
         #expect(editor.textView.undoManager?.canUndo == false)
       }
 
+      @Test func swipeIndentsAListLineAndIgnoresProse() throws {
+        let editor = Editor(text: "- item\nplain")
+        let window = host(editor)
+        defer { window.isHidden = true }
+        let caret = NSRange(location: editor.text.utf16.count, length: 0)
+        editor.textView.selectedRange = caret
+        editor.textView.layoutIfNeeded()
+        func point(at needle: String) throws -> CGPoint {
+          let range = (editor.text as NSString).range(of: needle)
+          let position = try #require(
+            editor.textView.position(
+              from: editor.textView.beginningOfDocument, offset: range.location))
+          let caret = editor.textView.caretRect(for: position)
+          return CGPoint(x: caret.midX, y: caret.midY)
+        }
+        #expect(editor.indentSwipedLine(at: try point(at: "item"), outdent: false))
+        #expect(editor.text == "  - item\nplain")
+        #expect(editor.textView.selectedRange == NSRange(location: caret.location + 2, length: 0))
+        let after = editor.text
+        #expect(!editor.indentSwipedLine(at: try point(at: "plain"), outdent: false))
+        #expect(editor.text == after)
+      }
+
       @Test func keyboardBarBoldEditsTheSessionAndImageNeedsAnAction() throws {
         let editor = Editor(text: "A note")
         let window = hostEditor(editor)
