@@ -231,10 +231,9 @@
       textView.scrollRangeToVisible(textView.selectedRange)
     }
 
+    /// A tap places its caret after this returns, so revealing the old caret would scroll away.
     public func textViewDidBeginEditing(_ textView: UITextView) {
       isEditing = true
-      view.requestEditingCaretReveal()
-      highlight()
     }
 
     public func textViewDidEndEditing(_ textView: UITextView) {

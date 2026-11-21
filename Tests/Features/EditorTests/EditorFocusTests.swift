@@ -24,6 +24,23 @@
         #expect(editor.inputError == nil)
       }
 
+      @Test func beginningToEditLeavesTheReadingPositionForTheTappedCaret() throws {
+        let source = (1...200).map { "Line \($0)" }.joined(separator: "\n")
+        let editor = Editor(text: source)
+        let window = host(editor, focused: false)
+        defer { window.isHidden = true }
+        let view = editor.textView
+        let manager = try #require(view.textLayoutManager)
+        manager.ensureLayout(for: try #require(manager.textContentManager?.documentRange))
+        view.selectedRange = NSRange(location: source.utf16.count, length: 0)
+        view.setContentOffset(CGPoint(x: 0, y: 1200), animated: false)
+        view.layoutIfNeeded()
+        // UIKit begins editing before it places a tap's caret, so the old caret must not scroll.
+        try #require(view.becomeFirstResponder())
+        #expect(editor.isEditing)
+        #expect(abs(view.contentOffset.y - 1200) < 1)
+      }
+
       @Test func focusRequestIsConsumedOnceAndKeepsSourceAndNativeUndo() throws {
         let editor = Editor(text: "note")
         editor.requestFocusAtEnd()
