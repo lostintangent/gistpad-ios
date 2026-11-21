@@ -77,11 +77,14 @@ final class GistUITests: XCTestCase {
     try tap(editor, "the editor")
     try tap(app.buttons["editor-insert-menu"], "Insert")
     try tap(app.buttons["Link"].firstMatch, "Link")
-    let url = app.textFields["URL"]
-    try waitUntil("Add Link with its keyboard") { url.exists && app.keyboards.firstMatch.exists }
+    let url = app.textFields["link-url"]
+    // The editor's keyboard is already up, so wait for the URL field itself to take it.
+    let focusedURL = app.textFields.matching(NSPredicate(format: "hasKeyboardFocus == true"))
+      .matching(identifier: "link-url").firstMatch
+    try waitUntil("Add Link with its URL field focused") { focusedURL.exists }
 
     // Typing without a tap proves the URL field, not the Text field or the editor, has focus.
     app.typeText("gistpad.dev")
-    XCTAssertEqual(url.value as? String, "gistpad.dev")
+    try waitUntil("the typed URL") { url.text == "gistpad.dev" }
   }
 }

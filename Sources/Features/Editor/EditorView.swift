@@ -320,6 +320,7 @@
           TextField(String(localized: "Text", bundle: .module), text: $label)
           TextField(String(localized: "URL", bundle: .module), text: $destination)
             .focused($urlFocused)
+            .accessibilityIdentifier("link-url")
             .keyboardType(.URL)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
