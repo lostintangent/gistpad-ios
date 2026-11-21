@@ -9,21 +9,15 @@ public struct Opening: Equatable {
   public enum Request: Codable, Equatable {
     case gist(id: String, filename: String? = nil, rowID: String? = nil)
     case draft(id: UUID, rowID: String? = nil)
-    case today(DailyNote.Day = DailyNote.Day(), focusesEditor: Bool = true)
+    case today(DailyNote.Day = DailyNote.Day())
     case new
 
     /// Creating a gist or starting the day puts the caret in it.
     var focusesEditor: Bool {
       switch self {
-      case .new: true
-      case .today(_, let focusesEditor): focusesEditor
+      case .new, .today: true
       case .gist, .draft: false
       }
-    }
-
-    /// Restoring today without asking for it leaves the library showing.
-    var revealsDetail: Bool {
-      if case .today(_, false) = self { false } else { true }
     }
   }
 
@@ -120,7 +114,7 @@ extension GistPadModel {
       case .gist(let id, let filename, let rowID): (rowID ?? id, id, filename, nil)
       case .draft(let id, let rowID):
         (rowID ?? id.uuidString, nil, nil, drafts.first { $0.id == id }?.newGistName)
-      case .today(let target, _):
+      case .today(let target):
         ("today/\(target.filename)", nil, target.filename, String(localized: "Today"))
       case .new: ("new", nil, nil, String(localized: "Untitled"))
       }
@@ -151,9 +145,7 @@ extension GistPadModel {
       editors[file.id] = fileEditor
     }
     presented = fileEditor
-    fileEditor.present(
-      file, focusesEditor: request?.focusesEditor ?? false,
-      revealsDetail: request?.revealsDetail ?? true)
+    fileEditor.present(file, focusesEditor: request?.focusesEditor ?? false)
   }
 
   /// The library row a file sits under, which may be its gist's row rather than its own.
@@ -238,7 +230,7 @@ extension GistPadModel {
       }
       guard let draft = drafts.first(where: { $0.id == id }) else { throw DraftError.notFound }
       return localFile(draft)
-    case .today(let target, _):
+    case .today(let target):
       let daily = gistCache?.owned.first(where: \.isDailyNote)
       let day = DailyNote(day: target, cache: gistCache, drafts: drafts)
       if let draft = drafts.first(where: { $0.id == day.draftID }) {
@@ -304,11 +296,10 @@ extension GistPadModel {
 extension GistFileEditor {
   /// Shows the file as it opens again: with its latest gist, and in Edit with the caret at the end
   /// when the open asks for it, as a new gist or day does.
-  func present(_ incoming: GistFile, focusesEditor: Bool, revealsDetail: Bool) {
+  func present(_ incoming: GistFile, focusesEditor: Bool) {
     guard incoming.accountID == file.accountID,
       incoming.gist?.id == file.gist?.id, incoming.filename == file.filename
     else { return }
-    self.revealsDetail = revealsDetail
     if let gist = incoming.gist { file.gist = gist }
     guard focusesEditor, canEdit else { return }
     mode = .edit

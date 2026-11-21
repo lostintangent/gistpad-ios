@@ -156,7 +156,7 @@ struct RootView: View {
     comments.activate(active)
     openRequestedComments()
     // A completed restoration must not reopen detail after returning to Library.
-    if model.state.selectedID != nil, active.revealsDetail {
+    if model.state.selectedID != nil {
       compactColumn = .detail
     }
     #if DEBUG
@@ -343,11 +343,7 @@ struct RootView: View {
           layout.select($0)
           if $0 != .split { fileEditor.mode = $0 }
         }
-        if $0 == .edit {
-          fileEditor.editor.requestFocusAtContentStart()
-        } else if $0 == .preview {
-          fileEditor.editor.endEditing()
-        }
+        if $0 == .preview { fileEditor.editor.endEditing() }
       })
     var details = fileEditor.details
     if comments.matches(fileEditor.file) {

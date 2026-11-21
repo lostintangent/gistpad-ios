@@ -169,22 +169,14 @@
       synchronizeText()
     }
 
+    /// Puts the caret at the end, ready to write, as a new gist or today's note opens.
     public func requestFocusAtEnd() {
-      requestFocus(at: text.utf16.count)
-    }
-
-    public func requestFocusAtContentStart() {
-      requestFocus(at: contentStart, resetReadingAnchor: true)
-    }
-
-    private func requestFocus(at offset: Int, resetReadingAnchor: Bool = false) {
       guard canFormat else {
         inputError = String(
           localized: "Finish the current text edit before moving the caret.", bundle: .module)
         return
       }
-      textView.selectedRange = NSRange(location: offset, length: 0)
-      if resetReadingAnchor { view.resetReadingAnchor(to: offset) }
+      textView.selectedRange = NSRange(location: text.utf16.count, length: 0)
       isFocusPending = true
       completeFocusRequestIfAttached()
     }

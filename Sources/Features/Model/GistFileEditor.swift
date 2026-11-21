@@ -19,8 +19,6 @@ public final class GistFileEditor {
   var isLanding = false
   public internal(set) var remoteInspectionProblem: GitHubProblem?
   public var mode: FileMode = .preview
-  /// Whether opening the file shows it, rather than restoring it behind the library.
-  public internal(set) var revealsDetail = true
   @ObservationIgnored let model: GistPadModel
   @ObservationIgnored var persistence: Task<Bool, Never>?
   @ObservationIgnored var autosaveTask: Task<Void, Never>?

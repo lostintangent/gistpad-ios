@@ -61,9 +61,6 @@ struct FrontMatterRangeTests {
         try #require(view.becomeFirstResponder())
         editor.requestFocusAtEnd()
         #expect(view.selectedRange == NSRange(location: source.utf16.count, length: 0))
-        editor.requestFocusAtContentStart()
-        #expect(view.isFirstResponder)
-        #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
         view.selectedTextRange = view.textRange(
           from: view.beginningOfDocument, to: view.beginningOfDocument)
         #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
@@ -150,7 +147,7 @@ struct FrontMatterRangeTests {
         editor.textViewDidChange(view)
         try #require(view.markedTextRange != nil)
         let composingSelection = view.selectedRange
-        editor.requestFocusAtContentStart()
+        editor.requestFocusAtEnd()
         #expect(view.selectedRange == composingSelection)
         #expect(view.markedTextRange != nil)
         #expect(editor.inputError != nil)

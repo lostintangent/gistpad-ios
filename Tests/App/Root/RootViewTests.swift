@@ -78,21 +78,18 @@ struct RootViewTests {
           }
           #expect(rendered)
         } else {
-          try await host.waitForKeyboard(visible: true)
+          // Edit shows the source at the top and waits for a tap to raise the keyboard.
+          try await host.waitUntil { host.isVisible(editor) }
+          try await host.waitForKeyboard(visible: false)
           let caret = try host.caret(in: editor)
-          #expect(caret.maxY <= host.keyboardFrame.minY)
           let bar = try #require(host.descendants.compactMap { $0 as? UINavigationBar }.last)
           let top = bar.convert(bar.bounds, to: host.window).maxY
-          #expect(editor.isFirstResponder)
-          #expect(host.isVisible(editor))
+          #expect(!editor.isFirstResponder)
           #expect(editor.text.utf8.elementsEqual(text.utf8))
           #expect(
             editor.selectedRange
               == NSRange(location: Syntax.contentStart(in: text), length: 0))
           #expect(caret.minY >= top - 1 && caret.minY < top + 40)
-          editor.resignFirstResponder()
-          try await host.waitForKeyboard(visible: false)
-          #expect(host.isVisible(editor))
         }
       }
       host.returnToLibrary()

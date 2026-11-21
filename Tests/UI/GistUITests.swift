@@ -27,6 +27,33 @@ final class GistUITests: XCTestCase {
     XCTAssertTrue(title.exists)
   }
 
+  func testEditWaitsForATapAndPutsTheCaretWhereYouTapped() throws {
+    let app = launchGistPad(open: "shape/README.md", mode: "edit")
+    let editor = app.textViews["source-editor"]
+    let modes = app.segmentedControls["note-toggle-mode"]
+    try waitUntil("README.md") { editor.text?.hasPrefix("# A considered") == true }
+    app.dismissSidebarOverlay()
+    try tap(modes.buttons["Preview"], "Preview")
+    try waitUntil("Preview") { modes.buttons["Preview"].isSelected }
+    try tap(modes.buttons["Edit"], "Edit")
+    try waitUntil("Edit") { modes.buttons["Edit"].isSelected && editor.isTappable }
+    XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 2), "Edit raised the keyboard")
+
+    // Leave a caret near the end, then tap near the top with the keyboard down.
+    for _ in 0..<3 { editor.swipeUp(velocity: .slow) }
+    editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+    try waitUntil("the keyboard") { app.keyboards.firstMatch.exists }
+    try tap(app.buttons["Hide Keyboard"], "Hide Keyboard")
+    try waitUntil("the keyboard to go") { !app.keyboards.firstMatch.exists }
+    for _ in 0..<4 { editor.swipeDown(velocity: .slow) }
+    editor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+    try waitUntil("the keyboard") { app.keyboards.firstMatch.exists }
+    app.typeText("Z")
+    // The editor's value holds only the note's first 512 characters, which a Z typed after
+    // scrolling back to the old caret wouldn't reach.
+    try waitUntil("Z near the top, where it was tapped") { editor.text?.contains("Z") == true }
+  }
+
   func testSwitchingFiles() throws {
     let app = launchGistPad(open: "shape/README.md", mode: "edit")
     let editor = app.textViews["source-editor"]
