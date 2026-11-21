@@ -108,6 +108,27 @@
         #expect(editor.textView.text == transient)
       }
 
+      @Test func aBracketPairUndoesInOneStepAndSteppingOverAddsNone() throws {
+        let editor = Editor(text: "Vagabond ")
+        let window = host(editor)
+        defer { window.isHidden = true }
+        let view = editor.textView
+        view.selectedRange = NSRange(location: 9, length: 0)
+        view.undoManager?.removeAllActions()
+        #expect(!editor.textView(view, shouldChangeTextIn: view.selectedRange, replacementText: "("))
+        #expect(editor.text == "Vagabond ()")
+        #expect(view.selectedRange == NSRange(location: 10, length: 0))
+        let generation = editor.generation
+        #expect(!editor.textView(view, shouldChangeTextIn: view.selectedRange, replacementText: ")"))
+        #expect(editor.text == "Vagabond ()")
+        #expect(editor.generation == generation)
+        #expect(view.selectedRange == NSRange(location: 11, length: 0))
+        view.undoManager?.undo()
+        editor.textViewDidChange(view)
+        #expect(editor.text == "Vagabond ")
+        #expect(view.undoManager?.canUndo == false)
+      }
+
       @Test func indentAndOutdentRetainSelectionAndNativeUndo() throws {
         let editor = Editor(text: "- 日本語\n- next")
         let window = hostEditor(editor)

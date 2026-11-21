@@ -11,6 +11,9 @@ enum Typing {
       guard !isProtected(selection, ranges: protected) else { return nil }
       return continueList(in: source, selection: selection, protected: protected)
     }
+    if let edit = pairBracket(in: source, selection: selection, replacement: replacement) {
+      return isProtected(selection, ranges: protectedRanges(in: source)) ? nil : edit
+    }
     guard !selected.isEmpty, !selected.contains(where: \.isNewline),
       !selected.allSatisfy(\.isWhitespace),
       replacement.rangeOfCharacter(from: .whitespacesAndNewlines.union(.controlCharacters)) == nil,
@@ -29,6 +32,49 @@ enum Typing {
     return Edit(
       range: selection, expected: selected, replacement: markdown,
       selection: NSRange(location: selection.location + markdown.utf16.count, length: 0))
+  }
+
+  private static let brackets = [
+    (open: "(", close: ")"), (open: "[", close: "]"), (open: "{", close: "}"),
+  ]
+  private static let closesBefore = CharacterSet.whitespacesAndNewlines
+    .union(CharacterSet(charactersIn: ")]}.,;:!?"))
+
+  /// An opener closes before a space, a line end or a closer, so one typed before a word stays
+  /// single. Its closer steps over a waiting one, and backspace in an empty pair deletes both.
+  private static func pairBracket(in source: String, selection: NSRange, replacement: String)
+    -> Edit?
+  {
+    let text = source as NSString
+    let caret = NSMaxRange(selection)
+    let next = caret < text.length ? text.substring(with: NSRange(location: caret, length: 1)) : ""
+    if replacement.isEmpty, selection.length == 1,
+      let pair = brackets.first(where: { $0.open == text.substring(with: selection) }),
+      next == pair.close
+    {
+      return Edit(
+        range: NSRange(location: selection.location, length: 2), expected: pair.open + pair.close,
+        replacement: "", selection: NSRange(location: selection.location, length: 0))
+    }
+    guard selection.length == 0 else { return nil }
+    if let pair = brackets.first(where: { $0.open == replacement }),
+      next.isEmpty || next.rangeOfCharacter(from: closesBefore) != nil
+    {
+      return Edit(
+        range: selection, expected: "", replacement: pair.open + pair.close,
+        selection: NSRange(location: caret + 1, length: 0))
+    }
+    // When the line already balances its closers, the one after the caret is waiting for this one.
+    if let pair = brackets.first(where: { $0.close == replacement }), next == pair.close {
+      let line = text.substring(with: text.lineRange(for: selection))
+      guard line.count(where: { String($0) == pair.open })
+        <= line.count(where: { String($0) == pair.close })
+      else { return nil }
+      return Edit(
+        range: selection, expected: "", replacement: "",
+        selection: NSRange(location: caret + 1, length: 0))
+    }
+    return nil
   }
 
   static func isListItem(in source: String, at offset: Int) -> Bool {

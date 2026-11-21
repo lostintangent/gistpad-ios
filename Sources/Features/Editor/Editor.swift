@@ -77,6 +77,11 @@
       guard isSettled else { throw Edit.Failure.compositionActive }
       guard self.generation == generation else { throw Edit.Failure.staleGeneration }
       _ = try edit.applying(to: text)
+      // An edit that changes nothing, like stepping over a closer, only moves the caret.
+      if edit.range.length == 0, edit.replacement.isEmpty {
+        if let selection = edit.selection { textView.selectedRange = selection }
+        return
+      }
       let previousSelection = textView.selectedRange
       let inverse = Edit(
         range: NSRange(location: edit.range.location, length: edit.replacement.utf16.count),

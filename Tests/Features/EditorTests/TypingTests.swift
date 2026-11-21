@@ -304,4 +304,72 @@ import Testing
           in: source, selection: selection, replacement: "https://example.test") == nil)
     }
   }
+
+  /// Types `keys` one at a time from the end of `source`, using native insertion when
+  /// `Typing.edit` declines, and returns the source with its caret marked by `|`.
+  private func type(_ keys: String, after source: String = "") throws -> String {
+    var text = source
+    var caret = source.utf16.count
+    for key in keys.map(String.init) {
+      let selection = NSRange(location: caret, length: 0)
+      if let edit = try Typing.edit(in: text, selection: selection, replacement: key) {
+        text = try edit.applying(to: text)
+        caret = try #require(edit.selection).location
+      } else {
+        text = (text as NSString).replacingCharacters(in: selection, with: key)
+        caret += key.utf16.count
+      }
+    }
+    return (text as NSString).replacingCharacters(
+      in: NSRange(location: caret, length: 0), with: "|")
+  }
+
+  @Test func bracketsCloseAndStepOverThroughTasksLinksAndAsides() throws {
+    let line = "- [ ] Read (vol 3) and [link](url) {x}"
+    #expect(try type(line) == line + "|")
+    #expect(try type("(") == "(|)")
+    #expect(try type("[", after: "Berserk ") == "Berserk [|]")
+    #expect(try type("((a))") == "((a))|")
+    #expect(try type("{", after: "end.") == "end.{|}")
+  }
+
+  @Test func anOpenerBeforeAWordStaysSingle() throws {
+    for opener in ["(", "[", "{"] {
+      let start = NSRange(location: 0, length: 0)
+      #expect(try Typing.edit(in: "word", selection: start, replacement: opener) == nil)
+    }
+  }
+
+  @Test func aCloserTheLineNeedsIsTypedInsteadOfSteppedOver() throws {
+    let source = "(see (x)"
+    let selection = NSRange(location: 7, length: 0)
+    #expect(try Typing.edit(in: source, selection: selection, replacement: ")") == nil)
+    let mismatched = NSRange(location: 2, length: 0)
+    #expect(try Typing.edit(in: "(x]", selection: mismatched, replacement: ")") == nil)
+  }
+
+  @Test(arguments: ["()", "[]", "{}"])
+  func backspaceInsideAnEmptyPairDeletesBoth(_ pair: String) throws {
+    let source = "a \(pair) b"
+    let edit = try #require(
+      try Typing.edit(in: source, selection: NSRange(location: 2, length: 1), replacement: ""))
+    #expect(try edit.applying(to: source) == "a  b")
+    #expect(edit.selection == NSRange(location: 2, length: 0))
+    let filled = NSRange(location: 0, length: 1)
+    #expect(try Typing.edit(in: "(x)", selection: filled, replacement: "") == nil)
+  }
+
+  @Test(arguments: ["```\nf", "---\ntitle: "])
+  func bracketsStayOutOfUnfinishedCodeAndFrontMatter(_ source: String) throws {
+    let end = NSRange(location: source.utf16.count, length: 0)
+    #expect(try Typing.edit(in: source, selection: end, replacement: "(") == nil)
+  }
+
+  @Test func bracketsStayOutOfInlineCode() throws {
+    let source = "Use `f()` here"
+    let inside = NSRange(location: (source as NSString).range(of: "()").location + 1, length: 0)
+    #expect(try Typing.edit(in: source, selection: inside, replacement: ")") == nil)
+    let opener = NSRange(location: inside.location - 1, length: 1)
+    #expect(try Typing.edit(in: source, selection: opener, replacement: "") == nil)
+  }
 }
