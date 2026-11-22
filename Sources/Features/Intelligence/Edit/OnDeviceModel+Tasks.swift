@@ -95,31 +95,16 @@ extension OnDeviceModel {
       let id: Int
       let title: String
     }
-    struct Item: Encodable {
-      let id: Int
-      let text: String
-      let isComplete: Bool
-      let listID: Int
-      let listTitle: String
-    }
     struct Catalog: Encodable {
       let request: String
       let availableLists: [List]
-      let tasks: [Item]
+      let tasks: [ModelTask]
     }
     var seen = Set<Int>()
     let lists = pass.tasks.filter { seen.insert($0.listID).inserted }.map {
       List(id: $0.listID, title: $0.listTitle)
     }
-    let tasks = pass.tasks.map {
-      Item(
-        id: $0.id, text: $0.text, isComplete: $0.isComplete,
-        listID: $0.listID, listTitle: $0.listTitle)
-    }
-    let payload = Catalog(request: pass.instruction, availableLists: lists, tasks: tasks)
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
-    return String(decoding: try encoder.encode(payload), as: UTF8.self)
+    return try json(Catalog(request: pass.instruction, availableLists: lists, tasks: pass.tasks))
   }
 }
 

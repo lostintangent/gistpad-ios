@@ -97,11 +97,8 @@ package final class OnDeviceModel: IntelligenceModel {
     }
   }
 
-  static func session<Model: LanguageModel>(
-    model: Model, pass: ModelPass
-  ) -> LanguageModelSession {
-    LanguageModelSession(
-      model: model, instructions: Instructions(instructions(for: pass)))
+  func session(for pass: ModelPass) -> LanguageModelSession {
+    LanguageModelSession(model: model, instructions: Instructions(Self.instructions(for: pass)))
   }
 
   private struct Payload: Encodable {
@@ -115,30 +112,30 @@ package final class OnDeviceModel: IntelligenceModel {
       ?? SourceBlock.blocks(in: pass.source)
   }
 
-  static func prompt(for pass: ModelPass) throws -> String {
+  /// Prompt JSON, with sorted keys so the same pass always reads the same.
+  static func json(_ value: some Encodable) throws -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
+    return String(decoding: try encoder.encode(value), as: UTF8.self)
+  }
+
+  static func prompt(for pass: ModelPass) throws -> String {
     if pass.purpose == .edit, pass.isPart {
       let delimiter = delimiter(for: pass.source)
       return "Request:\n\(pass.instruction)\n\nNote:\n\(delimiter)\n\(pass.source)\n\(delimiter)"
     }
     if pass.purpose == .edit {
-      return String(
-        decoding: try encoder.encode(["note": pass.source, "request": pass.instruction]),
-        as: UTF8.self)
+      return try json(["note": pass.source, "request": pass.instruction])
     }
     let request =
       pass.instruction.isEmpty && pass.purpose == .review
       ? "Review the note for concrete errors, unclear meaning, contradictions and actionable omissions."
       : pass.instruction
-    return String(
-      decoding: try encoder.encode(
-        Payload(
-          request: request,
-          source: pass.purpose == .answer || pass.purpose == .extract ? nil : pass.source,
-          blocks: pass.purpose == .answer || pass.purpose == .extract
-            ? blocks(for: pass) : nil)),
-      as: UTF8.self)
+    return try json(
+      Payload(
+        request: request,
+        source: pass.purpose == .answer || pass.purpose == .extract ? nil : pass.source,
+        blocks: pass.purpose == .answer || pass.purpose == .extract ? blocks(for: pass) : nil))
   }
 
 

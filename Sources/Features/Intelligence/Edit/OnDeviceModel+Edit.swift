@@ -4,7 +4,8 @@ import OSLog
 
 extension OnDeviceModel {
   package func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
-    try await perform(pass: pass) {
+    if pass.purpose == .review { return try await replacements(for: pass).map(ModelEdit.replace) }
+    return try await perform(pass: pass) {
       if isRelocating(pass.instruction, in: pass.source) {
         let edits = try await editOperations(.text, for: pass)
         guard edits.count >= 2 || edits.contains(where: {
@@ -62,7 +63,7 @@ extension OnDeviceModel {
   }
 
   func revisedText(for pass: ModelPass) async throws -> String {
-    let response = try await Self.session(model: model, pass: pass).respond(
+    let response = try await session(for: pass).respond(
       to: Self.prompt(for: pass),
       options: GenerationOptions(
         samplingMode: .greedy, maximumResponseTokens: pass.responseTokens))
@@ -114,9 +115,7 @@ extension OnDeviceModel {
             String($0.text.replacingOccurrences(of: "\n", with: " ").prefix(80))
           })
       })
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
-    let prompt = String(decoding: try encoder.encode(payload), as: UTF8.self)
+    let prompt = try Self.json(payload)
     // AFM Core misplaces these English positions without help. See docs/engineering.md.
     let request = pass.instruction.lowercased()
       .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
@@ -144,6 +143,9 @@ extension OnDeviceModel {
       try Task.checkCancellation()
       let section = sections[id - 1]
       let direct = (pass.source as NSString).substring(with: section.directRange)
+      func inNote(_ range: NSRange) -> NSRange {
+        NSRange(location: section.directRange.location + range.location, length: range.length)
+      }
       let local = ModelPass(
         purpose: .edit, instruction: pass.instruction, source: direct,
         responseTokens: pass.responseTokens, requestID: pass.requestID, isPart: true)
@@ -161,13 +163,9 @@ extension OnDeviceModel {
         .map { operation in
           switch operation {
           case .rewriteRegion(let range, let revised):
-            return .rewriteRegion(
-              NSRange(location: section.directRange.location + range.location, length: range.length),
-              revised: revised)
+            return .rewriteRegion(inNote(range), revised: revised)
           case .replaceRegion(let range, let candidate):
-            return .replaceRegion(
-              NSRange(location: section.directRange.location + range.location, length: range.length),
-              candidate)
+            return .replaceRegion(inNote(range), candidate)
           default: throw IntelligenceError.invalidResponse
           }
         }
@@ -196,11 +194,7 @@ extension OnDeviceModel {
             else { continue }
             accepted = (insertion, block.range)
           }
-          edits.append(
-            .replaceRegion(
-              NSRange(
-                location: section.directRange.location + accepted.1.location, length: accepted.1.length),
-              accepted.0))
+          edits.append(.replaceRegion(inNote(accepted.1), accepted.0))
         }
         // A section rewrite often leaves the selected block alone. Revise just the block then.
         if edits.count == previousCount, selected.count == 1 {
@@ -213,14 +207,7 @@ extension OnDeviceModel {
             } else {
               try await focusedReplacement(for: local, in: direct, block: block)
             }
-          if let focused {
-            edits.append(
-              .replaceRegion(
-                NSRange(
-                  location: section.directRange.location + block.range.location,
-                  length: block.range.length),
-                focused))
-          }
+          if let focused { edits.append(.replaceRegion(inNote(block.range), focused)) }
         }
       }
     }
@@ -261,9 +248,7 @@ extension OnDeviceModel {
       blocks: eligible.enumerated().map {
         EditSelection.Block(id: $0.offset + 1, kind: $0.element.kind.rawValue, text: $0.element.text)
       })
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
-    let prompt = String(decoding: try encoder.encode(selection), as: UTF8.self)
+    let prompt = try Self.json(selection)
     let ids = try await selectedIDs(
       prompt: prompt, instructions: selectionInstructions, count: eligible.count,
       maximum: relocating ? 2 : 1, pass: pass, phase: "editBlock")

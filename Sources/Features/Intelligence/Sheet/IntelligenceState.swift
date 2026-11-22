@@ -84,7 +84,6 @@
     func generate() {
       guard canGenerate else { return }
       clearResults()
-      isCancelling = false
       let selectedAction = action
       let instruction = selectedAction == .review ? "" : prompt
       let requestID = UUID()

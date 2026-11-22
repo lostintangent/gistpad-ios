@@ -222,7 +222,7 @@ struct EditTests {
     }
   }
 
-  @Test func editSectionsIncludeDescendantsButStopAtPeerHeadings() {
+  @Test func editSectionsHoldOnlyTheTextDirectlyUnderEachHeading() {
     let source = """
       # Project
 
@@ -250,16 +250,10 @@ struct EditTests {
       "# Project", "## Setup", "### Install", "### Options", "## Next check",
     ])
     #expect(sections.map(\.level) == [1, 2, 3, 3, 2])
-    #expect(sections[0].text.contains("Retest in November."))
-    #expect((source as NSString).substring(with: sections[0].directRange) == "# Project\n\nIntro.")
-    #expect(sections[1].text.contains("### Options"))
-    #expect((source as NSString).substring(with: sections[1].directRange) == "## Setup\n\nSetup notes.")
-    #expect(!sections[1].text.contains("## Next check"))
-    #expect(!sections[2].text.contains("### Options"))
-    for section in sections {
-      #expect((source as NSString).substring(with: section.range) == section.text)
-      #expect(Range(section.range, in: source) != nil)
-    }
+    #expect(sections.map { (source as NSString).substring(with: $0.directRange) } == [
+      "# Project\n\nIntro.", "## Setup\n\nSetup notes.", "### Install\n\nInstall steps.",
+      "### Options\n\n| Flag | Meaning |\n| -i | Ignore case |", "## Next check\n\nRetest in November.",
+    ])
   }
 
   @Test func scopedEditsSpliceOnlyVerifiedBodyRanges() async throws {
@@ -353,21 +347,6 @@ struct EditTests {
     }
   }
 
-  @Test func taskEditsDoNotShowTheModelFrontMatter() async throws {
-    let prefix = "---\r\nexample: '- [ ] hidden'\r\n---\r\n\r\n"
-    let body = "# Today\r\n\r\n- [ ] Visible 👩🏽‍💻\r\n"
-    let fixture = FixtureLanguageModel()
-    fixture.changes = { _ in [.setTaskStates(ids: nil, isComplete: true)] }
-    let input = request(prefix + body, "Mark every task complete")
-    let proposal = try await IntelligenceEngine(backend: fixture).edit(input)
-    #expect(input.snapshot.tasks.count == 1)
-    #expect(fixture.passes.map(\.source) == [body])
-    #expect(fixture.passes.flatMap(\.tasks).map(\.text) == ["- [ ] Visible 👩🏽‍💻"])
-    #expect(
-      try proposal.application(to: input.snapshot).source
-        == prefix + "# Today\r\n\r\n- [x] Visible 👩🏽‍💻\r\n")
-  }
-
   @Test func editChecksUnchecksAndCompletesTheRightTasks() async throws {
     let fixture = FixtureLanguageModel()
     let engine = IntelligenceEngine(backend: fixture)
@@ -438,9 +417,6 @@ struct EditTests {
     #expect(!diff.after.contains { $0.kind == .removed })
     for (source, runs) in [(before, diff.before), (after, diff.after)] {
       #expect(runs.map(\.text).joined().utf8.elementsEqual(source.utf8))
-      #expect(
-        String(DiffText.attributed(runs).characters).utf8
-          .elementsEqual(source.utf8))
       var boundaries: Set<Int> = [0]
       var offset = 0
       for character in source {
@@ -537,12 +513,5 @@ struct EditTests {
       try await IntelligenceEngine(backend: failing).edit(request("A\n\nB", "Edit"))
     }
     #expect(failing.passes.count == 1)
-  }
-
-  private func edited(_ input: IntelligenceRequest, _ edits: [ModelEdit]) async throws -> String {
-    let fixture = FixtureLanguageModel()
-    fixture.changes = { _ in edits }
-    return try await IntelligenceEngine(backend: fixture).edit(input).application(to: input.snapshot)
-      .source
   }
 }

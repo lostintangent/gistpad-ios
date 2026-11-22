@@ -390,9 +390,6 @@ final class RecordingModel: IntelligenceModel {
     inputTokens = max(inputTokens ?? 0, count)
     return count
   }
-  func replacements(for pass: ModelPass) async throws -> [ModelReplacement] {
-    try await model.replacements(for: pass)
-  }
   func editOperations(for pass: ModelPass) async throws -> [ModelEdit] {
     let operations = try await model.editOperations(for: pass)
     self.operations += operations.map { String(reflecting: $0) }

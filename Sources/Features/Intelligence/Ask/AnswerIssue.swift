@@ -16,18 +16,12 @@ package enum AnswerIssue: String, Sendable {
         + #"(?![\p{L}\p{N}])"#
       return source.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
-    for match in answer.matches(of: /["“]([^"”\n]+)["”]/) {
-      if !isSupportedQuote(String(match.output.1)) {
-        return .unverifiedProseQuote
-      }
-    }
-    for match in answer.matches(of: /(?:^|[\s(\[])['‘]([^\n]+?)['’](?=$|[\s).,!?:;\]])/) {
-      if !isSupportedQuote(String(match.output.1)) {
-        return .unverifiedProseQuote
-      }
-    }
-    for match in answer.matches(of: /[「『«]([^」』»\n]+)[」』»]/) {
-      if !isSupportedQuote(String(match.output.1)) {
+    let quotations = [
+      /["“]([^"”\n]+)["”]/, /(?:^|[\s(\[])['‘]([^\n]+?)['’](?=$|[\s).,!?:;\]])/,
+      /[「『«]([^」』»\n]+)[」』»]/,
+    ]
+    for quotation in quotations {
+      for match in answer.matches(of: quotation) where !isSupportedQuote(String(match.output.1)) {
         return .unverifiedProseQuote
       }
     }
@@ -38,18 +32,16 @@ package enum AnswerIssue: String, Sendable {
     for match in answer.matches(
       of:
         /(?i)\b(?:blockIDs?|firstOrderedItem|evidenceBlocks|sourceUTF16|requestID|listID|taskIDs?|(?:source|evidence) blocks?|block\s*#?\s*(?:\d+|one|two|three|four)|(?:first|second|third) block)\b/
-    ) {
-      if !isAuthored(String(match.output)) {
-        return .internalIdentifier
-      }
+    ) where !isAuthored(String(match.output)) {
+      return .internalIdentifier
     }
-    for match in answer.matches(of: /(?i)\bthe (?:user|creator)\b/) {
-      if !isAuthored(String(match.output)) {
-        return .thirdPerson
-      }
+    for match in answer.matches(of: /(?i)\bthe (?:user|creator)\b/)
+    where !isAuthored(String(match.output)) {
+      return .thirdPerson
     }
-    for match in answer.matches(of: /(?i)<\/?[a-z][a-z0-9-]*(?:\s+[^>]*)?>|[{}]/) {
-      if !source.contains(String(match.output)) { return .markupLeak }
+    for match in answer.matches(of: /(?i)<\/?[a-z][a-z0-9-]*(?:\s+[^>]*)?>|[{}]/)
+    where !source.contains(String(match.output)) {
+      return .markupLeak
     }
     return nil
   }

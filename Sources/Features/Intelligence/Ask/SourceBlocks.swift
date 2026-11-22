@@ -5,11 +5,6 @@ struct SourceBlock: Encodable {
   let id: Int
   let text: String
 
-  init(id: Int, text: String) {
-    self.id = id
-    self.text = text
-  }
-
   static func blocks(in source: String) -> [Self] {
     let text = source as NSString
     let offsets = [0] + Syntax.outline(in: source).blocks

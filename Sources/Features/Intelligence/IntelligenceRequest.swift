@@ -132,13 +132,16 @@ package struct ModelPass: Sendable {
   var isPart = false
 }
 
-package struct ModelTask: Sendable {
+/// A task as the note has it. It encodes for the model without its range.
+package struct ModelTask: Sendable, Encodable {
   let id: Int
   package let range: NSRange
   package let text: String
   package let isComplete: Bool
   var listID = 1
   package var listTitle = ""
+
+  private enum CodingKeys: CodingKey { case id, text, isComplete, listID, listTitle }
 
   static func indexed(
     in source: String, markers: [NSRange], headings: [NSRange]
@@ -193,7 +196,7 @@ package struct IntelligenceProgress: Sendable {
 package protocol IntelligenceModel {
   func modelInfo() async throws -> ModelInfo
   func tokenCount(for pass: ModelPass) async throws -> Int
-  func replacements(for pass: ModelPass) async throws -> [ModelReplacement]
+  /// Edit's operations, or Review's comments as replacements.
   func editOperations(for pass: ModelPass) async throws -> [ModelEdit]
   func excerpts(for pass: ModelPass) async throws -> [String]
   func streamAnswer(

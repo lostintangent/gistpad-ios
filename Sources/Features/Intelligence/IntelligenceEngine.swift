@@ -52,12 +52,7 @@ package final class IntelligenceEngine {
       do {
         let input = pass(
           request, purpose: purpose, source: chunk.source, model: model, scope: chunk.range)
-        let operations: [ModelEdit]
-        if purpose == .edit {
-          operations = try await backend.editOperations(for: input)
-        } else {
-          operations = try await backend.replacements(for: input).map(ModelEdit.replace)
-        }
+        let operations = try await backend.editOperations(for: input)
         try Task.checkCancellation()
         for operation in operations {
           switch operation {

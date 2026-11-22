@@ -248,6 +248,26 @@
       }
     }
 
+    private static func attributed(_ runs: [TextDiff.Run]) -> AttributedString {
+      var result = AttributedString()
+      for run in runs {
+        var text = AttributedString(run.text)
+        switch run.kind {
+        case .unchanged:
+          text.foregroundColor = .primary
+        case .removed:
+          text.foregroundColor = .secondary
+          text.strikethroughStyle = Text.LineStyle(pattern: .solid)
+        case .added:
+          text.foregroundColor = .primary
+          text.font = .body.weight(.semibold)
+          text.underlineStyle = Text.LineStyle(pattern: .solid)
+        }
+        result += text
+      }
+      return result
+    }
+
     @ViewBuilder
     private func change(_ change: Proposal.Change) -> some View {
       let comparison = change.replacement.map { TextDiff(before: change.quote, after: $0) }
@@ -263,7 +283,7 @@
         if change.quote.isEmpty {
           Text("Empty file", bundle: .module).foregroundStyle(.secondary)
         } else if let comparison {
-          Text(DiffText.attributed(comparison.before)).textSelection(.enabled)
+          Text(Self.attributed(comparison.before)).textSelection(.enabled)
         } else {
           Text(change.quote).textSelection(.enabled)
         }
@@ -274,7 +294,7 @@
           if replacement.isEmpty {
             Text("Remove this text", bundle: .module).foregroundStyle(.secondary)
           } else {
-            Text(DiffText.attributed(comparison.after)).textSelection(.enabled)
+            Text(Self.attributed(comparison.after)).textSelection(.enabled)
           }
         }
       }

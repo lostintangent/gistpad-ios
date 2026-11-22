@@ -64,7 +64,6 @@ final class IntelligencePresentation {
 
   @MainActor
   final class Target: Identifiable {
-    let id = UUID()
     let editor: Editor
     let title: String
     let revealSource: @MainActor (NSRange) -> Void

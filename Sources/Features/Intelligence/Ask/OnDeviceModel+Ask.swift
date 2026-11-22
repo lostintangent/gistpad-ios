@@ -6,10 +6,10 @@ extension OnDeviceModel {
   package func excerpts(for pass: ModelPass) async throws -> [String] {
     try await perform(pass: pass) {
       let blocks = Self.blocks(for: pass)
-      guard !blocks.isEmpty, let schema = try Self.schema(for: pass) else {
+      guard let schema = try Self.schema(for: pass) else {
         throw IntelligenceError.noEvidence
       }
-      let session = Self.session(model: model, pass: pass)
+      let session = session(for: pass)
       let response = try await session.respond(
         to: Self.prompt(for: pass), schema: schema,
         options: GenerationOptions(temperature: 0.1, maximumResponseTokens: pass.responseTokens))
@@ -25,7 +25,7 @@ extension OnDeviceModel {
     for pass: ModelPass, onUpdate: @MainActor (String) -> Void
   ) async throws -> ModelAnswer {
     try await perform(pass: pass) {
-      let stream = Self.session(model: model, pass: pass).streamResponse(
+      let stream = session(for: pass).streamResponse(
         to: try Self.prompt(for: pass),
         options: GenerationOptions(temperature: 0.2, maximumResponseTokens: pass.responseTokens))
       var latest = ""
@@ -41,7 +41,7 @@ extension OnDeviceModel {
     }
   }
 
-  static func parseAnswer(_ content: String, blocks: [SourceBlock] = []) throws -> ModelAnswer {
+  static func parseAnswer(_ content: String, blocks: [SourceBlock]) throws -> ModelAnswer {
     let response = content.trimmingCharacters(in: .whitespacesAndNewlines)
     let marker = /(?i)(?:\n|[ \t]+)\[?sources:\s*([0-9]+(?:\s*,\s*[0-9]+)*)\]?\s*$/
     let match = response.firstMatch(of: marker)
