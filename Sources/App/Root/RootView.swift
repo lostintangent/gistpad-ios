@@ -450,7 +450,7 @@ struct RootView: View {
     case .unpublishedGist(let accountID, let draftID):
       guard accountID == account.id else {
         model.alertMessage = String(
-          localized: "This draft belongs to another GitHub account. Sign in with that account to open it.")
+          localized: "This draft belongs to another GitHub account. Sign out, then sign in with that account to open it.")
         pending.link = nil
         return
       }

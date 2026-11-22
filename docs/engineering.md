@@ -24,6 +24,28 @@ These rules aren't obvious from reading the code. The toolchain, the iOS 27.2 fl
 | One simulator suite | The `GistPad` scheme also runs the iOS package tests, which is why `GistPad.xcworkspace` exists. `GistPadTests` links no package products and reaches the modules through its host app, so test builds link them statically, as shipping builds do. Linking one into the test bundle turns them all into frameworks, where the system can't find GistPad's intents, and every Spotlight update then stalls the test process for about 40 seconds. The simulator's keyboard outlives each test process and may be the software keyboard or a hardware keyboard's bar, so window tests check the caret against whichever keyboard frame settles. |
 | Strings live in String Catalogs | User-facing text goes in `Sources/App/Localizable.xcstrings` or a module's `Resources/Localizable.xcstrings` with `bundle: .module`. Don't build sentences by concatenation. [String Catalogs](https://developer.apple.com/documentation/xcode/localizing-and-varying-text-with-a-string-catalog) |
 
+## Shared words
+
+Every module uses one word for each of these, and the UI's words follow design.md's [Words](design.md#words).
+
+| Noun | Means | Type |
+|---|---|---|
+| Account | A signed-in GitHub identity and its preferences | `GistPadAccount` |
+| Preferences | The account's settings, synced through Supabase metadata | `GistPadPreferences` |
+| Gist | A GitHub gist | `Gist` |
+| File | One Markdown file in a gist | `GistFile` |
+| Draft | This iPhone's saved copy of a file, waiting to publish | `GistFileDraft` |
+| Daily note | A dated file in the daily gist | `DailyNote` |
+| Library | Your gists, as the list shows them | `LibraryState` |
+| Tag | A named, colored label on a gist | `Tag` |
+| Comment | A GitHub gist comment, optionally quoting a passage | `GistComment` |
+| Editor and Preview | The two ways to show an open file | `Editor`, `MarkdownPreviewView` |
+| Edit | A checked change to a file's text, applied as one Undo step | `Edit` |
+| Suggestion | One of Review's notes on a passage, shown without changing the file | `Proposal.Change` |
+| GitHub status | What GitHub needs from you, shown in the toolbar | `GitHubStatus` |
+
+The verbs are **save** (to this iPhone), **publish** (to GitHub), **refresh** (read GitHub with `refresh()`, which the UI calls checking for changes) and **conflict** (GitHub changed underneath a draft), with no "land" or "remote": a file `isLocked` while a change you didn't type goes in, and GitHub's side is `github`.
+
 ## Whole-note on-device intelligence
 
 Siri leads for questions about the open note; GistPad Ask remains a private offline option with verified citations and is frozen for feature work. Ask, Edit and Review use only `SystemLanguageModel.default`, with no cloud or third-party model. They see the body, never front matter, even when the note is split. `Syntax.outline(in:)` supplies shared UTF-16 blocks and task markers for Ask citations, Edit scope and Review's move check. The app preserves original source ranges for citations and exact edit quotes. [Foundation Models](https://developer.apple.com/documentation/foundationmodels), [Context management](https://developer.apple.com/documentation/foundationmodels/managing-the-context-window).
