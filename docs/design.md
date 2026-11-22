@@ -16,6 +16,7 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 - A **draft** is your unpublished text on this iPhone. **Publish** means sending to GitHub. Saving on the phone is never announced. **Autosave** is the web's name for publishing as you write, and it's the only place "save" means GitHub.
 - GitHub reads are a **check for changes**, never "update" or "sync".
 - **Show in File** (`text.viewfinder`) is the one name for jumping to a passage, from a comment or an Intelligence citation.
+- **Comments** are GitHub's. Intelligence Review's private notes on passages are **suggestions**, never comments.
 - Something that waits for GitHub says **You can [verb] after this gist publishes.**
 - A busy editor says **Finish typing or wait for Writing Tools, then try again.** Text that moved under a selection says **This file changed. Select the text again.**
 - Inserted pictures are **images**, never "photos".
@@ -189,7 +190,7 @@ No page-wide sideways scrolling, tap flash or hover-only controls.
 
 ## Apple Intelligence
 
-A medium and large sheet opens from the keyboard bar or **More → Intelligence**, with an **Ask**, **Edit** and **Review** segmented control. Ask prompts "Ask about this file", Edit "What would you like to change?" and Review says "Find errors and unclear wording." One button named for the action becomes **Stop** while it runs, over a row naming the step with a spinner, like "Reading part 2 of 3…". Ask answers with citations and **Show in File**. Edit shows each change as Before and After, with added words semibold and underlined and removed words secondary and struck through, then one **Apply Edit**. With nothing to change it says "No changes needed." Only task changes get a headline, like "Mark this task complete." Review lists comments. A read-only gist says "This gist is read-only. You can ask and review, but not apply changes." An unsupported device says "This device doesn't support Apple Intelligence." Failures show in the sheet with `exclamationmark.circle`.
+A medium and large sheet opens from the keyboard bar or **More → Intelligence**, with an **Ask**, **Edit** and **Review** segmented control. Ask prompts "Ask about this file", Edit "What would you like to change?" and Review says "Find errors and unclear wording." One button named for the action becomes **Stop** while it runs, over a row naming the step with a spinner, like "Reading part 2 of 3…". Ask answers with citations and **Show in File**. Edit shows each change as Before and After, with added words semibold and underlined and removed words secondary and struck through, then one **Apply Edit**. With nothing to change it says "No changes needed." Only task changes get a headline, like "Mark this task complete." Review lists suggestions under a "3 suggestions" header, or says "No suggestions." A read-only gist says "This gist is read-only. You can ask and review, but not apply changes." An unsupported device says "This device doesn't support Apple Intelligence." Failures show in the sheet with `exclamationmark.circle`.
 
 ## Comments
 
