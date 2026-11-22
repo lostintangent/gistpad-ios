@@ -93,7 +93,7 @@ When one of these explains a problem, **GitHub needs attention** stays out of th
 
 **Title.** The title floats at the leading end of the bar: the gist's title in `.headline` over its file name in `.caption` `secondaryLabel`, one line each, with no file name for README.md. Every title is the same glass capsule with no chevron, in every gist, every daily note and every state. In a gist it's a `Menu` with its indicator hidden. In your own gist the menu lists the files, the current one checked, when there are two or more, then **Rename File** and **Add File**. In someone else's gist it lists just the files, even when there's one. VoiceOver reads the title, then the file name. A daily note's capsule holds its day exactly as its row reads ("Friday, Nov 6"), with no file name and no menu, and reads as a heading. You move between days in the Daily Notes section, like the web. The title is never wider than "🤖 Coding Agent Culture" set in its own `.headline`, so the cap grows with Dynamic Type. Shorter titles hug their text, and longer ones end in "…" inside the capsule, as does a long file name. The cap is the same in every posture, so the capsule never moves into the overflow menu and never pushes Mode, Comments or More there. The page's scroll edges are soft in every mode, so words blur under the floating title and buttons with no bar or hairline. A note that's opening is already its own screen, with its capsule, Mode, Comments and More from the first frame of the push, so nothing in the bar changes when it arrives. One that can't open keeps the same capsule.
 
-**Mode.** In your own gist, a segmented, icon-only picker: Edit `square.and.pencil`, Split `rectangle.split.2x1` (only when it fits) and Preview `eye`. Someone else's gist shows only Preview, with no picker.
+**Mode.** In your own gist, a segmented, icon-only picker: Edit `square.and.pencil`, Split `rectangle.split.2x1` (only when it fits) and Preview `eye`. Someone else's gist shows only Preview, with no picker. Switching to Preview with the keyboard up shows the page at rest while the keyboard drops.
 
 **Status.** Healthy editing shows nothing, and there's no Publish button. A conflict or a lapsed sign-in puts **GitHub needs attention** (`exclamationmark`) in the bar, and it opens Review Changes or reconnects. When a check for changes fails, the same control sits at the bottom and opens a popover headed "Couldn't check for changes", with the reason and **Try Again** or **Reconnect GitHub**. No spinner, toast or save pill. [sync.md](sync.md#what-you-see) says what each means.
 
@@ -227,7 +227,7 @@ Three controls work in Control Center, on the Lock Screen and from the Action bu
 
 ## Motion
 
-Native navigation, sheets and list animation do the moving, and pin and unpin move rows with list motion. Never delay words or the caret for an animation. No confetti, page flips or entrance replays on refresh. The only haptics are a light tap when a swipe indents a line and a success tap when an edit applies. Reduce Motion shows the settled state.
+Native navigation, sheets and list animation do the moving, and pin and unpin move rows with list motion. Scrolling down the list, the editor or the preview minimizes the bar, and scrolling up brings it back. Never delay words or the caret for an animation. No confetti, page flips or entrance replays on refresh. The only haptics are a light tap when a swipe indents a line and a success tap when an edit applies. Reduce Motion shows the settled state.
 
 ## Review
 
