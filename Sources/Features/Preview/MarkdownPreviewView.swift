@@ -134,6 +134,10 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             onEvent(.failure(error.userInfo["WKJavaScriptExceptionMessage"] as? String ?? error.localizedDescription))
         }
 
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            (webView as? PreviewWebView)?.handBarPage()
+        }
+
         func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
             // WebKit keeps a new page, fixed content, anchors and revealed passages clear of the bars it
             // knows obscure it.
@@ -232,6 +236,31 @@ private final class PreviewWebView: WKWebView {
                     requestAnimationFrame(() => room.remove())), { once: true });
                 }
                 """)
+        }
+    }
+
+    override var isHidden: Bool {
+        didSet { if oldValue, !isHidden { handBarPage() } }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil, !isHidden { handBarPage() }
+    }
+
+    // Platform gap: the bar can't find a scroll view inside a UIViewRepresentable, so it neither
+    // minimizes nor draws its soft edge over the page. Remove when SwiftUI hands the bar the page.
+    // The bar follows the pane that last appeared or that you last scrolled.
+    func handBarPage() {
+        var responder = next
+        while let current = responder {
+            if let controller = current as? UIViewController, controller.parent is UINavigationController {
+                if controller.contentScrollView(for: .top) !== scrollView {
+                    controller.setContentScrollView(scrollView, for: .top)
+                }
+                return
+            }
+            responder = current.next
         }
     }
 
