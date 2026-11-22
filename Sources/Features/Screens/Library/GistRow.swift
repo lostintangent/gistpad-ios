@@ -89,7 +89,7 @@ struct GistRow: View {
     }
 
     private var updateLabel: String? {
-        guard !gist.isDailyNote, let updatedAt = gist.updatedAt else { return nil }
+        guard let updatedAt = gist.updatedAt else { return nil }
         return DateLabels.updateLabel(
             for: updatedAt, relativeTo: now, locale: locale, calendar: displayCalendar)
     }

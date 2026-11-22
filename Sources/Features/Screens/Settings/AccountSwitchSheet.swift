@@ -31,10 +31,8 @@ public struct AccountSwitchSheet: View {
           Text("Your drafts stay on this iPhone with their original account. Switching never publishes them.", bundle: .module)
         }
         Section {
-          Button(String(localized: "Switch to @\(replacement)", bundle: .module)) {
-            work { try await switchAccount() }
-          }
-          .accessibilityIdentifier("account-switch-confirm")
+          Button(String(localized: "Switch to @\(replacement)", bundle: .module), action: confirm)
+            .accessibilityIdentifier("account-switch-confirm")
         } footer: {
           Text("Reconnect the original account to return to its drafts.", bundle: .module)
         }
@@ -57,13 +55,13 @@ public struct AccountSwitchSheet: View {
     }
   }
 
-  private func work(_ operation: @escaping @MainActor () async throws -> Void) {
+  private func confirm() {
     guard !isWorking else { return }
     isWorking = true
     Task {
       defer { isWorking = false }
       do {
-        try await operation()
+        try await switchAccount()
         error = nil
       } catch {
         self.error = error.localizedDescription
