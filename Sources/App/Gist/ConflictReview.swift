@@ -111,9 +111,7 @@ struct ConflictReview: View {
         }
         Button("Cancel", role: .cancel) {}
       } message: {
-        Text(
-          "Replace your text with GitHub's version. You can undo this."
-        )
+        Text("You can undo this.")
       }
       .task(id: review) {
         isComparing = true
