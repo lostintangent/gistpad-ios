@@ -45,26 +45,24 @@ final class PlatformBridge: PlatformActions {
   private var operation: Task<Void, Never>?
   /// Starts from the snapshot GistPad launched with, read before the first refresh rewrites it.
   private let spotlight = SpotlightIndex(launchedWith: try? LibrarySnapshot.read())
-  private var spotlightSnapshot: LibrarySnapshot?
-  private var spotlightTask: Task<Void, Never>?
-  private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "SystemIntegration")
+  private let spotlightSnapshots: AsyncStream<LibrarySnapshot>.Continuation
+  private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Platform")
 
   init(model: GistPadModel) {
     self.model = model
+    let (snapshots, continuation) = AsyncStream.makeStream(
+      of: LibrarySnapshot.self, bufferingPolicy: .bufferingNewest(1))
+    spotlightSnapshots = continuation
+    indexInSpotlight(snapshots)
     followLibrary()
-    // Launch also catches up on anything that changed while the app wasn't running.
-    scheduleRefresh()
   }
 
-  /// Widgets, Spotlight and Shortcuts follow the library's account and the drafts on this iPhone.
+  /// Widgets, Spotlight and Shortcuts follow the library's account and the drafts on this iPhone,
+  /// starting at launch, which catches up on anything that changed while the app wasn't running.
   private func followLibrary() {
-    withObservationTracking {
-      _ = (model.account, model.phase, model.drafts)
-    } onChange: { [weak self] in
-      Task { @MainActor in
-        self?.scheduleRefresh()
-        self?.followLibrary()
-      }
+    let library = Observations { [weak model] in _ = (model?.account, model?.phase, model?.drafts) }
+    Task { [weak self] in
+      for await _ in library { self?.scheduleRefresh() }
     }
   }
 
@@ -90,7 +88,7 @@ final class PlatformBridge: PlatformActions {
       account: account, cache: model.gistCache, drafts: model.drafts, visibleText: Self.noteBody)
     try snapshot.write()
     WidgetCenter.shared.reloadTimelines(ofKind: LauncherWidgetView.kind)
-    indexInSpotlight(snapshot)
+    spotlightSnapshots.yield(snapshot)
   }
 
   /// Widgets and Spotlight show an accepted change before the intent returns, or soon after.
@@ -131,12 +129,9 @@ final class PlatformBridge: PlatformActions {
   }
 
   /// Spotlight catches up with the newest snapshot in the background, so nothing waits on it.
-  private func indexInSpotlight(_ snapshot: LibrarySnapshot) {
-    spotlightSnapshot = snapshot
-    guard spotlightTask == nil else { return }
-    spotlightTask = Task {
-      while let snapshot = spotlightSnapshot {
-        spotlightSnapshot = nil
+  private func indexInSpotlight(_ snapshots: AsyncStream<LibrarySnapshot>) {
+    Task { [spotlight, logger] in
+      for await snapshot in snapshots {
         do {
           try await spotlight.update(snapshot)
         } catch {
@@ -144,7 +139,6 @@ final class PlatformBridge: PlatformActions {
             "Spotlight update failed: \(String(reflecting: type(of: error)), privacy: .public)")
         }
       }
-      spotlightTask = nil
     }
   }
 
