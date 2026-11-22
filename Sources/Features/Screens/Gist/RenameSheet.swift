@@ -92,7 +92,7 @@ public struct RenameTarget: Identifiable {
     self.kind = kind
   }
 
-  public var heading: String {
+  var heading: String {
     switch kind {
     case .title: String(localized: "Rename Gist", bundle: .module)
     case .filename: String(localized: "Rename File", bundle: .module)
@@ -100,7 +100,7 @@ public struct RenameTarget: Identifiable {
     }
   }
 
-  public var initialValue: String {
+  var initialValue: String {
     switch kind {
     case .title: title
     case .filename: draft.filename

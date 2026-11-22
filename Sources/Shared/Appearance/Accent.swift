@@ -34,7 +34,7 @@ public struct RGBColor: Hashable, Sendable {
 
     public static let black = RGBColor(red: 0, green: 0, blue: 0)
     public static let white = RGBColor(red: 255, green: 255, blue: 255)
-    public static let sky = RGBColor(red: 14, green: 165, blue: 233)
+    static let sky = RGBColor(red: 14, green: 165, blue: 233)
 
     public var hex: String {
         String(format: "#%02X%02X%02X", Int(red), Int(green), Int(blue))

@@ -51,7 +51,7 @@ public struct GistItem: Equatable, Identifiable, Sendable {
 
     public var visibleFileCount: Int? { fileCount > 1 ? fileCount : nil }
 
-    public var supportsComments: Bool { gistID != nil && !isDailyNote }
+    var supportsComments: Bool { gistID != nil && !isDailyNote }
 
     /// Pin and Archive organize whole gists. A daily note is one file, so it only deletes.
     var canPinAndArchive: Bool { isOwned && !isDeletedOnGitHub && !isDailyNote }
@@ -62,7 +62,7 @@ public struct GistItem: Equatable, Identifiable, Sendable {
         return DailyNote.title(for: dailyDate, relativeTo: now, locale: locale, calendar: calendar)
     }
 
-    public var visibleCommentCount: Int? {
+    var visibleCommentCount: Int? {
         guard supportsComments, let commentCount, commentCount > 0 else { return nil }
         return commentCount
     }
@@ -113,7 +113,7 @@ public final class LibraryState {
     public private(set) var tags: [Tag]
     /// Nil until the account's gists are known, and while the daily gist is too large to count.
     public private(set) var dailyNoteCount: Int?
-    public private(set) var hasKnownGists: Bool
+    private(set) var hasKnownGists: Bool
     public var query = ""
     public var selectedTagIDs: Set<String> = []
     public var selectedID: String?
@@ -131,12 +131,12 @@ public final class LibraryState {
         self.today = today
     }
 
-    public var hasFilters: Bool {
+    var hasFilters: Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedTagIDs.isEmpty
     }
 
     /// Like the web, a filter matches titles and tags, and the open gist stays listed.
-    public var matchingGists: [GistItem] {
+    var matchingGists: [GistItem] {
         Self.ordered(gists.filter { gist in
             hasFilters
                 ? Self.primarySection(for: gist) != nil && (gist.id == selectedID || matchesFilter(gist))
@@ -152,7 +152,7 @@ public final class LibraryState {
         hasKnownGists = known
     }
 
-    public func count(in section: LibrarySection) -> Int? {
+    func count(in section: LibrarySection) -> Int? {
         guard hasKnownGists else { return nil }
         if section == .dailyNotes { return dailyNoteCount }
         return Self.gistCount(in: gists.filter { Self.includes($0, in: section) })
@@ -165,7 +165,7 @@ public final class LibraryState {
         }
     }
 
-    public func matchingGists(in section: LibrarySection) -> [GistItem] {
+    func matchingGists(in section: LibrarySection) -> [GistItem] {
         guard hasFilters else { return Self.ordered(gists.filter { Self.includes($0, in: section) }, in: section) }
         let gists = matchingGists.filter { Self.primarySection(for: $0) == section }
         return section == .dailyNotes ? Self.ordered(gists, in: section) : gists
@@ -192,13 +192,13 @@ public final class LibraryState {
     }
 
     /// Gists the filter matches. The open gist is listed without counting as a match.
-    public var resultGistCount: Int? {
+    var resultGistCount: Int? {
         guard hasFilters, hasKnownGists else { return nil }
         return Self.gistCount(in: matchingGists.filter(matchesFilter))
     }
 
     /// Whether anything besides the open gist matches the filter.
-    public var hasMatches: Bool { matchingGists.contains(where: matchesFilter) }
+    var hasMatches: Bool { matchingGists.contains(where: matchesFilter) }
 
     private func matchesFilter(_ gist: GistItem) -> Bool {
         let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -207,13 +207,13 @@ public final class LibraryState {
     }
 
     /// Gists carrying the tag, counted over the same gists a tag filter searches.
-    public func gistCount(tagged tagID: String) -> Int {
+    func gistCount(tagged tagID: String) -> Int {
         Self.gistCount(in: gists.filter {
             $0.tagIDs.contains(tagID) && Self.primarySection(for: $0) != nil
         })
     }
 
-    public static func gistCount(in gists: [GistItem]) -> Int {
+    static func gistCount(in gists: [GistItem]) -> Int {
         Set(gists.compactMap(\.gistID)).count
     }
 
@@ -239,7 +239,7 @@ public final class LibraryState {
         selectedTagIDs = []
     }
 
-    public func tags(for gist: GistItem) -> [Tag] {
+    func tags(for gist: GistItem) -> [Tag] {
         tags.filter { gist.tagIDs.contains($0.id) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
