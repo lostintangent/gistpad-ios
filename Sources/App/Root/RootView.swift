@@ -353,7 +353,7 @@ struct RootView: View {
         return EditorView(
             editor: fileEditor.editor, title: fileEditor.details.title,
             insertImage: images.canChooseImage(for: fileEditor)
-                ? { comments.performAfterClosing { images.chooseImage(for: fileEditor) } }
+                ? { @MainActor in comments.performAfterClosing { images.chooseImage(for: fileEditor) } }
                 : nil,
             intelligence: { comments.performAfterClosing { presentIntelligence(fileEditor) } },
             comments: highlights.configuration, commentActions: highlights.actions)
