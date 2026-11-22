@@ -97,9 +97,8 @@ public struct SettingsSheet<Appearance: View>: View {
       .navigationTitle(Text("Settings", bundle: .module))
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: .cancellationAction) {
           Button(role: .close) { dismiss() }
-            .accessibilityLabel(Text("Close Settings", bundle: .module))
             .disabled(isWorking)
         }
       }
