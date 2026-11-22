@@ -21,6 +21,8 @@ public struct CommentQuote: Equatable, Sendable {
     fileprivate func match(in haystacks: [NSString]) -> Match? {
         let needle = quote as NSString
         guard needle.length >= Self.minimumQuoteLength else { return nil }
+        let checksStart = Self.isASCIIWord(needle.character(at: 0))
+        let checksEnd = Self.isASCIIWord(needle.character(at: needle.length - 1))
         var found: Match?
         for (segment, haystack) in haystacks.enumerated() {
             var location = 0
@@ -28,8 +30,8 @@ public struct CommentQuote: Equatable, Sendable {
                 let rest = NSRange(location: location, length: haystack.length - location)
                 let range = haystack.range(of: quote, options: .literal, range: rest)
                 guard range.location != NSNotFound else { break }
-                if Self.isWordBoundary(in: haystack, at: range.location),
-                    Self.isWordBoundary(in: haystack, at: NSMaxRange(range))
+                if !checksStart || Self.isWordBoundary(in: haystack, at: range.location),
+                    !checksEnd || Self.isWordBoundary(in: haystack, at: NSMaxRange(range))
                 {
                     if found != nil { return nil }
                     found = (threadID, segment, range)
@@ -56,7 +58,8 @@ public struct CommentQuote: Equatable, Sendable {
 }
 
 extension [CommentQuote] {
-    /// Like the web's `\bquote\b`, a quote links only when it appears exactly once as whole words.
+    /// Like the web, a quote links only when it appears exactly once, with a word boundary at each
+    /// edge that ends in a word character, so "ship it." links but "care" never matches "careful".
     func matches(in segments: [String]) -> [CommentQuote.Match] {
         let haystacks = segments.map { $0 as NSString }
         return compactMap { $0.match(in: haystacks) }

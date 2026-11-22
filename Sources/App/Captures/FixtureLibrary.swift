@@ -178,13 +178,12 @@
       .joined(separator: "\n\n")
       + "\n\n## Further down\n\nA late native passage should scroll into view.\n\n"
       + Array(repeating: "Room below, so the late passage can rest at the top of the page.", count: 24)
-      .joined(separator: "\n\n") + "\n\n\(longQuote).\n"
+      .joined(separator: "\n\n") + "\n\n\(longQuote)\n"
 
-    /// Runs well past the three lines a quote shows before Show Full Quote. Like the web's `\b`
-    /// match, a quote links only between word characters, so it stops before the period.
+    /// Runs well past the three lines a quote shows before Show Full Quote.
     private static let longQuote =
       "The margins of a notebook are where second thoughts live: the small corrections and asides "
       + "that make a page feel lived in. A comment should hold that whole thought without crowding "
-      + "the conversation around it"
+      + "the conversation around it."
   }
 #endif
