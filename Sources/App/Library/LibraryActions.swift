@@ -16,7 +16,7 @@ extension LibraryActions {
     actions.today = today
     actions.select = select
     actions.openComments = openComments
-    actions.account = settings
+    actions.settings = settings
     actions.reconnect = { Task { await model.reconnect() } }
     actions.recoverStatus = {
       Task {
@@ -29,7 +29,7 @@ extension LibraryActions {
     }
     actions.togglePin = { rowID in
       guard let account = model.account, let id = model.gistID(forRow: rowID) else {
-        model.alertMessage = String(localized: "Save this local draft to GitHub before pinning it.")
+        model.alertMessage = String(localized: "You can pin this gist after it publishes.")
         return
       }
       let pinned = !account.preferences.pinnedGists.contains(id)
@@ -39,8 +39,7 @@ extension LibraryActions {
       guard let id = model.gistID(forRow: rowID),
         let gist = model.gistCache?.gists.first(where: { $0.id == id })
       else {
-        model.alertMessage = String(
-          localized: "A recovery or unpublished draft cannot be archived on GitHub.")
+        model.alertMessage = String(localized: "You can archive this gist after it publishes.")
         return
       }
       model.setArchived(!gist.isArchived, gistID: id, undoManager: undoManager)

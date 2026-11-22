@@ -2,15 +2,6 @@
 import Store
 import SwiftUI
 
-private struct LibraryCreateButton: View {
-    let action: @MainActor () -> Void
-
-    var body: some View {
-        Button(String(localized: "New Gist", bundle: .module), systemImage: "square.and.pencil", action: action)
-            .accessibilityIdentifier("library-create")
-    }
-}
-
 extension View {
     public func libraryRail(
         isVisible: Bool, today: DailyNote,
@@ -19,7 +10,7 @@ extension View {
         toolbar {
             if isVisible {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    LibraryCreateButton(action: create)
+                    LibraryView.newGistButton(action: create)
                     TodayButton(summary: today, action: openToday)
                 }
             }
@@ -56,7 +47,7 @@ public struct LibraryActions {
     public var select: (String) -> Void = { _ in }
     public var reconnect: () -> Void = {}
     public var recoverStatus: @MainActor () -> Void = {}
-    public var account: () -> Void = {}
+    public var settings: () -> Void = {}
     public var togglePin: (String) -> Void = { _ in }
     public var toggleArchive: (String) -> Void = { _ in }
     public var openComments: (String) -> Void = { _ in }
@@ -351,9 +342,22 @@ public struct LibraryView: View {
         }
     }
 
+    fileprivate static func newGistButton(action: @escaping @MainActor () -> Void) -> some View {
+        Button(String(localized: "New Gist", bundle: .module), systemImage: "square.and.pencil", action: action)
+            .accessibilityIdentifier("library-create")
+    }
+
+    private var artwork: some View {
+        Image("Artwork", bundle: .module)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 64, height: 64)
+            .accessibilityHidden(true)
+    }
+
     private var signedOutInvitation: some View {
         ContentUnavailableView {
-            GistPadArtwork()
+            artwork
             Text("Welcome to GistPad", bundle: .module)
                 .font(.title2.weight(.semibold))
         } description: {
@@ -392,7 +396,7 @@ public struct LibraryView: View {
                 }
             case nil:
                 ContentUnavailableView {
-                    GistPadArtwork()
+                    artwork
                     Text("No Gists Yet", bundle: .module)
                         .font(.title2.weight(.semibold))
                 } description: {
@@ -504,7 +508,7 @@ public struct LibraryView: View {
             }
             if !isSidebar {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    LibraryCreateButton(action: actions.create)
+                    Self.newGistButton(action: actions.create)
                     TodayButton(summary: state.today, action: actions.today)
                     settingsButton
                 }
@@ -518,12 +522,12 @@ public struct LibraryView: View {
     }
 
     private var settingsButton: some View {
-        Button(String(localized: "Settings", bundle: .module), systemImage: "gearshape", action: actions.account)
+        Button(String(localized: "Settings", bundle: .module), systemImage: "gearshape", action: actions.settings)
             .accessibilityIdentifier("library-settings")
     }
 
     private var tagFilterButton: some View {
-        Button(String(localized: "Filter by tags", bundle: .module), systemImage: "tag") {
+        Button(String(localized: "Filter by Tags", bundle: .module), systemImage: "tag") {
             showingTags = true
         }
         // The system blue that confirm buttons use, not the personal accent.
@@ -568,12 +572,12 @@ public struct LibraryView: View {
                     }
                 }
                 if !state.selectedTagIDs.isEmpty {
-                    Button(String(localized: "Clear tag filters", bundle: .module)) {
+                    Button(String(localized: "Clear Tag Filter", bundle: .module)) {
                         state.selectedTagIDs = []
                     }
                 }
             }
-            .navigationTitle(Text("Filter by tags", bundle: .module))
+            .navigationTitle(Text("Filter by Tags", bundle: .module))
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $tagQuery, prompt: Text("Search tags", bundle: .module))
             .overlay {
