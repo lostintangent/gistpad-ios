@@ -49,11 +49,51 @@ struct RootView: View {
       set: { layout.setPinnedExpanded($0, accountID: accountID) })
   }
 
+  /// GistPad's navigation, following the links that arrive, the app coming and going and the
+  /// account that's signed in, under one alert and one sheet.
   var body: some View {
-    workspaceSheets
+    navigation
+      .task {
+        await model.start()
+        await model.returnToApp()
+      }
+      .task(id: linkToOpen) { await openPendingLink() }
+      #if DEBUG
+      .onChange(of: pending.link) { presentFixtureSheet() }
+      #endif
+      .onChange(of: scenePhase) { _, phase in
+        if phase == .background { leaveApp() }
+        if phase == .active { Task { await model.returnToApp() } }
+      }
+      .onChange(of: settledAccountID) {
+        comments.reset()
+        intelligence.target = nil
+      }
+      .onChange(of: model.account?.id) {
+        columnVisibility = .all
+        sheet = nil
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+        model.updateCalendar()
+      }
+      .alert("GistPad", isPresented: $model.isShowingError) {
+      } message: {
+        Text(model.alertMessage ?? "")
+      }
+      .sheet(item: $sheet) { sheet in
+        switch sheet {
+        case .settings: settingsSheet
+        case .addToToday: AddToTodaySheet()
+        case .tags(let target): TagEditor(target, model: model)
+        case .rename(let target): RenameSheet(target, model: model)
+        case .review(let target):
+          ConflictReview(fileEditor: target.fileEditor, review: target.review)
+        }
+      }
       .intelligenceSheet(intelligence)
   }
 
+  /// The library and the open file, preparing each file as it arrives and leaving it as it goes.
   private var navigation: some View {
     Group {
       if model.account == nil {
@@ -63,6 +103,28 @@ struct RootView: View {
       } else {
         splitView
       }
+    }
+    .background {
+      // Keyed by the active editor instead of onChange, because SwiftUI drops onChange actions
+      // past a few per frame. A launch link can restore today, open, and present a new note in one.
+      Color.clear.onAppear(perform: didActivate).id(active?.editor.id)
+    }
+    .onChange(of: active?.file.id) { previous, _ in
+      if let previous, let outgoing = model.editors[previous] {
+        Task { await outgoing.leave() }
+      }
+    }
+    .onChange(of: model.state.selectedID) { _, selected in
+      if selected == nil, model.opening == nil { compactColumn = .sidebar }
+    }
+    .onChange(of: compactColumn) { previous, current in
+      guard previous != current, current == .sidebar else { return }
+      if horizontalSizeClass == .compact {
+        comments.hide()
+        model.showLibrary()
+        active?.editor.endEditing()
+      }
+      if let outgoing = active { Task { await outgoing.leave() } }
     }
   }
 
@@ -109,40 +171,6 @@ struct RootView: View {
     .commentsInspector(comments, active: active, columnVisibility: $columnVisibility)
   }
 
-  private var workspaceNavigationLifecycle: some View {
-    navigation
-    .task {
-      await model.start()
-      await model.returnToApp()
-    }
-    .task(id: linkToOpen) { await openPendingLink() }
-    #if DEBUG
-    .onChange(of: pending.link) { presentFixtureSheet() }
-    #endif
-    .background {
-      // Keyed by the active editor instead of onChange, because SwiftUI drops onChange actions
-      // past a few per frame. A launch link can restore today, open, and present a new note in one.
-      Color.clear.onAppear(perform: didActivate).id(active?.editor.id)
-    }
-    .onChange(of: active?.file.id) { previous, _ in
-      if let previous, let outgoing = model.editors[previous] {
-        Task { await outgoing.leave() }
-      }
-    }
-    .onChange(of: model.state.selectedID) { _, selected in
-      if selected == nil, model.opening == nil { compactColumn = .sidebar }
-    }
-    .onChange(of: compactColumn) { previous, current in
-      guard previous != current, current == .sidebar else { return }
-      if horizontalSizeClass == .compact {
-        comments.hide()
-        model.showLibrary()
-        active?.editor.endEditing()
-      }
-      if let outgoing = active { Task { await outgoing.leave() } }
-    }
-  }
-
   /// Prepares a file as it comes into the detail column.
   private func didActivate() {
     guard let active else { return }
@@ -173,43 +201,6 @@ struct RootView: View {
   /// The account whose gists are up, or nil while one signs in, out or waits to replace it.
   private var settledAccountID: UUID? {
     model.phase.isChangingAccount ? nil : model.account?.id
-  }
-
-  private var workspaceLifecycle: some View {
-    workspaceNavigationLifecycle
-    .onChange(of: scenePhase) { _, phase in
-      if phase == .background { leaveApp() }
-      if phase == .active { Task { await model.returnToApp() } }
-    }
-    .onChange(of: settledAccountID) {
-      comments.reset()
-      intelligence.target = nil
-    }
-    .onChange(of: model.account?.id) {
-      columnVisibility = .all
-      sheet = nil
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
-      model.updateCalendar()
-    }
-  }
-
-  private var workspaceSheets: some View {
-    workspaceLifecycle
-    .alert("GistPad", isPresented: $model.isShowingError) {
-    } message: {
-      Text(model.alertMessage ?? "")
-    }
-    .sheet(item: $sheet) { sheet in
-      switch sheet {
-      case .settings: settingsSheet
-      case .addToToday: AddToTodaySheet()
-      case .tags(let target): TagEditor(target, model: model)
-      case .rename(let target): RenameSheet(target, model: model)
-      case .review(let target):
-        ConflictReview(fileEditor: target.fileEditor, review: target.review)
-      }
-    }
   }
 
   /// The one sheet over the app. A link or another account replaces it.
@@ -458,7 +449,8 @@ struct RootView: View {
       await model.open(.gist(id: id, filename: filename))
     case .unpublishedGist(let accountID, let draftID):
       guard accountID == account.id else {
-        model.alertMessage = "This draft belongs to another GitHub account. Switch accounts to open it."
+        model.alertMessage = String(
+          localized: "This draft belongs to another GitHub account. Sign in with that account to open it.")
         pending.link = nil
         return
       }

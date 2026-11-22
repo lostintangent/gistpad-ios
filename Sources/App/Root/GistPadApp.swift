@@ -66,7 +66,7 @@ struct GistPadApp: App {
           cannotOpenLink = true
         }
       }
-      .alert("Cannot Open Link", isPresented: $cannotOpenLink) {
+      .alert("Couldn’t Open Link", isPresented: $cannotOpenLink) {
       } message: {
         Text("GistPad can't open this link.")
       }

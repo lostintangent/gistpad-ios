@@ -1,32 +1,24 @@
 import OSLog
 import UIKit
 
+/// The background time a publish gets after you leave the app. When the system takes it back,
+/// `onExpiration` cancels the publish and the draft stays on this iPhone.
 @MainActor
 final class BackgroundLease {
   private var identifier = UIBackgroundTaskIdentifier.invalid
-  private var expired = false
   var onExpiration: (() -> Void)?
 
-  var isActive: Bool { !expired && identifier != .invalid }
+  var isActive: Bool { identifier != .invalid }
 
   init() {
-    identifier = UIApplication.shared.beginBackgroundTask(
-      withName: "Publish changes"
-    ) {
+    // UIKit calls this on the main actor, and the task has to end before it returns.
+    identifier = UIApplication.shared.beginBackgroundTask(withName: "Publish changes") {
       [weak self] in
-      Task { @MainActor in
-        Logger(subsystem: "dev.gistpad.GistPad", category: "Library")
-          .info("Background publish time expired. Local drafts are retained.")
-        self?.expire()
-      }
+      Logger(subsystem: "dev.gistpad.GistPad", category: "Library")
+        .info("Background publish time expired. Local drafts are retained.")
+      self?.onExpiration?()
+      self?.end()
     }
-  }
-
-  func expire() {
-    guard !expired else { return }
-    expired = true
-    onExpiration?()
-    end()
   }
 
   func end() {
