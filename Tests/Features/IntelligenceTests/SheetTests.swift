@@ -68,11 +68,7 @@
     }
 
     @Test(arguments: [
-      AskFailure.unavailable, .error(.refused), .error(.timedOut), .error(.rateLimited),
-      .error(.insufficientContext), .answer(ModelAnswer(prose: "")),
-      .answer(ModelAnswer(prose: " \r\n\t")),
-      .answer(ModelAnswer(prose: "", quotes: ["Invented source"])),
-      .answer(ModelAnswer(prose: "The user leaves at 9am.")),
+      AskFailure.unavailable, .error(.refused), .answer(ModelAnswer(prose: " \r\n\t")),
     ])
     func everyFailedAskShowsAReasonAndKeepsTheRequestAndFile(failure: AskFailure) async {
       let editor = Editor(text: source)

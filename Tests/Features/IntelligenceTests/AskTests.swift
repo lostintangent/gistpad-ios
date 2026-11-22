@@ -17,7 +17,7 @@ struct AskTests {
     2. A short series for the weekend
     """
 
-  @Test func askAnswersFromTheWholeFileShortOrLong() async throws {
+  @Test func askAnswersAShortFileInOnePass() async throws {
     let fixture = FixtureLanguageModel()
     fixture.answer = ModelAnswer(
       prose: "You are reading two series and have two next reads.",
@@ -27,18 +27,6 @@ struct AskTests {
     #expect(answer.count == 2)
     #expect(fixture.passes.map(\.source) == [manga])
     #expect(fixture.passes.map(\.requestID) == [short.id])
-
-    let long = String(repeating: "A background paragraph.\n\n", count: 100) + "needle"
-    let reader = FixtureLanguageModel()
-    reader.contextSize = 1_536
-    reader.excerpts = { $0.source.contains("needle") ? ["needle"] : [] }
-    reader.answer = ModelAnswer(prose: "", quotes: ["needle"])
-    let found = try await IntelligenceEngine(backend: reader).ask(
-      request(long, "Find needle"))
-    let reads = reader.passes.filter { $0.purpose == .extract }
-    #expect(reads.map(\.source).joined().utf8.elementsEqual(long.utf8))
-    #expect(reader.passes.filter { $0.purpose == .answer }.map(\.evidenceBlocks) == [["needle"]])
-    #expect(found.count == 1)
   }
 
   @Test func aCitationCarriesTheExactPassageForShowInFile() async throws {
@@ -111,7 +99,7 @@ struct AskTests {
     #expect(answer == [.prose("The route is south.")])
   }
 
-  @Test func askNeverReadsOrCitesFrontMatter() async throws {
+  @Test func askReadsTheWholeBodyButNeverFrontMatter() async throws {
     let prefix = "---\r\nprivate: A hidden fact 👩🏽‍💻\r\n---\r\n\r\n"
     let body = "# Content\r\n\r\nA visible fact 👩🏽‍💻.\r\n"
     let fixture = FixtureLanguageModel()
@@ -140,11 +128,13 @@ struct AskTests {
     reader.contextSize = 1_536
     reader.excerpts = { $0.source.contains("needle") ? ["needle"] : [] }
     reader.answer = ModelAnswer(prose: "", quotes: ["needle"])
-    _ = try await IntelligenceEngine(backend: reader).ask(
+    let found = try await IntelligenceEngine(backend: reader).ask(
       request(prefix + longBody, "Find needle"))
     #expect(
       reader.passes.filter { $0.purpose == .extract }
         .map(\.source).joined().utf8.elementsEqual(longBody.utf8))
+    #expect(reader.passes.filter { $0.purpose == .answer }.map(\.evidenceBlocks) == [["needle"]])
+    #expect(found.count == 1)
     #expect(!reader.passes.contains { $0.source.contains("private:") })
   }
 
