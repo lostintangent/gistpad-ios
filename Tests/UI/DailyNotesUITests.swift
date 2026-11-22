@@ -39,7 +39,9 @@ final class DailyNotesUITests: XCTestCase {
     try waitUntil("a confirmation that names the day") {
       app.staticTexts["Delete “\(Self.yesterdayTitle)”?"].exists
     }
-    try confirmDeletion(in: app)
+    let confirm = app.buttons.matching(identifier: "Delete")
+    try waitUntil("the delete confirmation") { confirm.allElementsBoundByIndex.contains(where: \.isTappable) }
+    confirm.allElementsBoundByIndex.last(where: \.isTappable)?.tap()
 
     // Deleting the open file returns to the Library, or empties the note beside a hidden sidebar.
     try waitUntil("the day to close") { !app.navigationBars[Self.yesterdayTitle].exists }

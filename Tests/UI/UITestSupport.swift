@@ -20,11 +20,6 @@ extension XCUIElement {
     descendants(matching: .any).matching(identifier: identifier).firstMatch
   }
 
-  /// Library rows, which are the only elements whose identifiers start with `library-note-`.
-  var libraryRows: XCUIElementQuery {
-    descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'library-note-'"))
-  }
-
   /// Whether the element can be tapped now. Reading `isHittable` fails the test, rather than
   /// returning false, while the element is missing or laid out off screen mid-transition.
   var isTappable: Bool {
@@ -37,12 +32,6 @@ extension XCUIElement {
 
   /// The element's value as text, or nil while it's missing, which reading `value` fails on.
   var text: String? { (try? snapshot())?.value as? String }
-
-  /// A web view element whose text starts with `prefix`.
-  func passage(_ prefix: String) -> XCUIElement {
-    webViews.firstMatch.descendants(matching: .any)
-      .matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
-  }
 }
 
 extension XCUIApplication {
@@ -114,9 +103,7 @@ extension XCTestCase {
     XCTFail("Timed out waiting for \(description).", file: file, line: line)
     throw UITestTimeout()
   }
-}
 
-extension XCTestCase {
   /// Taps `element` once it can be tapped, since menus and swipe actions animate in.
   @MainActor
   func tap(
@@ -142,17 +129,6 @@ extension XCTestCase {
     try tap(
       app.buttons.matching(NSPredicate(format: "label == 'More' AND identifier == ''")).firstMatch,
       "More in the overflow menu", file: file, line: line)
-  }
-
-  /// Taps the destructive button in the confirmation dialog that a Delete action presents.
-  @MainActor
-  func confirmDeletion(in app: XCUIApplication) throws {
-    var confirm: XCUIElement?
-    try waitUntil("the delete confirmation") {
-      confirm = app.buttons.matching(identifier: "Delete").allElementsBoundByIndex.last(where: \.isTappable)
-      return confirm != nil
-    }
-    confirm?.tap()
   }
 }
 

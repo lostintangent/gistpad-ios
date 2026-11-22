@@ -134,7 +134,8 @@ final class LibraryUITests: XCTestCase {
     let dailyNotes = app.element("library-collection-dailyNotes")
     dailyNotes.scrollIntoView(in: app)
     dailyNotes.tap()
-    let day = app.libraryRows.matching(NSPredicate(format: "identifier BEGINSWITH 'library-note-daily/'")).firstMatch
+    let day = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "identifier BEGINSWITH 'library-note-daily/'")).firstMatch
     try waitUntil("a daily note") { day.exists }
     day.scrollIntoView(in: app)
 
@@ -171,7 +172,7 @@ final class LibraryUITests: XCTestCase {
       app.element("library-note-words").tap()
       app.showLibrary()
     }
-    let published = app.libraryRows.matching(
+    let published = app.descendants(matching: .any).matching(
       NSPredicate(format: "identifier MATCHES 'library-note-f[0-9a-f]{7}'")).firstMatch
     try waitUntil("the published gist in the Library") { published.isTappable }
     let id = published.identifier
