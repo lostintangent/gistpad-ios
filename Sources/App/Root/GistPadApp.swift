@@ -2,7 +2,6 @@ import Appearance
 import Model
 import Platform
 import SwiftUI
-import Store
 
 @main
 struct GistPadApp: App {
@@ -27,12 +26,7 @@ struct GistPadApp: App {
           return
         }
       #endif
-      guard let key = Bundle.main.object(forInfoDictionaryKey: "SupabasePublishableKey") as? String,
-        !key.isEmpty, !key.contains("$(")
-      else {
-        throw AccountError.invalidConfiguration
-      }
-      model = try PlatformBridge.model(publishableKey: key)
+      model = try PlatformBridge.model()
     } catch {
       loadError = error.localizedDescription
     }

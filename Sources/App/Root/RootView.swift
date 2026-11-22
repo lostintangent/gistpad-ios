@@ -30,7 +30,7 @@ struct RootView: View {
     self.pending = pending
     _layout = State(initialValue: layout)
     _comments = State(initialValue: CommentsPresentation(app: model))
-    _images = State(initialValue: ImageUpload(upload: model.uploadImage))
+    _images = State(initialValue: ImageUpload(model: model))
   }
 
   private var active: GistFileEditor? { model.activeEditor }
@@ -292,11 +292,9 @@ struct RootView: View {
       }
       .onChange(of: identifier, initial: true) { _, value in
         fileEditor.editor.entityIdentifier = value
-        PlatformBridge.shared?.setVisibleNote(value?.identifier, fileEditor: fileEditor)
       }
       .onDisappear {
         fileEditor.editor.entityIdentifier = nil
-        PlatformBridge.shared?.setVisibleNote(nil, fileEditor: fileEditor)
       }
   }
 

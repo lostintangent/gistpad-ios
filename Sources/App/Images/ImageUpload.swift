@@ -20,10 +20,10 @@ final class ImageUpload {
   private(set) var isUploading = false
   /// The note the picked image, or a retried one, goes into.
   @ObservationIgnored private weak var fileEditor: GistFileEditor?
-  @ObservationIgnored private let upload: @MainActor (Data, GistFile) async throws -> URL
+  @ObservationIgnored private let model: GistPadModel
 
-  init(upload: @escaping @MainActor (Data, GistFile) async throws -> URL) {
-    self.upload = upload
+  init(model: GistPadModel) {
+    self.model = model
   }
 
   func canChooseImage(for fileEditor: GistFileEditor) -> Bool {
@@ -61,8 +61,7 @@ final class ImageUpload {
       return
     }
     do {
-      let markdown = ImageStorage.markdown(
-        try await upload(image, fileEditor.file))
+      let markdown = ImageStorage.markdown(try await model.uploadImage(image, for: fileEditor.file))
       let editor = fileEditor.editor
       try editor.apply(
         Edit(

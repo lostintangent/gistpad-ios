@@ -35,7 +35,9 @@ struct PlatformTests {
     defer { fixture.cleanUp() }
     let fileEditor = try await fixture.fileEditor()
     let typed = fileEditor.editor.text + "- [ ] Written offline\n"
-    try await fixture.type(typed, in: fileEditor)
+    fileEditor.editor.textView.text = typed
+    fileEditor.editor.textViewDidChange(fileEditor.editor.textView)
+    try #require(await fileEditor.waitForLocalSave())
     // Today's publish goes out and is cut off, so GitHub may or may not have it.
     fixture.fixture.fail("PATCH")
     await fileEditor.publish()
@@ -53,35 +55,7 @@ struct PlatformTests {
     #expect(fileEditor.status == .published)
   }
 
-  @Test func siriCreatesANamedNoteThroughTheExistingNewGistDraft() async throws {
-    let fixture = try await PlatformFixture.make()
-    defer { fixture.cleanUp() }
-    let previousLink = PendingLink.shared.link
-    defer { PendingLink.shared.link = previousLink }
-    let intent = CreateGistNoteIntent()
-    intent.app = fixture.bridge
-    intent.name = AttributedString("Groceries")
-    intent.attachments = []
-    intent.isPinned = false
-
-    _ = try await intent.perform()
-
-    let draft = try #require(fixture.model.drafts.first {
-      $0.gistID == nil && $0.newGistName == "Groceries"
-    })
-    #expect(draft.text == "# Groceries\n\n")
-    #expect(PendingLink.shared.link == .unpublishedGist(
-      accountID: fixture.account.id, draftID: draft.id))
-    let note = try #require(try LibrarySnapshot.read()?.gists.first {
-      $0.link == .unpublishedGist(accountID: fixture.account.id, draftID: draft.id)
-    })
-    #expect(note.content == nil)
-    #expect(fixture.publishes.isEmpty)
-    await fixture.model.open(.draft(id: draft.id))
-    #expect(fixture.model.activeEditor?.file.id == draft.id)
-  }
-
-  @Test func siriCreatesANoteWithContentAndRejectsUnsupportedOptions() async throws {
+  @Test func siriCreatesANoteThroughANewGistDraftAndRejectsUnsupportedOptions() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
     let previousLink = PendingLink.shared.link
@@ -109,35 +83,22 @@ struct PlatformTests {
     })
     #expect(fixture.model.drafts.filter { $0.newGistName == "Test Reading List" }.count == 1)
     #expect(draft.text == "# Ranked\n1. Vagabond\n")
-    let note = try #require(try LibrarySnapshot.read()?.gists.first {
-      $0.link == .unpublishedGist(accountID: fixture.account.id, draftID: draft.id)
-    })
+    let link = GistPadLink.unpublishedGist(accountID: fixture.account.id, draftID: draft.id)
+    #expect(PendingLink.shared.link == link)
+    let note = try #require(try LibrarySnapshot.read()?.gists.first { $0.link == link })
     #expect(note.content == nil)
     #expect(fixture.publishes.isEmpty)
+    await fixture.model.open(.draft(id: draft.id))
+    #expect(fixture.model.activeEditor?.file.id == draft.id)
   }
 
-  @Test func siriAppendPreservesFrontMatterAndUsesTheOpenEditorsDurableEdit() async throws {
+  @Test func siriAppendUsesTheOpenEditorsDurableEdit() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
     let fileEditor = try await fixture.fileEditor()
-    let snapshot = try #require(try LibrarySnapshot.read())
-    let note = try #require(snapshot.gists.first {
+    let note = try #require(try LibrarySnapshot.read()?.gists.first {
       $0.link == GistPadLink.gist(id: "daily123", filename: nil)
     })
-    let other = try #require(snapshot.gists.first {
-      $0.link == GistPadLink.gist(id: "daily123", filename: "another.md")
-    })
-    #expect(other.content == nil)
-    // Opening Today read the whole gist, so its sibling's excerpt is known, without front matter.
-    #expect(other.excerpt == "Another note")
-    let closed = try #require(try await fixture.bridge.noteEntities(for: [other.id]).first)
-    #expect(closed.content == nil)
-    fixture.model.isForeground = true
-    fixture.bridge.setVisibleNote(note.id, fileEditor: fileEditor)
-    defer { fixture.bridge.setVisibleNote(nil, fileEditor: fileEditor) }
-    let visible = try #require(try await fixture.bridge.noteEntities(for: [note.id]).first)
-    #expect(String(try #require(visible.content).characters) == fileEditor.editor.text)
-    #expect(visible.attributeSet.textContent == nil)
     let original = fileEditor.editor.text
     let intent = AppendToGistIntent()
     intent.app = fixture.bridge
@@ -159,6 +120,8 @@ struct PlatformTests {
     let note = try #require(snapshot.gists.first {
       $0.link == GistPadLink.gist(id: "daily123", filename: "another.md")
     })
+    // Opening Today read the whole gist, so its sibling's excerpt is known, without front matter.
+    #expect(note.excerpt == "Another note")
 
     let updated = try await fixture.bridge.appendToNote(note, text: "A new line")
 
@@ -178,8 +141,8 @@ struct PlatformTests {
     await fixture.model.open(.gist(id: "daily123", filename: "another.md"))
     let fileEditor = try #require(fixture.model.activeEditor)
     fixture.model.isForeground = true
-    fixture.bridge.setVisibleNote(note.id, fileEditor: fileEditor)
-    defer { fixture.bridge.setVisibleNote(nil, fileEditor: fileEditor) }
+    fileEditor.editor.entityIdentifier = EntityIdentifier(for: GistEntity.self, identifier: note.id)
+    defer { fileEditor.editor.entityIdentifier = nil }
 
     let open = try #require(try await fixture.bridge.noteEntities(for: [note.id]).first)
     #expect(String(try #require(open.content).characters) == "Another note\n")
@@ -193,7 +156,7 @@ struct PlatformTests {
     fixture.model.isForeground = false
     #expect(try await fixture.bridge.noteEntities(for: [note.id]).first?.content == nil)
     fixture.model.isForeground = true
-    fixture.bridge.setVisibleNote(nil, fileEditor: fileEditor)
+    fileEditor.editor.entityIdentifier = nil
     #expect(try await fixture.bridge.noteEntities(for: [note.id]).first?.content == nil)
   }
 
@@ -262,20 +225,19 @@ struct PlatformTests {
     defer { window.isHidden = true }
     try await Task.sleep(for: .milliseconds(100))
     let original = fileEditor.editor.text
-    let url = try #require(URL(string: "https://example.com/assets/daily123/image.png"))
-    var uploadedGistIDs: [String] = []
-    let images = ImageUpload { _, file in
-      uploadedGistIDs.append(file.nextDraft.gistID ?? "")
-      return url
+    fixture.fixture.server.intercept { request in
+      request.url?.path.hasPrefix("/storage/v1/object/assets/daily123/") == true ? .init() : nil
     }
+    let images = ImageUpload(model: fixture.model)
     images.chooseImage(for: fileEditor)
     #expect(images.isShowingPicker)
     fileEditor.editor.textView.selectedRange = NSRange(
       location: (original as NSString).length, length: 0)
-    await images.add(image: Data("image".utf8))
+    await images.add(image: UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).pngData { _ in })
     #expect(images.failure == nil && !images.isUploading)
-    #expect(uploadedGistIDs == ["daily123"])
-    #expect(fileEditor.editor.text == original + "![Image](\(url.absoluteString))")
+    #expect(fileEditor.editor.text.hasPrefix(
+      original + "![Image](\(GistPadAccountStore.projectURL)/storage/v1/object/public/assets/daily123/"))
+    #expect(fileEditor.editor.text.hasSuffix(".png)"))
     fileEditor.editor.textView.undoManager?.undo()
     #expect(fileEditor.editor.text == original)
     #expect(await fileEditor.waitForLocalSave())
@@ -316,20 +278,9 @@ private struct PlatformFixture {
   var store: GistFileDraftStore { fixture.store }
   var publishes: [String] { fixture.publishes }
 
-  func today() async throws -> GistFile {
-    try await model.today()
-  }
-
   /// Today, opened from the Today button.
   func fileEditor() async throws -> GistFileEditor {
-    try #require(model.editors[try await today().id])
-  }
-
-  /// Typing in `session`, saved on this iPhone.
-  func type(_ text: String, in fileEditor: GistFileEditor) async throws {
-    fileEditor.editor.textView.text = text
-    fileEditor.editor.textViewDidChange(fileEditor.editor.textView)
-    try #require(await fileEditor.waitForLocalSave())
+    try #require(model.editors[try await model.today().id])
   }
 
   func cleanUp() {

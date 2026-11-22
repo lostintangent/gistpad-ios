@@ -10,45 +10,37 @@ import WidgetKit
 
 @MainActor
 extension PlatformBridge {
-  private static var services: (model: GistPadModel, bridge: PlatformBridge)?
-  static var shared: PlatformBridge? { services?.bridge }
+  private(set) static var shared: PlatformBridge?
 
   static func install() {
     AppDependencyManager.shared.add { () async throws -> any PlatformActions in
       try await MainActor.run {
-        guard let key = Bundle.main.object(forInfoDictionaryKey: "SupabasePublishableKey") as? String,
-          !key.isEmpty, !key.contains("$(")
-        else { throw AccountError.invalidConfiguration }
-        _ = try model(publishableKey: key)
-        return services!.bridge
+        _ = try model()
+        return shared!
       }
     }
   }
 
-  static func model(publishableKey: String) throws -> GistPadModel {
-    if let services { return services.model }
+  static func model() throws -> GistPadModel {
+    if let shared { return shared.model }
+    guard let key = Bundle.main.object(forInfoDictionaryKey: "SupabasePublishableKey") as? String,
+      !key.isEmpty, !key.contains("$(")
+    else { throw AccountError.invalidConfiguration }
     return connect(
       GistPadModel(
-        accounts: GistPadAccountStore(publishableKey: publishableKey),
-        drafts: try GistFileDraftStore.open()))
+        accounts: GistPadAccountStore(publishableKey: key), drafts: try GistFileDraftStore.open()))
   }
 
   /// Connects the model to App Intents, widgets and Spotlight.
   static func connect(_ model: GistPadModel) -> GistPadModel {
-    services = (model, PlatformBridge(model: model))
+    shared = PlatformBridge(model: model)
     return model
   }
 }
 
 @MainActor
 final class PlatformBridge: PlatformActions {
-  private struct WeakEditor {
-    weak var value: GistFileEditor?
-  }
-
   private let model: GistPadModel
-  private var visibleEditor: WeakEditor?
-  private var visibleNoteID: String?
   private var refreshTask: Task<Void, Never>?
   private var operation: Task<Void, Never>?
   /// Starts from the snapshot GistPad launched with, read before the first refresh rewrites it.
@@ -73,16 +65,6 @@ final class PlatformBridge: PlatformActions {
         self?.scheduleRefresh()
         self?.followLibrary()
       }
-    }
-  }
-
-  func setVisibleNote(_ id: String?, fileEditor: GistFileEditor) {
-    if let id {
-      visibleEditor = WeakEditor(value: fileEditor)
-      visibleNoteID = id
-    } else if visibleEditor?.value === fileEditor {
-      visibleEditor = nil
-      visibleNoteID = nil
     }
   }
 
@@ -139,10 +121,11 @@ final class PlatformBridge: PlatformActions {
     }
   }
 
+  /// The live body of the note on screen, which RootView names as the editor's entity.
   private func visibleBody(for note: GistEntity, accountID: UUID) -> String? {
-    guard note.id == visibleNoteID, let fileEditor = visibleEditor?.value,
-      model.isForeground, model.activeEditor === fileEditor,
-      model.state.selectedID != nil,
+    guard let fileEditor = model.activeEditor,
+      fileEditor.editor.entityIdentifier?.identifier == note.id,
+      model.isForeground, model.state.selectedID != nil,
       fileEditor.file.accountID == accountID
     else { return nil }
     return Self.noteBody(fileEditor.editor.text)
@@ -219,7 +202,6 @@ final class PlatformBridge: PlatformActions {
   ) async throws -> GistEntity {
     try await serially {
       let draft = try await self.noteDraft(for: note)
-      let model = self.model
       let name = name?.trimmingCharacters(in: .whitespacesAndNewlines)
       let renames = name != nil && name != String(note.name.characters)
       let changesPin = isPinned != nil && isPinned != note.isPinned
@@ -231,9 +213,9 @@ final class PlatformBridge: PlatformActions {
           guard self.model.gistCache?.owned.first(where: { $0.id == id })?.isDailyNote != true else {
             throw PlatformError.unsupportedNoteUpdate
           }
-          try await model.rename(draft, to: name)
+          try await self.model.rename(draft, to: name)
         case .unpublishedGist:
-          try await model.rename(draft, to: name)
+          try await self.model.rename(draft, to: name)
         case .gist, .today, .addToToday, .newGist:
           throw PlatformError.unsupportedNoteUpdate
         }
@@ -242,7 +224,7 @@ final class PlatformBridge: PlatformActions {
         guard case .gist(let id, _) = note.link else {
           throw PlatformError.unsupportedNoteUpdate
         }
-        try await model.updatePreferences([.setPinned(gistID: id, pinned: isPinned)])
+        try await self.model.updatePreferences([.setPinned(gistID: id, pinned: isPinned)])
       }
       await self.refreshNow()
       return note.withMetadata(

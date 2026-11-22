@@ -39,7 +39,12 @@ struct AddToTodaySheet: View {
           .lineLimit(5...)
           .focused($isFocused)
           .accessibilityIdentifier("today-capture-input")
-          kindPicker
+          Picker("Add as", selection: $asTask) {
+            Text("Text").tag(false)
+            Text("Task").tag(true)
+          }
+          .pickerStyle(.segmented)
+          .accessibilityIdentifier("today-capture-kind")
         } header: {
           Text(day, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
             .font(.caption)
@@ -73,15 +78,6 @@ struct AddToTodaySheet: View {
       dynamicTypeSize.isAccessibilitySize || errorMessage != nil ? [.large] : [.medium, .large])
   }
 
-  private var kindPicker: some View {
-    Picker("Add as", selection: $asTask) {
-      Text("Text").tag(false)
-      Text("Task").tag(true)
-    }
-    .pickerStyle(.segmented)
-    .accessibilityIdentifier("today-capture-kind")
-  }
-
   private func add() {
     isAdding = true
     errorMessage = nil
@@ -94,17 +90,13 @@ struct AddToTodaySheet: View {
         }
         dismiss()
       } catch {
-        errorMessage = Self.message(for: error)
+        errorMessage =
+          error as? ChangeError == .notSaved
+          ? String(localized: "Your text is still here. Tap Add to try again.")
+          : error.localizedDescription
         isFocused = false
         isAdding = false
       }
     }
-  }
-
-  private static func message(for error: Error) -> String {
-    if error as? ChangeError == .notSaved {
-      return String(localized: "Your text is still here. Tap Add to try again.")
-    }
-    return error.localizedDescription
   }
 }
