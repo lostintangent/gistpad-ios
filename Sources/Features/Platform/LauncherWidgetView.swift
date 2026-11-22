@@ -3,24 +3,25 @@ import Appearance
 import SwiftUI
 import WidgetKit
 
-public enum LauncherWidgetState: Sendable {
-    case available, signedOut, unavailable, placeholder
-}
-
 /// The GistPad widget, a launcher into today's note, a recent gist or a new one.
 public struct LauncherWidgetView: View {
     /// Kept from the Today widget it replaced, so widgets already on a Home Screen stay.
     public static let kind = "GistPadToday"
+
+    public enum State: Sendable {
+        case available, signedOut, unavailable, placeholder
+    }
+
     private let snapshot: LibrarySnapshot?
     private let date: Date
-    private let state: LauncherWidgetState
+    private let state: State
     @Environment(\.widgetFamily) private var family
     @Environment(\.widgetRenderingMode) private var renderingMode
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.locale) private var locale
     @Environment(\.calendar) private var calendar
 
-    public init(snapshot: LibrarySnapshot?, date: Date, state: LauncherWidgetState) {
+    public init(snapshot: LibrarySnapshot?, date: Date, state: State) {
         self.snapshot = snapshot
         self.date = date
         self.state = state
@@ -29,9 +30,7 @@ public struct LauncherWidgetView: View {
     private var accent: Color {
         renderingMode == .fullColor ? Color(uiColor: .accentText) : .primary
     }
-    private var recents: [GistEntity] {
-        state == .available || state == .placeholder ? snapshot?.recents ?? [] : []
-    }
+    private var recents: [GistEntity] { snapshot?.recents ?? [] }
 
     public var body: some View {
         Group {
@@ -164,8 +163,8 @@ public struct LauncherWidgetView: View {
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(lineLimit)
                     .privacySensitive()
-                if showsTime, let updatedAt = gist.updatedAt {
-                    Text(verbatim: timeLabel(for: updatedAt))
+                if showsTime {
+                    Text(verbatim: timeLabel(for: gist.updatedAt))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
