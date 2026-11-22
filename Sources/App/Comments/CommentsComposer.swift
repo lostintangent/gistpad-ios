@@ -46,7 +46,8 @@ struct CommentsComposer: View {
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.circle)
             .controlSize(.large)
-            // The inspector's compact sheet inherits the dimmed accent of the gist it covers at large.
+            // Platform gap: the inspector's compact sheet inherits the dimmed tint of the gist it covers at
+            // large. Remove this tint when a sheet's controls keep the full accent.
             .tint(Color(uiColor: .tintColor))
             .disabled(!model.canPost)
             .keyboardShortcut(.return, modifiers: .command)

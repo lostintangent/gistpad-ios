@@ -34,11 +34,14 @@ public struct MarkdownPreviewView: View {
         )
         // The page scrolls under the bars, and UIKit insets it by their height.
         .ignoresSafeArea(.container, edges: .vertical)
-        // Resize in one step so WebKit's scroll anchoring keeps the reading passage.
+        // Platform gap: WebKit's scroll anchoring loses the reading passage when SwiftUI animates the
+        // frame through several widths. Remove when an animated resize keeps the passage in place.
         .transaction { $0.animation = nil }
     }
 }
 
+// Platform gap: SwiftUI's WebView has no edit menu, obscured insets or crash event on iOS. Remove this
+// wrapper when webViewContextMenu, webViewObscuredContentInsets and a termination event ship for iOS.
 private struct NativeMarkdownPreview: UIViewRepresentable {
     let file: PreviewFile
     let comments: CommentHighlightConfiguration
@@ -138,7 +141,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             updateViewport()
         }
 
-        /// Anchors and revealed passages land below the bars UIKit insets the page by.
+        // Platform gap: WebKit scrolls anchors and revealed passages under the bars UIKit insets the page
+        // by. Remove this scroll padding when obscuredContentInsets covers scrollIntoView.
         private func updateViewport() {
             guard ready, let insets = webView?.scrollView.adjustedContentInset, lastViewportInsets != insets else { return }
             lastViewportInsets = insets
@@ -220,18 +224,18 @@ extension Logger {
 private final class PreviewWebView: WKWebView {
     var onBuildCommentMenu: (() -> UIDeferredMenuElement?)?
 
-    // The preview stays inside the horizontal safe area, but a narrowing frame can overlap it
-    // for one layout pass, and that brief inset stops WebKit anchoring the reading position.
+    // Platform gap: a narrowing frame overlaps the horizontal safe area for one layout pass, and that
+    // brief inset stops WebKit anchoring the reading position. Remove when WebKit anchors through it.
     override var safeAreaInsets: UIEdgeInsets {
         let insets = super.safeAreaInsets
         return UIEdgeInsets(top: insets.top, left: 0, bottom: insets.bottom, right: 0)
     }
 
+    // Platform gap: WebKit drops its scroll anchor when a reflow clamps the offset, so this keeps room
+    // below the page until the new width is anchored. Remove when WebKit anchors through a clamped reflow.
     override var frame: CGRect {
         willSet {
             guard newValue.width != frame.width, window != nil else { return }
-            // WebKit drops its scroll anchor when a reflow clamps the offset, so keep room
-            // below the page until the new width has been anchored.
             evaluateJavaScript("""
                 {
                   const room = document.body.appendChild(document.createElement("div"));
