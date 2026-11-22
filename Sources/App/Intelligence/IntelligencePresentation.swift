@@ -11,7 +11,7 @@ final class IntelligencePresentation {
   var target: Target?
   private var retainedTarget: Target?
 
-  /// Opens Intelligence on the file. A reference the sheet returns opens in the editor once it closes.
+  /// Opens Intelligence on the file. A passage the sheet shows opens in the editor once it closes.
   func present(
     _ fileEditor: GistFileEditor, model: GistPadModel,
     showEditor: @escaping @MainActor () -> Void
@@ -55,8 +55,8 @@ final class IntelligencePresentation {
   func dismissed() {
     guard let target = retainedTarget else { return }
     retainedTarget = nil
-    if let reference = target.reference {
-      target.revealSource(reference)
+    if let passage = target.passage {
+      target.revealSource(passage)
       return
     }
     if target.wasEditing { target.editor.focus() }
@@ -68,7 +68,7 @@ final class IntelligencePresentation {
     let title: String
     let revealSource: @MainActor (NSRange) -> Void
     let wasEditing: Bool
-    var reference: NSRange?
+    var passage: NSRange?
 
     init(
       editor: Editor, title: String,
@@ -96,7 +96,7 @@ private struct IntelligenceSheetModifier: ViewModifier {
       .sheet(item: $presentation.target, onDismiss: presentation.dismissed) { target in
         IntelligenceSheet(
           editor: target.editor, title: target.title,
-          revealSource: { target.reference = $0 }
+          revealSource: { target.passage = $0 }
         )
       }
   }

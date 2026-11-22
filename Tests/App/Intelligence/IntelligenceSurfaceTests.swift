@@ -50,7 +50,7 @@
       try #require(offset > 0)
       presentation.present(
         editor: session, title: "Saturday walk",
-        revealSource: { _ in Issue.record("Closing must not navigate to a reference.") })
+        revealSource: { _ in Issue.record("Closing must not navigate to a passage.") })
       try #require(presentation.target?.wasEditing == true)
       try await waitForNativeReturnState("the sheet's prompt to mount") {
         intelligencePrompt(presentedOver: host) != nil
