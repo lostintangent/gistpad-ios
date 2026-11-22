@@ -69,9 +69,8 @@
       originalInk = []
       paintedGeneration = editor.generation
       editor.textView.setNeedsLayout()
-      let highlights = CommentQuoteMatcher.highlights(
-        quotes: configuration.quotes, segments: [editor.text]
-      ).filter { $0.start >= editor.contentStart }
+      let highlights = configuration.quotes.highlights(in: [editor.text])
+        .filter { $0.start >= editor.contentStart }
       verifiedHighlights = highlights
       publish(Set(highlights.flatMap(\.threadIDs)))
       updateAccessibility()
@@ -234,7 +233,7 @@
       guard actions != nil, !isSuspended,
         ranges.count == 1, let range = ranges.first, editor.isSettled,
         let quote = try? Edit.text(in: editor.text, at: range),
-        CommentQuoteMatcher.isEligibleSelection(quote)
+        CommentQuote.isQuotable(quote)
       else { return nil }
       return UIAction(
         title: String(localized: "Add Comment", bundle: .module),

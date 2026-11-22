@@ -44,11 +44,9 @@ public struct CommentQuoteHighlight: Equatable, Sendable {
     public var range: NSRange { NSRange(location: start, length: end - start) }
 }
 
-extension CommentQuoteMatcher {
-    public static func highlights(
-        quotes: [CommentQuote], segments: [String]
-    ) -> [CommentQuoteHighlight] {
-        let matches = matches(quotes: quotes, segments: segments)
+extension [CommentQuote] {
+    public func highlights(in segments: [String]) -> [CommentQuoteHighlight] {
+        let matches = matches(in: segments)
         let grouped = Dictionary(grouping: matches, by: \.segment)
         var highlights: [CommentQuoteHighlight] = []
         for (segment, matches) in grouped.sorted(by: { $0.key < $1.key }) {

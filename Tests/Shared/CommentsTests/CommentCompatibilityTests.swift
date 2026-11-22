@@ -44,8 +44,7 @@ struct CommentCompatibilityFixtures: Decodable {
 
     @Test func matchesWebLiteralWordBoundariesAndUTF16Offsets() throws {
         for fixture in try CommentCompatibilityFixtures.load().quotes {
-            let actual = CommentQuoteMatcher.matches(
-                quotes: [.init(threadID: 7, quote: fixture.quote)], segments: fixture.segments)
+            let actual = [CommentQuote(threadID: 7, quote: fixture.quote)].matches(in: fixture.segments)
             #expect(actual.map {
                 CommentCompatibilityFixtures.Quote.Match(
                     segment: $0.segment, start: $0.range.location, end: NSMaxRange($0.range))

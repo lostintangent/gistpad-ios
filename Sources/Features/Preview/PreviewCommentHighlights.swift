@@ -79,7 +79,7 @@ final class PreviewCommentHighlights {
                         arguments: [:], in: nil, contentWorld: .page)
                     let selection: Selection = try PreviewBridge.decode(value)
                     guard self.renderedFile == file, let quote = selection.quote,
-                          CommentQuoteMatcher.isEligibleSelection(quote) else { return completion([]) }
+                          CommentQuote.isQuotable(quote) else { return completion([]) }
                     let action = UIAction(
                         title: String(localized: "Add Comment", bundle: .module),
                         image: UIImage(systemName: "text.bubble")
@@ -126,8 +126,7 @@ final class PreviewCommentHighlights {
                     guard !Task.isCancelled else { return }
                     self.segments = catalog.segments
                 }
-                self.highlights = CommentQuoteMatcher.highlights(
-                    quotes: configuration.quotes, segments: self.segments ?? [])
+                self.highlights = configuration.quotes.highlights(in: self.segments ?? [])
                 let payload: [String: Any] = [
                     "highlights": self.highlights.map {
                         ["segment": $0.segment, "start": $0.start, "end": $0.end, "threadIDs": $0.threadIDs]
