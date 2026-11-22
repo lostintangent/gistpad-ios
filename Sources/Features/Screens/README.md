@@ -67,10 +67,9 @@ A retry resends the same edits, and the sheet closes only after `save` succeeds.
 `RenameSheet(_:save:)` renames the gist or a file, or adds a file, from a
 `RenameTarget`, and also closes only after `save` succeeds.
 
-`SettingsSheet` holds the account, the Writing preferences, the app's
-`appearance` rows and Sign Out, and confirms each preference with
-`savePreference`. `AccountSwitchSheet` asks before replacing the signed-in
-account, and drafts stay with the account that wrote them.
+`SettingsSheet` holds the account with Sign Out beneath it, the Writing
+preferences and the app's `appearance` rows, and confirms each preference with
+`savePreference`.
 `AccentColorRow` saves the personal color, and Appearance's `.accent(savedHex:)` applies it
 to content, never to navigation or commands.
 
