@@ -20,7 +20,6 @@ public struct PreviewLink: Equatable, Sendable {
     public enum Kind: String, Sendable {
         case external
         case wikilink
-        case anchor
     }
 
     public let kind: Kind

@@ -23,7 +23,7 @@ export type PreviewMessage =
   | (Identity &
       (
         | { type: "taskToggle"; edit: TaskEdit }
-        | { type: "link"; kind: "external" | "wikilink" | "anchor"; target: string }
+        | { type: "link"; kind: "external" | "wikilink"; target: string }
         | { type: "rendered" }
         | { type: "failure"; message: string }
       ));

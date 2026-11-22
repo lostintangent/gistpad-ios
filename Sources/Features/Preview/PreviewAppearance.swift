@@ -52,9 +52,7 @@ struct PreviewAppearance: Equatable {
             let reference = UIFont.preferredFont(forTextStyle: style, compatibleWith: largeTraits)
             // Preserve the approved Large baseline and UIKit's per-style point growth.
             let size = largeBody.pointSize * largeRatio + preferred.pointSize - reference.pointSize
-            let font = UIFont(descriptor: preferred.fontDescriptor, size: size)
-            values["--gp-\(name)-size"] = "\(font.pointSize)px"
-            values["--gp-\(name)-line-height"] = "\(font.lineHeight)px"
+            values["--gp-\(name)-size"] = "\(size)px"
         }
         variables = values
     }

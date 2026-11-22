@@ -117,14 +117,12 @@ export function Preview({ request, comments }: { request: RenderRequest; comment
     contents.current = { fileID: request.fileID, open: false };
   }
   const components = useMemo<Components>(() => {
-    const link = (kind: "external" | "wikilink" | "anchor", target: string) => {
-      if (kind === "anchor") {
-        const element = document.getElementById(target);
-        element?.scrollIntoView({ block: "start" });
-        element?.setAttribute("tabindex", "-1");
-        element?.focus({ preventScroll: true });
-      }
-      send({ ...identity(request), type: "link", kind, target });
+    const link = (kind: "external" | "wikilink", target: string) => send({ ...identity(request), type: "link", kind, target });
+    const jump = (target: string) => {
+      const element = document.getElementById(target);
+      element?.scrollIntoView({ block: "start" });
+      element?.setAttribute("tabindex", "-1");
+      element?.focus({ preventScroll: true });
     };
     return {
       div({ children, className, node: _, ...props }) {
@@ -149,13 +147,14 @@ export function Preview({ request, comments }: { request: RenderRequest; comment
           return <button className="wikilink" onClick={() => link("wikilink", wikilink)}>{children}</button>;
         }
         if (typeof bookmark === "string") {
-          return <button id={bookmark} className="bookmark" aria-label={`Bookmark ${bookmark}`} onClick={() => link("anchor", bookmark)}>♧</button>;
+          return <button id={bookmark} className="bookmark" aria-label={`Bookmark ${bookmark}`} onClick={() => jump(bookmark)}>♧</button>;
         }
         if (!href) return <span>{children}</span>;
         return (
           <a {...props} href={href} onClick={(event) => {
             event.preventDefault();
-            link(href.startsWith("#") ? "anchor" : "external", href.startsWith("#") ? href.slice(1) : href);
+            if (href.startsWith("#")) jump(href.slice(1));
+            else link("external", href);
           }}>{children}</a>
         );
       },
