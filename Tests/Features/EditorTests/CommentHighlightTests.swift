@@ -149,7 +149,7 @@
                 #expect(editor.textView.selectedRange == selection)
             }
 
-            @Test func explicitRevealCanReturnToTheSameSelectedQuoteWithoutChangingSource() async throws {
+            @Test func explicitRevealCanReturnToTheSameSelectedQuoteWithoutChangingSource() async {
                 let text =
                     "# Start\n\n" + String(repeating: "Room for another thought.\n\n", count: 60)
                     + "A late native passage."
@@ -161,16 +161,17 @@
                     quotes: [CommentQuote(threadID: 60, quote: "late native passage")], selectedThreadID: 60
                 )
                 editor.commentHighlights.configure(configuration)
-                try await settle(editor.textView) { editor.textView.contentOffset.y > 100 }
+                await editor.commentHighlights.scrollTask?.value
                 #expect(editor.textView.contentOffset.y > 100)
                 let top = CGPoint(x: 0, y: -editor.textView.adjustedContentInset.top)
                 editor.textView.setContentOffset(top, animated: false)
                 editor.commentHighlights.configure(configuration)
-                try await Task.sleep(for: .milliseconds(50))
+                editor.textView.layoutIfNeeded()
+                #expect(editor.commentHighlights.scrollTask == nil)
                 #expect(abs(editor.textView.contentOffset.y - top.y) < 1)
                 configuration.revealRevision += 1
                 editor.commentHighlights.configure(configuration)
-                try await settle(editor.textView) { editor.textView.contentOffset.y > 100 }
+                await editor.commentHighlights.scrollTask?.value
                 #expect(editor.textView.contentOffset.y > 100)
                 #expect(editor.text == text)
                 #expect(editor.generation == 0)
@@ -233,13 +234,13 @@
                         CommentQuote(threadID: 30, quote: "missing"),
                         CommentQuote(threadID: 40, quote: "native note"),
                     ]), actions: actions(linked: { linked = $0 }))
-                await Task.yield()
+                await editor.commentHighlights.publication?.value
                 #expect(linked == [40])
                 #expect(
                     editor.textView.textStorage.attribute(
                         CommentHighlights.annotationKey, at: 5, effectiveRange: nil) == nil)
                 editor.setShowsFrontMatter(true)
-                await Task.yield()
+                await editor.commentHighlights.publication?.value
                 #expect(linked == [20, 40])
                 #expect(
                     editor.textView.textStorage.attribute(
@@ -267,11 +268,15 @@
 
                 let interaction = try #require(view.findInteraction)
                 interaction.presentFindNavigator(showingReplace: false)
-                try await settle(view) { interaction.isFindNavigatorVisible && !annotated() }
+                view.setNeedsLayout()
+                view.layoutIfNeeded()
+                await editor.commentHighlights.pendingFindUpdate?.value
                 #expect(interaction.isFindNavigatorVisible)
                 #expect(!annotated())
                 interaction.dismissFindNavigator()
-                try await settle(view) { !interaction.isFindNavigatorVisible && annotated() }
+                view.setNeedsLayout()
+                view.layoutIfNeeded()
+                await editor.commentHighlights.pendingFindUpdate?.value
                 #expect(!interaction.isFindNavigatorVisible)
                 #expect(annotated())
                 #expect(editor.text == "A native note")
@@ -298,14 +303,6 @@
                 add: @escaping @MainActor (String) -> Void = { _ in }
             ) -> CommentHighlightActions {
                 CommentHighlightActions(open: open, linked: linked, add: add)
-            }
-
-            private func settle(_ view: UITextView, until condition: () -> Bool) async throws {
-                for _ in 0..<40 where !condition() {
-                    view.setNeedsLayout()
-                    view.layoutIfNeeded()
-                    try await Task.sleep(for: .milliseconds(25))
-                }
             }
         }
     }

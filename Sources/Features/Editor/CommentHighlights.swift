@@ -20,9 +20,9 @@
         private var isSuspended: Bool { suspendsForFind || suspendsForWritingTools }
         private var updatingSelection = false
         private var pendingTap: [Int64]?
-        private var pendingFindUpdate: Task<Void, Never>?
-        private var publication: Task<Void, Never>?
-        private var scrollTask: Task<Void, Never>?
+        private(set) var pendingFindUpdate: Task<Void, Never>?
+        private(set) var publication: Task<Void, Never>?
+        private(set) var scrollTask: Task<Void, Never>?
         private var needsSelectedScroll = false
         private var onSelected = UIColor.label
         private lazy var tap = UITapGestureRecognizer(

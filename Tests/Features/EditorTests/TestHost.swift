@@ -9,7 +9,7 @@
     // window and hides it when the test ends. Every suite that hosts a window nests here so those
     // tests run one at a time. Otherwise main-actor tests from different suites interleave at each
     // await, and one test's window takes key and first responder from another's.
-    @Suite(.serialized)
+    @Suite(.serialized, .timeLimit(.minutes(1)))
     enum HostedEditorTests {}
 
     func host(_ editor: Editor, focused: Bool = true) -> UIWindow {
