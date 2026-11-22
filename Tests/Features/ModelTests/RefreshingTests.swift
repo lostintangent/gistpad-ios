@@ -50,6 +50,7 @@ struct RefreshingTests {
         let returning = Task { await phone.returnToApp() }
         try await list.arrival()
         #expect(phone.status == "Checking")
+        #expect(!list.hasReachedGitHub)
         list.open()
         await returning.value
         #expect(Set(phone.rows.map(\.id)) == ["a", "c"])
@@ -60,6 +61,7 @@ struct RefreshingTests {
         let relaunching = Task { await phone.relaunch() }
         try await read.arrival()
         #expect(phone.onScreen == "One, from the web")
+        #expect(!read.hasReachedGitHub)
         read.open()
         await relaunching.value
         #expect(phone.onScreen == "Changed again")

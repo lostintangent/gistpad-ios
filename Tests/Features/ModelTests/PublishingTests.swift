@@ -27,6 +27,7 @@ struct PublishingTests {
         let publishing = Task { await a.publish() }
         try await sending.arrival()
         try await phone.type("Second", in: a)
+        #expect(!sending.hasReachedGitHub)
         sending.open()
         await publishing.value
         #expect(phone.onGitHub("a")?.utf8.elementsEqual(typed.utf8) == true)

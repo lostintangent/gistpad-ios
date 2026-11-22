@@ -42,6 +42,7 @@ struct OpeningTests {
         let launching = Task { await phone.launch() }
         try await list.arrival()
         try await phone.open(.gist(id: "a"))
+        #expect(!list.hasReachedGitHub)
         list.open()
         await launching.value
         #expect(phone.model.state.selectedID == "a")
@@ -55,6 +56,7 @@ struct OpeningTests {
         let older = Task { await phone.model.open(.gist(id: "b")) }
         try await slow.arrival()
         try await phone.open(.gist(id: "c"))
+        #expect(!slow.hasReachedGitHub)
         slow.open()
         await older.value
         #expect(phone.model.state.selectedID == "c")

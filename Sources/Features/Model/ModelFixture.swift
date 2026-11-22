@@ -89,7 +89,7 @@
 
         /// Holds every request whose "METHOD /path" starts with `prefix` until the gate opens.
         func hold(_ prefix: String) -> Gate {
-            let gate = Gate()
+            let gate = Gate(prefix, on: server)
             server.intercept { request in
                 guard Self.line(request).hasPrefix(prefix) else { return nil }
                 await gate.pass()
@@ -132,8 +132,22 @@
 
         /// A held request, released when the test opens it.
         @Observable final class Gate {
+            private let prefix: String
+            private let server: FixtureServer
+            private let earlierRequests: Int
             private var hasArrived = false
             private var isOpen = false
+
+            fileprivate init(_ prefix: String, on server: FixtureServer) {
+                self.prefix = prefix
+                self.server = server
+                earlierRequests = server.requests.count
+            }
+
+            /// Whether GitHub has seen a request this gate holds, which it shouldn't until the gate opens.
+            var hasReachedGitHub: Bool {
+                server.requests.dropFirst(earlierRequests).contains { $0.hasPrefix(prefix) }
+            }
 
             /// Waits until a held request arrives, or throws if the test is cancelled first.
             func arrival() async throws {
