@@ -96,7 +96,6 @@ public actor GistPadAccountStore {
     public static let projectURL = URL(string: "https://upnfachynwuwialgybvf.supabase.co")!
     public static let callbackURL = URL(string: "gistpad://auth-callback")!
     private static let sessionKey = "gistpad-supabase-session"
-    private static let providerPrefix = "github-provider-"
     private let auth: AuthClient
     private let credentials: any AuthLocalStorage
     private let publishableKey: String
@@ -217,7 +216,7 @@ public actor GistPadAccountStore {
         try credentials.remove(key: Self.sessionKey)
     }
 
-    private func providerKey(_ id: UUID) -> String { Self.providerPrefix + id.uuidString }
+    private func providerKey(_ id: UUID) -> String { "github-provider-\(id.uuidString)" }
 
     private func persistedSession() throws -> Session? {
         try credentials.retrieve(key: Self.sessionKey).map {

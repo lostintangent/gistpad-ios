@@ -75,8 +75,7 @@ public struct GistCache: Codable, Equatable, Sendable {
         owned = owned.map(replace)
         starred = starred.map(replace)
         for (filename, file) in gist.files where file.truncated != true {
-            guard let content = file.content else { continue }
-            store(Gist.File.decodeContent(content), of: filename, in: gist)
+            if let content = file.content { store(Gist.File.decodeContent(content), of: filename, in: gist) }
         }
     }
 
@@ -88,9 +87,8 @@ public struct GistCache: Codable, Equatable, Sendable {
     }
 
     public mutating func store(_ text: String, of filename: String, in gist: Gist) {
-        let key = Self.key(gist.id, filename)
         if let cached = gists.first(where: { $0.id == gist.id }), cached.updatedAt > gist.updatedAt { return }
-        texts[key] = GitHubVersion(text: text, revision: gist.revision)
+        texts[Self.key(gist.id, filename)] = GitHubVersion(text: text, revision: gist.revision)
     }
 
     /// Forgets a gist deleted on GitHub, or one of its files when `filename` is set and `updated` is
