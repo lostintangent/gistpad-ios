@@ -105,8 +105,8 @@ struct RootView: View {
       }
     }
     .background {
-      // Keyed by the active editor instead of onChange, because SwiftUI drops onChange actions
-      // past a few per frame. A launch link can restore today, open, and present a new note in one.
+      // Platform gap: SwiftUI drops onChange actions past a few per frame, and a launch link can
+      // restore, open and present notes in one. Remove this keyed view when onChange runs for each.
       Color.clear.onAppear(perform: didActivate).id(active?.editor.id)
     }
     .onChange(of: active?.file.id) { previous, _ in

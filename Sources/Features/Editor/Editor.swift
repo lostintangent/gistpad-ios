@@ -526,6 +526,8 @@
     private weak var viewportView: UIView?
     private var needsEditingCaretReveal = false
 
+    // Platform gap: UIKit still selects and deletes text that shouldEnumerate hides, so this
+    // setter and deleteBackward stop at hidden front matter. Remove both when it can't be selected.
     override var selectedRange: NSRange {
       get { super.selectedRange }
       set {
@@ -622,8 +624,8 @@
       setNeedsLayout()
     }
 
-    /// UIKit insets the source below the bars. The keyboard and its bar aren't part of the safe
-    /// area, so the viewport overlay measures them.
+    // Platform gap: UIKit insets the source below the bars but not above the keyboard and its
+    // bar, so the viewport overlay measures them. Remove it when UIScrollView insets for those too.
     private func applyViewportInsets() {
       guard let viewportView, window != nil, viewportView.window === window else { return }
       let viewport = convert(viewportView.bounds, from: viewportView)
@@ -647,6 +649,8 @@
       editor?.completeFocusRequestIfAttached()
     }
 
+    // Platform gap: TextKit 2's own reveal scrolls to estimated geometry, so long notes stop short
+    // of the caret. Remove this override and reveal(_:) when UITextView reveals laid-out text.
     override func scrollRangeToVisible(_ range: NSRange) {
       guard !writingToolsOwnsScrolling, markedTextRange == nil else {
         super.scrollRangeToVisible(range)
@@ -656,7 +660,6 @@
       reveal(NSMaxRange(range))
     }
 
-    /// TextKit 2's own reveal scrolls to estimated geometry, so long notes stop short of the caret.
     private func reveal(_ offset: Int) {
       guard let position = position(from: beginningOfDocument, offset: offset) else { return }
       let caret = caretRect(for: position).insetBy(dx: 0, dy: -8)
@@ -710,6 +713,8 @@
     @objc private func increaseIndent() { editor?.indent(outdent: false) }
     @objc private func decreaseIndent() { editor?.indent(outdent: true) }
 
+    // Platform gap: through a reflow from a new width or new attributes, UITextView keeps its
+    // scroll offset, not the passage on screen. Remove the reading anchor when it anchors to text.
     func rememberReadingAnchor() {
       guard !writingToolsOwnsScrolling, !restoringAnchor, bounds.width > 0,
         previousWidth == 0 || abs(previousWidth - bounds.width) < 1,
@@ -766,8 +771,8 @@
       editor?.commentHighlights.scrollSelectedCommentIfNeeded()
     }
 
-    /// TextKit 2 estimates the height of text it hasn't laid out, which leaves scroll limits and
-    /// offscreen geometry short until the whole note is laid out.
+    // Platform gap: TextKit 2 estimates the height of text it hasn't laid out, which leaves scroll
+    // limits and offscreen geometry short. Remove when UITextView keeps them exact as it lays out.
     func layoutDocument() {
       guard let manager = textLayoutManager, let range = manager.textContentManager?.documentRange
       else { return }

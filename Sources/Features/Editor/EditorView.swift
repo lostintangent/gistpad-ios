@@ -175,7 +175,8 @@
       guard editor.host === self else { return }
       if !ownsEditor { adoptEditor() }
       if editor.textView.frame != bounds { editor.textView.frame = bounds }
-      // Laying out now, inside any column animation, lets the keyboard capsule glide with the note.
+      // Platform gap: the keyboard lays out its accessory after a column animation, so the capsule
+      // would jump. Laying it out now glides it with the note. Remove when UIKit animates it along.
       if let accessory = editor.textView.inputAccessoryView, accessory.window != nil {
         accessory.setNeedsLayout()
         accessory.layoutIfNeeded()
@@ -236,6 +237,8 @@
 
   private final class ViewportView: UIView {
     weak var textView: UITextView?
+    // Platform gap: the bar doesn't track a scroll view inside a UIViewRepresentable, so it draws
+    // no soft edge over the source. Remove topEdge when SwiftUI gives the bar that scroll view.
     private let topEdge = UIScrollEdgeElementContainerInteraction()
 
     override init(frame: CGRect) {

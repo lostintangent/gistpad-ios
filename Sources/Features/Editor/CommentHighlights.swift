@@ -155,6 +155,9 @@
       }
     }
 
+    // Platform gap: TextKit 2's highlight style offers only its own color schemes, with no
+    // selected state or fill of our own, and backgroundColor draws square runs. Remove these
+    // layers when a text highlight takes a fill color.
     func layoutBackgrounds() {
       CATransaction.begin()
       CATransaction.setDisableActions(true)
@@ -368,6 +371,8 @@
       if !configuration.quotes.isEmpty { editor.highlight() }
     }
 
+    // Platform gap: UITextView is its own find interaction's delegate and tells ours nothing when
+    // Find opens or closes, so layout checks the navigator. Remove when UITextViewDelegate does.
     func findVisibilityDidChange() {
       let visible = editor.textView.findInteraction?.isFindNavigatorVisible == true
       guard suspendsForFind != visible, pendingFindUpdate == nil
