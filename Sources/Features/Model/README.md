@@ -2,8 +2,8 @@
 
 `GistPadModel` does what you ask with the things the [Store](../../Shared/Store/README.md)
 keeps: sign in, list your gists, open, save, publish, refresh, star, archive,
-rename and delete. It's the app's one `@MainActor` `@Observable` model, and every
-screen, intent and control reads it. It's the only code that talks to
+rename and delete. It's the app's one `@Observable` model, on the main actor, and
+every screen, intent and control reads it. It's the only code that talks to
 `GitHubClient`, the `GistCache` and the `GistFileDraftStore`, and `serially`
 sends GitHub and the drafts one write at a time. [docs/sync.md](../../../docs/sync.md)
 is the promise to the user, and this module keeps it.
