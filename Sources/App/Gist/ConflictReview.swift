@@ -64,8 +64,8 @@ struct ConflictReview: View {
             if isComparing {
               ProgressView()
             } else {
-              changes(title: String(localized: "On this iPhone"), lines: localChanges)
-              changes(title: String(localized: "On GitHub"), lines: remoteChanges)
+              changes(title: String(localized: "My Draft"), lines: localChanges)
+              changes(title: String(localized: "GitHub"), lines: remoteChanges)
             }
           case .local:
             source(review.text)
@@ -86,7 +86,7 @@ struct ConflictReview: View {
           }
           .disabled(isStale || !fileEditor.canEdit)
           if !fileEditor.canEdit {
-            Text("Finish the current edit to apply this version.")
+            Text("Finish typing or wait for Writing Tools, then try again.")
           }
         }
         .padding(20)
@@ -103,7 +103,7 @@ struct ConflictReview: View {
       .disabled(isApplying)
       .interactiveDismissDisabled(isApplying)
       .confirmationDialog(
-        "Replace your local draft with the GitHub version?",
+        "Replace your draft with GitHub's version?",
         isPresented: $isConfirmingRemote, titleVisibility: .visible
       ) {
         Button("Use GitHub's", role: .destructive) {

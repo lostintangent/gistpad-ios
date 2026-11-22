@@ -84,7 +84,7 @@ struct GitHubStatusHostTests {
 
   private func problem() -> GitHubStatus {
     .problem(
-      .offline, heading: "Couldn't check for updates",
+      .offline, heading: "Couldn't check for changes",
       detail: "Your gists on this iPhone are unchanged.")
   }
 }

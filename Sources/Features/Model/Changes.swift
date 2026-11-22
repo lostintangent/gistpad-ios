@@ -25,17 +25,17 @@ public enum ChangeError: Error, Equatable {
 extension ChangeError: LocalizedError {
   public var errorDescription: String? {
     switch self {
-    case .invalidTitle: String(localized: "Enter a name for this gist.")
+    case .invalidTitle: String(localized: "Give this gist a name.")
     case .invalidFilename:
       String(localized: "Enter a Markdown filename ending in .md, without a slash.")
     case .filenameExists: String(localized: "This gist already has a file with that name.")
-    case .publicationInProgress: String(localized: "You can change this after the gist publishes.")
+    case .publicationInProgress: String(localized: "You can change this after this gist publishes.")
     case .staleReview:
       String(localized: "Your draft changed while this review was open. Review the latest draft.")
     case .notSaved:
       String(
         localized:
-          "Your latest changes couldn't be saved on this iPhone. Keep the editor open and retry the local save."
+          "Your latest changes couldn't be saved on this iPhone. Keep this file open and try again."
       )
     }
   }

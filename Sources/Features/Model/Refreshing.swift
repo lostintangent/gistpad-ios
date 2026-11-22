@@ -10,7 +10,7 @@ extension GistPadModel {
   public var remoteRefreshStatus: GitHubStatus {
     if let problem {
       return .problem(
-        problem, heading: String(localized: "Couldn't update your gists"),
+        problem, heading: String(localized: "Couldn't check for changes"),
         detail: String(localized: "Your gists on this iPhone are unchanged."))
     }
     return phase == .refreshing
@@ -102,7 +102,7 @@ extension GistFileEditor {
     case .failed, .conflict:
       return .idle
     default:
-      return .problem(problem, heading: String(localized: "Couldn't check for updates"))
+      return .problem(problem, heading: String(localized: "Couldn't check for changes"))
     }
   }
 
