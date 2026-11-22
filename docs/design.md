@@ -12,7 +12,7 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 
 ## Words
 
-- A **gist** is the whole thing on GitHub. A **file** is one file in it. A **daily note** is one day's file, and **today's note** is today's. Never call a gist a "note" or "source" on screen. Siri's notes actions are the one exception, because "note" is the word you said to Siri.
+- A **gist** is the whole thing on GitHub. A **file** is one file in it. A **daily note** is one day's file, and **today’s note** is today's. Never call a gist a "note" or "source" on screen. Siri's notes actions are the one exception, because "note" is the word you said to Siri.
 - A **draft** is your unpublished text on this iPhone. **Publish** means sending to GitHub. Saving on the phone is never announced. **Autosave** is the web's name for publishing as you write, and it's the only place "save" means GitHub.
 - GitHub reads are a **check for changes**, never "update" or "sync".
 - **Show in File** (`text.viewfinder`) is the one name for jumping to a passage, from a comment or an Intelligence citation.
@@ -46,7 +46,7 @@ Opening a file:
 
 - **Cached:** the real words at once, offline too. No skeleton, flash or previous file.
 - **Uncached:** its bar at once, sliding in with the push, then one plain `ProgressView` after 350 ms. The words arrive under a bar that doesn't change.
-- **Failed:** **Couldn't Open This File**, the reason and Try Again. Preview's own failure says **Preview Unavailable**.
+- **Failed:** **Couldn’t Open This File**, the reason and Try Again. Preview's own failure says **Preview Unavailable**.
 
 ## Library
 
@@ -80,7 +80,7 @@ The system **Edit** button leads the top of the Library in both layouts, giving 
 | --- | --- |
 | Signed out | **Welcome to GistPad** / Your knowledge and daily notes, kept in GitHub gists. / Sign in with GitHub |
 | No gists | **No Gists Yet** / A thought, a list, a little thing worth keeping. Start your first gist. / New Gist |
-| Load failed | **Couldn't Load Your Gists** / GitHub couldn't be reached. Your gists will appear once it answers. / Try Again |
+| Load failed | **Couldn’t Load Your Gists** / GitHub couldn’t be reached. Your gists will appear once it answers. / Try Again |
 | Sign-in lapsed | **Reconnect GitHub** / Sign in with GitHub again to see your gists. / Sign in with GitHub |
 
 When one of these explains a problem, **GitHub needs attention** stays out of the toolbar, so the problem is said once. With gists still listed, or while a filter or search shows nothing, the toolbar control carries it.
@@ -95,7 +95,7 @@ When one of these explains a problem, **GitHub needs attention** stays out of th
 
 **Mode.** In your own gist, a segmented, icon-only picker: Edit `square.and.pencil`, Split `rectangle.split.2x1` (only when it fits) and Preview `eye`. Someone else's gist shows only Preview, with no picker. Switching to Preview with the keyboard up shows the page at rest while the keyboard drops.
 
-**Status.** Healthy editing shows nothing, and there's no Publish button. A conflict or a lapsed sign-in puts **GitHub needs attention** (`exclamationmark`) in the bar, and it opens Review Changes or reconnects. When a check for changes fails, the same control sits at the bottom and opens a popover headed "Couldn't check for changes", with the reason and **Try Again** or **Reconnect GitHub**. No spinner, toast or save pill. [sync.md](sync.md#what-you-see) says what each means.
+**Status.** Healthy editing shows nothing, and there's no Publish button. A conflict or a lapsed sign-in puts **GitHub needs attention** (`exclamationmark`) in the bar, and it opens Review Changes or reconnects. When a check for changes fails, the same control sits at the bottom and opens a popover headed "Couldn’t check for changes", with the reason and **Try Again** or **Reconnect GitHub**. No spinner, toast or save pill. [sync.md](sync.md#what-you-see) says what each means.
 
 **More**, in native sections:
 
@@ -106,11 +106,11 @@ When one of these explains a problem, **GitHub needs attention** stays out of th
 
 A daily note leaves out everything that acts on the gist: Pin, Star, Rename Gist, Tags and Archive. Its Share is headed by the day.
 
-**Delete.** Title **Delete “[title]”?** Message: **This deletes the gist from this iPhone and GitHub, including changes that haven't been published. This can't be undone.** A daily note is titled by its day, **Delete “Friday, Nov 6”?**, and says **the daily note** instead of the gist.
+**Delete.** Title **Delete “[title]”?** Message: **This deletes the gist from this iPhone and GitHub, including changes that haven’t been published. This can’t be undone.** A daily note is titled by its day, **Delete “Friday, Nov 6”?**, and says **the daily note** instead of the gist.
 
-**Review Changes.** A conflict opens a sheet with Changes, My Draft and GitHub tabs. It says **Your draft is saved on this iPhone.** and **Both versions changed the same passage. Choose a version, or return to your draft to combine the changes yourself.** Changes labels its sides **My Draft** and **GitHub**, like the tabs, with `+` and `-` and sideways scrolling. **Keep Mine** publishes yours. **Use GitHub's** confirms with **Replace your draft with GitHub's version?** / "You can undo this."
+**Review Changes.** A conflict opens a sheet with Changes, My Draft and GitHub tabs. It says **Your draft is saved on this iPhone.** and **Both versions changed the same passage. Choose a version, or return to your draft to combine the changes yourself.** Changes labels its sides **My Draft** and **GitHub**, like the tabs, with `+` and `-` and sideways scrolling. **Keep Mine** publishes yours. **Use GitHub’s** confirms with **Replace your draft with GitHub’s version?** / "You can undo this."
 
-**Local save failure.** "Your latest changes couldn't be saved on this iPhone. Keep this file open and try again."
+**Local save failure.** "Your latest changes couldn’t be saved on this iPhone. Keep this file open and try again."
 
 **Keyboard bar.** One floating `UIGlassEffect` capsule above the keyboard:
 
@@ -119,7 +119,7 @@ A daily note leaves out everything that acts on the gist: Pin, Star, Rename Gist
 - **Insert:** Link, Inline Code, Code Block, Quote, Image.
 - **Intelligence** and **Hide Keyboard**.
 
-**Images.** Insert → Image opens the system picker, with no notice first. A toolbar `ProgressView` labeled "Uploading Image" shows during upload. Failure is **Couldn't Add Image** with Try Again and Cancel.
+**Images.** Insert → Image opens the system picker, with no notice first. A toolbar `ProgressView` labeled "Uploading Image" shows during upload. Failure is **Couldn’t Add Image** with Try Again and Cancel.
 
 ## Tags and Settings
 
@@ -191,7 +191,7 @@ No page-wide sideways scrolling, tap flash or hover-only controls.
 
 ## Apple Intelligence
 
-A medium and large sheet opens from the keyboard bar or **More → Intelligence**, with an **Ask**, **Edit** and **Review** segmented control. Ask prompts "Ask about this file", Edit "What would you like to change?" and Review says "Find errors and unclear wording." One button named for the action becomes **Stop** while it runs, over a row naming the step with a spinner, like "Reading part 2 of 3…". Ask answers with citations and **Show in File**. Edit shows each change as Before and After, with added words semibold and underlined and removed words secondary and struck through, then one **Apply Edit**. With nothing to change it says "No changes needed." Only task changes get a headline, like "Mark this task complete." Review lists suggestions under a "3 suggestions" header, or says "No suggestions." A read-only gist says "This gist is read-only. You can ask and review, but not apply changes." An unsupported device says "This device doesn't support Apple Intelligence." Failures show in the sheet with `exclamationmark.circle`.
+A medium and large sheet opens from the keyboard bar or **More → Intelligence**, with an **Ask**, **Edit** and **Review** segmented control. Ask prompts "Ask about this file", Edit "What would you like to change?" and Review says "Find errors and unclear wording." One button named for the action becomes **Stop** while it runs, over a row naming the step with a spinner, like "Reading part 2 of 3…". Ask answers with citations and **Show in File**. Edit shows each change as Before and After, with added words semibold and underlined and removed words secondary and struck through, then one **Apply Edit**. With nothing to change it says "No changes needed." Only task changes get a headline, like "Mark this task complete." Review lists suggestions under a "3 suggestions" header, or says "No suggestions." A read-only gist says "This gist is read-only. You can ask and review, but not apply changes." An unsupported device says "This device doesn’t support Apple Intelligence." Failures show in the sheet with `exclamationmark.circle`.
 
 ## Comments
 
@@ -199,17 +199,17 @@ Comments belong to published gists, so daily notes and unpublished gists have no
 
 In compact width, Comments is a sheet at medium and large (large at accessibility sizes), and you can keep using the gist behind it at medium. In regular width it's a trailing inspector, 320 pt ideal, and the Library sidebar steps aside until it closes. The inline title is **Comments**.
 
-Threads show newest first. Each comment has an avatar, a semibold author, a relative date and a selectable Markdown body with system links. Replies are disclosures indented 12 pt. The selected thread gets a 12-pt rounded tertiary surface and scrolls into view. **Reply**, **Show in File**, **Show Full Quote** and **Show Less** are borderless secondary buttons with 44-pt targets. A quote that can't be found says "Not found in this file". The composer's clear button reads **Cancel Reply**, **Remove Quote** or **Cancel Editing**. Your comments offer Edit and Delete, which confirms with **Delete [author]'s comment from GitHub?** / **Delete Comment**.
+Threads show newest first. Each comment has an avatar, a semibold author, a relative date and a selectable Markdown body with system links. Replies are disclosures indented 12 pt. The selected thread gets a 12-pt rounded tertiary surface and scrolls into view. **Reply**, **Show in File**, **Show Full Quote** and **Show Less** are borderless secondary buttons with 44-pt targets. A quote that can't be found says "Not found in this file". The composer's clear button reads **Cancel Reply**, **Remove Quote** or **Cancel Editing**. Your comments offer Edit and Delete, which confirms with **Delete [author]’s comment from GitHub?** / **Delete Comment**.
 
 The composer sits in the bottom safe-area bar, like Messages: a growing interactive glass field with 22-pt corners and the reply or quote context inside it, beside a circular **Post** button. Post is `arrow.up`, `.glassProminent` in system blue, large, with Command-Return. The thread's bottom scroll edge is soft, so the field and Post float over the thread with no band or divider.
 
-States: "Loading comments" shows only on a first load with nothing cached. Reopening Comments shows the loaded thread straight away and refreshes quietly. Failures say "Comments couldn't be loaded" or "Couldn't reach GitHub. Check your connection and try again." with Try Again. A post or edit that doesn't go through says "Your comment couldn't be posted." A delete says "This comment couldn't be deleted.", because it can be someone else's on your gist. Both go on "Check your connection and try again." An empty conversation is just the composer, with no message.
+States: "Loading comments" shows only on a first load with nothing cached. Reopening Comments shows the loaded thread straight away and refreshes quietly. Failures say "Comments couldn’t be loaded" or "Couldn’t reach GitHub. Check your connection and try again." with Try Again. A post or edit that doesn't go through says "Your comment couldn’t be posted." A delete says "This comment couldn’t be deleted.", because it can be someone else's on your gist. Both go on "Check your connection and try again." An empty conversation is just the composer, with no message.
 
 In the gist, a commented passage gets a 50% accent highlight and no underline. The highlight stays put while you type. Selected text offers **Add Comment** in the edit menu. Tapping a highlight, or **View Comment**, opens its thread.
 
 ## Widgets and shortcuts
 
-The **GistPad** widget is a launcher with three ways in: today's note, a recent gist or a new one. It shows no note content. It comes in small and medium only, described as "Open today's note, a recent gist or start a new one." Widgets don't scroll, and a short library never changes the layout.
+The **GistPad** widget is a launcher with three ways in: today's note, a recent gist or a new one. It shows no note content. It comes in small and medium only, described as "Open today’s note, a recent gist or start a new one." Widgets don't scroll, and a short library never changes the layout.
 
 | Part | Look |
 | --- | --- |
@@ -221,9 +221,9 @@ The **GistPad** widget is a launcher with three ways in: today's note, a recent 
 
 Medium's date column is exactly as wide as today's weekday at every size, always spelled out, and the list starts 20 pt after it, so the list moves only at midnight. At accessibility sizes, medium shows two gists and small drops the time rather than shrinking text. Titles that still don't fit truncate or hyphenate, like Calendar's widget. New Gist holds its corner at every size: the symbol grows only as far as the widget lets text grow, and its tap area is a fixed pad around the symbol, so its edges stay on the margins and level with the weekday in small.
 
-The Lock Screen gets **Today**, one round `accessoryCircular` widget for the row under the clock. It shows GistPad's notebook mark, the app icon's cover, spine, three writing lines and three tabs drawn as a one-color template image (`TodayMark`), at half the circle's height and centered on `AccessoryWidgetBackground`. It's the only place the mark appears outside the icon, and the one exception to the symbol rule below. It shows no date, which the Lock Screen already shows, and no `calendar`, which reads as Calendar. It's described as "Open today's note." and VoiceOver reads "Today's note". A tap opens today's note in Edit, or sign-in when signed out.
+The Lock Screen gets **Today**, one round `accessoryCircular` widget for the row under the clock. It shows GistPad's notebook mark, the app icon's cover, spine, three writing lines and three tabs drawn as a one-color template image (`TodayMark`), at half the circle's height and centered on `AccessoryWidgetBackground`. It's the only place the mark appears outside the icon, and the one exception to the symbol rule below. It shows no date, which the Lock Screen already shows, and no `calendar`, which reads as Calendar. It's described as "Open today’s note." and VoiceOver reads "Today’s note". A tap opens today's note in Edit, or sign-in when signed out.
 
-Three controls work in Control Center, on the Lock Screen and from the Action button, in this order and in the system control style with no accent. **Add to Today** (`calendar.badge.plus`, "Capture a thought or task in today's note.") opens the capture sheet, which adds Text or a Task to today's note. Its failure says **Couldn't Add to Today**. **Open Today** (`calendar`, "Open today's note.") opens today's note in Edit. **New Gist** (`square.and.pencil`, "Start a new gist.") opens a blank gist, exactly like the widget's New Gist. Each verb keeps its symbol across the widget, controls and Shortcuts. Open Today, Add to Today and New Gist are also Siri and Shortcuts actions. Spotlight finds gists, and `gistpad://today`, `gistpad://new` and gist links open through the normal opening states.
+Three controls work in Control Center, on the Lock Screen and from the Action button, in this order and in the system control style with no accent. **Add to Today** (`calendar.badge.plus`, "Capture a thought or task in today’s note.") opens the capture sheet, which adds Text or a Task to today's note. Its failure says **Couldn’t Add to Today**. **Open Today** (`calendar`, "Open today’s note.") opens today's note in Edit. **New Gist** (`square.and.pencil`, "Start a new gist.") opens a blank gist, exactly like the widget's New Gist. Each verb keeps its symbol across the widget, controls and Shortcuts. Open Today, Add to Today and New Gist are also Siri and Shortcuts actions. Spotlight finds gists, and `gistpad://today`, `gistpad://new` and gist links open through the normal opening states.
 
 ## Motion
 
