@@ -143,7 +143,7 @@ private struct AppleTaskDeletion {
 }
 
 @Generable
-private struct AppleNewTask: Sendable {
+private struct AppleNewTask {
   @Guide(description: "Plain text of the new task, without Markdown checkbox or bullet.")
   var text: String
   @Guide(description: "ID of the existing list whose title best fits the task.")

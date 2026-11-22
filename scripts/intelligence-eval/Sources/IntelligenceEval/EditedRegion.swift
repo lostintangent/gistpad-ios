@@ -73,9 +73,9 @@ struct EditedRegion: Codable, Sendable {
     case .section:
       return lines.count >= 2 && isHeading(lines[0]) && !lines.dropFirst().allSatisfy(isHeading)
     case .tableRow:
-      let cells = prefix.split(separator: "\n").last?.filter { $0 == "|" }.count
+      let cells = prefix.split(separator: "\n").last?.count(where: { $0 == "|" })
       return lines.allSatisfy {
-        $0.hasPrefix("|") && $0.hasSuffix("|") && $0.filter { $0 == "|" }.count == cells
+        $0.hasPrefix("|") && $0.hasSuffix("|") && $0.count(where: { $0 == "|" }) == cells
       }
     }
   }
@@ -83,7 +83,7 @@ struct EditedRegion: Codable, Sendable {
   /// A new block needs a blank line from its neighbors, a table row needs exactly one newline,
   /// and other text keeps at least the line breaks the original passage had around it.
   private func isSeparated(_ written: String, replacing original: String) -> Bool {
-    func newlines(_ text: some Sequence<Character>) -> Int { text.filter(\.isNewline).count }
+    func newlines(_ text: some Sequence<Character>) -> Int { text.count(where: \.isNewline) }
     func breaks(_ text: String) -> (before: Int, after: Int) {
       (
         newlines(prefix.reversed().prefix(while: \.isWhitespace))

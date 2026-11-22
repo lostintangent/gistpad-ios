@@ -20,7 +20,7 @@ package struct ModelInfo: Sendable {
 }
 
 package struct ModelPass: Sendable {
-  enum Purpose: String, Sendable { case answer, extract, edit, review }
+  enum Purpose: String { case answer, extract, edit, review }
   let purpose: Purpose
   package let instruction: String
   package let source: String

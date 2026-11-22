@@ -28,7 +28,7 @@ extension OnDeviceModel {
 
 extension OnDeviceModel {
   @Generable
-  struct AppleChange: Sendable {
+  struct AppleChange {
     @Guide(description: "Exact source text, including whitespace.")
     var quote: String
     @Guide(description: "Exact source text immediately before quote, or an empty string.")
@@ -42,7 +42,7 @@ extension OnDeviceModel {
   }
 
   @Generable
-  struct AppleChanges: Sendable {
+  struct AppleChanges {
     @Guide(.maximumCount(12))
     var changes: [AppleChange]
   }

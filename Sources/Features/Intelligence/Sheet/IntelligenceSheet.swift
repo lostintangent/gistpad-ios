@@ -98,12 +98,11 @@
       .presentationDetents([.medium, .large], selection: $detent)
       .presentationDragIndicator(.visible)
       .sensoryFeedback(.success, trigger: state.appliedCount) { old, new in new > old }
-      .task {
-        if dynamicTypeSize.isAccessibilitySize { detent = .large }
-      }
       .onChange(of: state.action) { state.clearResults() }
-      .onChange(of: state.isRunning || state.proposal != nil || dynamicTypeSize.isAccessibilitySize)
-      { _, expands in
+      .onChange(
+        of: state.isRunning || state.proposal != nil || dynamicTypeSize.isAccessibilitySize,
+        initial: true
+      ) { _, expands in
         if expands { detent = .large }
       }
       .onDisappear { state.cancel() }
@@ -161,7 +160,7 @@
     }
 
     private var answer: some View {
-      ForEach(Array(state.answerParts.enumerated()), id: \.offset) { _, part in
+      ForEach(state.answerParts.enumerated(), id: \.offset) { _, part in
         switch part {
         case .prose(let text):
           Section { Text(text).textSelection(.enabled) }
@@ -177,7 +176,7 @@
               Menu(
                 String(localized: "Show in File", bundle: .module), systemImage: "text.viewfinder"
               ) {
-                ForEach(Array(ranges.enumerated()), id: \.offset) { index, range in
+                ForEach(ranges.enumerated(), id: \.offset) { index, range in
                   Button(String(localized: "Match \(index + 1)", bundle: .module)) {
                     reveal(range)
                   }
@@ -212,7 +211,7 @@
           .foregroundStyle(.secondary)
         }
       }
-      ForEach(Array(proposal.changes.enumerated()), id: \.element.id) { index, change in
+      ForEach(proposal.changes.enumerated(), id: \.element.id) { index, change in
         Section {
           self.change(change)
         } header: {

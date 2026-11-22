@@ -1,10 +1,10 @@
 import Foundation
 import NaturalLanguage
 
-struct TextDiff: Sendable {
-  enum Kind: Sendable { case unchanged, removed, added }
+struct TextDiff {
+  enum Kind { case unchanged, removed, added }
 
-  struct Run: Sendable {
+  struct Run {
     let kind: Kind
     let text: String
   }

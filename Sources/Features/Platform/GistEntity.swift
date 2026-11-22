@@ -2,7 +2,7 @@ import AppIntents
 import Foundation
 
 @AppEntity(schema: .notes.note)
-public struct GistEntity: Codable, Identifiable, Sendable {
+public struct GistEntity: Codable {
     public static let defaultQuery = GistEntityQuery()
     public var id: String { link.url.absoluteString }
     var title: String

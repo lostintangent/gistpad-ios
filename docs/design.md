@@ -17,7 +17,7 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 - GitHub reads are a **check for changes**, never "update" or "sync".
 - **Show in File** (`text.viewfinder`) is the one name for jumping to a passage, from a comment or an Intelligence citation.
 - **Comments** are GitHub's. Intelligence Review's private notes on passages are **suggestions**, never comments.
-- Something that waits for GitHub says **You can [verb] after this gist publishes.**
+- Something that waits for GitHub says when it can happen, like **You can add images after this gist publishes.**
 - A busy editor says **Finish typing or wait for Writing Tools, then try again.** Text that moved under a selection says **This file changed. Select the text again.**
 - Inserted pictures are **images**, never "photos".
 - Recovery buttons say **Try Again**.
@@ -38,15 +38,15 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 
 Use size classes and the container's geometry, never device names. Folding or unfolding keeps the caret and Undo, and Split comes back when there's room for it.
 
-**Sheet buttons.** Every sheet closes with the system X in `.cancellationAction`: `Button(role: .cancel)` when closing throws away an edit, `Button(role: .close)` when there's nothing to lose. A sheet that saves confirms with `Button(role: .confirm)` in `.confirmationAction`, the system's blue checkmark. Neither sets text, a label, a tint or a style, because the role supplies them. While saving, the checkmark becomes a `ProgressView`. Both stay visible while a field has focus. This covers Rename Gist, Rename File, Add File, Add Link, Add to Today and the tag sheets.
+**Sheet buttons.** Every sheet closes with the system X in `.cancellationAction`: `Button(role: .cancel)` when closing throws away an edit, `Button(role: .close)` when there's nothing to lose. A sheet that saves confirms with `Button(role: .confirm)` in `.confirmationAction`, the system's blue checkmark. Neither sets text, a label, a tint or a style, because the role supplies them. While saving, the checkmark becomes a `ProgressView`.
 
 Launch restores the last open file. With none, nothing opens, because today's note only starts when you ask for it. A file opens in the mode you picked last, Split at first. Where Split doesn't fit, it opens in the last of Edit or Preview you picked, Preview at first. A new gist, and today's note opened from Today, start with the caret at the end. Otherwise Edit waits for a tap before it raises the keyboard. A new gist's row appears, selected, with your first keystroke. Leave one untyped and it closes without a trace, like an empty note in Notes.
 
 Opening a file:
 
 - **Cached:** the real words at once, offline too. No skeleton, flash or previous file.
-- **Uncached:** its bar at once, sliding in with the push, then one plain `ProgressView` after 350 ms. The words arrive under a bar that doesn't change.
-- **Failed:** **Couldn’t Open This File**, the reason and Try Again. Preview's own failure says **Preview Unavailable**.
+- **Uncached:** its whole bar at once, title capsule, Mode, Comments and More, sliding in with the push, then one plain `ProgressView` after 350 ms. The words arrive under a bar that doesn't change.
+- **Failed:** the same bar over **Couldn’t Open This File**, the reason and Try Again. Preview's own failure says **Preview Unavailable**.
 
 ## Library
 
@@ -63,12 +63,12 @@ Headers use `.headerProminence(.increased)` with a secondary count. Pinned and t
 | Title line | `.headline` title, with `star.fill` after it when starred. Trailing `.footnote` metadata: file count, comment count, then date |
 | Tag line | Only when tagged, 6 pt below. Up to two tag labels, then `+N` in secondary text. The counts move to its trailing end |
 | Counts | Secondary `.footnote`, each an inline glyph and number 8 pt apart (scaled): `doc.text` with the file count when a gist has two or more files, then `text.bubble` with the comment count when it has comments. A missing count leaves no gap. VoiceOver reads "3 files, 2 comments" |
-| Date | `.secondary`, the one muted exception, like Notes. Time today, then Yesterday, the weekday this week, then a short date |
+| Date | Secondary. Time today, then Yesterday, the weekday this week, then a short date |
 | Daily row | One line: the day ("Monday, Nov 2", with the year when it differs) and a task ring with `3/4`. Complete shows a green `checkmark.circle.fill`. An earlier day's unfinished tasks show in orange. No tags or counts |
 
 No excerpts, thumbnails or cards. Vertical padding is 14 pt, scaled with Body, and the compact horizontal inset is 16 pt. At accessibility sizes the row stacks: title, metadata, then tags.
 
-Swipe trailing for **Delete** and **Archive** or **Unarchive**, and leading for **Pin** or **Unpin**. Swipe actions show only their symbols, as in Mail. Every one of these buttons shows what tapping does, never the gist's current state: `pin` and `pin.slash`, `star` and `star.slash`, `archivebox` and `arrow.up.bin`, in swipes, the context menu and More. The context menu offers Open Comments, Pin, Archive and Delete. Revealing a Delete, by swipe or by Edit's red minus, is its own confirmation, so it deletes at once. The context menu's Delete confirms, because one tap reaches it. A daily note is a file, not a gist, so it only offers Delete. A pin, star or archive that doesn't go through shows the standard alert with the system's reason, and nothing retries it.
+Swipe trailing for **Delete** and **Archive** or **Unarchive**, and leading for **Pin** or **Unpin**. Swipe actions show only their symbols, as in Mail. Every one of these buttons shows what tapping does, never the gist's current state: `pin` and `pin.slash`, `star` and `star.slash`, `archivebox` and `arrow.up.bin`, wherever they appear. The context menu offers Open Comments, Pin, Archive and Delete. Revealing a Delete, by swipe or by Edit's red minus, is its own confirmation, so it deletes at once. The context menu's Delete confirms, because one tap reaches it. A daily note is a file, not a gist, so it only offers Delete. A pin, star or archive that doesn't go through shows the standard alert with the system's reason, and nothing retries it.
 
 ### Search, filters and toolbars
 
@@ -91,7 +91,7 @@ When one of these explains a problem, **GitHub needs attention** stays out of th
 
 ## The gist screen
 
-**Title.** The title floats at the leading end of the bar: the gist's title in `.headline` over its file name in `.caption` `secondaryLabel`, one line each, with no file name for README.md. Every title is the same glass capsule with no chevron, in every gist, every daily note and every state. In a gist it's a `Menu` with its indicator hidden. In your own gist the menu lists the files, the current one checked, when there are two or more, then **Rename File** and **Add File**. In someone else's gist it lists just the files, even when there's one. VoiceOver reads the title, then the file name. A daily note's capsule holds its day exactly as its row reads ("Friday, Nov 6"), with no file name and no menu, and reads as a heading. You move between days in the Daily Notes section, like the web. The title is never wider than "🤖 Coding Agent Culture" set in its own `.headline`, so the cap grows with Dynamic Type. Shorter titles hug their text, and longer ones end in "…" inside the capsule, as does a long file name. The cap is the same in every posture, so the capsule never moves into the overflow menu and never pushes Mode, Comments or More there. The page's scroll edges are soft in every mode, so words blur under the floating title and buttons with no bar or hairline. A note that's opening is already its own screen, with its capsule, Mode, Comments and More from the first frame of the push, so nothing in the bar changes when it arrives. One that can't open keeps the same capsule.
+**Title.** The title floats at the leading end of the bar: the gist's title in `.headline` over its file name in `.caption` `secondaryLabel`, one line each, with no file name for README.md. Every title is the same glass capsule with no chevron, in every gist, every daily note and every state. In a gist it's a `Menu` with its indicator hidden. In your own gist the menu lists the files, the current one checked, when there are two or more, then **Rename File** and **Add File**. In someone else's gist it lists just the files, even when there's one. VoiceOver reads the title, then the file name. A daily note's capsule holds its day exactly as its row reads ("Friday, Nov 6"), with no file name and no menu, and reads as a heading. You move between days in the Daily Notes section, like the web. The title is never wider than "🤖 Coding Agent Culture" set in its own `.headline`, so the cap grows with Dynamic Type. Shorter titles hug their text, and longer ones end in "…" inside the capsule, as does a long file name. The cap is the same in every posture, so the capsule never moves into the overflow menu and never pushes Mode, Comments or More there.
 
 **Mode.** In your own gist, a segmented, icon-only picker: Edit `square.and.pencil`, Split `rectangle.split.2x1` (only when it fits) and Preview `eye`. Someone else's gist shows only Preview, with no picker. Switching to Preview with the keyboard up shows the page at rest while the keyboard drops.
 
@@ -123,7 +123,7 @@ A daily note leaves out everything that acts on the gist: Pin, Star, Rename Gist
 
 ## Tags and Settings
 
-The tag editor and filter are one family: searchable sheets at medium and large (large at accessibility sizes) with inline titles. The editor, **Tags**, has a Close that asks **Discard tag changes?** when there are edits, a checkmark Save, and Search and **New Tag** at the bottom. **Edit Tag** (`pencil`) lives in swipe and context menus, and its swipe is icon-only like the gist list's. The tag form is **New Tag** or **Edit Tag**, with Tag name, Color, Use Default Color, a preview and **Delete Tag**, and saves with its checkmark. **Filter by Tags** shows each tag's gist count in secondary before its check, whose space is always reserved, and **Clear Tag Filter**, the same words as the strip's button. Picker rows show a swatch, the name in `label` and a neutral check, never a tinted row.
+The tag editor and filter are one family: searchable sheets at medium and large (large at accessibility sizes) with inline titles. The editor, **Tags**, has a Close that asks **Discard tag changes?** when there are edits, a checkmark Save, and Search and **New Tag** at the bottom. **Edit Tag** (`pencil`) lives in swipe and context menus, and its swipe is icon-only like the gist list's. The tag form is **New Tag** or **Edit Tag**, with Tag name, Color, Use Default Color, a preview and **Delete Tag**, and saves with its checkmark. **Filter by Tags** shows each tag's gist count in secondary before its check, whose space is always reserved, and **Clear Tag Filter**, the same words as the strip's button. Picker rows show a swatch, the name in `label` and the system's tinted checkmark, never a tinted row.
 
 Settings is a small Form:
 
@@ -136,14 +136,14 @@ Settings is a small Form:
 | Role | Color |
 | --- | --- |
 | Chrome | Primary monochrome, never the accent |
-| Caret, selection, confirm buttons and the active Tags filter | System blue |
+| Caret, selection, checkmarks, confirm buttons and the active Tags filter | System blue |
 | Complete | System green |
 | Overdue | System orange |
 | Accent | The user's saved web accent, sky `#0EA5E9` by default |
 
 The accent appears only in the widget's weekday and New Gist, a few Preview details, comment highlights, the rule beside a comment's quote and its own Settings swatch. Text targets 4.5:1, and 7:1 with Increased Contrast.
 
-**Tag labels** fill with the exact saved color at full opacity, with black or white ink, whichever contrasts more. `.footnote` medium, 8 by 4 pt padding, 8-pt corners. No dot, overlay or opacity. A missing color uses the neutral system fill. Increased Contrast adds a primary outline.
+**Tag labels** fill with the exact saved color at full opacity, with black or white ink, whichever contrasts more. `.footnote` medium, 8 by 4 pt padding, 8-pt corners. No dot or opacity. Near-white and near-black fills get a hairline `separator` edge, and so do their swatches. A missing color uses the neutral system fill. Increased Contrast adds a primary outline.
 
 **Type** is SF through text styles. Code uses scaled system monospace. No bundled fonts, tracking or fixed sizes. At accessibility sizes, wrap and stack before shrinking.
 
@@ -191,7 +191,7 @@ No page-wide sideways scrolling, tap flash or hover-only controls.
 
 ## Apple Intelligence
 
-A medium and large sheet opens from the keyboard bar or **More → Intelligence**, with an **Ask**, **Edit** and **Review** segmented control. Ask prompts "Ask about this file", Edit "What would you like to change?" and Review says "Find errors and unclear wording." One button named for the action becomes **Stop** while it runs, over a row naming the step with a spinner, like "Reading part 2 of 3…". Ask answers with citations and **Show in File**. Edit shows each change as Before and After, with added words semibold and underlined and removed words secondary and struck through, then one **Apply Edit**. With nothing to change it says "No changes needed." Only task changes get a headline, like "Mark this task complete." Review lists suggestions under a "3 suggestions" header, or says "No suggestions." A read-only gist says "This gist is read-only. You can ask and review, but not apply changes." An unsupported device says "This device doesn’t support Apple Intelligence." Failures show in the sheet with `exclamationmark.circle`.
+A medium and large sheet opens from the keyboard bar or **More → Intelligence**, with an **Ask**, **Edit** and **Review** segmented control. Ask prompts "Ask about this file", Edit "What would you like to change?" and Review says "Find errors and unclear wording." One button named for the action becomes **Stop** while it runs, over a row naming the step with a spinner, like "Reading part 2 of 3…". Ask answers with citations and **Show in File**. Edit shows each change as Before and After, with added words semibold and underlined and removed words secondary and struck through, then one **Apply Edit**. With nothing to change it says "No changes needed." Only task changes get a headline, like "Mark this task complete." Review lists suggestions under a "3 suggestions" header, or says "No suggestions." A read-only gist says "This gist is read-only. You can ask and review, but not apply changes." An unsupported device says "This device doesn’t support Apple Intelligence."
 
 ## Comments
 
@@ -201,7 +201,7 @@ In compact width, Comments is a sheet at medium and large (large at accessibilit
 
 Threads show newest first. Each comment has an avatar, a semibold author, a relative date and a selectable Markdown body with system links. Replies are disclosures indented 12 pt. The selected thread gets a 12-pt rounded tertiary surface and scrolls into view. **Reply**, **Show in File**, **Show Full Quote** and **Show Less** are borderless secondary buttons with 44-pt targets. A quote that can't be found says "Not found in this file". The composer's clear button reads **Cancel Reply**, **Remove Quote** or **Cancel Editing**. Your comments offer Edit and Delete, which confirms with **Delete [author]’s comment from GitHub?** / **Delete Comment**.
 
-The composer sits in the bottom safe-area bar, like Messages: a growing interactive glass field with 22-pt corners and the reply or quote context inside it, beside a circular **Post** button. Post is `arrow.up`, `.glassProminent` in system blue, large, with Command-Return. The thread's bottom scroll edge is soft, so the field and Post float over the thread with no band or divider.
+The composer sits in the bottom safe-area bar, like Messages: a growing interactive glass field with 22-pt corners and the reply or quote context inside it, beside a circular **Post** button. Post is `arrow.up`, `.glassProminent` in system blue, large, with Command-Return.
 
 States: "Loading comments" shows only on a first load with nothing cached. Reopening Comments shows the loaded thread straight away and refreshes quietly. Failures say "Comments couldn’t be loaded" or "Couldn’t reach GitHub. Check your connection and try again." with Try Again. A post or edit that doesn't go through says "Your comment couldn’t be posted." A delete says "This comment couldn’t be deleted.", because it can be someone else's on your gist. Both go on "Check your connection and try again." An empty conversation is just the composer, with no message.
 
@@ -209,7 +209,7 @@ In the gist, a commented passage gets a 50% accent highlight and no underline. T
 
 ## Widgets and shortcuts
 
-The **GistPad** widget is a launcher with three ways in: today's note, a recent gist or a new one. It shows no note content. It comes in small and medium only, described as "Open today’s note, a recent gist or start a new one." Widgets don't scroll, and a short library never changes the layout.
+The **GistPad** widget is a launcher with three ways in: today's note, a recent gist or a new one. It shows no note content. It comes in small and medium only, described as "Open today’s note, a recent gist or start a new one." A short library never changes the layout.
 
 | Part | Look |
 | --- | --- |

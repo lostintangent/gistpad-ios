@@ -39,7 +39,7 @@ struct Evaluate {
     }
     let meetsFloor = cases.allSatisfy { item in
       let group = finalResults.filter { $0.caseID == item.id }
-      return Double(group.filter(\.passed).count) / Double(group.count)
+      return Double(group.count(where: \.passed)) / Double(group.count)
         >= (item.favorite == nil ? 1 : 0.9)
     }
     if !meetsFloor { exit(1) }

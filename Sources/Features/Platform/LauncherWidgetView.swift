@@ -36,7 +36,7 @@ public struct LauncherWidgetView: View {
         Group {
             if family == .systemMedium { medium } else { small }
         }
-        .environment(\.accent, Accent(savedHex: snapshot?.accentHex))
+        .accent(savedHex: snapshot?.accentHex)
         // Any tap that misses a gist or New Gist opens Today, not just one on the date's glyphs.
         .widgetURL(GistPadLink.today.url)
     }

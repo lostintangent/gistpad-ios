@@ -358,7 +358,7 @@ extension OnDeviceModel {
       return Proposal.Change(quote: block.text, replacement: block.text + newline + newline + text, reason: "")
     case .insertRow:
       guard kinds == [.tableRow],
-        text.filter({ $0 == "|" }).count == block.text.filter({ $0 == "|" }).count
+        text.count(where: { $0 == "|" }) == block.text.count(where: { $0 == "|" })
       else { return nil }
       return Proposal.Change(quote: block.text, replacement: block.text + newline + text, reason: "")
     case .makeList, .replaceParagraph:
@@ -436,16 +436,9 @@ extension OnDeviceModel {
     prompt: String, instructions: String, count: Int, maximum: Int,
     pass: ModelPass, phase: String
   ) async throws -> [Int] {
-    let root = DynamicGenerationSchema(
-      name: "EditTargets",
-      properties: [
-        .init(
-          name: "blockIDs", description: "IDs of the sections or blocks to change.",
-          schema: DynamicGenerationSchema(
-            arrayOf: DynamicGenerationSchema(type: Int.self, guides: [.range(1...count)]),
-            maximumElements: maximum))
-      ])
-    let schema = try GenerationSchema(root: root, dependencies: [])
+    let schema = try Self.idSchema(
+      named: "EditTargets", description: "IDs of the sections or blocks to change.",
+      count: count, maximum: maximum)
     let response = try await LanguageModelSession(
       model: model, instructions: Instructions(instructions)
     ).respond(
@@ -462,7 +455,7 @@ extension OnDeviceModel {
 
   // Edit writes new text, so it doesn't share the rules against adding to the note.
   static func editInstructions(for pass: ModelPass) -> String {
-    return pass.isPart ? """
+    pass.isPart ? """
       You revise the supplied passage from one Markdown note for the user.
       Reply with the full supplied passage as it should read, from its first line to its last.
       Change only what the request asks for. Copy every other line exactly, even lines with mistakes.

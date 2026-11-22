@@ -4,7 +4,7 @@ Widgets, controls, Shortcuts and Spotlight open the app with `gistpad://` links
 for Today, Add to Today, a new gist, a gist's file and a gist that's only on the phone.
 `GistPadLink` reads and writes them, and `PendingLink` hands one to the app,
 which opens it through its ordinary navigation.
-Receiving a link never publishes. The sign-in callback stays with Auth.
+Receiving a link never publishes. The sign-in callback belongs to Store's account sign-in.
 
 gistpad.dev links open in the browser. The app doesn't claim them, because that
 needs the web's `apple-app-site-association` file deployed first.
@@ -38,8 +38,8 @@ rewrite or Q&A.
 Open Gist, Open Today, Add to Today and New Gist are App Shortcuts, and the
 last three are also controls. The Add to Today control opens the capture
 sheet, and shortcut-provided text skips it. Captures start today the way the
-app does, append Store's `DailyNote.addition` through the editor's
-`append(_:to:)` path, and leave publishing to autosave.
+app does, append Store's `DailyNote.addition` through the same durable edit
+as Siri's append, and leave publishing to autosave.
 
 Intents run in the main app (`allowedExecutionTargets = .main`), which provides
 `PlatformActions` through `AppDependencyManager`. An edit from an intent reaches
@@ -58,7 +58,8 @@ Gist runs `NewGistIntent`, and each recent gist runs `OpenGistIntent`. It keeps
 the `GistPadToday` kind so widgets already on a Home Screen stay. Timelines never
 create a note and only turn the day over, since the app reloads the widget when
 the library changes, and on every launch. When the snapshot can't be read, such
-as before first unlock, it asks you to open GistPad.
+as before first unlock, it asks you to open GistPad. The Today Lock Screen
+widget is one round button with GistPad's notebook mark that opens Today.
 
 ## Validation
 
