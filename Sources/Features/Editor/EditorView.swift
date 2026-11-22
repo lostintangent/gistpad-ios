@@ -129,6 +129,7 @@
         view.traitOverrides[AccentTrait.self] = accent
         editor.setCommentHighlights(comments, actions: commentActions)
       }
+      host.isPaneVisible = isPaneVisible
     }
 
     static func dismantleUIView(_ host: TextViewHost, coordinator: KeyboardBar) {
@@ -144,14 +145,13 @@
     private let editor: Editor
     private var configuration: ((UITextView) -> Void)?
     private var isDismantled = false
-    // Platform gap: the bar doesn't track a scroll view inside a UIViewRepresentable, so it draws
-    // no soft edge over the source. Remove topEdge when SwiftUI gives the bar that scroll view.
-    private let topEdge = UIScrollEdgeElementContainerInteraction()
+    var isPaneVisible = true {
+      didSet { if isPaneVisible, !oldValue { handBarSource() } }
+    }
 
     init(editor: Editor) {
       self.editor = editor
       super.init(frame: .zero)
-      topEdge.edge = .top
       editor.hosts.append(Reference(host: self))
       // Platform gap: a keyboard guide move only lays out views constrained to it, so a hidden view
       // pinned to it lays out the host. Remove with the source's keyboard inset.
@@ -190,7 +190,6 @@
       if !ownsEditor { adoptEditor() }
       if editor.textView.frame != bounds { editor.textView.frame = bounds }
       editor.textView.keyboardOverlap = bounds.maxY - keyboardLayoutGuide.layoutFrame.minY
-      updateTopEdge()
       // Platform gap: the keyboard lays out its accessory after a column animation, so the capsule
       // would jump. Laying it out now glides it with the note. Remove when UIKit animates it along.
       if let accessory = editor.textView.inputAccessoryView, accessory.window != nil {
@@ -232,18 +231,20 @@
       textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       configuration?(textView)
       addSubview(textView)
+      handBarSource()
     }
 
-    private func updateTopEdge() {
+    // Platform gap: the bar can't find a scroll view inside a UIViewRepresentable, so it neither
+    // minimizes nor draws its soft edge over the source. Remove when SwiftUI hands the bar the
+    // source. The bar follows the pane that last appeared or that you last scrolled.
+    func handBarSource() {
+      guard window != nil, isPaneVisible, ownsEditor else { return }
       var responder: UIResponder? = self
       while let current = responder {
-        if let bar = (current as? UIViewController)?.navigationController?.navigationBar,
-          bar.window === window
-        {
-          guard topEdge.view !== bar || topEdge.scrollView !== editor.textView else { return }
-          topEdge.view?.removeInteraction(topEdge)
-          topEdge.scrollView = editor.textView
-          bar.addInteraction(topEdge)
+        if let screen = current as? UIViewController, screen.parent is UINavigationController {
+          if screen.contentScrollView(for: .top) !== editor.textView {
+            screen.setContentScrollView(editor.textView, for: .top)
+          }
           return
         }
         responder = current.next

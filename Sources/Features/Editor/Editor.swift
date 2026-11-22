@@ -349,6 +349,7 @@
 
     public func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
       textView.cancelEditingCaretReveal()
+      host?.handBarSource()
     }
 
     public func setCommentHighlights(

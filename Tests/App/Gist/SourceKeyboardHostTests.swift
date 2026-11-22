@@ -69,6 +69,18 @@ struct SourceKeyboardHostTests {
         }
     }
 
+    @Test("The bar follows the source, so it minimizes and draws its edge as the source scrolls")
+    func barFollowsTheSource() async throws {
+        let fixture = try await SourceKeyboardFixture(source: Self.source, size: "large")
+        defer { fixture.close() }
+        var responder: UIResponder? = fixture.editor
+        while let current = responder, !(current is UINavigationController) {
+            responder = current.next
+        }
+        let navigation = try #require(responder as? UINavigationController)
+        #expect(navigation.topViewController?.contentScrollView(for: .top) === fixture.editor)
+    }
+
     @Test("Native end scrolling reveals the last line above the formatting capsule")
     func lastLineScrollReachability() async throws {
         let fixture = try await SourceKeyboardFixture(source: Self.source, size: "large")
