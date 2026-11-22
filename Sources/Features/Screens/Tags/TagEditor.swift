@@ -66,7 +66,7 @@ public struct TagEditor: View {
             .sheet(item: $editingTag) { tag in
                 TagEditForm(
                     tag: tag, isNew: !draft.tags.contains(where: { $0.id == tag.id }),
-                    update: { try draft.upsert($0) },
+                    update: { draft.upsert($0) },
                     delete: { draft.delete(tag) }
                 )
                 .accent(savedHex: accent.savedHex)
@@ -184,7 +184,7 @@ public struct TagEditor: View {
 private struct TagEditForm: View {
     let tag: Tag
     let isNew: Bool
-    let update: (Tag) throws -> Void
+    let update: (Tag) -> Bool
     let delete: () -> Void
     @State private var name: String
     @State private var colorHex: String?
@@ -195,7 +195,7 @@ private struct TagEditForm: View {
     @Environment(\.self) private var environment
 
     init(
-        tag: Tag, isNew: Bool, update: @escaping (Tag) throws -> Void,
+        tag: Tag, isNew: Bool, update: @escaping (Tag) -> Bool,
         delete: @escaping () -> Void
     ) {
         self.tag = tag
@@ -248,11 +248,10 @@ private struct TagEditForm: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {
-                        do {
-                            try update(Tag(id: tag.id, name: name, colorHex: colorHex))
+                        if update(Tag(id: tag.id, name: name, colorHex: colorHex)) {
                             dismiss()
-                        } catch {
-                            self.error = error.localizedDescription
+                        } else {
+                            error = String(localized: "A tag with this name already exists.", bundle: .module)
                         }
                     }
                     .accessibilityIdentifier("tag-form-save")

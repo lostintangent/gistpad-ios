@@ -1,18 +1,6 @@
 import Foundation
 import Store
 
-enum TagEditingError: LocalizedError {
-    case emptyName
-    case duplicateName
-
-    var errorDescription: String? {
-        switch self {
-        case .emptyName: String(localized: "Give this tag a name.", bundle: .module)
-        case .duplicateName: String(localized: "A tag with this name already exists.", bundle: .module)
-        }
-    }
-}
-
 struct TagEditorDraft {
     private let gistID: String
     private let originalTags: [Tag]
@@ -28,12 +16,12 @@ struct TagEditorDraft {
         self.selectedTagIDs = selectedTagIDs
     }
 
-    mutating func upsert(_ tag: Tag) throws {
+    /// Adds or renames a tag, unless another tag already has its name.
+    mutating func upsert(_ tag: Tag) -> Bool {
         let name = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { throw TagEditingError.emptyName }
         guard !tags.contains(where: {
             $0.id != tag.id && $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame
-        }) else { throw TagEditingError.duplicateName }
+        }) else { return false }
         let updated = Tag(id: tag.id, name: name, colorHex: tag.colorHex)
         if let index = tags.firstIndex(where: { $0.id == tag.id }) {
             tags[index] = updated
@@ -41,6 +29,7 @@ struct TagEditorDraft {
             tags.append(updated)
             selectedTagIDs.insert(updated.id)
         }
+        return true
     }
 
     mutating func delete(_ tag: Tag) {

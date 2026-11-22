@@ -9,7 +9,7 @@ struct TagLabel: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
-        let style = TagLabelStyle(hex: tag.colorHex)
+        let rgb = RGBColor(tagHex: tag.colorHex)
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(verbatim: tag.name)
                 .fixedSize(horizontal: false, vertical: true)
@@ -18,16 +18,16 @@ struct TagLabel: View {
             }
         }
         .font(.footnote.weight(.medium))
-        .foregroundStyle(style.ink)
+        .foregroundStyle(rgb?.contrastingInk ?? .primary)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background {
             RoundedRectangle(cornerRadius: 8)
-                .fill(style.fill)
+                .fill(rgb?.color ?? Color(uiColor: .tertiarySystemFill))
                 .overlay {
-                    if let edge = style.edge {
+                    if rgb?.needsEdge == true {
                         RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(edge, lineWidth: 0.5)
+                            .strokeBorder(Color(uiColor: .separator), lineWidth: 0.5)
                     }
                 }
                 .overlay {
@@ -40,24 +40,6 @@ struct TagLabel: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: tag.name))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
-struct TagLabelStyle {
-    let fill: Color
-    let ink: Color
-    let edge: Color?
-
-    init(hex: String?) {
-        guard let rgb = RGBColor(tagHex: hex) else {
-            fill = Color(uiColor: .tertiarySystemFill)
-            ink = .primary
-            edge = nil
-            return
-        }
-        fill = rgb.color
-        ink = rgb.contrast(with: .black) >= rgb.contrast(with: .white) ? .black : .white
-        edge = rgb.needsEdge ? Color(uiColor: .separator) : nil
     }
 }
 
@@ -88,6 +70,9 @@ extension RGBColor {
 
     /// Near-white and near-black fills need an edge against the surface.
     var needsEdge: Bool { luminance >= 0.8 || luminance <= 0.05 }
+
+    /// Black or white, whichever reads better on this fill.
+    var contrastingInk: Color { contrast(with: .black) >= contrast(with: .white) ? .black : .white }
 }
 
 struct TagLabels: View {
@@ -111,7 +96,7 @@ struct TagLabels: View {
                 TagFlowLayout(layoutDirection: layoutDirection) {
                     ForEach(tags.prefix(limit ?? tags.count)) { TagLabel(tag: $0, isSelected: isSelected) }
                     if let limit, tags.count > limit {
-                        TagOverflowLabel(count: tags.count - limit)
+                        overflow(tags.count - limit)
                     }
                 }
             }
@@ -121,28 +106,24 @@ struct TagLabels: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    struct TagOverflowLabel: View {
-        let count: Int
-
-        var body: some View {
-            Text("+\(count)", bundle: .module)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
-        }
-    }
-
     private func line(showing count: Int) -> some View {
         HStack(spacing: 6) {
             ForEach(tags.prefix(count)) { TagLabel(tag: $0, isSelected: isSelected) }
             if tags.count > count {
-                TagOverflowLabel(count: tags.count - count)
+                overflow(tags.count - count)
                     .fixedSize()
             }
         }
     }
+
+    private func overflow(_ count: Int) -> some View {
+        Text("+\(count)", bundle: .module)
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(.secondary)
+    }
 }
 
-struct TagFlowLayout: Layout {
+private struct TagFlowLayout: Layout {
     var layoutDirection: LayoutDirection
     private let spacing: CGFloat = 6
 
