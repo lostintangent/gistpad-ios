@@ -148,6 +148,7 @@ private struct CommentThreadContent: View {
     @Environment(\.displayScale) private var displayScale
     @ScaledMetric(relativeTo: .body) private var contentSpacing = 8
     @ScaledMetric(relativeTo: .body) private var quoteSpacing = 12
+    @ScaledMetric(relativeTo: .body) private var avatarSize = 28
 
     private var comment: GistComment { thread.comment }
     private var parsed: GistCommentBody { comment.parsedBody }
@@ -219,7 +220,17 @@ private struct CommentThreadContent: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 8) {
-            CommentAvatar(author: comment.user)
+            AsyncImage(url: comment.user?.avatarURL) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Text(verbatim: comment.user?.login.first.map { String($0).uppercased() } ?? "?")
+                    .font(.caption.weight(.semibold))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(uiColor: .secondarySystemFill))
+            }
+            .frame(width: avatarSize, height: avatarSize)
+            .clipShape(.circle)
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(verbatim: login)
                     .font(.subheadline.weight(.semibold))
@@ -297,7 +308,7 @@ private struct CommentThreadContent: View {
                             comments.revealPassage(comment.id)
                         } label: {
                             Label(
-                                String(localized: "Show Passage"),
+                                String(localized: "Show in File"),
                                 systemImage: "text.viewfinder")
                                 .labelStyle(.iconOnly)
                                 .frame(minWidth: 44, minHeight: 44)
@@ -335,7 +346,7 @@ private struct CommentThreadContent: View {
                     .padding(.vertical, -8)
                 }
                 if comments.linkedThreadIDs?.contains(comment.id) == false {
-                    Text("Not linked in this view")
+                    Text("Not found in this file")
                         .font(.footnote)
                 }
             }
@@ -362,24 +373,5 @@ private struct InlineActionLabelStyle: LabelStyle {
                 .imageScale(.small)
             configuration.title
         }
-    }
-}
-
-private struct CommentAvatar: View {
-    let author: GistComment.Author?
-    @ScaledMetric(relativeTo: .body) private var size = 28
-
-    var body: some View {
-        AsyncImage(url: author?.avatarURL) { image in
-            image.resizable().scaledToFill()
-        } placeholder: {
-            Text(verbatim: author?.login.first.map { String($0).uppercased() } ?? "?")
-                .font(.caption.weight(.semibold))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(uiColor: .secondarySystemFill))
-        }
-        .frame(width: size, height: size)
-        .clipShape(.circle)
-        .accessibilityHidden(true)
     }
 }

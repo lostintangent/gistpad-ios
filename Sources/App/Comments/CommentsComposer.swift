@@ -66,11 +66,6 @@ struct CommentsComposer: View {
         .accessibilityIdentifier("comments-composer")
     }
 
-    private var isEditing: Bool {
-        if case .edit = model.target { return true }
-        return false
-    }
-
     private var maximumLines: Int {
         if failure != nil { return 1 }
         return dynamicTypeSize.isAccessibilitySize ? 2 : 5
@@ -106,8 +101,7 @@ struct CommentsComposer: View {
                     } icon: {
                         Image(systemName: "quote.opening")
                     }
-                    .accessibilityLabel(
-                        Text("Selected from \(filename): \(text)"))
+                    .accessibilityLabel(Text("Quoting \(filename): \(text)"))
                 case .edit:
                     Text("Editing your comment")
                 }
@@ -115,14 +109,10 @@ struct CommentsComposer: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             Button {
-                if isEditing { comments.isComposerFocused = false } else { comments.focusComposer() }
+                if case .edit = model.target { comments.isComposerFocused = false } else { comments.focusComposer() }
                 model.removeContext()
             } label: {
-                Label(
-                    isEditing
-                        ? String(localized: "Cancel editing comment")
-                        : String(localized: "Remove comment context"),
-                    systemImage: "xmark.circle.fill")
+                Label(clearTitle, systemImage: "xmark.circle.fill")
                     .labelStyle(.iconOnly)
                     .foregroundStyle(.tertiary)
                     // A 44-point target that doesn't make the context row taller.
@@ -134,6 +124,14 @@ struct CommentsComposer: View {
         }
         .font(.footnote)
     }
+
+    private var clearTitle: String {
+        switch model.target {
+        case .reply: String(localized: "Cancel Reply")
+        case .edit: String(localized: "Cancel Editing")
+        case .root, .quote: String(localized: "Remove Quote")
+        }
+    }
 }
 
 extension CommentsModel.Failure {
@@ -143,10 +141,8 @@ extension CommentsModel.Failure {
             String(localized: "Couldn’t reach GitHub. Check your connection and try again.")
         case .post:
             String(localized: "Your comment couldn’t be posted. Check your connection and try again.")
-        case .edit:
-            String(localized: "Your edit couldn’t be saved. Check your connection and try again.")
         case .delete:
-            String(localized: "The comment couldn’t be deleted. Check your connection and try again.")
+            String(localized: "This comment couldn’t be deleted. Check your connection and try again.")
         }
     }
 }

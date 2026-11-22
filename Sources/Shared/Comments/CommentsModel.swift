@@ -19,7 +19,7 @@ public final class CommentsModel {
     }
 
     public enum Failure: Equatable, Sendable {
-        case load, post, edit, delete
+        case load, post, delete
     }
 
     public let gistID: String
@@ -104,7 +104,7 @@ public final class CommentsModel {
             failure = nil
             if case .edit = posting { finishEditing() } else { (target, draft) = (.root, "") }
         } catch {
-            if case .edit = posting { failure = .edit } else { failure = .post }
+            failure = .post
         }
     }
 
