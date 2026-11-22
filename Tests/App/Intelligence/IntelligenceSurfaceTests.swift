@@ -7,7 +7,6 @@
   @testable import GistPad
 
   @Suite(.serialized)
-  @MainActor
   struct IntelligenceSurfaceTests {
     @Test func closingIntelligenceRestoresSourceSelectionFocusAndUndo() async throws {
       let source =
@@ -119,7 +118,6 @@
 
   /// The sheet's prompt field, found as a view because SwiftUI only builds
   /// accessibility identifiers while an accessibility client is running.
-  @MainActor
   func intelligencePrompt(presentedOver root: UIViewController) -> UITextView? {
     var presented = root.presentedViewController
     while let next = presented?.presentedViewController { presented = next }

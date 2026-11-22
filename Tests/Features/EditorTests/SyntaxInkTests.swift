@@ -6,7 +6,6 @@
   @testable import Editor
 
   @Suite(.serialized)
-  @MainActor
   struct SyntaxInkTests {
     @Test func syntaxUsesTheWebsInksAndNativeFontsWithoutChangingSourceOrSelection() throws {
       let source =

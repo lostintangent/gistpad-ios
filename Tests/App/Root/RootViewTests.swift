@@ -12,7 +12,6 @@ import WebKit
 @testable import Store
 
 @Suite(.serialized)
-@MainActor
 struct RootViewTests {
   @Test func reopeningPreviewThenEditKeepsTheSourceOnScreen() async throws {
     let source = """
@@ -357,7 +356,6 @@ struct RootViewTests {
 }
 
 /// The app's root view in a real window, around a fixture library.
-@MainActor
 private struct NavigationHost {
   let model: GistPadModel
   let window: UIWindow

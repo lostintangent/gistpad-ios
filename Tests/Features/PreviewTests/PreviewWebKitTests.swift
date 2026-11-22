@@ -6,7 +6,6 @@ import UIKit
 import WebKit
 @testable import Preview
 
-@MainActor
 @Suite("Offline WebKit renderer", .serialized)
 struct PreviewWebKitTests {
     @Test("The bundled page renders offline, keeps read-only tasks inert and addresses duplicate tasks")
@@ -356,7 +355,6 @@ struct PreviewWebKitTests {
 }
 
 /// Runs `sample` once per display frame until stopped.
-@MainActor
 private final class FrameSampler: NSObject {
     private let sample: @MainActor () -> Void
     private var link: CADisplayLink?
@@ -373,7 +371,6 @@ private final class FrameSampler: NSObject {
     func stop() { link?.invalidate() }
 }
 
-@MainActor
 private final class MessageReceiver: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     var bodies: [[String: Any]] = []
     var origins: [String] = []

@@ -12,7 +12,6 @@ import UIKit
 @testable import Store
 
 @Suite(.serialized)
-@MainActor
 struct PlatformTests {
   @Test func addToTodayFromAShortcutAppendsToTodaysNoteWithoutASheetOrAPublish() async throws {
     let fixture = try await PlatformFixture.make()
@@ -247,7 +246,6 @@ struct PlatformTests {
 
 /// Today's note in a daily gist on the fixture GitHub, open in a fixture connected to widgets,
 /// Spotlight and Shortcuts.
-@MainActor
 private struct PlatformFixture {
   let fixture: ModelFixture
   let model: GistPadModel

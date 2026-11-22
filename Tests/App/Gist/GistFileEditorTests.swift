@@ -9,7 +9,6 @@ import UIKit
 @testable import Store
 
 @Suite(.serialized)
-@MainActor
 struct GistFileEditorTests {
   @Test func writingToolsPersistsOnlyTheFinalChoiceAndNeverPublishesPreviews() async throws {
     let fixture = try await makeFixture()

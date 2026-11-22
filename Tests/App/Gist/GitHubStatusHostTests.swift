@@ -6,7 +6,6 @@ import Testing
 import UIKit
 
 @Suite(.serialized)
-@MainActor
 struct GitHubStatusHostTests {
   @Test func statusUpdatesPreserveAScrolledEditorsSourceSelectionAndViewport() async throws {
     let source = (1...180).map {
@@ -92,7 +91,6 @@ struct GitHubStatusHostTests {
 }
 
 @Observable
-@MainActor
 private final class StatusModel {
   var state: GitHubStatus = .idle
   var recoveries = 0
@@ -101,7 +99,6 @@ private final class StatusModel {
   func recover() { recoveries += 1 }
 }
 
-@MainActor
 private struct StatusFixture: View {
   @Bindable var model: StatusModel
   var session: Editor?
@@ -130,7 +127,6 @@ private struct StatusFixture: View {
   }
 }
 
-@MainActor
 private final class StatusHost {
   let model = StatusModel()
   let window: UIWindow

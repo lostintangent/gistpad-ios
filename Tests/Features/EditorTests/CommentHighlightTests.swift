@@ -6,7 +6,6 @@
   @testable import Editor
 
   extension HostedEditorTests {
-    @MainActor
     struct CommentHighlightTests {
       @Test func typingKeepsPillsAndMutesANewListMarker() throws {
         let editor = Editor(text: "A native note\n")
@@ -281,7 +280,7 @@
 
       @Test func selectedCommentHasNativeAccessibilityStateWithoutChangingTheEditorRole() throws {
         let editor = Editor(text: "A native note")
-        let provider = try #require(editor.textView as? any AXCustomContentProvider)
+        let provider: any AXCustomContentProvider = editor.textView
         editor.commentHighlights.configure(
           .init(
             quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))

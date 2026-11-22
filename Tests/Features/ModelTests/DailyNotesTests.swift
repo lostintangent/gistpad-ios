@@ -4,7 +4,6 @@ import Testing
 @testable import Model
 @testable import Store
 
-@MainActor
 struct DailyNotesTests {
   @Test func `Today opens one note from my template, however many times I tap it`() async throws {
     let phone = try await Phone(lastFile: .gist(id: "a", filename: "README.md")) {

@@ -3,7 +3,6 @@ import Foundation
 @testable import Intelligence
 
 /// A scripted model. It never calls Apple Intelligence.
-@MainActor
 final class FixtureLanguageModel: IntelligenceModel {
   static let source =
     "# Saturday walk\n\nTake teh river path.\nLeave at 9am, before the cafe opens at 8am."

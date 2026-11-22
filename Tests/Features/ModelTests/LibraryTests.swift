@@ -4,7 +4,6 @@ import Testing
 
 @testable import Model
 
-@MainActor
 struct LibraryTests {
   /// A pinned gist "a" tagged Ideas, like the web saves them.
   static let ideas: [GistPadPreferences.Change] = [

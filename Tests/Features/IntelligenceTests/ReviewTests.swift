@@ -3,7 +3,6 @@ import Testing
 
 @testable import Intelligence
 
-@MainActor
 struct ReviewTests {
   @Test func applyingOneSuggestionAndDismissingAnotherLeavesTheRestExact() async throws {
     let fixture = FixtureLanguageModel()

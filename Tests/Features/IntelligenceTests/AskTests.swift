@@ -3,7 +3,6 @@ import Testing
 
 @testable import Intelligence
 
-@MainActor
 struct AskTests {
   private let manga = """
     # Manga Reading List

@@ -4,7 +4,6 @@ import Testing
 
 @testable import Model
 
-@MainActor
 struct ChangesTests {
   @Test func `Deleting a gist removes it from GitHub, or only from here if it never got there`() async throws {
     let phone = try await Phone(autosave: false) {

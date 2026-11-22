@@ -6,7 +6,6 @@ import UIKit
 @testable import Editor
 
 @Suite(.serialized)
-@MainActor
 struct FileSwitchingTests {
   enum OwnerState: CaseIterable {
     case current, missing, detached
@@ -341,7 +340,6 @@ struct FileSwitchingTests {
   }
 }
 
-@MainActor
 private final class SourceHostWindow {
   let window: UIWindow
   let root = UIViewController()
@@ -365,7 +363,6 @@ private final class SourceHostWindow {
   }
 }
 
-@MainActor
 @Observable
 private final class ReidentifiedSourceState {
   var identity = 0

@@ -25,7 +25,6 @@ struct FrontMatterRangeTests {
   import UIKit
 
   extension HostedEditorTests {
-    @MainActor
     struct FrontMatterLayoutTests {
       @Test(arguments: [
         "---\nedit:\n  commands:\n    update: Preserve all source bytes\n---\n\n\n",

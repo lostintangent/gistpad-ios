@@ -4,7 +4,6 @@ import Testing
 
 @testable import Model
 
-@MainActor
 struct RefreshingTests {
   @Test func `The web's changes show up as I come back, without replacing what I'm reading`() async throws {
     let phone = try await Phone(preferences: LibraryTests.ideas) {

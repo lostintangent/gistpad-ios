@@ -3,7 +3,6 @@ import Store
 import Testing
 @testable import Screens
 
-@MainActor
 struct LibraryStateTests {
     private let gists = SampleLibrary.gists
     private let tags = SampleLibrary.tags

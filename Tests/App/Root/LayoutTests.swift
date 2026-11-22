@@ -9,7 +9,6 @@ import WebKit
 @testable import GistPad
 
 @Suite(.serialized)
-@MainActor
 struct LayoutTests {
   @Test func libraryDisclosuresStartCollapsedAndRememberOnlyTheirOwnAccount() throws {
     let name = "dev.gistpad.layout.tests.\(UUID().uuidString)"

@@ -4,7 +4,6 @@ import Testing
 import UIKit
 
 @Suite(.serialized)
-@MainActor
 struct EditorContinuityTests {
   func host(_ session: Editor) throws -> UIWindow {
     let scene = try #require(

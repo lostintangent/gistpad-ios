@@ -4,7 +4,6 @@ import Testing
 
 @testable import Model
 
-@MainActor
 struct AccountsTests {
   @Test func `What I typed survives signing out, and someone else signing in`() async throws {
     let phone = try await Phone {

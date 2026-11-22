@@ -4,7 +4,6 @@ import Testing
 
 @testable import Model
 
-@MainActor
 @Suite(.timeLimit(.minutes(1)))
 struct PublishingTests {
   @Test func `What I type is saved here at once and publishes once I stop`() async throws {

@@ -4,7 +4,6 @@ import Testing
 
 @testable import Model
 
-@MainActor
 struct OpeningTests {
   @Test func `I launch to my gists and land on the note I left, even offline`() async throws {
     let phone = try await Phone {

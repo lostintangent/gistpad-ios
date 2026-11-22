@@ -7,7 +7,6 @@
   @testable import Intelligence
 
   @Suite(.serialized)
-  @MainActor
   struct SheetTests {
     private let source = FixtureLanguageModel.source
 

@@ -1,6 +1,5 @@
 import UIKit
 
-@MainActor
 func accessibilityElement(_ identifier: String, in root: NSObject) -> NSObject? {
   var visited = Set<ObjectIdentifier>()
   func find(in object: NSObject) -> NSObject? {

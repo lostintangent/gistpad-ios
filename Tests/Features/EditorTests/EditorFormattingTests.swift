@@ -5,7 +5,6 @@
   @testable import Editor
 
   extension HostedEditorTests {
-    @MainActor
     struct EditorFormattingTests {
       @Test func formattingIsOneNativeUndoWithFinalSelection() throws {
         let editor = Editor(text: "A 日本語 note")

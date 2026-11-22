@@ -12,7 +12,6 @@
   @Suite(.serialized)
   enum HostedEditorTests {}
 
-  @MainActor
   func host(_ editor: Editor, focused: Bool = true) -> UIWindow {
     let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
     let controller = UIViewController()
@@ -26,7 +25,6 @@
     return window
   }
 
-  @MainActor
   func hostEditor(
     _ editor: Editor, title: String? = nil, intelligence: (@MainActor () -> Void)? = nil,
     insertImage: (@MainActor () -> Void)? = nil

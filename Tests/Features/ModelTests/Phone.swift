@@ -8,7 +8,6 @@ import Testing
 
 /// The app on one iPhone, signed in to the fixture GitHub. It launches, opens, types and leaves
 /// the way RootView drives the library, and reads what you'd see on screen and on GitHub.
-@MainActor
 final class Phone {
   let fixture: ModelFixture
   private(set) var model: GistPadModel

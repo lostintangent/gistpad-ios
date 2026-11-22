@@ -5,7 +5,6 @@ import Testing
 import UIKit
 @testable import GistPad
 
-@MainActor
 @Suite(.serialized)
 struct SourceKeyboardHostTests {
     @Test func restylingClearsRemovedBoldHeadingAndFenceAttributes() async throws {
@@ -210,7 +209,6 @@ struct SourceKeyboardHostTests {
         + lastLine
 }
 
-@MainActor
 private final class SourceKeyboardFixture {
     let session: Editor
     let window: UIWindow
@@ -375,7 +373,6 @@ private final class SourceKeyboardFixture {
     }
 }
 
-@MainActor
 private final class SourceKeyboardHostingController<Content: View>: UIHostingController<Content> {
     private(set) var hasAppeared = false
 

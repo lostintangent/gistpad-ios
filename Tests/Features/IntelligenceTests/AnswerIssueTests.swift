@@ -2,7 +2,6 @@ import Testing
 
 @testable import Intelligence
 
-@MainActor
 struct AnswerIssueTests {
   private let source =
     "# Incredible\n1. An Example\n\nYou like protagonists who reflect (e.g. An Example)."

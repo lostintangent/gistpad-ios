@@ -5,7 +5,6 @@
   @testable import Editor
 
   extension HostedEditorTests {
-    @MainActor
     struct EditorFocusTests {
       @Test func focusRequestPlacesCaretNowAndFocusesOnWindowAttachment() {
         let source = "# Today\n\n日本語 👩🏽‍💻"

@@ -4,7 +4,6 @@ import Testing
 
 @testable import Model
 
-@MainActor
 struct ConflictsTests {
   @Test func `When the web changed a note too, I choose which version stays`() async throws {
     let phone = try await Phone(autosave: false) {

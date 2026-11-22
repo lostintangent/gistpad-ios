@@ -7,7 +7,6 @@ import UIKit
 @testable import GistPad
 
 @Suite(.serialized)
-@MainActor
 struct SettingsHostTests {
   @Test func settingsPersistAutosaveAndKeepFrontMatterHiddenByDefault() async throws {
     var saved: [(BooleanPreference, Bool)] = []
@@ -51,7 +50,6 @@ struct SettingsHostTests {
   }
 }
 
-@MainActor
 private final class SettingsHost {
   let window: UIWindow
   private let previous: UIWindow?

@@ -3,7 +3,6 @@ import Testing
 
 @testable import Intelligence
 
-@MainActor
 struct EditTests {
   @Test func aChangeAppliesOnlyWhereItsTextMatchesExactlyOnce() throws {
     let literal = note("same same cafe\u{301}")
