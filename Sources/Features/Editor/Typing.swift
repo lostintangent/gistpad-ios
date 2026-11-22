@@ -198,7 +198,8 @@ enum Typing {
       return outdentList(
         in: source, current: current, block: block, selection: selection, protected: protected)
     }
-    guard let parent = sibling(above: current, in: text, protected: protected) else { return nil }
+    guard let parent = listItem(above: current, shallower: false, in: text, protected: protected)
+    else { return nil }
     let target = String(repeating: " ", count: parent.prefixLength)
     let extra = target.utf16.count - current.indent.utf16.count
     guard extra > 0 else { return nil }
@@ -231,7 +232,8 @@ enum Typing {
     in source: String, current: ListLine, block: NSRange, selection: NSRange, protected: [NSRange]
   ) -> Edit? {
     let text = source as NSString
-    guard let parent = ancestor(above: current, in: text, protected: protected) else { return nil }
+    guard let parent = listItem(above: current, shallower: true, in: text, protected: protected)
+    else { return nil }
     let extra = current.indent.utf16.count - parent.indent.utf16.count
     guard extra > 0 else { return nil }
     let end = itemBlockEnd(in: text, after: block, indent: current.indent)
@@ -291,31 +293,18 @@ enum Typing {
       number: number, delimiter: capture(7), digits: numberRange)
   }
 
-  private static func sibling(above current: ListLine, in text: NSString, protected: [NSRange])
-    -> ListLine?
-  {
+  /// The nearest list item above `current` at its indent, or shallower than it.
+  private static func listItem(
+    above current: ListLine, shallower: Bool, in text: NSString, protected: [NSRange]
+  ) -> ListLine? {
     var offset = current.range.location
     while offset > 0 {
       let previous = text.lineRange(for: NSRange(location: offset - 1, length: 0))
       offset = previous.location
       if isProtected(previous, ranges: protected) { return nil }
       guard let item = listLine(in: text, at: offset) else { continue }
-      if item.indent.utf16.count < current.indent.utf16.count { return nil }
-      if item.indent == current.indent { return item }
-    }
-    return nil
-  }
-
-  private static func ancestor(above current: ListLine, in text: NSString, protected: [NSRange])
-    -> ListLine?
-  {
-    var offset = current.range.location
-    while offset > 0 {
-      let previous = text.lineRange(for: NSRange(location: offset - 1, length: 0))
-      offset = previous.location
-      if isProtected(previous, ranges: protected) { return nil }
-      guard let item = listLine(in: text, at: offset) else { continue }
-      if item.indent.utf16.count < current.indent.utf16.count { return item }
+      if item.indent.utf16.count < current.indent.utf16.count { return shallower ? item : nil }
+      if !shallower, item.indent == current.indent { return item }
     }
     return nil
   }
@@ -345,8 +334,8 @@ enum Typing {
     var number = start
     var scan = startOffset
     while scan < offset {
-      if let item = listLine(in: text, at: scan), item.indent == indent, let value = item.number,
-        delimiter.isEmpty || item.delimiter == delimiter
+      if let item = listLine(in: text, at: scan), item.indent == indent,
+        item.delimiter == delimiter, let value = item.number
       {
         number = value + 1
       }

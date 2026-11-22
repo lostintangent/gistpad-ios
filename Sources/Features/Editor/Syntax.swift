@@ -9,13 +9,7 @@ public enum Syntax {
   struct Span: Sendable {
     let range: NSRange
     let kind: Kind
-    let isFencedCode: Bool
-
-    init(range: NSRange, kind: Kind, isFencedCode: Bool = false) {
-      self.range = range
-      self.kind = kind
-      self.isFencedCode = isFencedCode
-    }
+    var isFencedCode = false
   }
 
   public struct Block: Sendable {
@@ -70,26 +64,14 @@ public enum Syntax {
       ("^[ \\t]*(?:>[ \\t]*)*([0-9]{1,9}[.)])(?=[ \\t])", [(1, .orderedMarker)]),
       ("^[ \\t]*(?:>[ \\t]*)*([-*+])(?=[ \\t])", [(1, .punctuation)]),
     ]
-    return patterns.map { pattern, captures in
-      do {
-        return (try NSRegularExpression(pattern: pattern), captures)
-      } catch {
-        preconditionFailure("Invalid built-in Markdown highlighting expression: \(error)")
-      }
-    }
+    return patterns.map { pattern, captures in (Formatting.expression(pattern), captures) }
   }()
 
-  private static let fencePatterns: (opening: NSRegularExpression, closing: NSRegularExpression) = {
-    do {
-      return (
-        try NSRegularExpression(
-          pattern: "^[ \\t]*(?:>[ \\t]*)*(?:(?:[-+*]|[0-9]{1,9}[.)])[ \\t]+)?(`{3,}|~{3,})(.*)$"),
-        try NSRegularExpression(pattern: "^[ \\t]*(?:>[ \\t]*)*(`{3,}|~{3,})[ \\t]*$")
-      )
-    } catch {
-      preconditionFailure("Invalid built-in Markdown fence expression: \(error)")
-    }
-  }()
+  private static let fencePatterns = (
+    opening: Formatting.expression(
+      "^[ \\t]*(?:>[ \\t]*)*(?:(?:[-+*]|[0-9]{1,9}[.)])[ \\t]+)?(`{3,}|~{3,})(.*)$"),
+    closing: Formatting.expression("^[ \\t]*(?:>[ \\t]*)*(`{3,}|~{3,})[ \\t]*$")
+  )
 
   public static func contentStart(in text: String) -> Int {
     let source = text as NSString
