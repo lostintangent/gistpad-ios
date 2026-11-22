@@ -7,18 +7,18 @@ import Testing
 @Suite struct GistCommentsClientTests {
     @Test func paginatesAllCommentsAndNeverForwardsCredentialsOffGitHub() async throws {
         let paths = Mutex<[String]>([])
-        let session = FakeURLProtocol.session { request in
+        let session = FixtureServer { request in
             #expect(request.httpMethod == "GET")
             #expect(request.cachePolicy == .reloadIgnoringLocalCacheData)
             #expect(request.value(forHTTPHeaderField: "Cache-Control") == "no-cache")
             paths.withLock { $0.append(request.url!.absoluteString) }
             if request.url?.query?.contains("page=2") == true {
-                return FakeResponse(data: try commentsData([3], anonymous: true))
+                return FixtureServer.Response(data: try commentsData([3], anonymous: true))
             }
-            return FakeResponse(
+            return FixtureServer.Response(
                 headers: ["Link": "<https://api.github.com/gists/abc123/comments?per_page=100&page=2>; rel=\"next\""],
                 data: try commentsData([1, 2]))
-        }
+        }.session
         let comments = try await GitHubClient(session: session) { "fake" }.listComments(gistID: "abc123")
         #expect(comments.map(\.id) == [1, 2, 3])
         #expect(comments.last?.user == nil)
@@ -27,11 +27,11 @@ import Testing
         #expect(paths.withLock { $0.count } == 2)
         #expect(paths.withLock { $0.first } == "https://api.github.com/gists/abc123/comments?per_page=100")
 
-        let offGitHub = GitHubClient(session: FakeURLProtocol.session { _ in
-            FakeResponse(
+        let offGitHub = GitHubClient(session: FixtureServer { _ in
+            FixtureServer.Response(
                 headers: ["Link": "<https://example.com/gists/abc123/comments?page=2>; rel=\"next\""],
                 data: try commentsData([1]))
-        }) { "fake" }
+        }.session) { "fake" }
         await #expect(throws: GitHubClientError.invalidResponse) {
             try await offGitHub.listComments(gistID: "abc123")
         }
@@ -41,20 +41,20 @@ import Testing
         let calls = Mutex<[String]>([])
         let quoted = GistCommentBody.quoting("A **quoted** passage", text: "Comment\n\nBody")
         let reply = GistCommentBody.replying(to: 123, text: "Reply")
-        let session = FakeURLProtocol.session { request in
+        let session = FixtureServer { request in
             calls.withLock { $0.append("\(request.httpMethod!) \(request.url!.path)") }
             switch request.httpMethod {
             case "POST":
                 #expect(try requestBody(request)["body"] as? String == quoted)
                 #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
-                return FakeResponse(status: 201, data: try commentData(id: 123, body: quoted))
+                return FixtureServer.Response(status: 201, data: try commentData(id: 123, body: quoted))
             case "PATCH":
                 #expect(try requestBody(request)["body"] as? String == reply)
-                return FakeResponse(data: try commentData(id: 123, body: reply))
+                return FixtureServer.Response(data: try commentData(id: 123, body: reply))
             default:
-                return FakeResponse(status: 204)
+                return FixtureServer.Response(status: 204)
             }
-        }
+        }.session
         let client = GitHubClient(session: session) { "fake" }
         #expect(try await client.createComment(gistID: "abc123", body: quoted).body == quoted)
         #expect(try await client.updateComment(gistID: "abc123", commentID: 123, body: reply).body == reply)

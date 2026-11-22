@@ -28,7 +28,7 @@ func testImage(_ type: UTType) throws -> Data {
         let requests = Mutex<[String]>([])
         let storage = ImageStorage(
             publishableKey: "sb_publishable_fake",
-            session: FakeURLProtocol.session { request in
+            session: FixtureServer { request in
                 requests.withLock { $0.append(request.httpMethod ?? "") }
                 #expect(request.url?.host == "upnfachynwuwialgybvf.supabase.co")
                 #expect(request.url?.path == "/storage/v1/object/assets/abc123/12345678-abcd-4000-8000-123456789abc.jpg")
@@ -36,11 +36,10 @@ func testImage(_ type: UTType) throws -> Data {
                 #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fake-supabase-access")
                 #expect(request.value(forHTTPHeaderField: "Content-Type") == "image/jpeg")
                 #expect(request.value(forHTTPHeaderField: "Cache-Control") == "max-age=3600")
-                let body = try requestData(request)
-                #expect(body == bytes)
+                #expect(FixtureServer.body(of: request) == bytes)
                 #expect(request.value(forHTTPHeaderField: "x-upsert") == nil)
-                return FakeResponse(status: 200)
-            }
+                return FixtureServer.Response(status: 200)
+            }.session
         ) { "fake-supabase-access" }
         let url = try await storage.upload(bytes, gistID: "abc123", assetID: asset)
         #expect(url.absoluteString == "https://upnfachynwuwialgybvf.supabase.co/storage/v1/object/public/assets/abc123/12345678-abcd-4000-8000-123456789abc.jpg")

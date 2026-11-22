@@ -7,22 +7,22 @@ import Testing
 @Suite struct GitHubClientTests {
     @Test func libraryListsAreFreshAndCoverOwnedAndStarred() async throws {
         let count = Mutex(0)
-        let session = FakeURLProtocol.session { request in
+        let session = FixtureServer { request in
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fake")
             #expect(request.value(forHTTPHeaderField: "X-GitHub-Api-Version") == "2026-03-10")
             #expect(request.cachePolicy == .reloadIgnoringLocalCacheData)
             #expect(request.value(forHTTPHeaderField: "Cache-Control") == "no-cache")
             count.withLock { $0 += 1 }
             if request.url?.query?.contains("page=2") == true {
-                return FakeResponse(data: Data("[]".utf8))
+                return FixtureServer.Response(data: Data("[]".utf8))
             }
             let markdown = try gistData()
             let image = try gistData(id: "def456", filename: "photo.png", language: "")
             let list = Data("[".utf8) + markdown + Data(",".utf8) + image + Data("]".utf8)
-            return FakeResponse(
+            return FixtureServer.Response(
                 headers: ["Link": "<https://api.github.com/gists?page=2>; rel=\"next\"", "Cache-Control": "max-age=60"],
                 data: list)
-        }
+        }.session
         let client = GitHubClient(session: session) { "fake" }
         #expect(try await client.listGists().count == 2)
         #expect(try await client.listStarredGists().count == 1)
@@ -32,15 +32,15 @@ import Testing
 
     @Test func theTokenOnlyGoesToGitHub() async throws {
         let hosts = Mutex<[String]>([])
-        let session = FakeURLProtocol.session { request in
+        let session = FixtureServer { request in
             hosts.withLock { $0.append(request.url?.host ?? "") }
             if request.url?.host == "gist.githubusercontent.com" {
                 #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
-                return FakeResponse(data: Data("raw".utf8))
+                return FixtureServer.Response(data: Data("raw".utf8))
             }
-            return FakeResponse(
+            return FixtureServer.Response(
                 headers: ["Link": "<https://example.com/gists?page=2>; rel=\"next\""], data: Data("[]".utf8))
-        }
+        }.session
         let client = GitHubClient(session: session) { "fake" }
         await #expect(throws: GitHubClientError.invalidResponse) { try await client.listGists() }
         #expect(try await client.content(gist: rawGist(), filename: "README.md") == "raw")
@@ -62,9 +62,9 @@ import Testing
     }
 
     @Test func throttlingDoesNotLookLikeSignOut() async throws {
-        let session = FakeURLProtocol.session { _ in
-            FakeResponse(status: 403, headers: ["Retry-After": "60"])
-        }
+        let session = FixtureServer { _ in
+            FixtureServer.Response(status: 403, headers: ["Retry-After": "60"])
+        }.session
         let client = GitHubClient(session: session) { "fake" }
         do {
             _ = try await client.gist(id: "abc123")
@@ -76,10 +76,10 @@ import Testing
 
     @Test func largeFilesOpenInFullAndAnIncompleteGistIsNeverPublished() async throws {
         let requests = Mutex(0)
-        let client = GitHubClient(session: FakeURLProtocol.session { _ in
+        let client = GitHubClient(session: FixtureServer { _ in
             requests.withLock { $0 += 1 }
-            return FakeResponse(data: Data("complete content".utf8))
-        }) { "fake" }
+            return FixtureServer.Response(data: Data("complete content".utf8))
+        }.session) { "fake" }
         #expect(try await client.content(gist: rawGist(content: "partial"), filename: "README.md") == "complete content")
         await #expect(throws: GitHubClientError.incompleteGist) {
             try await client.content(gist: decodeGist(gistData(truncated: true)), filename: "README.md")

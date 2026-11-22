@@ -2,14 +2,6 @@ import Foundation
 import Testing
 @testable import Store
 
-typealias FakeResponse = FixtureServer.Response
-
-enum FakeURLProtocol {
-    static func session(handler: @escaping @Sendable (URLRequest) async throws -> FakeResponse) -> URLSession {
-        FixtureServer { try await handler($0) }.session
-    }
-}
-
 func gistData(
     id: String = "abc123", content: String = "base", description: String = "Note",
     owner: Int64 = 42, revision: String = "revision1",
@@ -32,11 +24,7 @@ func decodeGist(_ data: Data) throws -> Gist {
 }
 
 func requestBody(_ request: URLRequest) throws -> [String: Any] {
-    try #require(JSONSerialization.jsonObject(with: requestData(request)) as? [String: Any])
-}
-
-func requestData(_ request: URLRequest) throws -> Data {
-    FixtureServer.body(of: request)
+    try #require(JSONSerialization.jsonObject(with: FixtureServer.body(of: request)) as? [String: Any])
 }
 
 /// The fixture GitHub with a draft store, signed in as `FixtureServer.you`.
