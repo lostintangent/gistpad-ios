@@ -38,14 +38,14 @@ public struct TagEditor: View {
                     }
                 }
                 Section {
-                    ForEach(save == nil ? selectedTags : matchingTags) { tag in
+                    ForEach(listedTags) { tag in
                         if save == nil {
                             tagRow(tag)
                         } else {
                             editableRow(tag)
                         }
                     }
-                    if (save == nil ? selectedTags : matchingTags).isEmpty {
+                    if listedTags.isEmpty {
                         Text(
                             query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                 ? String(localized: "No tags yet.", bundle: .module)
@@ -83,28 +83,15 @@ public struct TagEditor: View {
         }
     }
 
-    private var selectedTags: [Tag] {
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return draft.tags.filter {
-            draft.selectedTagIDs.contains($0.id)
-                && (save != nil || query.isEmpty || $0.name.localizedStandardContains(query))
-        }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-    }
-
-    private var matchingTags: [Tag] {
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return draft.tags.filter { query.isEmpty || $0.name.localizedStandardContains(query) }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    /// A sheet that can't save lists only the gist's own tags.
+    private var listedTags: [Tag] {
+        let tags = draft.tags.matching(query)
+        return save == nil ? tags.filter { draft.selectedTagIDs.contains($0.id) } : tags
     }
 
     private func editableRow(_ tag: Tag) -> some View {
         Button {
-            if draft.selectedTagIDs.contains(tag.id) {
-                draft.selectedTagIDs.remove(tag.id)
-            } else {
-                draft.selectedTagIDs.insert(tag.id)
-            }
+            draft.selectedTagIDs.formSymmetricDifference([tag.id])
         } label: {
             tagRow(tag)
         }

@@ -4,14 +4,9 @@ import Store
 import SwiftUI
 
 struct TagLabel: View {
-    private let tag: Tag
-    private let isSelected: Bool
+    let tag: Tag
+    var isSelected = false
     @Environment(\.colorSchemeContrast) private var contrast
-
-    init(tag: Tag, isSelected: Bool = false) {
-        self.tag = tag
-        self.isSelected = isSelected
-    }
 
     var body: some View {
         let style = TagLabelStyle(hex: tag.colorHex)
@@ -96,18 +91,11 @@ extension RGBColor {
 }
 
 struct TagLabels: View {
-    private let tags: [Tag]
-    private let limit: Int?
-    private let isSelected: Bool
+    let tags: [Tag]
+    var limit: Int?
+    var isSelected = false
     @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    init(tags: [Tag], limit: Int? = nil, isSelected: Bool = false) {
-        precondition(limit.map { $0 > 0 } ?? true)
-        self.tags = tags
-        self.limit = limit
-        self.isSelected = isSelected
-    }
 
     var body: some View {
         Group {

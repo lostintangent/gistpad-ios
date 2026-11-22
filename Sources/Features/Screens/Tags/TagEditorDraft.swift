@@ -60,3 +60,12 @@ struct TagEditorDraft {
         return result
     }
 }
+
+extension [Tag] {
+    /// The tags whose names contain `query`, in name order.
+    func matching(_ query: String) -> [Tag] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return filter { query.isEmpty || $0.name.localizedStandardContains(query) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+}

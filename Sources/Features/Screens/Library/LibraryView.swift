@@ -541,13 +541,9 @@ public struct LibraryView: View {
         NavigationStack {
             List {
                 Section {
-                    ForEach(matchingTags) { tag in
+                    ForEach(state.tags.matching(tagQuery)) { tag in
                         Button {
-                            if state.selectedTagIDs.contains(tag.id) {
-                                state.selectedTagIDs.remove(tag.id)
-                            } else {
-                                state.selectedTagIDs.insert(tag.id)
-                            }
+                            state.selectedTagIDs.formSymmetricDifference([tag.id])
                         } label: {
                             HStack(spacing: 12) {
                                 TagSwatch(hex: tag.colorHex)
@@ -585,7 +581,7 @@ public struct LibraryView: View {
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $tagQuery, prompt: Text("Search tags", bundle: .module))
             .overlay {
-                if matchingTags.isEmpty {
+                if state.tags.matching(tagQuery).isEmpty {
                     ContentUnavailableView.search(text: tagQuery)
                 }
             }
@@ -598,12 +594,6 @@ public struct LibraryView: View {
         }
         .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         .presentationDragIndicator(.visible)
-    }
-
-    private var matchingTags: [Tag] {
-        let query = tagQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        return state.tags.filter { query.isEmpty || $0.name.localizedStandardContains(query) }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 }
 #endif
