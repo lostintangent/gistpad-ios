@@ -111,8 +111,7 @@ extension GistPadModel {
       gist = try await github.updateGist(id: gistID, files: [draft.filename: .content(draft.text)])
     } else {
       gist = try await github.createGist(
-        description: draft.newGistName ?? "", filename: draft.filename,
-        content: Gist.File.encodeContent(draft.text))
+        description: draft.newGistName ?? "", filename: draft.filename, text: draft.text)
     }
     let confirmed = try await github.content(gist: gist, filename: draft.filename)
     guard sourceEqual(confirmed, draft.text) else { throw DraftError.notConfirmed }

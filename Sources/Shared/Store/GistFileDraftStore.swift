@@ -81,9 +81,10 @@ extension GistFileDraft {
 
     /// A new gist called `name`, starting with `content` or else the web's heading for its name.
     public init(accountID: UUID, newGistName name: String, content: String?) {
+        let heading = name.isEmpty ? "" : "# \(name)\n\n"
         self.init(
             accountID: accountID, newGistName: name,
-            text: Gist.File.decodeContent(Gist.File.initialContent(description: name, content: content)))
+            text: content.flatMap { $0.isEmpty ? nil : Gist.File.decodeContent($0) } ?? heading)
     }
 }
 

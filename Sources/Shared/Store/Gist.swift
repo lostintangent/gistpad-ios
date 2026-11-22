@@ -162,11 +162,6 @@ extension Gist.File {
     public static func displayName(_ filename: String) -> String {
         filename.hasSuffix(".md") ? String(filename.dropLast(3)) : filename
     }
-
-    static func initialContent(description: String, content: String?) -> String {
-        content.flatMap { $0.isEmpty ? nil : $0 }
-            ?? (description.isEmpty ? emptyContent : "# \(description)\n\n")
-    }
 }
 
 public enum FileChange: Encodable, Sendable {

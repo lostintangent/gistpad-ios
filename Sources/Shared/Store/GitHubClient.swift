@@ -116,21 +116,16 @@ public actor GitHubClient {
         return (gist, try await content(gist: gist, filename: filename))
     }
 
-    public func createGist(
-        description: String = "", filename: String = "README.md",
-        content: String? = nil, isPublic: Bool = false
-    ) async throws -> Gist {
+    /// Creates a secret gist, as the web does.
+    public func createGist(description: String, filename: String, text: String) async throws -> Gist {
         struct Create: Encodable {
             let description: String
             let files: [String: FileChange]
-            let `public`: Bool
+            let `public` = false
         }
-        let initial = Gist.File.initialContent(description: description, content: content)
         return try await decoded(
             path: "/gists", method: "POST",
-            body: JSONEncoder().encode(Create(
-                description: description, files: [filename: .content(initial)], public: isPublic
-            ))
+            body: JSONEncoder().encode(Create(description: description, files: [filename: .content(text)]))
         )
     }
 

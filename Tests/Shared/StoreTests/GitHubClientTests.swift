@@ -53,7 +53,7 @@ import Testing
     @Test func emptySavesUseSentinelAndCreatesAreSecret() async throws {
         let server = FixtureServer()
         let client = GitHubClient(session: server.session) { "fixture-github" }
-        let created = try await client.createGist()
+        let created = try await client.createGist(description: "", filename: "README.md", text: "")
         #expect(created.isPublic == false)
         #expect(server.gists[0].files["README.md"]?.content == Gist.File.emptyContent)
         let saved = try await client.updateGist(id: created.id, files: ["README.md": .content("")])
