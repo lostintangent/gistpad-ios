@@ -87,6 +87,15 @@ extension GistActions {
   }
 }
 
+extension GistActions {
+  /// A gist on its way has its Comments button from the start, which opens them once it arrives.
+  init(opening: Opening?, comments: CommentsPresentation) {
+    self.init()
+    guard let opening, opening.isPublished, !opening.details.isDailyNote else { return }
+    self.comments = { comments.requestedRowID = opening.rowID }
+  }
+}
+
 extension RenameSheet {
   /// Saves the new title or filename, or adds the file, through the model.
   init(_ target: RenameTarget, model: GistPadModel) {

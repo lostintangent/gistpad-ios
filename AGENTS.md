@@ -135,7 +135,7 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 | Folder | What it does |
 |---|---|
 | `Sources/App/Root` | `GistPadApp` and `RootView`, which starts the `GistPadModel` and shows the library and the open file, with the layout preferences and the background time that lets a publish finish. |
-| `Sources/App/Gist` | Preview hosting, the opening placeholder and conflict review. |
+| `Sources/App/Gist` | Preview hosting, the opening spinner and conflict review. |
 | `Sources/App/DailyNotes` | The Add to Today sheet. |
 | `Sources/App/Comments` | `CommentsPresentation`, the comments inspector with its conversation and composer, and the services behind `CommentsModel`. |
 | `Sources/App/Tags` | Presents the tag editor for the open gist. |

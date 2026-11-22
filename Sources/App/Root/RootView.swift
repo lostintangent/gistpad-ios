@@ -154,10 +154,8 @@ struct RootView: View {
             OpenFailedView(gist: opening.details, message: failure) {
               Task { await model.open(opening.request) }
             }
-          } else if let opening = model.opening {
-            OpeningFileView(gist: opening.details).id(opening.rowID)
-          } else if let active {
-            fileScreen(active, availableWidth: geometry.size.width)
+          } else if let details = model.opening?.details ?? active?.details {
+            gistScreen(details, availableWidth: geometry.size.width)
           }
         }
         .libraryRail(
@@ -248,26 +246,6 @@ struct RootView: View {
       today: { openToday() }, settings: { sheet = .settings })
   }
 
-  private func fileScreen(
-    _ fileEditor: GistFileEditor, availableWidth: CGFloat
-  ) -> some View {
-    let identifier = entityIdentifier(for: fileEditor)
-    return gistScreen(fileEditor, availableWidth: availableWidth)
-      .imagePicker(images)
-      .userActivity("dev.gistpad.GistPad.note", isActive: identifier != nil) { activity in
-        activity.title = fileEditor.details.title
-        activity.isEligibleForSearch = false
-        activity.isEligibleForHandoff = false
-        activity.appEntityIdentifier = identifier
-      }
-      .onChange(of: identifier, initial: true) { _, value in
-        fileEditor.editor.entityIdentifier = value
-      }
-      .onDisappear {
-        fileEditor.editor.entityIdentifier = nil
-      }
-  }
-
   private func entityIdentifier(for fileEditor: GistFileEditor) -> EntityIdentifier? {
     onScreenNote(for: fileEditor).map {
       EntityIdentifier(for: GistEntity.self, identifier: $0.url.absoluteString)
@@ -291,73 +269,93 @@ struct RootView: View {
     return .unpublishedGist(accountID: fileEditor.file.accountID, draftID: fileEditor.file.id)
   }
 
-  private func gistScreen(
-    _ fileEditor: GistFileEditor, availableWidth: CGFloat
-  ) -> some View {
+  /// The file in the detail column, under its bar from the moment it's asked for, so the push
+  /// brings the bar in with it. Only the content waits for the file.
+  private func gistScreen(_ details: GistDetails, availableWidth: CGFloat) -> some View {
+    let allowsSplit = LayoutPreferences.allowsSplit(availableWidth: availableWidth)
+    let showsComments = comments.isPresented && active.map { comments.matches($0.file) } == true
     let mode = Binding(
       get: {
-        if comments.isPresented, comments.matches(fileEditor.file) {
-          return comments.fileMode
-        }
+        if showsComments { return comments.fileMode }
         return layout.presentedMode(
-          availableWidth: availableWidth, sessionMode: fileEditor.mode,
-          isEditing: fileEditor.editor.isEditing,
-          canEdit: fileEditor.details.isOwned)
+          availableWidth: availableWidth,
+          sessionMode: active?.mode
+            ?? layout.initialMode(isUnpublished: model.opening?.isPublished == false),
+          isEditing: active?.editor.isEditing == true, canEdit: details.isOwned)
       },
       set: {
-        if comments.isPresented, comments.matches(fileEditor.file) {
+        if showsComments {
           comments.fileMode = $0
         } else {
           layout.select($0)
-          if $0 != .split { fileEditor.mode = $0 }
+          if $0 != .split { active?.mode = $0 }
         }
-        if $0 == .preview { fileEditor.editor.endEditing() }
+        if $0 == .preview { active?.editor.endEditing() }
       })
-    var details = fileEditor.details
-    if comments.matches(fileEditor.file) {
+    var details = details
+    if let active, comments.matches(active.file) {
       details.commentCount = comments.model?.comments?.count ?? details.commentCount
     }
     return GistScreen(
-      gist: details, mode: mode,
-      status: fileEditor.status, actions: gistActions(fileEditor),
-      allowsSplit: !comments.isPresented && LayoutPreferences.allowsSplit(availableWidth: availableWidth),
-      areCommentsPresented: comments.isPresented && comments.matches(fileEditor.file)
+      gist: details, mode: mode, status: active?.status ?? .published,
+      actions: active.map(gistActions) ?? GistActions(opening: model.opening, comments: comments),
+      allowsSplit: !comments.isPresented && allowsSplit, areCommentsPresented: showsComments
     ) {
-      let highlights = comments.highlights(for: fileEditor, origin: .edit)
-      EditorView(
-        editor: fileEditor.editor, title: details.title,
-        insertImage: images.canChooseImage(for: fileEditor)
-          ? { @MainActor in comments.performAfterClosing { images.chooseImage(for: fileEditor) } }
-          : nil,
-        intelligence: { comments.performAfterClosing { presentIntelligence(fileEditor) } },
-        comments: highlights.configuration, commentActions: highlights.actions)
+      if let active { source(active) }
     } preview: {
-      preview(fileEditor)
+      if let active { preview(active) }
     }
-    .toolbar {
-      if fileEditor.refreshStatus != .idle {
-        ToolbarSpacer(.flexible, placement: .bottomBar)
-        ToolbarItem(placement: .bottomBar) {
-          GitHubStatusControl(
-            status: fileEditor.refreshStatus
-          ) {
-            Task {
-              if fileEditor.refreshProblem == .reconnect { await model.reconnect() }
-              await fileEditor.refresh()
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .overlay { model.opening.map { OpeningProgress(title: $0.details.title) } }
+    .background { active.map { session($0, allowsSplit: allowsSplit).id($0.editor.id) } }
+    .imagePicker(images)
+  }
+
+  /// What an open file keeps up while it's on screen: its refresh from GitHub and its comments,
+  /// its status in the bottom bar, and the note Siri and Spotlight see.
+  private func session(_ fileEditor: GistFileEditor, allowsSplit: Bool) -> some View {
+    let identifier = entityIdentifier(for: fileEditor)
+    return Color.clear
+      .toolbar {
+        if fileEditor.refreshStatus != .idle {
+          ToolbarSpacer(.flexible, placement: .bottomBar)
+          ToolbarItem(placement: .bottomBar) {
+            GitHubStatusControl(status: fileEditor.refreshStatus) {
+              Task {
+                if fileEditor.refreshProblem == .reconnect { await model.reconnect() }
+                await fileEditor.refresh()
+              }
             }
           }
-          .id(fileEditor.editor.id)
+          .sharedBackgroundVisibility(.hidden)
         }
-        .sharedBackgroundVisibility(.hidden)
       }
-    }
-    .task(id: fileEditor.editor.id) { await fileEditor.refresh() }
-    .task(id: comments.tracking(fileEditor)) { await comments.track(fileEditor) }
-    .onChange(of: LayoutPreferences.allowsSplit(availableWidth: availableWidth)) { _, allows in
-      if !allows, layout.preferredMode == .split, fileEditor.editor.isEditing {
-        fileEditor.mode = .edit
+      .userActivity("dev.gistpad.GistPad.note", isActive: identifier != nil) { activity in
+        activity.title = fileEditor.details.title
+        activity.isEligibleForSearch = false
+        activity.isEligibleForHandoff = false
+        activity.appEntityIdentifier = identifier
       }
-    }
+      .onChange(of: identifier, initial: true) { fileEditor.editor.entityIdentifier = $1 }
+      .onDisappear { fileEditor.editor.entityIdentifier = nil }
+      .task { await fileEditor.refresh() }
+      .task(id: comments.tracking(fileEditor)) { await comments.track(fileEditor) }
+      .onChange(of: allowsSplit) { _, allows in
+        if !allows, layout.preferredMode == .split, fileEditor.editor.isEditing {
+          fileEditor.mode = .edit
+        }
+      }
+  }
+
+  private func source(_ fileEditor: GistFileEditor) -> some View {
+    let highlights = comments.highlights(for: fileEditor, origin: .edit)
+    return EditorView(
+      editor: fileEditor.editor, title: fileEditor.details.title,
+      insertImage: images.canChooseImage(for: fileEditor)
+        ? { @MainActor in comments.performAfterClosing { images.chooseImage(for: fileEditor) } }
+        : nil,
+      intelligence: { comments.performAfterClosing { presentIntelligence(fileEditor) } },
+      comments: highlights.configuration, commentActions: highlights.actions)
   }
 
   private func preview(_ fileEditor: GistFileEditor) -> some View {

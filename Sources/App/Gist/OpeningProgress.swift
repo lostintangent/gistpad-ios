@@ -1,22 +1,20 @@
 import Screens
 import SwiftUI
 
-/// A file on its way, under the bar it will have, with a spinner once it takes a moment.
-struct OpeningFileView: View {
-  let gist: GistDetails
+/// A spinner over a file on its way, once it takes a moment.
+struct OpeningProgress: View {
+  let title: String
   @State private var isSlow = false
 
   var body: some View {
     ZStack {
       if isSlow {
         ProgressView()
-          .accessibilityLabel(Text("Opening \(gist.title)"))
+          .accessibilityLabel(Text("Opening \(title)"))
           .accessibilityIdentifier("opening-note-progress")
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .gistTitle(gist)
-    .background(Color(uiColor: .systemBackground))
     .task {
       try? await Task.sleep(for: .milliseconds(350))
       isSlow = !Task.isCancelled

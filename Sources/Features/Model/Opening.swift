@@ -27,6 +27,9 @@ public struct Opening: Equatable {
   /// bar doesn't change when it arrives.
   public let details: GistDetails
   public var failure: String?
+
+  /// A gist already on GitHub, which opens to read rather than to write.
+  public var isPublished: Bool { if case .gist = request { true } else { false } }
 }
 
 extension GistPadModel {
@@ -128,7 +131,10 @@ extension GistPadModel {
     let details = GistDetails(
       title: row?.title ?? name ?? gist?.displayName ?? String(localized: "Gist"),
       filenames: Set((gist?.markdownFilenames ?? []) + [shown]).sorted(), filename: shown,
-      isDailyNote: isDailyNote)
+      isOwned: row?.isOwned ?? gist.map(owns) ?? true,
+      isPinned: row?.isPinned ?? false, isStarred: row?.isStarred ?? false,
+      isArchived: row?.isArchived ?? false, isDailyNote: isDailyNote,
+      commentCount: isDailyNote ? nil : row?.commentCount ?? gist?.commentCount)
     return Opening(request: request, rowID: rowID, details: details)
   }
 

@@ -71,4 +71,21 @@ struct OpeningTests {
     await Task.yield()
     #expect(phone.github.requests == requests)
   }
+
+  @Test func `A note on its way has the bar it lands with`() async throws {
+    let phone = try await Phone {
+      $0.addGist(
+        id: "theirs", description: "Theirs", files: ["README.md": "Their words"],
+        owner: FixtureServer.someoneElse, isStarred: true, comments: ["Nice", "Agreed"])
+    }
+    await phone.launch()
+    phone.model.open(rowID: "theirs")
+    let onItsWay = try #require(phone.model.opening?.details)
+    let landed = try await phone.open(row: "theirs").details
+    #expect(!onItsWay.isOwned && onItsWay.isStarred && onItsWay.commentCount == 2)
+    #expect(onItsWay.isOwned == landed.isOwned)
+    #expect(onItsWay.isStarred == landed.isStarred)
+    #expect(onItsWay.commentCount == landed.commentCount)
+    #expect(onItsWay.title == landed.title)
+  }
 }
