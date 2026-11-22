@@ -1,16 +1,20 @@
-import Foundation
+#if os(iOS)
 import Comments
+import OSLog
+import UIKit
+import WebKit
 
-struct PreviewCommentCatalog: Decodable {
-    let segments: [String]
-}
+@MainActor
+final class PreviewCommentHighlights {
+    private struct Catalog: Decodable {
+        let segments: [String]
+    }
 
-struct PreviewCommentSelection: Decodable {
-    let quote: String?
-}
+    private struct Selection: Decodable {
+        let quote: String?
+    }
 
-enum PreviewCommentActivation {
-    private struct Envelope: Decodable {
+    private struct Activation: Decodable {
         let fileID: String
         let generation: UInt64
         let segment: Int
@@ -18,25 +22,6 @@ enum PreviewCommentActivation {
         let end: Int
     }
 
-    static func decode(
-        _ value: Any, file: PreviewFile, highlights: [CommentQuoteHighlight]
-    ) throws -> [Int64] {
-        let message: Envelope = try PreviewBridge.decode(value)
-        guard message.fileID == file.id, message.generation == file.generation,
-              let highlight = highlights.first(where: {
-                  $0.segment == message.segment && $0.start == message.start && $0.end == message.end
-              }) else { throw PreviewBridge.invalidMessage }
-        return highlight.threadIDs
-    }
-}
-
-#if os(iOS)
-import OSLog
-import UIKit
-import WebKit
-
-@MainActor
-final class PreviewCommentHighlights {
     weak var webView: WKWebView?
     private var actions: CommentHighlightActions?
     private var file: PreviewFile?
@@ -44,7 +29,6 @@ final class PreviewCommentHighlights {
     private var configuration = CommentHighlightConfiguration()
     private var accent = "#0EA5E9"
     private var segments: [String]?
-    private var matchedQuotes: [CommentQuote]?
     private var highlights: [CommentQuoteHighlight] = []
     private var linkedIDs: Set<Int64>?
     private var task: Task<Void, Never>?
@@ -76,7 +60,12 @@ final class PreviewCommentHighlights {
 
     func activate(_ body: Any) throws {
         guard let file, renderedFile == file else { return }
-        actions?.open(try PreviewCommentActivation.decode(body, file: file, highlights: highlights))
+        let message: Activation = try PreviewBridge.decode(body)
+        guard message.fileID == file.id, message.generation == file.generation,
+              let highlight = highlights.first(where: {
+                  $0.segment == message.segment && $0.start == message.start && $0.end == message.end
+              }) else { throw PreviewBridge.invalidMessage }
+        actions?.open(highlight.threadIDs)
     }
 
     func addCommentMenu() -> UIDeferredMenuElement? {
@@ -88,7 +77,7 @@ final class PreviewCommentHighlights {
                     let value = try await webView.callAsyncJavaScript(
                         "return window.gistpadPreview.commentSelection();",
                         arguments: [:], in: nil, contentWorld: .page)
-                    let selection: PreviewCommentSelection = try PreviewBridge.decode(value)
+                    let selection: Selection = try PreviewBridge.decode(value)
                     guard self.renderedFile == file, let quote = selection.quote,
                           CommentQuoteMatcher.isEligibleSelection(quote) else { return completion([]) }
                     let action = UIAction(
@@ -112,7 +101,6 @@ final class PreviewCommentHighlights {
         task = nil
         renderedFile = nil
         segments = nil
-        matchedQuotes = nil
         highlights = []
         linkedIDs = nil
     }
@@ -124,7 +112,6 @@ final class PreviewCommentHighlights {
         let accent = accent
         let allowsInteraction = actions != nil
         if configuration.quotes.isEmpty, highlights.isEmpty {
-            matchedQuotes = []
             publish([])
             return
         }
@@ -135,21 +122,12 @@ final class PreviewCommentHighlights {
                     let value = try await webView.callAsyncJavaScript(
                         "return window.gistpadPreview.commentSegments();",
                         arguments: [:], in: nil, contentWorld: .page)
-                    let catalog: PreviewCommentCatalog = try PreviewBridge.decode(value)
+                    let catalog: Catalog = try PreviewBridge.decode(value)
                     guard !Task.isCancelled else { return }
                     self.segments = catalog.segments
                 }
-                if configuration.quotes.isEmpty {
-                    self.highlights = []
-                    self.matchedQuotes = []
-                } else if self.matchedQuotes != configuration.quotes, let segments = self.segments {
-                    let highlights = await Task.detached(priority: .userInitiated) {
-                        CommentQuoteMatcher.highlights(quotes: configuration.quotes, segments: segments)
-                    }.value
-                    guard !Task.isCancelled else { return }
-                    self.highlights = highlights
-                    self.matchedQuotes = configuration.quotes
-                }
+                self.highlights = CommentQuoteMatcher.highlights(
+                    quotes: configuration.quotes, segments: self.segments ?? [])
                 let payload: [String: Any] = [
                     "highlights": self.highlights.map {
                         ["segment": $0.segment, "start": $0.start, "end": $0.end, "threadIDs": $0.threadIDs]
@@ -168,7 +146,6 @@ final class PreviewCommentHighlights {
             } catch {
                 guard !Task.isCancelled else { return }
                 Logger.preview.error("Comment highlights couldn't be updated: \(error.localizedDescription)")
-                self.matchedQuotes = nil
                 self.highlights = []
                 self.publish([])
             }
