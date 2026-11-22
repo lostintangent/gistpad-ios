@@ -15,7 +15,8 @@ final class CommentsUITests: XCTestCase {
       hideSidebar.tap()
       try waitUntil("the hidden sidebar") { app.buttons["Show Sidebar"].firstMatch.isTappable }
     }
-    for _ in 0..<6 where !late.isTappable { app.webViews.firstMatch.swipeUp() }
+    // Slow swipes barely coast, so the passage can't pass the screen between checks.
+    for _ in 0..<10 where !late.isTappable { app.webViews.firstMatch.swipeUp(velocity: .slow) }
     try waitUntil("the late passage on screen") { late.isTappable }
     try alignToTop(late, in: app)
     let before = late.frame
@@ -58,9 +59,11 @@ final class CommentsUITests: XCTestCase {
     try waitUntil("Comments") { app.element("comment-thread-1").exists }
     XCTAssertFalse(app.element("comment-thread-1").buttons["Show Full Quote"].exists)
 
-    try scroll(to: "comment-thread-4", in: app)
+    // The thread can exist before it's on screen, so swipe until its button is.
     let long = app.element("comment-thread-4")
-    try tap(long.buttons["Show Full Quote"], "Show Full Quote")
+    let more = long.buttons["Show Full Quote"]
+    for _ in 0..<6 where !more.isTappable { app.element("comments-conversation").swipeUp() }
+    try tap(more, "Show Full Quote")
     try tap(long.buttons["Show Less"], "Show Less")
     try waitUntil("the quote folded again") { long.buttons["Show Full Quote"].exists }
   }
