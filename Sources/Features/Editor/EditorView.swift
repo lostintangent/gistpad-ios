@@ -64,15 +64,11 @@
       }
       .alert(
         String(localized: "Couldn't Complete Action", bundle: .module),
-        isPresented: Binding(
-          get: { editor.inputError != nil },
-          set: { if !$0 { editor.inputError = nil } })
-      ) {
-        Button(String(localized: "OK", bundle: .module), role: .cancel) {
-          editor.inputError = nil
-        }
-      } message: {
-        Text(editor.inputError ?? "")
+        item: Bindable(editor).inputError
+      ) { _ in
+        Button(String(localized: "OK", bundle: .module), role: .cancel) {}
+      } message: { message in
+        Text(message)
       }
     }
 

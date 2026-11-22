@@ -34,14 +34,10 @@ struct CommentsInspector: View {
       }
       return .systemAction
     })
-    .alert(
-      String(localized: "Couldn’t Open Link"),
-      isPresented: Binding(
-        get: { linkFailure != nil }, set: { if !$0 { linkFailure = nil } })
-    ) {
-      Button("OK", role: .cancel) { linkFailure = nil }
-    } message: {
-      Text(verbatim: linkFailure ?? "")
+    .alert(String(localized: "Couldn’t Open Link"), item: $linkFailure) { _ in
+      Button("OK", role: .cancel) {}
+    } message: { failure in
+      Text(verbatim: failure)
     }
     .accessibilityIdentifier("comments-inspector")
   }

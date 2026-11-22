@@ -66,25 +66,16 @@ struct CommentsConversation: View {
         .confirmationDialog(
             String(
                 localized: "Delete \(deletionTarget?.user?.login ?? String(localized: "this author"))’s comment from GitHub?"),
-            isPresented: Binding(
-                get: { deletionTarget != nil },
-                set: { if !$0 { deletionTarget = nil } }),
+            item: $deletionTarget,
             titleVisibility: .visible
-        ) {
-            if let target = deletionTarget {
-                Button(String(localized: "Delete Comment"), role: .destructive) {
-                    deletionTarget = nil
-                    Task { await model.delete(target.id) }
-                }
+        ) { target in
+            Button(String(localized: "Delete Comment"), role: .destructive) {
+                Task { await model.delete(target.id) }
             }
-            Button(String(localized: "Cancel"), role: .cancel) {
-                deletionTarget = nil
-            }
-        } message: {
-            if let target = deletionTarget {
-                Text(
-                    "“\(String(target.parsedBody.text.prefix(140)))”\n\nOnly this comment is deleted. Its replies stay in the conversation.")
-            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: { target in
+            Text(
+                "“\(String(target.parsedBody.text.prefix(140)))”\n\nOnly this comment is deleted. Its replies stay in the conversation.")
         }
     }
 

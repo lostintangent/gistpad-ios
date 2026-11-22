@@ -24,11 +24,7 @@ private struct ImagePicker: ViewModifier {
         selection = nil
         Task { await images.add(item) }
       }
-      .alert(
-        "Couldn't Add Image",
-        isPresented: Binding(get: { images.failure != nil }, set: { if !$0 { images.failure = nil } }),
-        presenting: images.failure
-      ) { failure in
+      .alert("Couldn't Add Image", item: $images.failure) { failure in
         if let image = failure.image {
           Button("Try Again") { Task { await images.add(image: image) } }
         }

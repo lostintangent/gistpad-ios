@@ -112,14 +112,10 @@ public struct SettingsSheet<Appearance: View>: View {
       } message: {
         Text("Drafts for @\(account?.github.login ?? "") stay on this iPhone. Nothing is published.", bundle: .module)
       }
-      .alert(
-        errorTitle,
-        isPresented: Binding(
-          get: { saveError != nil }, set: { if !$0 { saveError = nil } })
-      ) {
-        Button(String(localized: "OK", bundle: .module)) { saveError = nil }
-      } message: {
-        Text(saveError ?? "")
+      .alert(errorTitle, item: $saveError) { _ in
+        Button(String(localized: "OK", bundle: .module)) {}
+      } message: { message in
+        Text(message)
       }
     }
   }
