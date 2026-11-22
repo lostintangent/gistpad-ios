@@ -153,14 +153,3 @@ svg text, svg .nodeLabel, svg .nodeLabel *, svg .edgeLabel, svg .edgeLabel * { f
 [data-bold-text="true"] article { font-weight: 600; }
 [data-contrast="increased"] { --border: var(--gp-boundary); }
 [data-contrast="increased"] .markdown-alert { border-inline-start-width: 4px; }
-@media (prefers-contrast: more) {
-  :root:not([data-contrast]) {
-    --gp-text: light-dark(#000, #fff);
-    --gp-syntax-code: light-dark(#334155, #f1f5f9);
-    --gp-text-secondary: var(--gp-text);
-    --gp-accent-text: light-dark(#075985, #bae6fd);
-    --gp-accent-fill: light-dark(#0ea5e9, #7dd3fc);
-    --gp-selected-surface: light-dark(#d4eefc, #134b63);
-  }
-}
-@media (max-width: 360px) { main { padding-inline: 16px; } }

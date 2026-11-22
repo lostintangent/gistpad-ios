@@ -9,21 +9,13 @@ import "./style.css";
 
 const root = createRoot(document.getElementById("root")!);
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-let comments: CommentHighlightController | undefined;
+// Native asks about comments only after the page reports a render.
+let comments: CommentHighlightController;
 window.gistpadPreview = Object.freeze({
   setAppearance,
-  commentSegments() {
-    if (!comments) throw new Error("There is no rendered document.");
-    return comments.catalog();
-  },
-  commentSelection() {
-    if (!comments) throw new Error("There is no rendered document.");
-    return comments.selection();
-  },
-  setCommentHighlights(value) {
-    if (!comments) throw new Error("There is no rendered document.");
-    comments.setHighlights(value);
-  },
+  commentSegments: () => comments.catalog(),
+  commentSelection: () => comments.selection(),
+  setCommentHighlights: (value) => comments.setHighlights(value),
   render(request: RenderRequest) {
     comments = new CommentHighlightController(request);
     root.render(

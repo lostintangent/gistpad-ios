@@ -76,7 +76,6 @@ export class CommentHighlightController {
   }
 
   selection() {
-    if (!this.segments) throw new Error("The preview has not finished rendering.");
     const selection = window.getSelection();
     const article = document.querySelector("article");
     const belongs = (node: Node | null) => node && article &&
@@ -89,11 +88,7 @@ export class CommentHighlightController {
   setHighlights(state: HighlightState) {
     const restoreSelection = preserveRenderedSelection();
     this.state = state;
-    if (typeof document === "undefined") {
-      this.listeners.forEach((listener) => listener());
-    } else {
-      flushSync(() => this.listeners.forEach((listener) => listener()));
-    }
+    flushSync(() => this.listeners.forEach((listener) => listener()));
     restoreSelection?.();
   }
 
