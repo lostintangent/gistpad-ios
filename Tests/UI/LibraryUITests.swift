@@ -79,15 +79,14 @@ final class LibraryUITests: XCTestCase {
     XCTAssertTrue(app.element("library-note-shape").exists)
     XCTAssertTrue(app.element("library-note-words").exists)
 
-    app.search("words")
+    app.search("week")
     try waitUntil("search inside the tag filter") {
-      app.element("library-note-words").exists && !app.element("library-note-shape").exists
+      app.element("library-filter-count").label == "0 gists" && !app.element("library-note-weekend").exists
     }
-    app.searchFields.firstMatch.buttons["Clear text"].tap()
-    try waitUntil("the tag filter without the query") {
-      app.element("library-note-words").exists && !app.element("library-note-weekend").exists
+    try tap(app.element("library-filter-clear"), "Clear Tag Filter")
+    try waitUntil("the query without the tag filter") {
+      app.element("library-note-weekend").exists && !app.element("library-note-words").exists
     }
-    XCTAssertTrue(app.element("library-filter-clear").exists)
   }
 
   func testSwipeAndContextMenuPinArchiveAndDelete() throws {

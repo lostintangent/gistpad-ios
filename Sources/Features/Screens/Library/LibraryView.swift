@@ -334,7 +334,7 @@ public struct LibraryView: View {
                         .accessibilityIdentifier("library-filter-count")
                 }
                 Button(String(localized: "Clear Tag Filter", bundle: .module), systemImage: "xmark.circle.fill") {
-                    state.clearFilters()
+                    state.selectedTagIDs = []
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
