@@ -4,9 +4,10 @@ import Editor
 import Foundation
 import Store
 
-// One GitHub account at a time. Signing in as someone else keeps your drafts until you choose.
+// One GitHub account at a time. Signing in as someone else signs you out first, and your drafts
+// wait on this iPhone until you sign back in.
 
-public enum Phase: Equatable, Sendable {
+public enum Phase: Sendable {
   case signedOut
   case signingIn
   /// Restoring the account and this iPhone's drafts at launch.
@@ -14,22 +15,10 @@ public enum Phase: Equatable, Sendable {
   case ready
   /// Reading your gists from GitHub.
   case refreshing
-  /// Someone else signed in over your account, until you choose which to keep.
-  case switching(to: GistPadAccount)
   case signingOut
 
-  /// The account that signed in over yours, while you choose.
-  public var switchingTo: GistPadAccount? {
-    if case .switching(let account) = self { account } else { nil }
-  }
-
-  /// Signing in, switching or signing out, while the account may change under you.
-  public var isChangingAccount: Bool {
-    switch self {
-    case .signingIn, .switching, .signingOut: true
-    default: false
-    }
-  }
+  /// Signing in or out, while the account may change under you.
+  public var isChangingAccount: Bool { self == .signingIn || self == .signingOut }
 }
 
 extension GistPadModel {
@@ -64,12 +53,17 @@ extension GistPadModel {
     do {
       let signedIn = try await accountStore.signIn()
       libraryRequest = UUID()
-      if let account, account.id != signedIn.id {
-        phase = .switching(to: signedIn)
-        return
+      if account?.id == signedIn.id {
+        account = signedIn
+        phase = .ready
+      } else {
+        for fileEditor in editors.values {
+          fileEditor.editor.commitComposition()
+          await fileEditor.waitForPublication()
+          _ = await fileEditor.waitForLocalSave()
+        }
+        reset(to: signedIn)
       }
-      account = signedIn
-      phase = .ready
       try await reloadLocalState(accountID: signedIn.id)
       await refresh()
       await restoreLastOpened()
@@ -96,34 +90,6 @@ extension GistPadModel {
     await activeEditor.publish()
   }
 
-  /// Switches to the account that just signed in, once every open file is saved on this iPhone.
-  public func switchAccount() async throws {
-    guard let pendingAccount = phase.switchingTo else { return }
-    for fileEditor in editors.values {
-      guard !fileEditor.isPublishing, !fileEditor.isLanding else {
-        throw ChangeError.publicationInProgress
-      }
-      guard fileEditor.editor.isSettled else { throw Edit.Failure.compositionActive }
-      guard await fileEditor.waitForLocalSave() else { throw ChangeError.notSaved }
-    }
-    guard phase.switchingTo == pendingAccount else { return }
-    reset(to: pendingAccount)
-    do {
-      try await reloadLocalState(accountID: pendingAccount.id)
-    } catch {
-      report(error, operation: "reload-local")
-      alertMessage = error.localizedDescription
-    }
-    await refresh()
-    await restoreLastOpened()
-  }
-
-  /// Keeps your drafts on this iPhone until the original account reconnects to publish them.
-  public func keepCurrentAccount() {
-    phase = .ready
-    problem = .reconnect
-  }
-
   /// The signed-in account, with this iPhone's drafts and cache loaded but nothing read from
   /// GitHub. App Intents use it, since they can run before the app's window starts the model.
   public func localAccount() async throws -> GistPadAccount? {
@@ -140,7 +106,7 @@ extension GistPadModel {
 
   /// Uploads an image to GistPad's public storage, filed under the file's gist.
   public func uploadImage(_ image: Data, for file: GistFile) async throws -> URL {
-    guard account?.id == file.accountID, phase.switchingTo == nil else {
+    guard account?.id == file.accountID else {
       throw AccountError.accountChanged
     }
     guard let gistID = file.gistID else { throw DraftError.notFound }
@@ -150,7 +116,7 @@ extension GistPadModel {
 
   /// A gist's conversation, which you take part in as the signed-in account.
   public func comments(for gist: Gist) async throws -> CommentsModel {
-    guard let account, phase.switchingTo == nil else { throw AccountError.accountChanged }
+    guard let account else { throw AccountError.accountChanged }
     let github = await client(accountID: account.id)
     return CommentsModel(
       gistID: gist.id, userID: account.github.id, gistOwnerID: gist.owner?.id, remote: github)

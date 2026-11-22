@@ -51,9 +51,6 @@ struct RootView: View {
 
   var body: some View {
     workspaceSheets
-      .sheet(isPresented: accountSwitchPresented) {
-        accountSwitchSheet
-      }
       .intelligenceSheet(intelligence)
   }
 
@@ -253,24 +250,6 @@ struct RootView: View {
     .id(account?.id)
   }
 
-  private var accountSwitchPresented: Binding<Bool> {
-    Binding(
-      get: { model.phase.switchingTo != nil },
-      set: { presented in
-        if !presented, model.phase.switchingTo != nil { model.keepCurrentAccount() }
-      })
-  }
-
-  @ViewBuilder
-  private var accountSwitchSheet: some View {
-    if let account = model.account, let pending = model.phase.switchingTo {
-      AccountSwitchSheet(
-        current: account.github.login, replacement: pending.github.login,
-        switchAccount: { try await model.switchAccount() },
-        keepCurrent: { model.keepCurrentAccount() })
-    }
-  }
-
   private var libraryActions: LibraryActions {
     LibraryActions(
       model: model, undoManager: undoManager,
@@ -308,7 +287,7 @@ struct RootView: View {
     guard scenePhase == .active,
       horizontalSizeClass != .compact || compactColumn == .detail,
       model.state.selectedID != nil, sheet == nil,
-      model.account?.id == fileEditor.file.accountID, model.phase.switchingTo == nil,
+      model.account?.id == fileEditor.file.accountID,
       !fileEditor.file.isDeletedOnGitHub
     else { return nil }
     if let gist = fileEditor.file.gist {
@@ -437,9 +416,7 @@ struct RootView: View {
 
   /// The pending link, once the account it opens in has settled.
   private var linkToOpen: GistPadLink? {
-    guard model.phase != .loading, model.phase != .signingIn, model.phase.switchingTo == nil else {
-      return nil
-    }
+    guard model.phase != .loading, model.phase != .signingIn else { return nil }
     return pending.link
   }
 

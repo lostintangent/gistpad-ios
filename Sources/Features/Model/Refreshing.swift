@@ -111,7 +111,7 @@ extension GistFileEditor {
   public func inspectRemoteChanges() async {
     guard GistPadModel.isStale(refreshedAt), !isInspectingRemote, !isPublishing, canEdit,
       !file.isDeletedOnGitHub, let gistID = file.gistID, file.draft?.conflict == nil,
-      model.account?.id == file.accountID, model.phase.switchingTo == nil
+      model.account?.id == file.accountID
     else { return }
     isInspectingRemote = true
     defer { isInspectingRemote = false }

@@ -44,7 +44,7 @@ extension ChangeError: LocalizedError {
 extension GistPadModel {
   /// What deleting a row removes. Rows the account doesn't own can't be deleted.
   public func deletion(forRow rowID: String) -> Deletion? {
-    guard account != nil, phase.switchingTo == nil else { return nil }
+    guard account != nil else { return nil }
     if let draft = draft(forRow: rowID),
       draft.gistID.flatMap({ gistID in gistCache?.gists.contains(where: { $0.id == gistID }) }) != true
     {
@@ -235,7 +235,7 @@ extension GistPadModel {
     locking locks: (GistFileEditor) -> Bool = { _ in false },
     _ body: @MainActor (GistPadAccount) async throws -> Void
   ) async throws {
-    guard let account, phase.switchingTo == nil else { throw AccountError.accountChanged }
+    guard let account else { throw AccountError.accountChanged }
     guard !isApplying else { throw ChangeError.publicationInProgress }
     isApplying = true
     var locked: [GistFileEditor] = []
@@ -258,7 +258,7 @@ extension GistPadModel {
         guard await fileEditor.waitForLocalSave() else { throw ChangeError.notSaved }
       }
       try Task.checkCancellation()
-      guard self.account?.id == account.id, phase.switchingTo == nil else {
+      guard self.account?.id == account.id else {
         throw AccountError.accountChanged
       }
       try await body(account)

@@ -6,7 +6,7 @@ import Testing
 
 @MainActor
 struct AccountsTests {
-  @Test func `What I typed survives signing out, and waits while another account signs in`() async throws {
+  @Test func `What I typed survives signing out, and someone else signing in`() async throws {
     let phone = try await Phone {
       $0.addGist(id: "a", description: "First", files: ["README.md": "One"])
       $0.addGist(
@@ -32,18 +32,20 @@ struct AccountsTests {
     await phone.returnToApp()
     #expect(phone.onGitHub("a")?.utf8.elementsEqual(mine.utf8) == true)
 
-    // When someone else signs in and I keep my account, my edits wait until I reconnect.
+    // Someone else signing in signs me out first, and what I typed waits for me to sign back in.
     let again = try await phone.open(.gist(id: "a"))
     try await phone.type("Mine again", in: again)
-    let other = UUID()
-    try phone.fixture.signInNext(as: other, login: FixtureServer.someoneElse.login)
+    try phone.fixture.signInNext(as: UUID(), login: FixtureServer.someoneElse.login)
+    await phone.model.signIn()
+    #expect(phone.model.account?.github.login == FixtureServer.someoneElse.login)
+    #expect(phone.model.phase == .ready)
+    #expect(phone.onScreen == nil)
+    #expect(phone.model.drafts.isEmpty)
+    #expect(phone.onGitHub("a")?.utf8.elementsEqual(mine.utf8) == true)
+    phone.goOnline()
     await phone.model.signIn()
     #expect(phone.model.account?.id == phone.accountID)
-    #expect(phone.model.phase.switchingTo?.id == other)
-    phone.model.keepCurrentAccount()
-    #expect(phone.model.phase == .ready)
-    await phone.leave(again)
-    #expect(phone.onGitHub("a")?.utf8.elementsEqual(mine.utf8) == true)
-    #expect(phone.model.problem == .reconnect)
+    await phone.returnToApp()
+    #expect(phone.onGitHub("a") == "Mine again")
   }
 }

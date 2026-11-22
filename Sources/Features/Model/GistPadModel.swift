@@ -8,7 +8,7 @@ import Store
 public final class GistPadModel {
   public let state = LibraryState()
   public internal(set) var account: GistPadAccount?
-  /// Whether you're signing in, loading, refreshing or switching. Links wait for loading, not for GitHub.
+  /// Whether you're signing in, loading, refreshing or signing out. Links wait for loading, not for GitHub.
   public internal(set) var phase: Phase = .loading
   /// Why the list couldn't read GitHub, until a refresh gets through.
   public internal(set) var problem: GitHubProblem?
@@ -161,7 +161,7 @@ public final class GistPadModel {
   func reloadLocalState(accountID: UUID) async throws {
     let stored = try await draftStore.drafts(accountID: accountID)
     let cache = try cache(accountID)
-    guard account?.id == accountID, phase.switchingTo == nil else { return }
+    guard account?.id == accountID else { return }
     drafts = stored
     gistCache = cache
     projectLibrary()
@@ -191,7 +191,7 @@ public final class GistPadModel {
 
   /// Keeps a gist's comment count current in the library once its conversation loads.
   public func recordCommentCount(accountID: UUID, gistID: String, total: Int) {
-    guard account?.id == accountID, phase.switchingTo == nil, phase != .signingOut,
+    guard account?.id == accountID, phase != .signingOut,
       var cache = gistCache, cache.gists.first(where: { $0.id == gistID })?.isDailyNote == false
     else { return }
     cache.setCommentCount(total, gistID: gistID)

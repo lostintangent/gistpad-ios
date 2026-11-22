@@ -11,7 +11,7 @@ is the promise to the user, and this module keeps it.
 ```text
 GistPadModel
   account: GistPadAccount?        who's signed in
-  phase                           loading, signing in, refreshing, switching, ready
+  phase                           loading, signing in, refreshing, signing out, ready
   problem: GitHubProblem?         why the list couldn't read GitHub
   state: LibraryState             the list, built from the cache and drafts
   editors: [UUID: GistFileEditor] every file opened since launch
@@ -42,7 +42,7 @@ GistFileEditor                    a file you've opened
 
 | File | What it does |
 |---|---|
-| `Accounts.swift` | `start`, `signIn`, `switchAccount`, `keepCurrentAccount`, images and comments for the account. |
+| `Accounts.swift` | `start`, `signIn` and `reconnect`, images and comments for the account. Signing in as someone else saves your open files and signs you out first. |
 | `Opening.swift` | `open(rowID:)` and `open(_:)`, the file in the detail column, and the last opened file. |
 | `Saving.swift` | Each keystroke saved on this iPhone, and `apply` for edits from outside the editor. |
 | `Publishing.swift` | Autosave, `publish`, `returnToApp` and `leaveApp`. |

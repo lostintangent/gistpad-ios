@@ -84,7 +84,7 @@ final class PlatformBridge: PlatformActions {
   }
 
   func refresh() async throws {
-    let account = model.phase.switchingTo == nil ? try await model.localAccount() : nil
+    let account = try await model.localAccount()
     try Task.checkCancellation()
     let snapshot = LibrarySnapshot.make(
       account: account, cache: account == nil ? nil : model.gistCache,
@@ -284,7 +284,7 @@ final class PlatformBridge: PlatformActions {
   }
 
   func validateAccount(_ accountID: UUID) throws {
-    guard model.account?.id == accountID, model.phase.switchingTo == nil else {
+    guard model.account?.id == accountID else {
       throw PlatformError.accountChanged
     }
   }

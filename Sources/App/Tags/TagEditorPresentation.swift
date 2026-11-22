@@ -15,8 +15,7 @@ struct TagTarget: Identifiable {
     accountID = fileEditor.file.accountID
     self.gistID = gistID
     selected = Set(model.account?.preferences.gistTags[gistID] ?? [])
-    canEdit = model.account?.id == accountID
-      && model.phase.switchingTo == nil && !fileEditor.file.isDeletedOnGitHub
+    canEdit = model.account?.id == accountID && !fileEditor.file.isDeletedOnGitHub
   }
 }
 

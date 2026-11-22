@@ -49,7 +49,7 @@ extension GistPadModel {
   /// Publishes each file with unpublished edits, in order, through its editor when it's open. The
   /// first offline result stops the sweep, and the next launch or return to the app retries it.
   func publishDrafts() async {
-    guard let accountID = account?.id, phase.switchingTo == nil else { return }
+    guard let accountID = account?.id else { return }
     for draft in drafts {
       guard !Task.isCancelled else { break }
       if let fileEditor = editors[draft.id] {
@@ -66,7 +66,7 @@ extension GistPadModel {
   /// once GitHub has its text. A file you haven't typed in has nothing to publish.
   public func publish(_ draft: GistFileDraft) async throws -> GistFileDraft? {
     let accountID = draft.accountID
-    guard account?.id == accountID, phase.switchingTo == nil else { throw AccountError.accountChanged }
+    guard account?.id == accountID else { throw AccountError.accountChanged }
     let github = await client(accountID: accountID)
     let saved = try await serially { try await publish(draft, to: github) }
     if draft.gistID == nil, let gistID = saved?.gistID { publishedGistIDs[draft.id] = gistID }
@@ -210,8 +210,7 @@ extension GistFileEditor {
     case .manual: true
     case .autosave: autosaveAllowed
     case .background:
-      model.account?.id == file.accountID && model.phase.switchingTo == nil
-        && editor.isSettled
+      model.account?.id == file.accountID && editor.isSettled
     }
   }
 
