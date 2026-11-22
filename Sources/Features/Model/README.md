@@ -53,29 +53,12 @@ GistFileEditor                    a file you've opened
 
 ## Publishing
 
-A publish reads GitHub's copy first. If GitHub has the base, the sent text or
-already your text, your text is recorded as `sent` and then sent. When GitHub
-confirms it, it becomes the base and the store lets the draft go unless you
-typed since. Anything else on GitHub is a conflict. A create that was cut off is
-found by its description and the sent bytes, so a gist is never created twice.
-A new day joins the Daily notes gist GitHub has, and creates one only when
-there's none.
-
-Autosave publishes five seconds after typing stops, while the app is in the
-foreground. Leaving a file and `leaveApp` publish too. `returnToApp` publishes
-what's waiting, refreshes a stale list, moves Today to a new day and checks the
-open file. A failure is the editor's `GitHubProblem` until you type, publish
-again or reconnect. GitHub has no conditional write, so the fresh read narrows
-a race with the web but can't close it.
-
-## Daily notes
-
-`today()` returns today's file, ready to edit: your draft if you've started the
-day, without asking GitHub. Otherwise it reads the daily gist from GitHub,
-because the web may have started today since the cache was written. Then it's
-the web's file for today, else a new file from `template.md` with `{{date}}`
-filled in, else the first day of a new daily gist with a `# YYYY-MM-DD` heading.
-Offline, the cache's answer stands. Nothing is stored until you type.
+Publishing and Today keep [docs/sync.md](../../../docs/sync.md)'s rules. Beyond
+them, a create that was cut off is found by its description and the sent bytes,
+so a gist is never created twice, and autosave runs only in the foreground. A
+failure is the editor's `GitHubProblem` until you type, publish again or
+reconnect. GitHub has no conditional write, so the fresh read before a publish
+narrows a race with the web but can't close it.
 
 ## Testing
 

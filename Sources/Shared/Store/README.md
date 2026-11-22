@@ -70,11 +70,10 @@ It holds at most one `GistFileDraft` per account and file, from your first
 keystroke until GitHub has the text. Every write commits before it returns, so
 the editor may say a change is saved on this iPhone as soon as `save` does.
 
-`base` is GitHub's text when you started typing, and a new gist or day has none.
-`sent` is the text of a publish GitHub hasn't confirmed yet. `conflict` is
-GitHub's newer text, once it moved past `base`. `isPublished` means GitHub has
-exactly the draft's text with nothing sent or in conflict, and the store lets
-such a draft go. So does `isDisposable`: a new gist with no name or writing.
+`base` and `sent` are as [docs/sync.md](../../../docs/sync.md) defines them, and
+`conflict` is GitHub's newer text, once it moved past `base`. `isPublished` means
+GitHub has exactly the draft's text with nothing sent or in conflict, and the
+store lets such a draft go. So does `isDisposable`: a new gist with no name or writing.
 
 `save(_:text:github:)` stores typing. `keep` stores a note before you type in
 it, such as a gist you named. `append(_:to:github:)` adds text from outside the
@@ -122,8 +121,3 @@ through a `URLProtocol` session, so tests, previews and fixture launches run the
 real clients. `accounts()` returns a `GistPadAccountStore` that signs in to it,
 `requests` records every call, and `intercept` injects failures. Tests never
 touch the real GitHub or Supabase.
-
-```sh
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-  swift test --filter StoreTests
-```
