@@ -76,8 +76,9 @@ private struct GistTitle<Choices: View>: ViewModifier {
     }
 }
 
-/// Sizes its second view to its own width, up to the width of its first, whatever the bar
-/// proposes, so the bar never moves the title to its overflow menu.
+// Platform gap: the bar moves a title too wide for its room to the overflow menu instead of
+// truncating it. Remove TemplateWidth when a bar item can truncate in place.
+/// Sizes its second view to its own width, up to the width of its first, whatever the bar proposes.
 private struct TemplateWidth: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let cap = subviews[0].sizeThatFits(.unspecified).width

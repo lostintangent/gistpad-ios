@@ -16,7 +16,8 @@ public struct GistScreen<Source: View, Preview: View>: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.locale) private var locale
     @Environment(\.calendar) private var calendar
-    // Match the native toolbar's settled segment size on its first layout.
+    // Platform gap: a segmented picker in the bar first lays out narrower than it settles, so it
+    // jumps. Remove this minimum when its first layout matches its settled size.
     @ScaledMetric(relativeTo: .body) private var minimumModeSegmentWidth = 48
 
     private var showingSplit: Bool { gist.isOwned && allowsSplit && mode == .split }
@@ -155,7 +156,8 @@ public struct GistScreen<Source: View, Preview: View>: View {
                         )
                     }
                     if let url = gist.shareURL {
-                        // The share sheet can't present over the Comments sheet on iPhone.
+                        // Platform gap: the share sheet can't present while Comments is a sheet on
+                        // iPhone. Remove this condition when ShareLink presents over an open sheet.
                         if !(areCommentsPresented && horizontalSizeClass == .compact) {
                             ShareLink(
                                 item: url,

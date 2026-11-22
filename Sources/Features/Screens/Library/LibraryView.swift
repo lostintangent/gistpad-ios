@@ -110,8 +110,9 @@ public struct LibraryView: View {
             signedOutInvitation
         } else {
             // Search belongs to the Library column with one placement, so folding and rotating
-            // never move it into the detail. A minimized button lands past the overlay sidebar's
-            // trailing edge, so the sidebar keeps the full field.
+            // never move it into the detail.
+            // Platform gap: UIKit places a minimized search button past an overlay sidebar's
+            // trailing edge. Remove the sidebar's .automatic when the button lands inside.
             styledList
                 .searchable(text: $state.query, isPresented: $isSearchPresented, placement: .toolbar)
                 .searchToolbarBehavior(isSidebar ? .automatic : .minimize)
@@ -194,8 +195,10 @@ public struct LibraryView: View {
         }
     }
 
-    /// Compact `.insetGrouped` draws no disclosure, so there the whole header is one disclosure
-    /// button ending in Notes' circled chevron. The sidebar draws and handles its own.
+    // Platform gap: Section(isExpanded:) draws a disclosure only in the sidebar style. Remove the
+    // compact header button when .insetGrouped draws one too.
+    /// In compact width the whole header is one disclosure button ending in Notes' circled
+    /// chevron. The sidebar draws and handles its own.
     @ViewBuilder
     private func sectionHeader(
         _ title: Text, symbol: String? = nil, count: Int?, countLabel: String?,

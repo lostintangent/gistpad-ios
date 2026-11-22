@@ -123,6 +123,7 @@ struct TagLabels: View {
     }
 }
 
+// Platform gap: SwiftUI has no wrapping stack. Remove TagFlowLayout when it ships one.
 private struct TagFlowLayout: Layout {
     var layoutDirection: LayoutDirection
     private let spacing: CGFloat = 6

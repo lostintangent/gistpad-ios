@@ -25,7 +25,8 @@ public struct AccentColorRow: View {
             supportsOpacity: false
         )
         .accessibilityIdentifier("settings-accent-color")
-        // The picker reports every drag step, so save once the color settles.
+        // Platform gap: ColorPicker reports every drag step and never says when a pick settles, as
+        // UIColorPickerViewController's `continuously` flag does. Remove the wait when it does.
         .task(id: picked) {
             guard let picked, picked != saved else { return }
             try? await Task.sleep(for: .milliseconds(400))

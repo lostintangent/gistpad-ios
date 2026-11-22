@@ -2,7 +2,7 @@
 import SwiftUI
 import UIKit
 
-/// A quiet toolbar glyph with a monochrome count, because SwiftUI's toolbar badge is always red.
+/// A quiet toolbar glyph with a monochrome count.
 struct ToolbarBadgeLabel: View {
     let title: String
     let systemImage: String
@@ -13,7 +13,8 @@ struct ToolbarBadgeLabel: View {
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
-        // A single image keeps the native adaptive toolbar item instead of a custom-view item.
+        // Platform gap: the toolbar badge is always red, even with badgeProminence(.decreased), and a
+        // custom view loses the native bar item. Remove this drawn image when the badge can be monochrome.
         Label {
             Text(verbatim: title)
         } icon: {
