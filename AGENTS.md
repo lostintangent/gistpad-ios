@@ -99,6 +99,7 @@ xcodebuild -workspace GistPad.xcworkspace -scheme GistPad \
 - UI tests drive the real app against the DEBUG fixture GitHub (`FixtureServer` in Store), never a live account.
 - UI tests poll with `isTappable` and `text`, never `isHittable` or `value`, which fail the test instead of returning false while an element is missing or off screen.
 - `simctl` can't fold the Duo, so tests and captures run in whatever posture is set. Turning a display off with `simctl io screenConfig power` doesn't fold it either, and it can leave the simulator stuck in its compact posture. Change posture by hand with Device Hub's display switch. Physical fold transitions are left to the manual pass on the phone.
+- The slot simulator drifts over a long day. When every sheet takes about 5 s to finish presenting and tests time out on code that passed before, shut down and boot the slot simulator, never a new one, before suspecting the code.
 - The Intelligence eval runs synthetic notes, and live gists you name, through the on-device model on the Mac: `bash scripts/evaluate-intelligence.sh 10`. See `scripts/intelligence-eval/README.md`.
 - `scripts/preview-renderer` builds Preview's web bundle from the sibling `gistpad.dev` checkout and has its own typecheck, tests and build. See its README.
 - The project file is `GistPad.xcodeproj/project.xcproj`, Xcode 27's JSON format. Change settings with `xcrun xcodeproj` rather than by hand. The build number is set once for the whole project and committed with each build: `xcrun xcodeproj setting set CURRENT_PROJECT_VERSION <build>`.
