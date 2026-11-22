@@ -88,6 +88,8 @@ extension GistFileDraft {
     }
 }
 
+// Platform gap: Foundation's UUID has no name-based initializer. Remove when it gains one, once no
+// stored draft still carries an ID made here.
 extension UUID {
     /// The same UUID for the same name.
     init(naming name: String) {

@@ -312,6 +312,8 @@ private extension Date {
     var wholeSeconds: Date { Date(timeIntervalSince1970: timeIntervalSince1970.rounded(.down)) }
 }
 
+// Platform gap: URLProtocol isn't Sendable, so the task that answers a request can't capture it.
+// Remove @unchecked when URLProtocol is Sendable.
 private final class FixtureProtocol: URLProtocol, @unchecked Sendable {
     static let header = "X-Fixture-Server"
     static let servers = Mutex<[String: FixtureServer]>([:])
