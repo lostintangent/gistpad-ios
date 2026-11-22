@@ -62,7 +62,7 @@ public struct LibraryView: View {
     private let isSidebar: Bool
     private let isSignedOut: Bool
     private let isLoading: Bool
-    private let status: GitHubStatusState
+    private let status: GitHubStatus
     @Binding private var expandedSections: Set<LibrarySection>
     @Binding private var isPinnedExpanded: Bool
     @State private var collapsedDateGroups: Set<DateGroup> = []
@@ -79,7 +79,7 @@ public struct LibraryView: View {
     /// `isSidebar` comes from the split view's owner, because a sidebar column always reads as compact.
     public init(
         state: LibraryState, actions: LibraryActions, isSidebar: Bool,
-        isSignedOut: Bool = false, isLoading: Bool = false, status: GitHubStatusState = .idle,
+        isSignedOut: Bool = false, isLoading: Bool = false, status: GitHubStatus = .idle,
         expandedSections: Binding<Set<LibrarySection>>, isPinnedExpanded: Binding<Bool>
     ) {
         self.state = state
@@ -496,7 +496,7 @@ public struct LibraryView: View {
                 if status.problem != nil, !explainsProblem {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
                     ToolbarItem(placement: .bottomBar) {
-                        GitHubStatusControl(state: status, recover: actions.recoverStatus)
+                        GitHubStatusControl(status: status, recover: actions.recoverStatus)
                     }
                     .axisBehavior(.verticalPreferred)
                     .sharedBackgroundVisibility(.hidden)

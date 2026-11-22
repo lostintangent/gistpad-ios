@@ -28,7 +28,7 @@ row's ID at once, and the context menu's confirms first. The app decides what
 that removes. The Library owns its search, so it stays in the
 Library column through folds and rotations. Apply
 `.libraryRail(isVisible:today:create:openToday:)` to regular detail content, so
-New and Today sit beside the open gist. Pass the account's `GitHubStatusState`
+New and Today sit beside the open gist. Pass the account's `GitHubStatus`
 as `status`. A problem shows `GitHubStatusControl` in the bottom bar, or the
 empty state explains it when there's nothing to list.
 

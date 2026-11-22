@@ -348,7 +348,7 @@ struct RootView: View {
         ToolbarSpacer(.flexible, placement: .bottomBar)
         ToolbarItem(placement: .bottomBar) {
           GitHubStatusControl(
-            state: fileEditor.remoteInspectionStatus
+            status: fileEditor.remoteInspectionStatus
           ) {
             Task {
               if fileEditor.remoteInspectionProblem == .reconnect { await model.reconnect() }

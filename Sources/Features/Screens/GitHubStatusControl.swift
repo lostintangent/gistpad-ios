@@ -1,7 +1,7 @@
 import Foundation
 import Store
 
-public enum GitHubStatusState: Equatable, Sendable {
+public enum GitHubStatus: Equatable, Sendable {
     case idle
     case checking(operation: String)
     /// `heading` names what didn't happen, and `detail` what's still safe.
@@ -17,19 +17,19 @@ public enum GitHubStatusState: Equatable, Sendable {
 import SwiftUI
 
 public struct GitHubStatusControl: View {
-    private let state: GitHubStatusState
+    private let status: GitHubStatus
     private let recover: @MainActor () -> Void
     @State private var spinnerOperation: String?
     @State private var showingDetails = false
 
-    public init(state: GitHubStatusState, recover: @escaping @MainActor () -> Void) {
-        self.state = state
+    public init(status: GitHubStatus, recover: @escaping @MainActor () -> Void) {
+        self.status = status
         self.recover = recover
     }
 
     public var body: some View {
         ZStack {
-            switch state {
+            switch status {
             case .idle:
                 EmptyView()
             case .checking(let operation):
@@ -64,13 +64,13 @@ public struct GitHubStatusControl: View {
             guard !Task.isCancelled else { return }
             spinnerOperation = operation
         }
-        .onChange(of: state) { _, state in
-            if case .idle = state { showingDetails = false }
+        .onChange(of: status) { _, status in
+            if case .idle = status { showingDetails = false }
         }
     }
 
     private var checkingOperation: String? {
-        if case .checking(let operation) = state { operation } else { nil }
+        if case .checking(let operation) = status { operation } else { nil }
     }
 
     private func message(_ problem: GitHubProblem) -> String {

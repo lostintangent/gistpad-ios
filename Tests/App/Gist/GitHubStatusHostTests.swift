@@ -55,7 +55,7 @@ struct GitHubStatusHostTests {
     let canUndo = editor.undoManager?.canUndo
     capture("scrolled")
     let generation = session.generation
-    let states: [(String, GitHubStatusState)] = [
+    let states: [(String, GitHubStatus)] = [
       ("attention", problem()),
       ("checking", .checking(operation: "Checking GitHub for changes")),
       ("unresolved", problem()),
@@ -82,7 +82,7 @@ struct GitHubStatusHostTests {
     #expect(host.model.recoveries == 0)
   }
 
-  private func problem() -> GitHubStatusState {
+  private func problem() -> GitHubStatus {
     .problem(
       .offline, heading: "Couldn't check for updates",
       detail: "Your gists on this iPhone are unchanged.")
@@ -92,9 +92,9 @@ struct GitHubStatusHostTests {
 @Observable
 @MainActor
 private final class StatusModel {
-  var state: GitHubStatusState = .idle
+  var state: GitHubStatus = .idle
   var recoveries = 0
-  var renderedState: GitHubStatusState = .idle
+  var renderedState: GitHubStatus = .idle
 
   func recover() { recoveries += 1 }
 }
@@ -118,7 +118,7 @@ private struct StatusFixture: View {
           if model.state != .idle {
             ToolbarSpacer(.flexible, placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) {
-              GitHubStatusControl(state: model.state, recover: model.recover)
+              GitHubStatusControl(status: model.state, recover: model.recover)
             }
             .sharedBackgroundVisibility(.hidden)
           }

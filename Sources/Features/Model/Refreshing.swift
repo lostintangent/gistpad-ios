@@ -7,7 +7,7 @@ import Store
 // web's edits show up without a pull.
 
 extension GistPadModel {
-  public var remoteRefreshStatus: GitHubStatusState {
+  public var remoteRefreshStatus: GitHubStatus {
     if let problem {
       return .problem(
         problem, heading: String(localized: "Couldn't update your gists"),
@@ -96,7 +96,7 @@ extension GistPadModel {
 }
 
 extension GistFileEditor {
-  public var remoteInspectionStatus: GitHubStatusState {
+  public var remoteInspectionStatus: GitHubStatus {
     guard let problem = remoteInspectionProblem else { return .idle }
     switch status {
     case .failed, .conflict:
