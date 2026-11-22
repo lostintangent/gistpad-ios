@@ -212,6 +212,37 @@ struct PreviewWebKitTests {
         })
     }
 
+    @Test("A pushed page paints its first frame below the bar", arguments: [false, true])
+    func firstFrameBelowTheBar(animated: Bool) async throws {
+        let markdown = "# Below the bar\n\n" + Array(
+            repeating: "A paragraph long enough that the page runs well past one screen.", count: 80
+        ).joined(separator: "\n\n")
+        let navigation = UINavigationController(rootViewController: UIViewController())
+        let window = testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+        window.rootViewController = navigation
+        window.makeKeyAndVisible()
+        defer { tearDown(window) }
+        let preview = UIHostingController(
+            rootView: MarkdownPreviewView(markdown: markdown, fileID: "first-frame", generation: 0) { _ in })
+        preview.title = "Below the bar"
+        navigation.pushViewController(preview, animated: animated)
+
+        // A rendered page is taller than the screen, so every frame from then on shows text.
+        var frames: [String] = []
+        var misplaced = 0
+        let sampler = FrameSampler {
+            guard let scrollView = findWebView(in: preview.view)?.scrollView,
+                  scrollView.contentSize.height > 2_000 else { return }
+            let gap = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
+            if abs(gap) > 0.5 || scrollView.adjustedContentInset.top < 1 { misplaced += 1 }
+            frames.append(String(format: "%.1f/%.1f", scrollView.contentOffset.y, scrollView.adjustedContentInset.top))
+        }
+        defer { sampler.stop() }
+        try await waitFor("the page to show for a moment") { frames.count >= 45 }
+        Attachment.record(frames.joined(separator: "\n"), named: "first-frames-offset-inset.txt")
+        #expect(misplaced == 0, "\(misplaced) of \(frames.count) frames showed text out of place")
+    }
+
     @Test("A terminated web process renders the same document again")
     func aTerminatedWebProcessRendersAgain() async throws {
         let (webView, window) = try await hostedPreview(markdown: "# Still here\n\nKeep this paragraph.")
@@ -287,6 +318,24 @@ struct PreviewWebKitTests {
         }
         throw PreviewError("Timed out waiting for \(description).")
     }
+}
+
+/// Runs `sample` once per display frame until stopped.
+@MainActor
+private final class FrameSampler: NSObject {
+    private let sample: @MainActor () -> Void
+    private var link: CADisplayLink?
+
+    init(_ sample: @escaping @MainActor () -> Void) {
+        self.sample = sample
+        super.init()
+        link = CADisplayLink(target: self, selector: #selector(tick))
+        link?.add(to: .main, forMode: .common)
+    }
+
+    @objc private func tick() { sample() }
+
+    func stop() { link?.invalidate() }
 }
 
 @MainActor

@@ -114,7 +114,6 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         private var lastAppearance: PreviewAppearance?
         private var lastViewportInsets: UIEdgeInsets?
         private var ready = false
-        private var needsInitialScroll = true
 
         fileprivate init(file: PreviewFile, onEvent: @escaping @MainActor (PreviewEvent) -> Void) {
             self.file = file
@@ -122,12 +121,9 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         }
 
         /// The completion-handler form submits calls in order, so a later render never races an earlier one.
-        private func call(_ script: String, _ arguments: [String: Any] = [:], then: (@MainActor () -> Void)? = nil) {
+        private func call(_ script: String, _ arguments: [String: Any] = [:]) {
             webView?.callAsyncJavaScript(script, arguments: arguments, in: nil, in: .page) { [weak self] result in
-                switch result {
-                case .success: then?()
-                case .failure(let error): self?.fail(error)
-                }
+                if case .failure(let error) = result { self?.fail(error) }
             }
         }
 
@@ -137,6 +133,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         }
 
         func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
+            // WebKit places a new page, and keeps fixed content, below the bars it knows obscure it.
+            webView?.obscuredContentInsets = scrollView.adjustedContentInset
             updateViewport()
         }
 
@@ -149,9 +147,6 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         }
 
         fileprivate func update(_ file: PreviewFile) {
-            if self.file.id != file.id {
-                needsInitialScroll = true
-            }
             self.file = file
             guard ready else { return }
             updateViewport()
@@ -181,26 +176,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                 case .commentActivate(let segment, let start, let end):
                     try commentHighlights.activate(segment: segment, start: start, end: end)
                 case .rendered:
-                    guard needsInitialScroll else {
-                        commentHighlights.rendered(file)
-                        return
-                    }
-                    let rendered = file
-                    // Initial CSS metrics can still reset WebKit's scroll origin, so wait for layout to settle.
-                    call("await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));") { [weak self] in
-                        guard let self, let webView = self.webView, self.file == rendered else { return }
-                        if self.needsInitialScroll {
-                            webView.layoutIfNeeded()
-                            if !webView.scrollView.isTracking, !webView.scrollView.isDecelerating {
-                                let insets = webView.scrollView.adjustedContentInset
-                                webView.scrollView.setContentOffset(
-                                    CGPoint(x: -insets.left, y: -insets.top), animated: false
-                                )
-                            }
-                            self.needsInitialScroll = false
-                        }
-                        self.commentHighlights.rendered(rendered)
-                    }
+                    commentHighlights.rendered(file)
                 case nil:
                     Logger.preview.debug("Dropped a preview message for an older generation.")
                 }
@@ -230,7 +206,6 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             lastAppearance = nil
             lastViewportInsets = nil
             commentHighlights.reset()
-            needsInitialScroll = true
             // Crash recovery leaves about:blank, so reload() would bounce on an empty page.
             webView.load(URLRequest(url: PreviewResourceHandler.pageURL))
         }

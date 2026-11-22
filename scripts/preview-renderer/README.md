@@ -35,7 +35,7 @@ Quote matching in Shared Comments is authoritative. The page catalogs each sanit
 
 ## Scrolling and appearance
 
-The web view runs under the bars. UIKit's automatic content inset puts the first line just below them and lets text scroll up under the glass. Native passes that adjusted inset to the page as root scroll-padding, so anchors and revealed passages land below the bars. The first render scrolls to the top once layout settles, and a width change keeps the reading passage in place.
+The web view runs under the bars. UIKit's automatic content inset puts the first line just below them and lets text scroll up under the glass. Native also hands that inset to WebKit as its obscured insets, so a new page paints its first frame below the bars, and passes it to the page as root scroll-padding, so anchors and revealed passages land below them too. A width change keeps the reading passage in place.
 
 Appearance travels apart from Markdown, as CSS variables that `PreviewAppearance` resolves from native traits: semantic colors, the personal accent's roles and Dynamic Type metrics. A change never reparses the note or drops the selection. `docs/design.md` specifies the look.
 
