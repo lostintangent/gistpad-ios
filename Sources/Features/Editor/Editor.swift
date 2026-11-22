@@ -626,29 +626,22 @@
       setNeedsLayout()
     }
 
+    /// UIKit insets the source below the bars. The keyboard and its bar aren't part of the safe
+    /// area, so the viewport overlay measures them.
     private func applyViewportInsets() {
       guard let viewportView, window != nil, viewportView.window === window else { return }
       let viewport = convert(viewportView.bounds, from: viewportView)
-      let target = UIEdgeInsets(
-        top: max(0, viewport.minY - bounds.minY), left: 0,
-        bottom: max(0, bounds.maxY - viewport.maxY), right: 0)
-      let previous = adjustedContentInset
-      var insets = contentInset
-      insets.top = max(0, target.top - (previous.top - contentInset.top))
-      insets.bottom = max(0, target.bottom - (previous.bottom - contentInset.bottom))
-      guard
-        abs(insets.top - contentInset.top) > 0.001
-          || abs(insets.bottom - contentInset.bottom) > 0.001
-      else { return }
+      let automatic = adjustedContentInset.bottom - contentInset.bottom
+      let bottom = max(0, bounds.maxY - viewport.maxY - automatic)
+      guard abs(bottom - contentInset.bottom) > 0.001 else { return }
       let wasRestoring = restoringAnchor
       restoringAnchor = true
       defer { restoringAnchor = wasRestoring }
       let offset = contentOffset
-      contentInset = insets
-      verticalScrollIndicatorInsets.top = insets.top
-      verticalScrollIndicatorInsets.bottom = insets.bottom
+      contentInset.bottom = bottom
+      verticalScrollIndicatorInsets.bottom = bottom
       if !writingToolsOwnsScrolling, markedTextRange == nil, !isTracking, !isDecelerating {
-        setVerticalContentOffset(offset.y + previous.top - adjustedContentInset.top)
+        setVerticalContentOffset(offset.y)
         if isFirstResponder { scrollRangeToVisible(selectedRange) }
       }
     }
