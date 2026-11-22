@@ -114,13 +114,12 @@ struct ConflictReview: View {
             }
             .task(id: review) {
                 isComparing = true
-                let base = review.base?.text, draft = review.text, github = github
-                let diffs = await Task.detached(priority: .userInitiated) {
-                    (DiffLine.changes(from: base, to: draft), DiffLine.changes(from: base, to: github))
-                }.value
+                let base = review.base?.text
+                let mine = await DiffLine.changes(from: base, to: review.text)
+                let theirs = await DiffLine.changes(from: base, to: github)
                 guard !Task.isCancelled else { return }
-                draftChanges = diffs.0
-                githubChanges = diffs.1
+                draftChanges = mine
+                githubChanges = theirs
                 isComparing = false
             }
         }
@@ -193,7 +192,7 @@ nonisolated struct DiffLine: Identifiable, Sendable {
     let offset: Int
     let text: String
 
-    static func changes(from base: String?, to text: String) -> [DiffLine] {
+    @concurrent static func changes(from base: String?, to text: String) async -> [DiffLine] {
         let original = lines(in: base ?? "")
         let updated = lines(in: text)
         return updated.difference(from: original).map { change in
