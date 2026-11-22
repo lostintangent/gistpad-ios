@@ -4,8 +4,8 @@ import Testing
 
 @MainActor @Suite struct CommentsModelTests {
     @Test func postsRootAndQuotedCommentsAndKeepsARejectedDraft() async throws {
-        let remote = FakeRemote()
-        let model = try await loadedModel(remote)
+        let github = FakeGitHub()
+        let model = try await loadedModel(github)
         model.draft = "First"
         await model.post()
         #expect(model.comments?.map(\.body) == ["First"])
@@ -13,13 +13,13 @@ import Testing
 
         model.beginQuote("the passage", filename: "notes.md")
         model.draft = "About this"
-        await remote.reject(true)
+        await github.reject(true)
         await model.post()
         #expect(model.failure == .post)
         #expect(model.draft == "About this")
         #expect(model.target == .quote(text: "the passage", filename: "notes.md"))
 
-        await remote.reject(false)
+        await github.reject(false)
         await model.post()
         #expect(model.failure == nil)
         #expect(model.comments?.last?.body == "> the passage\n\nAbout this")
@@ -28,8 +28,8 @@ import Testing
     }
 
     @Test func repliesUseTheWebMarkerAndStopAtTwoLevels() async throws {
-        let remote = FakeRemote([comment(1, "Root"), comment(2, "> [comment:1]\n\nReply")])
-        let model = try await loadedModel(remote)
+        let github = FakeGitHub([comment(1, "Root"), comment(2, "> [comment:1]\n\nReply")])
+        let model = try await loadedModel(github)
         model.beginReply(to: 2)
         model.draft = "Deeper"
         await model.post()
@@ -41,8 +41,8 @@ import Testing
     }
 
     @Test func editingKeepsTheHiddenPrefixAndReturnsTheUnsentComment() async throws {
-        let remote = FakeRemote([comment(1, "> the passage\n\nBefore")])
-        let model = try await loadedModel(remote)
+        let github = FakeGitHub([comment(1, "> the passage\n\nBefore")])
+        let model = try await loadedModel(github)
         model.beginReply(to: 1)
         model.draft = "Unsent"
 
@@ -59,15 +59,15 @@ import Testing
     }
 
     @Test func deletingACommentKeepsItsRepliesAsThreads() async throws {
-        let remote = FakeRemote([comment(1, "Root"), comment(2, "> [comment:1]\n\nReply")])
-        let model = try await loadedModel(remote)
+        let github = FakeGitHub([comment(1, "Root"), comment(2, "> [comment:1]\n\nReply")])
+        let model = try await loadedModel(github)
         await model.delete(1)
         #expect(model.threads.map(\.id) == [2])
-        #expect(await remote.comments.map(\.id) == [2])
+        #expect(await github.comments.map(\.id) == [2])
     }
 
-    private func loadedModel(_ remote: FakeRemote) async throws -> CommentsModel {
-        let model = CommentsModel(gistID: "gist", userID: 42, gistOwnerID: 42, remote: remote)
+    private func loadedModel(_ github: FakeGitHub) async throws -> CommentsModel {
+        let model = CommentsModel(gistID: "gist", userID: 42, gistOwnerID: 42, github: github)
         await model.refresh()
         try #require(model.comments != nil)
         return model
@@ -80,7 +80,7 @@ private func comment(_ id: Int64, _ body: String) -> GistComment {
         id: id, body: body, user: .init(id: 42, login: "me"), createdAt: date)
 }
 
-private actor FakeRemote: CommentsRemote {
+private actor FakeGitHub: GitHubComments {
     private(set) var comments: [GistComment]
     private var rejects = false
 

@@ -119,7 +119,7 @@ extension GistPadModel {
     guard let account else { throw AccountError.accountChanged }
     let github = await client(accountID: account.id)
     return CommentsModel(
-      gistID: gist.id, userID: account.github.id, gistOwnerID: gist.owner?.id, remote: github)
+      gistID: gist.id, userID: account.github.id, gistOwnerID: gist.owner?.id, github: github)
   }
 
   /// Drops everything shown for the current account and switches to `account`, or signs out.

@@ -311,4 +311,4 @@ extension GitHubClient {
     }
 }
 
-extension GitHubClient: CommentsRemote {}
+extension GitHubClient: GitHubComments {}

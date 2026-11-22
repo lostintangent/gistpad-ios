@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-public protocol CommentsRemote: Sendable {
+public protocol GitHubComments: Sendable {
     func listComments(gistID: String) async throws -> [GistComment]
     func createComment(gistID: String, body: String) async throws -> GistComment
     func updateComment(gistID: String, commentID: Int64, body: String) async throws -> GistComment
@@ -32,14 +32,14 @@ public final class CommentsModel {
     public private(set) var target = Target.root
     public var draft = ""
 
-    @ObservationIgnored private let remote: any CommentsRemote
+    @ObservationIgnored private let github: any GitHubComments
     @ObservationIgnored private var stashed = (target: Target.root, draft: "")
 
-    public init(gistID: String, userID: Int64, gistOwnerID: Int64?, remote: any CommentsRemote) {
+    public init(gistID: String, userID: Int64, gistOwnerID: Int64?, github: any GitHubComments) {
         self.gistID = gistID
         self.userID = userID
         self.gistOwnerID = gistOwnerID
-        self.remote = remote
+        self.github = github
     }
 
     public var threads: [GistCommentThread] { GistCommentThread.build(from: comments ?? []) }
@@ -53,7 +53,7 @@ public final class CommentsModel {
         isRefreshing = true
         defer { isRefreshing = false }
         do {
-            comments = try await remote.listComments(gistID: gistID)
+            comments = try await github.listComments(gistID: gistID)
             if failure == .load { failure = nil }
         } catch {
             if !Task.isCancelled { failure = .load }
@@ -96,7 +96,7 @@ public final class CommentsModel {
             case .reply(let parentID):
                 try await create(GistCommentBody.replying(to: parentID, text: draft))
             case .edit(let comment):
-                let updated = try await remote.updateComment(
+                let updated = try await github.updateComment(
                     gistID: gistID, commentID: comment.id,
                     body: comment.parsedBody.replacingText(with: draft))
                 comments = comments?.map { $0.id == updated.id ? updated : $0 }
@@ -112,7 +112,7 @@ public final class CommentsModel {
         isPosting = true
         defer { isPosting = false }
         do {
-            try await remote.deleteComment(gistID: gistID, commentID: commentID)
+            try await github.deleteComment(gistID: gistID, commentID: commentID)
             comments?.removeAll { $0.id == commentID }
             failure = nil
         } catch {
@@ -123,7 +123,7 @@ public final class CommentsModel {
     private func create(_ body: String) async throws {
         // Awaiting inside `comments?.append(…)` would hold the observed mutation open across the
         // request, so views would re-read the old comments and miss the new one.
-        let created = try await remote.createComment(gistID: gistID, body: body)
+        let created = try await github.createComment(gistID: gistID, body: body)
         comments?.append(created)
     }
 
