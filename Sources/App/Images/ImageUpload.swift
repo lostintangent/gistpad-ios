@@ -42,7 +42,7 @@ final class ImageUpload {
     defer { isUploading = false }
     do {
       guard let image = try await item.loadTransferable(type: Data.self) else {
-        throw ImageStorage.Failure.invalidImage
+        throw ImageError.unreadable
       }
       try ImageStorage.check(image)
       await add(image: image)
@@ -75,9 +75,9 @@ final class ImageUpload {
 
   private static func message(for error: any Error) -> String {
     switch error {
-    case ImageStorage.Failure.imageTooLarge: String(localized: "Choose an image under 50 MB.")
-    case ImageStorage.Failure.http: String(localized: "GistPad's image storage didn't accept this image.")
-    case is ImageStorage.Failure: String(localized: "This item couldn't be read as an image. Choose another one.")
+    case ImageError.tooLarge: String(localized: "Choose an image under 50 MB.")
+    case ImageError.http: String(localized: "GistPad's image storage didn't accept this image.")
+    case is ImageError: String(localized: "This item couldn't be read as an image. Choose another one.")
     default: error.localizedDescription
     }
   }

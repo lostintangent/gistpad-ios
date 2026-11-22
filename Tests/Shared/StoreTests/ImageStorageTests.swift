@@ -50,7 +50,7 @@ func testImage(_ type: UTType) throws -> Data {
     @Test func storageTakesAnyImageUnder50MBAsItIs() throws {
         #expect(try ImageStorage.check(testImage(.png)) == .png)
         #expect(try ImageStorage.check(testImage(.gif)) == .gif)
-        #expect(throws: ImageStorage.Failure.invalidImage) { try ImageStorage.check(Data("not an image".utf8)) }
-        #expect(throws: ImageStorage.Failure.imageTooLarge) { try ImageStorage.check(Data(count: 50_000_001)) }
+        #expect(throws: ImageError.unreadable) { try ImageStorage.check(Data("not an image".utf8)) }
+        #expect(throws: ImageError.tooLarge) { try ImageStorage.check(Data(count: 50_000_001)) }
     }
 }
