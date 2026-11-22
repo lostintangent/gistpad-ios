@@ -13,12 +13,10 @@ public struct RGBColor: Hashable, Sendable {
 
     public init?(hex: String) {
         guard hex.first == "#" else { return nil }
-        let digits = Array(hex.dropFirst().utf8)
-        guard [3, 6].contains(digits.count),
-              digits.allSatisfy({ (48...57).contains($0) || (65...70).contains($0) || (97...102).contains($0) })
+        let digits = hex.dropFirst()
+        guard [3, 6].contains(digits.count), digits.allSatisfy({ $0.isASCII && $0.isHexDigit }),
+              let value = UInt32(digits.count == 3 ? String(digits.flatMap { [$0, $0] }) : String(digits), radix: 16)
         else { return nil }
-        let expanded = digits.count == 3 ? digits.flatMap { [$0, $0] } : digits
-        guard let value = UInt32(String(decoding: expanded, as: UTF8.self), radix: 16) else { return nil }
         self.init(red: UInt8((value >> 16) & 255), green: UInt8((value >> 8) & 255), blue: UInt8(value & 255))
     }
 
