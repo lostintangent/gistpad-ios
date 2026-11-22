@@ -2,7 +2,7 @@ import AppIntents
 import Foundation
 
 @AppEntity(schema: .notes.account)
-public struct GistAccountEntity: Identifiable {
+public struct GistAccountEntity {
     public static let defaultQuery = GistAccountQuery()
     public let id: UUID
     public var name: String
@@ -30,7 +30,7 @@ public struct GistAccountQuery: EntityQuery {
 }
 
 @AppEntity(schema: .notes.folder)
-public struct GistFolderEntity: Identifiable {
+public struct GistFolderEntity {
     public static let defaultQuery = GistFolderQuery()
     public let id: String
     public var name: String

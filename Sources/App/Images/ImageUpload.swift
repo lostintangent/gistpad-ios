@@ -20,7 +20,7 @@ final class ImageUpload {
   private(set) var isUploading = false
   /// The note the picked image, or a retried one, goes into.
   @ObservationIgnored private weak var fileEditor: GistFileEditor?
-  @ObservationIgnored private let model: GistPadModel
+  private let model: GistPadModel
 
   init(model: GistPadModel) {
     self.model = model

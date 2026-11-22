@@ -117,9 +117,7 @@ extension LibrarySnapshot {
         let url = try Self.fileURL()
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        try encoder.encode(self).write(
+        try JSONEncoder().encode(self).write(
             to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
@@ -128,8 +126,6 @@ extension LibrarySnapshot {
             forSecurityApplicationGroupIdentifier: "group.dev.gistpad.GistPad")
         else { throw CocoaError(.fileNoSuchFile) }
         // The file keeps its first name, so an update never leaves the old one behind.
-        return container
-            .appendingPathComponent("Library/Application Support/GistPad", isDirectory: true)
-            .appendingPathComponent("notebook.snapshot")
+        return container.appending(path: "Library/Application Support/GistPad/notebook.snapshot")
     }
 }

@@ -29,7 +29,6 @@ extension GistEntityQuery: IndexedEntityQuery {
     public func reindexAllEntities(indexDescription: CSSearchableIndexDescription) async throws {
         try await SpotlightIndex.index.indexAppEntities(LibrarySnapshot.read(validating: app)?.gists ?? [])
     }
-
 }
 
 // Platform gap: Spotlight can't list the gists it holds or replace them as one set, so this tracks
