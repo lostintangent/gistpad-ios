@@ -44,13 +44,16 @@ struct GitHubStatusHostTests {
       editor.isFirstResponder && host.keyboardHeight >= 150
     }
     let selection = (source as NSString).range(of: "Paragraph 140")
+    func writingPosition() -> CGRect {
+      guard let caret = editor.selectedTextRange?.end else { return .null }
+      return editor.convert(editor.caretRect(for: caret), to: host.window)
+    }
     editor.selectedRange = selection
     editor.scrollRangeToVisible(selection)
-    try await Task.sleep(for: .milliseconds(350))
     // Offscreen TextKit estimates can change without moving the visible source passage.
+    try await host.waitUntilStill(writingPosition)
     let viewportSource = try #require(sourceAtViewportTop())
-    let caret = try #require(editor.selectedTextRange).end
-    let writingPosition = editor.convert(editor.caretRect(for: caret), to: host.window)
+    let scrolledPosition = writingPosition()
     let identity = session.id
     let canUndo = editor.undoManager?.canUndo
     capture("scrolled")
@@ -65,6 +68,7 @@ struct GitHubStatusHostTests {
       host.model.state = state
       try await host.waitUntil { host.model.renderedState == state }
       try await Task.sleep(for: .milliseconds(350))
+      try await host.waitUntilStill(writingPosition)
       capture(stage)
       #expect(session.id == identity)
       #expect(editor.selectedRange == selection)
@@ -74,10 +78,8 @@ struct GitHubStatusHostTests {
       #expect(editor.undoManager?.canUndo == canUndo)
       #expect(editor.isFirstResponder)
       #expect(sourceAtViewportTop() == viewportSource)
-      let restoredCaret = try #require(editor.selectedTextRange).end
-      let restoredPosition = editor.convert(editor.caretRect(for: restoredCaret), to: host.window)
-      #expect(abs(restoredPosition.minY - writingPosition.minY) <= 1)
-      #expect(abs(restoredPosition.minX - writingPosition.minX) <= 1)
+      #expect(abs(writingPosition().minY - scrolledPosition.minY) <= 1)
+      #expect(abs(writingPosition().minX - scrolledPosition.minX) <= 1)
     }
     #expect(host.model.recoveries == 0)
   }
@@ -174,6 +176,20 @@ private final class StatusHost {
     Issue.record(
       "The native GitHub status control did not reach the required state.", sourceLocation: sourceLocation)
     throw StatusFailure.timedOut
+  }
+
+  /// Waits until `position` holds still for 100ms, as scrolling and TextKit's estimates settle.
+  func waitUntilStill(
+    sourceLocation: SourceLocation = #_sourceLocation,
+    _ position: @MainActor () -> CGRect
+  ) async throws {
+    var last = position()
+    var stillSince = ContinuousClock.now
+    try await waitUntil(sourceLocation: sourceLocation) {
+      let current = position()
+      if current != last { (last, stillSince) = (current, .now) }
+      return ContinuousClock.now - stillSince >= .milliseconds(100)
+    }
   }
 
   func close() {
