@@ -41,6 +41,40 @@
         #expect(abs(view.contentOffset.y - 1200) < 1)
       }
 
+      @Test func revealingTheEndOfALongNoteShowsTheCaret() throws {
+        let source = (1...400).map { n in
+          """
+          ## Section \(n)
+
+          A paragraph long enough to wrap across several lines of a phone-width column, so \
+          TextKit's estimate for text it hasn't laid out drifts from the laid-out height.
+
+          - [ ] A task
+          - Another item with `code`
+
+          ```swift
+          let value = \(n)
+          ```
+          """
+        }.joined(separator: "\n\n")
+        let editor = Editor(text: source)
+        let window = host(editor)
+        defer { window.isHidden = true }
+        let view = editor.textView
+        let manager = try #require(view.textLayoutManager)
+        let exact = view.contentSize.height
+        // Restyling outside an anchored update leaves TextKit's short estimate for offscreen text.
+        manager.invalidateLayout(for: try #require(manager.textContentManager?.documentRange))
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        try #require(view.contentSize.height < exact)
+        view.selectedRange = NSRange(location: source.utf16.count, length: 0)
+        view.scrollRangeToVisible(view.selectedRange)
+        view.layoutIfNeeded()
+        let caret = view.caretRect(for: try #require(view.selectedTextRange?.end))
+        #expect(view.bounds.inset(by: view.adjustedContentInset).contains(caret))
+      }
+
       @Test func focusRequestIsConsumedOnceAndKeepsSourceAndNativeUndo() throws {
         let editor = Editor(text: "note")
         editor.requestFocusAtEnd()

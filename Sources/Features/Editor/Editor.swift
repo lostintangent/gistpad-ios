@@ -606,6 +606,8 @@
       case .reading(let offset, let delta):
         // Attribute invalidation can replace exact offscreen geometry with TextKit estimates.
         layoutDocument()
+        // UITextView scrolls to the selection on its next layout after an edit, so lay out here,
+        // where the reading anchor then wins.
         super.layoutSubviews()
         if let position = position(from: beginningOfDocument, offset: offset) {
           setVerticalContentOffset(caretRect(for: position).minY - delta)
@@ -775,6 +777,8 @@
       guard let manager = textLayoutManager, let range = manager.textContentManager?.documentRange
       else { return }
       manager.ensureLayout(for: range)
+      // UITextView takes the exact height as its content size only when the viewport lays out.
+      manager.textViewportLayoutController.layoutViewport()
     }
 
     private func setVerticalContentOffset(_ y: CGFloat) {
