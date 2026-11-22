@@ -3,7 +3,7 @@ import Foundation
 public struct GistCommentThread: Equatable, Identifiable, Sendable {
     public let comment: GistComment
     public let replies: [GistCommentThread]
-    public let depth: Int
+    let depth: Int
     public var id: Int64 { comment.id }
     public var canReply: Bool { depth < 2 }
 
@@ -13,7 +13,7 @@ public struct GistCommentThread: Equatable, Identifiable, Sendable {
     }
 
     /// Threads sort newest first, and a reply whose parent is gone becomes a thread of its own.
-    public static func build(from comments: [GistComment]) -> [GistCommentThread] {
+    static func build(from comments: [GistComment]) -> [GistCommentThread] {
         let ids = Set(comments.map(\.id))
         var roots: [GistComment] = []
         var replies: [Int64: [GistComment]] = [:]

@@ -22,7 +22,7 @@ public final class CommentsModel {
         case load, post, delete
     }
 
-    public let gistID: String
+    private let gistID: String
     public let userID: Int64
     public let gistOwnerID: Int64?
     public private(set) var comments: [GistComment]?

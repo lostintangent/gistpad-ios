@@ -3,14 +3,13 @@
 Gist comments, shaped like the comments panel on gistpad.dev. The package uses only Foundation, so the editor, Preview, Store and the app share it without accounts or storage.
 
 ```swift
-let threads = GistCommentThread.build(from: comments)
-let quotes = threads.compactMap(\.quotedPassage)
+let quotes = model.threads.compactMap(\.quotedPassage)
 let highlights = quotes.highlights(in: [source])
 ```
 
 - `GistComment` is GitHub's comment value. `canEdit(as:)` allows the author. `canDelete(as:gistOwnerID:)` allows the author and the gist owner.
-- `GistCommentBody` splits off the hidden prefix: a first line that starts with `>` and the blank lines after it. `> [comment:ID]` makes the comment a reply. Any other `>` line is a quote. `quoting(_:text:)` and `replying(to:text:)` write the web's format. `replacingText(with:)` keeps the prefix when a comment is edited.
-- `GistCommentThread.build(from:)` sorts newest first and keeps input order for ties. A reply whose parent is missing becomes its own thread. `canReply` stops at depth 2.
+- `parsedBody` splits off the hidden prefix: a first line that starts with `>` and the blank lines after it. `> [comment:ID]` makes the comment a reply. Any other `>` line is a quote. `GistCommentBody.quoting(_:text:)` and `replying(to:text:)` write the web's format, and an edit keeps the prefix.
+- `threads` on `CommentsModel` sorts newest first and keeps input order for ties. A reply whose parent is missing becomes its own thread. `canReply` stops at depth 2.
 - `highlights(in:)` on `[CommentQuote]` links a quote of at least 3 UTF-16 units that appears exactly once, as whole ASCII words, across all segments. It returns UTF-16 ranges per segment. Overlapping quotes split into pieces that list every thread ID. The editor passes the source as one segment. Preview passes each rendered text node outside `pre`, `code` and `svg`. `CommentQuote.isQuotable(_:)` needs 4 units before a selection can become a quote.
 - `CommentHighlightConfiguration` carries the quotes, the selected comment and the inline toggle to the editor and Preview, and `CommentHighlightActions` carries what a passage does when it's tapped, verified or quoted. Nil actions mean the file has no comments.
 - `CommentsModel` is the open gist's `@MainActor` `@Observable` conversation. It loads through `GitHubComments`, which `GitHubClient` implements. `comments` is nil until the first load succeeds. One in-memory `draft` has a `Target`: root, quote, reply or edit. Editing a comment borrows the composer, and the unsent draft returns when the edit ends. A failed load, post or delete sets `failure` and keeps the draft. Posting an edit fails as a post.
