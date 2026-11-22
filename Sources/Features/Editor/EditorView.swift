@@ -37,7 +37,7 @@
           comments: comments, commentActions: commentActions,
           actions: KeyboardBarActions(
             canFormat: editor.canFormat,
-            format: format, link: beginLink, indent: indent,
+            format: format, link: beginLink, indent: { editor.indent(outdent: $0) },
             image: insertImage,
             intelligence: editor.isSettled ? intelligence : nil,
             dismiss: { editor.textView.resignFirstResponder() })
@@ -103,15 +103,6 @@
       }
       linkRequest = LinkRequest(
         source: editor.text, generation: editor.generation, selection: selection, label: label)
-    }
-
-    private func indent(outdent: Bool) {
-      do {
-        try editor.indent(outdent: outdent)
-      } catch {
-        editor.inputError = String(
-          localized: "Finish the current text edit, then select the lines again.", bundle: .module)
-      }
     }
 
   }
@@ -244,13 +235,13 @@
     func makeUIView(context: Context) -> ViewportView {
       let view = ViewportView()
       view.textView = editor.textView
-      editor.view.updateViewportView(view)
+      editor.textView.updateViewportView(view)
       return view
     }
 
     func updateUIView(_ view: ViewportView, context: Context) {
       view.textView = editor.textView
-      editor.view.updateViewportView(view)
+      editor.textView.updateViewportView(view)
     }
   }
 

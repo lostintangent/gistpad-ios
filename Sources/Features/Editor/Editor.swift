@@ -21,8 +21,7 @@
     private(set) var showsFrontMatter = false
     public private(set) var contentStart = 0
     public var inputError: String?
-    let view = TextView(usingTextLayoutManager: true)
-    var textView: UITextView { view }
+    let textView = TextView(usingTextLayoutManager: true)
     @ObservationIgnored weak var host: TextViewHost?
     @ObservationIgnored var hosts: [TextViewHost.Reference] = []
     @ObservationIgnored public var onEdit: ((String, UInt64) -> Void)?
@@ -38,8 +37,8 @@
       self.generation = generation
       self.showsFrontMatter = showsFrontMatter
       super.init()
-      view.editor = self
-      view.installIndentSwipes()
+      textView.editor = self
+      textView.installIndentSwipes()
       textView.delegate = self
       textView.text = text
       textView.font = .preferredFont(forTextStyle: .body)
@@ -136,33 +135,33 @@
 
     /// Brings the keyboard back where the caret is, as after a sheet closes or a lock lifts.
     public func focus() {
-      guard canFormat, !view.isHidden, view.window != nil else { return }
+      guard canFormat, !textView.isHidden, textView.window != nil else { return }
       becomeFirstResponder()
     }
 
     /// Puts the keyboard away.
     public func endEditing() {
-      view.resignFirstResponder()
+      textView.resignFirstResponder()
     }
 
-    public var selection: NSRange { view.selectedRange }
+    public var selection: NSRange { textView.selectedRange }
 
     /// Selects `range` and brings it on screen, as when a citation or reference opens the note.
     public func select(_ range: NSRange) {
-      view.selectedRange = range
-      view.layoutIfNeeded()
-      view.scrollRangeToVisible(range)
+      textView.selectedRange = range
+      textView.layoutIfNeeded()
+      textView.scrollRangeToVisible(range)
       becomeFirstResponder()
     }
 
     /// The note Siri and Apple Intelligence see while you're in the editor.
     public var entityIdentifier: EntityIdentifier? {
-      get { view.appEntityIdentifier }
-      set { view.appEntityIdentifier = newValue }
+      get { textView.appEntityIdentifier }
+      set { textView.appEntityIdentifier = newValue }
     }
 
     private func becomeFirstResponder() {
-      if !view.becomeFirstResponder() {
+      if !textView.becomeFirstResponder() {
         inputError = String(localized: "Tap the file to resume writing.", bundle: .module)
       }
     }
@@ -217,7 +216,7 @@
       }
       // The text view's selection setter keeps the caret out of hidden front matter.
       if textView.selectedRange.location < start { textView.selectedRange = textView.selectedRange }
-      view.resetReadingAnchor(to: start)
+      textView.resetReadingAnchor(to: start)
       textView.setNeedsLayout()
     }
 
@@ -233,9 +232,9 @@
       isEditing = true
     }
 
-    public func textViewDidEndEditing(_ textView: UITextView) {
+    public func textViewDidEndEditing(_: UITextView) {
       isEditing = false
-      view.cancelEditingCaretReveal()
+      textView.cancelEditingCaretReveal()
       synchronizeText()
     }
 
@@ -262,12 +261,17 @@
       }
     }
 
-    func indent(outdent: Bool) throws {
-      guard canFormat else { throw Edit.Failure.compositionActive }
-      if let edit = try Typing.indent(
-        in: text, selection: textView.selectedRange, outdent: outdent)
-      {
-        try apply(edit, generation: generation)
+    func indent(outdent: Bool) {
+      do {
+        guard canFormat else { throw Edit.Failure.compositionActive }
+        if let edit = try Typing.indent(
+          in: text, selection: textView.selectedRange, outdent: outdent)
+        {
+          try apply(edit, generation: generation)
+        }
+      } catch {
+        inputError = String(
+          localized: "Finish the current text edit, then select the lines again.", bundle: .module)
       }
     }
 
@@ -303,28 +307,28 @@
       textView.findInteraction?.presentFindNavigator(showingReplace: replacing)
     }
 
-    public func textViewDidChangeSelection(_ textView: UITextView) {
+    public func textViewDidChangeSelection(_: UITextView) {
       // Re-setting runs the selection setter's clamp on selections UIKit makes itself.
       if textView.selectedRange.location < min(contentStart, textView.text.utf16.count) {
         textView.selectedRange = textView.selectedRange
       }
       isComposing = textView.markedTextRange != nil
-      if isComposing { view.cancelEditingCaretReveal() }
+      if isComposing { textView.cancelEditingCaretReveal() }
       commentHighlights.selectionDidChange()
     }
 
-    public func textViewWritingToolsWillBegin(_ textView: UITextView) {
+    public func textViewWritingToolsWillBegin(_: UITextView) {
       synchronizeText()
       commentHighlights.suspendForWritingTools()
       isWritingToolsActive = true
-      view.cancelEditingCaretReveal()
+      textView.cancelEditingCaretReveal()
     }
 
-    public func textViewWritingToolsDidEnd(_ textView: UITextView) {
+    public func textViewWritingToolsDidEnd(_: UITextView) {
       isWritingToolsActive = false
       commentHighlights.resumeAfterWritingTools()
       synchronizeText()
-      view.rememberReadingAnchor()
+      textView.rememberReadingAnchor()
     }
 
     public func textView(
@@ -344,11 +348,11 @@
     }
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
-      view.rememberReadingAnchor()
+      textView.rememberReadingAnchor()
     }
 
     public func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-      view.cancelEditingCaretReveal()
+      textView.cancelEditingCaretReveal()
     }
 
     public func setCommentHighlights(
@@ -390,8 +394,8 @@
       guard isSettled, !isHighlighting else { return }
       isHighlighting = true
       defer { isHighlighting = false }
-      let anchor = view.beginAttributeUpdate()
-      defer { view.endAttributeUpdate(anchor) }
+      let anchor = textView.beginAttributeUpdate()
+      defer { textView.endAttributeUpdate(anchor) }
       let storage: NSTextStorage
       if case .caret? = anchor {
         storage = NSTextStorage(string: textView.text)
@@ -500,7 +504,7 @@
         text = textView.text
         updateHiddenFrontMatter()
         generation += 1
-        view.requestEditingCaretReveal()
+        textView.requestEditingCaretReveal()
         onEdit?(text, generation)
       }
       highlight()
@@ -714,18 +718,8 @@
       }
     }
 
-    @objc private func increaseIndent() { changeIndent(outdent: false) }
-    @objc private func decreaseIndent() { changeIndent(outdent: true) }
-
-    private func changeIndent(outdent: Bool) {
-      guard let editor else { return }
-      do {
-        try editor.indent(outdent: outdent)
-      } catch {
-        editor.inputError = String(
-          localized: "Finish the current text edit, then select the lines again.", bundle: .module)
-      }
-    }
+    @objc private func increaseIndent() { editor?.indent(outdent: false) }
+    @objc private func decreaseIndent() { editor?.indent(outdent: true) }
 
     func rememberReadingAnchor() {
       guard !writingToolsOwnsScrolling, !restoringAnchor, bounds.width > 0,

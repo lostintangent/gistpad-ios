@@ -18,6 +18,7 @@
     private var paintedGeneration: UInt64?
     private var suspendsForFind = false
     private var suspendsForWritingTools = false
+    private var isSuspended: Bool { suspendsForFind || suspendsForWritingTools }
     private var updatingSelection = false
     private var pendingTap: [Int64]?
     private var pendingFindUpdate: Task<Void, Never>?
@@ -74,7 +75,7 @@
       verifiedHighlights = highlights
       publish(Set(highlights.flatMap(\.threadIDs)))
       updateAccessibility()
-      guard !highlights.isEmpty, !suspendsForFind, !suspendsForWritingTools else {
+      guard !highlights.isEmpty, !isSuspended else {
         backgroundLayer.sublayers = nil
         return
       }
@@ -161,9 +162,7 @@
       defer { CATransaction.commit() }
       guard paintedGeneration == editor.generation, editor.isSettled else { return }
       backgroundLayer.sublayers = nil
-      guard let manager = editor.textView.textLayoutManager,
-        !suspendsForFind, !suspendsForWritingTools
-      else { return }
+      guard let manager = editor.textView.textLayoutManager, !isSuspended else { return }
       let inset = editor.textView.textContainerInset
       var selectedFrames: [CGRect] = []
       var selectedFill: UIColor?
@@ -232,7 +231,7 @@
     }
 
     private func addAction(ranges: [NSRange]) -> UIAction? {
-      guard actions != nil, !suspendsForFind, !suspendsForWritingTools,
+      guard actions != nil, !isSuspended,
         ranges.count == 1, let range = ranges.first, editor.isSettled,
         let quote = try? Edit.text(in: editor.text, at: range),
         CommentQuoteMatcher.isEligibleSelection(quote)
@@ -256,7 +255,7 @@
     }
 
     private func threadIDs(intersecting ranges: [NSRange]) -> [Int64] {
-      guard !suspendsForFind, !suspendsForWritingTools, editor.isSettled else { return [] }
+      guard !isSuspended, editor.isSettled else { return [] }
       var seen: Set<Int64> = []
       return verifiedHighlights.filter { highlight in
         ranges.contains { range in
@@ -270,8 +269,7 @@
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch)
       -> Bool
     {
-      guard !editor.textView.isFirstResponder, actions != nil,
-        !suspendsForFind, !suspendsForWritingTools, editor.isSettled
+      guard !editor.textView.isFirstResponder, actions != nil, !isSuspended, editor.isSettled
       else { return false }
       let ids = threadIDs(at: touch.location(in: editor.textView))
       pendingTap = ids.isEmpty ? nil : ids
@@ -331,7 +329,7 @@
 
     @objc private func selectTappedWord() {
       let view = editor.textView
-      guard !view.isFirstResponder, editor.isSettled, !suspendsForFind, !suspendsForWritingTools,
+      guard !view.isFirstResponder, editor.isSettled, !isSuspended,
         let position = view.closestPosition(to: selectionTap.location(in: view)),
         let caret = view.textRange(from: position, to: position)
       else { return }
@@ -342,8 +340,7 @@
     }
 
     func scrollSelectedCommentIfNeeded() {
-      guard needsSelectedScroll, !suspendsForFind, !suspendsForWritingTools,
-        editor.textView.window != nil,
+      guard needsSelectedScroll, !isSuspended, editor.textView.window != nil,
         !editor.textView.isHidden, scrollTask == nil,
         editor.textView.bounds.width > 0, editor.textView.bounds.height > 0
       else { return }
@@ -351,8 +348,7 @@
         await Task.yield()
         guard !Task.isCancelled, let self else { return }
         defer { if !Task.isCancelled { self.scrollTask = nil } }
-        guard self.needsSelectedScroll,
-          !self.suspendsForFind, !self.suspendsForWritingTools, self.editor.isSettled,
+        guard self.needsSelectedScroll, !self.isSuspended, self.editor.isSettled,
           let selectedID = self.configuration.selectedThreadID,
           let highlight = self.verifiedHighlights.first(where: {
             $0.threadIDs.contains(selectedID)
@@ -360,7 +356,7 @@
           self.editor.textView.window != nil, !self.editor.textView.isHidden
         else { return }
         self.needsSelectedScroll = false
-        self.editor.view.revealPassage(highlight.range)
+        self.editor.textView.revealPassage(highlight.range)
       }
     }
 
@@ -441,8 +437,8 @@
     }
 
     private func updateAccessibility() {
-      let view = editor.view
-      guard !suspendsForFind, !suspendsForWritingTools,
+      let view = editor.textView
+      guard !isSuspended,
         let selectedID = configuration.selectedThreadID,
         verifiedHighlights.contains(where: { $0.threadIDs.contains(selectedID) }),
         let quote = configuration.quotes.first(where: { $0.threadID == selectedID })?.quote

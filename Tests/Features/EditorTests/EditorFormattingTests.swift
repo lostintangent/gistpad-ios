@@ -136,7 +136,7 @@
         let original = editor.text
         editor.textView.selectedRange = NSRange(location: 0, length: original.utf16.count)
         editor.textView.undoManager?.removeAllActions()
-        try editor.indent(outdent: false)
+        editor.indent(outdent: false)
         #expect(editor.text == "  - 日本語\n  - next")
         #expect(
           editor.textView.selectedRange == NSRange(location: 2, length: original.utf16.count + 2))
@@ -170,7 +170,7 @@
         let swipe = try #require(
           editor.textView.gestureRecognizers?.compactMap { $0 as? UISwipeGestureRecognizer }.first)
         #expect(
-          editor.view.gestureRecognizer(
+          editor.textView.gestureRecognizer(
             swipe, shouldRequireFailureOf: UIScreenEdgePanGestureRecognizer()))
       }
 
