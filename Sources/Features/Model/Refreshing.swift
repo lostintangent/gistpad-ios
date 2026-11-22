@@ -6,19 +6,6 @@ import Store
 // The list and the open note read GitHub as they appear, at most every five minutes, so the
 // web's edits show up without a pull.
 
-extension GitHubProblem {
-  /// The problem a failed GitHub read shows, or nil when a newer request superseded it.
-  static func reading(_ error: any Error) -> GitHubProblem? {
-    if error is CancellationError || (error as? URLError)?.code == .cancelled
-      || (error as? DraftError) == .changed
-      || (error as? ChangeError) == .staleReview
-    {
-      return nil
-    }
-    return GitHubProblem(error)
-  }
-}
-
 extension GistPadModel {
   public var remoteRefreshStatus: GitHubStatusState {
     if let problem {
@@ -98,13 +85,12 @@ extension GistPadModel {
       refreshedAt = nil
       // A request that only timed out or lost its connection keeps your gists on screen without
       // a problem, and the next refresh tries again. With nothing cached, the failure explains itself.
-      let wasDropped = (error as? URLError).map {
-        [URLError.Code.timedOut, .networkConnectionLost].contains($0.code)
-      } ?? false
-      guard let problem = GitHubProblem.reading(error), !(wasDropped && gistCache != nil)
+      let code = (error as? URLError)?.code
+      let wasDropped = code == .timedOut || code == .networkConnectionLost
+      guard !(error is CancellationError || code == .cancelled), !(wasDropped && gistCache != nil)
       else { return }
       report(error, operation: "refresh")
-      self.problem = problem
+      problem = GitHubProblem(error)
     }
   }
 }
@@ -167,8 +153,7 @@ extension GistFileEditor {
     } catch {
       logger.error(
         "Remote inspection failed: \(String(reflecting: type(of: error)), privacy: .public)")
-      let problem = GitHubProblem.reading(error)
-      remoteInspectionProblem = problem == .reconnect ? problem : nil
+      remoteInspectionProblem = GitHubProblem(error) == .reconnect ? .reconnect : nil
     }
   }
 }

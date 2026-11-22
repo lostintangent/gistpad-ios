@@ -98,12 +98,9 @@ extension GistFileEditor {
       if wasEditing { editor.focus() }
     }
     guard await waitForLocalSave() else { throw ChangeError.notSaved }
-    guard editor.generation == expectedGeneration, editor.isSettled
-    else { throw DraftError.changed }
+    guard editor.generation == expectedGeneration, editor.isSettled else { throw DraftError.changed }
     file.update(try await commit())
-    if changed {
-      try editor.apply(edit, generation: expectedGeneration)
-    }
+    if changed { try editor.apply(edit, generation: expectedGeneration) }
     guard await waitForLocalSave() else { throw ChangeError.notSaved }
   }
 
