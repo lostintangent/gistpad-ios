@@ -63,7 +63,10 @@ public struct SettingsSheet<Appearance: View>: View {
             if isSigningOut {
               ProgressView(String(localized: "Signing Out", bundle: .module))
             } else {
-              Button(String(localized: "Sign Out", bundle: .module), role: .destructive) { confirmingSignOut = true }
+              Button(
+                String(localized: "Sign Out", bundle: .module), systemImage: "rectangle.portrait.and.arrow.forward",
+                role: .destructive
+              ) { confirmingSignOut = true }
                 .accessibilityIdentifier("settings-sign-out")
             }
           } else {
