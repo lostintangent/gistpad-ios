@@ -31,7 +31,7 @@ extension GistPadModel {
     await publishDrafts()
     await refreshOnReturn()
     updateCalendar()
-    await activeEditor?.inspectRemoteChanges()
+    await activeEditor?.refresh()
   }
 
   /// Leaving the app saves every open file on this iPhone first, then publishes them one by one

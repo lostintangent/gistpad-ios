@@ -17,13 +17,13 @@ public final class GistFileEditor {
   var savedGeneration: UInt64 = 0
   /// Typing waits while a change you didn't type goes into the note.
   var isLocked = false
-  public internal(set) var remoteInspectionProblem: GitHubProblem?
+  public internal(set) var refreshProblem: GitHubProblem?
   public var mode: FileMode = .preview
   @ObservationIgnored let model: GistPadModel
   @ObservationIgnored var persistence: Task<Bool, Never>?
   @ObservationIgnored var autosaveTask: Task<Void, Never>?
   @ObservationIgnored var scheduledAutosave: AutosaveRequest?
-  @ObservationIgnored var isInspectingRemote = false
+  @ObservationIgnored var isRefreshing = false
   /// When this note last read GitHub, so opening it again reads only once that's stale.
   @ObservationIgnored var refreshedAt: Date?
   @ObservationIgnored let logger = Logger(

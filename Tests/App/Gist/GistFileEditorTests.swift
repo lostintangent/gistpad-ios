@@ -74,7 +74,7 @@ struct GistFileEditorTests {
     editor.selectedRange = NSRange(location: 4, length: 3)
     #expect(await fileEditor.waitForLocalSave())
     fixture.server.edit("a", files: ["README.md": "Changed in the web app"])
-    await fileEditor.inspectRemoteChanges()
+    await fileEditor.refresh()
     #expect(fileEditor.editor.text == "Base, kept here")
     #expect(editor.selectedRange == NSRange(location: 4, length: 3))
     #expect(fileEditor.status == .conflict)
@@ -126,7 +126,7 @@ struct GistFileEditorTests {
     edit(fileEditor, to: "Mine")
     #expect(await fileEditor.waitForLocalSave())
     fixture.server.edit("a", files: ["README.md": "From GitHub 日本語"])
-    await fileEditor.inspectRemoteChanges()
+    await fileEditor.refresh()
     let undo = try #require(fileEditor.editor.textView.undoManager)
     undo.removeAllActions()
     let generation = fileEditor.editor.generation

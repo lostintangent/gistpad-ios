@@ -46,7 +46,7 @@ GistFileEditor                    a file you've opened
 | `Opening.swift` | `open(rowID:)` and `open(_:)`, the file in the detail column, and the last opened file. |
 | `Saving.swift` | Each keystroke saved on this iPhone, and `apply` for edits from outside the editor. |
 | `Publishing.swift` | Autosave, `publish`, `returnToApp` and `leaveApp`. |
-| `Refreshing.swift` | `refresh` for the list and `inspectRemoteChanges` for the open file. |
+| `Refreshing.swift` | `refresh`, for the list and for the open file. |
 | `Conflicts.swift` | `resolveConflict`. |
 | `DailyNotes.swift` | `today`, and moving Today to a new day. |
 | `Changes.swift` | Changes that apply right away: preferences, star, archive, rename, add a file, delete and sign out. |

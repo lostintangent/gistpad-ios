@@ -74,7 +74,7 @@ struct RootView: View {
   private var library: some View {
     LibraryView(
       state: model.state, actions: libraryActions, isSidebar: horizontalSizeClass == .regular,
-      isSignedOut: isSignedOut, isLoading: isLoadingLibrary, status: model.remoteRefreshStatus,
+      isSignedOut: isSignedOut, isLoading: isLoadingLibrary, status: model.refreshStatus,
       expandedSections: librarySections, isPinnedExpanded: pinnedExpanded
     )
     .id(model.account?.id)
@@ -344,15 +344,15 @@ struct RootView: View {
       preview(fileEditor)
     }
     .toolbar {
-      if fileEditor.remoteInspectionStatus != .idle {
+      if fileEditor.refreshStatus != .idle {
         ToolbarSpacer(.flexible, placement: .bottomBar)
         ToolbarItem(placement: .bottomBar) {
           GitHubStatusControl(
-            status: fileEditor.remoteInspectionStatus
+            status: fileEditor.refreshStatus
           ) {
             Task {
-              if fileEditor.remoteInspectionProblem == .reconnect { await model.reconnect() }
-              await fileEditor.inspectRemoteChanges()
+              if fileEditor.refreshProblem == .reconnect { await model.reconnect() }
+              await fileEditor.refresh()
             }
           }
           .id(fileEditor.editor.id)
@@ -360,7 +360,7 @@ struct RootView: View {
         .sharedBackgroundVisibility(.hidden)
       }
     }
-    .task(id: fileEditor.editor.id) { await fileEditor.inspectRemoteChanges() }
+    .task(id: fileEditor.editor.id) { await fileEditor.refresh() }
     .task(id: comments.tracking(fileEditor)) { await comments.track(fileEditor) }
     .onChange(of: LayoutPreferences.allowsSplit(availableWidth: availableWidth)) { _, allows in
       if !allows, layout.preferredMode == .split, fileEditor.editor.isEditing {

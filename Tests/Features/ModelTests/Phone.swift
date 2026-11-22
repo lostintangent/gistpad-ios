@@ -168,7 +168,7 @@ final class Phone {
 
   /// The list's GitHub status: a problem's heading, "Checking" while it refreshes, or nil.
   var status: String? {
-    switch model.remoteRefreshStatus {
+    switch model.refreshStatus {
     case .idle: nil
     case .checking: "Checking"
     case .problem(_, let heading, _): heading

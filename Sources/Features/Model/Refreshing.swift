@@ -7,7 +7,7 @@ import Store
 // web's edits show up without a pull.
 
 extension GistPadModel {
-  public var remoteRefreshStatus: GitHubStatus {
+  public var refreshStatus: GitHubStatus {
     if let problem {
       return .problem(
         problem, heading: String(localized: "Couldn't check for changes"),
@@ -96,8 +96,8 @@ extension GistPadModel {
 }
 
 extension GistFileEditor {
-  public var remoteInspectionStatus: GitHubStatus {
-    guard let problem = remoteInspectionProblem else { return .idle }
+  public var refreshStatus: GitHubStatus {
+    guard let problem = refreshProblem else { return .idle }
     switch status {
     case .failed, .conflict:
       return .idle
@@ -108,13 +108,13 @@ extension GistFileEditor {
 
   /// Reads this note from GitHub as it opens or the app comes back. A note you haven't typed in
   /// takes GitHub's newer text, and one with edits shows the conflict.
-  public func inspectRemoteChanges() async {
-    guard GistPadModel.isStale(refreshedAt), !isInspectingRemote, !isPublishing, canEdit,
+  public func refresh() async {
+    guard GistPadModel.isStale(refreshedAt), !isRefreshing, !isPublishing, canEdit,
       !file.isDeletedOnGitHub, let gistID = file.gistID, file.draft?.conflict == nil,
       model.account?.id == file.accountID
     else { return }
-    isInspectingRemote = true
-    defer { isInspectingRemote = false }
+    isRefreshing = true
+    defer { isRefreshing = false }
     guard await waitForLocalSave() else { return }
     let generation = editor.generation
     let read = file.nextDraft
@@ -148,12 +148,12 @@ extension GistFileEditor {
           expectedGeneration: generation
         ) { read.adopting(GitHubVersion(text: content, revision: latest.gist.revision)) }
       }
-      remoteInspectionProblem = nil
+      refreshProblem = nil
       refreshedAt = .now
     } catch {
       logger.error(
-        "Remote inspection failed: \(String(reflecting: type(of: error)), privacy: .public)")
-      remoteInspectionProblem = GitHubProblem(error) == .reconnect ? .reconnect : nil
+        "Refresh failed: \(String(reflecting: type(of: error)), privacy: .public)")
+      refreshProblem = GitHubProblem(error) == .reconnect ? .reconnect : nil
     }
   }
 }

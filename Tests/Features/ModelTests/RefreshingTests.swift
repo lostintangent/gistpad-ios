@@ -33,7 +33,7 @@ struct RefreshingTests {
     phone.github.addGist(id: "c", description: "Third", files: ["README.md": "Three"])
     try await phone.open(.gist(id: "c"))
     #expect(try await phone.open(.gist(id: "a")) === a)
-    await a.inspectRemoteChanges()
+    await a.refresh()
     #expect(phone.onScreen == "One, from the web")
 
     // A refresh that fails keeps what I have. A dropped connection stays quiet.
