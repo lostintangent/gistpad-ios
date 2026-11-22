@@ -5,7 +5,6 @@ import Observation
 import SwiftUI
 import UIKit
 
-@MainActor
 @Observable
 final class IntelligencePresentation {
   var target: Target?
@@ -62,7 +61,6 @@ final class IntelligencePresentation {
     if target.wasEditing { target.editor.focus() }
   }
 
-  @MainActor
   final class Target: Identifiable {
     let editor: Editor
     let title: String

@@ -107,7 +107,7 @@ extension DailyNote {
     }
 }
 
-@MainActor @Observable
+@Observable
 public final class LibraryState {
     public var gists: [GistItem]
     public private(set) var tags: [Tag]

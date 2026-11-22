@@ -38,16 +38,15 @@
     }
 
     /// Settings that would otherwise carry over from the last launch.
-    @MainActor static let defaults: UserDefaults = {
+    static let defaults: UserDefaults = {
       let defaults = UserDefaults(suiteName: "dev.gistpad.fixture")!
       defaults.removePersistentDomain(forName: "dev.gistpad.fixture")
       return defaults
     }()
 
     /// The sheet still to present. The root view clears it once it's up. Today arrives as a link.
-    @MainActor static var pendingSheet = current?.sheet == .today ? nil : current?.sheet
+    static var pendingSheet = current?.sheet == .today ? nil : current?.sheet
 
-    @MainActor
     func model() async throws -> GistPadModel {
       let server = FixtureServer()
       if fixture == .standard || fixture == .offline { try FixtureLibrary.seed(server) }
@@ -78,7 +77,6 @@
       return model
     }
 
-    @MainActor
     func layout() -> LayoutPreferences {
       let layout = LayoutPreferences(defaults: Self.defaults)
       if let mode { layout.select(mode) }

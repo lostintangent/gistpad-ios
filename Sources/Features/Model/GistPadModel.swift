@@ -4,7 +4,7 @@ import OSLog
 import Observation
 import Store
 
-@MainActor @Observable
+@Observable
 public final class GistPadModel {
   public let state = LibraryState()
   public internal(set) var account: GistPadAccount?

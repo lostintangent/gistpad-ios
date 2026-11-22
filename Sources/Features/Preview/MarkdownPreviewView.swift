@@ -105,7 +105,6 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         uiView.stopLoading()
     }
 
-    @MainActor
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, UIScrollViewDelegate {
         fileprivate weak var webView: WKWebView?
         fileprivate var onEvent: @MainActor (PreviewEvent) -> Void
@@ -211,7 +210,6 @@ extension Logger {
     static let preview = Logger(subsystem: "dev.gistpad.GistPad", category: "MarkdownPreview")
 }
 
-@MainActor
 private final class PreviewWebView: WKWebView {
     var onBuildCommentMenu: (() -> UIDeferredMenuElement?)?
 
@@ -271,7 +269,6 @@ private final class PreviewWebView: WKWebView {
     }
 }
 
-@MainActor
 final class PreviewResourceHandler: NSObject, WKURLSchemeHandler {
     static let pageURL = URL(string: "gistpad-preview://bundle/index.html")!
 

@@ -2,7 +2,6 @@ import Foundation
 import FoundationModels
 import OSLog
 
-@MainActor
 package final class OnDeviceModel: IntelligenceModel {
   let model = SystemLanguageModel.default
 

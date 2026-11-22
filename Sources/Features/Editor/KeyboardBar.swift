@@ -3,7 +3,6 @@
 
   /// What the bar's buttons do. Formatting is off while `canFormat` is false, and a missing
   /// image or Intelligence action disables its button.
-  @MainActor
   struct KeyboardBarActions {
     let canFormat: Bool
     let format: @MainActor (Format) -> Void
@@ -18,7 +17,6 @@
 
   /// The glass capsule above the keyboard. Its buttons call the latest actions SwiftUI passed in.
   /// It centers over the editor's column rather than the keyboard, so an open sidebar doesn't push it off the note.
-  @MainActor
   final class KeyboardBar: UIView {
     let buttons = UIStackView()
     let glass: UIVisualEffectView

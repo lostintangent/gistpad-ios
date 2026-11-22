@@ -5,7 +5,6 @@ import OSLog
 import Observation
 import Store
 
-@MainActor
 @Observable
 public final class GistFileEditor {
   public internal(set) var file: GistFile

@@ -75,7 +75,6 @@ public struct GistDetails: Equatable, Sendable {
 }
 
 /// Actions every gist has. Optional members are capabilities only some gists have.
-@MainActor
 public struct GistActions {
     public var reconnect: () -> Void = {}
     public var reviewChanges: () -> Void = {}

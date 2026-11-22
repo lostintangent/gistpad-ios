@@ -4,7 +4,6 @@ import OSLog
 import UIKit
 import WebKit
 
-@MainActor
 final class PreviewCommentHighlights {
     weak var webView: WKWebView?
     private var actions: CommentHighlightActions?
@@ -53,7 +52,7 @@ final class PreviewCommentHighlights {
     func addCommentMenu() -> UIDeferredMenuElement? {
         guard actions != nil, let file, renderedFile == file else { return nil }
         return .uncached { [weak self] completion in
-            Task { @MainActor in
+            Task {
                 guard let self, let webView = self.webView else { return completion([]) }
                 do {
                     let value = try await webView.callAsyncJavaScript(

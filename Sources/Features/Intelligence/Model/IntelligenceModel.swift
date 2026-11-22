@@ -1,6 +1,5 @@
 import Foundation
 
-@MainActor
 package protocol IntelligenceModel {
   /// Why the model can't run right now, or nil when it can. Views that read it stay current.
   var unavailableReason: String? { get }

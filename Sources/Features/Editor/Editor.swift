@@ -7,11 +7,8 @@
   import SwiftUI
   import UIKit
 
-  @MainActor
   @Observable
-  public final class Editor: NSObject, Identifiable, UITextViewDelegate,
-    @MainActor NSTextContentStorageDelegate
-  {
+  public final class Editor: NSObject, Identifiable, UITextViewDelegate, NSTextContentStorageDelegate {
     public let id = UUID()
     public private(set) var text: String
     public private(set) var generation: UInt64
@@ -501,7 +498,7 @@
     }
   }
 
-  final class TextView: UITextView, @MainActor AXCustomContentProvider, UIGestureRecognizerDelegate {
+  final class TextView: UITextView, AXCustomContentProvider, UIGestureRecognizerDelegate {
     var accessibilityCustomContent: [AXCustomContent]! = []
     enum AttributeUpdateAnchor {
       case reading(offset: Int, delta: CGFloat)
@@ -865,7 +862,6 @@
 
   /// Off iOS the editor is just the note's text, so the library's sync runs in Mac tests. Typing
   /// there is `apply`, which counts a generation and reports the edit as a keystroke does on iOS.
-  @MainActor
   @Observable
   public final class Editor: Identifiable {
     public let id = UUID()

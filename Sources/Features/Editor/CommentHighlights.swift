@@ -4,7 +4,6 @@
   import Comments
   import UIKit
 
-  @MainActor
   final class CommentHighlights: NSObject, UIGestureRecognizerDelegate {
     static let annotationKey = NSAttributedString.Key("dev.gistpad.comment.highlight")
     private unowned let editor: Editor
@@ -348,7 +347,7 @@
         !editor.textView.isHidden, scrollTask == nil,
         editor.textView.bounds.width > 0, editor.textView.bounds.height > 0
       else { return }
-      scrollTask = Task { @MainActor [weak self] in
+      scrollTask = Task { [weak self] in
         await Task.yield()
         guard !Task.isCancelled, let self else { return }
         defer { if !Task.isCancelled { self.scrollTask = nil } }
@@ -379,7 +378,7 @@
       let visible = editor.textView.findInteraction?.isFindNavigatorVisible == true
       guard suspendsForFind != visible, pendingFindUpdate == nil
       else { return }
-      pendingFindUpdate = Task { @MainActor [weak self] in
+      pendingFindUpdate = Task { [weak self] in
         await Task.yield()
         guard let self else { return }
         self.pendingFindUpdate = nil
@@ -463,7 +462,7 @@
       guard force || linkedIDs != ids else { return }
       linkedIDs = ids
       publication?.cancel()
-      publication = Task { @MainActor [weak self] in
+      publication = Task { [weak self] in
         guard !Task.isCancelled, let self else { return }
         self.publication = nil
         self.actions?.linked(ids)

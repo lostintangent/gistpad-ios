@@ -8,7 +8,6 @@ import Store
 import UIKit
 import WidgetKit
 
-@MainActor
 extension PlatformBridge {
   private(set) static var shared: PlatformBridge?
 
@@ -38,7 +37,6 @@ extension PlatformBridge {
   }
 }
 
-@MainActor
 final class PlatformBridge: PlatformActions {
   private let model: GistPadModel
   private var refreshTask: Task<Void, Never>?

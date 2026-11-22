@@ -5,7 +5,6 @@
 
   /// The model the app ships, with its account and draft stores, signed in to Store's fixture
   /// GitHub, so tests drive real requests instead of a fake.
-  @MainActor
   struct ModelFixture {
     let server = FixtureServer()
     let accounts: GistPadAccountStore

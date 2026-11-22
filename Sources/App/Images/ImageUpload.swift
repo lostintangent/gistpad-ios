@@ -7,7 +7,6 @@ import SwiftUI
 import Store
 
 /// Adds an image the way gistpad.dev does: upload it to public storage, then insert its Markdown at the cursor.
-@MainActor
 @Observable
 final class ImageUpload {
   struct Failure {

@@ -8,7 +8,6 @@ struct PreviewAppearance: Equatable {
     let boldText: Bool
     let colorScheme: String
 
-    @MainActor
     init(traits: UITraitCollection, boldText: Bool) {
         increasedContrast = traits.accessibilityContrast == .high
         self.boldText = boldText

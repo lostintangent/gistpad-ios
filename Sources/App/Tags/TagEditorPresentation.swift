@@ -10,7 +10,6 @@ struct TagTarget: Identifiable {
   let selected: Set<String>
   let canEdit: Bool
 
-  @MainActor
   init(_ fileEditor: GistFileEditor, gistID: String, model: GistPadModel) {
     accountID = fileEditor.file.accountID
     self.gistID = gistID

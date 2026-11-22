@@ -4,7 +4,6 @@
   import OSLog
   import UIKit
 
-  @MainActor
   @Observable
   final class IntelligenceState {
     let editor: Editor

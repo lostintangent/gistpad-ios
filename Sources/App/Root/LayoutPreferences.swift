@@ -4,7 +4,6 @@ import Observation
 
 /// Layout choices kept on this device. `@AppStorage` can't hold the per-account section sets in
 /// their saved shape, so one observable model owns these keys and the rules for the file mode.
-@MainActor
 @Observable
 final class LayoutPreferences {
   private(set) var preferredMode: FileMode

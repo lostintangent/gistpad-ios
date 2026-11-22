@@ -3,7 +3,6 @@ import UIKit
 
 /// The background time a publish gets after you leave the app. When the system takes it back,
 /// `onExpiration` cancels the publish and the draft stays on this iPhone.
-@MainActor
 final class BackgroundLease {
   private var identifier = UIBackgroundTaskIdentifier.invalid
   var onExpiration: (() -> Void)?

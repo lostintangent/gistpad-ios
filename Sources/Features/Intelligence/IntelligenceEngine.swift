@@ -4,7 +4,6 @@ import OSLog
 
 let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 
-@MainActor
 package final class IntelligenceEngine {
   let backend: any IntelligenceModel
   // Platform gap: GenerationOptions has no repetition penalty or stop sequence, so a runaway answer

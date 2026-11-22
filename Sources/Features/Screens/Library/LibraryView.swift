@@ -39,7 +39,6 @@ extension View {
     }
 }
 
-@MainActor
 public struct LibraryActions {
     public var refresh: () async -> Void = {}
     public var create: @MainActor () -> Void = {}

@@ -6,7 +6,6 @@ import Observation
 import SwiftUI
 
 /// Comments for the open gist: one in-memory `CommentsModel`, dropped when another gist opens.
-@MainActor
 @Observable
 final class CommentsPresentation {
   struct Scope: Hashable {
