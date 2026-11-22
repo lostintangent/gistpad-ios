@@ -12,12 +12,16 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 
 ## Words
 
-- A **gist** is the whole thing on GitHub. A **file** is one file in it. A **daily note** is one day's file, and **today's note** is today's. Never call a gist a "note" or "source" on screen.
-- **Publish** means sending to GitHub. Saving on the phone is never announced.
+- A **gist** is the whole thing on GitHub. A **file** is one file in it. A **daily note** is one day's file, and **today's note** is today's. Never call a gist a "note" or "source" on screen. Siri's notes actions are the one exception, because "note" is the word you said to Siri.
+- A **draft** is your unpublished text on this iPhone. **Publish** means sending to GitHub. Saving on the phone is never announced. **Autosave** is the web's name for publishing as you write, and it's the only place "save" means GitHub.
+- GitHub reads are a **check for changes**, never "update" or "sync".
+- **Show in File** (`text.viewfinder`) is the one name for jumping to a passage, from a comment or an Intelligence citation.
+- Something that waits for GitHub says **You can [verb] after this gist publishes.**
+- A busy editor says **Finish typing or wait for Writing Tools, then try again.** Text that moved under a selection says **This file changed. Select the text again.**
 - Inserted pictures are **images**, never "photos".
 - Recovery buttons say **Try Again**.
 - Every sign-in button says **Sign in with GitHub**, as text with no mark, cased like Apple's Sign in with Apple.
-- `ContentUnavailableView` titles and alert titles are title case. Messages are sentence case and end with a period.
+- Buttons, `ContentUnavailableView` titles and alert titles are title case. An alert title that asks a question is a sentence, like **Discard tag changes?** Messages are sentence case, end with a period and use contractions, never "cannot".
 - Failures use `exclamationmark.circle`.
 - Menu items and buttons never end with "…", even when they open a dialog or sheet. Progress text like "Answering…" keeps it.
 - Authored titles and emoji appear exactly as written.
@@ -68,7 +72,7 @@ Swipe trailing for **Delete** and **Archive** or **Unarchive**, and leading for 
 
 Search is one `.searchable(placement: .toolbar)` on the library list, matching titles. In compact width it minimizes to a magnifier that expands in place. In the Open sidebar it's a full field at the bottom of the column, because a minimized button lands past the sidebar's edge. Tags filter separately. While tags are selected, a strip above Pinned shows them as chips, the matching count in secondary ("3 gists") and an `xmark.circle.fill` **Clear Tag Filter** button. No matches shows `ContentUnavailableView.search`.
 
-The system **Edit** button leads the top of the Library in both layouts, giving each gist you own a red minus that reveals its Delete. The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and Search and **Filter by tags** at the bottom, like Notes. The filter keeps the outline `tag`, hides while searching, is disabled without tags and turns system blue while filtering. When there's a problem, **GitHub needs attention** sits between Search and the filter in both layouts. In the Open sidebar, New Gist and Today sit in the rail, so Edit and Settings are the only buttons at the top. Signed out, Settings is the only toolbar button. The library has no More menu.
+The system **Edit** button leads the top of the Library in both layouts, giving each gist you own a red minus that reveals its Delete. The compact toolbar has **New Gist**, **Today** and **Settings** at the top, and Search and **Filter by Tags** at the bottom, like Notes. The filter keeps the outline `tag`, hides while searching, is disabled without tags and turns system blue while filtering. When there's a problem, **GitHub needs attention** sits between Search and the filter in both layouts. In the Open sidebar, New Gist and Today sit in the rail, so Edit and Settings are the only buttons at the top. Signed out, Settings is the only toolbar button. The library has no More menu.
 
 | State | Title, message and action |
 | --- | --- |
@@ -89,7 +93,7 @@ When one of these explains a problem, **GitHub needs attention** stays out of th
 
 **Mode.** In your own gist, a segmented, icon-only picker: Edit `square.and.pencil`, Split `rectangle.split.2x1` (only when it fits) and Preview `eye`. Someone else's gist shows only Preview, with no picker.
 
-**Status.** Healthy editing shows nothing, and there's no Publish button. A conflict or a lapsed sign-in puts **GitHub needs attention** (`exclamationmark`) in the bar, and it opens Review Changes or reconnects. When a check for updates fails, the same control sits at the bottom and opens a popover with the reason and **Try Again** or **Reconnect GitHub**. No spinner, toast or save pill. [sync.md](sync.md#what-you-see) says what each means.
+**Status.** Healthy editing shows nothing, and there's no Publish button. A conflict or a lapsed sign-in puts **GitHub needs attention** (`exclamationmark`) in the bar, and it opens Review Changes or reconnects. When a check for changes fails, the same control sits at the bottom and opens a popover headed "Couldn't check for changes", with the reason and **Try Again** or **Reconnect GitHub**. No spinner, toast or save pill. [sync.md](sync.md#what-you-see) says what each means.
 
 **More**, in native sections:
 
@@ -102,9 +106,9 @@ A daily note leaves out everything that acts on the gist: Pin, Star, Rename Gist
 
 **Delete.** Title **Delete “[title]”?** Message: **This deletes the gist from this iPhone and GitHub, including changes that haven't been published. This can't be undone.** A daily note is titled by its day, **Delete “Friday, Nov 6”?**, and says **the daily note** instead of the gist.
 
-**Review Changes.** A conflict opens a sheet with Changes, My Draft and GitHub tabs. It says **Your draft is saved on this iPhone.** and **Both versions changed the same passage. Choose a version, or return to your draft to combine the changes yourself.** Changes labels its sides **On this iPhone** and **On GitHub**, with `+` and `-` and sideways scrolling. **Keep Mine** publishes yours. **Use GitHub's** confirms with **Replace your local draft with the GitHub version?** / "Replace your text with GitHub's version. You can undo this."
+**Review Changes.** A conflict opens a sheet with Changes, My Draft and GitHub tabs. It says **Your draft is saved on this iPhone.** and **Both versions changed the same passage. Choose a version, or return to your draft to combine the changes yourself.** Changes labels its sides **My Draft** and **GitHub**, like the tabs, with `+` and `-` and sideways scrolling. **Keep Mine** publishes yours. **Use GitHub's** confirms with **Replace your draft with GitHub's version?** / "You can undo this."
 
-**Local save failure.** "Your latest changes couldn't be saved on this iPhone. Keep the editor open and retry the local save."
+**Local save failure.** "Your latest changes couldn't be saved on this iPhone. Keep this file open and try again."
 
 **Keyboard bar.** One floating `UIGlassEffect` capsule above the keyboard:
 
@@ -117,14 +121,13 @@ A daily note leaves out everything that acts on the gist: Pin, Star, Rename Gist
 
 ## Tags and Settings
 
-The tag editor and filter are one family: searchable sheets at medium and large (large at accessibility sizes) with inline titles. The editor, **Tags**, has a Close that asks **Discard tag changes?** when there are edits, a checkmark Save, and Search and **New Tag** at the bottom. **Edit Tag** (`pencil`) lives in swipe and context menus, and its swipe is icon-only like the gist list's. The tag form is **New Tag** or **Edit Tag**, with Tag name, Color, Use Default Color, a preview and **Delete Tag**, and saves with its checkmark. **Filter by tags** shows each tag's gist count in secondary before its check, whose space is always reserved, and **Clear tag filters**. Picker rows show a swatch, the name in `label` and a neutral check, never a tinted row.
+The tag editor and filter are one family: searchable sheets at medium and large (large at accessibility sizes) with inline titles. The editor, **Tags**, has a Close that asks **Discard tag changes?** when there are edits, a checkmark Save, and Search and **New Tag** at the bottom. **Edit Tag** (`pencil`) lives in swipe and context menus, and its swipe is icon-only like the gist list's. The tag form is **New Tag** or **Edit Tag**, with Tag name, Color, Use Default Color, a preview and **Delete Tag**, and saves with its checkmark. **Filter by Tags** shows each tag's gist count in secondary before its check, whose space is always reserved, and **Clear Tag Filter**, the same words as the strip's button. Picker rows show a swatch, the name in `label` and a neutral check, never a tinted row.
 
 Settings is a small Form:
 
-- **Account.** Signed out shows **Connect GitHub**, "Sign in to open your GitHub gists, daily notes and saved tags." and **Sign in with GitHub**.
+- **Account.** Signed in shows your avatar, name and `@login`, with **Sign Out** right under it as a destructive row, confirmed by **Sign Out?** There's no account switching: sign out, then sign in. Signed out shows **Connect GitHub**, "Sign in to open your GitHub gists, daily notes and saved tags." and **Sign in with GitHub**.
 - **Writing.** Autosave While Writing, Check Spelling and Show Front Matter, with no footers.
 - **Appearance.** Accent Color.
-- **Switch GitHub Account**, then **Sign Out**, which confirms with **Sign Out?**
 
 ## Color and type
 
@@ -186,7 +189,7 @@ No page-wide sideways scrolling, tap flash or hover-only controls.
 
 ## Apple Intelligence
 
-A medium and large sheet opens from the keyboard bar or **More → Intelligence**, with an **Ask**, **Edit** and **Review** segmented control. Ask prompts "Ask about this file", Edit "What would you like to change?" and Review says "Find errors and unclear wording." One button named for the action becomes **Stop** while it runs, over a row naming the step with a spinner, like "Reading part 2 of 3…". Ask answers with citations and **Show in File**. Edit shows each change as Before and After, with added words semibold and underlined and removed words secondary and struck through, then one **Apply Edit**. Only task changes get a headline, like "Mark this task complete." Review lists comments. A read-only gist says "This gist is read-only. You can ask and review, but not apply changes." An unsupported device says "This device doesn't support Apple Intelligence." Failures show in the sheet with `exclamationmark.circle`.
+A medium and large sheet opens from the keyboard bar or **More → Intelligence**, with an **Ask**, **Edit** and **Review** segmented control. Ask prompts "Ask about this file", Edit "What would you like to change?" and Review says "Find errors and unclear wording." One button named for the action becomes **Stop** while it runs, over a row naming the step with a spinner, like "Reading part 2 of 3…". Ask answers with citations and **Show in File**. Edit shows each change as Before and After, with added words semibold and underlined and removed words secondary and struck through, then one **Apply Edit**. With nothing to change it says "No changes needed." Only task changes get a headline, like "Mark this task complete." Review lists comments. A read-only gist says "This gist is read-only. You can ask and review, but not apply changes." An unsupported device says "This device doesn't support Apple Intelligence." Failures show in the sheet with `exclamationmark.circle`.
 
 ## Comments
 
@@ -194,11 +197,11 @@ Comments belong to published gists, so daily notes and unpublished gists have no
 
 In compact width, Comments is a sheet at medium and large (large at accessibility sizes), and you can keep using the gist behind it at medium. In regular width it's a trailing inspector, 320 pt ideal, and the Library sidebar steps aside until it closes. The inline title is **Comments**.
 
-Threads show newest first. Each comment has an avatar, a semibold author, a relative date and a selectable Markdown body with system links. Replies are disclosures indented 12 pt. The selected thread gets a 12-pt rounded tertiary surface and scrolls into view. **Reply**, **Show Passage**, **Show Full Quote** and **Show Less** are borderless secondary buttons with 44-pt targets. Your comments offer Edit and Delete, which confirms with **Delete [author]'s comment from GitHub?** / **Delete Comment**.
+Threads show newest first. Each comment has an avatar, a semibold author, a relative date and a selectable Markdown body with system links. Replies are disclosures indented 12 pt. The selected thread gets a 12-pt rounded tertiary surface and scrolls into view. **Reply**, **Show in File**, **Show Full Quote** and **Show Less** are borderless secondary buttons with 44-pt targets. A quote that can't be found says "Not found in this file". The composer's clear button reads **Cancel Reply**, **Remove Quote** or **Cancel Editing**. Your comments offer Edit and Delete, which confirms with **Delete [author]'s comment from GitHub?** / **Delete Comment**.
 
 The composer sits in the bottom safe-area bar, like Messages: a growing interactive glass field with 22-pt corners and the reply or quote context inside it, beside a circular **Post** button. Post is `arrow.up`, `.glassProminent` in system blue, large, with Command-Return. The thread's bottom scroll edge is soft, so the field and Post float over the thread with no band or divider.
 
-States: "Loading comments" shows only on a first load with nothing cached. Reopening Comments shows the loaded thread straight away and refreshes quietly. Failures say "Comments couldn't be loaded" or "Couldn't reach GitHub. Check your connection and try again." with Try Again. An empty conversation is just the composer, with no message.
+States: "Loading comments" shows only on a first load with nothing cached. Reopening Comments shows the loaded thread straight away and refreshes quietly. Failures say "Comments couldn't be loaded" or "Couldn't reach GitHub. Check your connection and try again." with Try Again. A post or edit that doesn't go through says "Your comment couldn't be posted.", and a delete "Your comment couldn't be deleted.", each followed by "Check your connection and try again." An empty conversation is just the composer, with no message.
 
 In the gist, a commented passage gets a 50% accent highlight and no underline. The highlight stays put while you type. Selected text offers **Add Comment** in the edit menu. Tapping a highlight, or **View Comment**, opens its thread.
 
