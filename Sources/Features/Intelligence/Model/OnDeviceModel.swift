@@ -46,13 +46,13 @@ package final class OnDeviceModel: IntelligenceModel {
     pass: ModelPass,
     _ operation: @MainActor () async throws -> Value
   ) async throws -> Value {
-    let started = Date()
+    let started = ContinuousClock.now
     logger.notice(
       "request=\(pass.requestID.uuidString, privacy: .public) generation=start phase=\(pass.purpose.rawValue, privacy: .public) sourceUTF16=\(pass.source.utf16.count)"
     )
     defer {
       logger.notice(
-        "request=\(pass.requestID.uuidString, privacy: .public) generation=end elapsedMs=\(Int(Date().timeIntervalSince(started) * 1_000))"
+        "request=\(pass.requestID.uuidString, privacy: .public) generation=end elapsedMs=\(Int(started.duration(to: .now) / .milliseconds(1)))"
       )
     }
     do {

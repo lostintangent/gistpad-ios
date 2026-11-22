@@ -37,7 +37,7 @@ package struct IntelligenceRequest: Sendable {
   }
 }
 
-package enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
+package enum IntelligenceError: LocalizedError, Sendable, Equatable {
   case unavailable(String)
   case insufficientContext
   case invalidResponse

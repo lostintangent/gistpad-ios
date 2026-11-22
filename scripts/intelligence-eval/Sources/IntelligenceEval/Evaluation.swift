@@ -333,12 +333,12 @@ enum Evaluator {
       let preparation = latencyText(group.compactMap(\.answerPreparationSeconds))
       let complete = latencyText(group.compactMap(\.answerCompletionSeconds))
       let total = latencyText(group.map(\.elapsedSeconds))
-      let retried = group.filter { ($0.qualityRetryCount ?? 0) > 0 }.count
+      let retried = group.count(where: { ($0.qualityRetryCount ?? 0) > 0 })
       let grades = group.compactMap(\.modelGrade)
-      let meaning = grades.isEmpty ? "-" : "\(grades.filter { $0 }.count)/\(grades.count)"
+      let meaning = grades.isEmpty ? "-" : "\(grades.count(where: { $0 }))/\(grades.count)"
       let tokens = group.compactMap(\.inputTokens).max().map(String.init) ?? "-"
       lines.append(
-        "| \(id) | \(group.filter(\.passed).count)/\(group.count) | \(meaning) | \(firstVisible) | \(preparation) | \(complete) | \(total) | \(tokens) | \(retried) | \(failures.isEmpty ? "None" : failures) |"
+        "| \(id) | \(group.count(where: \.passed))/\(group.count) | \(meaning) | \(firstVisible) | \(preparation) | \(complete) | \(total) | \(tokens) | \(retried) | \(failures.isEmpty ? "None" : failures) |"
       )
     }
     return lines.joined(separator: "\n")

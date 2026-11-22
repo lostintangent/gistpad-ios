@@ -5,7 +5,7 @@ package struct Proposal: Sendable {
   let changes: [Change]
   fileprivate let safetyInstruction: String?
 
-  package var omittedCount: Int { changes.filter { $0.range == nil }.count }
+  package var omittedCount: Int { changes.count(where: { $0.range == nil }) }
   var canApply: Bool { changes.contains { $0.canApply } }
 
   init(
@@ -114,8 +114,8 @@ package struct Proposal: Sendable {
     guard !replacement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       throw IntelligenceError.unsafeEdit
     }
-    let originalCount = source.filter { !$0.isWhitespace }.count
-    let replacementCount = replacement.filter { !$0.isWhitespace }.count
+    let originalCount = source.count(where: { !$0.isWhitespace })
+    let replacementCount = replacement.count(where: { !$0.isWhitespace })
     guard replacementCount <= min(12, originalCount / 4) else { return }
     let retained = TextDiff(before: source, after: replacement).before
       .filter { $0.kind == .unchanged }.reduce(0) { $0 + $1.text.utf8.count }
