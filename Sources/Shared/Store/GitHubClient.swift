@@ -207,10 +207,7 @@ public actor GitHubClient {
         var ids: Set<String> = []
         return gists.filter {
             $0.matchesWebMarkdownFilter(allowImages: allowImages) && ids.insert($0.id).inserted
-        }.enumerated().sorted {
-            if $0.element.updatedAt != $1.element.updatedAt { return $0.element.updatedAt > $1.element.updatedAt }
-            return $0.offset < $1.offset
-        }.map(\.element)
+        }.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     private func pages<Element: Decodable>(path: String) async throws -> [Element] {

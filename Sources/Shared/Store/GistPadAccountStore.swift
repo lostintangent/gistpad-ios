@@ -193,7 +193,7 @@ public actor GistPadAccountStore {
         return try snapshot(await auth.update(user: UserAttributes(data: written)))
     }
 
-    // The caller must first let the user keep/export/discard account-scoped unsynced work.
+    /// Ends the session and forgets the GitHub token on this iPhone. The account's drafts stay.
     public func signOut(accountID: UUID) async throws {
         guard let session = try persistedSession() else { return try removeLocalCredentials(accountID: accountID) }
         guard session.user.id == accountID else { throw AccountError.accountChanged }
