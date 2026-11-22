@@ -39,14 +39,10 @@ public struct GistComment: Codable, Equatable, Identifiable, Sendable {
 
     public var parsedBody: GistCommentBody { GistCommentBody(body) }
 
-    public func canEdit(as userID: Int64?) -> Bool {
-        guard let userID else { return false }
-        return user?.id == userID
-    }
+    public func canEdit(as userID: Int64) -> Bool { user?.id == userID }
 
-    public func canDelete(as userID: Int64?, gistOwnerID: Int64?) -> Bool {
-        guard let userID else { return false }
-        return canEdit(as: userID) || gistOwnerID == userID
+    public func canDelete(as userID: Int64, gistOwnerID: Int64?) -> Bool {
+        canEdit(as: userID) || gistOwnerID == userID
     }
 }
 

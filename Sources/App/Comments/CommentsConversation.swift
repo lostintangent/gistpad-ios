@@ -334,11 +334,9 @@ private struct CommentThreadContent: View {
                     .buttonStyle(.borderless)
                     .padding(.vertical, -8)
                 }
-                if let linkedThreadIDs = comments.linkedThreadIDs {
-                    if !linkedThreadIDs.contains(comment.id) {
-                        Text("Not linked in this view")
-                            .font(.footnote)
-                    }
+                if comments.linkedThreadIDs?.contains(comment.id) == false {
+                    Text("Not linked in this view")
+                        .font(.footnote)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -48,7 +48,7 @@ struct CommentsComposer: View {
             .controlSize(.large)
             // The inspector's compact sheet inherits the dimmed accent of the gist it covers at large.
             .tint(Color(uiColor: .tintColor))
-            .disabled(!model.canPost || model.isPosting)
+            .disabled(!model.canPost)
             .keyboardShortcut(.return, modifiers: .command)
             .accessibilityIdentifier("comment-post")
         }

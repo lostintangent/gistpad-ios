@@ -22,7 +22,6 @@ import Testing
         #expect(!authored.canEdit(as: 7))
         #expect(authored.canDelete(as: 42, gistOwnerID: 7))
         #expect(authored.canDelete(as: 7, gistOwnerID: 7))
-        #expect(!authored.canDelete(as: nil, gistOwnerID: nil))
         #expect(!authored.canDelete(as: 8, gistOwnerID: 7))
         #expect(!comment(2).canEdit(as: 42))
         #expect(comment(2).canDelete(as: 7, gistOwnerID: 7))

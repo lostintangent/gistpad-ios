@@ -1,12 +1,11 @@
 import Foundation
 
 public struct GistCommentThread: Equatable, Identifiable, Sendable {
-    public static let maximumReplyDepth = 2
     public let comment: GistComment
     public let replies: [GistCommentThread]
     public let depth: Int
     public var id: Int64 { comment.id }
-    public var canReply: Bool { depth < Self.maximumReplyDepth }
+    public var canReply: Bool { depth < 2 }
 
     public var quotedPassage: CommentQuote? {
         guard let quote = comment.parsedBody.quote, !quote.isEmpty else { return nil }

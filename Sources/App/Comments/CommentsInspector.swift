@@ -99,22 +99,14 @@ private struct CommentsInspectorHost: ViewModifier {
       }
       .onChange(of: comments.isPresented) { _, presented in
         if presented, horizontalSizeClass == .regular {
-          if sidebarBeforeOpening == nil {
-            sidebarBeforeOpening = columnVisibility
-          }
-          columnVisibility = .detailOnly
+          hideSidebar()
         } else if !presented, sidebarBeforeOpening != nil {
           // Dismiss any temporary overlay before restoring the pinned column at native completion.
           columnVisibility = .detailOnly
         }
       }
       .onChange(of: horizontalSizeClass) { _, sizeClass in
-        if comments.isPresented, sizeClass == .regular {
-          if sidebarBeforeOpening == nil {
-            sidebarBeforeOpening = columnVisibility
-          }
-          columnVisibility = .detailOnly
-        }
+        if comments.isPresented, sizeClass == .regular { hideSidebar() }
       }
       .onChange(of: commentCount, initial: true) { _, count in
         if let count {
@@ -129,6 +121,11 @@ private struct CommentsInspectorHost: ViewModifier {
       ) {
         choices
       }
+  }
+
+  private func hideSidebar() {
+    if sidebarBeforeOpening == nil { sidebarBeforeOpening = columnVisibility }
+    columnVisibility = .detailOnly
   }
 
   private var panel: some View {
