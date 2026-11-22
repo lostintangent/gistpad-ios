@@ -12,7 +12,7 @@ npm test
 npm run build
 ```
 
-Rebuild on purpose, when the web's dialect changes. The build takes `remarkInlineSyntax`, `rehypeToc`, `Mermaid`, the calculator and the preview CSS straight from `gistpad.dev/src`, with the plugin order of `MarkdownPreview.tsx`, and `provenance.json` records their SHA-256 hashes. Mermaid and its dependencies resolve from `gistpad.dev/node_modules`, so a rebuild also takes the web's current versions of those even when the hashes match. Review the diff in `Resources/Web` before committing one.
+Rebuild on purpose, when the web's dialect changes. The build takes `remarkInlineSyntax`, `rehypeToc`, `Mermaid`, the calculator and the preview CSS straight from `gistpad.dev/src`, with the plugin order of `MarkdownPreview.tsx`, and `provenance.json` records their SHA-256 hashes. `package.json` lists every package the bundle imports, the web's included, and Vite resolves them all from this folder's lock, so the same web source rebuilds the checked-in bundle byte for byte. When the web's Markdown code adds an import or changes a version, match it here and review the diff in `Resources/Web` before committing.
 
 Two adapters keep the web's code offline and native:
 

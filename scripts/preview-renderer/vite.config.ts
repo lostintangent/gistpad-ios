@@ -66,7 +66,8 @@ export default defineConfig({
       "@web": resolve(web, "src"),
       "@gistpad/rehype-toc": resolve(web, "src/features/markdown/rehypeToc.ts"),
     },
-    dedupe: ["react", "react-dom", "@tanstack/react-query"],
+    // Web source imports resolve from our lock, not from gistpad.dev/node_modules.
+    dedupe: Object.keys(JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")).dependencies),
   },
   build: {
     target: "safari18",

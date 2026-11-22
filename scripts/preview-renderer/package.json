@@ -13,7 +13,7 @@
     "@tanstack/react-query": "5.104.5",
     "hast-util-heading-rank": "3.0.0",
     "hast-util-to-string": "3.0.1",
-    "hastscript": "9.0.1",
+    "hastscript": "9.0.3",
     "mermaid": "11.9.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
@@ -24,7 +24,7 @@
     "remark-frontmatter": "5.0.0",
     "remark-gfm": "4.0.1",
     "remark-github-alerts": "0.1.1",
-    "unist-util-visit": "5.1.0",
+    "unist-util-visit": "5.2.0",
     "unified": "11.0.5",
     "remark-parse": "11.0.0",
     "remark-rehype": "11.1.2"
