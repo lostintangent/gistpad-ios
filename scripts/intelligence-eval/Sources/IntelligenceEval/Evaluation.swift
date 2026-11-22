@@ -100,7 +100,7 @@ enum Evaluator {
             let response = try await engine.ask(
               request,
               progress: { progress in
-                if progress.phase == .answering, preparationSeconds == nil {
+                if case .answering = progress, preparationSeconds == nil {
                   preparationSeconds = elapsed()
                 }
               },

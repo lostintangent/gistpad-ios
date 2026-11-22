@@ -154,22 +154,17 @@
       guard let progress = state.progress else {
         return String(localized: "Preparing this file…", bundle: .module)
       }
-      switch progress.phase {
+      switch progress {
       case .answering:
         return String(localized: "Answering…", bundle: .module)
-      case .combining:
-        return String(
-          localized: "Combining passages \(progress.current) of \(progress.total)…", bundle: .module
-        )
-      case .reading:
-        return String(
-          localized: "Reading part \(progress.current) of \(progress.total)…", bundle: .module)
-      case .editing:
-        return String(
-          localized: "Editing part \(progress.current) of \(progress.total)…", bundle: .module)
-      case .reviewing:
-        return String(
-          localized: "Reviewing part \(progress.current) of \(progress.total)…", bundle: .module)
+      case .combining(let current, let total):
+        return String(localized: "Combining passages \(current) of \(total)…", bundle: .module)
+      case .reading(let current, let total):
+        return String(localized: "Reading part \(current) of \(total)…", bundle: .module)
+      case .editing(let current, let total):
+        return String(localized: "Editing part \(current) of \(total)…", bundle: .module)
+      case .reviewing(let current, let total):
+        return String(localized: "Reviewing part \(current) of \(total)…", bundle: .module)
       }
     }
 

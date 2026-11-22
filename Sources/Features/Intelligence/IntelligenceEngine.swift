@@ -11,20 +11,29 @@ package final class IntelligenceEngine {
   /// Real answers use under 120 tokens. A runaway repeats itself until this limit stops it.
   private let answerTokens = 384
 
+  /// Where a long request is, for the sheet's progress label.
+  package enum Progress: Sendable {
+    case reading(Int, of: Int)
+    case editing(Int, of: Int)
+    case reviewing(Int, of: Int)
+    case combining(Int, of: Int)
+    case answering
+  }
+
   package init(backend: any IntelligenceModel) {
     self.backend = backend
   }
 
   package func edit(
     _ request: IntelligenceRequest,
-    progress: @MainActor (IntelligenceProgress) -> Void = { _ in }
+    progress: @MainActor (Progress) -> Void = { _ in }
   ) async throws -> Proposal {
     try await generate(request, purpose: .edit, progress: progress)
   }
 
   package func review(
     _ request: IntelligenceRequest,
-    progress: @MainActor (IntelligenceProgress) -> Void = { _ in }
+    progress: @MainActor (Progress) -> Void = { _ in }
   ) async throws -> Proposal {
     try await generate(request, purpose: .review, progress: progress)
   }
@@ -32,26 +41,25 @@ package final class IntelligenceEngine {
   /// Review starts chunked; Edit starts with the whole body and splits only on context failure.
   private func generate(
     _ request: IntelligenceRequest, purpose: ModelPass.Purpose,
-    progress: @MainActor (IntelligenceProgress) -> Void
+    progress: @MainActor (Progress) -> Void
   ) async throws -> Proposal {
     try Task.checkCancellation()
     let model = try await backend.modelInfo()
     let chunks =
       purpose == .edit
-      ? [content(in: request)]
-      : try await split(content(in: request), request: request, purpose: purpose, model: model)
+      ? [body(of: request)]
+      : try await split(body(of: request), request: request, purpose: purpose, model: model)
     var candidates: [(Proposal.Change, NSRange)] = []
     var pending = Array(chunks.reversed())
     var completed = 0
     while let chunk = pending.popLast() {
       try Task.checkCancellation()
+      let total = completed + pending.count + 1
       progress(
-        IntelligenceProgress(
-          phase: purpose == .edit ? .editing : .reviewing,
-          current: completed + 1, total: completed + pending.count + 1))
+        purpose == .edit ? .editing(completed + 1, of: total) : .reviewing(completed + 1, of: total))
+      let chunkSource = text(chunk, of: request)
       do {
-        let input = pass(
-          request, purpose: purpose, source: chunk.source, model: model, scope: chunk.range)
+        let input = pass(request, purpose: purpose, source: chunkSource, model: model, scope: chunk)
         let operations = try await backend.editOperations(for: input)
         try Task.checkCancellation()
         for operation in operations {
@@ -60,7 +68,7 @@ package final class IntelligenceEngine {
             if purpose == .edit, candidate.replacement == nil {
               throw IntelligenceError.invalidResponse
             }
-            candidates.append((candidate, chunk.range))
+            candidates.append((candidate, chunk))
           case .setTaskStates(let ids, let isComplete):
             guard ids.map({ !$0.isEmpty && Set($0).count == $0.count }) ?? true
             else { throw IntelligenceError.invalidResponse }
@@ -135,24 +143,24 @@ package final class IntelligenceEngine {
                 NSRange(location: offset, length: 0)
               ))
           case .rewriteRegion(let relative, let revised):
-            guard relative.location >= 0, NSMaxRange(relative) <= chunk.range.length
+            guard relative.location >= 0, NSMaxRange(relative) <= chunk.length
             else { throw IntelligenceError.invalidResponse }
             candidates += try Proposal.Change.lineChanges(
               in: request.snapshot.source,
               visible: NSRange(
-                location: chunk.range.location + relative.location, length: relative.length),
+                location: chunk.location + relative.location, length: relative.length),
               revised: revised)
           case .replaceRegion(let relative, let candidate):
             guard relative.location >= 0, relative.length > 0,
-              NSMaxRange(relative) <= chunk.range.length,
+              NSMaxRange(relative) <= chunk.length,
               candidate.replacement != nil,
               candidate.quote.utf8.elementsEqual(
-                (chunk.source as NSString).substring(with: relative).utf8)
+                (chunkSource as NSString).substring(with: relative).utf8)
             else { throw IntelligenceError.invalidResponse }
             candidates.append(
               (
                 candidate,
-                NSRange(location: chunk.range.location + relative.location, length: relative.length)
+                NSRange(location: chunk.location + relative.location, length: relative.length)
               ))
           }
         }
@@ -177,7 +185,7 @@ package final class IntelligenceEngine {
 
   package func ask(
     _ request: IntelligenceRequest,
-    progress: @MainActor (IntelligenceProgress) -> Void = { _ in },
+    progress: @MainActor (Progress) -> Void = { _ in },
     onPartialAnswer: @MainActor (String) -> Void = { _ in }
   ) async throws -> [AnswerPart] {
     try Task.checkCancellation()
@@ -185,29 +193,29 @@ package final class IntelligenceEngine {
     logger.notice(
       "request=\(request.id.uuidString, privacy: .public) action=ask model=\(model.variant, privacy: .public) context=\(model.contextSize)"
     )
-    let body = content(in: request)
-    let whole = pass(request, purpose: .answer, source: body.source, model: model)
+    let body = body(of: request)
+    let whole = pass(request, purpose: .answer, source: text(body, of: request), model: model)
     let input: ModelPass
     let wholeFits = try await fits(whole, model: model)
     logger.notice(
-      "request=\(request.id.uuidString, privacy: .public) action=ask path=\(wholeFits ? "whole" : "extract", privacy: .public) bodyUTF16=\(body.range.length) frontMatterUTF16=\(body.range.location)"
+      "request=\(request.id.uuidString, privacy: .public) action=ask path=\(wholeFits ? "whole" : "extract", privacy: .public) bodyUTF16=\(body.length) frontMatterUTF16=\(body.location)"
     )
     if wholeFits {
       input = whole
     } else {
-      let chunks = try await split(
-        content(in: request), request: request, purpose: .extract, model: model)
+      let chunks = try await split(body, request: request, purpose: .extract, model: model)
       var evidence: [String] = []
       for (index, chunk) in chunks.enumerated() {
         try Task.checkCancellation()
-        progress(IntelligenceProgress(phase: .reading, current: index + 1, total: chunks.count))
+        progress(.reading(index + 1, of: chunks.count))
+        let source = text(chunk, of: request)
         let excerpts = try await backend.excerpts(
-          for: pass(request, purpose: .extract, source: chunk.source, model: model))
+          for: pass(request, purpose: .extract, source: source, model: model))
         logger.notice(
-          "request=\(request.id.uuidString, privacy: .public) action=ask chunk=\(index + 1)/\(chunks.count) range=\(chunk.range.location):\(chunk.range.length) excerpts=\(excerpts.count)"
+          "request=\(request.id.uuidString, privacy: .public) action=ask chunk=\(index + 1)/\(chunks.count) range=\(chunk.location):\(chunk.length) excerpts=\(excerpts.count)"
         )
         for excerpt in excerpts {
-          guard !chunk.source.exactRanges(of: excerpt).isEmpty else {
+          guard !source.exactRanges(of: excerpt).isEmpty else {
             throw IntelligenceError.unverifiedQuotation
           }
         }
@@ -220,7 +228,7 @@ package final class IntelligenceEngine {
       guard !evidence.isEmpty else { throw IntelligenceError.noEvidence }
       input = try await combine(evidence, request: request, model: model, progress: progress)
     }
-    progress(IntelligenceProgress(phase: .answering, current: 1, total: 1))
+    progress(.answering)
     var generated = ModelAnswer(prose: "")
     for attempt in 1...2 {
       try Task.checkCancellation()
@@ -265,7 +273,7 @@ package final class IntelligenceEngine {
 
   private func combine(
     _ initial: [String], request: IntelligenceRequest, model: ModelInfo,
-    progress: @MainActor (IntelligenceProgress) -> Void
+    progress: @MainActor (Progress) -> Void
   ) async throws -> ModelPass {
     var evidence = initial
     for _ in 0..<8 {
@@ -291,16 +299,15 @@ package final class IntelligenceEngine {
           let extraction = IntelligenceRequest(
             snapshot: snapshot, instruction: request.instruction, id: request.id)
           let parts = try await split(
-            content(in: extraction), request: extraction, purpose: .extract, model: model)
-          batches.append(contentsOf: parts.map { [$0.source] })
+            body(of: extraction), request: extraction, purpose: .extract, model: model)
+          batches.append(contentsOf: parts.map { [text($0, of: extraction)] })
         }
       }
       if !batch.isEmpty { batches.append(batch) }
       var reduced: [String] = []
       for (index, batch) in batches.enumerated() {
         try Task.checkCancellation()
-        progress(
-          IntelligenceProgress(phase: .combining, current: index + 1, total: batches.count))
+        progress(.combining(index + 1, of: batches.count))
         let excerpts = try await backend.excerpts(
           for: pass(
             request, purpose: .extract, source: batch.joined(separator: "\n\n"), model: model,
@@ -323,72 +330,63 @@ package final class IntelligenceEngine {
     throw IntelligenceError.insufficientContext
   }
 
-  private struct Chunk {
-    let source: String
-    let range: NSRange
+  /// The note after its front matter.
+  private func body(of request: IntelligenceRequest) -> NSRange {
+    let start = Syntax.contentStart(in: request.snapshot.source)
+    return NSRange(location: start, length: request.snapshot.source.utf16.count - start)
   }
 
-  private func content(in request: IntelligenceRequest) -> Chunk {
-    let source = request.snapshot.source as NSString
-    let start = Syntax.contentStart(in: request.snapshot.source)
-    return Chunk(
-      source: source.substring(from: start),
-      range: NSRange(location: start, length: source.length - start))
+  private func text(_ range: NSRange, of request: IntelligenceRequest) -> String {
+    (request.snapshot.source as NSString).substring(with: range)
   }
 
   private func split(
-    _ chunk: Chunk, request: IntelligenceRequest, purpose: ModelPass.Purpose,
+    _ chunk: NSRange, request: IntelligenceRequest, purpose: ModelPass.Purpose,
     model: ModelInfo, force: Bool = false
-  ) async throws -> [Chunk] {
+  ) async throws -> [NSRange] {
     try Task.checkCancellation()
+    let source = text(chunk, of: request)
     if !force,
       try await fits(
-        pass(
-          request, purpose: purpose, source: chunk.source, model: model, scope: chunk.range),
-        model: model)
+        pass(request, purpose: purpose, source: source, model: model, scope: chunk), model: model)
     {
       return [chunk]
     }
-    guard chunk.source.count > 1 else { throw IntelligenceError.insufficientContext }
-    let midpoint = chunk.range.location + chunk.range.length / 2
+    guard source.count > 1 else { throw IntelligenceError.insufficientContext }
+    let midpoint = chunk.location + chunk.length / 2
     let headings = request.snapshot.headingOffsets.filter {
-      $0 > chunk.range.location && $0 < NSMaxRange(chunk.range)
+      $0 > chunk.location && $0 < NSMaxRange(chunk)
     }
     let heading = headings.min { abs($0 - midpoint) < abs($1 - midpoint) }
     var offset: Int
     if let heading {
-      offset = heading - chunk.range.location
+      offset = heading - chunk.location
     } else {
-      let indices = Array(chunk.source.indices)
+      let indices = Array(source.indices)
       let middleOffset = indices.count / 2
       let middle = indices[middleOffset]
-      let newline = indices.enumerated().filter { chunk.source[$0.element].isNewline }.min {
+      let newline = indices.enumerated().filter { source[$0.element].isNewline }.min {
         abs($0.offset - middleOffset) < abs($1.offset - middleOffset)
       }
-      let boundary = newline.map { chunk.source.index(after: $0.element) } ?? middle
-      let safeBoundary = boundary == chunk.source.endIndex ? middle : boundary
-      offset = chunk.source[..<safeBoundary].utf16.count
+      let boundary = newline.map { source.index(after: $0.element) } ?? middle
+      let safeBoundary = boundary == source.endIndex ? middle : boundary
+      offset = source[..<safeBoundary].utf16.count
     }
-    let boundary = chunk.range.location + offset
+    let boundary = chunk.location + offset
     if let task = request.snapshot.tasks.first(where: {
       $0.range.location < boundary && boundary < NSMaxRange($0.range)
     }) {
       offset =
-        task.range.location > chunk.range.location
-        ? task.range.location - chunk.range.location : NSMaxRange(task.range) - chunk.range.location
+        task.range.location > chunk.location
+        ? task.range.location - chunk.location : NSMaxRange(task.range) - chunk.location
     }
-    guard offset > 0, offset < chunk.range.length else {
+    guard offset > 0, offset < chunk.length else {
       throw IntelligenceError.insufficientContext
     }
-    let source = request.snapshot.source as NSString
-    let left = NSRange(location: chunk.range.location, length: offset)
-    let right = NSRange(location: NSMaxRange(left), length: chunk.range.length - offset)
-    let first = try await split(
-      Chunk(source: source.substring(with: left), range: left),
-      request: request, purpose: purpose, model: model)
-    let second = try await split(
-      Chunk(source: source.substring(with: right), range: right),
-      request: request, purpose: purpose, model: model)
+    let left = NSRange(location: chunk.location, length: offset)
+    let right = NSRange(location: NSMaxRange(left), length: chunk.length - offset)
+    let first = try await split(left, request: request, purpose: purpose, model: model)
+    let second = try await split(right, request: request, purpose: purpose, model: model)
     return first + second
   }
 

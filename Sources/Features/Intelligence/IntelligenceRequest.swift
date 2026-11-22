@@ -185,13 +185,6 @@ package enum AnswerPart: Sendable, Equatable {
   case quotation(String, ranges: [NSRange])
 }
 
-package struct IntelligenceProgress: Sendable {
-  package enum Phase: Sendable { case reading, editing, reviewing, combining, answering }
-  package let phase: Phase
-  let current: Int
-  let total: Int
-}
-
 @MainActor
 package protocol IntelligenceModel {
   func modelInfo() async throws -> ModelInfo

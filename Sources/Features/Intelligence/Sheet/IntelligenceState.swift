@@ -16,7 +16,7 @@
     var availabilityReason: String?
     var errorMessage: String?
     var notice: String?
-    var progress: IntelligenceProgress?
+    var progress: IntelligenceEngine.Progress?
     var answerParts: [AnswerPart] = []
     var proposal: Proposal?
     var appliedEdit: Proposal?
