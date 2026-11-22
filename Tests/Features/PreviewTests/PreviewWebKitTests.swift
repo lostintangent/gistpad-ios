@@ -118,13 +118,10 @@ struct PreviewWebKitTests {
                 + Array(repeating: paragraph, count: 5).joined(separator: "\n\n")
         }.joined(separator: "\n\n")
         var events: [PreviewEvent] = []
-        func preview(top: CGFloat) -> some View {
-            MarkdownPreviewView(markdown: markdown, fileID: "reading-resize", generation: 0) {
+        let controller = UIHostingController(
+            rootView: MarkdownPreviewView(markdown: markdown, fileID: "reading-resize", generation: 0) {
                 events.append($0)
-            }
-            .safeAreaInset(edge: .top, spacing: 0) { Color.clear.frame(height: top) }
-        }
-        let controller = UIHostingController(rootView: preview(top: 0))
+            })
         let container = UIViewController()
         container.addChild(controller)
         container.view.addSubview(controller.view)
@@ -195,7 +192,8 @@ struct PreviewWebKitTests {
         let originalReadingOffset = webView.scrollView.contentOffset.y + originalInset
         for _ in 0..<3 {
             for top: CGFloat in [78, 0] {
-                controller.rootView = preview(top: top)
+                // Bars reach the preview as UIKit safe area, which the page must count exactly once.
+                controller.additionalSafeAreaInsets.top = top
                 try await waitFor("the changed native reading inset") {
                     abs(webView.scrollView.adjustedContentInset.top - originalInset - top) <= 1
                 }
@@ -203,6 +201,10 @@ struct PreviewWebKitTests {
                 #expect(findWebView(in: controller.view) === webView)
                 let readingOffset = webView.scrollView.contentOffset.y + webView.scrollView.adjustedContentInset.top
                 #expect(abs(readingOffset - originalReadingOffset) <= 1)
+                let scrollPadding = try #require(try await webView.callAsyncJavaScript(
+                    "return parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop);",
+                    arguments: [:], in: nil, contentWorld: .page) as? Double)
+                #expect(abs(scrollPadding - webView.scrollView.adjustedContentInset.top) <= 1)
             }
         }
         #expect(!events.contains {

@@ -10,7 +10,6 @@ public struct MarkdownPreviewView: View {
     private let comments: CommentHighlightConfiguration
     private let commentActions: CommentHighlightActions?
     private let onEvent: @MainActor (PreviewEvent) -> Void
-    @State private var viewportView = PreviewViewportView()
 
     public init(
         markdown: String,
@@ -29,22 +28,18 @@ public struct MarkdownPreviewView: View {
     }
 
     public var body: some View {
-        GeometryReader { _ in
-            NativeMarkdownPreview(
-                file: file, viewportView: viewportView, comments: comments,
-                commentActions: commentActions, onEvent: onEvent
-            )
-            .ignoresSafeArea(.container, edges: .vertical)
-            // Resize in one step so WebKit's scroll anchoring keeps the reading passage.
-            .transaction { $0.animation = nil }
-        }
-        .overlay { PreviewViewport(view: viewportView).allowsHitTesting(false) }
+        NativeMarkdownPreview(
+            file: file, comments: comments, commentActions: commentActions, onEvent: onEvent
+        )
+        // The page scrolls under the bars, and UIKit insets it by their height.
+        .ignoresSafeArea(.container, edges: .vertical)
+        // Resize in one step so WebKit's scroll anchoring keeps the reading passage.
+        .transaction { $0.animation = nil }
     }
 }
 
 private struct NativeMarkdownPreview: UIViewRepresentable {
     let file: PreviewFile
-    let viewportView: PreviewViewportView
     let comments: CommentHighlightConfiguration
     let commentActions: CommentHighlightActions?
     let onEvent: @MainActor (PreviewEvent) -> Void
@@ -84,8 +79,6 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         let coordinator = context.coordinator
         webView.onBuildCommentMenu = { [weak coordinator] in coordinator?.commentHighlights.addCommentMenu() }
         webView.onViewportChange = { [weak coordinator] in coordinator?.updateViewport($0) }
-        viewportView.webView = webView
-        webView.updateViewportView(viewportView)
         webView.load(URLRequest(url: PreviewResourceHandler.pageURL))
         return webView
     }
@@ -94,8 +87,6 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         webView.isHidden = !isPaneVisible
         webView.accessibilityElementsHidden = !isPaneVisible
         context.coordinator.onEvent = onEvent
-        viewportView.webView = webView
-        webView.updateViewportView(viewportView)
         let traits = webView.traitCollection.modifyingTraits {
             $0.userInterfaceStyle = colorScheme == .dark ? .dark : .light
             $0.accessibilityContrast = contrast == .increased ? .high : .normal
@@ -253,42 +244,9 @@ extension Logger {
 }
 
 @MainActor
-private struct PreviewViewport: UIViewRepresentable {
-    let view: PreviewViewportView
-
-    func makeUIView(context: Context) -> PreviewViewportView { view }
-    func updateUIView(_ view: PreviewViewportView, context: Context) {}
-}
-
-@MainActor
-private final class PreviewViewportView: UIView {
-    weak var webView: InsetAwareWebView?
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        accessibilityElementsHidden = true
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        webView?.setNeedsLayout()
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        webView?.setNeedsLayout()
-    }
-}
-
-@MainActor
 private final class InsetAwareWebView: WKWebView {
     var onViewportChange: ((UIEdgeInsets) -> Void)?
     var onBuildCommentMenu: (() -> UIDeferredMenuElement?)?
-    private weak var viewportView: UIView?
-    private var applyingInsets = false
 
     override var frame: CGRect {
         willSet {
@@ -313,45 +271,13 @@ private final class InsetAwareWebView: WKWebView {
             UIMenu(options: .displayInline, children: [comment]), afterMenu: .standardEdit)
     }
 
-    func updateViewportView(_ view: UIView) {
-        viewportView = view
-        updateContentInsets()
-    }
-
     override func layoutSubviews() {
         super.layoutSubviews()
-        updateContentInsets()
+        onViewportChange?(scrollView.adjustedContentInset)
     }
 
     override func safeAreaInsetsDidChange() {
         super.safeAreaInsetsDidChange()
-        updateContentInsets()
-    }
-
-    private func updateContentInsets() {
-        guard !applyingInsets, let viewportView, window != nil, viewportView.window === window else { return }
-        applyingInsets = true
-        defer { applyingInsets = false }
-        let previous = scrollView.adjustedContentInset
-        let readingOffset = scrollView.contentOffset.y + previous.top
-        let automaticTop = previous.top - scrollView.contentInset.top
-        let automaticBottom = previous.bottom - scrollView.contentInset.bottom
-        let viewport = convert(viewportView.bounds, from: viewportView)
-        var contentInsets = scrollView.contentInset
-        contentInsets.top = max(0, viewport.minY - bounds.minY - automaticTop)
-        contentInsets.bottom = max(0, bounds.maxY - viewport.maxY - automaticBottom)
-        if contentInsets != scrollView.contentInset {
-            scrollView.contentInset = contentInsets
-            if !scrollView.isTracking, !scrollView.isDecelerating {
-                let insets = scrollView.adjustedContentInset
-                let minimum = -insets.top
-                let maximum = max(minimum, scrollView.contentSize.height - scrollView.bounds.height + insets.bottom)
-                scrollView.setContentOffset(
-                    CGPoint(x: scrollView.contentOffset.x, y: min(maximum, max(minimum, readingOffset - insets.top))),
-                    animated: false
-                )
-            }
-        }
         onViewportChange?(scrollView.adjustedContentInset)
     }
 }
