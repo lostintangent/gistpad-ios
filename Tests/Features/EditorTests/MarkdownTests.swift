@@ -61,12 +61,6 @@ import Testing
   #expect(outline.taskMarkers == [
     try #require(outline.blocks[2].taskMarker), text.range(of: "[ ]"),
   ])
-  #expect(outline.frontMatterRanges.map { text.substring(with: $0) } == [
-    "---\ntitle: Notebook\n---\n",
-  ])
-  #expect(outline.codeRanges.map { text.substring(with: $0) } == [
-    "```md\n## Not a heading\n- [ ] Not a task\n```\n", "`code`",
-  ])
 }
 
 @Test func headingsWithInlineCodeStillMarkTheirEntireLine() {

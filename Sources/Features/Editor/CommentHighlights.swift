@@ -46,7 +46,9 @@
       editor.textView.addGestureRecognizer(tap)
     }
 
-    func configure(_ configuration: CommentHighlightConfiguration, actions: CommentHighlightActions?) {
+    func configure(
+      _ configuration: CommentHighlightConfiguration, actions: CommentHighlightActions? = nil
+    ) {
       let needsInitialReport = self.actions == nil && actions != nil
       if self.configuration.selectedThreadID != configuration.selectedThreadID
         || self.configuration.revealRevision != configuration.revealRevision

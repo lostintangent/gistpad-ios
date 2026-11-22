@@ -12,7 +12,7 @@
         let editor = Editor(text: "A native note\n")
         let window = host(editor)
         defer { window.isHidden = true }
-        editor.setCommentHighlights(
+        editor.commentHighlights.configure(
           .init(quotes: [CommentQuote(threadID: 10, quote: "native")]))
         editor.textView.layoutIfNeeded()
         #expect(editor.commentHighlights.backgroundLayer.sublayers?.isEmpty == false)
@@ -45,7 +45,7 @@
         let selection = editor.textView.selectedRange
         var changes = 0
         editor.onEdit = { _, _ in changes += 1 }
-        editor.setCommentHighlights(
+        editor.commentHighlights.configure(
           .init(
             quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
         editor.highlight()
@@ -68,7 +68,7 @@
       @Test func overlapMenuKeepsSystemActionsAndOpensEveryThread() throws {
         let editor = Editor(text: "one two three")
         var opened: [[Int64]] = []
-        editor.setCommentHighlights(
+        editor.commentHighlights.configure(
           .init(quotes: [
             CommentQuote(threadID: 10, quote: "one two"),
             CommentQuote(threadID: 20, quote: "two three"),
@@ -109,7 +109,7 @@
         let window = host(editor, focused: false)
         defer { window.isHidden = true }
         var quotes: [String] = []
-        editor.setCommentHighlights(
+        editor.commentHighlights.configure(
           .init(quotes: [
             CommentQuote(threadID: 10, quote: "quiet native"),
             CommentQuote(threadID: 20, quote: "native note"),
@@ -161,16 +161,16 @@
         var configuration = CommentHighlightConfiguration(
           quotes: [CommentQuote(threadID: 60, quote: "late native passage")], selectedThreadID: 60
         )
-        editor.setCommentHighlights(configuration)
+        editor.commentHighlights.configure(configuration)
         try await settle(editor.textView) { editor.textView.contentOffset.y > 100 }
         #expect(editor.textView.contentOffset.y > 100)
         let top = CGPoint(x: 0, y: -editor.textView.adjustedContentInset.top)
         editor.textView.setContentOffset(top, animated: false)
-        editor.setCommentHighlights(configuration)
+        editor.commentHighlights.configure(configuration)
         try await Task.sleep(for: .milliseconds(50))
         #expect(abs(editor.textView.contentOffset.y - top.y) < 1)
         configuration.revealRevision += 1
-        editor.setCommentHighlights(configuration)
+        editor.commentHighlights.configure(configuration)
         try await settle(editor.textView) { editor.textView.contentOffset.y > 100 }
         #expect(editor.textView.contentOffset.y > 100)
         #expect(editor.text == text)
@@ -183,7 +183,7 @@
         #expect(
           editor.textView(
             editor.textView, editMenuForTextInRanges: [range], suggestedActions: []) == nil)
-        editor.setCommentHighlights(.init(), actions: actions())
+        editor.commentHighlights.configure(.init(), actions: actions())
         #expect(
           editor.textView(
             editor.textView,
@@ -204,7 +204,7 @@
 
       @Test func hidingIdleAnnotationsKeepsSelectionAndContextualDiscovery() throws {
         let editor = Editor(text: "one two three")
-        editor.setCommentHighlights(
+        editor.commentHighlights.configure(
           .init(
             quotes: [
               CommentQuote(threadID: 10, quote: "one two"),
@@ -227,7 +227,7 @@
       @Test func missingAmbiguousAndHiddenFrontMatterQuotesDoNotInventLinks() async {
         let editor = Editor(text: "---\ntitle: native\n---\n\nA native note")
         var linked: Set<Int64> = []
-        editor.setCommentHighlights(
+        editor.commentHighlights.configure(
           .init(quotes: [
             CommentQuote(threadID: 10, quote: "native"),
             CommentQuote(threadID: 20, quote: "title: native"),
@@ -256,7 +256,7 @@
           view.textStorage.attribute(CommentHighlights.annotationKey, at: 3, effectiveRange: nil)
             != nil
         }
-        editor.setCommentHighlights(
+        editor.commentHighlights.configure(
           .init(quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
         #expect(annotated())
         editor.textViewWritingToolsWillBegin(view)
@@ -282,14 +282,14 @@
       @Test func selectedCommentHasNativeAccessibilityStateWithoutChangingTheEditorRole() throws {
         let editor = Editor(text: "A native note")
         let provider = try #require(editor.textView as? any AXCustomContentProvider)
-        editor.setCommentHighlights(
+        editor.commentHighlights.configure(
           .init(
             quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
         let content = try #require(provider.accessibilityCustomContent.first)
         #expect(content.label == "Selected Comment")
         #expect(content.value == "native")
         #expect(content.importance == .high)
-        editor.setCommentHighlights(.init())
+        editor.commentHighlights.configure(.init())
         #expect(provider.accessibilityCustomContent.isEmpty)
       }
 

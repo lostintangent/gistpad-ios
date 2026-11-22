@@ -5,7 +5,7 @@
   import UIKit
 
   public struct EditorView: View {
-    public let editor: Editor
+    let editor: Editor
     /// What VoiceOver calls the text view: the title the screen shows.
     private let title: String?
     private let insertImage: (@MainActor () -> Void)?
@@ -127,7 +127,7 @@
           if view.isFirstResponder { view.reloadInputViews() }
         }
         view.traitOverrides[AccentTrait.self] = accent
-        editor.setCommentHighlights(comments, actions: commentActions)
+        editor.commentHighlights.configure(comments, actions: commentActions)
       }
       host.isPaneVisible = isPaneVisible
     }
@@ -203,7 +203,7 @@
       configuration = nil
       updateOwnership()
       guard editor.host == nil, editor.textView.superview === self else { return }
-      editor.setCommentHighlights(.init())
+      editor.commentHighlights.configure(.init())
       editor.textView.inputAccessoryView = nil
       editor.textView.removeFromSuperview()
     }

@@ -110,15 +110,10 @@ public enum Syntax {
   }
 
   /// UTF-16 source blocks and task markers, with markers outside code and front matter.
-  public static func outline(in text: String) -> (
-    blocks: [Block], taskMarkers: [NSRange], codeRanges: [NSRange],
-    frontMatterRanges: [NSRange]
-  ) {
+  public static func outline(in text: String) -> (blocks: [Block], taskMarkers: [NSRange]) {
     let source = text as NSString
     let spans = spans(in: text)
     let protected = spans.filter { $0.kind == .code || $0.kind == .frontmatter }
-    let codeRanges = mergedRanges(spans.filter { $0.kind == .code }.map(\.range))
-    let frontMatterRanges = mergedRanges(spans.filter { $0.kind == .frontmatter }.map(\.range))
     let taskMarkers = spans.filter { span in
       (span.kind == .task || span.kind == .checkedTask)
         && !protected.contains { NSIntersectionRange($0.range, span.range).length > 0 }
@@ -202,7 +197,7 @@ public enum Syntax {
       offset = NSMaxRange(line)
     }
     finish()
-    return (blocks, taskMarkers, codeRanges, frontMatterRanges)
+    return (blocks, taskMarkers)
   }
 
   static func spans(in text: String) -> [Span] {

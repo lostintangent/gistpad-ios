@@ -17,10 +17,10 @@
     public private(set) var generation: UInt64
     private(set) var isComposing = false
     public private(set) var isEditing = false
-    public private(set) var isWritingToolsActive = false
+    private(set) var isWritingToolsActive = false
     private(set) var showsFrontMatter = false
-    public private(set) var contentStart = 0
-    public var inputError: String?
+    private(set) var contentStart = 0
+    var inputError: String?
     let textView = TextView(usingTextLayoutManager: true)
     @ObservationIgnored weak var host: TextViewHost?
     @ObservationIgnored var hosts: [TextViewHost.Reference] = []
@@ -350,12 +350,6 @@
     public func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
       textView.cancelEditingCaretReveal()
       host?.handBarSource()
-    }
-
-    public func setCommentHighlights(
-      _ configuration: CommentHighlightConfiguration, actions: CommentHighlightActions? = nil
-    ) {
-      commentHighlights.configure(configuration, actions: actions)
     }
 
     public func textView(
