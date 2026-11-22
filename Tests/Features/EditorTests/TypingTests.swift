@@ -79,11 +79,11 @@ import Testing
       NSRange(location: -1, length: 0), NSRange(location: Int.max, length: 1),
       NSRange(location: 0, length: Int.max), NSRange(location: 3, length: 0),
     ] {
-      #expect(throws: Edit.Failure.invalidRange) {
+      #expect(throws: Edit.Failure.changed) {
         try Typing.edit(in: "- 👩", selection: range, replacement: "\n")
       }
 
-      #expect(throws: Edit.Failure.invalidRange) {
+      #expect(throws: Edit.Failure.changed) {
         try Typing.indent(in: "- 👩", selection: range, outdent: false)
       }
     }
@@ -126,7 +126,7 @@ import Testing
     #expect(result.hasPrefix("1. Item 👩🏽‍💻\n2. \n3. Item 👩🏽‍💻"))
     #expect(result.hasSuffix("201. Item 👩🏽‍💻"))
     #expect(edit.selection == NSRange(location: insertion + "\n2. ".utf16.count, length: 0))
-    #expect(throws: Edit.Failure.sourceChanged) {
+    #expect(throws: Edit.Failure.changed) {
       try edit.applying(to: source.replacingOccurrences(of: "200.", with: "201."))
     }
   }

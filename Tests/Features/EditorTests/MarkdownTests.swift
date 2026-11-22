@@ -80,11 +80,11 @@ import Testing
 
 @Test func invalidOrStaleSourceIsRejected() {
   let source = "📝 - [ ] task"
-  #expect(throws: Edit.Failure.invalidRange) {
+  #expect(throws: Edit.Failure.changed) {
     try Edit(range: NSRange(location: 1, length: 1), expected: "", replacement: "x")
       .applying(to: source)
   }
-  #expect(throws: Edit.Failure.sourceChanged) {
+  #expect(throws: Edit.Failure.changed) {
     try Edit(range: NSRange(location: 0, length: 2), expected: "[ ]", replacement: "[x]")
       .applying(to: source)
   }
@@ -92,7 +92,7 @@ import Testing
 
 @Test func canonicallyEquivalentButDifferentSourceIsNotAnExactMatch() {
   let source = "cafe\u{301}"
-  #expect(throws: Edit.Failure.sourceChanged) {
+  #expect(throws: Edit.Failure.changed) {
     try Edit(
       range: NSRange(location: 0, length: source.utf16.count),
       expected: "caf\u{e9}", replacement: "coffee"
@@ -178,7 +178,7 @@ func writingToolsProtectsFencesUntilTheirActualClosingDelimiter(source: String, 
     *emphasis* and **strong**
     """
   let spans = Syntax.spans(in: source)
-  func strings(_ kind: Syntax.Kind) -> [String] {
+  func strings(_ kind: Syntax.Span.Kind) -> [String] {
     spans.filter { $0.kind == kind }.map { (source as NSString).substring(with: $0.range) }
   }
   #expect(strings(.heading) == ["## A heading ##"])
@@ -213,7 +213,7 @@ func writingToolsProtectsFencesUntilTheirActualClosingDelimiter(source: String, 
     <span class="note">HTML</span> and ~~deleted~~
     """
   let spans = Syntax.spans(in: source)
-  func strings(_ kind: Syntax.Kind) -> [String] {
+  func strings(_ kind: Syntax.Span.Kind) -> [String] {
     spans.filter { $0.kind == kind }.map { (source as NSString).substring(with: $0.range) }
   }
   #expect(

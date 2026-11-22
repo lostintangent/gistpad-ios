@@ -1,12 +1,12 @@
 import Foundation
 
 public enum Syntax {
-  enum Kind: Sendable {
-    case heading, strong, emphasis, blockquote, htmlTag, strikethrough, orderedMarker
-    case code, frontmatter, link, task, checkedTask, punctuation, linkDestination
-  }
-
   struct Span: Sendable {
+    enum Kind: Sendable {
+      case heading, strong, emphasis, blockquote, htmlTag, strikethrough, orderedMarker
+      case code, frontmatter, link, task, checkedTask, punctuation, linkDestination
+    }
+
     let range: NSRange
     let kind: Kind
     var isFencedCode = false
@@ -24,8 +24,8 @@ public enum Syntax {
     public let taskMarker: NSRange?
   }
 
-  private static let inlinePatterns: [(NSRegularExpression, [(Int, Kind)])] = {
-    let patterns: [(String, [(Int, Kind)])] = [
+  private static let inlinePatterns: [(NSRegularExpression, [(Int, Span.Kind)])] = {
+    let patterns: [(String, [(Int, Span.Kind)])] = [
       ("^ {0,3}(?:>[ \\t]*)+.*$", [(0, .blockquote)]),
       ("^ {0,3}#{1,6}(?:[ \\t]+.*?)?(?:[ \\t]+#+)?[ \\t]*$", [(0, .heading)]),
       (
@@ -64,13 +64,13 @@ public enum Syntax {
       ("^[ \\t]*(?:>[ \\t]*)*([0-9]{1,9}[.)])(?=[ \\t])", [(1, .orderedMarker)]),
       ("^[ \\t]*(?:>[ \\t]*)*([-*+])(?=[ \\t])", [(1, .punctuation)]),
     ]
-    return patterns.map { pattern, captures in (Formatting.expression(pattern), captures) }
+    return patterns.map { pattern, captures in (try! NSRegularExpression(pattern: pattern), captures) }
   }()
 
   private static let fencePatterns = (
-    opening: Formatting.expression(
-      "^[ \\t]*(?:>[ \\t]*)*(?:(?:[-+*]|[0-9]{1,9}[.)])[ \\t]+)?(`{3,}|~{3,})(.*)$"),
-    closing: Formatting.expression("^[ \\t]*(?:>[ \\t]*)*(`{3,}|~{3,})[ \\t]*$")
+    opening: try! NSRegularExpression(
+      pattern: "^[ \\t]*(?:>[ \\t]*)*(?:(?:[-+*]|[0-9]{1,9}[.)])[ \\t]+)?(`{3,}|~{3,})(.*)$"),
+    closing: try! NSRegularExpression(pattern: "^[ \\t]*(?:>[ \\t]*)*(`{3,}|~{3,})[ \\t]*$")
   )
 
   public static func contentStart(in text: String) -> Int {
@@ -218,7 +218,7 @@ public enum Syntax {
       let line = source.substring(with: range).trimmingCharacters(in: .newlines)
       let candidate = fencePatterns.opening.firstMatch(
         in: line, range: NSRange(location: 0, length: (line as NSString).length))
-      var protectedKind: Kind?
+      var protectedKind: Span.Kind?
       var isFenceLine = false
       if offset == 0 && line == "---" {
         frontmatter = true
@@ -268,7 +268,7 @@ public enum Syntax {
             for (group, kind) in captures {
               let range = match.range(at: group)
               guard range.location != NSNotFound, range.length > 0 else { continue }
-              let actualKind: Kind =
+              let actualKind: Span.Kind =
                 kind == .task && (line as NSString).substring(with: range) != "[ ]"
                 ? .checkedTask : kind
               result.append(

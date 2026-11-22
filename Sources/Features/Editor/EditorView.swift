@@ -55,9 +55,8 @@
         }
       ) { request in
         LinkEditor(label: request.label) { label, destination in
-          if let edit = try Formatting.edit(
-            .link(label: label, destination: destination), in: request.source,
-            selection: request.selection)
+          if let edit = try Format.link(label: label, destination: destination).edit(
+            in: request.source, selection: request.selection)
           {
             try editor.apply(edit, generation: request.generation)
           }
@@ -79,30 +78,24 @@
 
     private func format(_ command: Format) {
       do {
-        if let edit = try Formatting.edit(
-          command, in: editor.text, selection: editor.textView.selectedRange)
-        {
+        if let edit = try command.edit(in: editor.text, selection: editor.textView.selectedRange) {
           try editor.apply(edit, generation: editor.generation)
         }
-      } catch Edit.Failure.compositionActive {
-        editor.inputError = String(
-          localized: "Finish typing or wait for Writing Tools, then try again.", bundle: .module)
       } catch {
-        editor.inputError = String(localized: "The file changed. Select the text again.", bundle: .module)
+        editor.inputError = error.localizedDescription
       }
     }
 
     private func beginLink() {
       let selection = editor.textView.selectedRange
-      guard editor.canFormat, let label = try? Edit.text(in: editor.text, at: selection)
-      else {
-        editor.inputError = String(
-          localized: "Finish the current text edit, then select the link text again.",
-          bundle: .module)
-        return
+      do {
+        guard editor.canFormat else { throw Edit.Failure.unsettled }
+        linkRequest = LinkRequest(
+          source: editor.text, generation: editor.generation, selection: selection,
+          label: try Edit.text(in: editor.text, at: selection))
+      } catch {
+        editor.inputError = error.localizedDescription
       }
-      linkRequest = LinkRequest(
-        source: editor.text, generation: editor.generation, selection: selection, label: label)
     }
 
   }
@@ -336,12 +329,8 @@
       do {
         try save(label, destination)
         dismiss()
-      } catch Formatting.FormattingError.invalidLink {
-        self.error = String(
-          localized: "Enter a complete web, email or phone link.", bundle: .module)
       } catch {
-        self.error = String(
-          localized: "The file changed. Cancel and select the text again.", bundle: .module)
+        self.error = error.localizedDescription
       }
     }
   }

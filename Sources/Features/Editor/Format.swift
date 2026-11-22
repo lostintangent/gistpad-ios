@@ -1,127 +1,26 @@
 import Foundation
 
-/// One change to a note's source, with UTF-16 offsets.
-public struct Edit: Sendable {
-  public let range: NSRange
-  public let expected: String
-  public let replacement: String
-  /// The selection after the edit, or nil to keep the caret where it was.
-  public let selection: NSRange?
-
-  public init(range: NSRange, expected: String, replacement: String, selection: NSRange? = nil) {
-    self.range = range
-    self.expected = expected
-    self.replacement = replacement
-    self.selection = selection
-  }
-
-  /// Replacements are ordered, nonoverlapping UTF-16 ranges in the original source.
-  init(
-    range: NSRange, expected: String, replacements: [(range: NSRange, replacement: String)],
-    selection: NSRange
-  ) {
-    var start = selection.location
-    var end = NSMaxRange(selection)
-    var delta = 0
-    for replacement in replacements {
-      let current = NSRange(
-        location: replacement.range.location + delta, length: replacement.range.length)
-      let length = replacement.replacement.utf16.count
-      start = Self.remap(start, through: current, replacementLength: length)
-      end = Self.remap(end, through: current, replacementLength: length)
-      delta += length - replacement.range.length
-    }
-    let result = NSMutableString(string: expected)
-    for replacement in replacements.reversed() {
-      result.replaceCharacters(
-        in: NSRange(
-          location: replacement.range.location - range.location, length: replacement.range.length),
-        with: replacement.replacement)
-    }
-    self.init(
-      range: range, expected: expected, replacement: result as String,
-      selection: NSRange(location: start, length: end - start))
-  }
-
-  public func applying(to source: String) throws -> String {
-    guard try Self.text(in: source, at: range).utf8.elementsEqual(expected.utf8) else {
-      throw Failure.sourceChanged
-    }
-    return (source as NSString).replacingCharacters(in: range, with: replacement)
-  }
-
-  /// The source at `range`, which must be in bounds and must not split a surrogate pair.
-  static func text(in source: String, at range: NSRange) throws -> String {
-    let utf16 = source as NSString
-    guard range.location >= 0, range.length >= 0, range.location <= utf16.length,
-      range.length <= utf16.length - range.location
-    else { throw Failure.invalidRange }
-    for boundary in [range.location, NSMaxRange(range)]
-    where boundary > 0 && boundary < utf16.length {
-      guard !(0xD800...0xDBFF).contains(utf16.character(at: boundary - 1))
-        || !(0xDC00...0xDFFF).contains(utf16.character(at: boundary))
-      else { throw Failure.invalidRange }
-    }
-    return utf16.substring(with: range)
-  }
-
-  private static func remap(_ offset: Int, through range: NSRange, replacementLength: Int) -> Int {
-    if offset < range.location { return offset }
-    if offset >= NSMaxRange(range) { return offset + replacementLength - range.length }
-    return range.location + min(offset - range.location, replacementLength)
-  }
-
-  public enum Failure: Error, Equatable {
-    case invalidRange
-    case sourceChanged
-    case staleGeneration
-    case compositionActive
-  }
-}
-
-extension Edit.Failure: LocalizedError {
-  public var errorDescription: String? {
-    switch self {
-    case .compositionActive:
-      String(
-        localized:
-          "Finish composition or Writing Tools before continuing. Your current draft is unchanged.",
-        bundle: .module)
-    case .invalidRange, .sourceChanged, .staleGeneration:
-      String(
-        localized: "This file changed. Review the latest version first.",
-        bundle: .module)
-    }
-  }
-}
-
+/// A Markdown format from the keyboard bar.
 enum Format: Sendable {
   case heading(Int)
   case bold, italic, bulletList, numberedList, checklist, quote
   case inlineCode, codeBlock
   case link(label: String, destination: String)
-}
 
-enum Formatting {
-  enum FormattingError: Error, Equatable {
-    case invalidLink
-  }
-
-  static func edit(
-    _ format: Format, in source: String, selection: NSRange
-  ) throws -> Edit? {
+  /// Formats the selection, or unformats it when it's already formatted. Nil when nothing changes.
+  func edit(in source: String, selection: NSRange) throws -> Edit? {
     let text = source as NSString
     let selected = try Edit.text(in: source, at: selection)
-    switch format {
+    switch self {
     case .bold:
-      return wrapped("**", source: source, selection: selection, selected: selected)
+      return Self.wrapped("**", source: source, selection: selection, selected: selected)
     case .italic:
-      return wrapped("*", source: source, selection: selection, selected: selected)
+      return Self.wrapped("*", source: source, selection: selection, selected: selected)
     case .inlineCode:
-      if let edit = unwrappedCode(in: source, selection: selection, selected: selected) {
+      if let edit = Self.unwrappedCode(in: source, selection: selection, selected: selected) {
         return edit
       }
-      let delimiter = String(repeating: "`", count: longestBacktickRun(selected) + 1)
+      let delimiter = String(repeating: "`", count: Self.longestBacktickRun(selected) + 1)
       let padded =
         selected.hasPrefix("`") || selected.hasSuffix("`")
         || (selected.hasPrefix(" ") && selected.hasSuffix(" ")
@@ -142,7 +41,7 @@ enum Formatting {
         !label.contains("\n"), !label.contains("\r"),
         (scheme != "http" && scheme != "https") || !(url.host ?? "").isEmpty,
         (scheme != "mailto" && scheme != "tel") || !url.path.isEmpty
-      else { throw FormattingError.invalidLink }
+      else { throw Edit.Failure.invalidLink }
       let target = url.absoluteString
       let escaped = target.contains("(") || target.contains(")") ? "<\(target)>" : target
       let title = (label.isEmpty ? target : label)
@@ -154,10 +53,10 @@ enum Formatting {
         range: selection, expected: selected, replacement: replacement,
         selection: NSRange(location: selection.location + replacement.utf16.count, length: 0))
     case .codeBlock:
-      let block = lineRange(in: text, selection: selection)
+      let block = text.lineRange(covering: selection)
       let content = text.substring(with: block)
       let newline = source.contains("\r\n") ? "\r\n" : "\n"
-      let fence = String(repeating: "`", count: max(3, longestBacktickRun(content) + 1))
+      let fence = String(repeating: "`", count: max(3, Self.longestBacktickRun(content) + 1))
       let endsLine = content.utf16.last == 10 || content.utf16.last == 13
       let terminator = endsLine ? "" : newline
       let trailing = endsLine ? newline : ""
@@ -168,7 +67,7 @@ enum Formatting {
         selection: NSRange(
           location: block.location + opening.utf16.count, length: content.utf16.count))
     case .heading, .bulletList, .numberedList, .checklist, .quote:
-      return lines(format, in: source, selection: selection)
+      return lines(in: source, selection: selection)
     }
   }
 
@@ -190,7 +89,7 @@ enum Formatting {
     while opening > 0, text.character(at: opening - 1) == 96 { opening -= 1 }
     while closing < text.length, text.character(at: closing) == 96 { closing += 1 }
     let before = selection.location - opening - padding
-    if before > longestBacktickRun(selected), closing - NSMaxRange(selection) - padding == before {
+    if before > Self.longestBacktickRun(selected), closing - NSMaxRange(selection) - padding == before {
       let enclosing = NSRange(location: opening, length: closing - opening)
       return Edit(
         range: enclosing, expected: text.substring(with: enclosing), replacement: selected,
@@ -201,7 +100,7 @@ enum Formatting {
       selected.utf16.count >= ticks * 2
     else { return nil }
     var content = String(selected.dropFirst(ticks).dropLast(ticks))
-    guard longestBacktickRun(content) < ticks else { return nil }
+    guard Self.longestBacktickRun(content) < ticks else { return nil }
     if content.hasPrefix(" "), content.hasSuffix(" "), !content.allSatisfy(\.isWhitespace) {
       content = String(content.dropFirst().dropLast())
     }
@@ -249,22 +148,20 @@ enum Formatting {
       selection: NSRange(location: selection.location + count, length: selection.length))
   }
 
-  private static func lines(
-    _ format: Format, in source: String, selection: NSRange
-  ) -> Edit? {
+  private func lines(in source: String, selection: NSRange) -> Edit? {
     let text = source as NSString
-    let block = lineRange(in: text, selection: selection)
+    let block = text.lineRange(covering: selection)
     let content = text.substring(with: block)
     var components = content.components(separatedBy: "\n")
     if content.utf16.last == 10 { components.removeLast() }
     let expression: NSRegularExpression
-    switch format {
+    switch self {
     case .heading:
-      expression = headingPrefix
+      expression = Self.headingPrefix
     case .quote:
-      expression = quotePrefix
+      expression = Self.quotePrefix
     default:
-      expression = listPrefix
+      expression = Self.listPrefix
     }
     var offset = block.location
     var prefixes: [(range: NSRange, marker: String, matches: Bool)] = []
@@ -277,7 +174,7 @@ enum Formatting {
       let existing = value.substring(with: NSRange(location: indent, length: length))
       let marker: String
       let matches: Bool
-      switch format {
+      switch self {
       case .heading(let level):
         marker = level == 0 ? "" : String(repeating: "#", count: level) + " "
         matches =
@@ -298,8 +195,8 @@ enum Formatting {
       }
       prefixes.append(
         (NSRange(location: offset + indent, length: length), marker, matches))
-      if case .heading = format, let match,
-        let suffix = headingSuffix.firstMatch(
+      if case .heading = self, let match,
+        let suffix = Self.headingSuffix.firstMatch(
           in: line, range: NSRange(location: 0, length: value.length)),
         suffix.range.location >= NSMaxRange(match.range)
       {
@@ -318,13 +215,6 @@ enum Formatting {
     return edit.replacement.utf8.elementsEqual(content.utf8) ? nil : edit
   }
 
-  static func lineRange(in source: NSString, selection: NSRange) -> NSRange {
-    let first = source.lineRange(for: NSRange(location: selection.location, length: 0))
-    let last = source.lineRange(
-      for: NSRange(location: max(selection.location, NSMaxRange(selection) - 1), length: 0))
-    return NSUnionRange(first, last)
-  }
-
   private static func longestBacktickRun(_ source: String) -> Int {
     var longest = 0
     var current = 0
@@ -335,15 +225,22 @@ enum Formatting {
     return longest
   }
 
-  static func expression(_ pattern: String) -> NSRegularExpression {
-    do { return try NSRegularExpression(pattern: pattern) } catch {
-      preconditionFailure("Invalid built-in formatting expression: \(error)")
-    }
-  }
+  private static let headingPrefix = try! NSRegularExpression(
+    pattern: "^[ \\t]*#{1,6}(?:[ \\t]+|(?=\\r?$))")
+  private static let headingSuffix = try! NSRegularExpression(
+    pattern: "[ \\t]+#+[ \\t]*(?=\\r?$)")
+  private static let quotePrefix = try! NSRegularExpression(pattern: "^[ \\t]*>[ \\t]?")
+  private static let listPrefix = try! NSRegularExpression(
+    pattern: "^[ \\t]*(?:[-*+][ \\t]+(?:\\[[ xX]\\][ \\t]+)?|[0-9]{1,9}[.)][ \\t]+)")
+}
 
-  private static let headingPrefix = expression("^[ \\t]*#{1,6}(?:[ \\t]+|(?=\\r?$))")
-  private static let headingSuffix = expression("[ \\t]+#+[ \\t]*(?=\\r?$)")
-  private static let quotePrefix = expression("^[ \\t]*>[ \\t]?")
-  private static let listPrefix = expression(
-    "^[ \\t]*(?:[-*+][ \\t]+(?:\\[[ xX]\\][ \\t]+)?|[0-9]{1,9}[.)][ \\t]+)")
+extension NSString {
+  /// The whole lines a selection touches. Unlike `lineRange(for:)`, a selection that ends just
+  /// after a line break leaves the next line out.
+  func lineRange(covering selection: NSRange) -> NSRange {
+    let first = lineRange(for: NSRange(location: selection.location, length: 0))
+    let last = lineRange(
+      for: NSRange(location: max(selection.location, NSMaxRange(selection) - 1), length: 0))
+    return NSUnionRange(first, last)
+  }
 }

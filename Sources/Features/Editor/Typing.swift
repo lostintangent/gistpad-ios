@@ -90,7 +90,7 @@ enum Typing {
   ) throws -> Edit? {
     _ = try Edit.text(in: source, at: selection)
     let text = source as NSString
-    let block = Formatting.lineRange(in: text, selection: selection)
+    let block = text.lineRange(covering: selection)
     let protected = protectedRanges(in: source)
     let kept = result ?? selection
     guard !isProtected(block, ranges: protected) else { return nil }
@@ -404,6 +404,6 @@ enum Typing {
     }
   }
 
-  private static let listPrefix = Formatting.expression(
-    "^([ \\t]*)(?:([-*+])([ \\t]+)(?:\\[([ xX])\\]([ \\t]+|$))?|([0-9]{1,9})([.)])([ \\t]+))")
+  private static let listPrefix = try! NSRegularExpression(
+    pattern: "^([ \\t]*)(?:([-*+])([ \\t]+)(?:\\[([ xX])\\]([ \\t]+|$))?|([0-9]{1,9})([.)])([ \\t]+))")
 }

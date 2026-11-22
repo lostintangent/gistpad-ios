@@ -75,13 +75,13 @@ struct EditorContinuityTests {
       replacement: "[x]")
     try session.apply(edit, generation: 0)
     #expect(session.text == "- [ ] Duplicate\n- [x] Duplicate")
-    #expect(throws: Edit.Failure.staleGeneration) {
+    #expect(throws: Edit.Failure.changed) {
       try session.apply(edit, generation: 0)
     }
     session.textView.undoManager?.undo()
     #expect(session.textView.text == source)
     session.textView.setMarkedText("に", selectedRange: NSRange(location: 1, length: 0))
-    #expect(throws: Edit.Failure.compositionActive) {
+    #expect(throws: Edit.Failure.unsettled) {
       try session.apply(edit, generation: session.generation)
     }
   }

@@ -85,7 +85,7 @@ extension GistFileEditor {
     _ edit: Edit, expectedGeneration: UInt64,
     commit: @MainActor () async throws -> GistFileDraft
   ) async throws {
-    guard canEdit else { throw Edit.Failure.compositionActive }
+    guard canEdit else { throw Edit.Failure.unsettled }
     guard editor.generation == expectedGeneration else { throw DraftError.changed }
     let result = try edit.applying(to: editor.text)
     let changed = !result.utf8.elementsEqual(editor.text.utf8)

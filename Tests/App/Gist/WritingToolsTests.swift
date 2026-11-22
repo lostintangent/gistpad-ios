@@ -28,7 +28,7 @@ extension EditorContinuityTests {
       #expect(session.generation == 7)
       #expect(changes.isEmpty)
     }
-    #expect(throws: Edit.Failure.compositionActive) {
+    #expect(throws: Edit.Failure.unsettled) {
       try session.apply(
         Edit(
           range: NSRange(location: 0, length: 8), expected: "Original", replacement: "External"),

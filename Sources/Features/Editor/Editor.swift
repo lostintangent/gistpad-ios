@@ -73,8 +73,8 @@
 
     /// Applies one change as an undoable step. A nil selection keeps the caret where it was.
     public func apply(_ edit: Edit, generation: UInt64) throws {
-      guard isSettled else { throw Edit.Failure.compositionActive }
-      guard self.generation == generation else { throw Edit.Failure.staleGeneration }
+      guard isSettled else { throw Edit.Failure.unsettled }
+      guard self.generation == generation else { throw Edit.Failure.changed }
       _ = try edit.applying(to: text)
       // An edit that changes nothing, like stepping over a closer, only moves the caret.
       if edit.range.length == 0, edit.replacement.isEmpty {
@@ -176,8 +176,7 @@
     /// Puts the caret at the end, ready to write, as a new gist or today's note opens.
     public func requestFocusAtEnd() {
       guard canFormat else {
-        inputError = String(
-          localized: "Finish the current text edit before moving the caret.", bundle: .module)
+        inputError = Edit.Failure.unsettled.localizedDescription
         return
       }
       textView.selectedRange = NSRange(location: text.utf16.count, length: 0)
@@ -256,22 +255,21 @@
         try apply(edit, generation: generation)
         return false
       } catch {
-        inputError = String(localized: "The file changed. Select the text again.", bundle: .module)
+        inputError = error.localizedDescription
         return false
       }
     }
 
     func indent(outdent: Bool) {
       do {
-        guard canFormat else { throw Edit.Failure.compositionActive }
+        guard canFormat else { throw Edit.Failure.unsettled }
         if let edit = try Typing.indent(
           in: text, selection: textView.selectedRange, outdent: outdent)
         {
           try apply(edit, generation: generation)
         }
       } catch {
-        inputError = String(
-          localized: "Finish the current text edit, then select the lines again.", bundle: .module)
+        inputError = error.localizedDescription
       }
     }
 
@@ -291,16 +289,14 @@
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         return true
       } catch {
-        inputError = String(
-          localized: "Finish the current text edit, then try again.", bundle: .module)
+        inputError = error.localizedDescription
         return false
       }
     }
 
     public func find(replacing: Bool = false) {
       guard isSettled else {
-        inputError = String(
-          localized: "Finish the current text edit before finding text.", bundle: .module)
+        inputError = Edit.Failure.unsettled.localizedDescription
         return
       }
       commentHighlights.suspendForFind()
@@ -813,7 +809,7 @@
     }
 
     public func apply(_ edit: Edit, generation: UInt64) throws {
-      guard self.generation == generation else { throw Edit.Failure.staleGeneration }
+      guard self.generation == generation else { throw Edit.Failure.changed }
       let result = try edit.applying(to: text)
       guard !result.utf8.elementsEqual(text.utf8) else { return }
       text = result

@@ -21,7 +21,7 @@
           changes += 1
         }
         let edit = try #require(
-          try Formatting.edit(.bold, in: editor.text, selection: originalSelection))
+          try Format.bold.edit(in: editor.text, selection: originalSelection))
         try editor.apply(edit, generation: 0)
         #expect(editor.text == "A **日本語** note")
         #expect(editor.textView.selectedRange == edit.selection)
@@ -41,10 +41,9 @@
       @Test func staleLinkNeverChangesSource() throws {
         let editor = Editor(text: "note")
         let edit = try #require(
-          try Formatting.edit(
-            .link(label: "note", destination: "https://example.com"),
+          try Format.link(label: "note", destination: "https://example.com").edit(
             in: editor.text, selection: NSRange(location: 0, length: 4)))
-        #expect(throws: Edit.Failure.staleGeneration) {
+        #expect(throws: Edit.Failure.changed) {
           try editor.apply(edit, generation: 1)
         }
         #expect(editor.text == "note")
@@ -56,14 +55,14 @@
         let window = hostEditor(editor)
         defer { window.isHidden = true }
         let edit = try #require(
-          try Formatting.edit(
-            .bold, in: editor.text, selection: NSRange(location: 0, length: 4)))
+          try Format.bold.edit(
+            in: editor.text, selection: NSRange(location: 0, length: 4)))
         editor.textViewWritingToolsWillBegin(editor.textView)
         editor.find()
         #expect(editor.inputError != nil)
         #expect(editor.textView.findInteraction?.isFindNavigatorVisible == false)
         editor.inputError = nil
-        #expect(throws: Edit.Failure.compositionActive) {
+        #expect(throws: Edit.Failure.unsettled) {
           try editor.apply(edit, generation: 0)
         }
         editor.textViewWritingToolsDidEnd(editor.textView)
@@ -72,7 +71,7 @@
         editor.find()
         #expect(editor.inputError != nil)
         #expect(editor.textView.findInteraction?.isFindNavigatorVisible == false)
-        #expect(throws: Edit.Failure.compositionActive) {
+        #expect(throws: Edit.Failure.unsettled) {
           try editor.apply(edit, generation: 0)
         }
         editor.textView.unmarkText()
