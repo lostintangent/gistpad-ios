@@ -523,8 +523,11 @@
     private var readingOffset = 0
     private var anchorDelta: CGFloat = 0
     private var restoringAnchor = false
-    private weak var viewportView: UIView?
     private var needsEditingCaretReveal = false
+    /// How far the keyboard and its bar reach into the view, from its host's keyboard guide.
+    var keyboardOverlap: CGFloat = 0 {
+      didSet { if abs(keyboardOverlap - oldValue) > 0.001 { setNeedsLayout() } }
+    }
 
     // Platform gap: UIKit still selects and deletes text that shouldEnumerate hides, so this
     // setter and deleteBackward stop at hidden front matter. Remove both when it can't be selected.
@@ -619,18 +622,12 @@
       }
     }
 
-    func updateViewportView(_ view: UIView) {
-      viewportView = view
-      setNeedsLayout()
-    }
-
     // Platform gap: UIKit insets the source below the bars but not above the keyboard and its
-    // bar, so the viewport overlay measures them. Remove it when UIScrollView insets for those too.
-    private func applyViewportInsets() {
-      guard let viewportView, window != nil, viewportView.window === window else { return }
-      let viewport = convert(viewportView.bounds, from: viewportView)
+    // bar, so the source insets for its keyboard overlap. Remove when UIScrollView insets for both.
+    private func applyKeyboardInset() {
+      guard window != nil else { return }
       let automatic = adjustedContentInset.bottom - contentInset.bottom
-      let bottom = max(0, bounds.maxY - viewport.maxY - automatic)
+      let bottom = max(0, keyboardOverlap - automatic)
       guard abs(bottom - contentInset.bottom) > 0.001 else { return }
       let wasRestoring = restoringAnchor
       restoringAnchor = true
@@ -731,7 +728,7 @@
 
     override func layoutSubviews() {
       editor?.commentHighlights.findVisibilityDidChange()
-      applyViewportInsets()
+      applyKeyboardInset()
       let needsInitialAnchor = previousWidth == 0
       if writingToolsOwnsScrolling {
         super.layoutSubviews()

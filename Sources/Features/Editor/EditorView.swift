@@ -45,7 +45,6 @@
         .id(editor.id)
         .ignoresSafeArea([.container, .keyboard], edges: .vertical)
       }
-      .overlay { ViewportRepresentable(editor: editor).allowsHitTesting(false) }
       .sheet(
         item: $linkRequest,
         onDismiss: {
@@ -145,11 +144,27 @@
     private let editor: Editor
     private var configuration: ((UITextView) -> Void)?
     private var isDismantled = false
+    // Platform gap: the bar doesn't track a scroll view inside a UIViewRepresentable, so it draws
+    // no soft edge over the source. Remove topEdge when SwiftUI gives the bar that scroll view.
+    private let topEdge = UIScrollEdgeElementContainerInteraction()
 
     init(editor: Editor) {
       self.editor = editor
       super.init(frame: .zero)
+      topEdge.edge = .top
       editor.hosts.append(Reference(host: self))
+      // Platform gap: a keyboard guide move only lays out views constrained to it, so a hidden view
+      // pinned to it lays out the host. Remove with the source's keyboard inset.
+      let keyboardEdge = UIView()
+      keyboardEdge.isHidden = true
+      keyboardEdge.translatesAutoresizingMaskIntoConstraints = false
+      addSubview(keyboardEdge)
+      NSLayoutConstraint.activate([
+        keyboardEdge.topAnchor.constraint(equalTo: keyboardLayoutGuide.topAnchor),
+        keyboardEdge.leadingAnchor.constraint(equalTo: leadingAnchor),
+        keyboardEdge.widthAnchor.constraint(equalToConstant: 0),
+        keyboardEdge.heightAnchor.constraint(equalToConstant: 0),
+      ])
     }
 
     @available(*, unavailable)
@@ -174,6 +189,8 @@
       guard editor.host === self else { return }
       if !ownsEditor { adoptEditor() }
       if editor.textView.frame != bounds { editor.textView.frame = bounds }
+      editor.textView.keyboardOverlap = bounds.maxY - keyboardLayoutGuide.layoutFrame.minY
+      updateTopEdge()
       // Platform gap: the keyboard lays out its accessory after a column animation, so the capsule
       // would jump. Laying it out now glides it with the note. Remove when UIKit animates it along.
       if let accessory = editor.textView.inputAccessoryView, accessory.window != nil {
@@ -216,67 +233,21 @@
       configuration?(textView)
       addSubview(textView)
     }
-  }
 
-  private struct ViewportRepresentable: UIViewRepresentable {
-    let editor: Editor
-
-    func makeUIView(context: Context) -> ViewportView {
-      let view = ViewportView()
-      view.textView = editor.textView
-      editor.textView.updateViewportView(view)
-      return view
-    }
-
-    func updateUIView(_ view: ViewportView, context: Context) {
-      view.textView = editor.textView
-      editor.textView.updateViewportView(view)
-    }
-  }
-
-  private final class ViewportView: UIView {
-    weak var textView: UITextView?
-    // Platform gap: the bar doesn't track a scroll view inside a UIViewRepresentable, so it draws
-    // no soft edge over the source. Remove topEdge when SwiftUI gives the bar that scroll view.
-    private let topEdge = UIScrollEdgeElementContainerInteraction()
-
-    override init(frame: CGRect) {
-      super.init(frame: frame)
-      isUserInteractionEnabled = false
-      accessibilityElementsHidden = true
-      topEdge.edge = .top
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func didMoveToWindow() {
-      super.didMoveToWindow()
-      updateChrome()
-      textView?.setNeedsLayout()
-    }
-
-    override func layoutSubviews() {
-      super.layoutSubviews()
-      updateChrome()
-      textView?.setNeedsLayout()
-    }
-
-    private func updateChrome() {
+    private func updateTopEdge() {
       var responder: UIResponder? = self
-      var navigationBar: UINavigationBar?
-      while let current = responder, window != nil {
-        if let controller = current as? UIViewController,
-          let bar = controller.navigationController?.navigationBar, bar.window === window
+      while let current = responder {
+        if let bar = (current as? UIViewController)?.navigationController?.navigationBar,
+          bar.window === window
         {
-          navigationBar = bar
-          break
+          guard topEdge.view !== bar || topEdge.scrollView !== editor.textView else { return }
+          topEdge.view?.removeInteraction(topEdge)
+          topEdge.scrollView = editor.textView
+          bar.addInteraction(topEdge)
+          return
         }
         responder = current.next
       }
-      guard topEdge.view !== navigationBar || topEdge.scrollView !== textView else { return }
-      topEdge.view?.removeInteraction(topEdge)
-      topEdge.scrollView = textView
-      navigationBar?.addInteraction(topEdge)
     }
   }
 
