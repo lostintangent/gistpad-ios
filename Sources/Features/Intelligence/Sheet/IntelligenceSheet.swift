@@ -197,7 +197,7 @@
           Label(
             String(
               localized:
-                "\(proposal.omittedCount) changes couldn't be found in your file and won't be applied.",
+                "\(proposal.omittedCount) changes couldn’t be found in your file and won’t be applied.",
               bundle: .module),
             systemImage: "exclamationmark.circle")
         }
@@ -286,7 +286,7 @@
         }
       }
       if change.range == nil {
-        Label(String(localized: "Can't Apply", bundle: .module), systemImage: "exclamationmark.circle")
+        Label(String(localized: "Can’t Apply", bundle: .module), systemImage: "exclamationmark.circle")
           .foregroundStyle(.secondary)
       }
       if state.action == .review {

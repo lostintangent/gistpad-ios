@@ -137,7 +137,7 @@
         appliedCount += count
         errorMessage = nil
         notice = String(
-          localized: "Applied. The editor's Undo restores your text.", bundle: .module)
+          localized: "Applied. The editor’s Undo restores your text.", bundle: .module)
       } catch {
         errorMessage = error.localizedDescription
       }

@@ -29,7 +29,7 @@ struct OpenFailedView: View {
 
   var body: some View {
     ContentUnavailableView {
-      Label("Couldn't Open This File", systemImage: "exclamationmark.circle")
+      Label("Couldn’t Open This File", systemImage: "exclamationmark.circle")
     } description: {
       Text(message)
     } actions: {

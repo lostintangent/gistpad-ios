@@ -81,7 +81,7 @@ struct ConflictReview: View {
           VStack(alignment: .leading, spacing: 12) {
             Button("Keep Mine") { apply(review.text, publishes: true) }
               .buttonStyle(.borderedProminent)
-            Button("Use GitHub's") { isConfirmingRemote = true }
+            Button("Use GitHub’s") { isConfirmingRemote = true }
               .buttonStyle(.bordered)
           }
           .disabled(isStale || !fileEditor.canEdit)
@@ -103,10 +103,10 @@ struct ConflictReview: View {
       .disabled(isApplying)
       .interactiveDismissDisabled(isApplying)
       .confirmationDialog(
-        "Replace your draft with GitHub's version?",
+        "Replace your draft with GitHub’s version?",
         isPresented: $isConfirmingRemote, titleVisibility: .visible
       ) {
-        Button("Use GitHub's", role: .destructive) {
+        Button("Use GitHub’s", role: .destructive) {
           apply(github, publishes: false)
         }
         Button("Cancel", role: .cancel) {}

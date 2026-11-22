@@ -76,8 +76,8 @@ final class ImageUpload {
   private static func message(for error: any Error) -> String {
     switch error {
     case ImageError.tooLarge: String(localized: "Choose an image under 50 MB.")
-    case ImageError.http: String(localized: "GistPad's image storage didn't accept this image.")
-    case is ImageError: String(localized: "This item couldn't be read as an image. Choose another one.")
+    case ImageError.http: String(localized: "GistPad’s image storage didn’t accept this image.")
+    case is ImageError: String(localized: "This item couldn’t be read as an image. Choose another one.")
     default: error.localizedDescription
     }
   }

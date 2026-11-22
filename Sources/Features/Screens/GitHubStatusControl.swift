@@ -75,7 +75,7 @@ public struct GitHubStatusControl: View {
 
     private func message(_ problem: GitHubProblem) -> String {
         switch problem {
-        case .offline: String(localized: "GitHub couldn't be reached.", bundle: .module)
+        case .offline: String(localized: "GitHub couldn’t be reached.", bundle: .module)
         case .reconnect: String(localized: "Reconnect GitHub to check for changes.", bundle: .module)
         case .rejected: String(localized: "GitHub declined the request.", bundle: .module)
         }

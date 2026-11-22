@@ -381,9 +381,9 @@ public struct LibraryView: View {
                 ContentUnavailableView.search(text: state.query)
             case .offline?, .rejected?:
                 ContentUnavailableView {
-                    Label(String(localized: "Couldn't Load Your Gists", bundle: .module), systemImage: "exclamationmark.circle")
+                    Label(String(localized: "Couldn’t Load Your Gists", bundle: .module), systemImage: "exclamationmark.circle")
                 } description: {
-                    Text("GitHub couldn't be reached. Your gists will appear once it answers.", bundle: .module)
+                    Text("GitHub couldn’t be reached. Your gists will appear once it answers.", bundle: .module)
                 } actions: {
                     Button(String(localized: "Try Again", bundle: .module)) {
                         Task { await actions.refresh() }

@@ -62,7 +62,7 @@
         }
       }
       .alert(
-        String(localized: "Couldn't Complete Action", bundle: .module),
+        String(localized: "Couldn’t Complete Action", bundle: .module),
         item: Bindable(editor).inputError
       ) { _ in
       } message: { message in

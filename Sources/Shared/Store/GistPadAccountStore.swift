@@ -14,10 +14,10 @@ extension AccountError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidConfiguration:
-            String(localized: "GitHub sign-in isn't configured correctly in this build.")
+            String(localized: "GitHub sign-in isn’t configured correctly in this build.")
         case .signedOut, .accountChanged, .reconnectGitHub:
             String(localized: "Reconnect GitHub to continue. Your gists on this iPhone are unchanged.")
-        case .keychain: String(localized: "GistPad couldn't use your sign-in on this iPhone. Sign in again.")
+        case .keychain: String(localized: "GistPad couldn’t use your sign-in on this iPhone. Sign in again.")
         }
     }
 }

@@ -10,7 +10,7 @@ public struct SettingsSheet<Appearance: View>: View {
   @ViewBuilder var appearance: () -> Appearance
   @State private var pendingPreference: (key: BooleanPreference, value: Bool)?
   @State private var saveError: String?
-  @State private var errorTitle = String(localized: "Couldn't Confirm Setting", bundle: .module)
+  @State private var errorTitle = String(localized: "Couldn’t Confirm Setting", bundle: .module)
   @State private var confirmingSignOut = false
   @State private var isSigningOut = false
   @Environment(\.dismiss) private var dismiss
@@ -125,7 +125,7 @@ public struct SettingsSheet<Appearance: View>: View {
     guard !isWorking else { return }
     isSigningOut = true
     saveError = nil
-    errorTitle = String(localized: "Couldn't Sign Out", bundle: .module)
+    errorTitle = String(localized: "Couldn’t Sign Out", bundle: .module)
     Task {
       defer { isSigningOut = false }
       do {
@@ -147,7 +147,7 @@ public struct SettingsSheet<Appearance: View>: View {
         guard pendingPreference == nil else { return }
         pendingPreference = (key, value)
         saveError = nil
-        errorTitle = String(localized: "Couldn't Confirm Setting", bundle: .module)
+        errorTitle = String(localized: "Couldn’t Confirm Setting", bundle: .module)
         Task {
           defer { pendingPreference = nil }
           do {

@@ -90,7 +90,7 @@ enum PreviewBridge {
         case "rendered":
             return .rendered
         case "failure":
-            return .event(.failure(message.message ?? "The preview couldn't be rendered."))
+            return .event(.failure(message.message ?? "The preview couldn’t be rendered."))
         default:
             throw invalidMessage
         }

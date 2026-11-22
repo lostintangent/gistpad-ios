@@ -25,7 +25,7 @@ final class IntelligencePresentation {
     present(editor: editor, title: fileEditor.details.title) { range in
       guard fileEditor.details.isOwned else {
         model.alertMessage = String(
-          localized: "This gist is read-only, so this passage can't open in Edit.")
+          localized: "This gist is read-only, so this passage can’t open in Edit.")
         return
       }
       let generation = editor.generation

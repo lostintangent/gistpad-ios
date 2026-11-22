@@ -35,7 +35,7 @@ extension ChangeError: LocalizedError {
     case .notSaved:
       String(
         localized:
-          "Your latest changes couldn't be saved on this iPhone. Keep this file open and try again."
+          "Your latest changes couldn’t be saved on this iPhone. Keep this file open and try again."
       )
     }
   }

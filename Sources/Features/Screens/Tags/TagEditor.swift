@@ -30,7 +30,7 @@ public struct TagEditor: View {
             List {
                 if let saveError {
                     Section {
-                        Label(String(localized: "Couldn't save your tags.", bundle: .module), systemImage: "exclamationmark.circle")
+                        Label(String(localized: "Couldn’t save your tags.", bundle: .module), systemImage: "exclamationmark.circle")
                             .foregroundStyle(.primary)
                         Button(String(localized: "Try Again", bundle: .module), action: commit)
                     } footer: {

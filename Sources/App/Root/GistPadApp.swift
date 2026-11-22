@@ -43,7 +43,7 @@ struct GistPadApp: App {
           #endif
         } else if let loadError {
           ContentUnavailableView {
-            Label("Couldn't Load Your Gists", systemImage: "exclamationmark.circle")
+            Label("Couldn’t Load Your Gists", systemImage: "exclamationmark.circle")
           } description: {
             Text(loadError)
           } actions: {
@@ -68,7 +68,7 @@ struct GistPadApp: App {
       }
       .alert("Couldn’t Open Link", isPresented: $cannotOpenLink) {
       } message: {
-        Text("GistPad can't open this link.")
+        Text("GistPad can’t open this link.")
       }
       .accent(savedHex: model?.account?.preferences.accentColor)
     }

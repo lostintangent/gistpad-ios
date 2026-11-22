@@ -25,7 +25,7 @@ struct LauncherWidget: Widget {
         .containerBackground(.background, for: .widget)
     }
     .configurationDisplayName("GistPad")
-    .description("Open today's note, a recent gist or start a new one.")
+    .description("Open today’s note, a recent gist or start a new one.")
     .supportedFamilies([.systemSmall, .systemMedium])
   }
 
@@ -85,13 +85,13 @@ struct LockScreenTodayWidget: Widget {
       }
       .background { AccessoryWidgetBackground() }
       .accessibilityElement(children: .ignore)
-      .accessibilityLabel(Text("Today's note"))
+      .accessibilityLabel(Text("Today’s note"))
       .widgetURL(GistPadLink.today.url)
       // The Lock Screen drops container backgrounds, so the disc lives in the content.
       .containerBackground(for: .widget) { Color.clear }
     }
     .configurationDisplayName("Today")
-    .description("Open today's note.")
+    .description("Open today’s note.")
     .supportedFamilies([.accessoryCircular])
   }
 
@@ -121,7 +121,7 @@ struct AddToTodayControl: ControlWidget {
       }
     }
     .displayName("Add to Today")
-    .description("Capture a thought or task in today's note.")
+    .description("Capture a thought or task in today’s note.")
   }
 }
 
@@ -133,7 +133,7 @@ struct OpenTodayControl: ControlWidget {
       }
     }
     .displayName("Open Today")
-    .description("Open today's note.")
+    .description("Open today’s note.")
   }
 }
 

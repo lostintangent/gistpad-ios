@@ -57,8 +57,8 @@ extension PreferenceError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .unknownTag: String(localized: "This tag no longer exists.")
-        case .invalidShape: String(localized: "GistPad can't safely make this change. Make it on gistpad.dev.")
-        case .invalidIdentifier: String(localized: "This change couldn't be saved. Try again.")
+        case .invalidShape: String(localized: "GistPad can’t safely make this change. Make it on gistpad.dev.")
+        case .invalidIdentifier: String(localized: "This change couldn’t be saved. Try again.")
         }
     }
 }

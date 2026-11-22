@@ -13,13 +13,13 @@ package final class OnDeviceModel: IntelligenceModel {
     case .available:
       nil
     case .unavailable(.deviceNotEligible):
-      String(localized: "This device doesn't support Apple Intelligence.", bundle: .module)
+      String(localized: "This device doesn’t support Apple Intelligence.", bundle: .module)
     case .unavailable(.appleIntelligenceNotEnabled):
       String(
         localized: "Turn on Apple Intelligence in Settings to use these actions.", bundle: .module)
     case .unavailable(.modelNotReady):
       String(
-        localized: "The on-device model isn't ready yet. Let its download finish, then try again.",
+        localized: "The on-device model isn’t ready yet. Let its download finish, then try again.",
         bundle: .module)
     case .unavailable:
       String(localized: "Apple Intelligence is currently unavailable.", bundle: .module)
@@ -72,7 +72,7 @@ package final class OnDeviceModel: IntelligenceModel {
       case .unsupportedLanguageOrLocale:
         throw IntelligenceError.unavailable(
           String(
-            localized: "Apple Intelligence doesn't support this language or region yet.",
+            localized: "Apple Intelligence doesn’t support this language or region yet.",
             bundle: .module))
       default:
         throw error

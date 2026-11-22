@@ -20,7 +20,7 @@ struct AddToTodaySheet: View {
           Section {
             Label {
               VStack(alignment: .leading, spacing: 4) {
-                Text("Couldn't Add to Today").font(.headline)
+                Text("Couldn’t Add to Today").font(.headline)
                 Text(errorMessage).foregroundStyle(.secondary)
               }
             } icon: {

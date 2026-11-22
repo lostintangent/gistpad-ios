@@ -32,9 +32,9 @@ public enum PlatformError: LocalizedError, Equatable, Sendable {
         case .emptyNoteName:
             String(localized: "Give the new note a name.")
         case .unsupportedNoteCreation:
-            String(localized: "Siri can't create a pinned note, add attachments, or put it in an existing gist.")
+            String(localized: "Siri can’t create a pinned note, add attachments, or put it in an existing gist.")
         case .unsupportedNoteUpdate:
-            String(localized: "Siri can't make that change to this gist. Open it in GistPad instead.")
+            String(localized: "Siri can’t make that change to this gist. Open it in GistPad instead.")
         }
     }
 }

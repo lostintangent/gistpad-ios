@@ -17,11 +17,11 @@ extension GitHubError: LocalizedError {
             String(localized: "GitHub declined the request. Try again later or reconnect GitHub.")
         case .http(404): String(localized: "This gist is no longer available to this account.")
         case .incompleteGist:
-            String(localized: "GitHub returned an incomplete gist. It can't be edited safely.")
+            String(localized: "GitHub returned an incomplete gist. It can’t be edited safely.")
         case .missingFile: String(localized: "This file is no longer in the gist.")
         case .fileTooLarge: String(localized: "This file is too large to open.")
         case .invalidResponse, .http:
-            String(localized: "GitHub couldn't complete the request. Try again.")
+            String(localized: "GitHub couldn’t complete the request. Try again.")
         }
     }
 }

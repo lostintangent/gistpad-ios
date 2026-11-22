@@ -65,7 +65,7 @@ package enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
     case .invalidResponse:
       String(
         localized:
-          "Apple Intelligence returned a response the app couldn't read. Your file is unchanged.",
+          "Apple Intelligence returned a response the app couldn’t read. Your file is unchanged.",
         bundle: .module)
     case .responseTooLarge:
       String(
@@ -75,15 +75,15 @@ package enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
     case .invalidEdit:
       String(
         localized:
-          "Apple Intelligence returned an edit that couldn't be found in your file. Nothing was changed.",
+          "Apple Intelligence returned an edit that couldn’t be found in your file. Nothing was changed.",
         bundle: .module)
     case .emptyAnswer:
       String(
-        localized: "Apple Intelligence didn't return an answer. Try again.", bundle: .module)
+        localized: "Apple Intelligence didn’t return an answer. Try again.", bundle: .module)
     case .invalidAnswer:
       String(
         localized:
-          "Apple Intelligence couldn't produce a clear, grounded answer. Try again.",
+          "Apple Intelligence couldn’t produce a clear, grounded answer. Try again.",
         bundle: .module)
     case .unsafeEdit:
       String(
@@ -92,9 +92,9 @@ package enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
         bundle: .module)
     case .unverifiedQuotation:
       String(
-        localized: "A quoted passage didn't match your file.", bundle: .module)
+        localized: "A quoted passage didn’t match your file.", bundle: .module)
     case .noEvidence:
-      String(localized: "I couldn't find that in this file.", bundle: .module)
+      String(localized: "I couldn’t find that in this file.", bundle: .module)
     case .staleSnapshot:
       String(
         localized: "This file has changed since this result.",
@@ -103,7 +103,7 @@ package enum IntelligenceError: Error, LocalizedError, Sendable, Equatable {
       String(localized: "There are no verified changes to apply.", bundle: .module)
     case .refused:
       String(
-        localized: "Apple Intelligence couldn't complete this request. Your file is unchanged.",
+        localized: "Apple Intelligence couldn’t complete this request. Your file is unchanged.",
         bundle: .module)
     case .rateLimited:
       String(localized: "Apple Intelligence is busy. Try again in a moment.", bundle: .module)
