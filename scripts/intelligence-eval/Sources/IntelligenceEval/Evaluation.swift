@@ -379,6 +379,7 @@ final class RecordingModel: IntelligenceModel {
   private(set) var rejectedAnswers: [String] = []
   private(set) var operations: [String] = []
 
+  var unavailableReason: String? { model.unavailableReason }
   func modelInfo() async throws -> ModelInfo { try await model.modelInfo() }
   func tokenCount(for pass: ModelPass) async throws -> Int {
     let count = try await model.tokenCount(for: pass)

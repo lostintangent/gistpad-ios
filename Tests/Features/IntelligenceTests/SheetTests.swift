@@ -27,7 +27,6 @@
       let state = IntelligenceState(editor: editor, backend: FixtureLanguageModel())
       state.action = .edit
       state.editPrompt = "Fix the typo and the time"
-      await state.checkAvailability()
       state.generate()
       await state.task?.value
       #expect(state.canApply)
@@ -82,7 +81,6 @@
       }
       let state = IntelligenceState(editor: editor, backend: fixture)
       state.askPrompt = "When do I leave?"
-      await state.checkAvailability()
       state.generate()
       await state.task?.value
       let reason = state.errorMessage ?? state.availabilityReason ?? ""
@@ -101,7 +99,6 @@
       fixture.delay = .seconds(5)
       let state = IntelligenceState(editor: editor, backend: fixture)
       state.askPrompt = "When do I leave?"
-      await state.checkAvailability()
       state.generate()
       var spins = 0
       while fixture.passes.isEmpty, spins < 1_000 {
@@ -124,7 +121,6 @@
       let editor = Editor(text: source)
       editor.isEditable = false
       let state = IntelligenceState(editor: editor, backend: FixtureLanguageModel())
-      await state.checkAvailability()
       state.askPrompt = "When do I leave?"
       #expect(state.canGenerate)
       state.action = .edit
@@ -151,7 +147,6 @@
         prose: "You retained this thought.", quotes: ["e\u{301} 👩🏽‍💻"])
       let state = IntelligenceState(editor: editor, backend: fixture)
       state.askPrompt = "What thought did I retain?"
-      await state.checkAvailability()
       state.generate()
       await state.task?.value
       guard case .quotation(_, let ranges) = try #require(state.answerParts.last) else {

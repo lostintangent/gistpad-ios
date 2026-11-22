@@ -12,8 +12,6 @@
     var askPrompt = ""
     var editPrompt = ""
     var isCancelling = false
-    var available = false
-    var availabilityReason: String?
     var errorMessage: String?
     var notice: String?
     var progress: IntelligenceEngine.Progress?
@@ -45,8 +43,10 @@
         || !editor.text.utf8.elementsEqual(snapshot.source.utf8)
     }
 
+    var availabilityReason: String? { engine.backend.unavailableReason }
+
     var canGenerate: Bool {
-      available && !isRunning
+      availabilityReason == nil && !isRunning
         && (action == .review || !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         && (action != .edit || editor.isEditable)
     }
@@ -57,17 +57,6 @@
 
     var hasResults: Bool {
       !answerParts.isEmpty || proposal != nil || appliedEdit != nil
-    }
-
-    func checkAvailability() async {
-      do {
-        _ = try await engine.backend.modelInfo()
-        available = true
-        availabilityReason = nil
-      } catch {
-        available = false
-        availabilityReason = error.localizedDescription
-      }
     }
 
     func clearResults() {

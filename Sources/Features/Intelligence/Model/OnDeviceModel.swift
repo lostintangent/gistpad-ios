@@ -8,28 +8,26 @@ package final class OnDeviceModel: IntelligenceModel {
 
   package init() {}
 
-  package func modelInfo() async throws -> ModelInfo {
+  package var unavailableReason: String? {
     switch model.availability {
     case .available:
-      break
+      nil
     case .unavailable(.deviceNotEligible):
-      throw IntelligenceError.unavailable(
-        String(localized: "This device doesn't support Apple Intelligence.", bundle: .module))
+      String(localized: "This device doesn't support Apple Intelligence.", bundle: .module)
     case .unavailable(.appleIntelligenceNotEnabled):
-      throw IntelligenceError.unavailable(
-        String(
-          localized: "Turn on Apple Intelligence in Settings to use these actions.",
-          bundle: .module))
+      String(
+        localized: "Turn on Apple Intelligence in Settings to use these actions.", bundle: .module)
     case .unavailable(.modelNotReady):
-      throw IntelligenceError.unavailable(
-        String(
-          localized:
-            "The on-device model isn't ready yet. Let its download finish, then try again.",
-          bundle: .module))
+      String(
+        localized: "The on-device model isn't ready yet. Let its download finish, then try again.",
+        bundle: .module)
     case .unavailable:
-      throw IntelligenceError.unavailable(
-        String(localized: "Apple Intelligence is currently unavailable.", bundle: .module))
+      String(localized: "Apple Intelligence is currently unavailable.", bundle: .module)
     }
+  }
+
+  package func modelInfo() async throws -> ModelInfo {
+    if let unavailableReason { throw IntelligenceError.unavailable(unavailableReason) }
     return ModelInfo(variant: model.variant.displayName, contextSize: model.contextSize)
   }
 

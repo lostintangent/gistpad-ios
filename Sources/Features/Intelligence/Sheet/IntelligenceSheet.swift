@@ -9,7 +9,6 @@
     @State private var state: IntelligenceState
     @State private var detent = PresentationDetent.medium
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @FocusState private var promptFocused: Bool
 
@@ -101,15 +100,8 @@
       .sensoryFeedback(.success, trigger: state.appliedCount) { old, new in new > old }
       .task {
         if dynamicTypeSize.isAccessibilitySize { detent = .large }
-        await state.checkAvailability()
       }
-      .onChange(of: scenePhase) { _, phase in
-        if phase == .active { Task { await state.checkAvailability() } }
-      }
-      .onChange(of: state.action) {
-        state.clearResults()
-        Task { await state.checkAvailability() }
-      }
+      .onChange(of: state.action) { state.clearResults() }
       .onChange(of: state.isRunning || state.proposal != nil || dynamicTypeSize.isAccessibilitySize)
       { _, expands in
         if expands { detent = .large }
