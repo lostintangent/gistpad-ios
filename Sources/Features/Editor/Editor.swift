@@ -44,7 +44,6 @@
       textView.font = .preferredFont(forTextStyle: .body)
       textView.adjustsFontForContentSizeCategory = true
       textView.backgroundColor = .systemBackground
-      textView.tintColor = .systemBlue
       textView.textContainerInset = UIEdgeInsets(top: 24, left: 20, bottom: 40, right: 20)
       textView.alwaysBounceVertical = true
       textView.topEdgeEffect.style = .soft
