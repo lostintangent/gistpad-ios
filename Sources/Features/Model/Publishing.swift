@@ -214,10 +214,12 @@ extension GistFileEditor {
 
   /// Schedules autosave now and again whenever its request changes, such as with each keystroke.
   func observeAutosave() {
-    withObservationTracking {
-      _ = updateAutosave()
-    } onChange: { [weak self] in
-      Task { @MainActor in self?.observeAutosave() }
+    let requests = Observations<AutosaveRequest, Never>.untilFinished { [weak self] in
+      guard let self else { return .finish }
+      return .next(autosaveRequest)
+    }
+    Task { [weak self] in
+      for await _ in requests { self?.updateAutosave() }
     }
   }
 
