@@ -22,12 +22,12 @@ extension GistEntityQuery: IndexedEntityQuery {
     public func reindexEntities(
         for identifiers: [String], indexDescription: CSSearchableIndexDescription
     ) async throws {
-        let notes = try await notesSnapshot(validating: app)?.gists ?? []
+        let notes = try await LibrarySnapshot.read(validating: app)?.gists ?? []
         try await GistSpotlightIndex.index.indexAppEntities(notes.filter { identifiers.contains($0.id) })
     }
 
     public func reindexAllEntities(indexDescription: CSSearchableIndexDescription) async throws {
-        try await GistSpotlightIndex.index.indexAppEntities(notesSnapshot(validating: app)?.gists ?? [])
+        try await GistSpotlightIndex.index.indexAppEntities(LibrarySnapshot.read(validating: app)?.gists ?? [])
     }
 
 }

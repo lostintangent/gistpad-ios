@@ -64,7 +64,7 @@ public struct LibrarySnapshot: Codable, Sendable {
         gists.sort {
             $0.entity.updatedAt == $1.entity.updatedAt
                 ? $0.entity.id < $1.entity.id
-                : ($0.entity.updatedAt ?? .distantPast) > ($1.entity.updatedAt ?? .distantPast)
+                : $0.entity.updatedAt > $1.entity.updatedAt
         }
         return Self(
             accountID: account.id,
@@ -101,6 +101,15 @@ extension LibrarySnapshot {
         do { data = try Data(contentsOf: url) }
         catch let error as CocoaError where error.code == .fileReadNoSuchFile { return nil }
         return try JSONDecoder().decode(Self.self, from: data)
+    }
+
+    /// The snapshot an intent or query can trust: its account is still the one signed in to the app.
+    static func read(validating app: any PlatformActions) async throws -> Self? {
+        let snapshot = try read()
+        if let accountID = snapshot?.accountID {
+            try await app.validateAccount(accountID)
+        }
+        return snapshot
     }
 
     /// Written atomically, readable after first unlock so Lock Screen and StandBy can show it.

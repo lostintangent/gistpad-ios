@@ -23,7 +23,7 @@ public struct GistAccountQuery: EntityQuery {
     public init() {}
 
     public func entities(for identifiers: [UUID]) async throws -> [GistAccountEntity] {
-        guard let id = try await notesSnapshot(validating: app)?.accountID,
+        guard let id = try await LibrarySnapshot.read(validating: app)?.accountID,
               identifiers.contains(id) else { return [] }
         return [GistAccountEntity(id: id, name: "GitHub")]
     }
@@ -69,18 +69,10 @@ public struct GistFolderQuery: EntityStringQuery {
     }
 
     private func folders() async throws -> [GistFolderEntity] {
-        let notes = try await notesSnapshot(validating: app)?.gists ?? []
+        let notes = try await LibrarySnapshot.read(validating: app)?.gists ?? []
         return Dictionary(
             notes.compactMap(\.folder).map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         ).values.sorted { $0.name < $1.name }
     }
-}
-
-func notesSnapshot(validating actions: any PlatformActions) async throws -> LibrarySnapshot? {
-    let snapshot = try LibrarySnapshot.read()
-    if let accountID = snapshot?.accountID {
-        try await actions.validateAccount(accountID)
-    }
-    return snapshot
 }

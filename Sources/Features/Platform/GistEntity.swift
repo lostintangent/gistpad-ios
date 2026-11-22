@@ -8,17 +8,17 @@ public struct GistEntity: Codable, Identifiable, Sendable {
     var title: String
     var excerpt: String?
     let tags: [String]
-    let updatedAt: Date?
+    let updatedAt: Date
     public let link: GistPadLink
     public let accountID: UUID?
     var folderName: String?
     var body: String?
-    var pinned: Bool?
+    var pinned = false
 
     public var name: AttributedString { AttributedString(title) }
     public var content: AttributedString? { body.map(AttributedString.init) }
     public var attachments: [IntentFile] { [] }
-    public var isPinned: Bool { pinned ?? false }
+    public var isPinned: Bool { pinned }
     public var creationDate: Date? { nil }
     public var modificationDate: Date? { updatedAt }
     public var folder: GistFolderEntity? {
@@ -64,12 +64,12 @@ public struct GistEntityQuery: EntityStringQuery {
     }
 
     public func suggestedEntities() async throws -> [GistEntity] {
-        try await Array(notesSnapshot(validating: app)?.gists.prefix(12) ?? [])
+        try await Array(LibrarySnapshot.read(validating: app)?.gists.prefix(12) ?? [])
     }
 
     public func entities(matching string: String) async throws -> [GistEntity] {
         let terms = string.split(whereSeparator: \.isWhitespace).map(String.init)
-        return try await notesSnapshot(validating: app)?.gists.filter { gist in
+        return try await LibrarySnapshot.read(validating: app)?.gists.filter { gist in
             let content = ([gist.title] + gist.tags).joined(separator: " ")
             return terms.allSatisfy { content.localizedStandardContains($0) }
         } ?? []
