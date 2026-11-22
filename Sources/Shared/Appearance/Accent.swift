@@ -61,13 +61,15 @@ public struct RGBColor: Hashable, Sendable {
     }
 }
 
-public struct AccentRoles: Equatable, Sendable {
-    public let text: RGBColor
-    public let fill: RGBColor
-    public let onFill: RGBColor
-}
-
+/// The personal accent color, saved as the web's hex, or sky until one is picked.
 public struct Accent: Hashable, Sendable {
+    /// The accent's colors on the system's surfaces, each passing contrast for its role.
+    public struct Roles: Equatable, Sendable {
+        public let text: RGBColor
+        public let fill: RGBColor
+        public let onFill: RGBColor
+    }
+
     public let savedHex: String?
     public let color: RGBColor
 
@@ -76,7 +78,7 @@ public struct Accent: Hashable, Sendable {
         color = savedHex.flatMap(RGBColor.init(hex:)) ?? .sky
     }
 
-    func roles(dark: Bool, increasedContrast: Bool, surfaces: [RGBColor]) -> AccentRoles {
+    func roles(dark: Bool, increasedContrast: Bool, surfaces: [RGBColor]) -> Roles {
         precondition(!surfaces.isEmpty)
         let target = increasedContrast ? 7.0 : 4.5
         let endpoint: RGBColor = dark ? .white : .black
@@ -95,7 +97,7 @@ public struct Accent: Hashable, Sendable {
             fill = darker.amount <= lighter.amount ? darker.color : lighter.color
             onFill = darker.amount <= lighter.amount ? .white : .black
         }
-        return AccentRoles(text: text, fill: fill, onFill: onFill)
+        return Roles(text: text, fill: fill, onFill: onFill)
     }
 
     private func passingMix(toward endpoint: RGBColor, passes: (RGBColor) -> Bool) -> (color: RGBColor, amount: Double) {

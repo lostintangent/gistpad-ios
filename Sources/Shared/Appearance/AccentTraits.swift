@@ -53,7 +53,7 @@ extension RGBColor {
 }
 
 extension Accent {
-    public func roles(traits: UITraitCollection) -> AccentRoles {
+    public func roles(traits: UITraitCollection) -> Roles {
         let dark = traits.userInterfaceStyle == .dark
         let increased = traits.accessibilityContrast == .high
         let backgrounds: [UIColor] = [
