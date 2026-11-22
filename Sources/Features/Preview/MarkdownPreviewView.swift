@@ -54,7 +54,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         Coordinator(file: file, onEvent: onEvent)
     }
 
-    func makeUIView(context: Context) -> InsetAwareWebView {
+    func makeUIView(context: Context) -> PreviewWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -63,7 +63,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         configuration.userContentController.add(context.coordinator, name: "gistpadPreview")
         configuration.userContentController.add(context.coordinator, name: "gistpadComments")
 
-        let webView = InsetAwareWebView(frame: .zero, configuration: configuration)
+        let webView = PreviewWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         webView.isOpaque = false
         webView.backgroundColor = .clear
@@ -74,16 +74,16 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         webView.scrollView.topEdgeEffect.style = .soft
         webView.scrollView.bottomEdgeEffect.style = .soft
         webView.allowsLinkPreview = false
+        webView.scrollView.delegate = context.coordinator
         context.coordinator.webView = webView
         context.coordinator.commentHighlights.webView = webView
         let coordinator = context.coordinator
         webView.onBuildCommentMenu = { [weak coordinator] in coordinator?.commentHighlights.addCommentMenu() }
-        webView.onViewportChange = { [weak coordinator] in coordinator?.updateViewport($0) }
         webView.load(URLRequest(url: PreviewResourceHandler.pageURL))
         return webView
     }
 
-    func updateUIView(_ webView: InsetAwareWebView, context: Context) {
+    func updateUIView(_ webView: PreviewWebView, context: Context) {
         webView.isHidden = !isPaneVisible
         webView.accessibilityElementsHidden = !isPaneVisible
         context.coordinator.onEvent = onEvent
@@ -99,8 +99,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         context.coordinator.update(file)
     }
 
-    static func dismantleUIView(_ uiView: InsetAwareWebView, coordinator: Coordinator) {
-        uiView.onViewportChange = nil
+    static func dismantleUIView(_ uiView: PreviewWebView, coordinator: Coordinator) {
+        uiView.scrollView.delegate = nil
         uiView.onBuildCommentMenu = nil
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "gistpadPreview")
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "gistpadComments")
@@ -112,7 +112,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, UIScrollViewDelegate {
         fileprivate weak var webView: WKWebView?
         fileprivate var onEvent: @MainActor (PreviewEvent) -> Void
         fileprivate var appearance: PreviewAppearance?
@@ -120,7 +120,6 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         private var file: PreviewFile
         private var lastSent: PreviewFile?
         private var lastAppearance: PreviewAppearance?
-        private var viewportInsets = UIEdgeInsets.zero
         private var lastViewportInsets: UIEdgeInsets?
         private var ready = false
         private var needsInitialScroll = true
@@ -140,9 +139,13 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             }
         }
 
-        fileprivate func updateViewport(_ insets: UIEdgeInsets) {
-            viewportInsets = insets
-            guard ready, lastViewportInsets != insets else { return }
+        func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
+            updateViewport()
+        }
+
+        /// Anchors and revealed passages land below the bars UIKit insets the page by.
+        private func updateViewport() {
+            guard ready, let insets = webView?.scrollView.adjustedContentInset, lastViewportInsets != insets else { return }
             lastViewportInsets = insets
             call("window.gistpadPreview.setViewportInsets(payload);",
                  ["payload": ["top": insets.top, "bottom": insets.bottom]])
@@ -154,7 +157,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             }
             self.file = file
             guard ready else { return }
-            updateViewport(viewportInsets)
+            updateViewport()
             if let appearance, appearance != lastAppearance {
                 lastAppearance = appearance
                 call("window.gistpadPreview.setAppearance(payload);", ["payload": appearance.arguments])
@@ -244,8 +247,7 @@ extension Logger {
 }
 
 @MainActor
-private final class InsetAwareWebView: WKWebView {
-    var onViewportChange: ((UIEdgeInsets) -> Void)?
+private final class PreviewWebView: WKWebView {
     var onBuildCommentMenu: (() -> UIDeferredMenuElement?)?
 
     override var frame: CGRect {
@@ -269,16 +271,6 @@ private final class InsetAwareWebView: WKWebView {
         guard let comment = onBuildCommentMenu?() else { return }
         builder.insertSibling(
             UIMenu(options: .displayInline, children: [comment]), afterMenu: .standardEdit)
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        onViewportChange?(scrollView.adjustedContentInset)
-    }
-
-    override func safeAreaInsetsDidChange() {
-        super.safeAreaInsetsDidChange()
-        onViewportChange?(scrollView.adjustedContentInset)
     }
 }
 
