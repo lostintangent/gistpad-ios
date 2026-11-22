@@ -1,4 +1,3 @@
-#if os(iOS)
 import AppIntents
 import Foundation
 import Store
@@ -57,4 +56,3 @@ public struct OpenTodayIntent: AppIntent {
         return .result()
     }
 }
-#endif

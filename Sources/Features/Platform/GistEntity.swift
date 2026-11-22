@@ -2,7 +2,7 @@ import AppIntents
 import Foundation
 
 @AppEntity(schema: .notes.note)
-public struct GistEntity: Codable, Equatable, Identifiable, Sendable {
+public struct GistEntity: Codable, Identifiable, Sendable {
     public static let defaultQuery = GistEntityQuery()
     public var id: String { link.url.absoluteString }
     var title: String
@@ -47,45 +47,10 @@ public struct GistEntity: Codable, Equatable, Identifiable, Sendable {
         entity.pinned = isPinned ?? pinned
         return entity
     }
-}
 
-extension GistEntity {
+    /// The entity macro adds stored properties of its own, so encoding lists the ones GistPad keeps.
     private enum CodingKeys: String, CodingKey {
         case title, excerpt, tags, updatedAt, link, accountID, folderName, body, pinned
-    }
-
-    public init(from decoder: any Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        title = try values.decode(String.self, forKey: .title)
-        excerpt = try values.decodeIfPresent(String.self, forKey: .excerpt)
-        tags = try values.decode([String].self, forKey: .tags)
-        updatedAt = try values.decodeIfPresent(Date.self, forKey: .updatedAt)
-        link = try values.decode(GistPadLink.self, forKey: .link)
-        accountID = try values.decodeIfPresent(UUID.self, forKey: .accountID)
-        folderName = try values.decodeIfPresent(String.self, forKey: .folderName)
-        body = try values.decodeIfPresent(String.self, forKey: .body)
-        pinned = try values.decodeIfPresent(Bool.self, forKey: .pinned)
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var values = encoder.container(keyedBy: CodingKeys.self)
-        try values.encode(title, forKey: .title)
-        try values.encodeIfPresent(excerpt, forKey: .excerpt)
-        try values.encode(tags, forKey: .tags)
-        try values.encodeIfPresent(updatedAt, forKey: .updatedAt)
-        try values.encode(link, forKey: .link)
-        try values.encodeIfPresent(accountID, forKey: .accountID)
-        try values.encodeIfPresent(folderName, forKey: .folderName)
-        try values.encodeIfPresent(body, forKey: .body)
-        try values.encodeIfPresent(pinned, forKey: .pinned)
-    }
-
-    public static func == (left: Self, right: Self) -> Bool {
-        left.title == right.title && left.excerpt == right.excerpt
-            && left.tags == right.tags && left.updatedAt == right.updatedAt
-            && left.link == right.link && left.accountID == right.accountID
-            && left.folderName == right.folderName && left.body == right.body
-            && left.pinned == right.pinned
     }
 }
 

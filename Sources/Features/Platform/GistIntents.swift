@@ -1,4 +1,3 @@
-#if os(iOS)
 import AppIntents
 import Foundation
 
@@ -34,4 +33,3 @@ public struct NewGistIntent: AppIntent {
 }
 
 public struct GistPadPlatformIntents: AppIntentsPackage {}
-#endif

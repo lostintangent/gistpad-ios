@@ -3,7 +3,7 @@ import Appearance
 import SwiftUI
 import WidgetKit
 
-public enum LauncherWidgetState: Equatable, Sendable {
+public enum LauncherWidgetState: Sendable {
     case available, signedOut, unavailable, placeholder
 }
 
