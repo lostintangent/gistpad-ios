@@ -109,6 +109,29 @@
         #expect(editor.textView.selectedRange == beginning)
         #expect(editor.text == "note")
       }
+
+      @Test func aLandingTapTreatsEveryPositionAsAWordEdge() throws {
+        let view = Editor(text: "Uncharacteristically").textView
+        let middle = try #require(view.position(from: view.beginningOfDocument, offset: 6))
+        // Whether the position is inside a word, and whether it's a word's edge.
+        func answers() -> [Bool] {
+          [
+            view.tokenizer.isPosition(middle, withinTextUnit: .word, inDirection: .storage(.forward)),
+            view.tokenizer.isPosition(middle, atBoundary: .word, inDirection: .storage(.backward)),
+          ]
+        }
+        #expect(answers() == [true, false])
+
+        view.isLandingTap = true
+        #expect(answers() == [false, true])
+        // The word itself stays whole, so a tap on a misspelling still selects it.
+        let word = try #require(
+          view.tokenizer.rangeEnclosingPosition(middle, with: .word, inDirection: .storage(.forward)))
+        #expect(view.offset(from: word.start, to: word.end) == 20)
+
+        view.isLandingTap = false
+        #expect(answers() == [true, false])
+      }
     }
   }
 #endif

@@ -38,7 +38,7 @@
       self.showsFrontMatter = showsFrontMatter
       super.init()
       textView.editor = self
-      textView.installIndentSwipes()
+      textView.installGestures()
       textView.delegate = self
       textView.text = text
       textView.font = .preferredFont(forTextStyle: .body)
@@ -548,12 +548,88 @@
       super.deleteBackward()
     }
 
-    func installIndentSwipes() {
+    func installGestures() {
       for direction in [UISwipeGestureRecognizer.Direction.right, .left] {
         let swipe = UISwipeGestureRecognizer(target: self, action: #selector(handleIndentSwipe))
         swipe.direction = direction
         swipe.delegate = self
         addGestureRecognizer(swipe)
+      }
+      addGestureRecognizer(FingerTap(target: nil, action: nil))
+    }
+
+    /// Whether a finger tap is landing, from touch-down until the system has handled it.
+    var isLandingTap = false
+
+    // Platform gap: a finger tap snaps the caret to the edge of the word under it, and no API sets
+    // the tap's granularity. While a tap lands, the tokenizer answers that every position is a word
+    // edge, so the system's own tap places the caret at the character under the finger and keeps
+    // its caret menu, misspelling suggestions and double tap. Remove the override, FingerTap and
+    // TapTokenizer when UIKit places taps precisely.
+    override var tokenizer: any UITextInputTokenizer {
+      isLandingTap ? TapTokenizer(base: super.tokenizer) : super.tokenizer
+    }
+
+    /// Watches a finger tap without acting on it or holding up any other gesture.
+    private final class FingerTap: UITapGestureRecognizer {
+      override init(target: Any?, action: Selector?) {
+        super.init(target: target, action: action)
+        allowedTouchTypes = [UITouch.TouchType.direct.rawValue as NSNumber]
+        cancelsTouchesInView = false
+        delaysTouchesEnded = false
+      }
+
+      override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        guard let view = view as? TextView, view.markedTextRange == nil, !view.isWritingToolsActive
+        else { return }
+        view.isLandingTap = true
+      }
+
+      override func reset() {
+        super.reset()
+        (view as? TextView)?.isLandingTap = false
+      }
+
+      override func canPrevent(_: UIGestureRecognizer) -> Bool { false }
+      override func canBePrevented(by _: UIGestureRecognizer) -> Bool { false }
+    }
+
+    private final class TapTokenizer: NSObject, UITextInputTokenizer {
+      let base: any UITextInputTokenizer
+
+      init(base: any UITextInputTokenizer) {
+        self.base = base
+      }
+
+      func isPosition(
+        _ position: UITextPosition, atBoundary granularity: UITextGranularity,
+        inDirection direction: UITextDirection
+      ) -> Bool {
+        granularity == .word
+          || base.isPosition(position, atBoundary: granularity, inDirection: direction)
+      }
+
+      func isPosition(
+        _ position: UITextPosition, withinTextUnit granularity: UITextGranularity,
+        inDirection direction: UITextDirection
+      ) -> Bool {
+        granularity != .word
+          && base.isPosition(position, withinTextUnit: granularity, inDirection: direction)
+      }
+
+      func rangeEnclosingPosition(
+        _ position: UITextPosition, with granularity: UITextGranularity,
+        inDirection direction: UITextDirection
+      ) -> UITextRange? {
+        base.rangeEnclosingPosition(position, with: granularity, inDirection: direction)
+      }
+
+      func position(
+        from position: UITextPosition, toBoundary granularity: UITextGranularity,
+        inDirection direction: UITextDirection
+      ) -> UITextPosition? {
+        base.position(from: position, toBoundary: granularity, inDirection: direction)
       }
     }
 

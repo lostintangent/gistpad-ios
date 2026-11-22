@@ -149,7 +149,7 @@ The accent appears only in the widget's weekday and New Gist, a few Preview deta
 
 ## Editor
 
-The editor shows exact Markdown, styled with attributes only: no hidden delimiters, smart quotes or reformatting. `()`, `[]` and `{}` pair as you type, and typing the closer steps over it. Insets are 24 pt top, 20 pt sides and 40 pt bottom. Headings are Body-size bold. The web editor's colors mark headings, quotes, HTML and links, and system ink does the rest.
+The editor shows exact Markdown, styled with attributes only: no hidden delimiters, smart quotes or reformatting. `()`, `[]` and `{}` pair as you type, and typing the closer steps over it. A finger tap puts the caret at the character under it, not the edge of the word, so a typo is one tap away. A tap near the caret still shows its menu, and a tap on a misspelling still offers corrections. Insets are 24 pt top, 20 pt sides and 40 pt bottom. Headings are Body-size bold. The web editor's colors mark headings, quotes, HTML and links, and system ink does the rest.
 
 | Span | Light | Dark | Light Increased | Dark Increased |
 | --- | --- | --- | --- | --- |

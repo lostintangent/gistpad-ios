@@ -54,6 +54,65 @@ final class GistUITests: XCTestCase {
     try waitUntil("Z near the top, where it was tapped") { editor.text?.contains("Z") == true }
   }
 
+  func testATapPutsTheCaretUnderTheFinger() throws {
+    let app = launchGistPad("empty")
+    let today = app.element("library-today")
+    try waitUntil("Today") { today.isTappable }
+    app.dismissSidebarOverlay()
+    today.tap()
+    let editor = app.textViews["source-editor"]
+    try waitUntil("today's note") { editor.isTappable && app.keyboards.firstMatch.exists }
+    // Below the date heading and a blank line, lines 2 to 7 each hold one long word.
+    editor.typeText(String(repeating: "Uncharacteristically\n", count: 6))
+
+    let frame = editor.frame
+    let top = max(frame.minY, app.navigationBars.firstMatch.frame.maxY) + 24
+    func point(line: Int, x: CGFloat) -> XCUICoordinate {
+      app.coordinate(withNormalizedOffset: .zero)
+        .withOffset(CGVector(dx: frame.minX + 25 + x, dy: top + 22 * (CGFloat(line) + 0.5)))
+    }
+    func line(_ index: Int) -> String? {
+      editor.text?.components(separatedBy: "\n").dropFirst(index).first
+    }
+    // The word snapping a stock tap does would put the mark at either end instead.
+    func landedInside(_ mark: String, line index: Int) -> Bool {
+      guard let text = line(index), text.count == 20 + mark.count, let found = text.range(of: mark)
+      else { return false }
+      return found.lowerBound != text.startIndex && found.upperBound != text.endIndex
+    }
+
+    point(line: 2, x: 80).tap()
+    app.typeText("A")
+    try waitUntil("A in the middle of the word") { landedInside("A", line: 2) }
+
+    // Fixing a typo in the word you're typing is one tap, without the caret's menu.
+    point(line: 3, x: 150).tap()
+    point(line: 3, x: 40).tap()
+    app.typeText("B")
+    try waitUntil("B where it was tapped, in the caret's word") { landedInside("B", line: 3) }
+
+    // A tap on the caret still shows its menu, and leaves the caret where it was.
+    point(line: 4, x: 60).tap()
+    app.typeText("C")
+    try waitUntil("C in the middle of the word") { landedInside("C", line: 4) }
+    point(line: 4, x: 60).tap()
+    try waitUntil("the caret's menu") { app.menuItems["Select All"].exists }
+    app.typeText("c")
+    try waitUntil("c right after C") { landedInside("Cc", line: 4) }
+
+    point(line: 5, x: 80).doubleTap()
+    try waitUntil("the selection's menu") { app.menuItems["Copy"].exists }
+    app.typeText("D")
+    try waitUntil("D in place of the double-tapped word") { line(5) == "D" }
+
+    try tap(app.buttons["Hide Keyboard"], "Hide Keyboard")
+    try waitUntil("the keyboard to go") { !app.keyboards.firstMatch.exists }
+    point(line: 6, x: 80).tap()
+    try waitUntil("the keyboard") { app.keyboards.firstMatch.exists }
+    app.typeText("E")
+    try waitUntil("E in the middle of the word") { landedInside("E", line: 6) }
+  }
+
   func testSwitchingFiles() throws {
     let app = launchGistPad(open: "shape/README.md", mode: "edit")
     let editor = app.textViews["source-editor"]
