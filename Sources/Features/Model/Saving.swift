@@ -90,10 +90,10 @@ extension GistFileEditor {
     let result = try edit.applying(to: editor.text)
     let changed = !result.utf8.elementsEqual(editor.text.utf8)
     let wasEditing = editor.isEditing
-    isLanding = true
+    isLocked = true
     updateEditable()
     defer {
-      isLanding = false
+      isLocked = false
       updateEditable()
       if wasEditing { editor.focus() }
     }

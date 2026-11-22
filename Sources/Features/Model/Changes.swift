@@ -76,13 +76,13 @@ extension GistPadModel {
         try await github.setStarred(starred, id: gistID)
         return gist
       }
-      try await landed(gist, starred: starred)
+      try await update(gist, starred: starred)
     }
   }
 
   public func setArchived(_ archived: Bool, gistID: String) async throws {
     try await change { account in
-      try await landed(
+      try await update(
         try await serially {
           let (github, gist) = try await ownedGist(gistID, account: account)
           return try await github.setArchived(archived, gist: gist)
@@ -98,7 +98,7 @@ extension GistPadModel {
     try await change { account in
       if let gistID = draft.gistID {
         // The gist's drafts on this iPhone take its new name too.
-        return try await landed(
+        return try await update(
           try await serially {
             let (github, gist) = try await ownedGist(gistID, account: account)
             let local = try await unsentDrafts(gistID: gistID, accountID: account.id)
@@ -128,7 +128,7 @@ extension GistPadModel {
       let gist = try await serially {
         let (github, gist) = try await ownedGist(gistID, account: account)
         guard filename != newFilename else { return gist }
-        guard gist.files[filename] != nil else { throw GitHubClientError.missingFile }
+        guard gist.files[filename] != nil else { throw GitHubError.missingFile }
         let local = try await unsentDrafts(gistID: gistID, accountID: account.id)
         guard gist.files[newFilename] == nil, !local.contains(where: { $0.filename == newFilename })
         else { throw ChangeError.filenameExists }
@@ -139,7 +139,7 @@ extension GistPadModel {
         }
         return updated
       }
-      try await landed(gist, renamedFile: (filename, newFilename))
+      try await update(gist, renamedFile: (filename, newFilename))
     }
   }
 
@@ -241,7 +241,7 @@ extension GistPadModel {
     var locked: [GistFileEditor] = []
     defer {
       for fileEditor in locked {
-        fileEditor.isLanding = false
+        fileEditor.isLocked = false
         fileEditor.updateEditable()
       }
       isApplying = false
@@ -250,7 +250,7 @@ extension GistPadModel {
       for fileEditor in editors.values where locks(fileEditor) && fileEditor.details.isOwned {
         await fileEditor.waitForPublication()
         guard fileEditor.canEdit, !fileEditor.isPublishing else { throw ChangeError.publicationInProgress }
-        fileEditor.isLanding = true
+        fileEditor.isLocked = true
         fileEditor.updateEditable()
         locked.append(fileEditor)
       }
@@ -270,7 +270,7 @@ extension GistPadModel {
   }
 
   /// Takes a gist GitHub just changed into the cache and every note open in it.
-  private func landed(
+  private func update(
     _ gist: Gist, starred: Bool? = nil, renamedFile: (from: String, to: String)? = nil
   ) async throws {
     if let account {

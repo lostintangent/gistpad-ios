@@ -65,7 +65,7 @@ extension GistPadModel {
       if let daily {
         do { return try await github.gist(id: daily.id) }
         // Deleting its last day on the web deleted it, so look for the one today joins.
-        catch GitHubClientError.http(status: 404) {}
+        catch GitHubError.http(status: 404) {}
       }
       return try await github.listGists().first(where: \.isDailyNote)
     } catch let error as URLError where cached != nil && error.code != .cancelled {

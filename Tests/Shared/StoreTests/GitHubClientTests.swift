@@ -42,9 +42,9 @@ import Testing
                 headers: ["Link": "<https://example.com/gists?page=2>; rel=\"next\""], data: Data("[]".utf8))
         }.session
         let client = GitHubClient(session: session) { "fake" }
-        await #expect(throws: GitHubClientError.invalidResponse) { try await client.listGists() }
+        await #expect(throws: GitHubError.invalidResponse) { try await client.listGists() }
         #expect(try await client.content(gist: rawGist(), filename: "README.md") == "raw")
-        await #expect(throws: GitHubClientError.invalidResponse) {
+        await #expect(throws: GitHubError.invalidResponse) {
             try await client.content(gist: rawGist(url: "https://example.com/raw/README.md"), filename: "README.md")
         }
         #expect(hosts.withLock { $0 } == ["api.github.com", "gist.githubusercontent.com"])
@@ -69,7 +69,7 @@ import Testing
         do {
             _ = try await client.gist(id: "abc123")
             Issue.record("Expected throttling")
-        } catch GitHubClientError.http(let status) {
+        } catch GitHubError.http(let status) {
             #expect(status == 403)
         }
     }
@@ -81,7 +81,7 @@ import Testing
             return FixtureServer.Response(data: Data("complete content".utf8))
         }.session) { "fake" }
         #expect(try await client.content(gist: rawGist(content: "partial"), filename: "README.md") == "complete content")
-        await #expect(throws: GitHubClientError.incompleteGist) {
+        await #expect(throws: GitHubError.incompleteGist) {
             try await client.content(gist: decodeGist(gistData(truncated: true)), filename: "README.md")
         }
         #expect(requests.withLock { $0 } == 1)

@@ -28,7 +28,7 @@ with whatever the phone writes.
 ## Account
 
 `GistPadAccountStore` signs in with GitHub through Supabase, using PKCE, the
-`gist` scope and `gistpad://auth-callback`. `Keychain` holds the Supabase
+`gist` scope and `gistpad://auth-callback`. The keychain holds the Supabase
 session and each account's GitHub token, available after first unlock and never
 synced off this device. `connectedAccount()` is the account in Supabase's
 session, read at launch without the network, and `refreshAccount()` fetches the

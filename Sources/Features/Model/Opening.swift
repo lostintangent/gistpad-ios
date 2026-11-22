@@ -211,9 +211,9 @@ extension GistPadModel {
         } else {
           gist.defaultMarkdownFilename
         }
-      guard let selected else { throw GitHubClientError.missingFile }
+      guard let selected else { throw GitHubError.missingFile }
       guard let text = try await text(of: selected, in: gist, accountID: account.id) else {
-        throw GitHubClientError.missingFile
+        throw GitHubError.missingFile
       }
       // The read is cached on this iPhone, so the note opens from here next time.
       try await reloadLocalState(accountID: account.id)

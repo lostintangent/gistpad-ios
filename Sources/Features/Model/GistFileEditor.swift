@@ -15,8 +15,8 @@ public final class GistFileEditor {
   var failure: GitHubProblem?
   /// The editor's last generation saved on this iPhone.
   var savedGeneration: UInt64 = 0
-  /// A change you didn't type is landing in the note, so typing waits.
-  var isLanding = false
+  /// Typing waits while a change you didn't type goes into the note.
+  var isLocked = false
   public internal(set) var remoteInspectionProblem: GitHubProblem?
   public var mode: FileMode = .preview
   @ObservationIgnored let model: GistPadModel
@@ -70,9 +70,9 @@ public final class GistFileEditor {
     return model.drafts.contains { $0.id == draft.id }
   }
 
-  /// Whether a change can land in the note now: it's yours, nothing else is landing and you aren't composing.
+  /// Whether a change can go into the note now: it's yours, it isn't locked and you aren't composing.
   public var canEdit: Bool {
-    details.isOwned && !isLanding && editor.isSettled
+    details.isOwned && !isLocked && editor.isSettled
   }
 
   /// Brings the note's name and gist up to date after a change. A file GitHub renamed before you
@@ -88,9 +88,9 @@ public final class GistFileEditor {
     applyWritingPreferences()
   }
 
-  /// You can type in your own gists, except while a change is landing in the note.
+  /// You can type in your own gists, except while a change locks the note.
   func updateEditable() {
-    editor.isEditable = details.isOwned && !isLanding
+    editor.isEditable = details.isOwned && !isLocked
   }
 
   private func applyWritingPreferences() {
