@@ -7,7 +7,6 @@ let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 @MainActor
 package final class IntelligenceEngine {
   let backend: any IntelligenceModel
-  private let framingReserve = 96
   // Platform gap: GenerationOptions has no repetition penalty or stop sequence, so a runaway answer
   // runs to this limit and is retried once. Remove the retry and raise the limit when it has one.
   /// Real answers use under 120 tokens.
@@ -393,7 +392,7 @@ package final class IntelligenceEngine {
 
   private func fits(_ pass: ModelPass, model: ModelInfo) async throws -> Bool {
     let count = try await backend.tokenCount(for: pass)
-    let fits = count <= model.contextSize - pass.responseTokens - framingReserve
+    let fits = count <= model.contextSize - pass.responseTokens
     logger.notice(
       "request=\(pass.requestID.uuidString, privacy: .public) phase=\(pass.purpose.rawValue, privacy: .public) inputTokens=\(count) responseTokens=\(pass.responseTokens) context=\(model.contextSize) fits=\(fits)"
     )

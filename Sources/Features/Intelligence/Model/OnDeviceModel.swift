@@ -31,14 +31,15 @@ package final class OnDeviceModel: IntelligenceModel {
     return ModelInfo(variant: model.variant.displayName, contextSize: model.contextSize)
   }
 
+  /// Everything a session reads before it responds, as its usage reports it.
   package func tokenCount(for pass: ModelPass) async throws -> Int {
-    let instructionTokens = try await model.tokenCount(
-      for: Instructions(Self.instructions(for: pass)))
-    let promptTokens = try await model.tokenCount(for: try Self.prompt(for: pass))
-    guard let schema = try Self.schema(for: pass) else {
-      return instructionTokens + promptTokens
-    }
-    return try await instructionTokens + promptTokens + model.tokenCount(for: schema)
+    let instructions = Transcript.Segment.text(.init(content: Self.instructions(for: pass)))
+    let prompt = Transcript.Segment.text(.init(content: try Self.prompt(for: pass)))
+    let format = try Self.schema(for: pass).map(Transcript.ResponseFormat.init(schema:))
+    return try await model.tokenCount(for: [
+      .instructions(.init(segments: [instructions], toolDefinitions: [])),
+      .prompt(.init(segments: [prompt], responseFormat: format)),
+    ])
   }
 
   func perform<Value>(

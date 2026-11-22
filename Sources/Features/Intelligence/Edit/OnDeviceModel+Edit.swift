@@ -446,11 +446,6 @@ extension OnDeviceModel {
             maximumElements: maximum))
       ])
     let schema = try GenerationSchema(root: root, dependencies: [])
-    let tokens = try await model.tokenCount(for: Instructions(instructions))
-      + model.tokenCount(for: prompt) + model.tokenCount(for: schema)
-    guard tokens <= model.contextSize - 128 - 96 else {
-      throw IntelligenceError.insufficientContext
-    }
     let response = try await LanguageModelSession(
       model: model, instructions: Instructions(instructions)
     ).respond(
