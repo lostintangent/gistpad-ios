@@ -43,14 +43,26 @@ final class CommentsUITests: XCTestCase {
     app.buttons["comment-post"].tap()
     // Thread 1 had no replies, so its replies appearing means the reply didn't start a thread.
     try waitUntil("the reply") { app.element("comment-replies-1").exists }
-    try scroll(to: "comment-thread-3", in: app)
+    try scroll(to: "comment-thread-4", in: app)
 
     composer.tap()
     composer.typeText("A new thought on the whole note.")
     app.buttons["comment-post"].tap()
-    // GitHub numbers this gist's comments, so the reply is 4 and the new thread is 5.
-    try scroll(to: "comment-thread-5", in: app)
-    XCTAssertFalse(app.element("comment-thread-4").exists, "The reply became its own thread.")
+    // GitHub numbers this gist's comments, so the reply is 5 and the new thread is 6.
+    try scroll(to: "comment-thread-6", in: app)
+    XCTAssertFalse(app.element("comment-thread-5").exists, "The reply became its own thread.")
+  }
+
+  func testOnlyALongQuoteOffersTheFullQuote() throws {
+    let app = launchGistPad(open: "highlights", mode: "preview", sheet: "comments")
+    try waitUntil("Comments") { app.element("comment-thread-1").exists }
+    XCTAssertFalse(app.element("comment-thread-1").buttons["Show Full Quote"].exists)
+
+    try scroll(to: "comment-thread-4", in: app)
+    let long = app.element("comment-thread-4")
+    try tap(long.buttons["Show Full Quote"], "Show Full Quote")
+    try tap(long.buttons["Show Less"], "Show Less")
+    try waitUntil("the quote folded again") { long.buttons["Show Full Quote"].exists }
   }
 
   func testTappingAHighlightSelectsItsThread() throws {

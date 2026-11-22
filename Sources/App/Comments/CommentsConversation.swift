@@ -133,10 +133,8 @@ private struct CommentThreadContent: View {
     let requestDelete: (GistComment) -> Void
     @State private var showsReplies = false
     @State private var showsFullQuote = false
-    @State private var fullQuoteHeight: CGFloat = 0
-    @State private var collapsedQuoteHeight: CGFloat = 0
+    @State private var quoteIsLong = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.displayScale) private var displayScale
     @ScaledMetric(relativeTo: .body) private var contentSpacing = 8
     @ScaledMetric(relativeTo: .body) private var quoteSpacing = 12
     @ScaledMetric(relativeTo: .body) private var avatarSize = 28
@@ -275,24 +273,9 @@ private struct CommentThreadContent: View {
                     quoteText(quote)
                         .lineLimit(showsFullQuote ? nil : 3)
                         .textSelection(.enabled)
-                        .overlay(alignment: .topLeading) {
-                            quoteText(quote)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .hidden()
-                                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
-                                    fullQuoteHeight = $0
-                                }
-                                .accessibilityHidden(true)
-                        }
-                        .background(alignment: .topLeading) {
-                            quoteText(quote)
-                                .lineLimit(3)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .hidden()
-                                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
-                                    collapsedQuoteHeight = $0
-                                }
-                                .accessibilityHidden(true)
+                        .onPreferenceChange(Text.LayoutKey.self) { layouts in
+                            guard let layout = layouts.first?.layout else { return }
+                            quoteIsLong = showsFullQuote ? layout.count > 3 : layout.isTruncated
                         }
                     if comments.linkedThreadIDs?.contains(comment.id) == true {
                         Button {
@@ -313,7 +296,7 @@ private struct CommentThreadContent: View {
                         .accessibilityIdentifier("comment-passage-\(comment.id)")
                     }
                 }
-                if fullQuoteHeight > collapsedQuoteHeight + 1 / displayScale {
+                if quoteIsLong {
                     Button {
                         showsFullQuote.toggle()
                     } label: {
