@@ -155,20 +155,28 @@ package final class OnDeviceModel: IntelligenceModel {
     case .extract:
       let count = blocks(for: pass).count
       guard count > 0 else { throw IntelligenceError.noEvidence }
-      let selection = DynamicGenerationSchema(
-        name: "BlockSelection",
-        properties: [
-          .init(
-            name: "blockIDs",
-            description: "IDs of relevant blocks. Empty if none are relevant.",
-            schema: DynamicGenerationSchema(
-              arrayOf: DynamicGenerationSchema(type: Int.self, guides: [.range(1...count)]),
-              maximumElements: 4))
-        ])
-      return try GenerationSchema(root: selection, dependencies: [])
+      return try idSchema(
+        named: "BlockSelection", description: "IDs of relevant blocks. Empty if none are relevant.",
+        count: count, maximum: 4)
     case .edit: return nil
     case .review: return AppleChanges.generationSchema
     }
+  }
+
+  /// Up to `maximum` block IDs from 1 through `count`, a range only known at runtime.
+  static func idSchema(
+    named name: String, description: String, count: Int, maximum: Int
+  ) throws -> GenerationSchema {
+    let root = DynamicGenerationSchema(
+      name: name,
+      properties: [
+        .init(
+          name: "blockIDs", description: description,
+          schema: DynamicGenerationSchema(
+            arrayOf: DynamicGenerationSchema(type: Int.self, guides: [.range(1...count)]),
+            maximumElements: maximum))
+      ])
+    return try GenerationSchema(root: root, dependencies: [])
   }
 
   /// The rules Ask and Review share.

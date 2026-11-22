@@ -436,16 +436,9 @@ extension OnDeviceModel {
     prompt: String, instructions: String, count: Int, maximum: Int,
     pass: ModelPass, phase: String
   ) async throws -> [Int] {
-    let root = DynamicGenerationSchema(
-      name: "EditTargets",
-      properties: [
-        .init(
-          name: "blockIDs", description: "IDs of the sections or blocks to change.",
-          schema: DynamicGenerationSchema(
-            arrayOf: DynamicGenerationSchema(type: Int.self, guides: [.range(1...count)]),
-            maximumElements: maximum))
-      ])
-    let schema = try GenerationSchema(root: root, dependencies: [])
+    let schema = try Self.idSchema(
+      named: "EditTargets", description: "IDs of the sections or blocks to change.",
+      count: count, maximum: maximum)
     let response = try await LanguageModelSession(
       model: model, instructions: Instructions(instructions)
     ).respond(
