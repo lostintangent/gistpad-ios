@@ -83,9 +83,8 @@ extension GistPadPreferences {
                 return [preference.rawValue: .bool(value)]
             case .setAccentColor(let hex):
                 guard hex.first == "#", hex.utf8.count == 7,
-                      hex.dropFirst().utf8.allSatisfy({
-                          (48...57).contains($0) || (65...70).contains($0) || (97...102).contains($0)
-                      }) else { throw PreferenceError.invalidShape("accentColor") }
+                      hex.dropFirst().allSatisfy({ $0.isASCII && $0.isHexDigit })
+                else { throw PreferenceError.invalidShape("accentColor") }
                 return ["accentColor": .string(hex)]
             case .setPinned(let gistID, let pinned):
                 try requireID(gistID)

@@ -196,9 +196,8 @@ public actor GitHubClient {
     }
 
     private func identifier(_ value: String) throws -> String {
-        guard !value.isEmpty,
-              value.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0)
-                  || (97...122).contains($0) }) else { throw GitHubError.invalidResponse }
+        guard !value.isEmpty, value.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) })
+        else { throw GitHubError.invalidResponse }
         return value
     }
 
