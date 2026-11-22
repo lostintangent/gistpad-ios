@@ -64,7 +64,7 @@ extension GistPadModel {
     }
   }
 
-  private func cachedFile(gistID: String, filename: String? = nil) -> GistFile? {
+  private func cachedFile(gistID: String, filename: String?) -> GistFile? {
     guard let account, phase.switchingTo == nil else { return nil }
     let gist = gistCache?.gists.first { $0.id == gistID }
     let selectedFilename: String?

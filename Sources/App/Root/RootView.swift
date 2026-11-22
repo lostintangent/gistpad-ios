@@ -401,7 +401,7 @@ struct RootView: View {
         if let gist = model.state.gists.first(where: {
           $0.title.localizedStandardCompare(target) == .orderedSame
         }) {
-          open(gistID: gist.id)
+          Task { await model.open(.gist(id: gist.id)) }
         } else {
           model.alertMessage = String(localized: "No gist has that title.")
         }
@@ -414,10 +414,6 @@ struct RootView: View {
     GistActions(
       fileEditor, model: model, comments: comments, undoManager: undoManager,
       present: { sheet = $0 }, intelligence: { presentIntelligence(fileEditor) })
-  }
-
-  private func open(gistID: String, filename: String? = nil) {
-    Task { await model.open(.gist(id: gistID, filename: filename)) }
   }
 
   private func selectRow(_ id: String) {

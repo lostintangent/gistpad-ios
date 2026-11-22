@@ -38,24 +38,15 @@ struct GistPadApp: App {
     }
   }
 
-  @ViewBuilder
-  private func rootView(_ model: GistPadModel) -> some View {
-    #if DEBUG
-      if let fixture = FixtureLaunch.current {
-        RootView(model: model, layout: fixture.layout())
-      } else {
-        RootView(model: model)
-      }
-    #else
-      RootView(model: model)
-    #endif
-  }
-
   var body: some Scene {
     WindowGroup {
       Group {
         if let model {
-          rootView(model)
+          #if DEBUG
+            RootView(model: model, layout: FixtureLaunch.current?.layout() ?? LayoutPreferences())
+          #else
+            RootView(model: model)
+          #endif
         } else if let loadError {
           ContentUnavailableView {
             Label("Couldn't Load Your Gists", systemImage: "exclamationmark.circle")
