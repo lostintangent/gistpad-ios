@@ -32,7 +32,7 @@ public struct SettingsSheet<Appearance: View>: View {
   public var body: some View {
     NavigationStack {
       Form {
-        Section {
+        Section(String(localized: "Account", bundle: .module)) {
           if let account {
             HStack(spacing: 14) {
               AsyncImage(url: account.github.avatarURL) { phase in
@@ -57,9 +57,15 @@ public struct SettingsSheet<Appearance: View>: View {
                 }
               }
             }
-              .padding(.vertical, 4)
-              .accessibilityElement(children: .combine)
-              .accessibilityIdentifier("settings-account")
+            .padding(.vertical, 4)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("settings-account")
+            if isSigningOut {
+              ProgressView(String(localized: "Signing Out", bundle: .module))
+            } else {
+              Button(String(localized: "Sign Out", bundle: .module), role: .destructive) { confirmingSignOut = true }
+                .accessibilityIdentifier("settings-sign-out")
+            }
           } else {
             Label(String(localized: "Connect GitHub", bundle: .module), systemImage: "person.crop.circle")
             Text("Sign in to open your GitHub gists, daily notes and saved tags.", bundle: .module)
@@ -67,8 +73,6 @@ public struct SettingsSheet<Appearance: View>: View {
             Button(String(localized: "Sign in with GitHub", bundle: .module), action: connect)
               .accessibilityIdentifier("settings-sign-in")
           }
-        } header: {
-          Text("Account", bundle: .module)
         }
         if account != nil {
           Section(String(localized: "Writing", bundle: .module)) {
@@ -80,20 +84,6 @@ public struct SettingsSheet<Appearance: View>: View {
               .accessibilityIdentifier("settings-front-matter")
           }
           Section(String(localized: "Appearance", bundle: .module)) { appearance() }
-          Section {
-            Button(String(localized: "Switch GitHub Account", bundle: .module), action: connect)
-              .accessibilityIdentifier("settings-switch-account")
-          } footer: {
-            Text("Drafts stay on this iPhone with their original account. Switching never publishes them.", bundle: .module)
-          }
-          Section {
-            if isSigningOut {
-              ProgressView(String(localized: "Signing Out", bundle: .module))
-            } else {
-              Button(String(localized: "Sign Out", bundle: .module), role: .destructive) { confirmingSignOut = true }
-                .accessibilityIdentifier("settings-sign-out")
-            }
-          }
         }
       }
       .disabled(isWorking)
