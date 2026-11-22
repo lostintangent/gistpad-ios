@@ -13,6 +13,8 @@ public struct GistEntity: Codable, Identifiable, Sendable {
     public let accountID: UUID?
     var folderName: String?
     var body: String?
+    // Platform gap: Swift 6.4.2 crashes compiling this entity when it stores isPinned itself.
+    // Remove pinned and store isPinned, coded as "pinned", when the compiler handles it.
     var pinned = false
 
     public var name: AttributedString { AttributedString(title) }
@@ -48,7 +50,8 @@ public struct GistEntity: Codable, Identifiable, Sendable {
         return entity
     }
 
-    /// The entity macro adds stored properties of its own, so encoding lists the ones GistPad keeps.
+    // Platform gap: @AppEntity's EntityProperty storage isn't Codable, so encoding lists the fields
+    // GistPad keeps. Remove CodingKeys when the macro keeps its storage out of Codable.
     private enum CodingKeys: String, CodingKey {
         case title, excerpt, tags, updatedAt, link, accountID, folderName, body, pinned
     }

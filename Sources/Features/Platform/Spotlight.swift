@@ -32,6 +32,8 @@ extension GistEntityQuery: IndexedEntityQuery {
 
 }
 
+// Platform gap: Spotlight can't list the gists it holds or replace them as one set, so this tracks
+// them itself. Remove indexedIDs when CSSearchableIndex can replace all of a type's entities.
 public actor SpotlightIndex {
     /// The gists Spotlight may hold, or nil when only clearing it is safe.
     private var indexedIDs: Set<String>?
