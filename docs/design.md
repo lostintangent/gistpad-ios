@@ -23,6 +23,7 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 - Recovery buttons say **Try Again**.
 - Every sign-in button says **Sign in with GitHub**, as text with no mark, cased like Apple's Sign in with Apple.
 - Buttons, `ContentUnavailableView` titles and alert titles are title case. An alert title that asks a question is a sentence, like **Discard tag changes?** Messages are sentence case, end with a period and use contractions, never "cannot".
+- Copy uses the typographic apostrophe (’), as the system's own strings do, never the typewriter one (').
 - Failures use `exclamationmark.circle`.
 - Menu items and buttons never end with "…", even when they open a dialog or sheet. Progress text like "Answering…" keeps it.
 - Authored titles and emoji appear exactly as written.
