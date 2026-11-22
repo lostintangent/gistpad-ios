@@ -545,33 +545,12 @@ public struct LibraryView: View {
             List {
                 Section {
                     ForEach(state.tags.matching(tagQuery)) { tag in
-                        Button {
+                        let count = state.gistCount(tagged: tag.id)
+                        TagChoice(tag: tag, isSelected: state.selectedTagIDs.contains(tag.id), count: count) {
                             state.selectedTagIDs.formSymmetricDifference([tag.id])
-                        } label: {
-                            HStack(spacing: 12) {
-                                TagSwatch(hex: tag.colorHex)
-                                Text(verbatim: tag.name)
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                Text(state.gistCount(tagged: tag.id), format: .number)
-                                    .monospacedDigit()
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityHidden(true)
-                                // Reserves its width so the count never shifts when a tag is selected.
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.tint)
-                                    .opacity(state.selectedTagIDs.contains(tag.id) ? 1 : 0)
-                                    .accessibilityHidden(true)
-                            }
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityValue(Text(verbatim: LibraryState.gistCountLabel(state.gistCount(tagged: tag.id))))
-                        .accessibilityAddTraits(state.selectedTagIDs.contains(tag.id) ? .isSelected : [])
+                        .accessibilityValue(Text(verbatim: LibraryState.gistCountLabel(count)))
                         .accessibilityIdentifier("library-tag-filter-\(tag.id)")
-                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: state.selectedTagIDs.contains(tag.id))
                     }
                 }
                 if !state.selectedTagIDs.isEmpty {

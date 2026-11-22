@@ -45,7 +45,7 @@ struct TagLabel: View {
 
 struct TagSwatch: View {
     let hex: String?
-    var size: CGFloat = 12
+    let size: CGFloat
 
     var body: some View {
         let rgb = RGBColor(tagHex: hex)
@@ -58,6 +58,54 @@ struct TagSwatch: View {
                 }
             }
             .accessibilityHidden(true)
+    }
+}
+
+/// A tag row in the tag filter and the tag editor, which toggles its checkmark when it has a `toggle`.
+struct TagChoice: View {
+    let tag: Tag
+    let isSelected: Bool
+    var count: Int?
+    var toggle: (() -> Void)?
+    @ScaledMetric(relativeTo: .body) private var swatchSize: CGFloat = 12
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Group {
+            if let toggle {
+                Button(action: toggle) { row }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+            } else {
+                row
+            }
+        }
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: isSelected)
+    }
+
+    private var row: some View {
+        HStack(spacing: 12) {
+            TagSwatch(hex: tag.colorHex, size: min(swatchSize, 24))
+            Text(verbatim: tag.name)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            if let count {
+                Text(count, format: .number)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            // Reserves its width so the count never shifts when a tag is selected.
+            Image(systemName: "checkmark")
+                .foregroundStyle(.tint)
+                .opacity(isSelected ? 1 : 0)
+                .accessibilityHidden(true)
+        }
+        .padding(.vertical, 8)
+        .frame(minHeight: 44)
+        .contentShape(.rect)
     }
 }
 

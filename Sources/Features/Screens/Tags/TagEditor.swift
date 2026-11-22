@@ -12,10 +12,7 @@ public struct TagEditor: View {
     @State private var saveError: String?
     @State private var confirmingDiscard = false
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.accent) private var accent
-    @ScaledMetric(relativeTo: .body) private var swatchSize: CGFloat = 12
 
     public init(
         gistID: String, tags: [Tag], selectedTagIDs: Set<String>,
@@ -40,7 +37,7 @@ public struct TagEditor: View {
                 Section {
                     ForEach(listedTags) { tag in
                         if save == nil {
-                            tagRow(tag)
+                            TagChoice(tag: tag, isSelected: true)
                         } else {
                             editableRow(tag)
                         }
@@ -69,7 +66,6 @@ public struct TagEditor: View {
                     update: { draft.upsert($0) },
                     delete: { draft.delete(tag) }
                 )
-                .accent(savedHex: accent.savedHex)
             }
             .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
             .presentationDragIndicator(.visible)
@@ -90,17 +86,11 @@ public struct TagEditor: View {
     }
 
     private func editableRow(_ tag: Tag) -> some View {
-        Button {
+        TagChoice(tag: tag, isSelected: draft.selectedTagIDs.contains(tag.id)) {
             draft.selectedTagIDs.formSymmetricDifference([tag.id])
-        } label: {
-            tagRow(tag)
         }
-        .buttonStyle(.plain)
         .accessibilityIdentifier("tag-choice-\(tag.id)")
-        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
-        .accessibilityAddTraits(draft.selectedTagIDs.contains(tag.id) ? .isSelected : [])
         .accessibilityAction(named: Text("Edit Tag \(tag.name)", bundle: .module)) { editingTag = tag }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: draft.selectedTagIDs.contains(tag.id))
         .contextMenu {
             Button(String(localized: "Edit Tag", bundle: .module), systemImage: "pencil") { editingTag = tag }
         }
@@ -108,27 +98,6 @@ public struct TagEditor: View {
             Button(String(localized: "Edit Tag", bundle: .module), systemImage: "pencil") { editingTag = tag }
                 .labelStyle(.iconOnly)
         }
-    }
-
-    private func tagRow(_ tag: Tag) -> some View {
-        HStack(spacing: 12) {
-            TagSwatch(hex: tag.colorHex, size: min(swatchSize, 24))
-                .accessibilityHidden(true)
-            Text(verbatim: tag.name)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            if draft.selectedTagIDs.contains(tag.id) {
-                Image(systemName: "checkmark")
-                    .foregroundStyle(.tint)
-                    .accessibilityHidden(true)
-                    .transition(.opacity)
-            }
-        }
-        .padding(.vertical, 8)
-        .frame(minHeight: 44)
-        .contentShape(Rectangle())
-        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
     }
 
     @ToolbarContentBuilder
@@ -169,12 +138,11 @@ public struct TagEditor: View {
         isSaving = true
         saveError = nil
         Task {
+            defer { isSaving = false }
             do {
                 try await save(edits)
-                isSaving = false
                 dismiss()
             } catch {
-                isSaving = false
                 saveError = error.localizedDescription
             }
         }
