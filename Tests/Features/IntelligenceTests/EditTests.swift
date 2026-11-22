@@ -245,12 +245,12 @@ struct EditTests {
 
       Retest in November.
       """
-    let sections = EditSection.indexed(in: source)
-    #expect(sections.map(\.title) == [
+    let sections = EditBlock.sections(in: source)
+    #expect(sections.map { $0.heading.text } == [
       "# Project", "## Setup", "### Install", "### Options", "## Next check",
     ])
-    #expect(sections.map(\.level) == [1, 2, 3, 3, 2])
-    #expect(sections.map { (source as NSString).substring(with: $0.directRange) } == [
+    #expect(sections.map { $0.heading.level } == [1, 2, 3, 3, 2])
+    #expect(sections.map { (source as NSString).substring(with: $0.range) } == [
       "# Project\n\nIntro.", "## Setup\n\nSetup notes.", "### Install\n\nInstall steps.",
       "### Options\n\n| Flag | Meaning |\n| -i | Ignore case |", "## Next check\n\nRetest in November.",
     ])

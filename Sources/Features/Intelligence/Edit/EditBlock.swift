@@ -34,16 +34,10 @@ struct EditBlock {
         marker: block.marker, taskMarker: block.taskMarker)
     }
   }
-}
 
-struct EditSection {
-  let id: Int
-  let title: String
-  let level: Int
-  let directRange: NSRange
-
-  static func indexed(in source: String) -> [Self] {
-    let headings = EditBlock.indexed(in: source).filter { $0.kind == .heading }
+  /// Each heading with the text directly under it, before the next heading of any level.
+  static func sections(in source: String) -> [(heading: Self, range: NSRange)] {
+    let headings = indexed(in: source).filter { $0.kind == .heading }
     let text = source as NSString
     return headings.enumerated().map { index, heading in
       var end = headings.dropFirst(index + 1).first?.range.location ?? text.length
@@ -52,9 +46,7 @@ struct EditSection {
       {
         end -= 1
       }
-      return Self(
-        id: index + 1, title: heading.text, level: heading.level,
-        directRange: NSRange(location: heading.range.location, length: end - heading.range.location))
+      return (heading, NSRange(location: heading.range.location, length: end - heading.range.location))
     }
   }
 }

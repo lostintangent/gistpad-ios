@@ -97,20 +97,20 @@ extension OnDeviceModel {
   }
 
   func sectionEdits(for pass: ModelPass) async throws -> [ModelEdit] {
-    let sections = EditSection.indexed(in: pass.source)
+    let sections = EditBlock.sections(in: pass.source)
     guard !sections.isEmpty else { return try await blockEdits(for: pass) }
     let blocks = EditBlock.indexed(in: pass.source)
     let payload = OutlineSelection(
       request: pass.instruction,
-      headings: sections.map { section in
+      headings: sections.enumerated().map { index, section in
         let direct = blocks.filter {
-          $0.kind != .heading && $0.range.location >= section.directRange.location
-            && NSMaxRange($0.range) <= NSMaxRange(section.directRange)
+          $0.kind != .heading && $0.range.location >= section.range.location
+            && NSMaxRange($0.range) <= NSMaxRange(section.range)
         }
         let samples =
           direct.count > 6 ? Array(direct.prefix(4)) + Array(direct.suffix(2)) : direct
         return .init(
-          id: section.id, title: section.title, level: section.level,
+          id: index + 1, title: section.heading.text, level: section.heading.level,
           preview: samples.map {
             String($0.text.replacingOccurrences(of: "\n", with: " ").prefix(80))
           })
@@ -132,7 +132,7 @@ extension OnDeviceModel {
       part of the note has no relevant heading.
       """
     let ids =
-      if atEnd, let last = sections.last { [last.id] } else {
+      if atEnd { [sections.count] } else {
         try await selectedIDs(
           prompt: prompt, instructions: instructions, count: sections.count,
           maximum: isRelocating(pass.instruction, in: pass.source) ? 2 : 1,
@@ -142,9 +142,9 @@ extension OnDeviceModel {
     for id in ids {
       try Task.checkCancellation()
       let section = sections[id - 1]
-      let direct = (pass.source as NSString).substring(with: section.directRange)
+      let direct = (pass.source as NSString).substring(with: section.range)
       func inNote(_ range: NSRange) -> NSRange {
-        NSRange(location: section.directRange.location + range.location, length: range.length)
+        NSRange(location: section.range.location + range.location, length: range.length)
       }
       let local = ModelPass(
         purpose: .edit, instruction: pass.instruction, source: direct,
