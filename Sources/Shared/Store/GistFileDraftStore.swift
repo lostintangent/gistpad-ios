@@ -181,13 +181,6 @@ final class StoredDraft {
 
 @ModelActor
 public actor GistFileDraftStore {
-    public init(container: ModelContainer) {
-        modelContainer = container
-        let context = ModelContext(container)
-        context.autosaveEnabled = false
-        modelExecutor = DefaultSerialModelExecutor(modelContext: context)
-    }
-
     public static func open(url: URL? = nil, inMemory: Bool = false) throws -> GistFileDraftStore {
         let schema = Schema([StoredDraft.self, StoredLibrary.self])
         let configuration: ModelConfiguration
@@ -203,7 +196,7 @@ public actor GistFileDraftStore {
         }
         // GistPad.entitlements gives the app's files complete protection, so drafts stay sealed
         // while the phone is locked.
-        return GistFileDraftStore(container: try ModelContainer(for: schema, configurations: [configuration]))
+        return GistFileDraftStore(modelContainer: try ModelContainer(for: schema, configurations: [configuration]))
     }
 
     public func drafts(accountID: UUID) throws -> [GistFileDraft] {
