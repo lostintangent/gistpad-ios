@@ -67,6 +67,8 @@ public struct SettingsSheet<Appearance: View>: View {
                 String(localized: "Sign Out", bundle: .module), systemImage: "rectangle.portrait.and.arrow.forward",
                 role: .destructive
               ) { confirmingSignOut = true }
+                // The destructive role reddens only the title in a Form, and the icon would keep the accent.
+                .foregroundStyle(.red)
                 .accessibilityIdentifier("settings-sign-out")
             }
           } else {
