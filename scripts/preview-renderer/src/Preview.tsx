@@ -12,7 +12,7 @@ import rehypeToc from "@gistpad/rehype-toc";
 import Mermaid from "../../../../gistpad.dev/src/features/markdown/Mermaid";
 import { taskRangePlugins } from "./tasks";
 import { toString } from "hast-util-to-string";
-import { identity, type PreviewMessage, type RenderRequest, type TaskEdit } from "./protocol";
+import { identity, send, type RenderRequest, type TaskEdit } from "./protocol";
 import { CommentText, type CommentHighlightController } from "./commentHighlights";
 
 const emojis = new Map(
@@ -37,10 +37,6 @@ const schema = {
     src: ["https", "http", "data"],
   },
 };
-
-export function send(message: PreviewMessage) {
-  window.webkit?.messageHandlers?.gistpadPreview?.postMessage(message);
-}
 
 function Spoiler({ children }: { children: ReactNode }) {
   const [revealed, setRevealed] = useState(false);

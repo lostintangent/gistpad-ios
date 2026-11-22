@@ -11,7 +11,7 @@ const request: RenderRequest = {
 
 describe("comment highlights", () => {
   test("selected overlap partitions share one visual run without merging thread targets", () => {
-    const controller = new CommentHighlightController(request, () => {});
+    const controller = new CommentHighlightController(request);
     controller.catalogPlugin()({ type: "root", children: [{ type: "text", value: request.markdown }] });
     controller.setHighlights({
       highlights: [
@@ -45,9 +45,9 @@ describe("comment highlights", () => {
         children: [{ type: "text" as const, value: "excluded" }],
       }))],
     };
-    const controller = new CommentHighlightController(request, () => {});
+    const controller = new CommentHighlightController(request);
     controller.catalogPlugin()(tree);
-    expect(controller.catalog().segments).toEqual(["Before ", "native", " after"]);
+    expect(controller.catalog()).toEqual(["Before ", "native", " after"]);
   });
 
   test("table whitespace stays a text node instead of becoming invalid span children", () => {
@@ -63,10 +63,10 @@ describe("comment highlights", () => {
         ],
       }],
     };
-    const controller = new CommentHighlightController(request, () => {});
+    const controller = new CommentHighlightController(request);
     controller.catalogPlugin()(tree);
     const table = tree.children[0]!;
     expect(table.type === "element" && table.children[0]!.type).toBe("text");
-    expect(controller.catalog().segments).toEqual(["\n", "native"]);
+    expect(controller.catalog()).toEqual(["\n", "native"]);
   });
 });

@@ -1,15 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import type { Element as HASTElement, Root } from "hast";
-import { identity, type Identity, type RenderRequest } from "./protocol";
+import { identity, send, type RenderRequest } from "./protocol";
 import { contrastRatio, type RGB } from "./appearance";
 
-export interface CommentThreadActivation extends Identity {
-  type: "commentActivate";
-  segment: number;
-  start: number;
-  end: number;
-}
 interface Highlight {
   segment: number;
   start: number;
@@ -31,10 +25,7 @@ export class CommentHighlightController {
   private listeners = new Set<() => void>();
   private state: HighlightState;
 
-  constructor(
-    private readonly request: RenderRequest,
-    private readonly activate: (message: CommentThreadActivation) => void,
-  ) {
+  constructor(private readonly request: RenderRequest) {
     this.state = {
       highlights: [], selectedThreadID: null, revealRevision: 0,
       showsInlineComments: true, allowsInteraction: false, accent: "#0EA5E9",
@@ -81,7 +72,7 @@ export class CommentHighlightController {
 
   catalog() {
     if (!this.segments) throw new Error("The preview has not finished rendering.");
-    return { ...identity(this.request), segments: this.segments.slice() };
+    return this.segments.slice();
   }
 
   selection() {
@@ -90,10 +81,9 @@ export class CommentHighlightController {
     const article = document.querySelector("article");
     const belongs = (node: Node | null) => node && article &&
       (article.contains(node) || node.contains(article));
-    const quote = selection && selection.rangeCount === 1 && !selection.isCollapsed &&
+    return selection && selection.rangeCount === 1 && !selection.isCollapsed &&
       belongs(selection.anchorNode) && belongs(selection.focusNode)
       ? selection.toString() : null;
-    return { ...identity(this.request), quote };
   }
 
   setHighlights(state: HighlightState) {
@@ -109,7 +99,7 @@ export class CommentHighlightController {
 
   open(highlight: Highlight) {
     if (!this.state.allowsInteraction || !this.state.highlights.includes(highlight)) return;
-    this.activate({
+    send({
       ...identity(this.request), type: "commentActivate",
       segment: highlight.segment, start: highlight.start, end: highlight.end,
     });

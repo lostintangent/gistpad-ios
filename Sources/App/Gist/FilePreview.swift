@@ -41,21 +41,16 @@ struct FilePreview: View {
 
   private func handle(_ event: PreviewEvent) {
     switch event {
-    case .taskToggle(let edit):
+    case .taskToggle(let range, let expected, let replacement, let generation):
       // A refused toggle (typing in progress, or a newer generation) needs no message: the
       // checkbox is controlled, so it springs back and the preview keeps showing the file.
-      try? editor.apply(
-        Edit(
-          range: edit.range, expected: edit.expectedMarker, replacement: edit.replacementMarker),
-        generation: edit.generation)
-    case .linkTapped(let link):
-      if link.kind == .external, let url = URL(string: link.target) {
-        openURL(url)
-      } else if link.kind == .wikilink {
-        openWikilink?(link.target)
-      }
-    case .failure(let failure):
-      renderError = failure.localizedDescription
+      try? editor.apply(Edit(range: range, expected: expected, replacement: replacement), generation: generation)
+    case .openURL(let url):
+      openURL(url)
+    case .openWikilink(let name):
+      openWikilink?(name)
+    case .failure(let message):
+      renderError = message
     }
   }
 }

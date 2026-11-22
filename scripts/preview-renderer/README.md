@@ -25,13 +25,13 @@ HTML is sanitized before Contents, slugs and task annotation, so scripts, forms,
 
 ## Bridge
 
-The page exposes `window.gistpadPreview` (`src/protocol.ts`): `render`, `setAppearance`, `setViewportInsets`, `commentSegments`, `commentSelection` and `setCommentHighlights`. It posts `ready`, `rendered`, `taskToggle`, `link` and `failure` to `gistpadPreview`, and a tapped highlight to `gistpadComments`.
+The page exposes `window.gistpadPreview` (`src/protocol.ts`): `render`, `setAppearance`, `setViewportInsets`, `commentSegments`, `commentSelection` and `setCommentHighlights`. It posts `ready`, `rendered`, `taskToggle`, `link`, `commentActivate` and `failure` to one handler, `gistpadPreview`.
 
 Native accepts messages only from the bundle's main frame and drops any from an older generation. A task toggle carries the UTF-16 range of the parsed task's marker plus the expected and replacement markers, and native checks them against the current text before applying the edit. `allowsTaskEdits` travels with each render, so read-only checkboxes never emit edits. Links must be http, https or mailto.
 
 ## Comments
 
-`CommentQuoteMatcher` in Shared Comments is authoritative. The page catalogs each sanitized text node outside `pre`, `code` and `svg`, native matches quotes against that catalog, and the page draws the returned ranges. A tapped highlight sends only its segment and range, and native resolves its threads. Add Comment joins the system selection menu and reads the rendered selection only when the menu opens. A selected passage opens its enclosing disclosures and scrolls into view.
+Quote matching in Shared Comments is authoritative. The page catalogs each sanitized text node outside `pre`, `code` and `svg`, native matches quotes against that catalog, and the page draws the returned ranges. A tapped highlight sends only its segment and range, and native resolves its threads. Add Comment joins the system selection menu and reads the rendered selection only when the menu opens. A selected passage opens its enclosing disclosures and scrolls into view.
 
 ## Scrolling and appearance
 

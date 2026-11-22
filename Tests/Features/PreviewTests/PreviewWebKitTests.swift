@@ -62,7 +62,7 @@ struct PreviewWebKitTests {
             let state = try await evaluate(
                 "return {url:location.href,state:document.readyState,renderer:typeof window.gistpadPreview};")
             let diagnostics = receiver.bodies.filter { $0["type"] as? String == "diagnostic" }
-            throw PreviewFailure("Ready timeout. Page: \(String(describing: state)). Diagnostics: \(diagnostics). Navigation: \(receiver.navigationErrors)")
+            throw PreviewError("Ready timeout. Page: \(String(describing: state)). Diagnostics: \(diagnostics). Navigation: \(receiver.navigationErrors)")
         }
         #expect(receiver.origins.allSatisfy { $0 == "gistpad-preview://bundle" })
 
@@ -85,12 +85,12 @@ struct PreviewWebKitTests {
         _ = try await evaluate("document.querySelectorAll('input[type=checkbox]')[1].click();")
         try await waitFor("task toggle") { receiver.bodies.contains { $0["type"] as? String == "taskToggle" } }
         let toggle = try #require(receiver.bodies.last { $0["type"] as? String == "taskToggle" })
-        guard case .event(.taskToggle(let edit)) = try PreviewBridge.decode(toggle, file: editable) else {
+        guard case .event(.taskToggle(let range, _, let replacement, _)) = try PreviewBridge.decode(toggle, file: editable) else {
             Issue.record("Expected a validated source edit")
             return
         }
-        #expect(edit.range == (markdown as NSString).range(of: "[x]"))
-        #expect(edit.replacementMarker == "[ ]")
+        #expect(range == (markdown as NSString).range(of: "[x]"))
+        #expect(replacement == "[ ]")
 
         var diagramRendered = false
         for _ in 0..<200 {
@@ -103,8 +103,7 @@ struct PreviewWebKitTests {
         _ = try await evaluate("document.querySelector('button.wikilink').click();")
         try await waitFor("wikilink message") { receiver.bodies.contains { $0["kind"] as? String == "wikilink" } }
         let wikilink = try #require(receiver.bodies.last { $0["kind"] as? String == "wikilink" })
-        #expect(try PreviewBridge.decode(wikilink, file: editable) == .event(.linkTapped(PreviewLink(
-            kind: .wikilink, target: "Ideas"))))
+        #expect(try PreviewBridge.decode(wikilink, file: editable) == .event(.openWikilink("Ideas")))
         #expect(!receiver.bodies.contains { $0["type"] as? String == "failure" })
     }
 
@@ -252,11 +251,11 @@ struct PreviewWebKitTests {
     private func killWebContent(of webView: WKWebView) throws {
         let selector = NSSelectorFromString("_webProcessIdentifier")
         guard webView.responds(to: selector), let method = webView.method(for: selector) else {
-            throw PreviewFailure("WKWebView does not expose a web process identifier.")
+            throw PreviewError("WKWebView does not expose a web process identifier.")
         }
         typealias Identifier = @convention(c) (AnyObject, Selector) -> Int32
         let pid = unsafeBitCast(method, to: Identifier.self)(webView, selector)
-        guard pid > 1 else { throw PreviewFailure("The preview has no web process.") }
+        guard pid > 1 else { throw PreviewError("The preview has no web process.") }
         #expect(kill(pid, SIGKILL) == 0)
     }
 
@@ -286,7 +285,7 @@ struct PreviewWebKitTests {
             if await condition() { return }
             try await Task.sleep(for: .milliseconds(50))
         }
-        throw PreviewFailure("Timed out waiting for \(description).")
+        throw PreviewError("Timed out waiting for \(description).")
     }
 }
 

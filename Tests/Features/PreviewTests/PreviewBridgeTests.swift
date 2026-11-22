@@ -21,17 +21,18 @@ struct PreviewBridgeTests {
     func taskToggles() throws {
         let range = (text as NSString).range(of: "[x]")
         let message = try PreviewBridge.decode(toggle(at: range.location, expected: "[x]", replacement: "[ ]"), file: file())
-        guard case .event(.taskToggle(let edit)) = message else {
+        guard case .event(.taskToggle(let edited, _, let replacement, let generation)) = message else {
             Issue.record("Expected a task edit")
             return
         }
-        #expect(edit.range == range)
-        #expect((text as NSString).replacingCharacters(in: range, with: edit.replacementMarker)
+        #expect(edited == range)
+        #expect(generation == 7)
+        #expect((text as NSString).replacingCharacters(in: range, with: replacement)
             == "👩🏽‍💻\r\n- [ ] Same\r\n- [ ] Same\r\n")
 
         let unchecked = (text as NSString).range(of: "[ ]").location
         for location in [-1, 0, Int.max - 1, Int.max, unchecked] {
-            #expect(throws: PreviewFailure.self) {
+            #expect(throws: PreviewError.self) {
                 try PreviewBridge.decode(toggle(at: location, expected: "[ ]", replacement: "bad"), file: file())
             }
         }
@@ -45,8 +46,18 @@ struct PreviewBridgeTests {
             ["type": "link", "fileID": "fixture", "generation": 7, "kind": "external", "target": target]
         }
         for target in ["javascript:alert(1)", "file:///private/a", "https://user:secret@example.com", "data:text/html,hello", ""] {
-            #expect(throws: PreviewFailure.self) { try PreviewBridge.decode(link(target), file: file()) }
+            #expect(throws: PreviewError.self) { try PreviewBridge.decode(link(target), file: file()) }
         }
-        #expect(try PreviewBridge.decode(link("https://example.com"), file: file()) != nil)
+        #expect(try PreviewBridge.decode(link("https://example.com"), file: file())
+            == .event(.openURL(URL(string: "https://example.com")!)))
+    }
+
+    @Test("A tapped highlight arrives as its segment and range")
+    func commentActivation() throws {
+        let tap: [String: Any] = [
+            "type": "commentActivate", "fileID": "fixture", "generation": 7, "segment": 2, "start": 4, "end": 9
+        ]
+        #expect(try PreviewBridge.decode(tap, file: file()) == .commentActivate(segment: 2, start: 4, end: 9))
+        #expect(throws: PreviewError.self) { try PreviewBridge.decode(tap.filter { $0.key != "end" }, file: file()) }
     }
 }

@@ -2,6 +2,7 @@
 import SwiftUI
 import WebKit
 import OSLog
+import UniformTypeIdentifiers
 import Appearance
 import Comments
 
@@ -57,11 +58,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     func makeUIView(context: Context) -> PreviewWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.setURLSchemeHandler(PreviewResourceHandler(), forURLScheme: "gistpad-preview")
         configuration.userContentController.add(context.coordinator, name: "gistpadPreview")
-        configuration.userContentController.add(context.coordinator, name: "gistpadComments")
 
         let webView = PreviewWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -100,14 +98,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ uiView: PreviewWebView, coordinator: Coordinator) {
-        uiView.scrollView.delegate = nil
-        uiView.onBuildCommentMenu = nil
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "gistpadPreview")
-        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "gistpadComments")
         coordinator.commentHighlights.reset()
-        coordinator.commentHighlights.webView = nil
-        uiView.navigationDelegate = nil
-        coordinator.webView = nil
         uiView.stopLoading()
     }
 
@@ -134,9 +126,14 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             webView?.callAsyncJavaScript(script, arguments: arguments, in: nil, in: .page) { [weak self] result in
                 switch result {
                 case .success: then?()
-                case .failure(let error): self?.onEvent(.failure(PreviewFailure(error)))
+                case .failure(let error): self?.fail(error)
                 }
             }
+        }
+
+        private func fail(_ error: any Error) {
+            let error = error as NSError
+            onEvent(.failure(error.userInfo["WKJavaScriptExceptionMessage"] as? String ?? error.localizedDescription))
         }
 
         func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
@@ -175,16 +172,14 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                 return
             }
             do {
-                if message.name == "gistpadComments" {
-                    try commentHighlights.activate(message.body)
-                    return
-                }
                 switch try PreviewBridge.decode(message.body, file: file) {
                 case .ready:
                     ready = true
                     update(file)
                 case .event(let event):
                     onEvent(event)
+                case .commentActivate(let segment, let start, let end):
+                    try commentHighlights.activate(segment: segment, start: start, end: end)
                 case .rendered:
                     guard needsInitialScroll else {
                         commentHighlights.rendered(file)
@@ -222,11 +217,11 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-            onEvent(.failure(PreviewFailure(error)))
+            fail(error)
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-            onEvent(.failure(PreviewFailure(error)))
+            fail(error)
         }
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
@@ -290,17 +285,16 @@ final class PreviewResourceHandler: NSObject, WKURLSchemeHandler {
             guard let url = urlSchemeTask.request.url,
                   url.scheme == "gistpad-preview", url.host == "bundle",
                   let base = Bundle.module.url(forResource: "Web", withExtension: nil) else {
-                throw PreviewFailure("Invalid preview resource URL.")
+                throw PreviewError("Invalid preview resource URL.")
             }
             let file = base.appendingPathComponent(url.path.dropFirst().description).standardizedFileURL
             guard file.path.hasPrefix(base.standardizedFileURL.path + "/") else {
-                throw PreviewFailure("The preview resource is outside its bundle.")
+                throw PreviewError("The preview resource is outside its bundle.")
             }
             let data = try Data(contentsOf: file, options: .mappedIfSafe)
-            let mimeTypes = ["html": "text/html", "js": "application/javascript", "css": "text/css",
-                             "json": "application/json", "svg": "image/svg+xml", "png": "image/png"]
             let response = URLResponse(
-                url: url, mimeType: mimeTypes[file.pathExtension] ?? "application/octet-stream",
+                url: url,
+                mimeType: UTType(filenameExtension: file.pathExtension)?.preferredMIMEType ?? "application/octet-stream",
                 expectedContentLength: data.count, textEncodingName: "utf-8"
             )
             urlSchemeTask.didReceive(response)

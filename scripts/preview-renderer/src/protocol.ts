@@ -26,7 +26,12 @@ export type PreviewMessage =
         | { type: "link"; kind: "external" | "wikilink"; target: string }
         | { type: "rendered" }
         | { type: "failure"; message: string }
+        | { type: "commentActivate"; segment: number; start: number; end: number }
       ));
+
+export function send(message: PreviewMessage) {
+  window.webkit?.messageHandlers?.gistpadPreview?.postMessage(message);
+}
 
 declare global {
   interface Window {
@@ -34,14 +39,13 @@ declare global {
       render: (request: RenderRequest) => void;
       setAppearance: (appearance: import("./appearance").Appearance) => void;
       setViewportInsets: (insets: import("./viewport").ViewportInsets) => void;
-      commentSegments: () => unknown;
-      commentSelection: () => unknown;
+      commentSegments: () => string[];
+      commentSelection: () => string | null;
       setCommentHighlights: (value: import("./commentHighlights").HighlightState) => void;
     };
     webkit?: {
       messageHandlers?: {
         gistpadPreview?: { postMessage: (message: PreviewMessage) => void };
-        gistpadComments?: { postMessage: (message: import("./commentHighlights").CommentThreadActivation) => void };
       };
     };
   }

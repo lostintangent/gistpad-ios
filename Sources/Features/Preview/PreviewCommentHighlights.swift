@@ -6,22 +6,6 @@ import WebKit
 
 @MainActor
 final class PreviewCommentHighlights {
-    private struct Catalog: Decodable {
-        let segments: [String]
-    }
-
-    private struct Selection: Decodable {
-        let quote: String?
-    }
-
-    private struct Activation: Decodable {
-        let fileID: String
-        let generation: UInt64
-        let segment: Int
-        let start: Int
-        let end: Int
-    }
-
     weak var webView: WKWebView?
     private var actions: CommentHighlightActions?
     private var file: PreviewFile?
@@ -58,13 +42,11 @@ final class PreviewCommentHighlights {
         refresh()
     }
 
-    func activate(_ body: Any) throws {
+    func activate(segment: Int, start: Int, end: Int) throws {
         guard let file, renderedFile == file else { return }
-        let message: Activation = try PreviewBridge.decode(body)
-        guard message.fileID == file.id, message.generation == file.generation,
-              let highlight = highlights.first(where: {
-                  $0.segment == message.segment && $0.start == message.start && $0.end == message.end
-              }) else { throw PreviewBridge.invalidMessage }
+        guard let highlight = highlights.first(where: {
+            $0.segment == segment && $0.start == start && $0.end == end
+        }) else { throw PreviewBridge.invalidMessage }
         actions?.open(highlight.threadIDs)
     }
 
@@ -77,8 +59,7 @@ final class PreviewCommentHighlights {
                     let value = try await webView.callAsyncJavaScript(
                         "return window.gistpadPreview.commentSelection();",
                         arguments: [:], in: nil, contentWorld: .page)
-                    let selection: Selection = try PreviewBridge.decode(value)
-                    guard self.renderedFile == file, let quote = selection.quote,
+                    guard self.renderedFile == file, let quote = value as? String,
                           CommentQuote.isQuotable(quote) else { return completion([]) }
                     let action = UIAction(
                         title: String(localized: "Add Comment", bundle: .module),
@@ -122,9 +103,9 @@ final class PreviewCommentHighlights {
                     let value = try await webView.callAsyncJavaScript(
                         "return window.gistpadPreview.commentSegments();",
                         arguments: [:], in: nil, contentWorld: .page)
-                    let catalog: Catalog = try PreviewBridge.decode(value)
+                    guard let segments = value as? [String] else { throw PreviewBridge.invalidMessage }
                     guard !Task.isCancelled else { return }
-                    self.segments = catalog.segments
+                    self.segments = segments
                 }
                 self.highlights = configuration.quotes.highlights(in: self.segments ?? [])
                 let payload: [String: Any] = [

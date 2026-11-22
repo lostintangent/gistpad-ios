@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Preview, PreviewErrorBoundary, send } from "./Preview";
-import type { RenderRequest } from "./protocol";
+import { Preview, PreviewErrorBoundary } from "./Preview";
+import { send, type RenderRequest } from "./protocol";
 import { setAppearance } from "./appearance";
 import { setViewportInsets } from "./viewport";
 import { CommentHighlightController } from "./commentHighlights";
@@ -27,8 +27,7 @@ window.gistpadPreview = Object.freeze({
     comments.setHighlights(value);
   },
   render(request: RenderRequest) {
-    comments = new CommentHighlightController(request, (message) =>
-      window.webkit?.messageHandlers?.gistpadComments?.postMessage(message));
+    comments = new CommentHighlightController(request);
     root.render(
       <QueryClientProvider client={queryClient}>
         <PreviewErrorBoundary key={request.fileID} request={request}>
