@@ -7,102 +7,102 @@ import Store
 
 @Observable
 public final class GistFileEditor {
-  public internal(set) var file: GistFile
-  public let editor: Editor
-  var publishing: Task<Void, Never>?
-  /// Why the last publish didn't land, until you type, publish again or reconnect GitHub.
-  var failure: GitHubProblem?
-  /// The editor's last generation saved on this iPhone.
-  var savedGeneration: UInt64 = 0
-  /// Typing waits while a change you didn't type goes into the note.
-  var isLocked = false
-  public internal(set) var refreshProblem: GitHubProblem?
-  public var mode: FileMode = .preview
-  @ObservationIgnored let model: GistPadModel
-  @ObservationIgnored var persistence: Task<Bool, Never>?
-  @ObservationIgnored var autosaveTask: Task<Void, Never>?
-  @ObservationIgnored var scheduledAutosave: AutosaveRequest?
-  @ObservationIgnored var isRefreshing = false
-  /// When this note last read GitHub, so opening it again reads only once that's stale.
-  @ObservationIgnored var refreshedAt: Date?
-  @ObservationIgnored let logger = Logger(
-    subsystem: "dev.gistpad.GistPad", category: "File")
+    public internal(set) var file: GistFile
+    public let editor: Editor
+    var publishing: Task<Void, Never>?
+    /// Why the last publish didn't land, until you type, publish again or reconnect GitHub.
+    var failure: GitHubProblem?
+    /// The editor's last generation saved on this iPhone.
+    var savedGeneration: UInt64 = 0
+    /// Typing waits while a change you didn't type goes into the note.
+    var isLocked = false
+    public internal(set) var refreshProblem: GitHubProblem?
+    public var mode: FileMode = .preview
+    @ObservationIgnored let model: GistPadModel
+    @ObservationIgnored var persistence: Task<Bool, Never>?
+    @ObservationIgnored var autosaveTask: Task<Void, Never>?
+    @ObservationIgnored var scheduledAutosave: AutosaveRequest?
+    @ObservationIgnored var isRefreshing = false
+    /// When this note last read GitHub, so opening it again reads only once that's stale.
+    @ObservationIgnored var refreshedAt: Date?
+    @ObservationIgnored let logger = Logger(
+        subsystem: "dev.gistpad.GistPad", category: "File")
 
-  init(file: GistFile, model: GistPadModel) {
-    self.file = file
-    self.model = model
-    editor = Editor(
-      text: file.text,
-      showsFrontMatter: model.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
-    if file.isNew { mode = .edit }
-    updateEditable()
-    applyWritingPreferences()
-    editor.onEdit = { [weak self] text, generation in
-      self?.persist(text: text, generation: generation)
+    init(file: GistFile, model: GistPadModel) {
+        self.file = file
+        self.model = model
+        editor = Editor(
+            text: file.text,
+            showsFrontMatter: model.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
+        if file.isNew { mode = .edit }
+        updateEditable()
+        applyWritingPreferences()
+        editor.onEdit = { [weak self] text, generation in
+            self?.persist(text: text, generation: generation)
+        }
+        observeAutosave()
     }
-    observeAutosave()
-  }
 
-  /// The gist's header and actions, always current with the library.
-  public var details: GistDetails { model.details(for: file) }
+    /// The gist's header and actions, always current with the library.
+    public var details: GistDetails { model.details(for: file) }
 
-  /// Where this note stands with GitHub: read-only for a recovery copy, publishing while a publish
-  /// runs, a conflict until you choose, then why the last publish failed, and otherwise whether
-  /// GitHub has your text.
-  public var status: PublishStatus {
-    if file.isDeletedOnGitHub { return .failed(.rejected) }
-    if isPublishing { return .publishing }
-    if file.draft?.conflict != nil { return .conflict }
-    if let failure { return .failed(failure) }
-    return file.nextDraft.isPublished && !hasUnpublishedChanges ? .published : .unpublished
-  }
-
-  /// Whether you've written anything GitHub doesn't have, including typing still saving.
-  var hasUnpublishedChanges: Bool {
-    hasStoredDraft || editor.generation != savedGeneration
-  }
-
-  /// Whether this iPhone keeps the file's draft, which a new gist or day only has in memory until
-  /// there's something in it.
-  var hasStoredDraft: Bool {
-    guard let draft = file.draft else { return false }
-    return model.drafts.contains { $0.id == draft.id }
-  }
-
-  /// Whether a change can go into the note now: it's yours, it isn't locked and you aren't composing.
-  public var canEdit: Bool {
-    details.isOwned && !isLocked && editor.isSettled
-  }
-
-  /// Brings the note's name and gist up to date after a change. A file GitHub renamed before you
-  /// typed in it takes `filename`.
-  func refreshMetadata(gist: Gist? = nil, filename: String? = nil) async throws {
-    if let stored = try await model.current(file.nextDraft) {
-      file.update(stored)
-    } else if let filename {
-      file.rename(filename)
+    /// Where this note stands with GitHub: read-only for a recovery copy, publishing while a publish
+    /// runs, a conflict until you choose, then why the last publish failed, and otherwise whether
+    /// GitHub has your text.
+    public var status: PublishStatus {
+        if file.isDeletedOnGitHub { return .failed(.rejected) }
+        if isPublishing { return .publishing }
+        if file.draft?.conflict != nil { return .conflict }
+        if let failure { return .failed(failure) }
+        return file.nextDraft.isPublished && !hasUnpublishedChanges ? .published : .unpublished
     }
-    if let gist { file.gist = gist }
-    updateEditable()
-    applyWritingPreferences()
-  }
 
-  /// You can type in your own gists, except while a change locks the note.
-  func updateEditable() {
-    editor.isEditable = details.isOwned && !isLocked
-  }
+    /// Whether you've written anything GitHub doesn't have, including typing still saving.
+    var hasUnpublishedChanges: Bool {
+        hasStoredDraft || editor.generation != savedGeneration
+    }
 
-  private func applyWritingPreferences() {
-    editor.isSpellCheckingEnabled =
-      model.account?.preferences.booleanValue(.isSpellcheckEnabled) ?? true
-    editor.setShowsFrontMatter(
-      model.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
-  }
+    /// Whether this iPhone keeps the file's draft, which a new gist or day only has in memory until
+    /// there's something in it.
+    var hasStoredDraft: Bool {
+        guard let draft = file.draft else { return false }
+        return model.drafts.contains { $0.id == draft.id }
+    }
 
-  /// Takes a publish's or read's result once your typing has saved. A keystroke during it may have
-  /// stored newer text, which the store has.
-  func adopt(_ result: GistFileDraft) async {
-    _ = await waitForLocalSave()
-    file.update((try? await model.current(result)) ?? result)
-  }
+    /// Whether a change can go into the note now: it's yours, it isn't locked and you aren't composing.
+    public var canEdit: Bool {
+        details.isOwned && !isLocked && editor.isSettled
+    }
+
+    /// Brings the note's name and gist up to date after a change. A file GitHub renamed before you
+    /// typed in it takes `filename`.
+    func refreshMetadata(gist: Gist? = nil, filename: String? = nil) async throws {
+        if let stored = try await model.current(file.nextDraft) {
+            file.update(stored)
+        } else if let filename {
+            file.rename(filename)
+        }
+        if let gist { file.gist = gist }
+        updateEditable()
+        applyWritingPreferences()
+    }
+
+    /// You can type in your own gists, except while a change locks the note.
+    func updateEditable() {
+        editor.isEditable = details.isOwned && !isLocked
+    }
+
+    private func applyWritingPreferences() {
+        editor.isSpellCheckingEnabled =
+            model.account?.preferences.booleanValue(.isSpellcheckEnabled) ?? true
+        editor.setShowsFrontMatter(
+            model.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
+    }
+
+    /// Takes a publish's or read's result once your typing has saved. A keystroke during it may have
+    /// stored newer text, which the store has.
+    func adopt(_ result: GistFileDraft) async {
+        _ = await waitForLocalSave()
+        file.update((try? await model.current(result)) ?? result)
+    }
 }

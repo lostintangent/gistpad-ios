@@ -2,227 +2,227 @@ import XCTest
 
 @MainActor
 final class LibraryUITests: XCTestCase {
-  override func setUp() { continueAfterFailure = false }
+    override func setUp() { continueAfterFailure = false }
 
-  func testSectionsShowCountsAndOpenAGist() throws {
-    let app = launchGistPad()
-    let pinned = app.element("library-section-pinned")
-    try waitUntil("the Library") { pinned.exists }
-    XCTAssertEqual(pinned.label, "Pinned")
-    XCTAssertEqual(pinned.countValue, "2 gists")
-    for (collection, count) in [("dailyNotes", "4 daily notes"), ("starred", "1 gist"), ("archive", "1 gist")] {
-      let header = app.element("library-collection-\(collection)")
-      header.scrollIntoView(in: app)
-      XCTAssertEqual(header.countValue, count, collection)
+    func testSectionsShowCountsAndOpenAGist() throws {
+        let app = launchGistPad()
+        let pinned = app.element("library-section-pinned")
+        try waitUntil("the Library") { pinned.exists }
+        XCTAssertEqual(pinned.label, "Pinned")
+        XCTAssertEqual(pinned.countValue, "2 gists")
+        for (collection, count) in [("dailyNotes", "4 daily notes"), ("starred", "1 gist"), ("archive", "1 gist")] {
+            let header = app.element("library-collection-\(collection)")
+            header.scrollIntoView(in: app)
+            XCTAssertEqual(header.countValue, count, collection)
+        }
+        let weekend = app.element("library-note-weekend")
+        weekend.scrollIntoView(in: app)
+        weekend.tap()
+        try waitUntil("the opened gist") {
+            app.navigationBars["A slower weekend"].exists && app.noteShows("Farmers market")
+        }
     }
-    let weekend = app.element("library-note-weekend")
-    weekend.scrollIntoView(in: app)
-    weekend.tap()
-    try waitUntil("the opened gist") {
-      app.navigationBars["A slower weekend"].exists && app.noteShows("Farmers market")
+
+    func testSidebarShowsTheOpenGistAndOneNewButton() throws {
+        let app = launchGistPad(open: "shape/README.md")
+        try waitUntil("the open gist") { app.navigationBars["The shape of a gist"].exists }
+        guard app.isRegularWidth else { throw XCTSkip("The sidebar only shows when the Duo is open.") }
+        let row = app.element("library-note-shape")
+        try waitUntil("the sidebar to select the open gist") {
+            row.isSelected || app.cells.containing(.any, identifier: "library-note-shape").firstMatch.isSelected
+        }
+        XCTAssertEqual(app.buttons.matching(identifier: "library-create").count, 1)
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "library-today").count, 1)
     }
-  }
 
-  func testSidebarShowsTheOpenGistAndOneNewButton() throws {
-    let app = launchGistPad(open: "shape/README.md")
-    try waitUntil("the open gist") { app.navigationBars["The shape of a gist"].exists }
-    guard app.isRegularWidth else { throw XCTSkip("The sidebar only shows when the Duo is open.") }
-    let row = app.element("library-note-shape")
-    try waitUntil("the sidebar to select the open gist") {
-      row.isSelected || app.cells.containing(.any, identifier: "library-note-shape").firstMatch.isSelected
+    /// Covers the posture it runs in. `XCUIDevice` can't fold or rotate the Duo in Simulator, so
+    /// folding then unfolding, which used to strand Search in the detail, is checked by hand.
+    func testSidebarKeepsSearchAndTagsInItsColumn() throws {
+        let app = launchGistPad(open: "shape/README.md")
+        try waitUntil("the open gist") { app.navigationBars["The shape of a gist"].exists }
+        guard app.isRegularWidth else { throw XCTSkip("The sidebar only shows when the Duo is open.") }
+        let showSidebar = app.buttons.matching(NSPredicate(format: "label == 'Show Sidebar'")).firstMatch
+        if !app.element("library-note-shape").isTappable && showSidebar.isTappable { showSidebar.tap() }
+        let column = app.navigationBars["GistPad"]
+        let field = app.searchFields.firstMatch
+        let tags = app.buttons["library-filter-tags"]
+        try waitUntil("the sidebar's search field and Tags") { column.exists && field.isTappable && tags.isTappable }
+        XCTAssertGreaterThanOrEqual(field.frame.minX, column.frame.minX)
+        XCTAssertLessThan(field.frame.maxX, tags.frame.minX)
+        XCTAssertLessThanOrEqual(tags.frame.maxX, column.frame.maxX)
     }
-    XCTAssertEqual(app.buttons.matching(identifier: "library-create").count, 1)
-    XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "library-today").count, 1)
-  }
 
-  /// Covers the posture it runs in. `XCUIDevice` can't fold or rotate the Duo in Simulator, so
-  /// folding then unfolding, which used to strand Search in the detail, is checked by hand.
-  func testSidebarKeepsSearchAndTagsInItsColumn() throws {
-    let app = launchGistPad(open: "shape/README.md")
-    try waitUntil("the open gist") { app.navigationBars["The shape of a gist"].exists }
-    guard app.isRegularWidth else { throw XCTSkip("The sidebar only shows when the Duo is open.") }
-    let showSidebar = app.buttons.matching(NSPredicate(format: "label == 'Show Sidebar'")).firstMatch
-    if !app.element("library-note-shape").isTappable && showSidebar.isTappable { showSidebar.tap() }
-    let column = app.navigationBars["GistPad"]
-    let field = app.searchFields.firstMatch
-    let tags = app.buttons["library-filter-tags"]
-    try waitUntil("the sidebar's search field and Tags") { column.exists && field.isTappable && tags.isTappable }
-    XCTAssertGreaterThanOrEqual(field.frame.minX, column.frame.minX)
-    XCTAssertLessThan(field.frame.maxX, tags.frame.minX)
-    XCTAssertLessThanOrEqual(tags.frame.maxX, column.frame.maxX)
-  }
-
-  func testSearchFindsAGistAndOpensIt() throws {
-    let app = launchGistPad()
-    try waitUntil("the Library") { app.element("library-note-shape").exists }
-    app.search("weekend")
-    let result = app.element("library-note-weekend")
-    // The open note stays listed while filtering, so only other gists must leave.
-    try waitUntil("the match") {
-      result.isTappable && !app.element("library-note-shape").exists && !app.element("library-note-words").exists
+    func testSearchFindsAGistAndOpensIt() throws {
+        let app = launchGistPad()
+        try waitUntil("the Library") { app.element("library-note-shape").exists }
+        app.search("weekend")
+        let result = app.element("library-note-weekend")
+        // The open note stays listed while filtering, so only other gists must leave.
+        try waitUntil("the match") {
+            result.isTappable && !app.element("library-note-shape").exists && !app.element("library-note-words").exists
+        }
+        result.tap()
+        try waitUntil("the matching gist") { app.noteShows("Farmers market") }
     }
-    result.tap()
-    try waitUntil("the matching gist") { app.noteShows("Farmers market") }
-  }
 
-  func testTagFilterNarrowsTheListAndSearchKeepsIt() throws {
-    let app = launchGistPad()
-    try waitUntil("the Library") { app.element("library-note-weekend").exists }
-    app.buttons["library-filter-tags"].tap()
-    let ideas = app.buttons["library-tag-filter-ideas"]
-    try waitUntil("the tag filter") { ideas.isTappable }
-    ideas.tap()
-    app.buttons["library-tag-filter-close"].tap()
-    try waitUntil("the Ideas gists") {
-      app.element("library-filter-count").label == "2 gists" && !app.element("library-note-weekend").exists
+    func testTagFilterNarrowsTheListAndSearchKeepsIt() throws {
+        let app = launchGistPad()
+        try waitUntil("the Library") { app.element("library-note-weekend").exists }
+        app.buttons["library-filter-tags"].tap()
+        let ideas = app.buttons["library-tag-filter-ideas"]
+        try waitUntil("the tag filter") { ideas.isTappable }
+        ideas.tap()
+        app.buttons["library-tag-filter-close"].tap()
+        try waitUntil("the Ideas gists") {
+            app.element("library-filter-count").label == "2 gists" && !app.element("library-note-weekend").exists
+        }
+        XCTAssertTrue(app.element("library-note-shape").exists)
+        XCTAssertTrue(app.element("library-note-words").exists)
+
+        app.search("week")
+        try waitUntil("search inside the tag filter") {
+            app.element("library-filter-count").label == "0 gists" && !app.element("library-note-weekend").exists
+        }
+        try tap(app.element("library-filter-clear"), "Clear Tag Filter")
+        try waitUntil("the query without the tag filter") {
+            app.element("library-note-weekend").exists && !app.element("library-note-words").exists
+        }
     }
-    XCTAssertTrue(app.element("library-note-shape").exists)
-    XCTAssertTrue(app.element("library-note-words").exists)
 
-    app.search("week")
-    try waitUntil("search inside the tag filter") {
-      app.element("library-filter-count").label == "0 gists" && !app.element("library-note-weekend").exists
+    func testSwipeAndContextMenuPinArchiveAndDelete() throws {
+        let app = launchGistPad()
+        let weekend = app.element("library-note-weekend")
+        try waitUntil("the Library") { weekend.isTappable }
+
+        weekend.swipeRight()
+        try tap(app.buttons["Pin"].firstMatch, "Pin")
+        try waitUntil("three pins") { app.element("library-section-pinned").countValue == "3 gists" }
+
+        let longTitle = app.element("library-note-longtitle")
+        longTitle.scrollIntoView(in: app)
+        longTitle.press(forDuration: 0.8)
+        try tap(app.buttons["Archive"].firstMatch, "Archive")
+        try waitUntil("two archived gists") { app.element("library-collection-archive").countValue == "2 gists" }
+
+        let mixed = app.element("library-note-mixed")
+        mixed.scrollIntoView(in: app)
+        mixed.swipeLeft()
+        try tap(app.buttons["Delete"].firstMatch, "Delete")
+        try waitUntil("mixed to leave the Library") { !mixed.exists }
     }
-    try tap(app.element("library-filter-clear"), "Clear Tag Filter")
-    try waitUntil("the query without the tag filter") {
-      app.element("library-note-weekend").exists && !app.element("library-note-words").exists
+
+    func testEditDeletesGistsFromTheirMinus() throws {
+        let app = launchGistPad()
+        let weekend = app.element("library-note-weekend")
+        try waitUntil("the Library") { weekend.isTappable }
+
+        let library = app.navigationBars["GistPad"]
+        try tap(library.buttons["Edit"], "Edit")
+        let minus = app.cells.containing(.any, identifier: "library-note-weekend").images["minus.circle.fill"].firstMatch
+        try tap(minus, "the red minus")
+        try tap(app.buttons["Delete"].firstMatch, "Delete")
+        try waitUntil("weekend to leave the Library") { !weekend.exists }
+        try tap(library.buttons["Done"], "Done")
+        try waitUntil("Edit") { library.buttons["Edit"].isTappable }
     }
-  }
 
-  func testSwipeAndContextMenuPinArchiveAndDelete() throws {
-    let app = launchGistPad()
-    let weekend = app.element("library-note-weekend")
-    try waitUntil("the Library") { weekend.isTappable }
+    func testDailyNoteRowsOnlyOfferDelete() throws {
+        let app = launchGistPad()
+        // On the cover the collections start below the fold, where a lazy list has no rows yet.
+        try waitUntil("the Library") { app.element("library-list").exists }
+        let dailyNotes = app.element("library-collection-dailyNotes")
+        dailyNotes.scrollIntoView(in: app)
+        dailyNotes.tap()
+        let day = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'library-note-daily/'")).firstMatch
+        try waitUntil("a daily note") { day.exists }
+        day.scrollIntoView(in: app)
 
-    weekend.swipeRight()
-    try tap(app.buttons["Pin"].firstMatch, "Pin")
-    try waitUntil("three pins") { app.element("library-section-pinned").countValue == "3 gists" }
+        day.swipeLeft()
+        XCTAssertTrue(app.buttons["Delete"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Archive"].exists)
+        day.swipeRight()
 
-    let longTitle = app.element("library-note-longtitle")
-    longTitle.scrollIntoView(in: app)
-    longTitle.press(forDuration: 0.8)
-    try tap(app.buttons["Archive"].firstMatch, "Archive")
-    try waitUntil("two archived gists") { app.element("library-collection-archive").countValue == "2 gists" }
+        day.press(forDuration: 0.8)
+        XCTAssertTrue(app.buttons["Delete"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Pin"].exists || app.buttons["Archive"].exists)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)).tap()
+        try waitUntil("the menu to close") { !app.buttons["Delete"].exists }
 
-    let mixed = app.element("library-note-mixed")
-    mixed.scrollIntoView(in: app)
-    mixed.swipeLeft()
-    try tap(app.buttons["Delete"].firstMatch, "Delete")
-    try waitUntil("mixed to leave the Library") { !mixed.exists }
-  }
-
-  func testEditDeletesGistsFromTheirMinus() throws {
-    let app = launchGistPad()
-    let weekend = app.element("library-note-weekend")
-    try waitUntil("the Library") { weekend.isTappable }
-
-    let library = app.navigationBars["GistPad"]
-    try tap(library.buttons["Edit"], "Edit")
-    let minus = app.cells.containing(.any, identifier: "library-note-weekend").images["minus.circle.fill"].firstMatch
-    try tap(minus, "the red minus")
-    try tap(app.buttons["Delete"].firstMatch, "Delete")
-    try waitUntil("weekend to leave the Library") { !weekend.exists }
-    try tap(library.buttons["Done"], "Done")
-    try waitUntil("Edit") { library.buttons["Edit"].isTappable }
-  }
-
-  func testDailyNoteRowsOnlyOfferDelete() throws {
-    let app = launchGistPad()
-    // On the cover the collections start below the fold, where a lazy list has no rows yet.
-    try waitUntil("the Library") { app.element("library-list").exists }
-    let dailyNotes = app.element("library-collection-dailyNotes")
-    dailyNotes.scrollIntoView(in: app)
-    dailyNotes.tap()
-    let day = app.descendants(matching: .any)
-      .matching(NSPredicate(format: "identifier BEGINSWITH 'library-note-daily/'")).firstMatch
-    try waitUntil("a daily note") { day.exists }
-    day.scrollIntoView(in: app)
-
-    day.swipeLeft()
-    XCTAssertTrue(app.buttons["Delete"].firstMatch.waitForExistence(timeout: 5))
-    XCTAssertFalse(app.buttons["Archive"].exists)
-    day.swipeRight()
-
-    day.press(forDuration: 0.8)
-    XCTAssertTrue(app.buttons["Delete"].firstMatch.waitForExistence(timeout: 5))
-    XCTAssertFalse(app.buttons["Pin"].exists || app.buttons["Archive"].exists)
-    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)).tap()
-    try waitUntil("the menu to close") { !app.buttons["Delete"].exists }
-
-    // With nothing on its leading edge, a right swipe ends as a tap and opens the day, as rows do
-    // in Settings, so this goes last.
-    day.swipeRight()
-    XCTAssertFalse(app.buttons["Pin"].firstMatch.waitForExistence(timeout: 2))
-  }
-
-  func testANewGistCanBeDeletedRightAfterYouLeaveIt() throws {
-    let app = launchGistPad()
-    let create = app.buttons["library-create"].firstMatch
-    try waitUntil("New Gist") { create.isTappable }
-    app.dismissSidebarOverlay()
-    create.tap()
-    let editor = app.textViews["source-editor"]
-    try waitUntil("the new gist's editor") { editor.isTappable && app.keyboards.firstMatch.exists }
-    editor.typeText("# Gone soon\n\nA thought to delete.")
-
-    // Leaving for the Library (or another gist, in the sidebar) publishes the new gist.
-    app.showLibrary()
-    if app.isRegularWidth {
-      app.element("library-note-words").tap()
-      app.showLibrary()
+        // With nothing on its leading edge, a right swipe ends as a tap and opens the day, as rows do
+        // in Settings, so this goes last.
+        day.swipeRight()
+        XCTAssertFalse(app.buttons["Pin"].firstMatch.waitForExistence(timeout: 2))
     }
-    let published = app.descendants(matching: .any).matching(
-      NSPredicate(format: "identifier MATCHES 'library-note-f[0-9a-f]{7}'")).firstMatch
-    try waitUntil("the published gist in the Library") { published.isTappable }
-    let id = published.identifier
-    published.swipeLeft()
-    try tap(app.buttons["Delete"].firstMatch, "Delete")
-    try waitUntil("the new gist to leave the Library") { !app.element(id).exists }
-  }
 
-  func testRenameAndDeleteATag() throws {
-    let app = launchGistPad(open: "shape/README.md", sheet: "tags")
-    let ideas = app.buttons["tag-choice-ideas"]
-    try waitUntil("the Tags sheet") { ideas.isTappable }
+    func testANewGistCanBeDeletedRightAfterYouLeaveIt() throws {
+        let app = launchGistPad()
+        let create = app.buttons["library-create"].firstMatch
+        try waitUntil("New Gist") { create.isTappable }
+        app.dismissSidebarOverlay()
+        create.tap()
+        let editor = app.textViews["source-editor"]
+        try waitUntil("the new gist's editor") { editor.isTappable && app.keyboards.firstMatch.exists }
+        editor.typeText("# Gone soon\n\nA thought to delete.")
 
-    ideas.swipeLeft()
-    try tap(app.buttons["Edit Tag"].firstMatch, "Edit Tag")
-    let name = app.textFields["Tag name"]
-    try waitUntil("the tag form") { name.isTappable }
-    name.tap()
-    name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 8) + "Big Ideas")
-    app.buttons["tag-form-save"].tap()
-    try waitUntil("the renamed tag") { ideas.label.contains("Big Ideas") }
+        // Leaving for the Library (or another gist, in the sidebar) publishes the new gist.
+        app.showLibrary()
+        if app.isRegularWidth {
+            app.element("library-note-words").tap()
+            app.showLibrary()
+        }
+        let published = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier MATCHES 'library-note-f[0-9a-f]{7}'")).firstMatch
+        try waitUntil("the published gist in the Library") { published.isTappable }
+        let id = published.identifier
+        published.swipeLeft()
+        try tap(app.buttons["Delete"].firstMatch, "Delete")
+        try waitUntil("the new gist to leave the Library") { !app.element(id).exists }
+    }
 
-    let design = app.buttons["tag-choice-design"]
-    design.swipeLeft()
-    try tap(app.buttons["Edit Tag"].firstMatch, "Edit Tag")
-    let delete = app.buttons["Delete Tag"].firstMatch
-    try waitUntil("Delete Tag") { delete.isTappable }
-    delete.tap()
-    try waitUntil("the delete confirmation") { app.buttons.matching(identifier: "Delete Tag").count > 1 }
-    app.buttons.matching(identifier: "Delete Tag").allElementsBoundByIndex.last?.tap()
-    try waitUntil("the deleted tag") { !design.exists }
+    func testRenameAndDeleteATag() throws {
+        let app = launchGistPad(open: "shape/README.md", sheet: "tags")
+        let ideas = app.buttons["tag-choice-ideas"]
+        try waitUntil("the Tags sheet") { ideas.isTappable }
 
-    app.buttons["tag-save"].tap()
-    try waitUntil("the saved tags") { !app.buttons["tag-save"].exists }
-    try openNoteActions(in: app)
-    try tap(app.buttons["Tags"].firstMatch, "Tags")
-    try waitUntil("the reopened Tags sheet") { ideas.isTappable }
-    XCTAssertTrue(ideas.label.contains("Big Ideas"))
-    XCTAssertFalse(design.exists)
-  }
+        ideas.swipeLeft()
+        try tap(app.buttons["Edit Tag"].firstMatch, "Edit Tag")
+        let name = app.textFields["Tag name"]
+        try waitUntil("the tag form") { name.isTappable }
+        name.tap()
+        name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 8) + "Big Ideas")
+        app.buttons["tag-form-save"].tap()
+        try waitUntil("the renamed tag") { ideas.label.contains("Big Ideas") }
+
+        let design = app.buttons["tag-choice-design"]
+        design.swipeLeft()
+        try tap(app.buttons["Edit Tag"].firstMatch, "Edit Tag")
+        let delete = app.buttons["Delete Tag"].firstMatch
+        try waitUntil("Delete Tag") { delete.isTappable }
+        delete.tap()
+        try waitUntil("the delete confirmation") { app.buttons.matching(identifier: "Delete Tag").count > 1 }
+        app.buttons.matching(identifier: "Delete Tag").allElementsBoundByIndex.last?.tap()
+        try waitUntil("the deleted tag") { !design.exists }
+
+        app.buttons["tag-save"].tap()
+        try waitUntil("the saved tags") { !app.buttons["tag-save"].exists }
+        try openNoteActions(in: app)
+        try tap(app.buttons["Tags"].firstMatch, "Tags")
+        try waitUntil("the reopened Tags sheet") { ideas.isTappable }
+        XCTAssertTrue(ideas.label.contains("Big Ideas"))
+        XCTAssertFalse(design.exists)
+    }
 }
 
 extension XCUIElement {
-  /// Scrolls the Library until this element sits clear of the bottom search bar.
-  func scrollIntoView(in app: XCUIApplication) {
-    let list = app.element("library-list")
-    for _ in 0..<8 where !(isTappable && frame.maxY < list.frame.maxY - 100) { list.swipeUp() }
-  }
+    /// Scrolls the Library until this element sits clear of the bottom search bar.
+    func scrollIntoView(in app: XCUIApplication) {
+        let list = app.element("library-list")
+        for _ in 0..<8 where !(isTappable && frame.maxY < list.frame.maxY - 100) { list.swipeUp() }
+    }
 
-  /// A section header's count, without its Expanded or Collapsed state.
-  var countValue: String? {
-    (value as? String)?.components(separatedBy: ", ").first
-  }
+    /// A section header's count, without its Expanded or Collapsed state.
+    var countValue: String? {
+        (value as? String)?.components(separatedBy: ", ").first
+    }
 }
