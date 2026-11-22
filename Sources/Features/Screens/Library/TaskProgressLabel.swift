@@ -18,6 +18,8 @@ struct TaskProgressLabel: View {
                     .frame(width: ringSize, height: ringSize)
                     .accessibilityHidden(true)
             } else {
+                // Platform gap: Gauge's circular style is sized for widgets and doesn't come down
+                // to text size. Remove this ring when it sizes to its frame.
                 ZStack {
                     Circle().strokeBorder(Color(uiColor: .separator), lineWidth: 2)
                     Circle()

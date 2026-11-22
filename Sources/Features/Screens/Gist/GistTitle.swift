@@ -2,8 +2,7 @@
 import SwiftUI
 
 extension View {
-    /// Shows a note's title as its screen will once it's open, for a note on its way or one that
-    /// couldn't open, so nothing in the bar changes when the note arrives.
+    /// Shows a note's title in the capsule its screen shows, for a note that couldn't open.
     public func gistTitle(_ gist: GistDetails) -> some View {
         modifier(GistTitle<EmptyView>(gist: gist, menu: nil))
     }
@@ -77,7 +76,8 @@ private struct GistTitle<Choices: View>: ViewModifier {
 }
 
 // Platform gap: the bar moves a title too wide for its room to the overflow menu instead of
-// truncating it. Remove TemplateWidth when a bar item can truncate in place.
+// truncating it, even with visibilityPriority(.high) on 27.2. Remove TemplateWidth when a bar
+// item can truncate in place.
 /// Sizes its second view to its own width, up to the width of its first, whatever the bar proposes.
 private struct TemplateWidth: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

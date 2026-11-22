@@ -41,8 +41,8 @@ in the same glass capsule in every note, with any file but README.md named under
 it. In a gist it opens a menu: the files, when there are two or more, then
 Rename File and Add File in your own gist, or just the files in someone else's.
 A daily note's capsule holds its day, exactly as its row reads, with no filename
-and no menu. The opening and failed screens show the same capsule with
-`gistTitle(_:)` from the first frame. The title is never wider than
+and no menu. A note that couldn't open shows the same capsule with
+`gistTitle(_:)`. The title is never wider than
 "🤖 Coding Agent Culture" in its own font, so it grows with Dynamic Type and a
 longer one ends in "…" rather than moving Mode, Comments or More to the
 overflow menu.
