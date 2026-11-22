@@ -184,7 +184,7 @@ Preview renders the web's Markdown dialect with the app's type and colors.
 | Calculations | The current result semibold on the selected surface, tabular numerals |
 | Diagrams | Neutral nodes in Body type, scrolling instead of shrinking |
 | Images | Fit to width, with a fallback offline |
-| Footnotes, contents | Footnote style with backlinks. Contents is a compact disclosure |
+| Footnotes, contents | Footnote style with backlinks. Contents is a compact disclosure. A contents link or backlink lands its target 16 pt under the bar |
 
 No page-wide sideways scrolling, tap flash or hover-only controls.
 
