@@ -64,15 +64,13 @@ struct CommentsConversation: View {
         .tint(.primary)
         .accessibilityIdentifier("comments-conversation")
         .confirmationDialog(
-            String(
-                localized: "Delete \(deletionTarget?.user?.login ?? String(localized: "this author"))’s comment from GitHub?"),
+            "Delete \(deletionTarget?.user?.login ?? String(localized: "this author"))’s comment from GitHub?",
             item: $deletionTarget,
             titleVisibility: .visible
         ) { target in
-            Button(String(localized: "Delete Comment"), role: .destructive) {
+            Button("Delete Comment", role: .destructive) {
                 Task { await model.delete(target.id) }
             }
-            Button(String(localized: "Cancel"), role: .cancel) {}
         } message: { target in
             Text(
                 "“\(String(target.parsedBody.text.prefix(140)))”\n\nOnly this comment is deleted. Its replies stay in the conversation.")
@@ -93,7 +91,7 @@ struct CommentsConversation: View {
                     .padding(20)
                 }
             } else {
-                ProgressView(String(localized: "Loading comments"))
+                ProgressView("Loading comments")
                     .accessibilityIdentifier("comments-loading")
             }
         }
@@ -110,7 +108,7 @@ struct CommentsConversation: View {
     }
 
     private var retry: some View {
-        Button(String(localized: "Try Again")) {
+        Button("Try Again") {
             Task { await model.refresh() }
         }
         .buttonStyle(.glass)
@@ -234,19 +232,18 @@ private struct CommentThreadContent: View {
             if canEdit || canDelete {
                 Menu {
                     if canEdit {
-                        Button(String(localized: "Edit Comment"), systemImage: "pencil") {
+                        Button("Edit Comment", systemImage: "pencil") {
                             model.beginEditing(comment.id)
                             comments.focusComposer()
                         }
                     }
                     if canDelete {
-                        Button(
-                            String(localized: "Delete Comment"),
-                            systemImage: "trash", role: .destructive
-                        ) { requestDelete(comment) }
+                        Button("Delete Comment", systemImage: "trash", role: .destructive) {
+                            requestDelete(comment)
+                        }
                     }
                 } label: {
-                    Label(String(localized: "Comment actions"), systemImage: "ellipsis")
+                    Label("Comment actions", systemImage: "ellipsis")
                         .labelStyle(.iconOnly)
                         .frame(minWidth: 44, minHeight: 44)
                 }
@@ -281,9 +278,7 @@ private struct CommentThreadContent: View {
                         Button {
                             comments.revealPassage(comment.id)
                         } label: {
-                            Label(
-                                String(localized: "Show in File"),
-                                systemImage: "text.viewfinder")
+                            Label("Show in File", systemImage: "text.viewfinder")
                                 .labelStyle(.iconOnly)
                                 .frame(minWidth: 44, minHeight: 44)
                                 .contentShape(.rect)
@@ -301,11 +296,7 @@ private struct CommentThreadContent: View {
                         showsFullQuote.toggle()
                     } label: {
                         Label {
-                            Text(
-                                showsFullQuote
-                                    ? String(localized: "Show Less")
-                                    : String(localized: "Show Full Quote")
-                            )
+                            Text(showsFullQuote ? "Show Less" : "Show Full Quote")
                             .fixedSize(horizontal: false, vertical: true)
                         } icon: {
                             Image(systemName: showsFullQuote ? "chevron.up" : "chevron.down")

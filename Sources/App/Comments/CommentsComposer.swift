@@ -40,7 +40,7 @@ struct CommentsComposer: View {
             Button(role: .confirm) {
                 Task { await model.post() }
             } label: {
-                Label(String(localized: "Post"), systemImage: "arrow.up")
+                Label("Post", systemImage: "arrow.up")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.glassProminent)
@@ -72,14 +72,11 @@ struct CommentsComposer: View {
         return dynamicTypeSize.isAccessibilitySize ? 2 : 5
     }
 
-    private var prompt: String {
+    private var prompt: LocalizedStringKey {
         switch model.target {
-        case .reply:
-            String(localized: "Write a reply")
-        case .edit:
-            String(localized: "Edit your comment")
-        case .root, .quote:
-            String(localized: "Write a comment")
+        case .reply: "Write a reply"
+        case .edit: "Edit your comment"
+        case .root, .quote: "Write a comment"
         }
     }
 
@@ -126,11 +123,11 @@ struct CommentsComposer: View {
         .font(.footnote)
     }
 
-    private var clearTitle: String {
+    private var clearTitle: LocalizedStringKey {
         switch model.target {
-        case .reply: String(localized: "Cancel Reply")
-        case .edit: String(localized: "Cancel Editing")
-        case .root, .quote: String(localized: "Remove Quote")
+        case .reply: "Cancel Reply"
+        case .edit: "Cancel Editing"
+        case .root, .quote: "Remove Quote"
         }
     }
 }

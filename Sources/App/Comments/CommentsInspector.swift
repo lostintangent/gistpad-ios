@@ -34,7 +34,7 @@ struct CommentsInspector: View {
       }
       return .systemAction
     })
-    .alert(String(localized: "Couldn’t Open Link"), item: $linkFailure) { _ in
+    .alert("Couldn’t Open Link", item: $linkFailure) { _ in
     } message: { failure in
       Text(verbatim: failure)
     }
@@ -110,7 +110,7 @@ private struct CommentsInspectorHost: ViewModifier {
         }
       }
       .confirmationDialog(
-        String(localized: "Choose Comment"),
+        "Choose Comment",
         isPresented: choicePresented(inInspector: false),
         titleVisibility: .visible
       ) {
@@ -129,7 +129,7 @@ private struct CommentsInspectorHost: ViewModifier {
         if size.isAccessibilitySize { comments.detent = .large }
       }
       .confirmationDialog(
-        String(localized: "Choose Comment"),
+        "Choose Comment",
         isPresented: choicePresented(inInspector: true),
         titleVisibility: .visible
       ) {
@@ -158,6 +158,5 @@ private struct CommentsInspectorHost: ViewModifier {
         }
       }
     }
-    Button("Cancel", role: .cancel) { comments.overlappingThreadIDs = [] }
   }
 }
