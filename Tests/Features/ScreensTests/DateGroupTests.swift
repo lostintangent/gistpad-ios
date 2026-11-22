@@ -1,4 +1,5 @@
 import Foundation
+import Store
 import Testing
 
 @testable import Screens
@@ -37,10 +38,10 @@ struct DateGroupTests {
 
     @Test func dailyTitlesIncludeTheWeekdayAndOnlyTheNeededYear() throws {
         let now = try date("2026-10-24T12:30:00Z")
-        #expect(DateLabels.dailyTitle(
+        #expect(DailyNote.title(
             for: try date("2026-10-23T00:00:00Z"), relativeTo: now,
             locale: locale, calendar: calendar) == "Friday, Oct 23")
-        #expect(DateLabels.dailyTitle(
+        #expect(DailyNote.title(
             for: try date("2025-10-23T00:00:00Z"), relativeTo: now,
             locale: locale, calendar: calendar).contains("2025"))
     }

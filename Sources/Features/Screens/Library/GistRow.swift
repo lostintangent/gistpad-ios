@@ -16,30 +16,30 @@ struct GistRow: View {
     @ScaledMetric(relativeTo: .footnote) private var metadataSpacing = 8
 
     var body: some View {
-        let counts = Counts(gist)
         // Daily notes stay one line, and only tagged gists earn a tag line.
         let rowTags = gist.isDailyNote ? [] : tags
         // At accessibility sizes the row stacks, so the count joins the date
         // and the tag line holds only tags.
         let isStacked = dynamicTypeSize.isAccessibilitySize
-        let countOnTitleLine = isStacked || rowTags.isEmpty
+        let hasCounts = gist.visibleFileCount != nil || gist.visibleCommentCount != nil
+        let countsOnTitleLine = hasCounts && (isStacked || rowTags.isEmpty)
         VStack(alignment: .leading, spacing: lineSpacing) {
             if isStacked {
                 titleContent
                     .frame(maxWidth: .infinity, alignment: .leading)
-                metadata(counts: counts)
+                metadata(showsCounts: countsOnTitleLine)
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     titleContent
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    metadata(counts: countOnTitleLine ? counts : nil)
+                    metadata(showsCounts: countsOnTitleLine)
                 }
             }
             if !rowTags.isEmpty {
                 HStack(spacing: 8) {
                     TagLabels(tags: rowTags, limit: 2)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    if let counts, !countOnTitleLine {
+                    if hasCounts && !countsOnTitleLine {
                         counts
                             .font(.footnote)
                     }
@@ -67,15 +67,15 @@ struct GistRow: View {
     }
 
     @ViewBuilder
-    private func metadata(counts: Counts?) -> some View {
+    private func metadata(showsCounts: Bool) -> some View {
         if gist.isDailyNote {
             if let progress = gist.progress, progress.total > 0 {
                 TaskProgressLabel(progress: progress, isOverdue: gist.isOverdue)
                     .fixedSize()
             }
-        } else if counts != nil || updateLabel != nil {
+        } else if showsCounts || updateLabel != nil {
             HStack(alignment: .firstTextBaseline, spacing: metadataSpacing) {
-                if let counts {
+                if showsCounts {
                     counts
                 }
                 if let updateLabel {
@@ -88,10 +88,42 @@ struct GistRow: View {
         }
     }
 
+    /// A file and comment count, which always travel together.
+    private var counts: some View {
+        // Inline text keeps each glyph on the row's baseline. A Label here takes
+        // List row icon layout, which hides the count and adds row height.
+        HStack(alignment: .firstTextBaseline, spacing: metadataSpacing) {
+            if let files = gist.visibleFileCount {
+                Text("\(Image(systemName: "doc.text")) \(files)", bundle: .module)
+                    .accessibilityLabel(Text("\(files) files", bundle: .module))
+            }
+            if let comments = gist.visibleCommentCount {
+                Text("\(Image(systemName: "text.bubble")) \(comments)", bundle: .module)
+                    .accessibilityLabel(Text("\(comments) comments", bundle: .module))
+            }
+        }
+        .foregroundStyle(.secondary)
+        .fixedSize()
+    }
+
+    /// The time today, then Yesterday, the weekday this week, and the date before that.
     private var updateLabel: String? {
         guard let updatedAt = gist.updatedAt else { return nil }
-        return DateLabels.updateLabel(
-            for: updatedAt, relativeTo: now, locale: locale, calendar: displayCalendar)
+        let calendar = displayCalendar
+        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+        if calendar.isDate(updatedAt, inSameDayAs: now) {
+            return updatedAt.formatted(style.hour().minute())
+        }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(updatedAt, inSameDayAs: yesterday) {
+            return String(localized: "Yesterday", bundle: .module, locale: locale)
+        }
+        if calendar.isDate(updatedAt, equalTo: now, toGranularity: .weekOfYear) {
+            return updatedAt.formatted(style.weekday(.wide))
+        }
+        let day = style.month(.defaultDigits).day()
+        return updatedAt.formatted(
+            calendar.isDate(updatedAt, equalTo: now, toGranularity: .year) ? day : day.year())
     }
 
     private var displayTitle: String {
@@ -109,36 +141,6 @@ struct GistRow: View {
         var value = calendar
         value.timeZone = timeZone
         return value
-    }
-}
-
-/// A gist's file and comment counts, which always travel together. Nil when there's nothing to count.
-struct Counts: View {
-    let files: Int?
-    let comments: Int?
-    @ScaledMetric(relativeTo: .footnote) private var spacing = 8
-
-    init?(_ gist: GistItem) {
-        files = gist.visibleFileCount
-        comments = gist.visibleCommentCount
-        if files == nil && comments == nil { return nil }
-    }
-
-    var body: some View {
-        // Inline text keeps each glyph on the row's baseline. A Label here takes
-        // List row icon layout, which hides the count and adds row height.
-        HStack(alignment: .firstTextBaseline, spacing: spacing) {
-            if let files {
-                Text("\(Image(systemName: "doc.text")) \(files)", bundle: .module)
-                    .accessibilityLabel(Text("\(files) files", bundle: .module))
-            }
-            if let comments {
-                Text("\(Image(systemName: "text.bubble")) \(comments)", bundle: .module)
-                    .accessibilityLabel(Text("\(comments) comments", bundle: .module))
-            }
-        }
-        .foregroundStyle(.secondary)
-        .fixedSize()
     }
 }
 

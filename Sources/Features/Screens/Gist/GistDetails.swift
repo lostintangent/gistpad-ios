@@ -45,7 +45,7 @@ public struct GistDetails: Equatable, Sendable {
     /// A daily note reads as its day, exactly like its Library row.
     func displayTitle(now: Date, locale: Locale, calendar: Calendar) -> String {
         guard isDailyNote, let day = DailyNote.date(filename: filename) else { return title }
-        return DateLabels.dailyTitle(for: day, relativeTo: now, locale: locale, calendar: calendar)
+        return DailyNote.title(for: day, relativeTo: now, locale: locale, calendar: calendar)
     }
 
     /// The file among several, except README.md. A daily note's title already names its day.

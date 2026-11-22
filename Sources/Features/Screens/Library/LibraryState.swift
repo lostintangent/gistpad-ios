@@ -59,7 +59,7 @@ public struct GistItem: Equatable, Identifiable, Sendable {
     /// A daily note reads as its day, "Friday, Nov 6".
     func displayTitle(now: Date, locale: Locale, calendar: Calendar) -> String {
         guard isDailyNote, let dailyDate else { return title }
-        return DateLabels.dailyTitle(for: dailyDate, relativeTo: now, locale: locale, calendar: calendar)
+        return DailyNote.title(for: dailyDate, relativeTo: now, locale: locale, calendar: calendar)
     }
 
     public var visibleCommentCount: Int? {
@@ -95,6 +95,15 @@ public struct GistItem: Equatable, Identifiable, Sendable {
         self.dailyDate = dailyDate
         self.fileCount = fileCount
         self.commentCount = commentCount
+    }
+}
+
+extension DailyNote {
+    /// The day as a daily note's title, with its year only when it isn't this year's.
+    static func title(for day: Date, relativeTo now: Date, locale: Locale, calendar: Calendar) -> String {
+        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+            .weekday(.wide).month(.abbreviated).day()
+        return day.formatted(calendar.isDate(day, equalTo: now, toGranularity: .year) ? style : style.year())
     }
 }
 

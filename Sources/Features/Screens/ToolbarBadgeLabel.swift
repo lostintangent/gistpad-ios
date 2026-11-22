@@ -17,24 +17,17 @@ struct ToolbarBadgeLabel: View {
         Label {
             Text(verbatim: title)
         } icon: {
-            Image(uiImage: ToolbarBadgeIcon.image(
-                systemImage: systemImage, count: count, fontSize: min(countSize, 13),
-                dark: colorScheme == .dark, scale: displayScale, isFilled: isFilled))
+            Image(uiImage: icon)
                 .renderingMode(.original)
         }
     }
-}
 
-enum ToolbarBadgeIcon {
-    static func image(
-        systemImage: String, count: Int?, fontSize: CGFloat,
-        dark: Bool, scale: CGFloat, isFilled: Bool
-    ) -> UIImage {
-        let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+    private var icon: UIImage {
+        let traits = UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
         let ink = UIColor.label.resolvedColor(with: traits)
         let inverse = UIColor.systemBackground.resolvedColor(with: traits)
         let format = UIGraphicsImageRendererFormat()
-        format.scale = scale
+        format.scale = displayScale
         return UIGraphicsImageRenderer(size: CGSize(width: 36, height: 36), format: format).image { _ in
             UIImage(systemName: systemImage, withConfiguration: UIImage.SymbolConfiguration(
                 pointSize: 21, weight: .regular))?
@@ -42,7 +35,7 @@ enum ToolbarBadgeIcon {
                 .draw(in: CGRect(x: 3, y: 9, width: 24, height: 24))
             guard let count, count > 0 else { return }
             let attributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .semibold),
+                .font: UIFont.monospacedDigitSystemFont(ofSize: min(countSize, 13), weight: .semibold),
                 .foregroundColor: inverse,
             ]
             let text = (count > 99 ? "99+" : count.formatted(.number)) as NSString
