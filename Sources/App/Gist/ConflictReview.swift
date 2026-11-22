@@ -17,8 +17,8 @@ struct ConflictReview: View {
   @State private var isApplying = false
   @State private var isConfirmingRemote = false
   @State private var error: String?
-  @State private var localChanges: [DiffLine] = []
-  @State private var remoteChanges: [DiffLine] = []
+  @State private var draftChanges: [DiffLine] = []
+  @State private var githubChanges: [DiffLine] = []
   @State private var isComparing = true
   @Environment(\.dismiss) private var dismiss
 
@@ -64,12 +64,12 @@ struct ConflictReview: View {
             if isComparing {
               ProgressView()
             } else {
-              changes(title: String(localized: "My Draft"), lines: localChanges)
-              changes(title: String(localized: "GitHub"), lines: remoteChanges)
+              changes(title: String(localized: "My Draft"), lines: draftChanges)
+              changes(title: String(localized: "GitHub"), lines: githubChanges)
             }
-          case .local:
+          case .draft:
             source(review.text)
-          case .remote:
+          case .github:
             source(github)
           }
           // GitHub deleting the file leaves no passage in common.
@@ -115,13 +115,13 @@ struct ConflictReview: View {
       }
       .task(id: review) {
         isComparing = true
-        let base = review.base?.text, local = review.text, github = github
+        let base = review.base?.text, draft = review.text, github = github
         let diffs = await Task.detached(priority: .userInitiated) {
-          (DiffLine.changes(from: base, to: local), DiffLine.changes(from: base, to: github))
+          (DiffLine.changes(from: base, to: draft), DiffLine.changes(from: base, to: github))
         }.value
         guard !Task.isCancelled else { return }
-        localChanges = diffs.0
-        remoteChanges = diffs.1
+        draftChanges = diffs.0
+        githubChanges = diffs.1
         isComparing = false
       }
     }
@@ -177,13 +177,13 @@ struct ConflictReview: View {
 }
 
 private enum ReviewTab: CaseIterable, Hashable {
-  case changes, local, remote
+  case changes, draft, github
 
   var title: String {
     switch self {
     case .changes: String(localized: "Changes")
-    case .local: String(localized: "My Draft")
-    case .remote: String(localized: "GitHub")
+    case .draft: String(localized: "My Draft")
+    case .github: String(localized: "GitHub")
     }
   }
 }
