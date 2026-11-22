@@ -19,31 +19,31 @@ The app updates the index in the background after each snapshot, so nothing
 waits on Spotlight, and deletes just the files that went away since the last
 one, including while the app wasn't running.
 
-For the Siri notes prototype, each Markdown file is a note in its gist's
-`GistFolderEntity`, under the active `GistAccountEntity`. `GistEntity` adopts
-the iOS 27 notes schema. The editor text view, preview and foreground
-`NSUserActivity` identify the displayed file. Only a query for that visible
-note while GistPad is active receives its live body from the editor, with
-front matter stripped by `Syntax.contentStart(in:)`. Spotlight and the
-shared snapshot keep titles and snippets but **never full bodies**. The
-schema creates a named note through the existing new-gist draft, appends
-text, and renames or pins an existing gist. It does not support arbitrary
-body rewrites or Q&A. Siri answering questions from the displayed body
-remains unproven until a phone test.
+`GistEntity` also adopts the iOS 27 notes schema. Each Markdown file is a
+note in its gist's `GistFolderEntity`, under the active `GistAccountEntity`.
+RootView names the displayed file as the entity of the editor, the preview and
+a foreground `NSUserActivity`. Only a query for that note while GistPad is
+active gets its live body, which the bridge reads from the editor with front
+matter stripped by `Syntax.contentStart(in:)`. Spotlight and the shared
+snapshot keep titles and snippets but **never full bodies**. Siri answering
+questions from the displayed body remains unproven until a phone test.
 
-Open Gist, Open Today, Add to Today and New Gist are App Shortcuts. Add to Today,
-Open Today and New Gist are also controls. The Open Today control opens today's
-note and the New Gist control opens a blank gist. The Add to Today control opens
-the capture sheet, and shortcut-provided text skips it. Captures start
-today the way the app does, append Store's `DailyNote.addition` through the same
-`append(_:to:)` path as the editor, then leave publishing to autosave.
-The notes-schema create uses the same local draft as New Gist and opens it
-through its saved link. Its content can be supplied when creating; adding
-attachments, pinning immediately or placing it in an existing gist is
-explicitly unsupported. Append uses the same durable edit path. Updating
-a gist's name or pin uses the library's existing metadata actions. A move
-between gists, an attachment update or a combined rename-plus-pin is
-refused, rather than silently ignored.
+The schema creates a note, with optional content, through the same local draft
+as New Gist and opens it. Append uses the editor's durable edit path, and
+renaming or pinning a gist uses the library's metadata actions. Attachments,
+pinning on create, choosing a gist, moving a note and a combined
+rename-plus-pin are refused rather than silently ignored. There's no body
+rewrite or Q&A.
+
+Open Gist, Open Today, Add to Today and New Gist are App Shortcuts, and the
+last three are also controls. The Add to Today control opens the capture
+sheet, and shortcut-provided text skips it. Captures start today the way the
+app does, append Store's `DailyNote.addition` through the editor's
+`append(_:to:)` path, and leave publishing to autosave.
+
+Intents run in the main app (`allowedExecutionTargets = .main`), which provides
+`PlatformActions` through `AppDependencyManager`. An edit from an intent reaches
+an open editor as one Undo step.
 
 Both targets read `LibrarySnapshot`, one JSON file in the
 `group.dev.gistpad.GistPad` container. It holds the active account, note
@@ -52,10 +52,6 @@ gists the widget shows: your own, newest edit first, counting unpublished
 edits on the phone, without daily notes or archived gists. It's written
 atomically with protection until first unlock so StandBy can read it.
 No credentials are shared.
-
-Intents run in the main app (`allowedExecutionTargets = .main`), which provides
-`PlatformActions` through `AppDependencyManager`. An edit from an intent reaches
-an open editor as one Undo step.
 
 The GistPad widget is a launcher in small and medium. Its date opens Today, New
 Gist runs `NewGistIntent`, and each recent gist runs `OpenGistIntent`. It keeps
