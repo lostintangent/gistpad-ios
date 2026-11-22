@@ -10,7 +10,6 @@ struct GistRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.locale) private var locale
     @Environment(\.calendar) private var calendar
-    @Environment(\.timeZone) private var timeZone
     @ScaledMetric(relativeTo: .body) private var verticalPadding = 14
     @ScaledMetric(relativeTo: .body) private var lineSpacing = 6
     @ScaledMetric(relativeTo: .footnote) private var metadataSpacing = 8
@@ -109,7 +108,6 @@ struct GistRow: View {
     /// The time today, then Yesterday, the weekday this week, and the date before that.
     private var updateLabel: String? {
         guard let updatedAt = gist.updatedAt else { return nil }
-        let calendar = displayCalendar
         let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
         if calendar.isDate(updatedAt, inSameDayAs: now) {
             return updatedAt.formatted(style.hour().minute())
@@ -127,20 +125,14 @@ struct GistRow: View {
     }
 
     private var displayTitle: String {
-        gist.displayTitle(now: now, locale: locale, calendar: displayCalendar)
+        gist.displayTitle(now: now, locale: locale, calendar: calendar)
     }
 
     private var spokenTitle: String {
         guard gist.isDailyNote, let dailyDate = gist.dailyDate else { return gist.title }
         return dailyDate.formatted(Date.FormatStyle(
             date: .complete, time: .omitted, locale: locale,
-            calendar: displayCalendar, timeZone: timeZone))
-    }
-
-    private var displayCalendar: Calendar {
-        var value = calendar
-        value.timeZone = timeZone
-        return value
+            calendar: calendar, timeZone: calendar.timeZone))
     }
 }
 
