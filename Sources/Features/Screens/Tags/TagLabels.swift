@@ -109,9 +109,9 @@ struct TagLabels: View {
                 }
             } else {
                 TagFlowLayout(layoutDirection: layoutDirection) {
-                    ForEach(visibleTags) { TagLabel(tag: $0, isSelected: isSelected) }
-                    if overflow > 0 {
-                        TagOverflowLabel(count: overflow)
+                    ForEach(tags.prefix(limit ?? tags.count)) { TagLabel(tag: $0, isSelected: isSelected) }
+                    if let limit, tags.count > limit {
+                        TagOverflowLabel(count: tags.count - limit)
                     }
                 }
             }
@@ -140,9 +140,6 @@ struct TagLabels: View {
             }
         }
     }
-
-    private var visibleTags: [Tag] { Array(tags.prefix(limit ?? tags.count)) }
-    private var overflow: Int { tags.count - visibleTags.count }
 }
 
 struct TagFlowLayout: Layout {
