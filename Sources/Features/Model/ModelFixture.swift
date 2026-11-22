@@ -46,7 +46,7 @@
     }
 
     /// A file's text on GitHub right now.
-    func remote(_ gistID: String, _ filename: String) -> String? {
+    func onGitHub(_ gistID: String, _ filename: String) -> String? {
       server.gists.first { $0.id == gistID }?.files[filename]?.content
     }
 

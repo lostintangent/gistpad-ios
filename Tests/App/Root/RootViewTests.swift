@@ -151,7 +151,7 @@ struct RootViewTests {
       host.model.drafts.first { $0.gistID == "a" }?.text == "Local Current source"
     }
     host.returnToLibrary()
-    try await host.waitUntil { fixture.remote("a", "README.md") == "Local Current source" }
+    try await host.waitUntil { fixture.onGitHub("a", "README.md") == "Local Current source" }
     // Autosave waits five quiet seconds after typing, so a publish before then came from leaving.
     if autosave { #expect(ContinuousClock.now - typed < .seconds(5)) }
     try await host.waitUntil { host.isLibraryVisible }
@@ -185,7 +185,7 @@ struct RootViewTests {
     try await host.waitUntil { host.editor(text: "Second note source") != nil }
     #expect(first.markedTextRange == nil)
     #expect(first.text == "にほんごFirst note source")
-    try await host.waitUntil { fixture.remote("a", "README.md") == "にほんごFirst note source" }
+    try await host.waitUntil { fixture.onGitHub("a", "README.md") == "にほんごFirst note source" }
     #expect(fixture.publishes == ["PATCH /gists/a"])
   }
 

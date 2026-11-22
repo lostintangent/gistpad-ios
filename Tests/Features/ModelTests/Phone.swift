@@ -176,7 +176,7 @@ final class Phone {
   }
 
   func onGitHub(_ gistID: String, _ filename: String = "README.md") -> String? {
-    fixture.remote(gistID, filename)
+    fixture.onGitHub(gistID, filename)
   }
 
   /// Every publish so far: a new gist or an edit to one.

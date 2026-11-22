@@ -51,7 +51,7 @@ struct PlatformTests {
 
     await fixture.model.publishDrafts()
     #expect(fixture.publishes == ["PATCH /gists/daily123"])
-    #expect(fixture.fixture.remote("daily123", DailyNote.Day().filename) == fileEditor.editor.text)
+    #expect(fixture.fixture.onGitHub("daily123", DailyNote.Day().filename) == fileEditor.editor.text)
     #expect(fileEditor.status == .published)
   }
 
