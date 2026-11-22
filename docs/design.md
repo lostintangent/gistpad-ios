@@ -126,7 +126,7 @@ The tag editor and filter are one family: searchable sheets at medium and large 
 
 Settings is a small Form:
 
-- **Account.** Signed in shows your avatar, name and `@login`, with **Sign Out** right under it as a destructive `Label` with `rectangle.portrait.and.arrow.forward`, the role tinting icon and text red together, confirmed by **Sign Out?** There's no account switching: sign out, then sign in. Signed out shows **Connect GitHub**, "Sign in to open your GitHub gists, daily notes and saved tags." and **Sign in with GitHub**.
+- **Account.** Signed in shows your avatar, name and `@login`, with **Sign Out** right under it as a destructive `Label` with `rectangle.portrait.and.arrow.forward`, icon and title both system red, confirmed by **Sign Out?** A Form's destructive role reddens only the title, so the icon takes `.red` to match. There's no account switching: sign out, then sign in. Signed out shows **Connect GitHub**, "Sign in to open your GitHub gists, daily notes and saved tags." and **Sign in with GitHub**.
 - **Writing.** Autosave While Writing, Check Spelling and Show Front Matter, with no footers.
 - **Appearance.** Accent Color.
 
