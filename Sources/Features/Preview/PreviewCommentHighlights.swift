@@ -11,7 +11,7 @@ final class PreviewCommentHighlights {
     private var file: PreviewFile?
     private var renderedFile: PreviewFile?
     private var configuration = CommentHighlightConfiguration()
-    private var accent = "#0EA5E9"
+    private var accent = ""
     private var segments: [String]?
     private var highlights: [CommentQuoteHighlight] = []
     private var linkedIDs: Set<Int64>?
@@ -96,7 +96,7 @@ final class PreviewCommentHighlights {
             publish([])
             return
         }
-        task = Task { @MainActor [weak self, weak webView] in
+        task = Task { [weak self, weak webView] in
             guard let self, let webView else { return }
             do {
                 if !configuration.quotes.isEmpty, self.segments == nil {
@@ -136,7 +136,7 @@ final class PreviewCommentHighlights {
         guard force || linkedIDs != ids else { return }
         linkedIDs = ids
         let file = file
-        Task { @MainActor [weak self] in
+        Task { [weak self] in
             guard let self, self.file == file, self.linkedIDs == ids else { return }
             self.actions?.linked(ids)
         }

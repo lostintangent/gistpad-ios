@@ -68,9 +68,8 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         webView.navigationDelegate = context.coordinator
         webView.isOpaque = false
         webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
         webView.underPageBackgroundColor = .clear
-        webView.scrollView.alwaysBounceVertical = true
+        // Claiming the default stops WebKit choosing its own inset behavior, so UIKit insets the page.
         webView.scrollView.contentInsetAdjustmentBehavior = .automatic
         webView.scrollView.topEdgeEffect.style = .soft
         webView.scrollView.bottomEdgeEffect.style = .soft
@@ -283,8 +282,8 @@ final class PreviewResourceHandler: NSObject, WKURLSchemeHandler {
                   let base = Bundle.module.url(forResource: "Web", withExtension: nil) else {
                 throw PreviewError("Invalid preview resource URL.")
             }
-            let file = base.appendingPathComponent(url.path.dropFirst().description).standardizedFileURL
-            guard file.path.hasPrefix(base.standardizedFileURL.path + "/") else {
+            let file = base.appending(path: url.path(percentEncoded: false)).standardizedFileURL
+            guard file.pathComponents.starts(with: base.standardizedFileURL.pathComponents) else {
                 throw PreviewError("The preview resource is outside its bundle.")
             }
             let data = try Data(contentsOf: file, options: .mappedIfSafe)
