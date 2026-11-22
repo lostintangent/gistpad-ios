@@ -5,7 +5,7 @@ import Testing
 
 @MainActor
 struct ReviewTests {
-  @Test func applyingOneCommentAndDismissingAnotherLeavesTheRestExact() async throws {
+  @Test func applyingOneSuggestionAndDismissingAnotherLeavesTheRestExact() async throws {
     let fixture = FixtureLanguageModel()
     fixture.changes = { _ in
       [

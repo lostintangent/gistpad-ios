@@ -178,12 +178,12 @@
             Text(quote).textSelection(.enabled)
             if ranges.count == 1, let range = ranges.first {
               Button(
-                String(localized: "Show in File", bundle: .module), systemImage: "arrow.up.forward"
+                String(localized: "Show in File", bundle: .module), systemImage: "text.viewfinder"
               ) { reveal(range) }
               .disabled(state.isStale)
             } else if ranges.count > 1 {
               Menu(
-                String(localized: "Show in File", bundle: .module), systemImage: "arrow.up.forward"
+                String(localized: "Show in File", bundle: .module), systemImage: "text.viewfinder"
               ) {
                 ForEach(Array(ranges.enumerated()), id: \.offset) { index, range in
                   Button(String(localized: "Match \(index + 1)", bundle: .module)) {
@@ -214,8 +214,8 @@
         Section {
           Text(
             state.action == .edit
-              ? String(localized: "No edits needed.", bundle: .module)
-              : String(localized: "No comments.", bundle: .module)
+              ? String(localized: "No changes needed.", bundle: .module)
+              : String(localized: "No suggestions.", bundle: .module)
           )
           .foregroundStyle(.secondary)
         }
@@ -227,8 +227,8 @@
           if index == 0, state.action == .review {
             Text(
               proposal.changes.count == 1
-                ? String(localized: "1 comment", bundle: .module)
-                : String(localized: "\(proposal.changes.count) comments", bundle: .module))
+                ? String(localized: "1 suggestion", bundle: .module)
+                : String(localized: "\(proposal.changes.count) suggestions", bundle: .module))
           }
         }
       }

@@ -46,7 +46,8 @@ struct EditBlock {
       {
         end -= 1
       }
-      return (heading, NSRange(location: heading.range.location, length: end - heading.range.location))
+      let range = NSRange(location: heading.range.location, length: end - heading.range.location)
+      return (heading, range)
     }
   }
 }

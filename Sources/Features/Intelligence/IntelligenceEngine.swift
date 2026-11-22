@@ -54,9 +54,8 @@ package final class IntelligenceEngine {
     var completed = 0
     while let chunk = pending.popLast() {
       try Task.checkCancellation()
-      let total = completed + pending.count + 1
-      progress(
-        purpose == .edit ? .editing(completed + 1, of: total) : .reviewing(completed + 1, of: total))
+      let (current, total) = (completed + 1, completed + pending.count + 1)
+      progress(purpose == .edit ? .editing(current, of: total) : .reviewing(current, of: total))
       let chunkSource = text(chunk, of: request)
       do {
         let input = pass(request, purpose: purpose, source: chunkSource, model: model, scope: chunk)

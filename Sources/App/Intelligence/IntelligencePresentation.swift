@@ -19,13 +19,13 @@ final class IntelligencePresentation {
     let editor = fileEditor.editor
     guard editor.isSettled else {
       model.alertMessage = String(
-        localized: "Finish composition or Writing Tools before opening Intelligence.")
+        localized: "Finish typing or wait for Writing Tools, then try again.")
       return
     }
     present(editor: editor, title: fileEditor.details.title) { range in
       guard fileEditor.details.isOwned else {
         model.alertMessage = String(
-          localized: "This gist is read-only, so the reference can't open in the editor.")
+          localized: "This gist is read-only, so this passage can't open in Edit.")
         return
       }
       let generation = editor.generation
@@ -34,7 +34,7 @@ final class IntelligencePresentation {
       Task { @MainActor in
         await Task.yield()
         guard editor.generation == generation else {
-          model.alertMessage = String(localized: "This reference no longer matches the file.")
+          model.alertMessage = String(localized: "This passage is no longer in the file.")
           return
         }
         editor.select(range)
