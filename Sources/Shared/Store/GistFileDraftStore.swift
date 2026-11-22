@@ -124,15 +124,14 @@ final class StoredDraft {
     var accountID: UUID
     var gistID: String?
     var filename: String
-    /// The new gist's name. Earlier builds kept every gist's description here.
-    var gistDescription: String
+    // Earlier builds stored these under their first names, and kept every gist's description as
+    // its new gist name.
+    @Attribute(originalName: "gistDescription") var newGistName: String
     var text: String
-    // Earlier builds stored these under their first names.
     @Attribute(originalName: "baseContent") var base: String?
     var baseRevision: String?
     @Attribute(originalName: "attemptedContent") var sent: String?
-    /// The conflict, as a JSON `GitHubVersion?`.
-    var stateData: Data
+    var conflict: GitHubVersion?
     var updatedAt: Date? = nil
 
     init(_ draft: GistFileDraft) {
@@ -140,27 +139,22 @@ final class StoredDraft {
         accountID = draft.accountID
         gistID = draft.gistID
         filename = draft.filename
-        gistDescription = draft.newGistName ?? ""
+        newGistName = draft.newGistName ?? ""
         text = draft.text
         base = draft.base?.text
         baseRevision = draft.base?.revision
         sent = draft.sent
-        stateData = Self.encode(draft.conflict)
+        conflict = draft.conflict
         updatedAt = .now
     }
 
     var draft: GistFileDraft {
         GistFileDraft(
             id: id, accountID: accountID, gistID: gistID,
-            newGistName: gistDescription.isEmpty ? nil : gistDescription, filename: filename,
+            newGistName: newGistName.isEmpty ? nil : newGistName, filename: filename,
             text: text, editedAt: updatedAt ?? .distantPast,
             base: base.map { GitHubVersion(text: $0, revision: baseRevision) }, sent: sent,
             conflict: conflict)
-    }
-
-    var conflict: GitHubVersion? {
-        get { try? JSONDecoder().decode(GitHubVersion.self, from: stateData) }
-        set { stateData = Self.encode(newValue) }
     }
 
     func setBase(_ version: GitHubVersion) {
@@ -172,10 +166,6 @@ final class StoredDraft {
         guard !sourceEqual(self.text, text) else { return }
         self.text = text
         updatedAt = .now
-    }
-
-    private static func encode(_ conflict: GitHubVersion?) -> Data {
-        (try? JSONEncoder().encode(conflict)) ?? Data("null".utf8)
     }
 }
 
@@ -252,7 +242,7 @@ public actor GistFileDraftStore {
     ) throws -> GistFileDraft {
         let row = try stored(draft) ?? insert(draft)
         if let filename { row.filename = filename }
-        if let newGistName { row.gistDescription = newGistName }
+        if let newGistName { row.newGistName = newGistName }
         return try settle(row)
     }
 

@@ -31,6 +31,7 @@ import Testing
     }
 
     /// A store from earlier builds, with attributes and models since removed, opens with its drafts.
+    /// A conflict it was waiting on is dropped, and the next compare with GitHub raises it again.
     @Test func schemaChangesKeepDrafts() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -51,7 +52,7 @@ import Testing
                 id: id, accountID: account, githubUserID: 42, gistID: "abc123",
                 filename: "README.md", description: "Note", text: "unsynced source",
                 baseContent: "remote base", baseRevision: "one",
-                stateData: Data(#"{"savedLocally":{}}"#.utf8)
+                stateData: Data(#"{"text":"newer on GitHub","revision":"two"}"#.utf8)
             )
             draft.generation = 7
             draft.autosavePaused = true
@@ -66,6 +67,7 @@ import Testing
         let draft = try #require(try await upgraded.drafts(accountID: account).first { $0.id == id })
         #expect(draft.text == "unsynced source")
         #expect(draft.base == GitHubVersion(text: "remote base", revision: "one"))
+        #expect(draft.newGistName == "Note")
         #expect(draft.conflict == nil)
         try GistCache(accountID: account).save(to: upgraded.modelContainer)
         #expect(try await upgraded.append(" accepted", to: draft, github: nil).text
@@ -75,7 +77,8 @@ import Testing
 }
 
 // The persisted schema before recovery history, the autosave pause, command receipts and the
-// draft's generations and GitHub user ID were removed.
+// draft's generations and GitHub user ID were removed, and before the conflict was a Codable
+// attribute instead of JSON in `stateData`.
 // It exists only so the test can prove those stores still open with their drafts intact.
 enum RetiredSchema {
     @Model
