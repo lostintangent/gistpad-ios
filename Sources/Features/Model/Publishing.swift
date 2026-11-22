@@ -125,7 +125,7 @@ extension GistPadModel {
   }
 
   /// Your GitHub user, who owns the gists you can publish to.
-  private var ownerID: Int64 {
+  var ownerID: Int64 {
     get throws {
       guard let id = account?.github.id else { throw AccountError.reconnectGitHub }
       return id
@@ -232,18 +232,11 @@ extension GistFileEditor {
     autosaveTask?.cancel()
     autosaveTask = nil
     guard request.eligible else { return nil }
-    autosaveTask = Task { [weak self, autosaveDelay] in
-      do {
-        try await Task.sleep(for: autosaveDelay)
-        guard let self, !Task.isCancelled, autosaveRequest == request else { return }
-        autosaveTask = nil
-        await publish(reason: .autosave)
-      } catch is CancellationError {
-        return
-      } catch {
-        self?.logger.error(
-          "Autosave delay failed: \(String(reflecting: type(of: error)), privacy: .public)")
-      }
+    autosaveTask = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(5))
+      guard let self, !Task.isCancelled, autosaveRequest == request else { return }
+      autosaveTask = nil
+      await publish(reason: .autosave)
     }
     return autosaveTask
   }

@@ -23,17 +23,15 @@ public final class GistFileEditor {
   @ObservationIgnored var persistence: Task<Bool, Never>?
   @ObservationIgnored var autosaveTask: Task<Void, Never>?
   @ObservationIgnored var scheduledAutosave: AutosaveRequest?
-  @ObservationIgnored let autosaveDelay: Duration
   @ObservationIgnored var isInspectingRemote = false
   /// When this note last read GitHub, so opening it again reads only once that's stale.
   @ObservationIgnored var refreshedAt: Date?
   @ObservationIgnored let logger = Logger(
     subsystem: "dev.gistpad.GistPad", category: "File")
 
-  init(file: GistFile, model: GistPadModel, autosaveDelay: Duration = .seconds(5)) {
+  init(file: GistFile, model: GistPadModel) {
     self.file = file
     self.model = model
-    self.autosaveDelay = autosaveDelay
     editor = Editor(
       text: file.text,
       showsFrontMatter: model.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)

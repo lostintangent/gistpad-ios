@@ -90,7 +90,6 @@ extension GistPadModel {
     }
   }
 
-  /// Renames a gist on GitHub, or names a new one that's only on this iPhone.
   /// Renames a file's gist: on GitHub once it has one, else the new gist you're writing.
   public func rename(_ draft: GistFileDraft, to title: String) async throws {
     if let gistID = draft.gistID { return try await renameGist(gistID, to: title) }

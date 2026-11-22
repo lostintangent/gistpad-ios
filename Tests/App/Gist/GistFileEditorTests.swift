@@ -159,12 +159,11 @@ struct GistFileEditorTests {
 }
 
 private extension ModelFixture {
-  /// Opens gist "a" as the app does, in an editor that autosaves after a short pause.
+  /// Opens gist "a" as the app does.
   func open() async throws -> GistFileEditor {
     if model.account == nil { await model.start() }
     await model.open(.gist(id: "a"))
-    return GistFileEditor(
-      file: try #require(model.activeEditor?.file), model: model, autosaveDelay: .milliseconds(30))
+    return GistFileEditor(file: try #require(model.activeEditor?.file), model: model)
   }
 
   /// The editor's file as it's saved on this iPhone.
