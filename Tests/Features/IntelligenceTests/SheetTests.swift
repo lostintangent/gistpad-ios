@@ -45,6 +45,7 @@
       #expect(editor.text == edited)
       #expect(editor.generation == generation + 1)
       #expect(changes == 1)
+      #expect(state.appliedCount == 2)
 
       field.resignFirstResponder()
       #expect(editor.textView.becomeFirstResponder())

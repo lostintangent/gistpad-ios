@@ -31,7 +31,7 @@ final class IntelligencePresentation {
       let generation = editor.generation
       showEditor()
       fileEditor.mode = .edit
-      Task { @MainActor in
+      Task {
         await Task.yield()
         guard editor.generation == generation else {
           model.alertMessage = String(localized: "This passage is no longer in the file.")

@@ -79,8 +79,7 @@
       logger.notice(
         "request=\(requestID.uuidString, privacy: .public) action=\(selectedAction.rawValue, privacy: .public) state=started sourceUTF16=\(self.editor.text.utf16.count)"
       )
-      task = Task { [weak self] in
-        guard let self else { return }
+      task = Task {
         defer {
           self.isCancelling = false
           self.progress = nil
@@ -127,14 +126,11 @@
     func apply(changeID: UUID? = nil) {
       guard let proposal, canApply else { return }
       do {
-        let count = proposal.changes.filter {
-          $0.canApply && (changeID == nil || $0.id == changeID)
-        }.count
         let remaining = try editor.apply(proposal, changeID: changeID)
         if action == .edit { appliedEdit = proposal }
         self.proposal = remaining
         snapshot = remaining.snapshot
-        appliedCount += count
+        appliedCount += proposal.changes.count - remaining.changes.count
         errorMessage = nil
         notice = String(
           localized: "Applied. The editor’s Undo restores your text.", bundle: .module)
