@@ -232,7 +232,7 @@ enum Evaluator {
     guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       return "emptyAnswer"
     }
-    if let issue = AnswerIssue.check(answer, source: item.source, instruction: item.prompt) {
+    if let issue = ModelAnswer.Issue.check(answer, source: item.source, instruction: item.prompt) {
       return issue.rawValue
     }
     if let maximum = item.maximumAnswerWords,
@@ -398,7 +398,7 @@ final class RecordingModel: IntelligenceModel {
   ) async throws -> ModelAnswer {
     answerCalls += 1
     let answer = try await model.streamAnswer(for: pass, onUpdate: onUpdate)
-    if AnswerIssue.check(answer.prose, source: pass.source, instruction: pass.instruction) != nil {
+    if ModelAnswer.Issue.check(answer.prose, source: pass.source, instruction: pass.instruction) != nil {
       rejectedAnswers.append(answer.prose)
     }
     return answer

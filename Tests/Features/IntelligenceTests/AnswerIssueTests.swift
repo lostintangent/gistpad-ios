@@ -8,7 +8,7 @@ struct AnswerIssueTests {
     "# Incredible\n1. An Example\n\nYou like protagonists who reflect (e.g. An Example)."
 
   @Test(arguments: [
-    ("You wrote “my favorite is An Example”.", AnswerIssue.unverifiedProseQuote),
+    ("You wrote “my favorite is An Example”.", ModelAnswer.Issue.unverifiedProseQuote),
     ("You wrote '(i.e. An Example)'.", .unverifiedProseQuote),
     ("You wrote 'It's your favorite series'.", .unverifiedProseQuote),
     ("「my favorite is An Example」と書いています。", .unverifiedProseQuote),
@@ -24,7 +24,7 @@ struct AnswerIssueTests {
     ("The second block supports that.", .internalIdentifier),
   ])
   func theGateRejectsInventedQuotesThirdPersonMarkupAndMetadata(
-    prose: String, issue: AnswerIssue
+    prose: String, issue: ModelAnswer.Issue
   ) async {
     let fixture = FixtureLanguageModel()
     fixture.answer = ModelAnswer(prose: prose)
@@ -52,18 +52,18 @@ struct AnswerIssueTests {
       "You called the top tier \"incredible\".",
       "The ranking evidence puts An Example first.",
     ] {
-      #expect(AnswerIssue.check(prose, source: source) == nil)
+      #expect(ModelAnswer.Issue.check(prose, source: source) == nil)
     }
     #expect(
-      AnswerIssue.check(
+      ModelAnswer.Issue.check(
         "The blockID parameter identifies your block.",
         source: "The blockID parameter identifies a block.",
         instruction: "What does blockID do?") == nil)
     #expect(
-      AnswerIssue.check(
+      ModelAnswer.Issue.check(
         "Write {name} where the greeting goes.", source: "Hello, {name}!") == nil)
     #expect(
-      AnswerIssue.check(
+      ModelAnswer.Issue.check(
         "You called it \"real\".", source: "This was realistic.")
         == .unverifiedProseQuote)
   }

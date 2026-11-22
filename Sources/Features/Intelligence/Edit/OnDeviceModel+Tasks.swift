@@ -108,18 +108,20 @@ extension OnDeviceModel {
   }
 }
 
-@Generable
-enum AppleEditKind {
-  case completeAllTasks, uncheckAllTasks, checkOrUncheckTasks, addTask, deleteTasks, text
-}
+extension OnDeviceModel {
+  @Generable
+  enum AppleEditKind {
+    case completeAllTasks, uncheckAllTasks, checkOrUncheckTasks, addTask, deleteTasks, text
+  }
 
-@Generable
-struct AppleEditIntent {
-  var kind: AppleEditKind
-  @Guide(
-    description: "True if the request also renames a heading or task, or changes any other wording."
-  )
-  var changesOtherText: Bool
+  @Generable
+  struct AppleEditIntent {
+    var kind: AppleEditKind
+    @Guide(
+      description: "True if the request also renames a heading or task, or changes any other wording."
+    )
+    var changesOtherText: Bool
+  }
 }
 
 @Generable

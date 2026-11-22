@@ -26,22 +26,24 @@ extension OnDeviceModel {
       """
 }
 
-@Generable
-struct AppleChange: Sendable {
-  @Guide(description: "Exact source text, including whitespace.")
-  var quote: String
-  @Guide(description: "Exact source text immediately before quote, or an empty string.")
-  var before: String
-  @Guide(description: "Exact source text immediately after quote, or an empty string.")
-  var after: String
-  @Guide(description: "New text only for the quoted passage. Never copy the user request here.")
-  var replacement: String?
-  @Guide(description: "A brief explanation of this specific change.")
-  var reason: String
-}
+extension OnDeviceModel {
+  @Generable
+  struct AppleChange: Sendable {
+    @Guide(description: "Exact source text, including whitespace.")
+    var quote: String
+    @Guide(description: "Exact source text immediately before quote, or an empty string.")
+    var before: String
+    @Guide(description: "Exact source text immediately after quote, or an empty string.")
+    var after: String
+    @Guide(description: "New text only for the quoted passage. Never copy the user request here.")
+    var replacement: String?
+    @Guide(description: "A brief explanation of this specific change.")
+    var reason: String
+  }
 
-@Generable
-struct AppleChanges: Sendable {
-  @Guide(.maximumCount(12))
-  var changes: [AppleChange]
+  @Generable
+  struct AppleChanges: Sendable {
+    @Guide(.maximumCount(12))
+    var changes: [AppleChange]
+  }
 }

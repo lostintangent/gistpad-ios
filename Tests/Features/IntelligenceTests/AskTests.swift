@@ -38,7 +38,7 @@ struct AskTests {
       answer == [.quotation("👩🏽‍💻", ranges: [NSRange(location: 6, length: "👩🏽‍💻".utf16.count)])])
 
     let original = "# One\r\n\r\nFirst 👩🏽‍💻\r\n\r\n# Two\n\nSecond cafe\u{301}\n"
-    let blocks = SourceBlock.blocks(in: original)
+    let blocks = OnDeviceModel.SourceBlock.blocks(in: original)
     #expect(blocks.map(\.text).joined().utf8.elementsEqual(original.utf8))
     let parts = try OnDeviceModel.parseAnswer(
       "The second section answers.\n[Sources: 2]", blocks: blocks)

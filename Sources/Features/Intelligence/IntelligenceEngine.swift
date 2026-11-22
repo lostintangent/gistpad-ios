@@ -247,7 +247,7 @@ package final class IntelligenceEngine {
         continue
       }
       guard
-        let issue = AnswerIssue.check(
+        let issue = ModelAnswer.Issue.check(
           generated.prose, source: input.source, instruction: input.instruction)
       else { break }
       logger.notice(
