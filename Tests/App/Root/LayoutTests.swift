@@ -8,7 +8,7 @@ import WebKit
 
 @testable import GistPad
 
-@Suite(.serialized)
+@Suite(.serialized, .timeLimit(.minutes(1)))
 struct LayoutTests {
     @Test func libraryDisclosuresStartCollapsedAndRememberOnlyTheirOwnAccount() throws {
         let name = "dev.gistpad.layout.tests.\(UUID().uuidString)"
@@ -94,7 +94,7 @@ struct LayoutTests {
         window.rootViewController = host
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
-        try await Task.sleep(for: .milliseconds(250))
+        host.view.layoutIfNeeded()
         let editor = session.textView
         let preview = try #require(descendants(of: host.view).compactMap { $0 as? WKWebView }.first)
         editor.selectedRange = NSRange(location: 0, length: 0)
@@ -111,8 +111,7 @@ struct LayoutTests {
         editor.undoManager?.endUndoGrouping()
         let text = session.text
         let selection = editor.selectedRange
-        try await Task.sleep(for: .milliseconds(350))
-        host.view.layoutIfNeeded()
+        await keyboard(visible: true, over: host.view)
         if let manager = editor.textLayoutManager, let range = manager.textContentManager?.documentRange
         {
             manager.ensureLayout(for: range)
@@ -129,7 +128,6 @@ struct LayoutTests {
         for (index, width) in widths.enumerated() {
             host.traitOverrides.horizontalSizeClass = width < 640 ? .compact : .regular
             host.rootView = LayoutFixture(session: session, layout: layout, width: width)
-            try await Task.sleep(for: .milliseconds(150))
             host.view.layoutIfNeeded()
             #expect(session.textView === editor)
             #expect(editor.window === window)

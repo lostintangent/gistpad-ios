@@ -5,7 +5,7 @@ import UIKit
 
 @testable import Editor
 
-@Suite(.serialized)
+@Suite(.serialized, .timeLimit(.minutes(1)))
 struct FileSwitchingTests {
     enum OwnerState: CaseIterable {
         case current, missing, detached
@@ -185,19 +185,19 @@ struct FileSwitchingTests {
         host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         fixture.root.view.addSubview(host.view)
         host.didMove(toParent: fixture.root)
-        try await Task.sleep(for: .milliseconds(200))
+        fixture.window.layoutIfNeeded()
         let textView = editor.textView
         textView.selectedRange = NSRange(location: 3, length: 0)
         let selection = textView.selectedRange
         for index in 0..<4 {
-            withAnimation(.easeInOut(duration: 0.1)) {
-                state.identity += 1
+            await completion { done in
+                withAnimation(.easeInOut(duration: 0.1), completionCriteria: .removed) {
+                    state.identity += 1
+                } completion: { done() }
             }
-            try await Task.sleep(for: .milliseconds(250))
             host.traitOverrides.horizontalSizeClass = index.isMultiple(of: 2) ? .regular : .compact
             for mode in [FileMode.preview, .split, .edit] {
                 state.mode = mode
-                try await Task.sleep(for: .milliseconds(150))
                 host.view.layoutIfNeeded()
                 #expect(editor.textView === textView)
                 #expect(textView.window === fixture.window)
@@ -220,7 +220,7 @@ struct FileSwitchingTests {
             }, named: "source-after-animated-rehosting-\(splitNavigation).png", as: .png)
     }
 
-    @Test func anOutgoingHostCannotDetachTheRetainedEditorFromItsNewHost() async throws {
+    @Test func anOutgoingHostCannotDetachTheRetainedEditorFromItsNewHost() throws {
         let editor = Editor(text: "# Still visible\nA retained source.")
         let other = Editor(text: "# A different source")
         let scene = try #require(
@@ -244,7 +244,7 @@ struct FileSwitchingTests {
             previous?.makeKey()
         }
 
-        try await Task.sleep(for: .milliseconds(150))
+        window.layoutIfNeeded()
         try #require(editor.textView.isDescendant(of: outgoing.view))
 
         let incoming = UIHostingController(rootView: EditorView(editor: editor))
@@ -253,26 +253,24 @@ struct FileSwitchingTests {
         incoming.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         root.view.addSubview(incoming.view)
         incoming.didMove(toParent: root)
-        try await Task.sleep(for: .milliseconds(150))
+        incoming.view.layoutIfNeeded()
         try #require(editor.textView.isDescendant(of: incoming.view))
         let incomingAccessory = editor.textView.inputAccessoryView
 
         outgoing.rootView = EditorView(editor: editor)
             .environment(\.isPaneVisible, false)
-        try await Task.sleep(for: .milliseconds(150))
+        outgoing.view.layoutIfNeeded()
         #expect(!editor.textView.isHidden)
         #expect(editor.textView.isAccessibilityElement)
         #expect(editor.textView.inputAccessoryView === incomingAccessory)
 
         outgoing.rootView = EditorView(editor: other)
             .environment(\.isPaneVisible, false)
-        outgoing.view.setNeedsLayout()
         outgoing.view.layoutIfNeeded()
-        try await Task.sleep(for: .milliseconds(150))
         outgoing.willMove(toParent: nil)
         outgoing.view.removeFromSuperview()
         outgoing.removeFromParent()
-        try await Task.sleep(for: .milliseconds(150))
+        incoming.view.layoutIfNeeded()
         #expect(editor.textView.window === window)
         #expect(editor.textView.isDescendant(of: incoming.view))
         #expect(!editor.textView.isHidden)
@@ -285,7 +283,7 @@ struct FileSwitchingTests {
             }, named: "retained-textView-after-outgoing-host-removal.png", as: .png)
     }
 
-    @Test func changingFilesMountsTheCorrectRetainedTextViewAndIsolatesUndo() async throws {
+    @Test func changingFilesMountsTheCorrectRetainedTextViewAndIsolatesUndo() throws {
         let daily = Editor(text: "# Today's note\nDaily source")
         let note = Editor(text: "# Another gist\nIts raw source")
         let scene = try #require(
@@ -295,7 +293,7 @@ struct FileSwitchingTests {
         window.rootViewController = host
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
-        try await Task.sleep(for: .milliseconds(150))
+        host.view.layoutIfNeeded()
         let dailyView = daily.textView
         let noteView = note.textView
         dailyView.becomeFirstResponder()
@@ -307,7 +305,7 @@ struct FileSwitchingTests {
         let dailySelection = dailyView.selectedRange
 
         host.rootView = EditorView(editor: note)
-        try await Task.sleep(for: .milliseconds(150))
+        host.view.layoutIfNeeded()
         #expect(noteView.window === window)
         #expect(dailyView.window == nil)
         #expect(noteView.text == "# Another gist\nIts raw source")
@@ -321,7 +319,7 @@ struct FileSwitchingTests {
 
         for editor in [daily, note, daily, note] {
             host.rootView = EditorView(editor: editor)
-            try await Task.sleep(for: .milliseconds(100))
+            host.view.layoutIfNeeded()
             #expect(editor.textView.window === window)
             #expect(daily.textView === dailyView)
             #expect(note.textView === noteView)
@@ -334,7 +332,7 @@ struct FileSwitchingTests {
         #expect(noteView.text == "# Another gist\nIts raw source")
         #expect(dailyView.text == dailyText)
         host.rootView = EditorView(editor: daily)
-        try await Task.sleep(for: .milliseconds(100))
+        host.view.layoutIfNeeded()
         dailyView.undoManager?.undo()
         #expect(dailyView.text == "# Today's note\nDaily source")
     }

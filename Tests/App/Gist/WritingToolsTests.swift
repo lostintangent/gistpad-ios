@@ -40,7 +40,7 @@ extension EditorContinuityTests {
         #expect(changes.isEmpty)
     }
 
-    @Test func acceptedNativeReplacementIsOneUndoableEditAndSurvivesReflow() async throws {
+    @Test func acceptedNativeReplacementIsOneUndoableEditAndSurvivesReflow() throws {
         let source = "A rough sentence.\n日本語 👨‍👩‍👧‍👦 `protected`"
         let session = Editor(text: source)
         let window = try host(session)
@@ -71,7 +71,6 @@ extension EditorContinuityTests {
         #expect(changes == [finalText])
         #expect(session.generation == 1)
         #expect(session.textView.selectedRange == finalSelection)
-        try await Task.sleep(for: .milliseconds(150))
         for width in [952.0, 402.0, 700.0, 360.0] {
             session.textView.frame.size.width = width
             session.textView.layoutIfNeeded()

@@ -3,7 +3,7 @@ import SwiftUI
 import Testing
 import UIKit
 
-@Suite(.serialized)
+@Suite(.serialized, .timeLimit(.minutes(1)))
 struct EditorContinuityTests {
     func host(_ session: Editor) throws -> UIWindow {
         let scene = try #require(
@@ -103,7 +103,7 @@ struct EditorContinuityTests {
         #expect(session.textView.text == source)
     }
 
-    @Test func readingAnchorSurvivesReflow() async throws {
+    @Test func readingAnchorSurvivesReflow() throws {
         let source = EditorFixture.markdown
         let session = Editor(text: source)
         let window = try host(session)
@@ -111,13 +111,8 @@ struct EditorContinuityTests {
         let view = session.textView
         let manager = try #require(view.textLayoutManager)
         manager.ensureLayout(for: try #require(manager.textContentManager?.documentRange))
-        let middle = NSRange(location: source.utf16.count / 2, length: 0)
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        while view.contentOffset.y <= 0, ContinuousClock.now < deadline {
-            view.scrollRangeToVisible(middle)
-            try await Task.sleep(for: .milliseconds(20))
-            view.layoutIfNeeded()
-        }
+        view.scrollRangeToVisible(NSRange(location: source.utf16.count / 2, length: 0))
+        view.layoutIfNeeded()
         try #require(
             view.contentOffset.y > 0,
             "The reading-anchor fixture must scroll to its middle source range before measuring.")
@@ -134,7 +129,6 @@ struct EditorContinuityTests {
             view.frame.size.width = width
             view.layoutIfNeeded()
             session.highlight()
-            try await Task.sleep(for: .milliseconds(150))
             let restored = try #require(view.position(from: view.beginningOfDocument, offset: offset))
             let caret = view.caretRect(for: restored)
             let nextLine = try #require(view.position(from: restored, in: .down, offset: 1))
