@@ -14,7 +14,7 @@ struct RootView: View {
   @State private var compactColumn: NavigationSplitViewColumn = .sidebar
   @State private var sheet: Sheet?
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
-  @State private var layout = LayoutPreferences()
+  @State private var layout: LayoutPreferences
   @State private var intelligence = IntelligencePresentation()
   @State private var comments: CommentsPresentation
   @State private var images: ImageUpload
