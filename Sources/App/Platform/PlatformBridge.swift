@@ -44,7 +44,7 @@ final class PlatformBridge: PlatformActions {
   private var refreshTask: Task<Void, Never>?
   private var operation: Task<Void, Never>?
   /// Starts from the snapshot GistPad launched with, read before the first refresh rewrites it.
-  private let spotlight = GistSpotlightIndex(launchedWith: try? LibrarySnapshot.read())
+  private let spotlight = SpotlightIndex(launchedWith: try? LibrarySnapshot.read())
   private var spotlightSnapshot: LibrarySnapshot?
   private var spotlightTask: Task<Void, Never>?
   private let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "SystemIntegration")
@@ -87,8 +87,7 @@ final class PlatformBridge: PlatformActions {
     let account = try await model.localAccount()
     try Task.checkCancellation()
     let snapshot = LibrarySnapshot.make(
-      account: account, cache: account == nil ? nil : model.gistCache,
-      drafts: account == nil ? [] : model.drafts, visibleText: Self.noteBody)
+      account: account, cache: model.gistCache, drafts: model.drafts, visibleText: Self.noteBody)
     try snapshot.write()
     WidgetCenter.shared.reloadTimelines(ofKind: LauncherWidgetView.kind)
     indexInSpotlight(snapshot)

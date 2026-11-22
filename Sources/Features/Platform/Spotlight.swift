@@ -23,16 +23,16 @@ extension GistEntityQuery: IndexedEntityQuery {
         for identifiers: [String], indexDescription: CSSearchableIndexDescription
     ) async throws {
         let notes = try await LibrarySnapshot.read(validating: app)?.gists ?? []
-        try await GistSpotlightIndex.index.indexAppEntities(notes.filter { identifiers.contains($0.id) })
+        try await SpotlightIndex.index.indexAppEntities(notes.filter { identifiers.contains($0.id) })
     }
 
     public func reindexAllEntities(indexDescription: CSSearchableIndexDescription) async throws {
-        try await GistSpotlightIndex.index.indexAppEntities(LibrarySnapshot.read(validating: app)?.gists ?? [])
+        try await SpotlightIndex.index.indexAppEntities(LibrarySnapshot.read(validating: app)?.gists ?? [])
     }
 
 }
 
-public actor GistSpotlightIndex {
+public actor SpotlightIndex {
     /// The gists Spotlight may hold, or nil when only clearing it is safe.
     private var indexedIDs: Set<String>?
     /// Spotlight keeps this index across updates, so it keeps its first name.

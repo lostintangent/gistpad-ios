@@ -8,7 +8,7 @@ extension View {
   }
 }
 
-struct ImagePicker: ViewModifier {
+private struct ImagePicker: ViewModifier {
   @Bindable var images: ImageUpload
   @State private var selection: PhotosPickerItem?
 

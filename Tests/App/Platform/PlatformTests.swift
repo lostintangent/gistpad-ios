@@ -14,7 +14,7 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct PlatformTests {
-  @Test func addToTodayFromAShortcutLandsInTodaysNoteWithoutASheetOrAPublish() async throws {
+  @Test func addToTodayFromAShortcutAppendsToTodaysNoteWithoutASheetOrAPublish() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
     let fileEditor = try await fixture.fileEditor()
@@ -30,7 +30,7 @@ struct PlatformTests {
     #expect(fixture.publishes.isEmpty)
   }
 
-  @Test func addToTodayLandsAfterTodaysPublishIsCutOffAndPublishesOnceOnline() async throws {
+  @Test func addToTodayAppendsAfterTodaysPublishIsCutOffAndPublishesOnceOnline() async throws {
     let fixture = try await PlatformFixture.make()
     defer { fixture.cleanUp() }
     let fileEditor = try await fixture.fileEditor()

@@ -26,7 +26,7 @@ public enum PlatformError: LocalizedError, Equatable, Sendable {
         case .accountChanged:
             String(localized: "Open GistPad and sign in to the account this action uses.")
         case .editingInProgress:
-            String(localized: "Finish the current edit in GistPad, then try again.")
+            String(localized: "Finish typing in GistPad, then try again.")
         case .emptyNoteText:
             String(localized: "Say or type something to add to this note.")
         case .emptyNoteName:
