@@ -48,11 +48,10 @@ public enum GitHubProblem: Equatable, Sendable {
 }
 
 public actor GitHubClient {
-    public typealias TokenProvider = @Sendable () async throws -> String
     private let session: URLSession
-    private let token: TokenProvider
+    private let token: @Sendable () async throws -> String
 
-    public init(session: URLSession, token: @escaping TokenProvider) {
+    public init(session: URLSession, token: @escaping @Sendable () async throws -> String) {
         self.session = session
         self.token = token
     }
@@ -106,7 +105,7 @@ public actor GitHubClient {
     }
 
     /// Fetches a gist and one file, enforcing ownership and completeness. `content` is nil when the file is gone.
-    public func remoteFile(
+    public func file(
         gistID: String, ownerID: Int64, filename: String
     ) async throws -> (gist: Gist, content: String?) {
         let gist = try await gist(id: gistID)
@@ -169,7 +168,7 @@ public actor GitHubClient {
     public func createComment(gistID: String, body: String) async throws -> GistComment {
         try await decoded(
             path: "/gists/\(try identifier(gistID))/comments", method: "POST",
-            body: commentData(body))
+            body: JSONEncoder().encode(["body": body]))
     }
 
     public func updateComment(
@@ -177,7 +176,7 @@ public actor GitHubClient {
     ) async throws -> GistComment {
         try await decoded(
             path: commentPath(gistID: gistID, commentID: commentID), method: "PATCH",
-            body: commentData(body))
+            body: JSONEncoder().encode(["body": body]))
     }
 
     public func deleteComment(gistID: String, commentID: Int64) async throws {
@@ -188,11 +187,6 @@ public actor GitHubClient {
     private func commentPath(gistID: String, commentID: Int64) throws -> String {
         guard commentID > 0 else { throw GitHubClientError.invalidResponse }
         return "/gists/\(try identifier(gistID))/comments/\(commentID)"
-    }
-
-    private func commentData(_ body: String) throws -> Data {
-        struct CommentChange: Encodable { let body: String }
-        return try JSONEncoder().encode(CommentChange(body: body))
     }
 
     public func setStarred(_ starred: Bool, id: String) async throws {
@@ -297,6 +291,23 @@ private final class NoRedirects: NSObject, URLSessionTaskDelegate {
         willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest
     ) async -> URLRequest? {
         nil
+    }
+}
+
+extension GitHubClient {
+    public enum FileChange: Encodable, Sendable {
+        case content(String)
+        case rename(String)
+        case delete
+
+        public func encode(to encoder: any Encoder) throws {
+            var container = encoder.singleValueContainer()
+            switch self {
+            case .content(let content): try container.encode(["content": Gist.File.encodeContent(content)])
+            case .rename(let filename): try container.encode(["filename": filename])
+            case .delete: try container.encodeNil()
+            }
+        }
     }
 }
 

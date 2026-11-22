@@ -18,10 +18,6 @@ public struct GitHubUser: Codable, Equatable, Sendable {
     }
 }
 
-public struct GistRevision: Codable, Equatable, Sendable {
-    public let version: String
-}
-
 public struct Gist: Codable, Equatable, Identifiable, Sendable {
     public internal(set) var id: String
     public internal(set) var description: String?
@@ -31,8 +27,12 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
     public internal(set) var isPublic: Bool
     public internal(set) var owner: GitHubUser?
     public internal(set) var truncated: Bool?
-    public internal(set) var history: [GistRevision]?
+    var history: [Revision]?
     public internal(set) var commentCount: Int?
+
+    struct Revision: Codable, Equatable, Sendable {
+        let version: String
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, description, files, owner, truncated, history
@@ -161,27 +161,5 @@ extension Gist.File {
 
     public static func displayName(_ filename: String) -> String {
         filename.hasSuffix(".md") ? String(filename.dropLast(3)) : filename
-    }
-}
-
-public enum FileChange: Encodable, Sendable {
-    case content(String)
-    case rename(String)
-    case delete
-
-    enum CodingKeys: String, CodingKey { case content, filename }
-
-    public func encode(to encoder: any Encoder) throws {
-        switch self {
-        case .content(let content):
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(Gist.File.encodeContent(content), forKey: .content)
-        case .rename(let filename):
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(filename, forKey: .filename)
-        case .delete:
-            var container = encoder.singleValueContainer()
-            try container.encodeNil()
-        }
     }
 }

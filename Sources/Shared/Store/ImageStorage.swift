@@ -10,14 +10,13 @@ public struct ImageStorage: Sendable {
         case http(status: Int)
     }
 
-    public typealias TokenProvider = @Sendable () async throws -> String
     private let publishableKey: String
-    private let token: TokenProvider
+    private let token: @Sendable () async throws -> String
     private let session: URLSession
 
     public init(
         publishableKey: String, session: URLSession,
-        token: @escaping TokenProvider
+        token: @escaping @Sendable () async throws -> String
     ) {
         self.publishableKey = publishableKey
         self.session = session

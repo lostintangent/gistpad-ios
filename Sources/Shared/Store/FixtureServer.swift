@@ -54,7 +54,9 @@ public final class FixtureServer: Sendable {
 
     /// An account store that signs in to this server and keeps its credentials in memory.
     public func accounts(
-        launchFlow: @escaping GistPadAccountStore.LaunchFlow = { _ in URL(string: "gistpad://auth-callback?code=fixture")! }
+        launchFlow: @escaping @MainActor @Sendable (URL) async throws -> URL = { _ in
+            URL(string: "gistpad://auth-callback?code=fixture")!
+        }
     ) -> GistPadAccountStore {
         GistPadAccountStore(
             publishableKey: "sb_publishable_fixture", credentials: credentials, session: session,
@@ -86,7 +88,7 @@ public final class FixtureServer: Sendable {
                 id: id, description: description,
                 files: files.reduce(into: [:]) { $0[$1.key] = .fixture($1.key, content: $1.value) },
                 updatedAt: updatedAt.wholeSeconds, createdAt: updatedAt.wholeSeconds, isPublic: false,
-                owner: owner, truncated: false, history: [GistRevision(version: state.newID())],
+                owner: owner, truncated: false, history: [Gist.Revision(version: state.newID())],
                 commentCount: comments.count)
             state.gists.insert(gist, at: 0)
             if isStarred { state.starred.insert(id) }
@@ -176,7 +178,7 @@ private extension FixtureServer.State {
                 files: files.reduce(into: [:]) { $0[$1.key] = .fixture($1.key, content: $1.value) },
                 updatedAt: Date.now.wholeSeconds, createdAt: Date.now.wholeSeconds,
                 isPublic: create.public ?? false, owner: FixtureServer.you, truncated: false,
-                history: [GistRevision(version: newID())], commentCount: 0), at: 0)
+                history: [Gist.Revision(version: newID())], commentCount: 0), at: 0)
             return try json(served(gists[0]), status: 201)
         case "GET /gists/:id":
             return try json(gists.first { $0.id == id }.map { served($0) })
@@ -274,7 +276,7 @@ private extension FixtureServer.State {
         gist.description = change.description ?? gist.description
         gist.updatedAt = Date.now.wholeSeconds
         gist.truncated = false
-        gist.history = [GistRevision(version: newID())] + (gist.history ?? [])
+        gist.history = [Gist.Revision(version: newID())] + (gist.history ?? [])
         gists[index] = gist
         return gist
     }

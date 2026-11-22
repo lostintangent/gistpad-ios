@@ -121,13 +121,13 @@ extension GistFileEditor {
     do {
       let ownerID = try model.ownerID
       let github = await model.client(accountID: read.accountID)
-      let (stored, remote) = try await model.serially {
+      let (stored, latest) = try await model.serially {
         let stored = try await model.current(read)
         let current = stored ?? read
-        let remote = try await github.remoteFile(
+        let latest = try await github.file(
           gistID: gistID, ownerID: ownerID, filename: current.filename)
-        try model.cache(remote, filename: current.filename, accountID: current.accountID)
-        return (stored, remote)
+        try model.cache(latest, filename: current.filename, accountID: current.accountID)
+        return (stored, latest)
       }
       try await model.reloadLocalState(accountID: read.accountID)
       guard editor.generation == generation, !isPublishing, canEdit else { return }
@@ -136,17 +136,17 @@ extension GistFileEditor {
         await adopt(
           try await model.serially {
             try await model.draftStore.compareWithGitHub(
-              stored, remote: remote.content, revision: remote.gist.revision)
+              stored, text: latest.content, revision: latest.gist.revision)
           })
         try await model.reloadLocalState(accountID: read.accountID)
-      } else if let content = remote.content, !sourceEqual(content, read.text) {
+      } else if let content = latest.content, !sourceEqual(content, read.text) {
         // Every text change bumps the generation, so this is refused if you typed after the fetch.
         try await commitMutation(
           Edit(
             range: NSRange(location: 0, length: editor.text.utf16.count),
             expected: editor.text, replacement: content),
           expectedGeneration: generation
-        ) { read.adopting(GitHubVersion(text: content, revision: remote.gist.revision)) }
+        ) { read.adopting(GitHubVersion(text: content, revision: latest.gist.revision)) }
       }
       remoteInspectionProblem = nil
       refreshedAt = .now

@@ -313,24 +313,24 @@ public actor GistFileDraftStore {
         return try settle(row)
     }
 
-    /// Compares GitHub's copy of the file, `remote` or none, with your draft, for a publish and for
+    /// Compares GitHub's copy of the file, `text` or none, with your draft, for a publish and for
     /// opening a note. If GitHub has the sent text or your text, it's confirmed. GitHub's copy
     /// changing from the base is a conflict. Sent text GitHub doesn't have is left for the next
     /// publish to forget. Typing since the draft was read means a newer publish or check follows, so
     /// this one stops here.
-    public func compareWithGitHub(_ read: GistFileDraft, remote: String?, revision: String?) throws -> GistFileDraft {
+    public func compareWithGitHub(_ read: GistFileDraft, text: String?, revision: String?) throws -> GistFileDraft {
         guard let row = try stored(read.id, accountID: read.accountID), sourceEqual(row.text, read.text)
         else { throw CancellationError() }
         let draft = row.draft
         guard let gistID = row.gistID, draft.conflict == nil else { return draft }
-        let version = GitHubVersion(text: remote ?? "", revision: revision)
+        let version = GitHubVersion(text: text ?? "", revision: revision)
         if let sent = row.sent {
-            guard sourceEqual(remote, sent) else { return draft }
+            guard sourceEqual(text, sent) else { return draft }
             return try confirm(draft, gistID: gistID, base: version)
         }
-        if sourceEqual(remote, row.text) { return try confirm(draft, gistID: gistID, base: version) }
+        if sourceEqual(text, row.text) { return try confirm(draft, gistID: gistID, base: version) }
         // A file GitHub deleted is a conflict with no text.
-        let moved = draft.base.map { !sourceEqual(remote ?? "", $0.text) } ?? (remote != nil)
+        let moved = draft.base.map { !sourceEqual(text ?? "", $0.text) } ?? (text != nil)
         guard moved else { return draft }
         row.conflict = version
         try commit()

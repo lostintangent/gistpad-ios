@@ -42,12 +42,8 @@ public struct GistPadAccount: Codable, Equatable, Sendable, Identifiable {
 }
 
 /// Where the GitHub token and Supabase session live, on this device only.
-public struct Keychain: AuthLocalStorage {
-    private let service: String
-
-    public init(service: String = "dev.gistpad.GistPad.credentials") {
-        self.service = service
-    }
+private struct Keychain: AuthLocalStorage {
+    private let service = "dev.gistpad.GistPad.credentials"
 
     private func query(_ key: String) -> [String: Any] {
         [
@@ -58,7 +54,7 @@ public struct Keychain: AuthLocalStorage {
         ]
     }
 
-    public func store(key: String, value: Data) throws {
+    func store(key: String, value: Data) throws {
         let attributes: [String: Any] = [
             kSecValueData as String: value,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
@@ -72,7 +68,7 @@ public struct Keychain: AuthLocalStorage {
         }
     }
 
-    public func retrieve(key: String) throws -> Data? {
+    func retrieve(key: String) throws -> Data? {
         var query = query(key)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -84,7 +80,7 @@ public struct Keychain: AuthLocalStorage {
         return data
     }
 
-    public func remove(key: String) throws {
+    func remove(key: String) throws {
         let status = SecItemDelete(query(key) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw AccountError.keychain(status)
@@ -100,17 +96,16 @@ public actor GistPadAccountStore {
     private let credentials: any AuthLocalStorage
     private let publishableKey: String
     private let httpSession: URLSession
-    private let launchFlow: LaunchFlow?
+    private let launchFlow: (@MainActor @Sendable (URL) async throws -> URL)?
 
-    /// Stands in for the system web session: it gets the sign-in URL and returns the callback.
-    public typealias LaunchFlow = @MainActor @Sendable (URL) async throws -> URL
-
-    /// An account store whose `signIn()` goes through `launchFlow` when there is one, as the
-    /// fixture server's does, and through the system web session otherwise.
+    /// An account store that signs in through `launchFlow`, which takes the sign-in URL and returns
+    /// the callback, as the fixture server's does, or else through the system web session.
     public init(
-        publishableKey: String, credentials: any AuthLocalStorage = Keychain(), session: URLSession? = nil,
-        automaticallyRefreshesToken: Bool = true, launchFlow: LaunchFlow? = nil
+        publishableKey: String, credentials: (any AuthLocalStorage)? = nil, session: URLSession? = nil,
+        automaticallyRefreshesToken: Bool = true,
+        launchFlow: (@MainActor @Sendable (URL) async throws -> URL)? = nil
     ) {
+        let credentials = credentials ?? Keychain()
         self.launchFlow = launchFlow
         self.credentials = credentials
         self.publishableKey = publishableKey

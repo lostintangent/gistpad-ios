@@ -138,16 +138,15 @@ extension GistPadModel {
   private func compareWithGitHub(
     _ draft: GistFileDraft, gistID: String, on github: GitHubClient
   ) async throws -> GistFileDraft {
-    let remote = try await github.remoteFile(
-      gistID: gistID, ownerID: try ownerID, filename: draft.filename)
-    try cache(remote, filename: draft.filename, accountID: draft.accountID)
+    let latest = try await github.file(gistID: gistID, ownerID: try ownerID, filename: draft.filename)
+    try cache(latest, filename: draft.filename, accountID: draft.accountID)
     var draft = draft
-    if let sent = draft.sent, !sourceEqual(remote.content, sent) {
+    if let sent = draft.sent, !sourceEqual(latest.content, sent) {
       draft = try await draftStore.forgetSent(draft)
       if draft.isPublished { return draft }
     }
     return try await draftStore.compareWithGitHub(
-      draft, remote: remote.content, revision: remote.gist.revision)
+      draft, text: latest.content, revision: latest.gist.revision)
   }
 
   /// A create that was cut off may have made the gist already. It's found by its description and
@@ -159,16 +158,15 @@ extension GistPadModel {
     let size = Gist.File.encodeContent(sent).utf8.count
     for gist in try await github.listGists()
     where (gist.description ?? "") == (draft.newGistName ?? "") && gist.files[draft.filename]?.size == size {
-      let remote = try await github.remoteFile(
-        gistID: gist.id, ownerID: try ownerID, filename: draft.filename)
-      if sourceEqual(remote.content, sent) {
+      let found = try await github.file(gistID: gist.id, ownerID: try ownerID, filename: draft.filename)
+      if sourceEqual(found.content, sent) {
         try updateCache(draft.accountID) {
-          $0.insert(remote.gist)
-          $0.store(sent, of: draft.filename, in: remote.gist)
+          $0.insert(found.gist)
+          $0.store(sent, of: draft.filename, in: found.gist)
         }
         return try await draftStore.confirm(
-          draft, gistID: remote.gist.id,
-          base: GitHubVersion(text: sent, revision: remote.gist.revision))
+          draft, gistID: found.gist.id,
+          base: GitHubVersion(text: sent, revision: found.gist.revision))
       }
     }
     return try await draftStore.forgetSent(draft)
