@@ -250,6 +250,13 @@ extension Logger {
 private final class PreviewWebView: WKWebView {
     var onBuildCommentMenu: (() -> UIDeferredMenuElement?)?
 
+    // The preview stays inside the horizontal safe area, but a narrowing frame can overlap it
+    // for one layout pass, and that brief inset stops WebKit anchoring the reading position.
+    override var safeAreaInsets: UIEdgeInsets {
+        let insets = super.safeAreaInsets
+        return UIEdgeInsets(top: insets.top, left: 0, bottom: insets.bottom, right: 0)
+    }
+
     override var frame: CGRect {
         willSet {
             guard newValue.width != frame.width, window != nil else { return }
