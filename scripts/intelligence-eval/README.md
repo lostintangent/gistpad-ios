@@ -57,8 +57,8 @@ General Edit on these longer notes selects from an outline with direct-content
 previews, then selects one block under that heading. The model rewrites the
 section's own content, but only changed hunks entirely within the selected block
 are proposed. An oversized section falls back to rewriting that block alone.
-An unchanged section does not get a block-only retry: that produced extra
-headings and fences outside the requested content in the measured run.
+A section rewrite that leaves the selected block unchanged gets one focused
+retry on that block alone.
 The review is still required: a wrong selection can propose an unrelated change,
 and the eval checks every byte outside the requested region. Short notes retain
 their existing JSON input and whole-note rewrite; scoped content uses raw
@@ -99,7 +99,7 @@ their p50/p90 plus retry counts and failures.
 The output contains a per-case pass-rate table and content-free failure categories.
 The acceptance floor is 100% for every Edit case and at least 90% for favorite
 cases across at least 10 repetitions. Below-floor runs exit unsuccessfully.
-The 24/35 single-pass Edit path is a Build 34 field candidate by product decision,
-not a passing evaluation. The user must review every proposed diff before Apply.
+Edit ships below that floor by product decision, so the user must review every
+proposed diff before Apply.
 Record the runtime model variant and context alongside results. A Mac Core result
 is not proof of Advanced-model behavior on the Duo.

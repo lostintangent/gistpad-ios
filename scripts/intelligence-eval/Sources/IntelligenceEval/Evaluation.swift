@@ -51,7 +51,6 @@ enum Evaluator {
     cases: [EvalCase], repeats: Int,
     onResult: @MainActor ([EvalResult]) throws -> Void
   ) async throws {
-    _ = try await OnDeviceModel().modelInfo()
     var results: [EvalResult] = []
     for repeatIndex in 1...repeats {
       for item in cases {
@@ -71,6 +70,24 @@ enum Evaluator {
         var answerSeconds: Double?
         var preparationSeconds: Double?
         var firstVisibleSeconds: Double?
+        func record(
+          passed: Bool, errorCode: String?, errorType: String? = nil, answer: String? = nil,
+          proposed: String? = nil, modelGrade: Bool? = nil, modelGradeError: String? = nil
+        ) -> EvalResult {
+          EvalResult(
+            caseID: item.id, repeatIndex: repeatIndex, requestID: request.id,
+            passed: passed, elapsedSeconds: elapsed(),
+            answerCompletionSeconds: answerSeconds,
+            answerPreparationSeconds: preparationSeconds,
+            firstVisibleSeconds: firstVisibleSeconds,
+            qualityRejectionCount: backend.rejectedAnswers.count,
+            qualityRetryCount: max(0, backend.answerCalls - 1),
+            errorCode: errorCode, errorType: errorType, answer: answer, proposedSource: proposed,
+            rejectedAnswers: backend.rejectedAnswers,
+            editOperations: backend.operations,
+            inputTokens: backend.inputTokens,
+            modelGrade: modelGrade, modelGradeError: modelGradeError)
+        }
         let result: EvalResult
         do {
           var answer: String?
@@ -142,37 +159,15 @@ enum Evaluator {
               passed = false
             }
           }
-          result = EvalResult(
-            caseID: item.id, repeatIndex: repeatIndex, requestID: request.id,
-            passed: passed, elapsedSeconds: elapsed(),
-            answerCompletionSeconds: answerSeconds,
-            answerPreparationSeconds: preparationSeconds,
-            firstVisibleSeconds: firstVisibleSeconds,
-            qualityRejectionCount: backend.rejectedAnswers.count,
-            qualityRetryCount: max(0, backend.answerCalls - 1),
-            errorCode: passed ? nil : expectationFailure ?? "expectationMismatch", errorType: nil,
-            answer: answer,
-            proposedSource: proposed,
-            rejectedAnswers: backend.rejectedAnswers,
-            editOperations: backend.operations,
-            inputTokens: backend.inputTokens,
-            modelGrade: modelGrade, modelGradeError: modelGradeError)
+          result = record(
+            passed: passed, errorCode: passed ? nil : expectationFailure ?? "expectationMismatch",
+            answer: answer, proposed: proposed, modelGrade: modelGrade,
+            modelGradeError: modelGradeError)
         } catch {
-          let code = (error as? IntelligenceError).map { String(describing: $0) } ?? "unexpected"
-          let type = String(reflecting: type(of: error))
-          result = EvalResult(
-            caseID: item.id, repeatIndex: repeatIndex, requestID: request.id,
-            passed: false, elapsedSeconds: elapsed(),
-            answerCompletionSeconds: answerSeconds,
-            answerPreparationSeconds: preparationSeconds,
-            firstVisibleSeconds: firstVisibleSeconds,
-            qualityRejectionCount: backend.rejectedAnswers.count,
-            qualityRetryCount: max(0, backend.answerCalls - 1),
-            errorCode: code, errorType: type, answer: nil, proposedSource: nil,
-            rejectedAnswers: backend.rejectedAnswers,
-            editOperations: backend.operations,
-            inputTokens: backend.inputTokens,
-            modelGrade: nil, modelGradeError: nil)
+          result = record(
+            passed: false,
+            errorCode: (error as? IntelligenceError).map { String(describing: $0) } ?? "unexpected",
+            errorType: String(reflecting: type(of: error)))
         }
         results.append(result)
         try onResult(results)
