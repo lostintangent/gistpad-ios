@@ -2,7 +2,26 @@
   "sourceLanguage" : "en",
   "strings" : {
     "%lld daily notes" : {
-
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld daily note"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld daily notes"
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "%lld unfinished tasks" : {
       "localizations" : {
@@ -83,9 +102,6 @@
 
     },
     "A thought, a list, a little thing worth keeping. Start your first gist." : {
-
-    },
-    "1 daily note" : {
 
     },
     "By %@" : {
@@ -347,11 +363,27 @@
     "More" : {
 
     },
-    "1 gist" : {
-
-    },
     "%lld gists" : {
-
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gist"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld gists"
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "Delete “%@”?" : {
 

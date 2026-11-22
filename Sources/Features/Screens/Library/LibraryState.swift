@@ -217,16 +217,12 @@ public final class LibraryState {
         Set(gists.compactMap(\.gistID)).count
     }
 
-    public static func gistCountLabel(_ count: Int) -> String {
-        count == 1
-            ? String(localized: "1 gist", bundle: .module)
-            : String(localized: "\(count) gists", bundle: .module)
+    static func gistCountLabel(_ count: Int) -> String {
+        String(localized: "\(count) gists", bundle: .module)
     }
 
-    public static func dailyNoteCountLabel(_ count: Int) -> String {
-        count == 1
-            ? String(localized: "1 daily note", bundle: .module)
-            : String(localized: "\(count) daily notes", bundle: .module)
+    static func dailyNoteCountLabel(_ count: Int) -> String {
+        String(localized: "\(count) daily notes", bundle: .module)
     }
 
     private static func includes(_ gist: GistItem, in section: LibrarySection) -> Bool {
