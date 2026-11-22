@@ -51,7 +51,16 @@ enum DateGroup: Hashable, Sendable {
         }
     }
 
-    fileprivate var sortKey: (rank: Int, recency: TimeInterval) {
+    /// Groups gists like Notes, newest group first, and keeps their order within each group.
+    static func sections(
+        for gists: [GistItem], relativeTo now: Date, calendar: Calendar
+    ) -> [(group: DateGroup, gists: [GistItem])] {
+        Dictionary(grouping: gists) { group(for: $0.updatedAt, relativeTo: now, calendar: calendar) }
+            .sorted { $0.key.sortKey < $1.key.sortKey }
+            .map { (group: $0.key, gists: $0.value) }
+    }
+
+    private var sortKey: (rank: Int, recency: TimeInterval) {
         switch self {
         case .today: (0, 0)
         case .yesterday: (1, 0)
@@ -61,30 +70,5 @@ enum DateGroup: Hashable, Sendable {
         case .year(let start): (5, -start.timeIntervalSinceReferenceDate)
         case .undated: (6, 0)
         }
-    }
-}
-
-struct DateSection: Identifiable, Equatable, Sendable {
-    let group: DateGroup
-    let gists: [GistItem]
-
-    var id: DateGroup { group }
-
-    static func sections(
-        for gists: [GistItem], relativeTo now: Date, calendar: Calendar
-    ) -> [DateSection] {
-        var buckets: [DateGroup: [GistItem]] = [:]
-        for gist in gists {
-            let group = DateGroup.group(for: gist.updatedAt, relativeTo: now, calendar: calendar)
-            buckets[group, default: []].append(gist)
-        }
-        return buckets
-            .sorted { $0.key.sortKey < $1.key.sortKey }
-            .map { entry in
-                let members = entry.key == .undated
-                    ? entry.value
-                    : entry.value.sorted { ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast) }
-                return DateSection(group: entry.key, gists: members)
-            }
     }
 }

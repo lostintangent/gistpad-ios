@@ -146,7 +146,9 @@ public struct LibraryView: View {
                 if !pinnedGists.isEmpty {
                     pinnedSection(now: context.date)
                 }
-                ForEach(dateSections(now: context.date)) { dateSection($0, now: context.date) }
+                ForEach(dateSections(now: context.date), id: \.group) {
+                    dateSection($0.group, gists: $0.gists, now: context.date)
+                }
                 ForEach(displayedSections) { librarySection($0, now: context.date) }
                 if !isLoading && (state.hasFilters ? !state.hasMatches : !hasVisibleGists) {
                     emptyState
@@ -172,8 +174,8 @@ public struct LibraryView: View {
         state.matchingGists(in: .gists).filter(\.isPinned)
     }
 
-    private func dateSections(now: Date) -> [DateSection] {
-        DateSection.sections(
+    private func dateSections(now: Date) -> [(group: DateGroup, gists: [GistItem])] {
+        DateGroup.sections(
             for: state.matchingGists(in: .gists).filter { !$0.isPinned },
             relativeTo: now, calendar: calendar)
     }
@@ -304,20 +306,20 @@ public struct LibraryView: View {
     }
 
     @ViewBuilder
-    private func dateSection(_ section: DateSection, now: Date) -> some View {
-        if section.group == .undated {
+    private func dateSection(_ group: DateGroup, gists: [GistItem], now: Date) -> some View {
+        if group == .undated {
             Section {
-                rows(section.gists, now: now)
+                rows(gists, now: now)
             }
         } else {
-            let title = section.group.title(locale: locale, calendar: calendar)
-            disclosureSection(isExpanded: isExpanded(section.group)) {
-                rows(section.gists, now: now)
+            let title = group.title(locale: locale, calendar: calendar)
+            disclosureSection(isExpanded: isExpanded(group)) {
+                rows(gists, now: now)
             } header: {
                 sectionHeader(
-                    Text(verbatim: title), count: section.gists.count,
-                    countLabel: LibraryState.gistCountLabel(section.gists.count),
-                    isExpanded: isExpanded(section.group), id: "library-section-\(title)")
+                    Text(verbatim: title), count: gists.count,
+                    countLabel: LibraryState.gistCountLabel(gists.count),
+                    isExpanded: isExpanded(group), id: "library-section-\(title)")
             }
         }
     }
