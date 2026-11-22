@@ -2,8 +2,6 @@
 import Testing
 import UIKit
 
-@testable import GistPad
-
 extension EditorContinuityTests {
   @Test func completeWritingToolsUsesPlainSourceAndAbsoluteIgnoredRanges() {
     let source = "日本語 👩🏽‍💻 before ``a ` b`` after"

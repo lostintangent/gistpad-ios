@@ -3,9 +3,6 @@ import SwiftUI
 import Testing
 import UIKit
 
-@testable import GistPad
-@testable import Model
-
 @Suite(.serialized)
 @MainActor
 struct EditorContinuityTests {
