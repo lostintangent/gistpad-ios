@@ -150,17 +150,17 @@ struct PreviewWebKitTests {
             """
             await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
             if (scrollY < 2000) throw Error('The native long note is not scrolled');
-            const top = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop);
+            // The page's viewport starts below the bars WebKit knows obscure it.
             const x = document.querySelector('article').getBoundingClientRect().left + 8;
-            const position = document.caretPositionFromPoint?.(x, top + 1);
-            const range = position ? document.createRange() : document.caretRangeFromPoint(x, top + 1);
+            const position = document.caretPositionFromPoint?.(x, 1);
+            const range = position ? document.createRange() : document.caretRangeFromPoint(x, 1);
             if (position) range.setStart(position.offsetNode, position.offset);
             if (range.startContainer.nodeType !== Node.TEXT_NODE) throw Error('No native reading character');
             const offset = Math.min(range.startOffset, range.startContainer.textContent.length - 1);
             range.setStart(range.startContainer, offset);
             range.setEnd(range.startContainer, offset + 1);
             window.readingCharacter = range;
-            window.readingCharacterTop = range.getBoundingClientRect().top - top;
+            window.readingCharacterTop = range.getBoundingClientRect().top;
             """,
             arguments: [:], in: nil, contentWorld: .page)
         var displacements: [Double] = []
@@ -175,8 +175,7 @@ struct PreviewWebKitTests {
                 let displacement = try #require(try await webView.callAsyncJavaScript(
                     """
                     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-                    const top = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop);
-                    return window.readingCharacter.getBoundingClientRect().top - top - window.readingCharacterTop;
+                    return window.readingCharacter.getBoundingClientRect().top - window.readingCharacterTop;
                     """,
                     arguments: [:], in: nil, contentWorld: .page) as? Double)
                 displacements.append(displacement)
@@ -200,10 +199,10 @@ struct PreviewWebKitTests {
                 #expect(findWebView(in: controller.view) === webView)
                 let readingOffset = webView.scrollView.contentOffset.y + webView.scrollView.adjustedContentInset.top
                 #expect(abs(readingOffset - originalReadingOffset) <= 1)
-                let scrollPadding = try #require(try await webView.callAsyncJavaScript(
-                    "return parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop);",
-                    arguments: [:], in: nil, contentWorld: .page) as? Double)
-                #expect(abs(scrollPadding - webView.scrollView.adjustedContentInset.top) <= 1)
+                let pageHeight = try #require(try await webView.callAsyncJavaScript(
+                    "return innerHeight;", arguments: [:], in: nil, contentWorld: .page) as? Double)
+                let inset = webView.scrollView.adjustedContentInset
+                #expect(abs(pageHeight - (webView.bounds.height - inset.top - inset.bottom)) <= 1)
             }
         }
         #expect(!events.contains {
@@ -241,6 +240,42 @@ struct PreviewWebKitTests {
         try await waitFor("the page to show for a moment") { frames.count >= 45 }
         Attachment.record(frames.joined(separator: "\n"), named: "first-frames-offset-inset.txt")
         #expect(misplaced == 0, "\(misplaced) of \(frames.count) frames showed text out of place")
+    }
+
+    @Test("A contents link lands its heading just below the bar", arguments: [
+        CGSize(width: 402, height: 874), CGSize(width: 951, height: 669),
+    ])
+    func contentsLinkLandsBelowTheBar(size: CGSize) async throws {
+        let paragraph = "A paragraph long enough to fill a few lines of the reading column, so every section is tall."
+        let markdown = "# Contents\n\n```toc\n```\n\n" + (1...20).map {
+            "## Section \($0)\n\n" + Array(repeating: paragraph, count: 4).joined(separator: "\n\n")
+        }.joined(separator: "\n\n")
+        let navigation = UINavigationController(rootViewController: UIViewController())
+        let window = testWindow(frame: CGRect(origin: .zero, size: size))
+        window.rootViewController = navigation
+        window.makeKeyAndVisible()
+        defer { tearDown(window) }
+        let preview = UIHostingController(
+            rootView: MarkdownPreviewView(markdown: markdown, fileID: "contents", generation: 0) { _ in })
+        preview.title = "Contents"
+        navigation.pushViewController(preview, animated: false)
+        try await waitFor("the long page") {
+            (findWebView(in: preview.view)?.scrollView.contentSize.height ?? 0) > 3_000
+        }
+        let webView = try #require(findWebView(in: preview.view))
+        let scrollView = webView.scrollView
+        try await settle(webView)
+        _ = try await webView.callAsyncJavaScript(
+            "document.querySelector('.markdown-toc a[href=\"#section-12\"]').click();",
+            arguments: [:], in: nil, contentWorld: .page)
+        try await waitFor("the jump") { scrollView.contentOffset.y > 1_000 }
+        try await settle(webView)
+        let heading = try #require(try await webView.callAsyncJavaScript(
+            "return document.getElementById('section-12').getBoundingClientRect().top + scrollY;",
+            arguments: [:], in: nil, contentWorld: .page) as? Double)
+        // Headings keep a 16-point scroll margin, so this holds only when the bar is counted exactly once.
+        let gap = heading - scrollView.contentOffset.y - scrollView.adjustedContentInset.top
+        #expect(abs(gap - 16) <= 1, "The heading landed \(gap) points below the bar")
     }
 
     @Test("A terminated web process renders the same document again")

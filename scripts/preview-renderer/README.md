@@ -25,7 +25,7 @@ HTML is sanitized before Contents, slugs and task annotation, so scripts, forms,
 
 ## Bridge
 
-The page exposes `window.gistpadPreview` (`src/protocol.ts`): `render`, `setAppearance`, `setViewportInsets`, `commentSegments`, `commentSelection` and `setCommentHighlights`. It posts `ready`, `rendered`, `taskToggle`, `link`, `commentActivate` and `failure` to one handler, `gistpadPreview`.
+The page exposes `window.gistpadPreview` (`src/protocol.ts`): `render`, `setAppearance`, `commentSegments`, `commentSelection` and `setCommentHighlights`. It posts `ready`, `rendered`, `taskToggle`, `link`, `commentActivate` and `failure` to one handler, `gistpadPreview`.
 
 Native accepts messages only from the bundle's main frame and drops any from an older generation. A task toggle carries the UTF-16 range of the parsed task's marker plus the expected and replacement markers, and native checks them against the current text before applying the edit. `allowsTaskEdits` travels with each render, so read-only checkboxes never emit edits. Links must be http, https or mailto.
 
@@ -35,7 +35,7 @@ Quote matching in Shared Comments is authoritative. The page catalogs each sanit
 
 ## Scrolling and appearance
 
-The web view runs under the bars. UIKit's automatic content inset puts the first line just below them and lets text scroll up under the glass. Native also hands that inset to WebKit as its obscured insets, so a new page paints its first frame below the bars, and passes it to the page as root scroll-padding, so anchors and revealed passages land below them too. A width change keeps the reading passage in place.
+The web view runs under the bars. UIKit's automatic content inset puts the first line just below them and lets text scroll up under the glass. Native also hands that inset to WebKit as its obscured insets, so a new page paints its first frame below the bars, and WebKit lands anchors and revealed passages between them. A width change keeps the reading passage in place.
 
 Appearance travels apart from Markdown, as CSS variables that `PreviewAppearance` resolves from native traits: semantic colors, the personal accent's roles and Dynamic Type metrics. A change never reparses the note or drops the selection. `docs/design.md` specifies the look.
 

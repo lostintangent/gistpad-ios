@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Preview, PreviewErrorBoundary } from "./Preview";
 import { send, type RenderRequest } from "./protocol";
 import { setAppearance } from "./appearance";
-import { setViewportInsets } from "./viewport";
 import { CommentHighlightController } from "./commentHighlights";
 import "../../../../gistpad.dev/src/features/markdown/index.css";
 import "./style.css";
@@ -13,7 +12,6 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false 
 let comments: CommentHighlightController | undefined;
 window.gistpadPreview = Object.freeze({
   setAppearance,
-  setViewportInsets,
   commentSegments() {
     if (!comments) throw new Error("There is no rendered document.");
     return comments.catalog();

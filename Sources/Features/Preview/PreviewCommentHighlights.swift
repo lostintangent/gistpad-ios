@@ -117,7 +117,7 @@ final class PreviewCommentHighlights {
                     "showsInlineComments": configuration.showsInlineComments,
                     "allowsInteraction": allowsInteraction, "accent": accent
                 ]
-                // The page reveals the selected passage itself, within the native viewport's scroll padding.
+                // The page reveals the selected passage itself, and WebKit centers it between the bars.
                 _ = try await webView.callAsyncJavaScript(
                     "window.gistpadPreview.setCommentHighlights(payload);",
                     arguments: ["payload": payload], in: nil, contentWorld: .page)

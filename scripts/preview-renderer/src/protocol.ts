@@ -38,7 +38,6 @@ declare global {
     gistpadPreview: {
       render: (request: RenderRequest) => void;
       setAppearance: (appearance: import("./appearance").Appearance) => void;
-      setViewportInsets: (insets: import("./viewport").ViewportInsets) => void;
       commentSegments: () => string[];
       commentSelection: () => string | null;
       setCommentHighlights: (value: import("./commentHighlights").HighlightState) => void;

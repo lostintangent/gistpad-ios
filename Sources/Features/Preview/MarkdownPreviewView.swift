@@ -115,7 +115,6 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         private var file: PreviewFile
         private var lastSent: PreviewFile?
         private var lastAppearance: PreviewAppearance?
-        private var lastViewportInsets: UIEdgeInsets?
         private var ready = false
 
         fileprivate init(file: PreviewFile, onEvent: @escaping @MainActor (PreviewEvent) -> Void) {
@@ -136,24 +135,14 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
         }
 
         func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
-            // WebKit places a new page, and keeps fixed content, below the bars it knows obscure it.
+            // WebKit keeps a new page, fixed content, anchors and revealed passages clear of the bars it
+            // knows obscure it.
             webView?.obscuredContentInsets = scrollView.adjustedContentInset
-            updateViewport()
-        }
-
-        // Platform gap: WebKit scrolls anchors and revealed passages under the bars UIKit insets the page
-        // by. Remove this scroll padding when obscuredContentInsets covers scrollIntoView.
-        private func updateViewport() {
-            guard ready, let insets = webView?.scrollView.adjustedContentInset, lastViewportInsets != insets else { return }
-            lastViewportInsets = insets
-            call("window.gistpadPreview.setViewportInsets(payload);",
-                 ["payload": ["top": insets.top, "bottom": insets.bottom]])
         }
 
         fileprivate func update(_ file: PreviewFile) {
             self.file = file
             guard ready else { return }
-            updateViewport()
             if let appearance, appearance != lastAppearance {
                 lastAppearance = appearance
                 call("window.gistpadPreview.setAppearance(payload);", ["payload": appearance.arguments])
@@ -208,7 +197,6 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             ready = false
             lastSent = nil
             lastAppearance = nil
-            lastViewportInsets = nil
             commentHighlights.reset()
             // Crash recovery leaves about:blank, so reload() would bounce on an empty page.
             webView.load(URLRequest(url: PreviewResourceHandler.pageURL))
