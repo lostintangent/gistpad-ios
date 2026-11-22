@@ -82,6 +82,11 @@ final class Phone {
     try #require(await fileEditor.waitForLocalSave())
   }
 
+  /// Stops typing and waits for autosave to publish the file, 5 seconds later.
+  func waitForAutosave(_ fileEditor: GistFileEditor) async {
+    for await status in Observations({ fileEditor.status }) where status == .published { return }
+  }
+
   /// Goes back to the list.
   func leave(_ fileEditor: GistFileEditor) async {
     model.showLibrary()

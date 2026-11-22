@@ -5,6 +5,7 @@ import Testing
 @testable import Model
 
 @MainActor
+@Suite(.timeLimit(.minutes(1)))
 struct PublishingTests {
   @Test func `What I type is saved here at once and publishes once I stop`() async throws {
     let phone = try await Phone { $0.addGist(id: "a", description: "First", files: ["README.md": "One"]) }
@@ -31,7 +32,7 @@ struct PublishingTests {
     await publishing.value
     #expect(phone.onGitHub("a")?.utf8.elementsEqual(typed.utf8) == true)
     #expect(a.status == .unpublished)
-    await a.updateAutosave()?.value
+    await phone.waitForAutosave(a)
     #expect(phone.publishes == ["PATCH /gists/a", "PATCH /gists/a"])
     #expect(phone.onGitHub("a") == "Second")
 
@@ -74,7 +75,7 @@ struct PublishingTests {
     switch moment {
     case .autosave:
       try await phone.type("# Today\n\n- [ ] Walk the dog", in: today)
-      await today.updateAutosave()?.value
+      await phone.waitForAutosave(today)
     case .leavingTheNote: await phone.leave(today)
     case .leavingTheApp: await phone.leaveApp()
     case .returningToTheApp: await phone.returnToApp()
