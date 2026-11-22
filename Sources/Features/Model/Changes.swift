@@ -92,9 +92,23 @@ extension GistPadModel {
 
   /// Renames a file's gist: on GitHub once it has one, else the new gist you're writing.
   public func rename(_ draft: GistFileDraft, to title: String) async throws {
-    if let gistID = draft.gistID { return try await renameGist(gistID, to: title) }
-    try Self.validateTitle(title)
-    try await change { _ in
+    guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      throw ChangeError.invalidTitle
+    }
+    try await change { account in
+      if let gistID = draft.gistID {
+        // The gist's drafts on this iPhone take its new name too.
+        return try await landed(
+          try await serially {
+            let (github, gist) = try await ownedGist(gistID, account: account)
+            let local = try await unsentDrafts(gistID: gistID, accountID: account.id)
+            let updated = try await github.updateDescription(title, gist: gist)
+            for named in local where named.newGistName != nil {
+              _ = try await draftStore.rename(named, newGistName: updated.description ?? "")
+            }
+            return updated
+          })
+      }
       let renamed = try await serially {
         guard try await draftStore.current(draft)?.sent == nil else {
           throw ChangeError.publicationInProgress
@@ -103,23 +117,6 @@ extension GistPadModel {
       }
       present(GistFile(draft: renamed, gist: nil))
       try await editors[renamed.id]?.refreshMetadata()
-    }
-  }
-
-  /// Renames a gist on GitHub and its drafts on this iPhone.
-  private func renameGist(_ gistID: String, to title: String) async throws {
-    try Self.validateTitle(title)
-    try await change { account in
-      try await landed(
-        try await serially {
-          let (github, gist) = try await ownedGist(gistID, account: account)
-          let local = try await unsentDrafts(gistID: gistID, accountID: account.id)
-          let updated = try await github.updateDescription(title, gist: gist)
-          for draft in local where draft.newGistName != nil {
-            _ = try await draftStore.rename(draft, newGistName: updated.description ?? "")
-          }
-          return updated
-        })
     }
   }
 
@@ -243,13 +240,18 @@ extension GistPadModel {
     isApplying = true
     var locked: [GistFileEditor] = []
     defer {
-      for fileEditor in locked { fileEditor.endDestructiveAction() }
+      for fileEditor in locked {
+        fileEditor.isLanding = false
+        fileEditor.updateEditable()
+      }
       isApplying = false
     }
     do {
       for fileEditor in editors.values where locks(fileEditor) && fileEditor.details.isOwned {
         await fileEditor.waitForPublication()
-        try fileEditor.beginDestructiveAction()
+        guard fileEditor.canEdit, !fileEditor.isPublishing else { throw ChangeError.publicationInProgress }
+        fileEditor.isLanding = true
+        fileEditor.updateEditable()
         locked.append(fileEditor)
       }
       for fileEditor in editors.values {
@@ -351,43 +353,20 @@ extension GistFileEditor {
     guard let gist = file.gist, details.isOwned else { return nil }
     return gist.isDailyNote ? .file(gistID: gist.id, filename: file.filename) : .gist(id: gist.id)
   }
-
-  func beginDestructiveAction() throws {
-    guard canEdit, !isPublishing else { throw ChangeError.publicationInProgress }
-    isLanding = true
-    updateEditable()
-  }
-
-  func endDestructiveAction() {
-    isLanding = false
-    updateEditable()
-  }
 }
 
 extension GistPadModel {
-  private static func validateTitle(_ title: String) throws {
-    guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      throw ChangeError.invalidTitle
-    }
-  }
-
   private static func validateFilename(_ filename: String) throws {
     guard !filename.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
       filename.hasSuffix(".md"), !filename.contains("/"), !filename.contains("\0")
     else { throw ChangeError.invalidFilename }
   }
-}
 
-extension GistPadModel {
   /// A gist the account owns, read fresh from GitHub before changing it.
-  private func ownedGist(
-    _ id: String, account: GistPadAccount
-  ) async throws -> (GitHubClient, Gist) {
+  private func ownedGist(_ id: String, account: GistPadAccount) async throws -> (GitHubClient, Gist) {
     let github = await client(accountID: account.id)
     let gist = try await github.gist(id: id)
-    guard gist.owner?.id == account.github.id else {
-      throw DraftError.readOnly
-    }
+    guard gist.owner?.id == account.github.id else { throw DraftError.readOnly }
     return (github, gist)
   }
 
@@ -395,9 +374,7 @@ extension GistPadModel {
   /// land under the old name.
   private func unsentDrafts(gistID: String, accountID: UUID) async throws -> [GistFileDraft] {
     let local = try await draftStore.drafts(accountID: accountID).filter { $0.gistID == gistID }
-    guard !local.contains(where: { $0.sent != nil }) else {
-      throw ChangeError.publicationInProgress
-    }
+    guard !local.contains(where: { $0.sent != nil }) else { throw ChangeError.publicationInProgress }
     return local
   }
 }
