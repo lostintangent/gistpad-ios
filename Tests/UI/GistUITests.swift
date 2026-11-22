@@ -91,14 +91,13 @@ final class GistUITests: XCTestCase {
     app.typeText("B")
     try waitUntil("B where it was tapped, in the caret's word") { landedInside("B", line: 3) }
 
-    // A tap on the caret still shows its menu, and leaves the caret where it was.
-    point(line: 4, x: 60).tap()
-    app.typeText("C")
-    try waitUntil("C in the middle of the word") { landedInside("C", line: 4) }
-    point(line: 4, x: 60).tap()
+    // A tap on the caret, or within about 30 pt of it, still shows its menu and leaves the caret
+    // where it was.
+    point(line: 4, x: 200).tap()
+    point(line: 4, x: 140).tap()
     try waitUntil("the caret's menu") { app.menuItems["Select All"].exists }
-    app.typeText("c")
-    try waitUntil("c right after C") { landedInside("Cc", line: 4) }
+    app.typeText("C")
+    try waitUntil("C where the caret was") { line(4) == "UncharacteristicallyC" }
 
     point(line: 5, x: 80).doubleTap()
     try waitUntil("the selection's menu") { app.menuItems["Copy"].exists }
@@ -111,6 +110,10 @@ final class GistUITests: XCTestCase {
     try waitUntil("the keyboard") { app.keyboards.firstMatch.exists }
     app.typeText("E")
     try waitUntil("E in the middle of the word") { landedInside("E", line: 6) }
+
+    // A tap on a misspelled word still selects it and offers corrections.
+    point(line: 2, x: 80).tap()
+    try waitUntil("corrections") { app.menuItems["Uncharacteristically"].exists }
   }
 
   func testSwitchingFiles() throws {
