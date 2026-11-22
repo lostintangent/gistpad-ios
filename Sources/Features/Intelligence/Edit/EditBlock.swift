@@ -11,6 +11,8 @@ struct EditBlock {
   let marker: NSRange?
   let taskMarker: NSRange?
 
+  // Platform gap: AFM Core names a move's target less reliably and more slowly than this English
+  // pattern. Remove when a model-extracted target passes the Edit eval.
   static func moveTarget(in instruction: String) -> String? {
     instruction.firstMatch(of: /(?i)\b(?:move|relocate)\s+(.+?)\s+from\s+.+?\s+to\s+/)
       .map { String($0.1) }

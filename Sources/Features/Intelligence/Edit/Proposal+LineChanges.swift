@@ -25,6 +25,8 @@ extension Proposal.Change {
     var new = unwrapped(revised, note: old.map(\.text)).components(separatedBy: "\n")
     while new.first?.allSatisfy(\.isWhitespace) == true { new.removeFirst() }
     while new.last?.allSatisfy(\.isWhitespace) == true { new.removeLast() }
+    // Platform gap: the model adds blank lines between the items of a tight list. Remove when an
+    // on-device model keeps a tight list tight.
     if !hasLooseList(old.map(\.text)) { new = tightened(new) }
     // An unclosed fence would turn the rest of the note into code.
     guard !new.isEmpty, fences(in: new) % 2 == fences(in: old.map(\.text)) % 2 else {
@@ -133,8 +135,8 @@ extension Proposal.Change {
     }
   }
 
-  /// The model drops trailing spaces, respaces words and curls straight quotes, so a line that
-  /// differs only there is unchanged.
+  // Platform gap: the model drops trailing spaces, respaces words and curls quotes in lines it
+  // copies, so the diff ignores them. Remove when an on-device model copies lines exactly.
   private static func key(_ line: String) -> String {
     let indent = line.prefix { $0 == " " || $0 == "\t" }
     let words = line.dropFirst(indent.count).split(whereSeparator: { $0 == " " || $0 == "\t" })
@@ -193,8 +195,8 @@ extension Proposal.Change {
     return lines
   }
 
-  /// The model sometimes echoes a note of several lines as the JSON string it read, on one line
-  /// with escaped line breaks, or fences its whole reply when the note doesn't start with a fence.
+  // Platform gap: the model sometimes echoes a multiline note as the escaped JSON string it read,
+  // or fences its whole reply. Remove when an on-device model returns the note as plain Markdown.
   private static func unwrapped(_ text: String, note: [String]) -> String {
     var text = text.replacingOccurrences(of: "\r\n", with: "\n")
     if note.count > 1, !text.contains("\n"), text.contains(#"\n"#) {

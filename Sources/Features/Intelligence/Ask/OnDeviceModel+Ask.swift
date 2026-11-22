@@ -41,6 +41,8 @@ extension OnDeviceModel {
     }
   }
 
+  // Platform gap: a guided answer with source IDs came back malformed in 27 of 132 Ask runs, so Ask
+  // streams prose ending in a Sources line. Remove when a Generable answer passes the Ask eval.
   static func parseAnswer(_ content: String, blocks: [SourceBlock]) throws -> ModelAnswer {
     let response = content.trimmingCharacters(in: .whitespacesAndNewlines)
     let marker = /(?i)(?:\n|[ \t]+)\[?sources:\s*([0-9]+(?:\s*,\s*[0-9]+)*)\]?\s*$/
@@ -155,6 +157,8 @@ extension OnDeviceModel {
       """ + preference
   }
 
+  // Platform gap: AFM Core takes reading order or volume counts as preference, so English favorite
+  // questions get ranking guidance. Remove when an on-device model passes the Ask eval without it.
   private static func asksForFavorite(_ question: String) -> Bool {
     let lower = question.lowercased()
     return [

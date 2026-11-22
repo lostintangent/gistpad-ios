@@ -16,7 +16,8 @@ extension OnDeviceModel {
       }
       // A whole note without tasks can't need a task edit, so it goes straight to the rewrite.
       if !pass.isPart, pass.tasks.isEmpty { return try await editOperations(.text, for: pass) }
-      // AFM Core classifies these English additions as task edits despite the intent guidance.
+      // Platform gap: AFM Core classifies these English additions as task edits despite the
+      // intent guidance. Remove when an on-device model passes the Edit eval without this route.
       if pass.instruction.range(
         of: #"\b(paragraph|summary|section|table|introduction|intro)\b"#,
         options: [.regularExpression, .caseInsensitive]) != nil,
@@ -116,7 +117,8 @@ extension OnDeviceModel {
           })
       })
     let prompt = try Self.json(payload)
-    // AFM Core misplaces these English positions without help. See docs/engineering.md.
+    // Platform gap: AFM Core misplaces "at the end" and table-row additions (docs/engineering.md).
+    // Remove when an on-device model passes the Edit eval without these routes.
     let request = pass.instruction.lowercased()
       .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
     let atEnd = !pass.isPart && (request.hasSuffix("at the end") || request.hasSuffix("at end"))
@@ -319,7 +321,8 @@ extension OnDeviceModel {
     case replaceParagraph, makeList, insertParagraph, insertRow
   }
 
-  // AFM Core leaves these English requests unproposed when it rewrites a whole section.
+  // Platform gap: AFM Core leaves these English requests unproposed when it rewrites a whole
+  // section. Remove when an on-device model passes the Edit eval without the focused revision.
   private static func focusedGoal(for block: EditBlock, instruction: String) -> FocusedGoal? {
     let request = instruction.lowercased()
     func has(_ words: String...) -> Bool { words.allSatisfy(request.contains) }

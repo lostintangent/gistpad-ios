@@ -8,7 +8,9 @@ let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 package final class IntelligenceEngine {
   let backend: any IntelligenceModel
   private let framingReserve = 96
-  /// Real answers use under 120 tokens. A runaway repeats itself until this limit stops it.
+  // Platform gap: GenerationOptions has no repetition penalty or stop sequence, so a runaway answer
+  // runs to this limit and is retried once. Remove the retry and raise the limit when it has one.
+  /// Real answers use under 120 tokens.
   private let answerTokens = 384
 
   /// Where a long request is, for the sheet's progress label.
