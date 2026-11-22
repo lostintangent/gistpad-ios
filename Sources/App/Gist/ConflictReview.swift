@@ -188,7 +188,7 @@ private enum ReviewTab: CaseIterable, Hashable {
   }
 }
 
-struct DiffLine: Identifiable, Sendable {
+nonisolated struct DiffLine: Identifiable, Sendable {
   var id: String { "\(isAddition)/\(offset)" }
   let isAddition: Bool
   let offset: Int

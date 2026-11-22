@@ -282,7 +282,8 @@ public actor GitHubClient {
 }
 
 private final class NoRedirects: NSObject, URLSessionTaskDelegate {
-    func urlSession(
+    // `@concurrent`, because Swift 6.4.2 crashes compiling this Objective-C async method as nonsending.
+    @concurrent func urlSession(
         _ session: URLSession, task: URLSessionTask,
         willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest
     ) async -> URLRequest? {

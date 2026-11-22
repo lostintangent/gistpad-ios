@@ -50,7 +50,7 @@ struct LibrarySnapshotTests {
         #expect(snapshot.accentHex == "#0EA5E9")
     }
 
-    @Test func eachMarkdownFileHasItsOwnNoteAndFrontMatterNeverReachesSiri() async throws {
+    @Test @MainActor func eachMarkdownFileHasItsOwnNoteAndFrontMatterNeverReachesSiri() async throws {
         let source = "---\nprivate: a distracting instruction\n---\n\n# Ranked\nVagabond is first.\n"
         let manga = try gist(
             "manga", "Manga reading list", updated: "2026-10-24T09:00:00Z",

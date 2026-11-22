@@ -102,7 +102,7 @@ final class PlatformBridge: PlatformActions {
     }
   }
 
-  nonisolated private static func noteBody(_ source: String) -> String {
+  private static func noteBody(_ source: String) -> String {
     (source as NSString).substring(from: Syntax.contentStart(in: source))
   }
 
