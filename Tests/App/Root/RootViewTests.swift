@@ -11,7 +11,7 @@ import WebKit
 @testable import Model
 @testable import Store
 
-@Suite(.serialized)
+@Suite(.serialized, .timeLimit(.minutes(1)))
 struct RootViewTests {
     @Test func reopeningPreviewThenEditKeepsTheSourceOnScreen() async throws {
         let source = """
@@ -39,11 +39,10 @@ struct RootViewTests {
         for id in ["reading", "other", "reading"] {
             let text = id == "reading" ? source : other
             host.model.open(rowID: id)
-            try await host.waitUntil {
-                host.model.activeEditor?.file.gist?.id == id && host.editor(text: text) != nil
-                    && host.picker != nil
-            }
+            await until { host.model.activeEditor?.file.gist?.id == id }
+            await host.settle()
             let editor = try #require(host.editor(text: text))
+            try #require(host.picker != nil)
             if id == "reading" {
                 if let retained { #expect(editor === retained) } else { retained = editor }
             }
@@ -52,34 +51,29 @@ struct RootViewTests {
                 let compactWidth = host.window.frame.width
                 host.window.traitOverrides.horizontalSizeClass = .regular
                 host.window.frame.size.width = 1180
-                try await host.waitUntil { host.picker?.numberOfSegments == 3 }
+                await host.settle()
+                try #require(host.picker?.numberOfSegments == 3)
                 host.layout.select(.split)
-                try await host.waitUntil { host.isVisible(editor) }
+                await host.settle()
+                try #require(host.isVisible(editor))
                 host.window.traitOverrides.horizontalSizeClass = .compact
                 host.window.frame.size.width = compactWidth
-                try await host.waitUntil { host.picker?.numberOfSegments == 2 }
+                await host.settle()
+                try #require(host.picker?.numberOfSegments == 2)
                 host.layout.select(.preview)
             }
             for showsPreview in [true, false] {
                 let picker = try #require(host.picker)
                 picker.selectedSegmentIndex = showsPreview ? picker.numberOfSegments - 1 : 0
                 picker.sendActions(for: .valueChanged)
+                await host.settle()
                 if showsPreview {
                     let preview = try #require(host.descendants.compactMap { $0 as? WKWebView }.first)
-                    var rendered = false
-                    // WebKit's content process can take several seconds to start while the suite runs.
-                    let deadline = ContinuousClock.now.advanced(by: .seconds(15))
-                    while !rendered, ContinuousClock.now < deadline {
-                        rendered = try await preview.callAsyncJavaScript(
-                            "return document.body.innerText.includes('retained');",
-                            arguments: [:], in: nil, contentWorld: .page) as? Bool == true
-                        if !rendered { try await Task.sleep(for: .milliseconds(100)) }
-                    }
-                    #expect(rendered)
+                    #expect(try await host.renders("retained", in: preview))
                 } else {
                     // Edit shows the source at the top and waits for a tap to raise the keyboard.
-                    try await host.waitUntil { host.isVisible(editor) }
-                    try await host.waitForKeyboard(visible: false)
+                    try #require(host.isVisible(editor))
+                    await host.keyboard(visible: false)
                     let caret = try host.caret(in: editor)
                     let bar = try #require(host.descendants.compactMap { $0 as? UINavigationBar }.last)
                     let top = bar.convert(bar.bounds, to: host.window).maxY
@@ -92,7 +86,8 @@ struct RootViewTests {
                 }
             }
             host.returnToLibrary()
-            try await host.waitUntil { host.isLibraryVisible }
+            await host.settle()
+            #expect(host.isLibraryVisible)
         }
     }
 
@@ -106,27 +101,33 @@ struct RootViewTests {
         fixture.fail()
         await host.model.open(.new)
         let first = try #require(host.model.activeEditor?.file.nextDraft)
-        try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
-        #expect(host.editor(text: "")?.selectedRange == NSRange(location: 0, length: 0))
-        try await host.waitForKeyboard(visible: true)
+        await host.settle()
         let blank = try #require(host.editor(text: ""))
+        #expect(blank.isFirstResponder)
+        #expect(blank.selectedRange == NSRange(location: 0, length: 0))
+        await host.keyboard(visible: true)
         #expect(try host.caret(in: blank).maxY <= host.keyboardFrame.minY)
         fixture.restore()
         host.pending.link = .gist(id: "kept", filename: nil)
-        try await host.waitUntil {
-            host.pending.link == nil && host.editor(text: "A real note") != nil
+        await until {
+            host.pending.link == nil && host.model.activeEditor?.file.gist?.id == "kept"
                 && host.model.editors[first.id] == nil
         }
+        await host.settle()
+        #expect(host.editor(text: "A real note") != nil)
         #expect(host.model.state.selectedID == "kept")
 
         await host.model.open(.new)
         let second = try #require(host.model.activeEditor?.file.nextDraft)
-        try await host.waitUntil { host.editor(text: "")?.isFirstResponder == true }
-        try await host.waitForKeyboard(visible: true)
+        await host.settle()
         let secondBlank = try #require(host.editor(text: ""))
+        #expect(secondBlank.isFirstResponder)
+        await host.keyboard(visible: true)
         #expect(try host.caret(in: secondBlank).maxY <= host.keyboardFrame.minY)
         host.returnToLibrary()
-        try await host.waitUntil { host.isLibraryVisible && host.model.activeEditor == nil }
+        await host.settle()
+        await until { host.model.activeEditor == nil }
+        #expect(host.isLibraryVisible)
         let stored = try await fixture.store.drafts(accountID: fixture.account.id).map(\.id)
         #expect(!stored.contains(first.id) && !stored.contains(second.id))
         #expect(fixture.publishes.isEmpty)
@@ -140,29 +141,30 @@ struct RootViewTests {
         let host = try await NavigationHost(fixture: fixture, sizeClass: .compact)
         defer { await host.close() }
         await host.model.open(.gist(id: "a"))
-        try await host.waitUntil { host.editor(text: "Current source") != nil }
+        let file = try #require(host.model.activeEditor)
+        await host.settle()
         let editor = try #require(host.editor(text: "Current source"))
         editor.becomeFirstResponder()
         editor.selectedRange = .init(location: 0, length: 0)
         let typed = ContinuousClock.now
         editor.insertText("Local ")
-        try await host.waitUntil {
-            host.model.drafts.first { $0.gistID == "a" }?.text == "Local Current source"
-        }
+        await until { host.model.drafts.first { $0.gistID == "a" }?.text == "Local Current source" }
         host.returnToLibrary()
-        try await host.waitUntil { fixture.onGitHub("a", "README.md") == "Local Current source" }
+        await until { file.status == .published }
+        #expect(fixture.onGitHub("a", "README.md") == "Local Current source")
         // Autosave waits five quiet seconds after typing, so a publish before then came from leaving.
         if autosave { #expect(ContinuousClock.now - typed < .seconds(5)) }
-        try await host.waitUntil { host.isLibraryVisible }
+        await host.settle()
+        #expect(host.isLibraryVisible)
         #expect(fixture.publishes == ["PATCH /gists/a"])
         #expect(host.model.state.selectedID == nil)
         #expect(!editor.isFirstResponder)
         let selection = editor.selectedRange
         host.pending.link = .gist(id: "a", filename: nil)
-        try await host.waitUntil {
-            host.pending.link == nil && host.editor(text: "Local Current source") === editor
-                && !host.isLibraryVisible
-        }
+        await until { host.pending.link == nil && host.model.activeEditor?.file.gist?.id == "a" }
+        await host.settle()
+        #expect(host.editor(text: "Local Current source") === editor)
+        #expect(!host.isLibraryVisible)
         #expect(editor.selectedRange == selection)
     }
 
@@ -174,17 +176,22 @@ struct RootViewTests {
         let host = try await NavigationHost(fixture: fixture)
         defer { await host.close() }
         host.model.open(rowID: "a")
-        try await host.waitUntil { host.editor(text: "First note source") != nil }
+        await until { host.model.activeEditor?.file.gist?.id == "a" }
+        let file = try #require(host.model.activeEditor)
+        await host.settle()
         let first = try #require(host.editor(text: "First note source"))
         try #require(first.becomeFirstResponder())
         first.selectedRange = NSRange(location: 0, length: 0)
         first.setMarkedText("にほんご", selectedRange: NSRange(location: 4, length: 0))
         try #require(first.markedTextRange != nil)
         host.model.open(rowID: "b")
-        try await host.waitUntil { host.editor(text: "Second note source") != nil }
+        await until { host.model.activeEditor?.file.gist?.id == "b" }
+        await host.settle()
+        #expect(host.editor(text: "Second note source") != nil)
         #expect(first.markedTextRange == nil)
         #expect(first.text == "にほんごFirst note source")
-        try await host.waitUntil { fixture.onGitHub("a", "README.md") == "にほんごFirst note source" }
+        await until { file.status == .published }
+        #expect(fixture.onGitHub("a", "README.md") == "にほんごFirst note source")
         #expect(fixture.publishes == ["PATCH /gists/a"])
     }
 
@@ -195,8 +202,9 @@ struct RootViewTests {
         await host.model.open(.today())
         let draft = try #require(host.model.activeEditor?.file.nextDraft)
         #expect(!draft.text.isEmpty)
-        try await host.waitUntil { host.editor(text: draft.text)?.isFirstResponder == true }
+        await host.settle()
         let editor = try #require(host.editor(text: draft.text))
+        #expect(editor.isFirstResponder)
         #expect(editor.selectedRange == NSRange(location: draft.text.utf16.count, length: 0))
         #expect(fixture.publishes.isEmpty)
     }
@@ -211,10 +219,9 @@ struct RootViewTests {
         pending.link = .gist(id: "b", filename: "Ideas.md")
         let host = try await NavigationHost(fixture: fixture, pending: pending)
         defer { await host.close() }
-        try await host.waitUntil {
-            pending.link == nil && host.editor(text: "Routed file source") != nil
-        }
-        #expect(host.model.activeEditor?.file.filename == "Ideas.md")
+        await until { pending.link == nil && host.model.activeEditor?.file.filename == "Ideas.md" }
+        await host.settle()
+        #expect(host.editor(text: "Routed file source") != nil)
         #expect(host.model.activeEditor?.file.gist?.id == "b")
     }
 
@@ -245,12 +252,14 @@ struct RootViewTests {
             await host.close()
         }
         try await github.arrival()
-        try await host.waitUntil { !host.isLibraryVisible }
+        await until { host.model.opening != nil || host.model.activeEditor != nil }
+        await host.settle()
+        #expect(!host.isLibraryVisible)
+        #expect(!github.hasReachedGitHub)
         if !writtenOnThisIPhone { github.open() }
-        try await host.waitUntil {
-            pending.link == nil && host.model.activeEditor?.file.filename == today
-                && host.editor(text: text)?.isFirstResponder == true
-        }
+        await until { pending.link == nil && host.model.activeEditor?.file.filename == today }
+        await host.settle()
+        #expect(host.editor(text: text)?.isFirstResponder == true)
     }
 
     /// Opening early doesn't mean deciding from a stale library: today started on the web since
@@ -278,10 +287,11 @@ struct RootViewTests {
             await host.close()
         }
         try await refresh.arrival()
-        try await host.waitUntil {
-            pending.link == nil && host.model.activeEditor?.file.filename == today
-                && host.editor(text: "Started on the web") != nil
-        }
+        await until { pending.link == nil && host.model.activeEditor?.file.filename == today }
+        #expect(host.model.activeEditor?.editor.text == "Started on the web")
+        await host.settle()
+        #expect(host.editor(text: "Started on the web") != nil)
+        #expect(!refresh.hasReachedGitHub)
     }
 
     @Test func aNewGistLinkOpensABlankNoteReadyToWrite() async throws {
@@ -292,7 +302,9 @@ struct RootViewTests {
         pending.link = .newGist
         let host = try await NavigationHost(fixture: fixture, pending: pending)
         defer { await host.close() }
-        try await host.waitUntil { pending.link == nil && host.editor(text: "")?.isFirstResponder == true }
+        await until { pending.link == nil && host.model.activeEditor != nil }
+        await host.settle()
+        #expect(host.editor(text: "")?.isFirstResponder == true)
         let draft = try #require(host.model.activeEditor?.file.nextDraft)
         #expect(!host.model.drafts.contains { $0.id == draft.id })
         #expect(host.model.activeEditor?.file.gist == nil)
@@ -309,16 +321,17 @@ struct RootViewTests {
         let host = try await NavigationHost(fixture: fixture)
         defer { await host.close() }
         await host.model.open(.gist(id: "a"))
-        try await host.waitUntil { host.editor(text: "Previous source") != nil }
+        await host.settle()
+        try #require(host.editor(text: "Previous source") != nil)
         fixture.fail("GET /gists/b")
         await host.model.open(.gist(id: "b", filename: "Other.md", rowID: "result-b"))
-        try await host.waitUntil {
-            host.descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title }.contains("Requested")
-        }
+        await host.settle()
+        #expect(host.titles.contains("Requested"))
         #expect(host.editor(text: "Previous source") == nil)
         fixture.restore()
         try await host.model.open(#require(host.model.opening).request)
-        try await host.waitUntil { host.editor(text: "Retried source") != nil }
+        await host.settle()
+        #expect(host.editor(text: "Retried source") != nil)
         #expect(accessibilityElement("note-open-retry", in: host.window) == nil)
         #expect(host.model.activeEditor?.file.gist?.id == "b")
         #expect(host.model.state.selectedID == "b")
@@ -333,10 +346,9 @@ struct RootViewTests {
         let host = try await NavigationHost(fixture: fixture)
         defer { await host.close() }
         await host.model.open(.gist(id: "a"))
-        try await host.waitUntil { host.editor(text: "A little room to think.") != nil }
+        await host.settle()
         let editor = try #require(host.editor(text: "A little room to think."))
-        editor.becomeFirstResponder()
-        try await host.waitUntil { editor.isFirstResponder }
+        try #require(editor.becomeFirstResponder())
         let selection = NSRange(location: 2, length: 6)
         editor.selectedRange = selection
         let accessory = try #require(editor.inputAccessoryView)
@@ -346,8 +358,8 @@ struct RootViewTests {
             })
         #expect(entry.isEnabled)
         entry.performPrimaryAction()
-        let root = try #require(host.window.rootViewController)
-        try await host.waitUntil { intelligencePrompt(presentedOver: root) != nil }
+        await host.settle()
+        try #require(intelligencePrompt(presentedOver: host.root) != nil)
         #expect(!editor.isFirstResponder)
         #expect(editor.selectedRange == selection)
         #expect(host.editor(text: "A little room to think.") === editor)
@@ -359,6 +371,7 @@ struct RootViewTests {
 private struct NavigationHost {
     let model: GistPadModel
     let window: UIWindow
+    let root: UIViewController
     let pending: PendingLink
     let layout: LayoutPreferences
     private let suite: String
@@ -388,14 +401,20 @@ private struct NavigationHost {
         window.frame = CGRect(
             origin: sceneBounds.origin, size: CGSize(width: width, height: sceneBounds.height))
         if let sizeClass { window.traitOverrides.horizontalSizeClass = sizeClass }
-        window.rootViewController = UIHostingController(
-            rootView: RootView(model: self.model, layout: layout, pending: pending))
+        root = UIHostingController(rootView: RootView(model: self.model, layout: layout, pending: pending))
+        window.rootViewController = root
         window.makeKeyAndVisible()
         guard waitsForStart else { return }
         let model = self.model
-        try await waitUntil {
-            model.phase == .ready && model.gistCache != nil
-        }
+        await until { model.phase == .ready && model.gistCache != nil }
+    }
+
+    /// Lays out the window and lets the navigation that starts finish. SwiftUI updates as the
+    /// window lays out, and a push or a sheet then runs under a transition coordinator.
+    func settle() async {
+        window.layoutIfNeeded()
+        await transitions(under: root)
+        window.layoutIfNeeded()
     }
 
     var descendants: [UIView] {
@@ -408,6 +427,11 @@ private struct NavigationHost {
 
     func editor(text: String) -> UITextView? {
         descendants.compactMap { $0 as? UITextView }.first { $0.text == text && $0.window === window }
+    }
+
+    /// The titles in the window's navigation bars.
+    var titles: [String] {
+        descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title }
     }
 
     /// The file's Edit, Preview (and Split, when wide) control.
@@ -453,8 +477,7 @@ private struct NavigationHost {
     }
 
     var keyboardFrame: CGRect {
-        guard let view = window.rootViewController?.view else { return .null }
-        return view.convert(view.keyboardLayoutGuide.layoutFrame, to: window)
+        root.view.convert(root.view.keyboardLayoutGuide.layoutFrame, to: window)
     }
 
     func caret(in editor: UITextView) throws -> CGRect {
@@ -462,91 +485,45 @@ private struct NavigationHost {
         return editor.convert(editor.caretRect(for: position), to: window)
     }
 
-    /// Waits for the keyboard to settle. The simulator's keyboard outlives each test and may be the
-    /// software keyboard, a hardware keyboard's bar, or placed beside a host narrower than the
-    /// scene, so tests check the caret against whichever frame settles.
-    func waitForKeyboard(visible: Bool, resigning: Bool = false) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        var previous: CGRect?
-        var stableSince = ContinuousClock.now
-        while ContinuousClock.now < deadline {
-            if resigning { window.endEditing(true) }
-            window.rootViewController?.view.layoutIfNeeded()
-            let frame = keyboardFrame
-            let isUp = frame.height > window.safeAreaInsets.bottom + 1
-            let matches = !frame.isNull && isUp == visible
-            if matches {
-                if previous == frame {
-                    if ContinuousClock.now - stableSince >= .milliseconds(350) { return }
-                } else {
-                    stableSince = ContinuousClock.now
-                    previous = frame
-                }
-            } else {
-                previous = nil
-            }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        Issue.record(
-            "The real keyboard did not settle \(visible ? "on screen" : "off screen"): \(keyboardFrame).")
-        throw HostError.presentationTimedOut
+    /// Waits for the keyboard to come up or go away. The simulator's keyboard outlives each test and
+    /// may be the software keyboard, a hardware keyboard's bar, or placed beside a host narrower than
+    /// the scene, so tests check the caret against whichever frame it ends at.
+    func keyboard(visible: Bool) async {
+        await GistPadTests.keyboard(visible: visible, over: root.view)
     }
 
-    func waitUntil(
-        sourceLocation: SourceLocation = #_sourceLocation, _ predicate: @MainActor () -> Bool
-    ) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        while !predicate() {
-            guard ContinuousClock.now < deadline else {
-                Attachment.record(
-                    """
-                    phase: \(model.phase)
-                    selected: \(String(describing: model.state.selectedID))
-                    active: \(String(describing: model.activeEditor?.file.id))
-                    opening: \(String(describing: model.opening))
-                    error: \(String(describing: model.alertMessage))
-                    link: \(String(describing: pending.link))
-                    library visible: \(isLibraryVisible)
-                    editors: \(descendants.compactMap { ($0 as? UITextView)?.text })
-                    titles: \(descendants.compactMap { ($0 as? UINavigationBar)?.topItem?.title })
-                    """, named: "navigation-timeout.txt")
-                let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
-                    window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-                }
-                Attachment.record(image, named: "navigation-timeout.png", as: .png)
-                Issue.record(
-                    "The mounted library did not reach its expected presentation.",
-                    sourceLocation: sourceLocation)
-                throw HostError.presentationTimedOut
-            }
-            try await Task.sleep(for: .milliseconds(16))
+    /// Whether the preview shows `text`, once WebKit has loaded the page and the note has rendered.
+    func renders(_ text: String, in preview: WKWebView) async throws -> Bool {
+        let (loaded, finish) = AsyncStream<Never>.makeStream()
+        let loading = preview.observe(\.isLoading, options: [.initial, .new]) { _, change in
+            if change.newValue == false { finish.finish() }
         }
+        for await _ in loaded {}
+        loading.invalidate()
+        return try await preview.callAsyncJavaScript(
+            """
+            const shows = () => document.body.innerText.includes(text);
+            while (!shows()) {
+                await new Promise(changed => new MutationObserver((_, observer) => {
+                    observer.disconnect();
+                    changed();
+                }).observe(document.body, { childList: true, subtree: true, characterData: true }));
+            }
+            return true;
+            """, arguments: ["text": text], in: nil, contentWorld: .page) as? Bool == true
     }
 
     func close() async {
-        window.rootViewController?.dismiss(animated: false)
-        // A closing sheet hands focus back to the file it came from, a beat after it's gone.
-        do {
-            try await waitForKeyboard(visible: false, resigning: true)
-        } catch {
-            Issue.record(error, "Navigation host teardown did not finish dismissing its keyboard.")
+        if root.presentedViewController != nil {
+            await completion { root.dismiss(animated: false, completion: $0) }
         }
-        if let root = window.rootViewController {
-            func controllers(_ controller: UIViewController) -> [UIViewController] {
-                [controller] + controller.children.flatMap(controllers)
-                    + (controller.presentedViewController.map(controllers) ?? [])
-            }
-            do {
-                try await waitUntil { controllers(root).allSatisfy { $0.transitionCoordinator == nil } }
-            } catch {
-                Issue.record(error, "Navigation host teardown interrupted a native transition.")
-            }
-        }
+        // A closing sheet hands focus back to the file it came from, so the keyboard goes last.
+        await settle()
+        window.endEditing(true)
+        await keyboard(visible: false)
         window.isHidden = true
         window.rootViewController = nil
         previousWindow?.makeKeyAndVisible()
         UserDefaults.standard.removePersistentDomain(forName: suite)
     }
-
-    private enum HostError: Error { case presentationTimedOut }
 }
