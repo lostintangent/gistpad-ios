@@ -31,28 +31,19 @@
     }
 
     public var body: some View {
-      GeometryReader { _ in
-        TextViewRepresentable(
-          editor: editor, title: title,
-          comments: comments, commentActions: commentActions,
-          actions: KeyboardBarActions(
-            canFormat: editor.canFormat,
-            format: format, link: beginLink, indent: { editor.indent(outdent: $0) },
-            image: insertImage,
-            intelligence: editor.isSettled ? intelligence : nil,
-            dismiss: { editor.textView.resignFirstResponder() })
-        )
-        .id(editor.id)
-        .ignoresSafeArea([.container, .keyboard], edges: .vertical)
-      }
-      .sheet(
-        item: $linkRequest,
-        onDismiss: {
-          if editor.textView.window != nil, editor.textView.isEditable {
-            editor.textView.becomeFirstResponder()
-          }
-        }
-      ) { request in
+      TextViewRepresentable(
+        editor: editor, title: title,
+        comments: comments, commentActions: commentActions,
+        actions: KeyboardBarActions(
+          canFormat: editor.canFormat,
+          format: format, link: beginLink, indent: { editor.indent(outdent: $0) },
+          image: insertImage,
+          intelligence: editor.isSettled ? intelligence : nil,
+          dismiss: editor.endEditing)
+      )
+      .id(editor.id)
+      .ignoresSafeArea([.container, .keyboard], edges: .vertical)
+      .sheet(item: $linkRequest, onDismiss: editor.focus) { request in
         LinkEditor(label: request.label) { label, destination in
           if let edit = try Format.link(label: label, destination: destination).edit(
             in: request.source, selection: request.selection)
