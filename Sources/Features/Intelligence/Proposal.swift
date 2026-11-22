@@ -1,13 +1,5 @@
 import Foundation
 
-package struct ModelReplacement: Sendable {
-  let quote: String
-  let replacement: String?
-  let reason: String
-  var before = ""
-  var after = ""
-}
-
 package struct Proposal: Sendable {
   let snapshot: FileSnapshot
   let changes: [Change]
@@ -17,22 +9,21 @@ package struct Proposal: Sendable {
   var canApply: Bool { changes.contains { $0.canApply } }
 
   init(
-    snapshot: FileSnapshot, scopedCandidates: [(ModelReplacement, NSRange)],
+    snapshot: FileSnapshot, scopedCandidates: [(Change, NSRange)],
     safetyInstruction: String? = nil
   ) {
     self.snapshot = snapshot
     self.safetyInstruction = safetyInstruction
-    var anchored = scopedCandidates.map { candidate, scope in
+    var anchored = scopedCandidates.map { change, scope in
+      var change = change
       // An empty quote inserts at an empty scope.
       let matches =
-        candidate.quote.isEmpty
+        change.quote.isEmpty
         ? (scope.length == 0 && Range(scope, in: snapshot.source) != nil ? [scope] : [])
-        : Anchors.matches(
-          candidate.quote, in: snapshot.source, within: scope,
-          before: candidate.before, after: candidate.after)
-      return Change(
-        id: UUID(), quote: candidate.quote, replacement: candidate.replacement,
-        reason: candidate.reason, range: matches.count == 1 ? matches[0] : nil)
+        : snapshot.source.exactRanges(
+          of: change.quote, within: scope, before: change.before, after: change.after)
+      change.range = matches.count == 1 ? matches[0] : nil
+      return change
     }
     var overlapping = Set<Int>()
     for first in anchored.indices {
@@ -50,12 +41,7 @@ package struct Proposal: Sendable {
         overlapping.insert(second)
       }
     }
-    for index in overlapping {
-      let change = anchored[index]
-      anchored[index] = Change(
-        id: change.id, quote: change.quote, replacement: change.replacement,
-        reason: change.reason, range: nil)
-    }
+    for index in overlapping { anchored[index].range = nil }
     changes = anchored
   }
 
@@ -151,12 +137,16 @@ package struct Proposal: Sendable {
 }
 
 extension Proposal {
+  /// A replacement for a quote, anchored at `range` once the quote is found exactly once.
   package struct Change: Identifiable, Sendable {
-    package let id: UUID
+    package let id = UUID()
     let quote: String
     let replacement: String?
     let reason: String
-    let range: NSRange?
+    /// The model's context around the quote, to tell repeats apart.
+    var before = ""
+    var after = ""
+    var range: NSRange?
 
     var canApply: Bool {
       range != nil
@@ -181,6 +171,7 @@ extension Proposal {
     func remaining(on snapshot: FileSnapshot) -> Proposal {
       let appliedIDs = Set(applied.map(\.id))
       let remaining = proposal.changes.filter { !appliedIDs.contains($0.id) }.map { change in
+        var change = change
         let range = change.range.map {
           NSRange(location: mappedOffset($0.location, trailing: false), length: $0.length)
         }
@@ -188,9 +179,8 @@ extension Proposal {
           range.flatMap { Range($0, in: source) }.map {
             source[$0].utf8.elementsEqual(change.quote.utf8)
           } ?? false
-        return Change(
-          id: change.id, quote: change.quote, replacement: change.replacement,
-          reason: change.reason, range: verified ? range : nil)
+        change.range = verified ? range : nil
+        return change
       }
       return Proposal(
         snapshot: snapshot, changes: remaining,
@@ -219,33 +209,33 @@ extension Proposal {
   }
 }
 
-enum Anchors {
-  static func matches(
-    _ quote: String, in source: String, within scope: NSRange? = nil,
-    before: String = "", after: String = ""
+extension String {
+  /// Where `quote` appears byte for byte, within `scope` and between `before` and `after`.
+  func exactRanges(
+    of quote: String, within scope: NSRange? = nil, before: String = "", after: String = ""
   ) -> [NSRange] {
-    let text = source as NSString
+    let text = self as NSString
     let scope = scope ?? NSRange(location: 0, length: text.length)
-    guard !quote.isEmpty, Range(scope, in: source) != nil else { return [] }
+    guard !quote.isEmpty, Range(scope, in: self) != nil else { return [] }
     var result: [NSRange] = []
     var cursor = scope.location
     while cursor < NSMaxRange(scope) {
       let search = NSRange(location: cursor, length: NSMaxRange(scope) - cursor)
       let match = text.range(of: quote, options: .literal, range: search)
       guard match.location != NSNotFound else { break }
-      if let swiftRange = Range(match, in: source),
-        source[swiftRange].utf8.elementsEqual(quote.utf8),
+      if let swiftRange = Range(match, in: self),
+        self[swiftRange].utf8.elementsEqual(quote.utf8),
         match.location >= before.utf16.count,
         NSMaxRange(match) + after.utf16.count <= text.length
       {
         let prefix = Range(
           NSRange(location: match.location - before.utf16.count, length: before.utf16.count),
-          in: source)
+          in: self)
         let suffix = Range(
-          NSRange(location: NSMaxRange(match), length: after.utf16.count), in: source)
+          NSRange(location: NSMaxRange(match), length: after.utf16.count), in: self)
         if let prefix, let suffix,
-          source[prefix].utf8.elementsEqual(before.utf8),
-          source[suffix].utf8.elementsEqual(after.utf8)
+          self[prefix].utf8.elementsEqual(before.utf8),
+          self[suffix].utf8.elementsEqual(after.utf8)
         {
           result.append(match)
         }

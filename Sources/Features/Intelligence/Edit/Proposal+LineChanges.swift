@@ -1,12 +1,12 @@
 import Foundation
 
 /// The model's revised note, compared line by line with the part of the note it read. Each run of
-/// changed lines becomes one candidate, so the review shows exactly what the model changed.
-enum Revision {
-  /// The text a candidate only adds, when it leaves everything it quotes in place.
-  static func insertedText(in candidate: ModelReplacement) -> String? {
-    guard let replacement = candidate.replacement else { return nil }
-    let original = Array(candidate.quote)
+/// changed lines becomes one change, so the review shows exactly what the model changed.
+extension Proposal.Change {
+  /// The text this change only adds, when it leaves everything it quotes in place.
+  var insertedText: String? {
+    guard let replacement else { return nil }
+    let original = Array(quote)
     let revised = Array(replacement)
     let prefix = zip(original, revised).prefix { $0.0 == $0.1 }.count
     let suffix = zip(original.dropFirst(prefix).reversed(), revised.dropFirst(prefix).reversed())
@@ -17,9 +17,9 @@ enum Revision {
     return insertion.isEmpty ? nil : insertion
   }
 
-  static func candidates(
+  static func lineChanges(
     in source: String, visible: NSRange, revised: String
-  ) throws -> [(ModelReplacement, NSRange)] {
+  ) throws -> [(Self, NSRange)] {
     let newline = source.contains("\r\n") ? "\r\n" : "\n"
     let old = lines(in: source, visible: visible)
     var new = unwrapped(revised, note: old.map(\.text)).components(separatedBy: "\n")
@@ -38,7 +38,7 @@ enum Revision {
           Unicode.Scalar(text.character(at: visible.location - 1)) ?? " ")
       return [
         (
-          ModelReplacement(
+          Self(
             quote: "",
             replacement: (needsBreak ? newline : "") + new.joined(separator: newline) + newline,
             reason: ""),
@@ -125,7 +125,7 @@ enum Revision {
         location: old[run.a].range.location,
         length: NSMaxRange(old[run.b - 1].range) - old[run.a].range.location)
       return (
-        ModelReplacement(
+        Self(
           quote: (source as NSString).substring(with: range),
           replacement: new[run.c..<run.d].joined(separator: newline), reason: ""),
         range

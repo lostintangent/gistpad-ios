@@ -17,7 +17,7 @@ struct EditTests {
     let disambiguated = Proposal(
       snapshot: repeated,
       candidates: [
-        ModelReplacement(
+        Proposal.Change(
           quote: "same", replacement: "different", reason: "Clarify", before: "right ")
       ])
     #expect(try disambiguated.application(to: repeated).source == "left same\nright different")
@@ -202,7 +202,7 @@ struct EditTests {
     for (before, misplaced, instruction, expected) in cases {
       let source = before.replacingOccurrences(of: "\n", with: newline)
       let revised = misplaced.replacingOccurrences(of: "\n", with: newline)
-      let candidates = try Revision.candidates(
+      let candidates = try Proposal.Change.lineChanges(
         in: source, visible: NSRange(location: 0, length: source.utf16.count),
         revised: revised)
       let blocks = EditBlock.indexed(in: source)
@@ -218,7 +218,7 @@ struct EditTests {
       #expect(
         try proposal.application(to: snapshot).source
           == expected.replacingOccurrences(of: "\n", with: newline))
-      #expect(Revision.insertedText(in: change("Keep", "Kept\n\nNew")) == nil)
+      #expect(change("Keep", "Kept\n\nNew").insertedText == nil)
     }
   }
 

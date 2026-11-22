@@ -15,12 +15,12 @@ func rewrite(_ revised: String) -> (ModelPass) -> [ModelEdit] {
   { [.rewriteRegion(NSRange(location: 0, length: $0.source.utf16.count), revised: revised)] }
 }
 
-func change(_ quote: String, _ replacement: String?) -> ModelReplacement {
-  ModelReplacement(quote: quote, replacement: replacement, reason: "Improve")
+func change(_ quote: String, _ replacement: String?) -> Proposal.Change {
+  Proposal.Change(quote: quote, replacement: replacement, reason: "Improve")
 }
 
 extension Proposal {
-  init(snapshot: FileSnapshot, candidates: [ModelReplacement]) {
+  init(snapshot: FileSnapshot, candidates: [Proposal.Change]) {
     self.init(
       snapshot: snapshot,
       scopedCandidates: candidates.map {

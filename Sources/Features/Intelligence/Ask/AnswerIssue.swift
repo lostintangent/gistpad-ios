@@ -9,7 +9,7 @@ package enum AnswerIssue: String, Sendable {
   package static func check(_ answer: String, source: String, instruction: String = "") -> Self? {
     func isSupportedQuote(_ quote: String) -> Bool {
       guard quote.first?.isLetter == true, quote.last?.isLetter == true else {
-        return !Anchors.matches(quote, in: source).isEmpty
+        return !source.exactRanges(of: quote).isEmpty
       }
       let pattern = #"(?<![\p{L}\p{N}])"#
         + NSRegularExpression.escapedPattern(for: quote)

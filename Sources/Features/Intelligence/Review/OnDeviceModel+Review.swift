@@ -2,14 +2,14 @@ import Foundation
 import FoundationModels
 
 extension OnDeviceModel {
-  func replacements(for pass: ModelPass) async throws -> [ModelReplacement] {
+  func replacements(for pass: ModelPass) async throws -> [Proposal.Change] {
     try await perform(pass: pass) {
       let session = session(for: pass)
       let response = try await session.respond(
         to: Self.prompt(for: pass), generating: AppleChanges.self,
         options: GenerationOptions(temperature: 0.2, maximumResponseTokens: pass.responseTokens))
       return response.content.changes.map {
-        ModelReplacement(
+        Proposal.Change(
           quote: $0.quote, replacement: $0.replacement, reason: $0.reason,
           before: $0.before, after: $0.after)
       }

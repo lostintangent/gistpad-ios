@@ -19,10 +19,10 @@ final class FixtureLanguageModel: IntelligenceModel {
   var changes: (ModelPass) -> [ModelEdit] = { _ in
     [
       .replace(
-        ModelReplacement(
+        Proposal.Change(
           quote: "teh", replacement: "the", reason: "Fix the spelling of “the”.")),
       .replace(
-        ModelReplacement(
+        Proposal.Change(
           quote: "before the cafe opens", replacement: "after the cafe opens",
           reason: "9am is after the cafe opens at 8am.")),
     ]

@@ -40,7 +40,7 @@ package final class IntelligenceEngine {
       purpose == .edit
       ? [content(in: request)]
       : try await split(content(in: request), request: request, purpose: purpose, model: model)
-    var candidates: [(ModelReplacement, NSRange)] = []
+    var candidates: [(Proposal.Change, NSRange)] = []
     var pending = Array(chunks.reversed())
     var completed = 0
     while let chunk = pending.popLast() {
@@ -74,7 +74,7 @@ package final class IntelligenceEngine {
             for task in selected where task.isComplete != isComplete {
               candidates.append(
                 (
-                  ModelReplacement(
+                  Proposal.Change(
                     quote: (request.snapshot.source as NSString).substring(with: task.range),
                     replacement: isComplete ? "[x]" : "[ ]",
                     reason: isComplete
@@ -92,7 +92,7 @@ package final class IntelligenceEngine {
               let text = (request.snapshot.source as NSString).substring(with: line)
               candidates.append(
                 (
-                  ModelReplacement(
+                  Proposal.Change(
                     quote: text, replacement: "",
                     reason: String(localized: "Remove this task.", bundle: .module)), line
                 ))
@@ -129,7 +129,7 @@ package final class IntelligenceEngine {
             }
             candidates.append(
               (
-                ModelReplacement(
+                Proposal.Change(
                   quote: "", replacement: insertion,
                   reason: String(localized: "Add this task.", bundle: .module)),
                 NSRange(location: offset, length: 0)
@@ -137,7 +137,7 @@ package final class IntelligenceEngine {
           case .rewriteRegion(let relative, let revised):
             guard relative.location >= 0, NSMaxRange(relative) <= chunk.range.length
             else { throw IntelligenceError.invalidResponse }
-            candidates += try Revision.candidates(
+            candidates += try Proposal.Change.lineChanges(
               in: request.snapshot.source,
               visible: NSRange(
                 location: chunk.range.location + relative.location, length: relative.length),
@@ -207,7 +207,7 @@ package final class IntelligenceEngine {
           "request=\(request.id.uuidString, privacy: .public) action=ask chunk=\(index + 1)/\(chunks.count) range=\(chunk.range.location):\(chunk.range.length) excerpts=\(excerpts.count)"
         )
         for excerpt in excerpts {
-          guard !Anchors.matches(excerpt, in: chunk.source).isEmpty else {
+          guard !chunk.source.exactRanges(of: excerpt).isEmpty else {
             throw IntelligenceError.unverifiedQuotation
           }
         }
@@ -255,7 +255,7 @@ package final class IntelligenceEngine {
     let bodyStart = Syntax.contentStart(in: request.snapshot.source)
     return try prose
       + generated.quotes.map { quote in
-        let ranges = Anchors.matches(quote, in: request.snapshot.source).filter {
+        let ranges = request.snapshot.source.exactRanges(of: quote).filter {
           $0.location >= bodyStart
         }
         guard !ranges.isEmpty else { throw IntelligenceError.unverifiedQuotation }
@@ -306,7 +306,7 @@ package final class IntelligenceEngine {
             request, purpose: .extract, source: batch.joined(separator: "\n\n"), model: model,
             evidenceBlocks: batch))
         for excerpt in excerpts {
-          guard evidence.contains(where: { !Anchors.matches(excerpt, in: $0).isEmpty }) else {
+          guard evidence.contains(where: { !$0.exactRanges(of: excerpt).isEmpty }) else {
             throw IntelligenceError.unverifiedQuotation
           }
         }

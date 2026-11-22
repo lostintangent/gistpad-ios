@@ -164,14 +164,14 @@ package struct ModelTask: Sendable, Encodable {
 }
 
 package enum ModelEdit: Sendable {
-  case replace(ModelReplacement)
+  case replace(Proposal.Change)
   case setTaskStates(ids: [Int]?, isComplete: Bool)
   case insertTask(listID: Int, text: String)
   case deleteTasks(ids: [Int])
   /// A region as the model revised it, using a UTF-16 range relative to the model pass.
   /// The app compares it line by line.
   case rewriteRegion(NSRange, revised: String)
-  case replaceRegion(NSRange, ModelReplacement)
+  case replaceRegion(NSRange, Proposal.Change)
 }
 
 package struct ModelAnswer: Sendable, Equatable {

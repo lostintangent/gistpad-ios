@@ -171,7 +171,7 @@ extension OnDeviceModel {
         }
       } else {
         let revised = try await revisedText(for: local)
-        let candidates = try Revision.candidates(
+        let candidates = try Proposal.Change.lineChanges(
           in: direct, visible: NSRange(location: 0, length: direct.utf16.count), revised: revised)
         let previousCount = edits.count
         for (candidate, range) in candidates {
@@ -288,7 +288,7 @@ extension OnDeviceModel {
         edits.append(
           .replaceRegion(
             range,
-            ModelReplacement(
+            Proposal.Change(
               quote: (pass.source as NSString).substring(with: range),
               replacement: next == nil ? trailing : "", reason: "")))
       } else if !revised.utf8.elementsEqual(block.text.utf8) {
@@ -334,30 +334,30 @@ extension OnDeviceModel {
 
   /// Moves text the model added elsewhere in the section to just after the selected block.
   static func relocatedInsertion(
-    from candidates: [(ModelReplacement, NSRange)], for block: EditBlock,
+    from candidates: [(Proposal.Change, NSRange)], for block: EditBlock,
     instruction: String, section: String
-  ) -> ModelReplacement? {
+  ) -> Proposal.Change? {
     guard candidates.count == 1,
       let goal = focusedGoal(for: block, instruction: instruction),
-      let inserted = Revision.insertedText(in: candidates[0].0)
+      let inserted = candidates[0].0.insertedText
     else { return nil }
     return insertion(inserted, goal: goal, after: block, section: section)
   }
 
   private static func insertion(
     _ text: String, goal: FocusedGoal, after block: EditBlock, section: String
-  ) -> ModelReplacement? {
+  ) -> Proposal.Change? {
     let kinds = EditBlock.indexed(in: text).map(\.kind)
     let newline = section.contains("\r\n") ? "\r\n" : "\n"
     switch goal {
     case .insertParagraph:
       guard kinds == [.paragraph] else { return nil }
-      return ModelReplacement(quote: block.text, replacement: block.text + newline + newline + text, reason: "")
+      return Proposal.Change(quote: block.text, replacement: block.text + newline + newline + text, reason: "")
     case .insertRow:
       guard kinds == [.tableRow],
         text.filter({ $0 == "|" }).count == block.text.filter({ $0 == "|" }).count
       else { return nil }
-      return ModelReplacement(quote: block.text, replacement: block.text + newline + text, reason: "")
+      return Proposal.Change(quote: block.text, replacement: block.text + newline + text, reason: "")
     case .makeList, .replaceParagraph:
       return nil
     }
@@ -365,7 +365,7 @@ extension OnDeviceModel {
 
   private func focusedReplacement(
     for pass: ModelPass, in section: String, block: EditBlock
-  ) async throws -> ModelReplacement? {
+  ) async throws -> Proposal.Change? {
     guard let goal = Self.focusedGoal(for: block, instruction: pass.instruction) else { return nil }
     let shortening = pass.instruction.lowercased().contains("shorten")
     let format =
@@ -425,7 +425,7 @@ extension OnDeviceModel {
       return Self.insertion(revised, goal: goal, after: block, section: section)
     }
     let newline = section.contains("\r\n") ? "\r\n" : "\n"
-    return ModelReplacement(
+    return Proposal.Change(
       quote: block.text, replacement: revised.replacingOccurrences(of: "\n", with: newline), reason: "")
   }
 
