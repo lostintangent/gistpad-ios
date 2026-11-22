@@ -93,19 +93,4 @@ public struct GistActions {
     public var addFile: (() -> Void)?
 
     public init() {}
-
-    /// A daily note is a file, not a gist. It shares and deletes, but nothing pins, stars,
-    /// archives, tags or renames the gist around it, and the Library picks the other days.
-    var dailyNote: GistActions {
-        var actions = self
-        actions.selectFile = nil
-        actions.togglePin = nil
-        actions.toggleStar = nil
-        actions.toggleArchive = nil
-        actions.tags = nil
-        actions.rename = nil
-        actions.renameFile = nil
-        actions.addFile = nil
-        return actions
-    }
 }

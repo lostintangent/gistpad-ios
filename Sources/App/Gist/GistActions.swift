@@ -29,7 +29,10 @@ extension GistActions {
       present(.rename(
         RenameTarget(draft: fileEditor.file.nextDraft, title: fileEditor.details.title, kind: kind)))
     }
-    if let gistID = fileEditor.file.gist?.id {
+    // A daily note is a file, not a gist. It shares and deletes, but nothing pins, stars,
+    // archives, tags or renames the gist around it, and the Library picks the other days.
+    let isGist = !fileEditor.details.isDailyNote
+    if isGist, let gistID = fileEditor.file.gist?.id {
       actions.selectFile = { filename in
         Task { await model.open(.gist(id: gistID, filename: filename)) }
       }
@@ -55,7 +58,7 @@ extension GistActions {
         }
       }
     }
-    if fileEditor.details.isOwned, !fileEditor.file.isDeletedOnGitHub {
+    if isGist, fileEditor.details.isOwned, !fileEditor.file.isDeletedOnGitHub {
       actions.rename = { rename(.title) }
     }
     if fileEditor.deletion != nil {

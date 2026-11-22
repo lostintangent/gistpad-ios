@@ -37,7 +37,7 @@ public struct GistScreen<Source: View, Preview: View>: View {
         self.gist = gist
         self._mode = mode
         self.status = status
-        self.actions = gist.isDailyNote ? actions.dailyNote : actions
+        self.actions = actions
         self.allowsSplit = allowsSplit
         self.areCommentsPresented = areCommentsPresented
         self.source = source()

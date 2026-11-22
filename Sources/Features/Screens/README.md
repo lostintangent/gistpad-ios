@@ -52,9 +52,9 @@ themselves, so there's no Publish button. A conflict or lost sign-in shows a
 button that opens the diff or reconnects. Comments is a toggle with a quiet count
 from `ToolbarBadgeLabel`. The More menu holds Pin, Star, Share and Copy Link,
 then Rename, Tags, Intelligence and Find and Replace, then Archive and Delete.
-Menu items never end in "…". A daily note is a file, not a gist.
-`GistActions.dailyNote` drops Pin, Star, Archive, Tags, Rename and the title
-menu, and its Library row offers only Delete. Share hides while Comments is a
+Menu items never end in "…". A daily note is a file, not a gist, so the app
+gives it no Pin, Star, Archive, Tags or Rename. It has no title menu, and its
+Library row offers only Delete. Share hides while Comments is a
 sheet in compact width, because the share sheet can't present over it. Delete
 confirms with the title, the day for a daily note, before it calls `delete`.
 

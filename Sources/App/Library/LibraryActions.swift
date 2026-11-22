@@ -10,10 +10,10 @@ extension LibraryActions {
     select: @escaping (String) -> Void, openComments: @escaping (String) -> Void,
     today: @escaping @MainActor () -> Void, settings: @escaping () -> Void
   ) {
-    var actions = LibraryActions(
-      refresh: { await model.refresh() },
-      create: { Task { await model.open(.new) } },
-      today: today)
+    var actions = LibraryActions()
+    actions.refresh = { await model.refresh() }
+    actions.create = { Task { await model.open(.new) } }
+    actions.today = today
     actions.select = select
     actions.openComments = openComments
     actions.account = settings

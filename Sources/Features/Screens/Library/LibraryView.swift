@@ -50,9 +50,9 @@ extension View {
 
 @MainActor
 public struct LibraryActions {
-    public var refresh: () async -> Void
-    public var create: @MainActor () -> Void
-    public var today: @MainActor () -> Void
+    public var refresh: () async -> Void = {}
+    public var create: @MainActor () -> Void = {}
+    public var today: @MainActor () -> Void = {}
     public var select: (String) -> Void = { _ in }
     public var reconnect: () -> Void = {}
     public var recoverStatus: @MainActor () -> Void = {}
@@ -62,15 +62,7 @@ public struct LibraryActions {
     public var openComments: (String) -> Void = { _ in }
     public var delete: (String) -> Void = { _ in }
 
-    public init(
-        refresh: @escaping () async -> Void,
-        create: @escaping @MainActor () -> Void,
-        today: @escaping @MainActor () -> Void
-    ) {
-        self.refresh = refresh
-        self.create = create
-        self.today = today
-    }
+    public init() {}
 }
 
 public struct LibraryView: View {
