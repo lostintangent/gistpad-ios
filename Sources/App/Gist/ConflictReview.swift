@@ -109,7 +109,6 @@ struct ConflictReview: View {
                 Button("Use GitHub’s", role: .destructive) {
                     apply(github, publishes: false)
                 }
-                Button("Cancel", role: .cancel) {}
             } message: {
                 Text("You can undo this.")
             }
