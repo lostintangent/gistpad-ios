@@ -37,11 +37,11 @@ struct LauncherWidget: Widget {
 
   struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> Entry {
-      Entry(date: .now, snapshot: .preview(), state: .placeholder)
+      Entry(date: .now, snapshot: .preview(), state: .available)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) {
-      completion(context.isPreview ? Entry(date: .now, snapshot: .preview(), state: .available) : entry())
+      completion(context.isPreview ? placeholder(in: context) : entry())
     }
 
     /// The app reloads the widget when the library changes, so the timeline only turns the day over,

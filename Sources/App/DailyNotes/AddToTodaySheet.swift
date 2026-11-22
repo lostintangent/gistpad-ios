@@ -53,7 +53,6 @@ struct AddToTodaySheet: View {
       }
       .navigationTitle("Add to Today")
       .navigationBarTitleDisplayMode(.inline)
-      .toolbarVisibility(.visible, for: .navigationBar)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button(role: .cancel) { dismiss() }

@@ -35,7 +35,6 @@ struct CommentsInspector: View {
       return .systemAction
     })
     .alert(String(localized: "Couldn’t Open Link"), item: $linkFailure) { _ in
-      Button("OK", role: .cancel) {}
     } message: { failure in
       Text(verbatim: failure)
     }

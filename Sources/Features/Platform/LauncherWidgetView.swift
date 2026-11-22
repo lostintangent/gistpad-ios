@@ -9,7 +9,7 @@ public struct LauncherWidgetView: View {
     public static let kind = "GistPadToday"
 
     public enum State: Sendable {
-        case available, signedOut, unavailable, placeholder
+        case available, signedOut, unavailable
     }
 
     private let snapshot: LibrarySnapshot?
@@ -39,7 +39,6 @@ public struct LauncherWidgetView: View {
         .environment(\.accent, Accent(savedHex: snapshot?.accentHex))
         // Any tap that misses a gist or New Gist opens Today, not just one on the date's glyphs.
         .widgetURL(GistPadLink.today.url)
-        .redacted(reason: state == .placeholder ? .placeholder : [])
     }
 
     private var small: some View {
@@ -181,7 +180,7 @@ public struct LauncherWidgetView: View {
             switch state {
             case .signedOut: Text("Sign in with GitHub")
             case .unavailable: Text("Open GistPad to refresh")
-            case .available, .placeholder: Text("No recent gists")
+            case .available: Text("No recent gists")
             }
         }
         .font(.subheadline)

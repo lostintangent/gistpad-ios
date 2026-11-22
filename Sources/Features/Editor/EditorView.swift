@@ -66,7 +66,6 @@
         String(localized: "Couldn't Complete Action", bundle: .module),
         item: Bindable(editor).inputError
       ) { _ in
-        Button(String(localized: "OK", bundle: .module), role: .cancel) {}
       } message: { message in
         Text(message)
       }

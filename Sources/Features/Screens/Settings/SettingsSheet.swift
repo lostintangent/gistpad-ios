@@ -113,7 +113,6 @@ public struct SettingsSheet<Appearance: View>: View {
         Text("Drafts for @\(account?.github.login ?? "") stay on this iPhone. Nothing is published.", bundle: .module)
       }
       .alert(errorTitle, item: $saveError) { _ in
-        Button(String(localized: "OK", bundle: .module)) {}
       } message: { message in
         Text(message)
       }
