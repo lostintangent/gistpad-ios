@@ -128,16 +128,11 @@ public final class LibraryState {
 
     /// Like the web, a filter matches titles and tags, and the open gist stays listed.
     public var matchingGists: [GistItem] {
-        gists.filter { gist in
+        Self.ordered(gists.filter { gist in
             hasFilters
                 ? Self.primarySection(for: gist) != nil && (gist.id == selectedID || matchesFilter(gist))
                 : Self.includes(gist, in: .gists)
-        }.sorted {
-            if $0.updatedAt != $1.updatedAt {
-                return ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast)
-            }
-            return $0.id < $1.id
-        }
+        }, in: .gists)
     }
 
     /// Until the account's gists are `known`, only gists still on the phone are listed and nothing is counted.
@@ -146,10 +141,6 @@ public final class LibraryState {
         self.tags = tags
         self.dailyNoteCount = known ? dailyNoteCount : nil
         hasKnownGists = known
-    }
-
-    public var mainGistCount: Int? {
-        count(in: .gists)
     }
 
     public func count(in section: LibrarySection) -> Int? {
@@ -165,12 +156,8 @@ public final class LibraryState {
         }
     }
 
-    public func unfilteredGists(in section: LibrarySection) -> [GistItem] {
-        Self.ordered(gists.filter { Self.includes($0, in: section) }, in: section)
-    }
-
     public func matchingGists(in section: LibrarySection) -> [GistItem] {
-        guard hasFilters else { return unfilteredGists(in: section) }
+        guard hasFilters else { return Self.ordered(gists.filter { Self.includes($0, in: section) }, in: section) }
         let gists = matchingGists.filter { Self.primarySection(for: $0) == section }
         return section == .dailyNotes ? Self.ordered(gists, in: section) : gists
     }

@@ -11,13 +11,13 @@ struct LibraryStateTests {
     @Test func sectionsFollowOwnershipAndArchiveAndCountUniqueGists() {
         let state = LibraryState(gists: gists, tags: tags)
         state.gists.append(.init(id: "shape/Ideas.md", title: "Ideas", updatedAt: nil, gistID: "shape"))
-        #expect(state.unfilteredGists(in: .gists).map(\.id) == ["shape", "weekend", "words", "mixed", "shape/Ideas.md"])
-        #expect(state.unfilteredGists(in: .dailyNotes).map(\.id) == ["daily"])
-        #expect(state.unfilteredGists(in: .starred).map(\.id) == ["starred"])
-        #expect(state.unfilteredGists(in: .archived).map(\.id) == ["archived"])
+        #expect(state.matchingGists(in: .gists).map(\.id) == ["shape", "weekend", "words", "mixed", "shape/Ideas.md"])
+        #expect(state.matchingGists(in: .dailyNotes).map(\.id) == ["daily"])
+        #expect(state.matchingGists(in: .starred).map(\.id) == ["starred"])
+        #expect(state.matchingGists(in: .archived).map(\.id) == ["archived"])
         state.query = "no matching title"
         state.selectedTagIDs = ["design"]
-        #expect(state.mainGistCount == 4)
+        #expect(state.count(in: .gists) == 4)
         #expect(state.count(in: .starred) == 1)
         #expect(state.count(in: .archived) == 1)
     }
@@ -67,7 +67,7 @@ struct LibraryStateTests {
                   isOverdue: true, dailyDate: today.addingTimeInterval(-86_400))
         ]
         let state = LibraryState(gists: days, dailyNoteCount: 3)
-        #expect(state.unfilteredGists(in: .dailyNotes).map(\.id) == ["yesterday", "old", "today"])
+        #expect(state.matchingGists(in: .dailyNotes).map(\.id) == ["yesterday", "old", "today"])
         state.query = "day"
         #expect(state.matchingGists(in: .dailyNotes).map(\.id) == ["yesterday", "old", "today"])
     }
@@ -80,7 +80,7 @@ struct LibraryStateTests {
         ]
         #expect(state.count(in: .dailyNotes) == nil)
         #expect(state.secondarySections == [.dailyNotes])
-        #expect(state.unfilteredGists(in: .dailyNotes).map(\.id) == ["local-day"])
+        #expect(state.matchingGists(in: .dailyNotes).map(\.id) == ["local-day"])
     }
 
     @Test func theOpenGistStaysListedWithoutCountingAsAMatch() {

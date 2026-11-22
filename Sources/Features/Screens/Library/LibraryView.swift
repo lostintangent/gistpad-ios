@@ -103,8 +103,8 @@ public struct LibraryView: View {
 
     public var body: some View {
         navigationList
-            .navigationTitle(navigationTitle)
-            .navigationSubtitle(navigationSubtitle)
+            .navigationTitle(isSignedOut ? "" : String(localized: "GistPad", bundle: .module))
+            .navigationSubtitle(isSignedOut ? "" : state.count(in: .gists).map(LibraryState.gistCountLabel) ?? "")
             .toolbarTitleDisplayMode(.inline)
             .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 400)
             .refreshable { await actions.refresh() }
@@ -134,16 +134,6 @@ public struct LibraryView: View {
         } else {
             libraryList.listStyle(.insetGrouped)
         }
-    }
-
-    private var navigationTitle: String {
-        if isSignedOut { return "" }
-        return String(localized: "GistPad", bundle: .module)
-    }
-
-    private var navigationSubtitle: String {
-        guard !isSignedOut else { return "" }
-        return state.mainGistCount.map(LibraryState.gistCountLabel) ?? ""
     }
 
     private var libraryList: some View {
