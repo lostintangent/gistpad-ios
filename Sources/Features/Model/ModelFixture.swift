@@ -1,5 +1,6 @@
 #if DEBUG
     import Foundation
+    import Observation
     import Store
     import Synchronization
 
@@ -130,21 +131,23 @@
         }
 
         /// A held request, released when the test opens it.
-        final class Gate: Sendable {
-            private let state = Mutex((arrived: false, isOpen: false))
+        @Observable final class Gate {
+            private var hasArrived = false
+            private var isOpen = false
 
-            /// Waits until a held request arrives.
+            /// Waits until a held request arrives, or throws if the test is cancelled first.
             func arrival() async throws {
-                while !state.withLock({ $0.arrived }) { try await Task.sleep(for: .milliseconds(5)) }
+                for await hasArrived in Observations({ self.hasArrived }) where hasArrived { return }
+                throw CancellationError()
             }
 
             func open() {
-                state.withLock { $0.isOpen = true }
+                isOpen = true
             }
 
             fileprivate func pass() async {
-                state.withLock { $0.arrived = true }
-                while !state.withLock({ $0.isOpen }) { try? await Task.sleep(for: .milliseconds(5)) }
+                hasArrived = true
+                for await isOpen in Observations({ self.isOpen }) where isOpen { return }
             }
         }
     }
