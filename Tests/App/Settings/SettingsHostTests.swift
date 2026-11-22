@@ -12,9 +12,7 @@ struct SettingsHostTests {
   @Test func settingsPersistAutosaveAndKeepFrontMatterHiddenByDefault() async throws {
     var saved: [(BooleanPreference, Bool)] = []
     let host = try await SettingsHost(
-      SettingsPreferenceFixture(
-        preferences: .init(metadata: ["unrelated": .string("retained")])
-      ) { saved.append(($0, $1)) })
+      SettingsPreferenceFixture(preferences: .init(metadata: [:])) { saved.append(($0, $1)) })
     defer { host.close() }
     // The Writing section lists Autosave, Check Spelling and Show Front Matter in order.
     let switches = host.switches
@@ -43,8 +41,7 @@ struct SettingsHostTests {
       SettingsSheet(
         account: .init(id: UUID(), github: GitHubUser(id: 1, login: "octavia"), preferences: preferences),
         savePreference: { key, value in
-          preferences = try preferences.applying(.setBoolean(key, value))
-          #expect(preferences.metadata["unrelated"] == .string("retained"))
+          preferences = .init(metadata: preferences.metadata.merging([key.rawValue: .bool(value)]) { $1 })
           saved(key, value)
         }, connect: {}, signOut: {}
       ) {

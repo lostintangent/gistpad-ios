@@ -31,11 +31,6 @@ public struct GistPadPreferences: Codable, Equatable, Sendable {
         }
     }
 
-    public func applying(_ change: Change) throws -> GistPadPreferences {
-        GistPadPreferences(metadata: metadata.merging(try change.changes(in: metadata)) { _, new in new })
-    }
-
-    public var isAutoSaveEnabled: Bool { metadata["isAutoSaveEnabled"]?.boolValue ?? true }
     public var accentColor: String? { metadata["accentColor"]?.stringValue }
     public var pinnedGists: [String] {
         metadata["pinnedGists"]?.arrayValue?.compactMap(\.stringValue) ?? []

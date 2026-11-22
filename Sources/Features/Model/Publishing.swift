@@ -201,7 +201,7 @@ extension GistFileEditor {
   private var autosaveAllowed: Bool {
     model.isForeground && model.account?.id == file.accountID
       && model.phase == .ready && model.problem == nil
-      && model.account?.preferences.isAutoSaveEnabled == true
+      && model.account?.preferences.booleanValue(.isAutoSaveEnabled) == true
       && canEdit && !file.isDeletedOnGitHub
   }
 

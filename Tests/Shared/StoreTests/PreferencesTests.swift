@@ -8,7 +8,7 @@ import Testing
 struct PreferencesTests {
     @Test func readsTheWebsPreferenceShapesWithDefaults() throws {
         let empty = GistPadPreferences(metadata: [:])
-        #expect(empty.isAutoSaveEnabled)
+        #expect(empty.booleanValue(.isAutoSaveEnabled))
         #expect(empty.booleanValue(.isSpellcheckEnabled))
         #expect(!empty.booleanValue(.showFrontmatter, default: false))
         #expect(empty.accentColor == nil)
@@ -26,7 +26,7 @@ struct PreferencesTests {
             ]),
             "gistTags": .object(["one": .array([.string("ideas"), .string("unnamed")])]),
         ])
-        #expect(!saved.isAutoSaveEnabled)
+        #expect(!saved.booleanValue(.isAutoSaveEnabled))
         #expect(saved.accentColor == "#facc15")
         #expect(GistPadAccount(id: UUID(), github: FixtureServer.you, preferences: empty).displayName == nil)
         #expect(GistPadAccount(id: UUID(), github: FixtureServer.you, preferences: saved).displayName == "Octavia")
@@ -74,7 +74,7 @@ struct PreferencesTests {
         #expect(updated.preferences.pinnedGists == ["web-pin", "native-pin"])
         #expect(updated.preferences.gistTags == ["web-pin": ["a", "b"], "native-pin": ["a"]])
         #expect(updated.preferences.metadata["tags"]?.objectValue?["a"] == ["name": "Renamed", "future": true])
-        #expect(!updated.preferences.isAutoSaveEnabled)
+        #expect(!updated.preferences.booleanValue(.isAutoSaveEnabled))
         #expect(updated.preferences.accentColor == "#facc15")
         #expect(updated.preferences.metadata["future"] == ["web-edit": 7])
 
