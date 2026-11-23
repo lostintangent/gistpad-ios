@@ -64,12 +64,11 @@ struct OpeningTests {
         #expect(phone.model.opening == nil)
 
         // A note this iPhone already has opens at once, without asking GitHub.
-        try await phone.open(.gist(id: "b"))
         let requests = phone.github.requests
+        try await phone.open(.gist(id: "b"))
         phone.model.open(rowID: "c")
         #expect(phone.model.opening == nil)
         #expect(phone.onScreen == "Three")
-        await Task.yield()
         #expect(phone.github.requests == requests)
     }
 
