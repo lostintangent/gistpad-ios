@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 import SwiftUI
 import Testing
@@ -32,7 +31,7 @@ struct PreviewWebKitTests {
         let controller = UIViewController()
         controller.view = UIView(frame: webView.frame)
         controller.view.addSubview(webView)
-        let window = testWindow(frame: webView.frame)
+        let window = try testWindow(frame: webView.frame)
         window.rootViewController = controller
         window.makeKeyAndVisible()
         defer {
@@ -50,11 +49,11 @@ struct PreviewWebKitTests {
                 "window.gistpadPreview.render(payload);",
                 arguments: ["payload": file.arguments], in: nil, contentWorld: .page
             )
-            await receiver.received("rendered")
+            await until { receiver.hasPosted("rendered") }
         }
 
         _ = try #require(webView.load(URLRequest(url: URL(string: "gistpad-preview://bundle/index.html")!)))
-        await receiver.received("ready")
+        await until { receiver.hasPosted("ready") }
         #expect(receiver.origins.allSatisfy { $0 == "gistpad-preview://bundle" })
 
         try await render(readOnly)
@@ -115,7 +114,7 @@ struct PreviewWebKitTests {
             width, controller.view.heightAnchor.constraint(equalToConstant: 500)
         ])
         controller.didMove(toParent: container)
-        let window = testWindow(frame: CGRect(x: 0, y: 0, width: 951, height: 669))
+        let window = try testWindow(frame: CGRect(x: 0, y: 0, width: 951, height: 669))
         window.rootViewController = container
         window.makeKeyAndVisible()
         defer {
@@ -145,20 +144,27 @@ struct PreviewWebKitTests {
             window.readingCharacter = range;
             """,
             arguments: [:], in: nil, contentWorld: .page)
-        // The page's scroll position trails the scroll view's for a frame or two after a resize, so this
-        // places the character by the offset on screen.
+        // The page learns the scroll view's offset a frame or two after it moves, and the next width
+        // change anchors from the page's offset, so this waits for the page to catch up. The scroll
+        // view's offset then places the character more finely than the page's whole points.
         func readingTop() async throws -> Double {
+            let offset = webView.scrollView.contentOffset.y + webView.scrollView.adjustedContentInset.top
             let top = try #require(try await webView.callAsyncJavaScript(
-                "return window.readingCharacter.getBoundingClientRect().top + scrollY;",
-                arguments: [:], in: nil, contentWorld: .page) as? Double)
-            return top - webView.scrollView.contentOffset.y
+                """
+                while (Math.abs(scrollY - offset) > 1) {
+                    await new Promise(scrolled => addEventListener("scroll", scrolled, { once: true }));
+                }
+                return window.readingCharacter.getBoundingClientRect().top + scrollY;
+                """,
+                arguments: ["offset": offset], in: nil, contentWorld: .page) as? Double)
+            return top - offset
         }
         let originalTop = try await readingTop()
         var displacements: [Double] = []
         for _ in 0..<3 {
             for destination: CGFloat in [520, 840] {
                 let offset = webView.scrollView.contentOffset.y
-                await UIView.animate(withDuration: animationsDisabled ? 0 : 0.35) {
+                UIView.animate(withDuration: animationsDisabled ? 0 : 0.35) {
                     width.constant = destination
                     container.view.layoutIfNeeded()
                 }
@@ -203,7 +209,7 @@ struct PreviewWebKitTests {
             repeating: "A paragraph long enough that the page runs well past one screen.", count: 80
         ).joined(separator: "\n\n")
         let navigation = UINavigationController(rootViewController: UIViewController())
-        let window = testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+        let window = try testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
         window.rootViewController = navigation
         window.makeKeyAndVisible()
         defer { tearDown(window) }
@@ -215,7 +221,7 @@ struct PreviewWebKitTests {
         // A rendered page is taller than the screen, so every frame from then on shows text.
         var frames: [String] = []
         var misplaced = 0
-        await withCheckedContinuation { shown in
+        await completion { shown in
             _ = FrameSampler {
                 guard let scrollView = findWebView(in: preview.view)?.scrollView,
                       scrollView.contentSize.height > 2_000 else { return true }
@@ -223,7 +229,7 @@ struct PreviewWebKitTests {
                 if abs(gap) > 0.5 || scrollView.adjustedContentInset.top < 1 { misplaced += 1 }
                 frames.append(String(format: "%.1f/%.1f", scrollView.contentOffset.y, scrollView.adjustedContentInset.top))
                 guard frames.count == 45 else { return true }
-                shown.resume()
+                shown()
                 return false
             }
         }
@@ -240,7 +246,7 @@ struct PreviewWebKitTests {
             "## Section \($0)\n\n" + Array(repeating: paragraph, count: 4).joined(separator: "\n\n")
         }.joined(separator: "\n\n")
         let navigation = UINavigationController(rootViewController: UIViewController())
-        let window = testWindow(frame: CGRect(origin: .zero, size: size))
+        let window = try testWindow(frame: CGRect(origin: .zero, size: size))
         window.rootViewController = navigation
         window.makeKeyAndVisible()
         defer { tearDown(window) }
@@ -271,7 +277,7 @@ struct PreviewWebKitTests {
         let controller = UIHostingController(
             rootView: MarkdownPreviewView(
                 markdown: "# Still here\n\nKeep this paragraph.", fileID: "blank-probe", generation: 1) { _ in })
-        let window = testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+        let window = try testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
         window.rootViewController = controller
         window.makeKeyAndVisible()
         defer { tearDown(window) }
@@ -328,27 +334,25 @@ struct PreviewWebKitTests {
             arguments: [:], in: nil, contentWorld: .page)
     }
 
-    private func testWindow(frame: CGRect) -> UIWindow {
-        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
-            let window = UIWindow(windowScene: scene)
-            window.frame = frame
-            return window
-        }
-        // Swift package runners can host UIKit without an application scene.
-        return UIWindow(frame: frame)
+    private func testWindow(frame: CGRect) throws -> UIWindow {
+        let scene = try #require(
+            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = frame
+        return window
     }
+}
 
-    /// Returns once `keyPath` of `object` meets `condition`, checking each value it changes to.
-    private func until<Object: NSObject, Value: Sendable>(
-        _ object: Object, _ keyPath: KeyPath<Object, Value>, _ condition: (Value) -> Bool
-    ) async {
-        let (values, send) = AsyncStream<Value>.makeStream()
-        let observation = object.observe(keyPath, options: [.initial, .new]) { _, change in
-            if let value = change.newValue { send.yield(value) }
-        }
-        defer { observation.invalidate() }
-        for await value in values where condition(value) { return }
+/// Returns once `keyPath` of `object` meets `condition`, checking each value it changes to.
+private func until<Object: NSObject, Value: Sendable>(
+    _ object: Object, _ keyPath: KeyPath<Object, Value>, _ condition: (Value) -> Bool
+) async {
+    let (values, send) = AsyncStream<Value>.makeStream()
+    let observation = object.observe(keyPath, options: [.initial, .new]) { _, change in
+        if let value = change.newValue { send.yield(value) }
     }
+    defer { observation.invalidate() }
+    for await value in values where condition(value) { return }
 }
 
 /// Runs `sample` once per display frame for as long as it returns true. The display link keeps the
@@ -374,11 +378,8 @@ private final class MessageReceiver: NSObject, WKScriptMessageHandler {
     var bodies: [[String: Any]] = []
     var origins: [String] = []
 
-    /// Returns once the page has posted a message of `type`.
-    func received(_ type: String) async {
-        for await posted in Observations({ self.bodies.contains { $0["type"] as? String == type } }) where posted {
-            return
-        }
+    func hasPosted(_ type: String) -> Bool {
+        bodies.contains { $0["type"] as? String == type }
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -386,4 +387,3 @@ private final class MessageReceiver: NSObject, WKScriptMessageHandler {
         origins.append("\(message.frameInfo.securityOrigin.protocol)://\(message.frameInfo.securityOrigin.host)")
     }
 }
-#endif

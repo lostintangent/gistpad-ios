@@ -83,7 +83,7 @@ Debug builds take fixture launch arguments, such as `--fixture standard --open s
 
 There are two test commands.
 
-**`swift test`** runs every module's package tests on macOS from the repo root, without the slot. Add `--filter EditorTests` to run one module's. Tests that need UIKit, in Editor, Intelligence, Preview and Screens, compile only for iOS, so it skips them.
+**`swift test`** runs every module's package tests on macOS from the repo root, without the slot. Add `--filter EditorTests` to run one module's. Tests that need UIKit, in Editor, Intelligence and Screens, compile only for iOS, so it skips them.
 
 ```sh
 swift test
