@@ -3,13 +3,14 @@ import Foundation
 @testable import Intelligence
 
 /// A scripted model. It never calls Apple Intelligence.
-final class FixtureLanguageModel: IntelligenceModel {
+@Observable final class FixtureLanguageModel: IntelligenceModel {
     static let source =
         "# Saturday walk\n\nTake teh river path.\nLeave at 9am, before the cafe opens at 8am."
 
     var contextSize = 4_096
     var unavailableReason: String?
-    var delay: Duration?
+    /// Keeps every pass waiting once it arrives, until the test sets this back to false or cancels.
+    var isHeld = false
     var failure: (any Error)?
     var nextFailure: (any Error)?
     var answer = ModelAnswer(
@@ -60,7 +61,10 @@ final class FixtureLanguageModel: IntelligenceModel {
 
     private func record(_ pass: ModelPass) async throws {
         passes.append(pass)
-        if let delay { try await Task.sleep(for: delay) }
+        if isHeld {
+            for await isHeld in Observations({ self.isHeld }) where !isHeld { break }
+            try Task.checkCancellation()
+        }
         if let nextFailure {
             self.nextFailure = nil
             throw nextFailure

@@ -6,7 +6,7 @@
 
     @testable import Intelligence
 
-    @Suite(.serialized)
+    @Suite(.serialized, .timeLimit(.minutes(1)))
     struct SheetTests {
         private let source = FixtureLanguageModel.source
 
@@ -19,7 +19,7 @@
             editor.textView.selectedRange = NSRange(location: source.utf16.count, length: 0)
             editor.textView.insertText("!")
             editor.textViewDidChange(editor.textView)
-            try await Task.sleep(for: .milliseconds(30))
+            await eventEnds(for: undo)
             let typed = source + "!"
             var changes = 0
             editor.onEdit = { _, _ in changes += 1 }
@@ -96,15 +96,11 @@
         @Test func cancelKeepsTheRequestAndTheFile() async {
             let editor = Editor(text: source)
             let fixture = FixtureLanguageModel()
-            fixture.delay = .seconds(5)
+            fixture.isHeld = true
             let state = IntelligenceState(editor: editor, backend: fixture)
             state.askPrompt = "When do I leave?"
             state.generate()
-            var spins = 0
-            while fixture.passes.isEmpty, spins < 1_000 {
-                spins += 1
-                await Task.yield()
-            }
+            for await count in Observations({ fixture.passes.count }) where count > 0 { break }
             #expect(state.isRunning)
             state.cancel()
             await state.task?.value
@@ -172,6 +168,17 @@
             controller.view.layoutIfNeeded()
             editor.textView.becomeFirstResponder()
             return window
+        }
+
+        /// Returns once the undo group that typing opened closes with the run loop's pass, as it
+        /// does between a keystroke and a tap on Apply.
+        private func eventEnds(for undo: UndoManager) async {
+            guard undo.groupingLevel > 0 else { return }
+            let (closed, close) = AsyncStream<Never>.makeStream()
+            let center = NotificationCenter.default
+            let token = center.addObserver(of: undo, for: .didCloseUndoGroup) { _ in close.finish() }
+            defer { center.removeObserver(token) }
+            for await _ in closed {}
         }
     }
 #endif
