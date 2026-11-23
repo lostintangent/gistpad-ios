@@ -11,7 +11,7 @@ import UIKit
 @testable import Model
 @testable import Store
 
-@Suite(.serialized)
+@Suite(.serialized, .timeLimit(.minutes(1)))
 struct PlatformTests {
     @Test func addToTodayFromAShortcutAppendsToTodaysNoteWithoutASheetOrAPublish() async throws {
         let fixture = try await PlatformFixture.make()
@@ -174,11 +174,9 @@ struct PlatformTests {
             rootView: RootView(model: fixture.model).environment(\.scenePhase, .active))
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
-        try await Task.sleep(for: .milliseconds(500))
         // Launch restores the account before it returns to the app.
-        for _ in 0..<100 where !fixture.model.isForeground {
-            try await Task.sleep(for: .milliseconds(100))
-        }
+        await until { fixture.model.isForeground }
+        window.layoutIfNeeded()
         #expect(scene.activationState == .foregroundActive)
         #expect(fixture.model.state.selectedID != nil)
         #expect(fixture.model.isForeground)
@@ -186,7 +184,7 @@ struct PlatformTests {
         #expect(fileEditor.editor.textView.appEntityIdentifier?.identifier == note.id)
 
         fixture.model.showLibrary()
-        try await Task.sleep(for: .milliseconds(500))
+        window.layoutIfNeeded()
         #expect(fileEditor.editor.textView.appEntityIdentifier == nil)
         #expect(try await fixture.bridge.noteEntities(for: [note.id]).first?.content == nil)
     }
@@ -222,7 +220,7 @@ struct PlatformTests {
             rootView: EditorView(editor: fileEditor.editor))
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
-        try await Task.sleep(for: .milliseconds(100))
+        window.layoutIfNeeded()
         let original = fileEditor.editor.text
         fixture.fixture.server.intercept { request in
             request.url?.path.hasPrefix("/storage/v1/object/assets/daily123/") == true ? .init() : nil
