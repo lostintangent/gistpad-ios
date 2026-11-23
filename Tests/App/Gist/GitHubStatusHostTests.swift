@@ -5,13 +5,13 @@ import SwiftUI
 import Testing
 import UIKit
 
-@Suite(.serialized)
+@Suite(.serialized, .timeLimit(.minutes(1)))
 struct GitHubStatusHostTests {
     @Test func statusUpdatesPreserveAScrolledEditorsSourceSelectionAndViewport() async throws {
         let source = (1...180).map {
             "Paragraph \($0) leaves enough room for a useful thought and a retained writing position."
         }.joined(separator: "\n\n")
-        let host = try await StatusHost(source: source)
+        let host = try StatusHost(source: source)
         defer { host.close() }
         let session = try #require(host.session)
         let editor = session.textView
@@ -33,15 +33,13 @@ struct GitHubStatusHostTests {
                 textContainer \(editor.textContainer.size), caret \(caret), \
                 windowCaret \(editor.convert(caret, to: host.window)), viewportSource \(String(describing: viewportSource)), \
                 selected \(editor.selectedRange), font \(editor.font?.pointSize ?? 0), \
-                focus \(editor.isFirstResponder), keyboard \(host.keyboardHeight), \
+                focus \(editor.isFirstResponder), keyboard \(host.view.keyboardLayoutGuide.layoutFrame.height), \
                 presented \(host.presented != nil)
                 """)
         }
         defer { Attachment.record(geometry.joined(separator: "\n"), named: "status-source-viewport.txt") }
         try #require(editor.becomeFirstResponder())
-        try await host.waitUntil {
-            editor.isFirstResponder && host.keyboardHeight >= 150
-        }
+        await keyboard(visible: true, over: host.view)
         let selection = (source as NSString).range(of: "Paragraph 140")
         func writingPosition() -> CGRect {
             guard let caret = editor.selectedTextRange?.end else { return .null }
@@ -49,8 +47,7 @@ struct GitHubStatusHostTests {
         }
         editor.selectedRange = selection
         editor.scrollRangeToVisible(selection)
-        // Offscreen TextKit estimates can change without moving the visible source passage.
-        try await host.waitUntilStill(writingPosition)
+        host.window.layoutIfNeeded()
         let viewportSource = try #require(sourceAtViewportTop())
         let scrolledPosition = writingPosition()
         let identity = session.id
@@ -65,10 +62,10 @@ struct GitHubStatusHostTests {
         ]
         for (stage, state) in states {
             host.model.state = state
-            try await host.waitUntil { host.model.renderedState == state }
-            try await Task.sleep(for: .milliseconds(350))
-            try await host.waitUntilStill(writingPosition)
+            await until { host.model.renderedState == state }
+            host.window.layoutIfNeeded()
             capture(stage)
+            #expect(host.showsStatus == (state != .idle))
             #expect(session.id == identity)
             #expect(editor.selectedRange == selection)
             #expect(session.generation == generation)
@@ -130,66 +127,35 @@ private struct StatusFixture: View {
 private final class StatusHost {
     let model = StatusModel()
     let window: UIWindow
+    let view: UIView
     let session: Editor?
-    private(set) var keyboardHeight: CGFloat = 0
     private let previous: UIWindow?
-    private var keyboardObserver: NSObjectProtocol?
 
-    init(source: String) async throws {
+    init(source: String) throws {
         let scene = try #require(
             UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         previous = scene.windows.first(where: \.isKeyWindow)
         session = Editor(text: source)
         window = UIWindow(windowScene: scene)
-        window.rootViewController = UIHostingController(
+        let controller = UIHostingController(
             rootView: StatusFixture(model: model, session: session).accent(savedHex: "#FACC15"))
-        keyboardObserver = NotificationCenter.default.addObserver(
-            forName: UIResponder.keyboardDidChangeFrameNotification, object: nil, queue: .main
-        ) { [weak self] notification in
-            guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
-            else { return }
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.keyboardHeight = max(0, scene.effectiveGeometry.coordinateSpace.bounds.intersection(frame).height)
-            }
-        }
+        view = controller.view
+        window.rootViewController = controller
         window.makeKeyAndVisible()
-        try await Task.sleep(for: .milliseconds(250))
+        window.layoutIfNeeded()
     }
 
     var presented: UIViewController? { window.rootViewController?.presentedViewController }
 
-    func waitUntil(
-        sourceLocation: SourceLocation = #_sourceLocation,
-        _ ready: @MainActor () -> Bool
-    ) async throws {
-        let deadline = ContinuousClock.now + .seconds(5)
-        while ContinuousClock.now < deadline {
-            window.layoutIfNeeded()
-            if ready() { return }
-            try await Task.sleep(for: .milliseconds(20))
+    /// Whether the bottom bar is up to show the status control.
+    var showsStatus: Bool {
+        func navigation(_ controller: UIViewController) -> UINavigationController? {
+            controller as? UINavigationController ?? controller.children.lazy.compactMap(navigation).first
         }
-        Issue.record(
-            "The native GitHub status control did not reach the required state.", sourceLocation: sourceLocation)
-        throw StatusFailure.timedOut
-    }
-
-    /// Waits until `position` holds still for 100ms, as scrolling and TextKit's estimates settle.
-    func waitUntilStill(
-        sourceLocation: SourceLocation = #_sourceLocation,
-        _ position: @MainActor () -> CGRect
-    ) async throws {
-        var last = position()
-        var stillSince = ContinuousClock.now
-        try await waitUntil(sourceLocation: sourceLocation) {
-            let current = position()
-            if current != last { (last, stillSince) = (current, .now) }
-            return ContinuousClock.now - stillSince >= .milliseconds(100)
-        }
+        return window.rootViewController.flatMap(navigation).map { !$0.isToolbarHidden } ?? false
     }
 
     func close() {
-        if let keyboardObserver { NotificationCenter.default.removeObserver(keyboardObserver) }
         window.rootViewController?.dismiss(animated: false)
         window.endEditing(true)
         window.isHidden = true
@@ -197,5 +163,3 @@ private final class StatusHost {
         previous?.makeKeyAndVisible()
     }
 }
-
-private enum StatusFailure: Error { case timedOut }
