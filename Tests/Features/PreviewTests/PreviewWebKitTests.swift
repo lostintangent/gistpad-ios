@@ -6,7 +6,7 @@ import UIKit
 import WebKit
 @testable import Preview
 
-@Suite("Offline WebKit renderer", .serialized)
+@Suite("Offline WebKit renderer", .serialized, .timeLimit(.minutes(1)))
 struct PreviewWebKitTests {
     @Test("The bundled page renders offline, keeps read-only tasks inert and addresses duplicate tasks")
     func offlineRendering() async throws {
@@ -29,7 +29,6 @@ struct PreviewWebKitTests {
             injectionTime: .atDocumentStart, forMainFrameOnly: true
         ))
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 402, height: 874), configuration: configuration)
-        webView.navigationDelegate = receiver
         let controller = UIViewController()
         controller.view = UIView(frame: webView.frame)
         controller.view.addSubview(webView)
@@ -51,18 +50,11 @@ struct PreviewWebKitTests {
                 "window.gistpadPreview.render(payload);",
                 arguments: ["payload": file.arguments], in: nil, contentWorld: .page
             )
-            try await waitFor("rendered message") { receiver.bodies.contains { $0["type"] as? String == "rendered" } }
+            await receiver.received("rendered")
         }
 
         _ = try #require(webView.load(URLRequest(url: URL(string: "gistpad-preview://bundle/index.html")!)))
-        do {
-            try await waitFor("ready message") { receiver.bodies.contains { $0["type"] as? String == "ready" } }
-        } catch {
-            let state = try await evaluate(
-                "return {url:location.href,state:document.readyState,renderer:typeof window.gistpadPreview};")
-            let diagnostics = receiver.bodies.filter { $0["type"] as? String == "diagnostic" }
-            throw PreviewError("Ready timeout. Page: \(String(describing: state)). Diagnostics: \(diagnostics). Navigation: \(receiver.navigationErrors)")
-        }
+        await receiver.received("ready")
         #expect(receiver.origins.allSatisfy { $0 == "gistpad-preview://bundle" })
 
         try await render(readOnly)
@@ -74,7 +66,7 @@ struct PreviewWebKitTests {
                 box.disabled && box.getAttribute('aria-label').startsWith('Read-only task: '));
             """) as? Bool
         #expect(inert == true)
-        try await Task.sleep(for: .milliseconds(100))
+        // The page posts while it handles a click, so anything a click sends arrives before the script returns.
         #expect(!receiver.bodies.contains { $0["type"] as? String == "taskToggle" })
 
         try await render(editable)
@@ -82,7 +74,6 @@ struct PreviewWebKitTests {
             "return document.querySelectorAll('input[type=checkbox]:not(:disabled)').length;") as? Int
         #expect(enabled == 7)
         _ = try await evaluate("document.querySelectorAll('input[type=checkbox]')[1].click();")
-        try await waitFor("task toggle") { receiver.bodies.contains { $0["type"] as? String == "taskToggle" } }
         let toggle = try #require(receiver.bodies.last { $0["type"] as? String == "taskToggle" })
         guard case .event(.taskToggle(let range, _, let replacement, _)) = try PreviewBridge.decode(toggle, file: editable) else {
             Issue.record("Expected a validated source edit")
@@ -91,19 +82,12 @@ struct PreviewWebKitTests {
         #expect(range == (markdown as NSString).range(of: "[x]"))
         #expect(replacement == "[ ]")
 
-        var diagramRendered = false
-        for _ in 0..<200 {
-            diagramRendered = try await evaluate("return document.querySelector('svg[id^=\"mermaid-\"]') !== null;") as? Bool == true
-            if diagramRendered { break }
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        #expect(diagramRendered)
+        #expect(try await text(of: #"svg[id^="mermaid-"]"#, in: webView) != nil)
 
         _ = try await evaluate("document.querySelector('button.wikilink').click();")
-        try await waitFor("wikilink message") { receiver.bodies.contains { $0["kind"] as? String == "wikilink" } }
         let wikilink = try #require(receiver.bodies.last { $0["kind"] as? String == "wikilink" })
         #expect(try PreviewBridge.decode(wikilink, file: editable) == .event(.openWikilink("Ideas")))
-        #expect(!receiver.bodies.contains { $0["type"] as? String == "failure" })
+        #expect(receiver.bodies.filter { ["diagnostic", "failure"].contains($0["type"] as? String) }.isEmpty)
     }
 
     @Test("The reading position survives native width and inset changes", arguments: [false, true])
@@ -138,10 +122,10 @@ struct PreviewWebKitTests {
             window.isHidden = true
             window.rootViewController = nil
         }
-        try await waitFor("long native reading document") {
-            (findWebView(in: controller.view)?.scrollView.contentSize.height ?? 0) > 4_000
-        }
+        // SwiftUI makes the web view in the hosting view's first layout pass.
+        container.view.layoutIfNeeded()
         let webView = try #require(findWebView(in: controller.view))
+        await until(webView.scrollView, \.contentSize) { $0.height > 4_000 }
         // Let the preview's own initial scroll to the top land first.
         try await settle(webView)
         webView.scrollView.setContentOffset(CGPoint(x: 0, y: 2_500), animated: false)
@@ -159,24 +143,28 @@ struct PreviewWebKitTests {
             range.setStart(range.startContainer, offset);
             range.setEnd(range.startContainer, offset + 1);
             window.readingCharacter = range;
-            window.readingCharacterTop = range.getBoundingClientRect().top;
             """,
             arguments: [:], in: nil, contentWorld: .page)
+        // The page's scroll position trails the scroll view's for a frame or two after a resize, so this
+        // places the character by the offset on screen.
+        func readingTop() async throws -> Double {
+            let top = try #require(try await webView.callAsyncJavaScript(
+                "return window.readingCharacter.getBoundingClientRect().top + scrollY;",
+                arguments: [:], in: nil, contentWorld: .page) as? Double)
+            return top - webView.scrollView.contentOffset.y
+        }
+        let originalTop = try await readingTop()
         var displacements: [Double] = []
         for _ in 0..<3 {
             for destination: CGFloat in [520, 840] {
-                var completed = false
-                UIView.animate(withDuration: animationsDisabled ? 0 : 0.35) {
+                let offset = webView.scrollView.contentOffset.y
+                await UIView.animate(withDuration: animationsDisabled ? 0 : 0.35) {
                     width.constant = destination
                     container.view.layoutIfNeeded()
-                } completion: { _ in completed = true }
-                try await waitFor("native reading width change") { completed }
-                let displacement = try #require(try await webView.callAsyncJavaScript(
-                    """
-                    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-                    return window.readingCharacter.getBoundingClientRect().top - window.readingCharacterTop;
-                    """,
-                    arguments: [:], in: nil, contentWorld: .page) as? Double)
+                }
+                // WebKit keeps the passage in place by moving the scroll view when the new layout arrives.
+                await until(webView.scrollView, \.contentOffset) { $0.y != offset }
+                let displacement = try await readingTop() - originalTop
                 displacements.append(displacement)
                 #expect(abs(displacement) <= 1)
             }
@@ -191,9 +179,8 @@ struct PreviewWebKitTests {
             for top: CGFloat in [78, 0] {
                 // Bars reach the preview as UIKit safe area, which the page must count exactly once.
                 controller.additionalSafeAreaInsets.top = top
-                try await waitFor("the changed native reading inset") {
-                    abs(webView.scrollView.adjustedContentInset.top - originalInset - top) <= 1
-                }
+                container.view.layoutIfNeeded()
+                #expect(abs(webView.scrollView.adjustedContentInset.top - originalInset - top) <= 1)
                 try await settle(webView)
                 #expect(findWebView(in: controller.view) === webView)
                 let readingOffset = webView.scrollView.contentOffset.y + webView.scrollView.adjustedContentInset.top
@@ -228,15 +215,18 @@ struct PreviewWebKitTests {
         // A rendered page is taller than the screen, so every frame from then on shows text.
         var frames: [String] = []
         var misplaced = 0
-        let sampler = FrameSampler {
-            guard let scrollView = findWebView(in: preview.view)?.scrollView,
-                  scrollView.contentSize.height > 2_000 else { return }
-            let gap = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
-            if abs(gap) > 0.5 || scrollView.adjustedContentInset.top < 1 { misplaced += 1 }
-            frames.append(String(format: "%.1f/%.1f", scrollView.contentOffset.y, scrollView.adjustedContentInset.top))
+        await withCheckedContinuation { shown in
+            _ = FrameSampler {
+                guard let scrollView = findWebView(in: preview.view)?.scrollView,
+                      scrollView.contentSize.height > 2_000 else { return true }
+                let gap = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
+                if abs(gap) > 0.5 || scrollView.adjustedContentInset.top < 1 { misplaced += 1 }
+                frames.append(String(format: "%.1f/%.1f", scrollView.contentOffset.y, scrollView.adjustedContentInset.top))
+                guard frames.count == 45 else { return true }
+                shown.resume()
+                return false
+            }
         }
-        defer { sampler.stop() }
-        try await waitFor("the page to show for a moment") { frames.count >= 45 }
         Attachment.record(frames.joined(separator: "\n"), named: "first-frames-offset-inset.txt")
         #expect(misplaced == 0, "\(misplaced) of \(frames.count) frames showed text out of place")
     }
@@ -258,16 +248,15 @@ struct PreviewWebKitTests {
             rootView: MarkdownPreviewView(markdown: markdown, fileID: "contents", generation: 0) { _ in })
         preview.title = "Contents"
         navigation.pushViewController(preview, animated: false)
-        try await waitFor("the long page") {
-            (findWebView(in: preview.view)?.scrollView.contentSize.height ?? 0) > 3_000
-        }
+        navigation.view.layoutIfNeeded()
         let webView = try #require(findWebView(in: preview.view))
         let scrollView = webView.scrollView
+        await until(scrollView, \.contentSize) { $0.height > 3_000 }
         try await settle(webView)
         _ = try await webView.callAsyncJavaScript(
             "document.querySelector('.markdown-toc a[href=\"#section-12\"]').click();",
             arguments: [:], in: nil, contentWorld: .page)
-        try await waitFor("the jump") { scrollView.contentOffset.y > 1_000 }
+        await until(scrollView, \.contentOffset) { $0.y > 1_000 }
         try await settle(webView)
         let heading = try #require(try await webView.callAsyncJavaScript(
             "return document.getElementById('section-12').getBoundingClientRect().top + scrollY;",
@@ -279,27 +268,23 @@ struct PreviewWebKitTests {
 
     @Test("A terminated web process renders the same document again")
     func aTerminatedWebProcessRendersAgain() async throws {
-        let (webView, window) = try await hostedPreview(markdown: "# Still here\n\nKeep this paragraph.")
-        defer { tearDown(window) }
-        #expect(try await heading(in: webView) == "Still here")
-        try killWebContent(of: webView)
-        try await waitFor("the preview to render again after the web process died") {
-            (try? await heading(in: webView)) == "Still here"
-        }
-    }
-
-    private func hostedPreview(markdown: String) async throws -> (WKWebView, UIWindow) {
         let controller = UIHostingController(
-            rootView: MarkdownPreviewView(markdown: markdown, fileID: "blank-probe", generation: 1) { _ in }
-        )
+            rootView: MarkdownPreviewView(
+                markdown: "# Still here\n\nKeep this paragraph.", fileID: "blank-probe", generation: 1) { _ in })
         let window = testWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
         window.rootViewController = controller
         window.makeKeyAndVisible()
-        try await waitFor("hosted preview to render") {
-            guard let webView = findWebView(in: controller.view) else { return false }
-            return (try? await heading(in: webView)) == "Still here"
-        }
-        return (try #require(findWebView(in: controller.view)), window)
+        defer { tearDown(window) }
+        controller.view.layoutIfNeeded()
+        let webView = try #require(findWebView(in: controller.view))
+        await until(webView, \.isLoading) { !$0 }
+        #expect(try await text(of: "h1", in: webView) == "Still here")
+
+        try killWebContent(of: webView)
+        // The preview loads its page again once WebKit reports the crash.
+        await until(webView, \.isLoading) { $0 }
+        await until(webView, \.isLoading) { !$0 }
+        #expect(try await text(of: "h1", in: webView) == "Still here")
     }
 
     private func tearDown(_ window: UIWindow) {
@@ -307,10 +292,18 @@ struct PreviewWebKitTests {
         window.rootViewController = nil
     }
 
-    private func heading(in webView: WKWebView) async throws -> String? {
+    /// Returns the text of the first element matching `selector`, once the page has one.
+    private func text(of selector: String, in webView: WKWebView) async throws -> String? {
         try await webView.callAsyncJavaScript(
-            "return document.querySelector('h1')?.textContent ?? null;",
-            arguments: [:], in: nil, contentWorld: .page) as? String
+            """
+            while (!document.querySelector(selector)) {
+                await new Promise(changed => new MutationObserver((_, observer) => {
+                    observer.disconnect();
+                    changed();
+                }).observe(document, { childList: true, subtree: true }));
+            }
+            return document.querySelector(selector).textContent;
+            """, arguments: ["selector": selector], in: nil, contentWorld: .page) as? String
     }
 
     private func killWebContent(of webView: WKWebView) throws {
@@ -345,43 +338,47 @@ struct PreviewWebKitTests {
         return UIWindow(frame: frame)
     }
 
-    private func waitFor(_ description: String, condition: () async -> Bool) async throws {
-        for _ in 0..<300 {
-            if await condition() { return }
-            try await Task.sleep(for: .milliseconds(50))
+    /// Returns once `keyPath` of `object` meets `condition`, checking each value it changes to.
+    private func until<Object: NSObject, Value: Sendable>(
+        _ object: Object, _ keyPath: KeyPath<Object, Value>, _ condition: (Value) -> Bool
+    ) async {
+        let (values, send) = AsyncStream<Value>.makeStream()
+        let observation = object.observe(keyPath, options: [.initial, .new]) { _, change in
+            if let value = change.newValue { send.yield(value) }
         }
-        throw PreviewError("Timed out waiting for \(description).")
+        defer { observation.invalidate() }
+        for await value in values where condition(value) { return }
     }
 }
 
-/// Runs `sample` once per display frame until stopped.
+/// Runs `sample` once per display frame for as long as it returns true. The display link keeps the
+/// sampler until then.
 private final class FrameSampler: NSObject {
-    private let sample: @MainActor () -> Void
+    private let sample: () -> Bool
     private var link: CADisplayLink?
 
-    init(_ sample: @escaping @MainActor () -> Void) {
+    init(_ sample: @escaping () -> Bool) {
         self.sample = sample
         super.init()
         link = CADisplayLink(target: self, selector: #selector(tick))
         link?.add(to: .main, forMode: .common)
     }
 
-    @objc private func tick() { sample() }
-
-    func stop() { link?.invalidate() }
+    @objc private func tick() {
+        if !sample() { link?.invalidate() }
+    }
 }
 
-private final class MessageReceiver: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+@Observable
+private final class MessageReceiver: NSObject, WKScriptMessageHandler {
     var bodies: [[String: Any]] = []
     var origins: [String] = []
-    var navigationErrors: [String] = []
 
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        navigationErrors.append(error.localizedDescription)
-    }
-
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        navigationErrors.append(error.localizedDescription)
+    /// Returns once the page has posted a message of `type`.
+    func received(_ type: String) async {
+        for await posted in Observations({ self.bodies.contains { $0["type"] as? String == type } }) where posted {
+            return
+        }
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
