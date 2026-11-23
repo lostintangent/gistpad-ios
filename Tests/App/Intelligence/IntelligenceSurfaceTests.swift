@@ -5,6 +5,7 @@
     import UIKit
 
     @testable import GistPad
+    @testable import Intelligence
 
     @Suite(.serialized, .timeLimit(.minutes(1)))
     struct IntelligenceSurfaceTests {
@@ -81,6 +82,67 @@
             #expect(session.text.utf8.elementsEqual((source + "\nStill editable.").utf8))
             editor.undoManager?.undo()
             #expect(session.text.utf8.elementsEqual(source.utf8))
+        }
+
+        @Test func applyIsOneUndoThatKeepsTheTypingBeforeIt() async throws {
+            let source = "Take teh river path.\nLeave at 9am, before the cafe opens at 8am."
+            let editor = Editor(text: source)
+            let window = try host(editor)
+            defer {
+                window.endEditing(true)
+                await keyboard(visible: false, over: window)
+                window.isHidden = true
+            }
+            let undo = try #require(editor.textView.undoManager)
+            undo.removeAllActions()
+            editor.textView.selectedRange = NSRange(location: source.utf16.count, length: 0)
+            editor.textView.insertText("!")
+            editor.textViewDidChange(editor.textView)
+            await undoGroupCloses(in: undo)
+            let typed = source + "!"
+            let snapshot = editor.snapshot()
+            let note = NSRange(location: 0, length: snapshot.source.utf16.count)
+            let proposal = Proposal(
+                snapshot: snapshot,
+                scopedCandidates: [
+                    (Proposal.Change(quote: "teh", replacement: "the", reason: "Spelling."), note),
+                    (Proposal.Change(quote: "before", replacement: "after", reason: "Timing."), note),
+                ])
+
+            // Apply runs while the sheet's prompt field has the keyboard.
+            let field = UITextField(frame: CGRect(x: 20, y: 20, width: 200, height: 44))
+            window.rootViewController?.view.addSubview(field)
+            #expect(field.becomeFirstResponder())
+            let selection = editor.textView.selectedRange
+            _ = try editor.apply(proposal)
+            let edited = "Take the river path.\nLeave at 9am, after the cafe opens at 8am.!"
+            #expect(editor.text == edited)
+
+            field.resignFirstResponder()
+            #expect(editor.textView.becomeFirstResponder())
+            #expect(editor.textView.undoManager === undo)
+            for expected in [typed, source] {
+                undo.undo()
+                editor.textViewDidChange(editor.textView)
+                #expect(editor.text == expected)
+                if expected == typed { #expect(editor.textView.selectedRange == selection) }
+            }
+            for expected in [typed, edited] {
+                undo.redo()
+                editor.textViewDidChange(editor.textView)
+                #expect(editor.text == expected)
+            }
+        }
+
+        /// Returns once the undo group that typing opened closes at the end of the run loop's pass,
+        /// as it does between a keystroke and a tap on Apply.
+        private func undoGroupCloses(in undo: UndoManager) async {
+            guard undo.groupingLevel > 0 else { return }
+            let (closed, close) = AsyncStream<Never>.makeStream()
+            let center = NotificationCenter.default
+            let token = center.addObserver(of: undo, for: .didCloseUndoGroup) { _ in close.finish() }
+            defer { center.removeObserver(token) }
+            for await _ in closed {}
         }
     }
 

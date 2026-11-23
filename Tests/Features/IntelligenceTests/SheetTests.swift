@@ -1,26 +1,16 @@
 #if canImport(UIKit)
-    @testable import Editor
-    import SwiftUI
+    import Editor
+    import Foundation
     import Testing
-    import UIKit
 
     @testable import Intelligence
 
-    @Suite(.serialized, .timeLimit(.minutes(1)))
+    @Suite(.timeLimit(.minutes(1)))
     struct SheetTests {
         private let source = FixtureLanguageModel.source
 
-        @Test func nothingChangesUntilApplyAndApplyIsOneUndo() async throws {
+        @Test func nothingChangesUntilApply() async {
             let editor = Editor(text: source)
-            let window = host(editor)
-            defer { window.isHidden = true }
-            let undo = try #require(editor.textView.undoManager)
-            undo.removeAllActions()
-            editor.textView.selectedRange = NSRange(location: source.utf16.count, length: 0)
-            editor.textView.insertText("!")
-            editor.textViewDidChange(editor.textView)
-            await eventEnds(for: undo)
-            let typed = source + "!"
             var changes = 0
             editor.onEdit = { _, _ in changes += 1 }
             let state = IntelligenceState(editor: editor, backend: FixtureLanguageModel())
@@ -30,36 +20,17 @@
             await state.task?.value
             #expect(state.canApply)
             #expect(changes == 0)
-            #expect(editor.text == typed)
+            #expect(editor.text == source)
 
-            let field = UITextField(frame: CGRect(x: 20, y: 20, width: 200, height: 44))
-            window.rootViewController?.view.addSubview(field)
-            #expect(field.becomeFirstResponder())
-            let selection = editor.textView.selectedRange
-            let generation = editor.generation
             state.apply()
-            let edited = typed.replacingOccurrences(of: "teh", with: "the")
-                .replacingOccurrences(of: "before the cafe", with: "after the cafe")
             #expect(state.errorMessage == nil)
-            #expect(editor.text == edited)
-            #expect(editor.generation == generation + 1)
+            #expect(
+                editor.text
+                    == source.replacingOccurrences(of: "teh", with: "the")
+                    .replacingOccurrences(of: "before the cafe", with: "after the cafe"))
+            #expect(editor.generation == 1)
             #expect(changes == 1)
             #expect(state.appliedCount == 2)
-
-            field.resignFirstResponder()
-            #expect(editor.textView.becomeFirstResponder())
-            #expect(editor.textView.undoManager === undo)
-            for expected in [typed, source] {
-                undo.undo()
-                editor.textViewDidChange(editor.textView)
-                #expect(editor.text == expected)
-                if expected == typed { #expect(editor.textView.selectedRange == selection) }
-            }
-            for expected in [typed, edited] {
-                undo.redo()
-                editor.textViewDidChange(editor.textView)
-                #expect(editor.text == expected)
-            }
         }
 
         enum AskFailure: Sendable {
@@ -158,27 +129,6 @@
             editor.setShowsFrontMatter(shown)
             #expect(editor.text.utf8.elementsEqual(text.utf8))
             #expect(editor.generation == 8)
-        }
-
-        private func host(_ editor: Editor) -> UIWindow {
-            let controller = UIHostingController(rootView: EditorView(editor: editor))
-            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-            window.rootViewController = controller
-            window.makeKeyAndVisible()
-            controller.view.layoutIfNeeded()
-            editor.textView.becomeFirstResponder()
-            return window
-        }
-
-        /// Returns once the undo group that typing opened closes with the run loop's pass, as it
-        /// does between a keystroke and a tap on Apply.
-        private func eventEnds(for undo: UndoManager) async {
-            guard undo.groupingLevel > 0 else { return }
-            let (closed, close) = AsyncStream<Never>.makeStream()
-            let center = NotificationCenter.default
-            let token = center.addObserver(of: undo, for: .didCloseUndoGroup) { _ in close.finish() }
-            defer { center.removeObserver(token) }
-            for await _ in closed {}
         }
     }
 #endif
