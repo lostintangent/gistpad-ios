@@ -6,7 +6,7 @@
 
     @testable import GistPad
 
-    @Suite(.serialized)
+    @Suite(.serialized, .timeLimit(.minutes(1)))
     struct IntelligenceSurfaceTests {
         @Test func closingIntelligenceRestoresSourceSelectionFocusAndUndo() async throws {
             let source =
@@ -30,40 +30,48 @@
             window.rootViewController = host
             window.makeKeyAndVisible()
             defer {
-                editor.resignFirstResponder()
-                host.dismiss(animated: false)
+                if host.presentedViewController != nil {
+                    await completion { host.dismiss(animated: false, completion: $0) }
+                }
+                window.endEditing(true)
+                await keyboard(visible: false, over: host.view)
                 window.isHidden = true
                 window.rootViewController = nil
                 previous?.makeKeyAndVisible()
             }
-            try await waitForNativeReturnState("the retained editor to mount") {
-                host.view.layoutIfNeeded()
-                return editor.window === window && editor.bounds.height > 0
+            // Lays out the window and lets the sheet that starts opening or closing finish.
+            func settle() async {
+                window.layoutIfNeeded()
+                await transitions(under: host)
+                window.layoutIfNeeded()
             }
+            window.layoutIfNeeded()
+            try #require(editor.window === window && editor.bounds.height > 0)
             try #require(editor.becomeFirstResponder())
-            // A writer reaches their place with the keyboard already up, so let it finish arriving.
-            _ = try await settledOffset(of: editor, in: host)
+            // A writer reaches their place with the keyboard already up.
+            await keyboard(visible: true, over: host.view)
             editor.selectedRange = selection
             editor.scrollRangeToVisible(selection)
-            let offset = try await settledOffset(of: editor, in: host)
+            window.layoutIfNeeded()
+            let offset = editor.contentOffset.y
             try #require(offset > 0)
             presentation.present(
                 editor: session, title: "Saturday walk",
                 revealSource: { _ in Issue.record("Closing must not navigate to a passage.") })
             try #require(presentation.target?.wasEditing == true)
-            try await waitForNativeReturnState("the sheet's prompt to mount") {
-                intelligencePrompt(presentedOver: host) != nil
-            }
+            await settle()
+            try #require(intelligencePrompt(presentedOver: host) != nil)
             #expect(!editor.isFirstResponder)
             presentation.target = nil
-            try await waitForNativeReturnState("dismissal to resume the original editor") {
-                host.view.layoutIfNeeded()
-                return host.presentedViewController == nil && editor.isFirstResponder
-            }
+            await settle()
+            // The closing sheet hands focus back to the editor it came from.
+            await until { session.isEditing }
+            await keyboard(visible: true, over: host.view)
+            #expect(host.presentedViewController == nil)
+            #expect(editor.isFirstResponder)
             #expect(session.textView === editor)
             #expect(editor.selectedRange == selection)
-            let returned = try await settledOffset(of: editor, in: host)
-            #expect(abs(returned - offset) < 1)
+            #expect(abs(editor.contentOffset.y - offset) < 1)
             #expect(session.text.utf8.elementsEqual(source.utf8))
             #expect(session.generation == 0)
             #expect(changes == 0)
@@ -74,46 +82,6 @@
             editor.undoManager?.undo()
             #expect(session.text.utf8.elementsEqual(source.utf8))
         }
-
-        private func waitForNativeReturnState(
-            _ description: String, until ready: @MainActor () -> Bool
-        ) async throws {
-            let deadline = ContinuousClock.now + .seconds(8)
-            while ContinuousClock.now < deadline {
-                if ready() { return }
-                try await Task.sleep(for: .milliseconds(20))
-            }
-            Issue.record("Timed out waiting for \(description).")
-            throw NativeReturnFailure.timedOut
-        }
-
-        /// The arriving keyboard, the collapsing title and any keyboard still leaving from an earlier
-        /// test move the editor's insets for a moment, so its position is comparable once they settle.
-        private func settledOffset(of editor: UITextView, in host: UIViewController) async throws
-            -> CGFloat
-        {
-            var state: [CGFloat] = []
-            var since = ContinuousClock.now
-            try await waitForNativeReturnState("the keyboard to settle") {
-                host.view.layoutIfNeeded()
-                let current = [
-                    editor.contentOffset.y, editor.adjustedContentInset.top,
-                    editor.adjustedContentInset.bottom,
-                ]
-                if current != state {
-                    state = current
-                    since = .now
-                }
-                return editor.inputAccessoryView?.window != nil
-                    && ContinuousClock.now - since > .milliseconds(300)
-            }
-            return editor.contentOffset.y
-        }
-
-        private enum NativeReturnFailure: Error {
-            case timedOut
-        }
-
     }
 
     /// The sheet's prompt field, found as a view because SwiftUI only builds
