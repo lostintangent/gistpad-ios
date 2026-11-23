@@ -58,16 +58,16 @@ struct LayoutTests {
         #expect(LayoutPreferences.allowsSplit(availableWidth: 641))
         #expect(
             layout.presentedMode(
-                availableWidth: 800, sessionMode: .preview, isEditing: false, canEdit: true) == .split)
+                allowsSplit: true, sessionMode: .preview, isEditing: false, canEdit: true) == .split)
         #expect(
             layout.presentedMode(
-                availableWidth: 402, sessionMode: .preview, isEditing: true, canEdit: true) == .edit)
+                allowsSplit: false, sessionMode: .preview, isEditing: true, canEdit: true) == .edit)
         #expect(
             layout.presentedMode(
-                availableWidth: 402, sessionMode: .preview, isEditing: false, canEdit: true) == .preview)
+                allowsSplit: false, sessionMode: .preview, isEditing: false, canEdit: true) == .preview)
         #expect(
             layout.presentedMode(
-                availableWidth: 800, sessionMode: .edit, isEditing: true, canEdit: false) == .preview)
+                allowsSplit: true, sessionMode: .edit, isEditing: true, canEdit: false) == .preview)
         #expect(layout.preferredMode == .split)
     }
 
@@ -204,7 +204,8 @@ private struct LayoutFixture: View {
                     mode: Binding(
                         get: {
                             layout.presentedMode(
-                                availableWidth: width, sessionMode: .edit,
+                                allowsSplit: LayoutPreferences.allowsSplit(availableWidth: width),
+                                sessionMode: .edit,
                                 isEditing: session.isEditing, canEdit: true)
                         },
                         set: { layout.select($0) }),

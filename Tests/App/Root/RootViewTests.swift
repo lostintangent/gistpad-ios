@@ -294,6 +294,22 @@ struct RootViewTests {
         #expect(!refresh.hasReachedGitHub)
     }
 
+    @Test func splitNeedsRoomForTwoPanesBesideTheSidebar() async throws {
+        let fixture = try await ModelFixture {
+            $0.addGist(id: "a", description: "A", files: ["README.md": "Source"])
+        }
+        let host = try await NavigationHost(fixture: fixture, sizeClass: .regular, mode: .split)
+        defer { await host.close() }
+        // An open Duo is regular either way, but beside the sidebar its detail can't fit two panes.
+        host.window.frame.size.width = 951
+        await host.model.open(.gist(id: "a"))
+        await host.settle()
+        #expect(host.picker?.numberOfSegments == 2)
+        try host.hideSidebar()
+        await host.settle()
+        #expect(host.picker?.numberOfSegments == 3)
+    }
+
     @Test func aNewGistLinkOpensABlankNoteReadyToWrite() async throws {
         let fixture = try await ModelFixture {
             $0.addGist(id: "a", description: "Existing", files: ["README.md": "Existing source"])
@@ -407,6 +423,16 @@ private struct NavigationHost {
         guard waitsForStart else { return }
         let model = self.model
         await until { model.phase == .ready && model.gistCache != nil }
+    }
+
+    /// Hides the Library, as the sidebar button does.
+    func hideSidebar() throws {
+        func splits(in controller: UIViewController) -> [UISplitViewController] {
+            [controller as? UISplitViewController].compactMap(\.self) + controller.children.flatMap(splits)
+        }
+        // The comments inspector is a split view too, without a sidebar.
+        let library = try #require(splits(in: root).first { $0.viewController(for: .primary) != nil })
+        library.hide(.primary)
     }
 
     /// Lays out the window and lets the navigation that starts finish. SwiftUI updates as the

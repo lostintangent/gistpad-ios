@@ -59,7 +59,7 @@ final class LayoutPreferences {
         defaults.set(collapsed.sorted(), forKey: Self.collapsedPinnedKey)
     }
 
-    static func allowsSplit(availableWidth: CGFloat) -> Bool {
+    nonisolated static func allowsSplit(availableWidth: CGFloat) -> Bool {
         availableWidth.isFinite && availableWidth >= 641
     }
 
@@ -77,11 +77,11 @@ final class LayoutPreferences {
     }
 
     func presentedMode(
-        availableWidth: CGFloat, sessionMode: FileMode, isEditing: Bool, canEdit: Bool
+        allowsSplit: Bool, sessionMode: FileMode, isEditing: Bool, canEdit: Bool
     ) -> FileMode {
         guard canEdit else { return .preview }
         if preferredMode == .split {
-            if Self.allowsSplit(availableWidth: availableWidth) { return .split }
+            if allowsSplit { return .split }
             if isEditing { return .edit }
         }
         return sessionMode == .split ? compactMode : sessionMode

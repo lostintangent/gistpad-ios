@@ -14,6 +14,7 @@ struct RootView: View {
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     @State private var sheet: Sheet?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var allowsSplit = false
     @State private var layout: LayoutPreferences
     @State private var intelligence = IntelligencePresentation()
     @State private var comments: CommentsPresentation
@@ -149,13 +150,24 @@ struct RootView: View {
             library
         } detail: {
             NavigationStack {
-                GeometryReader { geometry in
+                ZStack {
                     if let opening = model.opening, let failure = opening.failure {
                         OpenFailedView(gist: opening.details, message: failure) {
                             Task { await model.open(opening.request) }
                         }
                     } else if let details = model.opening?.details ?? active?.details {
-                        gistScreen(details, availableWidth: geometry.size.width)
+                        gistScreen(details)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // No trait says whether two panes fit beside the sidebar, so the column reports it.
+                .onGeometryChange(for: Bool.self) {
+                    LayoutPreferences.allowsSplit(availableWidth: $0.size.width)
+                } action: { allows in
+                    allowsSplit = allows
+                    // An edit that loses Split's room stays in Edit rather than falling back to Preview.
+                    if !allows, layout.preferredMode == .split, let active, active.editor.isEditing {
+                        active.mode = .edit
                     }
                 }
                 .libraryRail(
@@ -271,14 +283,13 @@ struct RootView: View {
 
     /// The file in the detail column, under its bar from the moment it's asked for, so the push
     /// brings the bar in with it. Only the content waits for the file.
-    private func gistScreen(_ details: GistDetails, availableWidth: CGFloat) -> some View {
-        let allowsSplit = LayoutPreferences.allowsSplit(availableWidth: availableWidth)
+    private func gistScreen(_ details: GistDetails) -> some View {
         let showsComments = comments.isPresented && active.map { comments.matches($0.file) } == true
         let mode = Binding(
             get: {
                 if showsComments { return comments.fileMode }
                 return layout.presentedMode(
-                    availableWidth: availableWidth,
+                    allowsSplit: allowsSplit,
                     sessionMode: active?.mode
                         ?? layout.initialMode(isUnpublished: model.opening?.isPublished == false),
                     isEditing: active?.editor.isEditing == true, canEdit: details.isOwned)
@@ -308,13 +319,13 @@ struct RootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay { model.opening.map { OpeningProgress(title: $0.details.title) } }
-        .background { active.map { session($0, allowsSplit: allowsSplit).id($0.editor.id) } }
+        .background { active.map { session($0).id($0.editor.id) } }
         .imagePicker(images)
     }
 
     /// What an open file keeps up while it's on screen: its refresh from GitHub and its comments,
     /// its status in the bottom bar, and the note Siri and Spotlight see.
-    private func session(_ fileEditor: GistFileEditor, allowsSplit: Bool) -> some View {
+    private func session(_ fileEditor: GistFileEditor) -> some View {
         let identifier = entityIdentifier(for: fileEditor)
         return Color.clear
             .toolbar {
@@ -341,11 +352,6 @@ struct RootView: View {
             .onDisappear { fileEditor.editor.entityIdentifier = nil }
             .task { await fileEditor.refresh() }
             .task(id: comments.tracking(fileEditor)) { await comments.track(fileEditor) }
-            .onChange(of: allowsSplit) { _, allows in
-                if !allows, layout.preferredMode == .split, fileEditor.editor.isEditing {
-                    fileEditor.mode = .edit
-                }
-            }
     }
 
     private func source(_ fileEditor: GistFileEditor) -> some View {
