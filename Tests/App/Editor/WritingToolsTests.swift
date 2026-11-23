@@ -48,7 +48,6 @@ extension EditorContinuityTests {
             session.textView.resignFirstResponder()
             window.isHidden = true
         }
-        session.textView.becomeFirstResponder()
         session.textView.selectedRange = (source as NSString).range(of: "rough")
         var changes: [String] = []
         session.onEdit = { text, _ in changes.append(text) }

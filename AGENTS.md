@@ -97,10 +97,12 @@ xcodebuild -workspace GistPad.xcworkspace -scheme GistPad \
   -derivedDataPath DerivedData -parallel-testing-enabled NO test
 ```
 
+- Package tests cover logic. A test that needs a window, for focus, the keyboard, undo or layout, runs app-hosted in `Tests/App` and opens its window with `UIWindow(windowScene:)` in the app's scene. Package tests run in Xcode's bare `xctest` agent, which has no scene, and `UIWindow(frame:)` is deprecated.
 - UI tests drive the real app against the DEBUG fixture GitHub (`FixtureServer` in Store), never a live account.
 - UI tests poll with `isTappable` and `text`, never `isHittable` or `value`, which fail the test instead of returning false while an element is missing or off screen.
 - `simctl` can't fold the Duo, so tests and captures run in whatever posture is set. Turning a display off with `simctl io screenConfig power` doesn't fold it either, and it can leave the simulator stuck in its compact posture. Change posture by hand with Device Hub's display switch. Physical fold transitions are left to the manual pass on the phone.
 - The slot simulator drifts over a long day. When every sheet takes about 5 s to finish presenting and tests time out on code that passed before, shut down and boot the slot simulator, never a new one, before suspecting the code.
+- When every UI test fails at `app.launch()` with "does not have a process ID" while `xcrun simctl launch` still works, the simulator's `testmanagerd` has gone stale. Find it with `pgrep -fl RuntimeRoot/usr/libexec/testmanagerd` and `kill` that PID, and the next run starts a fresh one.
 - The Intelligence eval runs synthetic notes, and live gists you name, through the on-device model on the Mac: `bash scripts/evaluate-intelligence.sh 10`. See `scripts/intelligence-eval/README.md`.
 - `scripts/preview-renderer` builds Preview's web bundle from the sibling `gistpad.dev` checkout and has its own typecheck, tests and build. See its README.
 - The project file is `GistPad.xcodeproj/project.xcproj`, Xcode 27's JSON format. Change settings with `xcrun xcodeproj` rather than by hand. The build number is set once for the whole project and committed with each build: `xcrun xcodeproj setting set CURRENT_PROJECT_VERSION <build>`.
@@ -155,7 +157,7 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 | `Sources/Shared/Appearance` | The personal accent color, its trait and `.accent(savedHex:)` modifier, and the `isPaneVisible` environment value. |
 | `Sources/Shared/Comments` | Comment bodies, threads, quotes and their highlights, and `CommentsModel`. |
 | `Sources/Shared/Store` | The nouns and where they're kept: gists, the GitHub client, drafts, the cache, the account and its preferences, photo storage and the DEBUG fixture GitHub. |
-| `Tests/App` | App-hosted tests, foldered by the capability they cover. |
+| `Tests/App` | App-hosted tests, foldered by the capability they cover, and every test that needs a window, such as Editor's focus, formatting and layout tests in `Editor`. |
 | `Tests/UI` | UI tests for the Library, a gist, daily notes and comments. |
 | `scripts` | Developer tools: `capture-matrix.sh`, `evaluate-intelligence.sh`, which runs the on-device Intelligence eval, the root package's `IntelligenceEval` target in `intelligence-eval`, and `preview-renderer`, which builds Preview's web bundle from the sibling `gistpad.dev` checkout into `Sources/Features/Preview`. |
 | `Configuration` | `Public.xcconfig`. |

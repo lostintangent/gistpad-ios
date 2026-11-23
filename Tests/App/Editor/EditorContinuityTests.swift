@@ -5,26 +5,11 @@ import UIKit
 
 @Suite(.serialized, .timeLimit(.minutes(1)))
 struct EditorContinuityTests {
-    func host(_ session: Editor) throws -> UIWindow {
-        let scene = try #require(
-            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-        let window = UIWindow(windowScene: scene)
-        let controller = UIViewController()
-        controller.view.addSubview(session.textView)
-        session.textView.frame = controller.view.bounds
-        session.textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        window.rootViewController = controller
-        window.makeKeyAndVisible()
-        controller.view.layoutIfNeeded()
-        return window
-    }
-
     @Test func sameTextViewSelectionAndUndoSurviveRepeatedResize() throws {
         let source = EditorFixture.markdown
         let session = Editor(text: source)
         let window = try host(session)
         defer { window.isHidden = true }
-        session.textView.becomeFirstResponder()
         session.textView.selectedRange = NSRange(location: 8, length: 0)
         session.textView.undoManager?.beginUndoGrouping()
         session.textView.insertText("📝日本語")
@@ -46,7 +31,6 @@ struct EditorContinuityTests {
         let session = Editor(text: "日本語のノート\n👨‍👩‍👧‍👦")
         let window = try host(session)
         defer { window.isHidden = true }
-        session.textView.becomeFirstResponder()
         session.textView.selectedRange = NSRange(location: 0, length: 0)
         session.textView.setMarkedText("にほんご", selectedRange: NSRange(location: 4, length: 0))
         #expect(session.textView.markedTextRange != nil)
@@ -68,7 +52,6 @@ struct EditorContinuityTests {
         let session = Editor(text: source)
         let window = try host(session)
         defer { window.isHidden = true }
-        session.textView.becomeFirstResponder()
         let edit = Edit(
             range: (source as NSString).range(of: "[ ]", options: .backwards), expected: "[ ]",
             replacement: "[x]")
@@ -88,7 +71,7 @@ struct EditorContinuityTests {
     @Test func previewMutationDoesNotNeedKeyboardAndPreservesSelection() throws {
         let source = "👨‍👩‍👧‍👦\n- [ ] Duplicate\n- [ ] Duplicate\n日本語"
         let session = Editor(text: source)
-        let window = try host(session)
+        let window = try host(session, focused: false)
         defer { window.isHidden = true }
         session.textView.selectedRange = NSRange(location: 0, length: 0)
         try session.apply(
@@ -106,7 +89,7 @@ struct EditorContinuityTests {
     @Test func readingAnchorSurvivesReflow() throws {
         let source = EditorFixture.markdown
         let session = Editor(text: source)
-        let window = try host(session)
+        let window = try host(session, focused: false)
         defer { window.isHidden = true }
         let view = session.textView
         let manager = try #require(view.textLayoutManager)

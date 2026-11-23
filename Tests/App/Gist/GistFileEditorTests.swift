@@ -38,7 +38,7 @@ struct GistFileEditorTests {
     @Test func anEditFromAShortcutIsOneUndo() async throws {
         let fixture = try await makeFixture()
         let fileEditor = try await fixture.open()
-        let window = try EditorContinuityTests().host(fileEditor.editor)
+        let window = try host(fileEditor.editor, focused: false)
         defer { window.isHidden = true }
         let image = "\n![Image](https://example.test/image.png)"
         let draft = fileEditor.file.nextDraft
@@ -64,7 +64,7 @@ struct GistFileEditorTests {
     @Test func retainedRemoteChangeIsReviewedWithoutReplacingSourceSelectionOrUndo() async throws {
         let fixture = try await makeFixture()
         let fileEditor = try await fixture.open()
-        let window = try EditorContinuityTests().host(fileEditor.editor)
+        let window = try host(fileEditor.editor, focused: false)
         defer { window.isHidden = true }
         let editor = fileEditor.editor.textView
         editor.becomeFirstResponder()
@@ -120,7 +120,7 @@ struct GistFileEditorTests {
     func resolvingAConflictEitherWayKeepsUndoHonest(keepsMine: Bool) async throws {
         let fixture = try await makeFixture()
         let fileEditor = try await fixture.open()
-        let window = try EditorContinuityTests().host(fileEditor.editor)
+        let window = try host(fileEditor.editor, focused: false)
         defer { window.isHidden = true }
         edit(fileEditor, to: "Mine")
         #expect(await fileEditor.waitForLocalSave())

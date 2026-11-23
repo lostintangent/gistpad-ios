@@ -1,42 +1,43 @@
-#if canImport(UIKit)
-    import SwiftUI
-    import Testing
-    import UIKit
+@testable import Editor
+import SwiftUI
+import Testing
+import UIKit
 
-    @testable import Editor
+/// Shows `editor`'s text view in a key window in the app's scene. The test hides the window when
+/// it ends.
+func host(_ editor: Editor, focused: Bool = true) throws -> UIWindow {
+    let controller = UIViewController()
+    editor.textView.frame = controller.view.bounds
+    editor.textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    controller.view.addSubview(editor.textView)
+    let window = try present(controller)
+    if focused { editor.textView.becomeFirstResponder() }
+    return window
+}
 
-    // Package tests have no connected UIWindowScene, so each test hosts the editor in its own key
-    // window and hides it when the test ends. Every suite that hosts a window nests here so those
-    // tests run one at a time. Otherwise main-actor tests from different suites interleave at each
-    // await, and one test's window takes key and first responder from another's.
-    @Suite(.serialized, .timeLimit(.minutes(1)))
-    enum HostedEditorTests {}
-
-    func host(_ editor: Editor, focused: Bool = true) -> UIWindow {
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-        let controller = UIViewController()
-        window.rootViewController = controller
-        window.makeKeyAndVisible()
-        editor.textView.frame = controller.view.bounds
-        editor.textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        controller.view.addSubview(editor.textView)
-        window.layoutIfNeeded()
-        if focused { editor.textView.becomeFirstResponder() }
-        return window
-    }
-
-    func hostEditor(
-        _ editor: Editor, title: String? = nil, intelligence: (@MainActor () -> Void)? = nil,
-        insertImage: (@MainActor () -> Void)? = nil
-    ) -> UIWindow {
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-        window.rootViewController = UIHostingController(
+/// Shows `editor` in its `EditorView`, with the keyboard bar, focused in a key window in the app's
+/// scene.
+func hostEditor(
+    _ editor: Editor, title: String? = nil, intelligence: (@MainActor () -> Void)? = nil,
+    insertImage: (@MainActor () -> Void)? = nil
+) throws -> UIWindow {
+    let window = try present(
+        UIHostingController(
             rootView: EditorView(
                 editor: editor, title: title, insertImage: insertImage,
-                intelligence: intelligence))
-        window.makeKeyAndVisible()
-        window.layoutIfNeeded()
-        editor.textView.becomeFirstResponder()
-        return window
-    }
-#endif
+                intelligence: intelligence)))
+    editor.textView.becomeFirstResponder()
+    return window
+}
+
+private func present(_ controller: UIViewController) throws -> UIWindow {
+    let scene = try #require(
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = UIWindow(windowScene: scene)
+    // A phone-sized window lays out the same in either of the Duo's postures.
+    window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+    window.rootViewController = controller
+    window.makeKeyAndVisible()
+    window.layoutIfNeeded()
+    return window
+}
