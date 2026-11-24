@@ -5,7 +5,6 @@ import SwiftUI
 struct GistRow: View {
     let gist: GistItem
     let tags: [Tag]
-    /// The library's day, which dates the row.
     let today: Date
     var showsStar = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -79,7 +78,7 @@ struct GistRow: View {
                     counts
                 }
                 if let updatedAt = gist.updatedAt {
-                    Text(updatedAt, format: .dayRelative(to: today, locale: locale, calendar: calendar))
+                    Text(verbatim: updatedAt.dayRelative(to: today, locale: locale, calendar: calendar))
                         .foregroundStyle(.secondary)
                 }
             }

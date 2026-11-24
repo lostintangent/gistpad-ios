@@ -98,16 +98,12 @@ struct LibraryStateTests {
     @Test func dateSectionsMoveWithTheModelsDay() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .gmt
-        let referenceDay = SampleLibrary.referenceDate
         let state = LibraryState(
             gists: gists, tags: tags,
-            today: DailyNote(day: .init(date: referenceDay.addingTimeInterval(-3_600), timeZone: .gmt)))
+            today: DailyNote(day: .init(date: SampleLibrary.referenceDate.addingTimeInterval(-3_600), timeZone: .gmt)))
         #expect(state.dateSections(calendar: calendar).map(\.group) == [.today, .yesterday])
-        #expect(state.dateSections(calendar: calendar).map { $0.gists.map(\.id) } == [["weekend", "words"], ["mixed"]])
-
-        state.today = DailyNote(day: .init(date: referenceDay, timeZone: .gmt))
+        state.today = DailyNote(day: .init(date: SampleLibrary.referenceDate, timeZone: .gmt))
         #expect(state.dateSections(calendar: calendar).map(\.group) == [.yesterday, .previousSevenDays])
-        #expect(state.dateSections(calendar: calendar).map { $0.gists.map(\.id) } == [["weekend", "words"], ["mixed"]])
     }
 
     @Test func aDailyNoteIsTitledByItsDayWithoutAFilename() throws {

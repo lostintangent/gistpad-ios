@@ -144,7 +144,7 @@ public struct LauncherWidgetView: View {
                     .lineLimit(lineLimit)
                     .privacySensitive()
                 if showsTime {
-                    Text(gist.updatedAt, format: .dayRelative(to: date, locale: locale, calendar: calendar))
+                    Text(verbatim: gist.updatedAt.dayRelative(to: date, locale: locale, calendar: calendar))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

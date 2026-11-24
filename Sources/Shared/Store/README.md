@@ -104,10 +104,9 @@ refresh rebuilds it.
 and `TaskProgress` counts tasks with the web's markers.
 `DailyNote.addition` is what Add to Today appends: a paragraph or one task per line.
 
-`Date.DayRelativeFormatStyle`, or `.dayRelative(to:)`, dates a change the way
-Notes lists it, against a reference day such as the library's today or a widget
-entry's date: a time that day, then Yesterday, the weekday that week, and the
-date before that.
+`Date.dayRelative(to:locale:calendar:)` dates a change the way Notes lists it,
+against a reference day such as the library's today or a widget entry's date:
+a time that day, then Yesterday, the weekday that week, and the date before that.
 
 ## Links and photos
 
