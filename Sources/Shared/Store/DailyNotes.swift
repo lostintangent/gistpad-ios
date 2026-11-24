@@ -59,10 +59,7 @@ extension DailyNote {
 
     /// The day's `YYYY-MM-DD.md` filename in `timeZone`.
     public static func filename(date: Date = .now, timeZone: TimeZone = .current) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let parts = calendar.dateComponents([.year, .month, .day], from: date)
-        return String(format: "%04d-%02d-%02d.md", parts.year!, parts.month!, parts.day!)
+        date.formatted(Date.ISO8601FormatStyle(timeZone: timeZone).year().month().day()) + ".md"
     }
 
     /// The day a daily note's `YYYY-MM-DD.md` filename names, in `timeZone`.

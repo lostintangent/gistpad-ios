@@ -43,14 +43,8 @@ public struct Gist: Codable, Equatable, Identifiable, Sendable {
     }
 
     public var isDailyNote: Bool { description == DailyNote.gistDescription }
-    public var isArchived: Bool {
-        (description ?? "").range(of: #"\s*\[Archived\]$"#, options: .regularExpression) != nil
-    }
-    public var displayDescription: String {
-        (description ?? "").replacingOccurrences(
-            of: #"\s*\[Archived\]$"#, with: "", options: .regularExpression
-        )
-    }
+    public var isArchived: Bool { description?.contains(/\s*\[Archived\]$/) ?? false }
+    public var displayDescription: String { description?.replacing(/\s*\[Archived\]$/, with: "") ?? "" }
     public var markdownFilenames: [String] { files.keys.filter { $0.hasSuffix(".md") }.sorted() }
     public var defaultMarkdownFilename: String? {
         if let dated = datedFiles {
