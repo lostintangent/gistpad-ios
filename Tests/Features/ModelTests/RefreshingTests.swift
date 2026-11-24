@@ -67,4 +67,19 @@ struct RefreshingTests {
         #expect(phone.onScreen == "Changed again")
         #expect(phone.publishes.isEmpty)
     }
+
+    @Test func `Someone else's note shows their changes as I come back, with nothing for me to publish`() async throws {
+        let phone = try await Phone {
+            $0.addGist(
+                id: "theirs", description: "Theirs", files: ["README.md": "First"],
+                owner: FixtureServer.someoneElse, isStarred: true)
+        }
+        await phone.launch()
+        let theirs = try await phone.open(.gist(id: "theirs"))
+
+        phone.webEdits("theirs", ["README.md": "Second"])
+        await phone.returnToApp()
+        #expect(phone.onScreen == "Second")
+        #expect(theirs.status == .published)
+    }
 }

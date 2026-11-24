@@ -75,7 +75,7 @@
 ### Everything else
 - Title, star, archive, comments, adding or renaming a file, tags, pins and settings apply right away. They need a connection and are never drafted.
 - A new file starts blank. A renamed file keeps its draft.
-- Someone else's gist is read-only.
+- Someone else's gist is read-only, and refreshes like your own.
 
 ### Accounts
 - Signing out keeps your drafts. They publish when you sign back in.

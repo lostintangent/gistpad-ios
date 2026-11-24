@@ -59,6 +59,12 @@ public struct GistFile: Equatable, Sendable, Identifiable {
         settle()
     }
 
+    /// Takes GitHub's newer text for a file you haven't typed in.
+    mutating func update(_ text: String, in gist: Gist) {
+        self.gist = gist
+        published = GitHubVersion(text: text, revision: gist.revision)
+    }
+
     /// Takes the name GitHub gave a file you haven't typed in.
     mutating func rename(_ filename: String) {
         self.filename = filename
