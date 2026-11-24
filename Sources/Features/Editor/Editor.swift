@@ -325,7 +325,7 @@
             guard canFormat,
                 textView.findInteraction?.isFindNavigatorVisible != true
             else { return true }
-            synchronizeText()
+            if !text.utf8.elementsEqual(textView.text.utf8) { synchronizeText() }
             do {
                 guard let edit = try Typing.edit(in: text, selection: range, replacement: replacement)
                 else { return true }

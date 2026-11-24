@@ -145,5 +145,31 @@
                 }
             }
         }
+
+        @Test func aKeystrokePaintsTheNoteOnce() {
+            let editor = Editor(text: "# Heading\n\nProse")
+            let view = editor.textView
+            view.selectedRange = NSRange(location: view.textStorage.length, length: 0)
+            let paints = AttributePasses(of: view.textStorage)
+            view.insertText("!")
+            #expect(editor.text == "# Heading\n\nProse!")
+            #expect(paints.count == 1)
+        }
+    }
+
+    /// Counts the passes that restyle `storage` without changing its characters.
+    private final class AttributePasses: NSObject {
+        private(set) var count = 0
+
+        init(of storage: NSTextStorage) {
+            super.init()
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(didProcessEditing(_:)),
+                name: NSTextStorage.didProcessEditingNotification, object: storage)
+        }
+
+        @objc private func didProcessEditing(_ notification: Notification) {
+            if (notification.object as? NSTextStorage)?.editedMask == .editedAttributes { count += 1 }
+        }
     }
 #endif
