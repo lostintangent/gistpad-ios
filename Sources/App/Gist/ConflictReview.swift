@@ -130,7 +130,6 @@ struct ConflictReview: View {
             Text(verbatim: text)
                 .font(.system(.body, design: .monospaced))
                 .textSelection(.enabled)
-                .fixedSize(horizontal: true, vertical: false)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -142,7 +141,7 @@ struct ConflictReview: View {
                 Text("No source changes.")
             } else {
                 ScrollView(.horizontal) {
-                    LazyVStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 4) {
                         ForEach(lines) { line in
                             Text(verbatim: "\(line.isAddition ? "+" : "-") \(line.text)")
                                 .font(.system(.body, design: .monospaced))
@@ -153,7 +152,6 @@ struct ConflictReview: View {
                                         : String(localized: "Removed: \(line.text)"))
                         }
                     }
-                    .fixedSize(horizontal: true, vertical: false)
                 }
             }
         }
