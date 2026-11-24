@@ -69,45 +69,26 @@ public struct LauncherWidgetView: View {
                 // The tap area spills past the column, and the pencil sits optically on the date's edge.
                 newGist.padding(-newGistPad).offset(x: -2, y: -newGistLift)
             }
-            ZStack(alignment: .topLeading) {
-                rowSlots
-                VStack(alignment: .leading, spacing: 0) {
-                    if recents.isEmpty {
-                        note
-                    } else {
-                        ForEach(Array(recents.prefix(rowCount).enumerated()), id: \.element.id) { index, gist in
-                            if index > 0 { Divider().frame(height: rowGap) }
-                            row(gist, lineLimit: 1, showsTime: true)
-                        }
+            VStack(alignment: .leading, spacing: 0) {
+                if recents.isEmpty {
+                    note
+                } else {
+                    ForEach(Array(recents.prefix(rowCount).enumerated()), id: \.element.id) { index, gist in
+                        if index > 0 { Divider().frame(height: rowGap) }
+                        row(gist, lineLimit: 1, showsTime: true)
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            // A full list runs a hair into the bottom margin, without moving the date or pencil off theirs.
+            .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
         }
-        // Both columns are as tall as a full list, so New Gist ends where its last row does.
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    private var rowCount: Int { dynamicTypeSize.isAccessibilitySize ? 2 : 3 }
+    /// Three fill the widget at the default text size, so bigger text shows two.
+    private var rowCount: Int { dynamicTypeSize > .large ? 2 : 3 }
     private let rowGap: CGFloat = 10
     /// Between medium's date column and its list, a little roomier than the widget's margin.
     private let dateGap: CGFloat = 20
-
-    /// A full list's rows, unseen, so both columns are always a full list tall and New Gist stays
-    /// put however many gists there are.
-    private var rowSlots: some View {
-        VStack(alignment: .leading, spacing: rowGap) {
-            ForEach(0..<rowCount, id: \.self) { _ in
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(verbatim: " ").font(.subheadline.weight(.semibold))
-                    Text(verbatim: " ").font(.footnote)
-                }
-            }
-        }
-        .hidden()
-        .accessibilityHidden(true)
-    }
 
     private var dateBlock: some View {
         dateBlock {
@@ -135,8 +116,8 @@ public struct LauncherWidgetView: View {
 
     /// A fixed pad, not a scaled frame, since widgets stop growing text before Dynamic Type does.
     private let newGistPad: CGFloat = 10
-    /// Raises the pencil's square from the bottom of its frame to the last row's text, growing with it.
-    @ScaledMetric(relativeTo: .title3) private var newGistLift: CGFloat = 1.33
+    /// Lines the pencil up with a full list's last line at the default text size.
+    private let newGistLift: CGFloat = 1
 
     @ViewBuilder
     private var newGist: some View {
