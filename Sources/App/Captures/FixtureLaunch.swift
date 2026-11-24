@@ -64,7 +64,7 @@
             }
             let store = try GistFileDraftStore.open(inMemory: true)
             if fixture == .offline, let account = try await accounts.connectedAccount() {
-                let github = await accounts.githubClient(accountID: account.id)
+                let github = accounts.githubClient(accountID: account.id)
                 try await GistCache(
                     accountID: account.id, owned: github.listGists(), starred: github.listStarredGists()
                 ).save(to: store.modelContainer)

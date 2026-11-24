@@ -66,7 +66,7 @@ extension GistPadModel {
         do {
             let refreshed = try await refreshedAccount()
             guard refreshed.id == account.id else { throw AccountError.accountChanged }
-            let github = await client(accountID: account.id)
+            let github = client(accountID: account.id)
             async let ownedGists = github.listGists()
             async let starredGists = github.listStarredGists()
             let (owned, starred) = try await (ownedGists, starredGists)
@@ -121,7 +121,7 @@ extension GistFileEditor {
         let read = file.nextDraft
         do {
             let ownerID = try model.ownerID
-            let github = await model.client(accountID: read.accountID)
+            let github = model.client(accountID: read.accountID)
             let (stored, latest) = try await model.serially {
                 let stored = try await model.current(read)
                 let current = stored ?? read

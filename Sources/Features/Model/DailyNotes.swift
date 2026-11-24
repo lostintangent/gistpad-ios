@@ -26,7 +26,7 @@ extension GistPadModel {
     /// and autosave publishes it like any other file.
     public func today(_ target: DailyNote.Day = .init()) async throws -> GistFile {
         guard let account else { throw AccountError.accountChanged }
-        let github = await client(accountID: account.id)
+        let github = client(accountID: account.id)
         return try await serially {
             let drafts = try await draftStore.drafts(accountID: account.id)
             let cached = try cache(account.id)

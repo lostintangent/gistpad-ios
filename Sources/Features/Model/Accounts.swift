@@ -110,14 +110,14 @@ extension GistPadModel {
             throw AccountError.accountChanged
         }
         guard let gistID = file.gistID else { throw DraftError.notFound }
-        let storage = await accountStore.imageStorage(accountID: file.accountID)
+        let storage = accountStore.imageStorage(accountID: file.accountID)
         return try await storage.upload(image, gistID: gistID)
     }
 
     /// A gist's conversation, which you take part in as the signed-in account.
     public func comments(for gist: Gist) async throws -> CommentsModel {
         guard let account else { throw AccountError.accountChanged }
-        let github = await client(accountID: account.id)
+        let github = client(accountID: account.id)
         return CommentsModel(
             gistID: gist.id, userID: account.github.id, gistOwnerID: gist.owner?.id, github: github)
     }

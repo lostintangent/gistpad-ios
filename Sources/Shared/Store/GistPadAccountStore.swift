@@ -150,11 +150,11 @@ public actor GistPadAccountStore {
         return try snapshot(session.user)
     }
 
-    public func githubClient(accountID: UUID) -> GitHubClient {
+    public nonisolated func githubClient(accountID: UUID) -> GitHubClient {
         GitHubClient(session: httpSession) { [self] in try await githubToken(accountID: accountID) }
     }
 
-    public func imageStorage(accountID: UUID) -> ImageStorage {
+    public nonisolated func imageStorage(accountID: UUID) -> ImageStorage {
         ImageStorage(publishableKey: publishableKey, session: httpSession) { [self] in
             try await storageToken(accountID: accountID)
         }

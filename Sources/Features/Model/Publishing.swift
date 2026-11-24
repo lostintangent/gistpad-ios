@@ -67,7 +67,7 @@ extension GistPadModel {
     public func publish(_ draft: GistFileDraft) async throws -> GistFileDraft? {
         let accountID = draft.accountID
         guard account?.id == accountID else { throw AccountError.accountChanged }
-        let github = await client(accountID: accountID)
+        let github = client(accountID: accountID)
         let saved = try await serially { try await publish(draft, to: github) }
         if draft.gistID == nil, let gistID = saved?.gistID { publishedGistIDs[draft.id] = gistID }
         if account?.id == accountID {

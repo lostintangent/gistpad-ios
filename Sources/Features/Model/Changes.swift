@@ -70,7 +70,7 @@ extension GistPadModel {
 
     public func setStarred(_ starred: Bool, gistID: String) async throws {
         try await change { account in
-            let github = await client(accountID: account.id)
+            let github = client(accountID: account.id)
             let gist = try await serially {
                 let gist = try await github.gist(id: gistID)
                 try await github.setStarred(starred, id: gistID)
@@ -364,7 +364,7 @@ extension GistPadModel {
 
     /// A gist the account owns, read fresh from GitHub before changing it.
     private func ownedGist(_ id: String, account: GistPadAccount) async throws -> (GitHubClient, Gist) {
-        let github = await client(accountID: account.id)
+        let github = client(accountID: account.id)
         let gist = try await github.gist(id: id)
         guard gist.owner?.id == account.github.id else { throw DraftError.readOnly }
         return (github, gist)

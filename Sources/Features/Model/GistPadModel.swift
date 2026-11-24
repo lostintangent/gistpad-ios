@@ -38,7 +38,6 @@ public final class GistPadModel {
     @ObservationIgnored let draftStore: GistFileDraftStore
     /// Where this iPhone remembers the file each account last had open.
     @ObservationIgnored let defaults: UserDefaults
-    @ObservationIgnored private var clients: [UUID: GitHubClient] = [:]
     @ObservationIgnored private var isWriting = false
     @ObservationIgnored private var writers: [CheckedContinuation<Void, Never>] = []
     @ObservationIgnored var libraryRequest = UUID()
@@ -55,14 +54,8 @@ public final class GistPadModel {
         self.defaults = defaults
     }
 
-    /// GitHub as the account sees it, one client per account.
-    func client(accountID: UUID) async -> GitHubClient {
-        if let client = clients[accountID] { return client }
-        let client = await accountStore.githubClient(accountID: accountID)
-        if let existing = clients[accountID] { return existing }
-        clients[accountID] = client
-        return client
-    }
+    /// GitHub as the account sees it.
+    func client(accountID: UUID) -> GitHubClient { accountStore.githubClient(accountID: accountID) }
 
     /// A gist as GitHub has it now, which the cache then keeps.
     func gist(id: String, accountID: UUID) async throws -> Gist {
