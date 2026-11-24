@@ -1,5 +1,6 @@
 #if os(iOS)
 import Appearance
+import Store
 import SwiftUI
 import WidgetKit
 
@@ -143,7 +144,7 @@ public struct LauncherWidgetView: View {
                     .lineLimit(lineLimit)
                     .privacySensitive()
                 if showsTime {
-                    Text(verbatim: timeLabel(for: gist.updatedAt))
+                    Text(gist.updatedAt, format: .dayRelative(to: date, locale: locale, calendar: calendar))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -165,24 +166,6 @@ public struct LauncherWidgetView: View {
         }
         .font(.subheadline)
         .foregroundStyle(.secondary)
-    }
-
-    /// Dated like the gist list: a time today, then Yesterday, a weekday this week, or the date.
-    private func timeLabel(for updatedAt: Date) -> String {
-        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
-        if calendar.isDate(updatedAt, inSameDayAs: date) {
-            return updatedAt.formatted(style.hour().minute())
-        }
-        if let yesterday = calendar.date(byAdding: .day, value: -1, to: date),
-           calendar.isDate(updatedAt, inSameDayAs: yesterday) {
-            return String(localized: "Yesterday", locale: locale)
-        }
-        if calendar.isDate(updatedAt, equalTo: date, toGranularity: .weekOfYear) {
-            return updatedAt.formatted(style.weekday(.wide))
-        }
-        let day = style.month(.defaultDigits).day()
-        return updatedAt.formatted(
-            calendar.isDate(updatedAt, equalTo: date, toGranularity: .year) ? day : day.year())
     }
 }
 #endif
