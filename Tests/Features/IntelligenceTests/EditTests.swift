@@ -461,6 +461,8 @@ struct EditTests {
         #expect(try await revised("One\n\nTwo\n\nThree", "One\n\nThree") == "One\n\nThree")
         #expect(try await revised("One\n\nTwo\n\nThree", "Two\n\nThree") == "Two\n\nThree")
         #expect(try await revised("- [ ] A\nKeep  \n", "- [x] A\nKeep") == "- [x] A\nKeep  \n")
+        #expect(try await revised("\nMilk", "# Groceries\n\nEggs\nMilk") == "# Groceries\n\nEggs\nMilk")
+        #expect(try await revised("\n\nMilk\nEggs\n", "# Groceries\n\nMilk") == "# Groceries\n\nMilk\n")
         #expect(
             try await revised(
                 "# Title\n\nBody\n\n## Next\n\n- x\n",

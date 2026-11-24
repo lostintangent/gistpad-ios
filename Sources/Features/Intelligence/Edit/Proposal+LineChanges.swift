@@ -48,88 +48,51 @@ extension Proposal.Change {
                 )
             ]
         }
-        let difference = new.map(key).difference(from: old.map { key($0.text) })
         var removed = Set<Int>()
         var inserted = Set<Int>()
-        for change in difference {
+        for change in new.map(key).difference(from: old.map { key($0.text) }) {
             switch change {
             case .remove(let offset, _, _): removed.insert(offset)
             case .insert(let offset, _, _): inserted.insert(offset)
             }
         }
-        // A line the model copied keeps its original text, including what the key ignores.
-        var i = 0
-        var j = 0
-        while i < old.count, j < new.count {
-            if removed.contains(i) {
-                i += 1
-            } else if inserted.contains(j) {
-                j += 1
-            } else {
-                new[j] = old[i].text
-                i += 1
-                j += 1
-            }
+        // The lines the model copied, paired in order between a pair before the note and one after it.
+        let copied: [(old: Int, new: Int)] =
+            [(-1, -1)]
+            + zip(old.indices.filter { !removed.contains($0) }, new.indices.filter { !inserted.contains($0) })
+            .map { ($0, $1) } + [(old.count, new.count)]
+        // A copied line keeps its original text, including what the key ignores.
+        for (i, j) in copied.dropFirst().dropLast() { new[j] = old[i].text }
+        // A change replaces the lines between two pairs.
+        func covered(by change: (start: Int, end: Int)) -> (old: Range<Int>, new: Range<Int>) {
+            let (start, end) = (copied[change.start], copied[change.end])
+            return (start.old + 1..<end.old, start.new + 1..<end.new)
         }
-        // Runs of changed lines, as old lines a..<b becoming new lines c..<d.
-        var runs: [(a: Int, b: Int, c: Int, d: Int)] = []
-        i = 0
-        j = 0
-        while i < old.count || j < new.count {
-            if i < old.count, j < new.count, !removed.contains(i), !inserted.contains(j) {
-                i += 1
-                j += 1
-                continue
-            }
-            let a = i
-            let c = j
-            var advanced = true
-            while advanced {
-                advanced = false
-                while i < old.count, removed.contains(i) {
-                    i += 1
-                    advanced = true
-                }
-                while j < new.count, inserted.contains(j) {
-                    j += 1
-                    advanced = true
-                }
-            }
-            var run = (a: a, b: i, c: c, d: j)
-            // A quote needs existing text and a replacement needs a line to keep its line breaks, so a
-            // run takes in unchanged lines before it, or after it at the top, until it quotes text.
-            while run.a == run.b || run.c == run.d
-                || old[run.a..<run.b].allSatisfy({ $0.text.allSatisfy(\.isWhitespace) })
-            {
-                if let last = runs.last, run.a == last.b {
-                    run = (last.a, run.b, last.c, run.d)
-                    runs.removeLast()
-                } else if run.a > 0 {
-                    run.a -= 1
-                    run.c -= 1
-                } else if run.b < old.count {
-                    run.b += 1
-                    run.d += 1
-                } else {
-                    break
-                }
-            }
-            i = run.b
-            j = run.d
-            if let last = runs.last, run.a <= last.b {
-                runs[runs.count - 1] = (last.a, max(last.b, run.b), last.c, max(last.d, run.d))
-            } else {
-                runs.append(run)
-            }
+        // A quote needs existing text and a replacement needs a line to keep its line breaks.
+        func quotesText(_ change: (start: Int, end: Int)) -> Bool {
+            let lines = covered(by: change)
+            return !lines.new.isEmpty && old[lines.old].contains { !$0.text.allSatisfy(\.isWhitespace) }
         }
-        return runs.map { run in
-            let range = NSRange(
-                location: old[run.a].range.location,
-                length: NSMaxRange(old[run.b - 1].range) - old[run.a].range.location)
+        var changes: [(start: Int, end: Int)] = []
+        for end in copied.indices.dropFirst() where end > changes.last?.end ?? 0 {
+            var change = (start: end - 1, end: end)
+            let lines = covered(by: change)
+            guard !lines.old.isEmpty || !lines.new.isEmpty else { continue }
+            // A change takes in the copied lines before it, or after it at the top, and any change it
+            // reaches, until it quotes text.
+            while !quotesText(change), change.start > 0 || change.end < copied.count - 1 {
+                if change.start > 0 { change.start -= 1 } else { change.end += 1 }
+                if let last = changes.last, change.start < last.end { change.start = changes.removeLast().start }
+            }
+            changes.append(change)
+        }
+        return changes.map { change in
+            let lines = covered(by: change)
+            let range = NSUnionRange(old[lines.old.lowerBound].range, old[lines.old.upperBound - 1].range)
             return (
                 Self(
                     quote: (source as NSString).substring(with: range),
-                    replacement: new[run.c..<run.d].joined(separator: newline), reason: ""),
+                    replacement: new[lines.new].joined(separator: newline), reason: ""),
                 range
             )
         }
