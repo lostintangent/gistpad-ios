@@ -110,6 +110,35 @@ struct LibrarySnapshotTests {
         ])
     }
 
+    @Test func widgetRanksAGistByTheNewestEditToAnyOfItsFiles() async throws {
+        let newer = try gist("newer", "Published last", updated: "2026-10-20T00:00:00Z")
+        let work = try gist(
+            "work", "Work", updated: "2026-10-10T00:00:00Z",
+            files: ["README.md": "Plans", "work.md": "Tasks"])
+        let ideas = try gist("ideas", "Ideas", updated: "2026-10-01T00:00:00Z")
+        let store = try GistFileDraftStore.open(inMemory: true)
+        let typed = try await store.save(
+            GistFileDraft(accountID: account, gist: work, filename: "work.md", text: "Tasks"),
+            text: "Tasks typed on the phone", github: nil)
+        let sibling = try await store.save(
+            GistFileDraft(accountID: account, gistID: ideas.id, filename: "Next.md"),
+            text: "# A new file", github: nil)
+
+        let snapshot = LibrarySnapshot.make(
+            account: GistPadAccount(id: account, github: FixtureServer.you, preferences: GistPadPreferences(metadata: [:])),
+            cache: GistCache(accountID: account, owned: [newer, work, ideas], starred: []),
+            drafts: [typed, sibling])
+
+        #expect(snapshot.recents.map(\.link) == [
+            .gist(id: ideas.id, filename: "README.md"), .gist(id: work.id, filename: "README.md"),
+            .gist(id: newer.id, filename: "README.md")
+        ])
+        #expect(snapshot.recents.map(\.updatedAt) == [sibling.editedAt, typed.editedAt, newer.updatedAt])
+        // Each file keeps its own edit in Shortcuts and Spotlight.
+        #expect(snapshot.gists.first { $0.link == .gist(id: work.id, filename: "README.md") }?.updatedAt
+            == work.updatedAt)
+    }
+
     private func gist(
         _ id: String, _ description: String, updated: String, filename: String = "README.md",
         files: [String: String]? = nil

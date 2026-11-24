@@ -50,9 +50,10 @@ an open editor as one Undo step.
 Both targets read `LibrarySnapshot`, one JSON file in the
 `group.dev.gistpad.GistPad` container. It holds the active account, note
 identities and snippets but **not full note bodies**, and the three recent
-gists the widget shows: your own, newest edit first, counting unpublished
-edits on the phone, without daily notes or archived gists. It's written
-atomically with protection until first unlock so StandBy can read it.
+gists the widget shows: your own, by the newest edit to any of their files,
+counting unpublished edits on the phone, without daily notes or archived gists.
+It's written atomically with protection until first unlock so StandBy can read
+it.
 No credentials are shared.
 
 The GistPad widget is a launcher in small and medium. Its date opens Today, New
@@ -66,7 +67,8 @@ widget is one round button with GistPad's notebook mark that opens Today.
 ## Validation
 
 `swift test` covers link round-trips, per-file note identities and front-matter
-stripping, and the widget's recent gists counting your unpublished edits.
+stripping, and the widget's recent gists counting your unpublished edits to any
+file.
 `PlatformTests` in the app host covers Add to Today from a Shortcut, Siri
 create and append on open and closed files, metadata updates, and photo upload
 at the cursor. Installed widgets, Control Center, Siri on the phone, Spotlight

@@ -6,7 +6,8 @@ public struct LibrarySnapshot: Codable, Sendable {
     public let accountID: UUID?
     let accentHex: String?
     public let gists: [GistEntity]
-    /// The widget's recent gists: your own, newest edit first, without daily notes or archived gists.
+    /// The widget's recent gists: your own, newest edit anywhere in the gist first, without daily
+    /// notes or archived gists.
     let recents: [GistEntity]
 
     public static func make(
@@ -15,62 +16,62 @@ public struct LibrarySnapshot: Codable, Sendable {
     ) -> Self {
         guard let account else { return Self(accountID: nil, accentHex: nil, gists: [], recents: []) }
         let preferences = account.preferences
-        var gists: [(entity: GistEntity, isRecent: Bool)] = []
-        func add(
-            _ title: String, text: String?, updatedAt: Date, link: GistPadLink, in gist: Gist?,
-            isRecent: Bool
-        ) {
-            gists.append((
-                GistEntity(
-                    title: title, excerpt: excerpt(text.map(visibleText)),
-                    tags: gist.map { preferences.tagNames(gistID: $0.id) } ?? [],
-                    updatedAt: updatedAt, link: link, accountID: account.id,
-                    folderName: gist?.displayName,
-                    pinned: gist.map { preferences.pinnedGists.contains($0.id) } ?? false),
-                isRecent))
+        func note(
+            _ title: String, text: String?, updatedAt: Date, link: GistPadLink, in gist: Gist?
+        ) -> GistEntity {
+            GistEntity(
+                title: title, excerpt: excerpt(text.map(visibleText)),
+                tags: gist.map { preferences.tagNames(gistID: $0.id) } ?? [],
+                updatedAt: updatedAt, link: link, accountID: account.id,
+                folderName: gist?.displayName,
+                pinned: gist.map { preferences.pinnedGists.contains($0.id) } ?? false)
         }
+        var gists: [GistEntity] = []
+        var recents: [GistEntity] = []
         let owned = Set(cache?.owned.map(\.id) ?? [])
         for gist in cache?.gists ?? [] {
-            for filename in gist.markdownFilenames {
-                let isDefault = filename == gist.defaultMarkdownFilename
-                let draft = drafts.first { $0.gistID == gist.id && $0.filename == filename }
+            let filenames = gist.markdownFilenames
+            let defaultFilename = gist.defaultMarkdownFilename
+            let gistDrafts = drafts.filter { $0.gistID == gist.id && $0.filename.hasSuffix(".md") }
+            let files = filenames.map { filename in
+                let draft = gistDrafts.first { $0.filename == filename }
                 // A draft is typing GitHub doesn't have yet, so it's newer.
-                add(
-                    isDefault ? gist.displayName : Gist.File.displayName(filename),
+                return note(
+                    filename == defaultFilename ? gist.displayName : Gist.File.displayName(filename),
                     text: draft?.text ?? cache?.version(of: filename, gistID: gist.id)?.text,
                     updatedAt: max(gist.updatedAt, draft?.editedAt ?? gist.updatedAt),
-                    link: .gist(id: gist.id, filename: filename), in: gist,
-                    isRecent: isDefault && owned.contains(gist.id) && !gist.isDailyNote && !gist.isArchived)
-            }
-        }
-        for draft in drafts {
-            if let gistID = draft.gistID {
-                guard draft.filename.hasSuffix(".md"),
-                      let gist = cache?.gists.first(where: { $0.id == gistID }),
-                      !gist.markdownFilenames.contains(draft.filename)
-                else { continue }
-                add(
+                    link: .gist(id: gist.id, filename: filename), in: gist)
+            } + gistDrafts.filter { !filenames.contains($0.filename) }.map { draft in
+                note(
                     Gist.File.displayName(draft.filename), text: draft.text, updatedAt: draft.editedAt,
-                    link: .gist(id: gistID, filename: draft.filename), in: gist, isRecent: false)
+                    link: .gist(id: gist.id, filename: draft.filename), in: gist)
+            }
+            gists += files
+            // The widget shows the gist by its default file, as of the newest edit to any of its files.
+            if owned.contains(gist.id), !gist.isDailyNote, !gist.isArchived,
+                var recent = files.first(where: { $0.link == .gist(id: gist.id, filename: defaultFilename) })
+            {
+                recent.updatedAt = files.map(\.updatedAt).max() ?? recent.updatedAt
+                recents.append(recent)
             }
         }
         for draft in drafts where draft.gistID == nil {
-            add(
+            let unpublished = note(
                 draft.newGistName ?? String(localized: "Untitled"), text: draft.text,
                 updatedAt: draft.editedAt,
-                link: .unpublishedGist(accountID: account.id, draftID: draft.id), in: nil,
-                isRecent: draft.newGistName != DailyNote.gistDescription)
-        }
-        gists.sort {
-            $0.entity.updatedAt == $1.entity.updatedAt
-                ? $0.entity.id < $1.entity.id
-                : $0.entity.updatedAt > $1.entity.updatedAt
+                link: .unpublishedGist(accountID: account.id, draftID: draft.id), in: nil)
+            gists.append(unpublished)
+            if draft.newGistName != DailyNote.gistDescription { recents.append(unpublished) }
         }
         return Self(
             accountID: account.id,
             accentHex: preferences.accentColor,
-            gists: gists.map(\.entity),
-            recents: Array(gists.filter(\.isRecent).prefix(3).map(\.entity)))
+            gists: gists.sorted(by: newestFirst),
+            recents: Array(recents.sorted(by: newestFirst).prefix(3)))
+    }
+
+    private static func newestFirst(_ a: GistEntity, _ b: GistEntity) -> Bool {
+        a.updatedAt == b.updatedAt ? a.id < b.id : a.updatedAt > b.updatedAt
     }
 
     public static func preview() -> Self {

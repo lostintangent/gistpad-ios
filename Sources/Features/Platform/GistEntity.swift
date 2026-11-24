@@ -8,7 +8,7 @@ public struct GistEntity: Codable {
     var title: String
     var excerpt: String?
     let tags: [String]
-    let updatedAt: Date
+    var updatedAt: Date
     public var link: GistPadLink
     public let accountID: UUID?
     var folderName: String?
