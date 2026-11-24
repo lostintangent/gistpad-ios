@@ -22,17 +22,14 @@ struct GistRow: View {
         let isStacked = dynamicTypeSize.isAccessibilitySize
         let hasCounts = gist.visibleFileCount != nil || gist.visibleCommentCount != nil
         let countsOnTitleLine = hasCounts && (isStacked || rowTags.isEmpty)
+        let titleLine = isStacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: lineSpacing))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
         VStack(alignment: .leading, spacing: lineSpacing) {
-            if isStacked {
+            titleLine {
                 titleContent
                     .frame(maxWidth: .infinity, alignment: .leading)
                 metadata(showsCounts: countsOnTitleLine)
-            } else {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    titleContent
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    metadata(showsCounts: countsOnTitleLine)
-                }
             }
             if !rowTags.isEmpty {
                 HStack(spacing: 8) {

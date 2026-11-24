@@ -21,21 +21,14 @@ struct TagLabel: View {
         .foregroundStyle(rgb?.contrastingInk ?? .primary)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(rgb?.color ?? Color(uiColor: .tertiarySystemFill))
-                .overlay {
-                    if rgb?.needsEdge == true {
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Color(uiColor: .separator), lineWidth: 0.5)
-                    }
-                }
-                .overlay {
-                    if contrast == .increased {
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(.primary, lineWidth: 1)
-                    }
-                }
+        .background(rgb?.color ?? Color(uiColor: .tertiarySystemFill), in: .rect(cornerRadius: 8))
+        .overlay {
+            // Increased Contrast's edge covers the hairline a near-white or near-black fill gets.
+            if contrast == .increased {
+                RoundedRectangle(cornerRadius: 8).strokeBorder(.primary, lineWidth: 1)
+            } else if rgb?.needsEdge == true {
+                RoundedRectangle(cornerRadius: 8).strokeBorder(Color(uiColor: .separator), lineWidth: 0.5)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: tag.name))
