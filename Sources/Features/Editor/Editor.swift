@@ -110,6 +110,15 @@
             if let selection = edit.selection { textView.scrollRangeToVisible(selection) }
         }
 
+        /// Shows newer text read from GitHub in a note you can only read, outside Undo and `onEdit`.
+        public func reload(_ text: String) {
+            self.text = text
+            generation += 1
+            textView.text = text
+            updateHiddenFrontMatter()
+            highlight()
+        }
+
         /// Nothing is mid-input: no marked text, dictation or Writing Tools session.
         public var isSettled: Bool {
             !isComposing && !isWritingToolsActive && textView.markedTextRange == nil
@@ -417,6 +426,11 @@
             text = result
             self.generation += 1
             onEdit?(text, self.generation)
+        }
+
+        public func reload(_ text: String) {
+            self.text = text
+            generation += 1
         }
 
         public func commitComposition() {}

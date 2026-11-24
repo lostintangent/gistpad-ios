@@ -86,6 +86,28 @@ struct EditorContinuityTests {
         #expect(session.textView.text == source)
     }
 
+    @Test func reloadShowsNewerTextOutsideUndoAndOnEdit() throws {
+        let session = Editor(text: "---\ntitle: Old\n---\nOld body")
+        session.isEditable = false
+        let window = try host(session, focused: false)
+        defer { window.isHidden = true }
+        var edits = 0
+        session.onEdit = { _, _ in edits += 1 }
+        let body = "# Newer heading"
+        let newer = "---\ntitle: Newer\nauthor: GitHub\n---\n" + body
+        session.reload(newer)
+        #expect(session.textView.text == newer)
+        #expect(session.text == newer)
+        #expect(session.generation == 1)
+        #expect(session.contentStart == newer.utf16.count - body.utf16.count)
+        #expect(session.textView.accessibilityValue == body)
+        let heading = session.textView.textStorage.attribute(
+            .font, at: session.contentStart, effectiveRange: nil) as? UIFont
+        #expect(heading?.fontDescriptor.symbolicTraits.contains(.traitBold) == true)
+        #expect(edits == 0)
+        #expect(session.textView.undoManager?.canUndo != true)
+    }
+
     @Test func readingAnchorSurvivesReflow() throws {
         let source = EditorFixture.markdown
         let session = Editor(text: source)
