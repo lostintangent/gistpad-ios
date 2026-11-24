@@ -83,7 +83,9 @@ struct EditorFormattingTests {
             let editor = Editor(text: source)
             let caret = NSRange(location: source.utf16.count, length: 0)
             #expect(
-                editor.textView(editor.textView, shouldChangeTextIn: caret, replacementText: "\n"))
+                editor.textView(
+                    editor.textView, shouldChangeTextInRanges: [NSValue(range: caret)],
+                    replacementText: "\n"))
             #expect(editor.text == source)
         }
         let editor = Editor(text: "- note")
@@ -92,7 +94,8 @@ struct EditorFormattingTests {
         editor.textViewWritingToolsWillBegin(editor.textView)
         #expect(
             editor.textView(
-                editor.textView, shouldChangeTextIn: NSRange(location: 6, length: 0),
+                editor.textView,
+                shouldChangeTextInRanges: [NSValue(range: NSRange(location: 6, length: 0))],
                 replacementText: "\n"))
         editor.textViewWritingToolsDidEnd(editor.textView)
         editor.textView.selectedRange = NSRange(location: 6, length: 0)
@@ -100,7 +103,8 @@ struct EditorFormattingTests {
         let transient = editor.textView.text
         #expect(
             editor.textView(
-                editor.textView, shouldChangeTextIn: editor.textView.selectedRange,
+                editor.textView,
+                shouldChangeTextInRanges: [NSValue(range: editor.textView.selectedRange)],
                 replacementText: "\n"))
         #expect(editor.textView.text == transient)
     }
@@ -112,11 +116,17 @@ struct EditorFormattingTests {
         let view = editor.textView
         view.selectedRange = NSRange(location: 9, length: 0)
         view.undoManager?.removeAllActions()
-        #expect(!editor.textView(view, shouldChangeTextIn: view.selectedRange, replacementText: "("))
+        #expect(
+            !editor.textView(
+                view, shouldChangeTextInRanges: [NSValue(range: view.selectedRange)],
+                replacementText: "("))
         #expect(editor.text == "Vagabond ()")
         #expect(view.selectedRange == NSRange(location: 10, length: 0))
         let generation = editor.generation
-        #expect(!editor.textView(view, shouldChangeTextIn: view.selectedRange, replacementText: ")"))
+        #expect(
+            !editor.textView(
+                view, shouldChangeTextInRanges: [NSValue(range: view.selectedRange)],
+                replacementText: ")"))
         #expect(editor.text == "Vagabond ()")
         #expect(editor.generation == generation)
         #expect(view.selectedRange == NSRange(location: 11, length: 0))
@@ -124,6 +134,16 @@ struct EditorFormattingTests {
         editor.textViewDidChange(view)
         #expect(editor.text == "Vagabond ")
         #expect(view.undoManager?.canUndo == false)
+    }
+
+    @Test func aURLTypedOverDiscontiguousSelectionsKeepsTheWordsBetween() throws {
+        let editor = Editor(text: "one keep two")
+        let window = try host(editor)
+        defer { window.isHidden = true }
+        let view = editor.textView
+        view.selectedRanges = [NSRange(location: 0, length: 3), NSRange(location: 9, length: 3)]
+        view.insertText("https://example.test")
+        #expect(["https://example.test keep ", " keep https://example.test"].contains(editor.text))
     }
 
     @Test func indentAndOutdentRetainSelectionAndNativeUndo() throws {

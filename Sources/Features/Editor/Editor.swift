@@ -319,15 +319,19 @@
         }
 
         public func textView(
-            _ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText replacement: String
+            _ textView: UITextView, shouldChangeTextInRanges ranges: [NSValue],
+            replacementText replacement: String
         ) -> Bool {
-            guard range.location >= contentStart else { return false }
-            guard canFormat,
+            let ranges = ranges.map(\.rangeValue)
+            guard ranges.allSatisfy({ $0.location >= contentStart }) else { return false }
+            // Smart typing reads one selection. UIKit replaces discontiguous ones itself.
+            guard ranges.count == 1, canFormat,
                 textView.findInteraction?.isFindNavigatorVisible != true
             else { return true }
             if !text.utf8.elementsEqual(textView.text.utf8) { synchronizeText() }
             do {
-                guard let edit = try Typing.edit(in: text, selection: range, replacement: replacement)
+                guard
+                    let edit = try Typing.edit(in: text, selection: ranges[0], replacement: replacement)
                 else { return true }
                 try apply(edit, generation: generation)
                 return false

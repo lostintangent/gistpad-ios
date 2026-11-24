@@ -30,9 +30,11 @@ struct FrontMatterLayoutTests {
         view.selectAll(nil)
         #expect(
             view.selectedRange == NSRange(location: prefix.utf16.count, length: body.utf16.count))
+        let visible = NSRange(location: prefix.utf16.count, length: 1)
+        let hidden = NSRange(location: prefix.utf16.count - 1, length: 1)
         #expect(
             !editor.textView(
-                view, shouldChangeTextIn: NSRange(location: prefix.utf16.count - 1, length: 1),
+                view, shouldChangeTextInRanges: [visible, hidden].map(NSValue.init(range:)),
                 replacementText: ""))
         view.selectedRange = NSRange(location: 0, length: 0)
         #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
