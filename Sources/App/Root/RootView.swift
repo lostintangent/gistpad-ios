@@ -77,9 +77,9 @@ struct RootView: View {
             .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
                 model.updateCalendar()
             }
-            .alert("GistPad", isPresented: $model.isShowingError) {
-            } message: {
-                Text(model.alertMessage ?? "")
+            .alert("GistPad", item: $model.alertMessage) { _ in
+            } message: { message in
+                Text(message)
             }
             .sheet(item: $sheet) { sheet in
                 switch sheet {
