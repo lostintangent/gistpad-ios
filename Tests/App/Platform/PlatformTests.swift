@@ -209,23 +209,6 @@ struct PlatformTests {
         #expect(fixture.publishes == ["PATCH /gists/manga"])
     }
 
-    @Test func aShortcutSavedWithAGistsLinkStillNamesItsDefaultFile() async throws {
-        let fixture = try await PlatformFixture.make()
-        defer { fixture.cleanUp() }
-        let saved = GistPadLink.gist(id: "manga", filename: nil).url.absoluteString
-
-        let note = try #require(try await fixture.bridge.noteEntities(for: [saved]).first)
-
-        #expect(note.id == saved)
-        #expect(note.title == "Manga reading list")
-        let intent = UpdateGistNoteIntent()
-        intent.app = fixture.bridge
-        intent.target = note
-        intent.name = AttributedString("Reading Library")
-        _ = try await intent.perform()
-        #expect(fixture.publishes == ["PATCH /gists/manga"])
-    }
-
     @Test func aPickedImageUploadsThenInsertsItsMarkdownAtTheCursorAsOneUndo() async throws {
         let fixture = try await PlatformFixture.make()
         defer { fixture.cleanUp() }

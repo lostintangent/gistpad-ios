@@ -13,10 +13,9 @@ needs the web's `apple-app-site-association` file deployed first.
 
 `GistEntity` is an `IndexedEntity`, one per Markdown file, with its title, tags
 and a snippet, indexed with complete file protection. Each one names its file,
-the gist's default file included, and opens that file. A gist's link without a
-filename, as Shortcuts saved before, still resolves to its default file.
-`GistEntityQuery` resolves identifiers and strings for the signed-in account and
-answers the system's reindex requests.
+the gist's default file included, and opens that file. `GistEntityQuery`
+resolves identifiers and strings for the signed-in account and answers the
+system's reindex requests.
 The app updates the index in the background after each snapshot, so nothing
 waits on Spotlight, and deletes just the files that went away since the last
 one, including while the app wasn't running.

@@ -106,26 +106,12 @@ final class PlatformBridge: PlatformActions {
 
     func noteEntities(for identifiers: [String]) async throws -> [GistEntity] {
         guard let account = try await model.localAccount() else { throw PlatformError.accountChanged }
-        let notes = LibrarySnapshot.make(
+        let snapshot = LibrarySnapshot.make(
             account: account, cache: model.gistCache, drafts: model.drafts,
-            visibleText: Self.noteBody
-        ).gists
-        return identifiers.compactMap { identifier in
-            guard let link = URL(string: identifier).flatMap(GistPadLink.init(url:)),
-                var note = notes.first(where: { $0.link == file(link) })
-            else { return nil }
-            note = note.withBody(visibleBody(for: note, accountID: account.id))
-            note.link = link
-            return note
+            visibleText: Self.noteBody)
+        return snapshot.gists.filter { identifiers.contains($0.id) }.map {
+            $0.withBody(visibleBody(for: $0, accountID: account.id))
         }
-    }
-
-    /// The file `link` names, where a gist's link without a filename names its default file.
-    private func file(_ link: GistPadLink) -> GistPadLink {
-        guard case .gist(let id, nil) = link,
-            let gist = model.gistCache?.gists.first(where: { $0.id == id })
-        else { return link }
-        return .gist(id: id, filename: gist.defaultMarkdownFilename)
     }
 
     /// The live body of the note on screen, which RootView names as the editor's entity.
