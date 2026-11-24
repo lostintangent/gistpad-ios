@@ -3,7 +3,6 @@ import Foundation
 
 public struct OpenGistIntent: OpenIntent {
     public static let title: LocalizedStringResource = "Open Gist"
-    public static var supportedModes: IntentModes { .foreground(.immediate) }
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
     public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
 

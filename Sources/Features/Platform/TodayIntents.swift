@@ -6,7 +6,6 @@ public struct AddToTodayIntent: AppIntent {
     public static let title: LocalizedStringResource = "Add to Today"
     public static let description = IntentDescription(
         "Adds text or a task to today’s note.")
-    public static var supportedModes: IntentModes { .background }
     public static var allowedExecutionTargets: IntentExecutionTargets { .main }
     public static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
 
