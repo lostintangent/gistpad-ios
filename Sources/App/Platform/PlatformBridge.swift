@@ -106,14 +106,26 @@ final class PlatformBridge: PlatformActions {
 
     func noteEntities(for identifiers: [String]) async throws -> [GistEntity] {
         guard let account = try await model.localAccount() else { throw PlatformError.accountChanged }
-        let accountID = account.id
-        let snapshot = LibrarySnapshot.make(
+        let notes = LibrarySnapshot.make(
             account: account, cache: model.gistCache, drafts: model.drafts,
-            visibleText: Self.noteBody)
-        return snapshot.gists.filter { identifiers.contains($0.id) }.map { entity in
-            guard let body = visibleBody(for: entity, accountID: accountID) else { return entity }
-            return entity.withBody(body)
+            visibleText: Self.noteBody
+        ).gists
+        return identifiers.compactMap { identifier in
+            guard let link = URL(string: identifier).flatMap(GistPadLink.init(url:)),
+                var note = notes.first(where: { $0.link == file(link) })
+            else { return nil }
+            note = note.withBody(visibleBody(for: note, accountID: account.id))
+            note.link = link
+            return note
         }
+    }
+
+    /// The file `link` names, where a gist's link without a filename names its default file.
+    private func file(_ link: GistPadLink) -> GistPadLink {
+        guard case .gist(let id, nil) = link,
+            let gist = model.gistCache?.gists.first(where: { $0.id == id })
+        else { return link }
+        return .gist(id: id, filename: gist.defaultMarkdownFilename)
     }
 
     /// The live body of the note on screen, which RootView names as the editor's entity.
@@ -199,17 +211,13 @@ final class PlatformBridge: PlatformActions {
             guard !(renames && changesPin) else { throw PlatformError.unsupportedNoteUpdate }
             if renames, let name {
                 guard !name.isEmpty else { throw PlatformError.unsupportedNoteUpdate }
-                switch note.link {
-                case .gist(let id, nil):
-                    guard self.model.gistCache?.owned.first(where: { $0.id == id })?.isDailyNote != true else {
-                        throw PlatformError.unsupportedNoteUpdate
-                    }
-                    try await self.model.rename(draft, to: name)
-                case .unpublishedGist:
-                    try await self.model.rename(draft, to: name)
-                case .gist, .today, .addToToday, .newGist:
-                    throw PlatformError.unsupportedNoteUpdate
+                // A note's name is its gist's, so only a gist's default file takes one.
+                if let gistID = draft.gistID {
+                    guard let gist = self.model.gistCache?.owned.first(where: { $0.id == gistID }),
+                        !gist.isDailyNote, draft.filename == gist.defaultMarkdownFilename
+                    else { throw PlatformError.unsupportedNoteUpdate }
                 }
+                try await self.model.rename(draft, to: name)
             }
             if changesPin, let isPinned {
                 guard case .gist(let id, _) = note.link else {

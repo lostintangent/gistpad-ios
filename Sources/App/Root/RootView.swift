@@ -272,10 +272,7 @@ struct RootView: View {
             !fileEditor.file.isDeletedOnGitHub
         else { return nil }
         if let gist = fileEditor.file.gist {
-            return .gist(
-                id: gist.id,
-                filename: fileEditor.file.filename == gist.defaultMarkdownFilename
-                    ? nil : fileEditor.file.filename)
+            return .gist(id: gist.id, filename: fileEditor.file.filename)
         }
         guard fileEditor.file.gistID == nil else { return nil }
         return .unpublishedGist(accountID: fileEditor.file.accountID, draftID: fileEditor.file.id)

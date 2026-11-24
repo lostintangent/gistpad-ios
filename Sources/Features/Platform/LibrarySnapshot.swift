@@ -39,7 +39,7 @@ public struct LibrarySnapshot: Codable, Sendable {
                     isDefault ? gist.displayName : Gist.File.displayName(filename),
                     text: draft?.text ?? cache?.version(of: filename, gistID: gist.id)?.text,
                     updatedAt: max(gist.updatedAt, draft?.editedAt ?? gist.updatedAt),
-                    link: .gist(id: gist.id, filename: isDefault ? nil : filename), in: gist,
+                    link: .gist(id: gist.id, filename: filename), in: gist,
                     isRecent: isDefault && owned.contains(gist.id) && !gist.isDailyNote && !gist.isArchived)
             }
         }

@@ -96,7 +96,7 @@ struct PlatformTests {
         defer { fixture.cleanUp() }
         let fileEditor = try await fixture.fileEditor()
         let note = try #require(try LibrarySnapshot.read()?.gists.first {
-            $0.link == GistPadLink.gist(id: "daily123", filename: nil)
+            $0.link == GistPadLink.gist(id: "daily123", filename: DailyNote.Day().filename)
         })
         let original = fileEditor.editor.text
         let intent = AppendToGistIntent()
@@ -165,7 +165,7 @@ struct PlatformTests {
         await fixture.model.open(.today())
         let fileEditor = try #require(fixture.model.activeEditor)
         let note = try #require(try LibrarySnapshot.read()?.gists.first {
-            $0.link == .gist(id: "daily123", filename: nil)
+            $0.link == .gist(id: "daily123", filename: DailyNote.Day().filename)
         })
         let scene = try #require(
             UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
@@ -194,7 +194,7 @@ struct PlatformTests {
         defer { fixture.cleanUp() }
         let snapshot = try #require(try LibrarySnapshot.read())
         let note = try #require(snapshot.gists.first {
-            $0.link == GistPadLink.gist(id: "manga", filename: nil)
+            $0.link == GistPadLink.gist(id: "manga", filename: "README.md")
         })
         let intent = UpdateGistNoteIntent()
         intent.app = fixture.bridge
@@ -206,6 +206,23 @@ struct PlatformTests {
         #expect(
             fixture.model.gistCache?.owned.first(where: { $0.id == "manga" })?.description
                 == "Reading Library")
+        #expect(fixture.publishes == ["PATCH /gists/manga"])
+    }
+
+    @Test func aShortcutSavedWithAGistsLinkStillNamesItsDefaultFile() async throws {
+        let fixture = try await PlatformFixture.make()
+        defer { fixture.cleanUp() }
+        let saved = GistPadLink.gist(id: "manga", filename: nil).url.absoluteString
+
+        let note = try #require(try await fixture.bridge.noteEntities(for: [saved]).first)
+
+        #expect(note.id == saved)
+        #expect(note.title == "Manga reading list")
+        let intent = UpdateGistNoteIntent()
+        intent.app = fixture.bridge
+        intent.target = note
+        intent.name = AttributedString("Reading Library")
+        _ = try await intent.perform()
         #expect(fixture.publishes == ["PATCH /gists/manga"])
     }
 

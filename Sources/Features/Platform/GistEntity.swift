@@ -9,7 +9,7 @@ public struct GistEntity: Codable {
     var excerpt: String?
     let tags: [String]
     let updatedAt: Date
-    public let link: GistPadLink
+    public var link: GistPadLink
     public let accountID: UUID?
     var folderName: String?
     var body: String?

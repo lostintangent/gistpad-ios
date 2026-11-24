@@ -42,7 +42,7 @@ struct LibrarySnapshotTests {
         #expect(snapshot.recents.map(\.title) == ["Started on the phone", "Edited on the phone", "Older"])
         #expect(snapshot.recents.map(\.link) == [
             .unpublishedGist(accountID: account, draftID: started.id),
-            .gist(id: edited.id, filename: nil), .gist(id: older.id, filename: nil)
+            .gist(id: edited.id, filename: "README.md"), .gist(id: older.id, filename: "README.md")
         ])
         #expect(snapshot.recents[1].updatedAt == typed.editedAt)
         #expect(snapshot.recents[1].tags == ["Work"])
@@ -74,7 +74,7 @@ struct LibrarySnapshotTests {
         #expect(snapshot.gists.count == 3)
         #expect(snapshot.recents.map(\.title) == ["Manga reading list"])
         let first = try #require(snapshot.gists.first {
-            $0.link == GistPadLink.gist(id: manga.id, filename: nil)
+            $0.link == GistPadLink.gist(id: manga.id, filename: "README.md")
         })
         let other = try #require(snapshot.gists.first {
             $0.link == GistPadLink.gist(id: manga.id, filename: "Calendars.md")
@@ -92,6 +92,22 @@ struct LibrarySnapshotTests {
         #expect(!encoded.contains("\"body\""))
         #expect(!encoded.contains("a distracting instruction"))
         #expect(!encoded.contains("# Ranked"))
+    }
+
+    @Test func everyNoteNamesItsFileSoADaysNoteNeverOpensToday() throws {
+        let daily = try gist(
+            "daily", DailyNote.gistDescription, updated: "2026-02-01T09:00:00Z",
+            files: ["2026-01-15.md": "January", "2026-02-01.md": "February"])
+
+        let snapshot = LibrarySnapshot.make(
+            account: GistPadAccount(id: account, github: FixtureServer.you, preferences: GistPadPreferences(metadata: [:])),
+            cache: GistCache(accountID: account, owned: [daily], starred: []),
+            drafts: [])
+
+        #expect(daily.defaultMarkdownFilename == "2026-02-01.md")
+        #expect(Set(snapshot.gists.map(\.link)) == [
+            .gist(id: daily.id, filename: "2026-01-15.md"), .gist(id: daily.id, filename: "2026-02-01.md")
+        ])
     }
 
     private func gist(
