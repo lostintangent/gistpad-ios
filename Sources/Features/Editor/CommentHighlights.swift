@@ -83,12 +83,7 @@
             let accent = traits[AccentTrait.self]
             let roles = accent.roles(traits: traits)
             onSelected = roles.onFill.uiColor
-            guard
-                let page = RGBColor(
-                    uiColor: UIColor.systemBackground.resolvedColor(with: traits))
-            else {
-                preconditionFailure("Comment highlights require an opaque native page.")
-            }
+            let page = RGBColor(uiColor: UIColor.systemBackground.resolvedColor(with: traits))
             for highlight in highlights {
                 let selected = configuration.selectedThreadID.map(highlight.threadIDs.contains) ?? false
                 guard configuration.showsInlineComments || selected else { continue }
@@ -102,10 +97,7 @@
                     var inks: [(RGBColor, Double)] = []
                     storage.enumerateAttribute(.foregroundColor, in: highlight.range) { value, _, _ in
                         let color = (value as? UIColor ?? .label).resolvedColor(with: traits)
-                        guard let ink = RGBColor(uiColor: color.withAlphaComponent(1)) else {
-                            preconditionFailure("Source annotation ink must resolve to sRGB.")
-                        }
-                        inks.append((ink, Double(color.cgColor.alpha)))
+                        inks.append((RGBColor(uiColor: color.withAlphaComponent(1)), Double(color.cgColor.alpha)))
                     }
                     fill =
                         Self.idleFill(

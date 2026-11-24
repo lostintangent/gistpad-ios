@@ -71,10 +71,9 @@ struct PreviewAppearance: Equatable {
 
     private static func listMarker(traits: UITraitCollection) -> String {
         let secondary = UIColor.secondaryLabel.resolvedColor(with: traits)
-        guard let page = RGBColor(uiColor: UIColor.systemBackground.resolvedColor(with: traits)),
-              let ink = RGBColor(uiColor: UIColor.label.resolvedColor(with: traits)),
-              let gray = RGBColor(uiColor: secondary.withAlphaComponent(1))
-        else { preconditionFailure("Native list-marker colors must resolve to sRGB.") }
+        let page = RGBColor(uiColor: UIColor.systemBackground.resolvedColor(with: traits))
+        let ink = RGBColor(uiColor: UIColor.label.resolvedColor(with: traits))
+        let gray = RGBColor(uiColor: secondary.withAlphaComponent(1))
         let original = page.mixed(toward: gray, amount: Double(secondary.cgColor.alpha))
         let minimum = traits.accessibilityContrast == .high ? 7.0 : 4.5
         for step in 0...255 {

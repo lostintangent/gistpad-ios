@@ -40,16 +40,8 @@ extension RGBColor {
         UIColor(red: CGFloat(red) / 255, green: CGFloat(green) / 255, blue: CGFloat(blue) / 255, alpha: 1)
     }
 
-    public init?(uiColor: UIColor) {
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let color = uiColor.cgColor.converted(to: colorSpace, intent: .defaultIntent, options: nil),
-              color.alpha == 1, let components = color.components, components.count == 4 else { return nil }
-        self.init(
-            red: UInt8((min(1, max(0, components[0])) * 255).rounded()),
-            green: UInt8((min(1, max(0, components[1])) * 255).rounded()),
-            blue: UInt8((min(1, max(0, components[2])) * 255).rounded())
-        )
-    }
+    /// An opaque color's sRGB, for the traits it was resolved with.
+    public init(uiColor: UIColor) { self.init(Color(uiColor: uiColor).resolve(in: EnvironmentValues())) }
 }
 
 extension Accent {
@@ -60,13 +52,9 @@ extension Accent {
             .systemBackground, .secondarySystemBackground, .tertiarySystemBackground,
             .systemGroupedBackground, .secondarySystemGroupedBackground, .tertiarySystemGroupedBackground
         ]
-        let surfaces = backgrounds.map { color in
-            guard let rgb = RGBColor(uiColor: color.resolvedColor(with: traits)) else {
-                preconditionFailure("System page surfaces must resolve to opaque RGB.")
-            }
-            return rgb
-        }
-        return roles(dark: dark, increasedContrast: increased, surfaces: surfaces)
+        return roles(
+            dark: dark, increasedContrast: increased,
+            surfaces: backgrounds.map { RGBColor(uiColor: $0.resolvedColor(with: traits)) })
     }
 }
 
