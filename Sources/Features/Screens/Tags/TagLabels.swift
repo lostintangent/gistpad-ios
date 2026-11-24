@@ -127,7 +127,6 @@ struct TagLabels: View {
     let tags: [Tag]
     var limit: Int?
     var isSelected = false
-    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -141,7 +140,7 @@ struct TagLabels: View {
                     line(showing: 1).lineLimit(1)
                 }
             } else {
-                TagFlowLayout(layoutDirection: layoutDirection) {
+                TagFlowLayout {
                     ForEach(tags.prefix(limit ?? tags.count)) { TagLabel(tag: $0, isSelected: isSelected) }
                     if let limit, tags.count > limit {
                         overflow(tags.count - limit)
@@ -173,7 +172,6 @@ struct TagLabels: View {
 
 // Platform gap: SwiftUI has no wrapping stack. Remove TagFlowLayout when it ships one.
 private struct TagFlowLayout: Layout {
-    var layoutDirection: LayoutDirection
     private let spacing: CGFloat = 6
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
@@ -183,11 +181,8 @@ private struct TagFlowLayout: Layout {
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let result = arrangement(width: bounds.width, subviews: subviews)
         for (index, placement) in result.placements.enumerated() {
-            let x = layoutDirection == .rightToLeft
-                ? bounds.maxX - placement.origin.x - placement.size.width
-                : bounds.minX + placement.origin.x
             subviews[index].place(
-                at: CGPoint(x: x, y: bounds.minY + placement.origin.y),
+                at: CGPoint(x: bounds.minX + placement.origin.x, y: bounds.minY + placement.origin.y),
                 anchor: .topLeading, proposal: ProposedViewSize(placement.size)
             )
         }
