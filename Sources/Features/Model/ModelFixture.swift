@@ -167,7 +167,7 @@
     }
 
     /// The few defaults the model reads and writes, without a suite on disk.
-    private nonisolated final class MemoryDefaults: UserDefaults, @unchecked Sendable {
+    private nonisolated final class MemoryDefaults: UserDefaults {
         private var values: [String: Any] = [:]
         override func object(forKey key: String) -> Any? { values[key] }
         override func set(_ value: Any?, forKey key: String) { values[key] = value }
