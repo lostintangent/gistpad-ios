@@ -104,6 +104,11 @@ refresh rebuilds it.
 and `TaskProgress` counts tasks with the web's markers.
 `DailyNote.addition` is what Add to Today appends: a paragraph or one task per line.
 
+`Date.DayRelativeFormatStyle`, or `.dayRelative(to:)`, dates a change the way
+Notes lists it, against a reference day such as the library's today or a widget
+entry's date: a time that day, then Yesterday, the weekday that week, and the
+date before that.
+
 ## Links and photos
 
 `Gist.shareURL(filename:)` gives a file's gistpad.dev share link, or nil when the

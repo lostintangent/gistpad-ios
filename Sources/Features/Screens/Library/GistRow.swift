@@ -5,7 +5,8 @@ import SwiftUI
 struct GistRow: View {
     let gist: GistItem
     let tags: [Tag]
-    let now: Date
+    /// The library's day, which dates the row.
+    let today: Date
     var showsStar = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.locale) private var locale
@@ -72,13 +73,13 @@ struct GistRow: View {
                 TaskProgressLabel(progress: progress, isOverdue: gist.isOverdue)
                     .fixedSize()
             }
-        } else if showsCounts || updateLabel != nil {
+        } else if showsCounts || gist.updatedAt != nil {
             HStack(alignment: .firstTextBaseline, spacing: metadataSpacing) {
                 if showsCounts {
                     counts
                 }
-                if let updateLabel {
-                    Text(verbatim: updateLabel)
+                if let updatedAt = gist.updatedAt {
+                    Text(updatedAt, format: .dayRelative(to: today, locale: locale, calendar: calendar))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -105,27 +106,8 @@ struct GistRow: View {
         .fixedSize()
     }
 
-    /// The time today, then Yesterday, the weekday this week, and the date before that.
-    private var updateLabel: String? {
-        guard let updatedAt = gist.updatedAt else { return nil }
-        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
-        if calendar.isDate(updatedAt, inSameDayAs: now) {
-            return updatedAt.formatted(style.hour().minute())
-        }
-        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
-           calendar.isDate(updatedAt, inSameDayAs: yesterday) {
-            return String(localized: "Yesterday", bundle: .module, locale: locale)
-        }
-        if calendar.isDate(updatedAt, equalTo: now, toGranularity: .weekOfYear) {
-            return updatedAt.formatted(style.weekday(.wide))
-        }
-        let day = style.month(.defaultDigits).day()
-        return updatedAt.formatted(
-            calendar.isDate(updatedAt, equalTo: now, toGranularity: .year) ? day : day.year())
-    }
-
     private var displayTitle: String {
-        gist.displayTitle(now: now, locale: locale, calendar: calendar)
+        gist.displayTitle(now: today, locale: locale, calendar: calendar)
     }
 
     private var spokenTitle: String {

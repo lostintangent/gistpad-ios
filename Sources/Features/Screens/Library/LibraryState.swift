@@ -119,6 +119,9 @@ public final class LibraryState {
     public var selectedID: String?
     public var today: DailyNote
 
+    /// The model's day, which moves at midnight and dates the library's sections and rows.
+    var day: Date { today.date ?? .now }
+
     /// Nil gists mean the account's gists aren't known yet.
     public init(
         gists: [GistItem]? = nil, tags: [Tag] = [], dailyNoteCount: Int? = nil,
@@ -169,6 +172,12 @@ public final class LibraryState {
         guard hasFilters else { return Self.ordered(gists.filter { Self.includes($0, in: section) }, in: section) }
         let gists = matchingGists.filter { Self.primarySection(for: $0) == section }
         return section == .dailyNotes ? Self.ordered(gists, in: section) : gists
+    }
+
+    /// Unpinned gists grouped like Notes by when they changed, relative to the model's day.
+    func dateSections(calendar: Calendar) -> [(group: DateGroup, gists: [GistItem])] {
+        DateGroup.sections(
+            for: matchingGists(in: .gists).filter { !$0.isPinned }, relativeTo: day, calendar: calendar)
     }
 
     private static func primarySection(for gist: GistItem) -> LibrarySection? {

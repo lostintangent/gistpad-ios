@@ -128,22 +128,19 @@ public struct LibraryView: View {
     }
 
     private var libraryList: some View {
-        // One clock moves rows between date sections and refreshes their relative dates.
-        TimelineView(.everyMinute) { context in
-            List(selection: selection) {
-                if !state.selectedTagIDs.isEmpty {
-                    searchScope
-                }
-                if !pinnedGists.isEmpty {
-                    pinnedSection(now: context.date)
-                }
-                ForEach(dateSections(now: context.date), id: \.group) {
-                    dateSection($0.group, gists: $0.gists, now: context.date)
-                }
-                ForEach(displayedSections) { librarySection($0, now: context.date) }
-                if !isLoading && (state.hasFilters ? !state.hasMatches : !hasVisibleGists) {
-                    emptyState
-                }
+        List(selection: selection) {
+            if !state.selectedTagIDs.isEmpty {
+                searchScope
+            }
+            if !pinnedGists.isEmpty {
+                pinnedSection
+            }
+            ForEach(state.dateSections(calendar: calendar), id: \.group) {
+                dateSection($0.group, gists: $0.gists)
+            }
+            ForEach(displayedSections) { librarySection($0) }
+            if !isLoading && (state.hasFilters ? !state.hasMatches : !hasVisibleGists) {
+                emptyState
             }
         }
         .headerProminence(.increased)
@@ -165,15 +162,9 @@ public struct LibraryView: View {
         state.matchingGists(in: .gists).filter(\.isPinned)
     }
 
-    private func dateSections(now: Date) -> [(group: DateGroup, gists: [GistItem])] {
-        DateGroup.sections(
-            for: state.matchingGists(in: .gists).filter { !$0.isPinned },
-            relativeTo: now, calendar: calendar)
-    }
-
-    private func pinnedSection(now: Date) -> some View {
+    private var pinnedSection: some View {
         disclosureSection(isExpanded: $isPinnedExpanded) {
-            rows(pinnedGists, now: now)
+            rows(pinnedGists)
         } header: {
             sectionHeader(
                 Text("Pinned", bundle: .module), symbol: "pin", count: pinnedGists.count,
@@ -282,10 +273,10 @@ public struct LibraryView: View {
             set: { if $0 { collapsedDateGroups.remove(group) } else { collapsedDateGroups.insert(group) } })
     }
 
-    private func librarySection(_ section: LibrarySection, now: Date) -> some View {
+    private func librarySection(_ section: LibrarySection) -> some View {
         let count = state.count(in: section)
         return disclosureSection(isExpanded: isExpanded(section)) {
-            rows(state.matchingGists(in: section), now: now, section: section)
+            rows(state.matchingGists(in: section), section: section)
         } header: {
             sectionHeader(
                 Text(verbatim: section.title), symbol: section.symbol, count: count,
@@ -299,15 +290,15 @@ public struct LibraryView: View {
     }
 
     @ViewBuilder
-    private func dateSection(_ group: DateGroup, gists: [GistItem], now: Date) -> some View {
+    private func dateSection(_ group: DateGroup, gists: [GistItem]) -> some View {
         if group == .undated {
             Section {
-                rows(gists, now: now)
+                rows(gists)
             }
         } else {
             let title = group.title(locale: locale, calendar: calendar)
             disclosureSection(isExpanded: isExpanded(group)) {
-                rows(gists, now: now)
+                rows(gists)
             } header: {
                 sectionHeader(
                     Text(verbatim: title), count: gists.count,
@@ -413,17 +404,17 @@ public struct LibraryView: View {
     }
 
     /// Gives Edit its red minus, which reveals the row's own Delete.
-    private func rows(_ gists: [GistItem], now: Date, section: LibrarySection = .gists) -> some View {
-        ForEach(gists) { gistRow($0, now: now, section: section) }
+    private func rows(_ gists: [GistItem], section: LibrarySection = .gists) -> some View {
+        ForEach(gists) { gistRow($0, section: section) }
             .onDelete { $0.forEach { actions.delete(gists[$0].id) } }
     }
 
     private func gistRow(
-        _ gist: GistItem, now: Date, section: LibrarySection
+        _ gist: GistItem, section: LibrarySection
     ) -> some View {
         NavigationLink(value: gist.id) {
             GistRow(
-                gist: gist, tags: state.tags(for: gist), now: now,
+                gist: gist, tags: state.tags(for: gist), today: state.day,
                 showsStar: section != .starred)
         }
         .accessibilityIdentifier("library-note-\(gist.id)")
@@ -441,7 +432,7 @@ public struct LibraryView: View {
             }
         }
         .deletionConfirmation(
-            title: gist.displayTitle(now: now, locale: locale, calendar: calendar),
+            title: gist.displayTitle(now: state.day, locale: locale, calendar: calendar),
             isDailyNote: gist.isDailyNote,
             isPresented: Binding(
                 get: { pendingDeletion == gist.id },

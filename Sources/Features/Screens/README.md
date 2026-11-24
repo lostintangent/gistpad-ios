@@ -17,10 +17,11 @@ Bind `expandedSections` and `isPinnedExpanded` to the account's preferences.
 `LibraryState` is the observable model. Apply new gists with
 `replace(gists:tags:dailyNoteCount:known:)` rather than making a new model, so
 search, tag filters and selection survive. Pass `known: false` until the
-account's gists are known, and counts stay absent rather than zero. Search
-matches titles and tags like the web, tag filters combine with AND, and the open
-gist stays listed. `GistItem.gistID` is the published gist, nil for a draft or
-recovery copy.
+account's gists are known, and counts stay absent rather than zero. Its `today`
+is the model's day, so set it when the calendar day changes and the date groups
+and row dates follow. Search matches titles and tags like the web, tag filters
+combine with AND, and the open gist stays listed. `GistItem.gistID` is the
+published gist, nil for a draft or recovery copy.
 
 `LibraryActions` carries the row actions. Every owned row can be deleted in any
 state. A revealed Delete, from a swipe or Edit's minus, calls `delete` with the
@@ -75,10 +76,11 @@ to content, never to navigation or commands.
 
 ## Validation
 
-`swift test` covers Library sections, counts and filters, date groups, tag
-contrast and the tag editor's edits. `GistPadUITests` drives these screens
-through the Debug fixture launches in [the capture matrix](../../docs/capture-matrix.md),
-and `scripts/capture-matrix.sh` captures them for Designer's review.
+`swift test` covers Library sections, counts and filters, date groups and the
+tag editor's edits. Tag contrast and right-to-left tag wrapping run in the iOS
+package tests. `GistPadUITests` drives these screens through the Debug fixture
+launches in [the capture matrix](../../docs/capture-matrix.md), and
+`scripts/capture-matrix.sh` captures them for Designer's review.
 
 ```sh
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
