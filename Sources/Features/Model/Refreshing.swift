@@ -107,8 +107,7 @@ extension GistFileEditor {
     }
 
     /// Reads this note from GitHub as it opens or the app comes back. A note you haven't typed in
-    /// takes GitHub's newer text, and one with edits shows the conflict. Someone else's note takes
-    /// it too, with nothing to save, publish or undo.
+    /// takes GitHub's newer text, and one with edits shows the conflict.
     public func refresh() async {
         guard GistPadModel.isStale(refreshedAt), !isRefreshing, !isPublishing,
             !file.isDeletedOnGitHub, let gistID = file.gistID, file.draft?.conflict == nil,
@@ -116,53 +115,63 @@ extension GistFileEditor {
         else { return }
         isRefreshing = true
         defer { isRefreshing = false }
+        guard details.isOwned else { return await adoptGitHubText(gistID: gistID) }
+        guard canEdit, await waitForLocalSave() else { return }
+        let generation = editor.generation
+        let read = file.nextDraft
         do {
-            if details.isOwned {
-                guard canEdit, await waitForLocalSave() else { return }
-                let generation = editor.generation
-                let read = file.nextDraft
-                let ownerID = try model.ownerID
-                let github = await model.client(accountID: read.accountID)
-                let (stored, latest) = try await model.serially {
-                    let stored = try await model.current(read)
-                    let current = stored ?? read
-                    let latest = try await github.file(
-                        gistID: gistID, ownerID: ownerID, filename: current.filename)
-                    try model.cache(latest, filename: current.filename, accountID: current.accountID)
-                    return (stored, latest)
-                }
+            let ownerID = try model.ownerID
+            let github = await model.client(accountID: read.accountID)
+            let (stored, latest) = try await model.serially {
+                let stored = try await model.current(read)
+                let current = stored ?? read
+                let latest = try await github.file(
+                    gistID: gistID, ownerID: ownerID, filename: current.filename)
+                try model.cache(latest, filename: current.filename, accountID: current.accountID)
+                return (stored, latest)
+            }
+            try await model.reloadLocalState(accountID: read.accountID)
+            guard editor.generation == generation, !isPublishing, canEdit else { return }
+            if let stored {
+                // The store refuses this if you typed after the fetch.
+                await adopt(
+                    try await model.serially {
+                        try await model.draftStore.compareWithGitHub(
+                            stored, text: latest.content, revision: latest.gist.revision)
+                    })
                 try await model.reloadLocalState(accountID: read.accountID)
-                guard editor.generation == generation, !isPublishing, canEdit else { return }
-                if let stored {
-                    // The store refuses this if you typed after the fetch.
-                    await adopt(
-                        try await model.serially {
-                            try await model.draftStore.compareWithGitHub(
-                                stored, text: latest.content, revision: latest.gist.revision)
-                        })
-                    try await model.reloadLocalState(accountID: read.accountID)
-                } else if let content = latest.content, !sourceEqual(content, read.text) {
-                    // Every text change bumps the generation, so this is refused if you typed after the fetch.
-                    try await commitMutation(
-                        Edit(
-                            range: NSRange(location: 0, length: editor.text.utf16.count),
-                            expected: editor.text, replacement: content),
-                        expectedGeneration: generation
-                    ) { read.adopting(GitHubVersion(text: content, revision: latest.gist.revision)) }
-                }
-            } else {
-                // Someone else's gist reads the way it opened.
-                let gist = try await model.gist(id: gistID, accountID: file.accountID)
-                guard
-                    let text = try await model.text(
-                        of: file.filename, in: gist, accountID: file.accountID)
-                else { throw GitHubError.missingFile }
-                try await model.reloadLocalState(accountID: file.accountID)
-                file.update(text, in: gist)
-                if !sourceEqual(text, editor.text) {
-                    editor.reload(text)
-                    savedGeneration = editor.generation
-                }
+            } else if let content = latest.content, !sourceEqual(content, read.text) {
+                // Every text change bumps the generation, so this is refused if you typed after the fetch.
+                try await commitMutation(
+                    Edit(
+                        range: NSRange(location: 0, length: editor.text.utf16.count),
+                        expected: editor.text, replacement: content),
+                    expectedGeneration: generation
+                ) { read.adopting(GitHubVersion(text: content, revision: latest.gist.revision)) }
+            }
+            refreshProblem = nil
+            refreshedAt = .now
+        } catch {
+            logger.error(
+                "Refresh failed: \(String(reflecting: type(of: error)), privacy: .public)")
+            refreshProblem = GitHubProblem(error) == .reconnect ? .reconnect : nil
+        }
+    }
+
+    /// Someone else's note takes GitHub's newer text through the read that opened it, with nothing
+    /// to save, publish or undo.
+    private func adoptGitHubText(gistID: String) async {
+        do {
+            let gist = try await model.gist(id: gistID, accountID: file.accountID)
+            guard
+                let text = try await model.text(
+                    of: file.filename, in: gist, accountID: file.accountID)
+            else { throw GitHubError.missingFile }
+            try await model.reloadLocalState(accountID: file.accountID)
+            file.update(text, in: gist)
+            if !sourceEqual(text, editor.text) {
+                editor.reload(text)
+                savedGeneration = editor.generation
             }
             refreshProblem = nil
             refreshedAt = .now
