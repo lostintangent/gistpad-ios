@@ -191,25 +191,25 @@ nonisolated struct DiffLine: Identifiable, Sendable {
     let text: String
 
     @concurrent static func changes(from base: String?, to text: String) async -> [DiffLine] {
-        let original = lines(in: base ?? "")
-        let updated = lines(in: text)
-        return updated.difference(from: original).map { change in
+        let difference = lines(in: text).difference(from: lines(in: base ?? ""))
+        return (difference.removals + difference.insertions).map { change in
             switch change {
-            case .insert(let offset, let element, _):
-                DiffLine(
-                    isAddition: true, offset: offset, text: String(decoding: element, as: UTF8.self))
-            case .remove(let offset, let element, _):
-                DiffLine(
-                    isAddition: false, offset: offset, text: String(decoding: element, as: UTF8.self))
+            case .insert(let offset, let line, _):
+                DiffLine(isAddition: true, offset: offset, text: display(line))
+            case .remove(let offset, let line, _):
+                DiffLine(isAddition: false, offset: offset, text: display(line))
             }
-        }.sorted {
-            if $0.isAddition != $1.isAddition { return !$0.isAddition }
-            return $0.offset < $1.offset
         }
     }
 
+    /// Splits on LF bytes, since Swift reads CRLF as one character and would see a single line.
     private static func lines(in text: String) -> [Data] {
         guard !text.isEmpty else { return [] }
-        return text.split(separator: "\n", omittingEmptySubsequences: false).map { Data($0.utf8) }
+        return Data(text.utf8).split(separator: 0x0A, omittingEmptySubsequences: false)
+    }
+
+    /// A line's text without its CR, which still counts when lines compare.
+    private static func display(_ line: Data) -> String {
+        String(decoding: line.last == 0x0D ? line.dropLast() : line, as: UTF8.self)
     }
 }
