@@ -61,10 +61,14 @@ public struct LauncherWidgetView: View {
 
     private var medium: some View {
         HStack(alignment: .top, spacing: dateGap) {
-            dateBlock { Text(date, format: .dateTime.weekday(.wide)) }
-            // Spelled out and hugging today's weekday, so the gap to the list is the same every day.
-            .fixedSize(horizontal: true, vertical: false)
-            .frame(maxHeight: .infinity, alignment: .topLeading)
+            VStack(alignment: .leading, spacing: 0) {
+                dateBlock { Text(date, format: .dateTime.weekday(.wide)) }
+                    // Spelled out and hugging today's weekday, so the gap to the list is the same every day.
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 0)
+                // The tap area spills past the column, and the pencil sits optically on the date's edge.
+                newGist.padding(-newGistPad).offset(x: -2, y: -newGistLift)
+            }
             ZStack(alignment: .topLeading) {
                 rowSlots
                 VStack(alignment: .leading, spacing: 0) {
@@ -78,11 +82,11 @@ public struct LauncherWidgetView: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .overlay(alignment: Alignment(horizontal: .leading, vertical: .lastRowBaseline)) {
-            newGist.offset(x: -newGistPad - 2)
-        }
+        // Both columns are as tall as a full list, so New Gist ends where its last row does.
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var rowCount: Int { dynamicTypeSize.isAccessibilitySize ? 2 : 3 }
@@ -90,20 +94,15 @@ public struct LauncherWidgetView: View {
     /// Between medium's date column and its list, a little roomier than the widget's margin.
     private let dateGap: CGFloat = 20
 
-    /// A full list's rows, unseen, so New Gist mirrors the date: its square sits on the last row's
-    /// baseline as the weekday's cap top meets the first title's, however many gists there are.
+    /// A full list's rows, unseen, so both columns are always a full list tall and New Gist stays
+    /// put however many gists there are.
     private var rowSlots: some View {
         VStack(alignment: .leading, spacing: rowGap) {
-            ForEach(1..<rowCount, id: \.self) { _ in
+            ForEach(0..<rowCount, id: \.self) { _ in
                 VStack(alignment: .leading, spacing: 1) {
                     Text(verbatim: " ").font(.subheadline.weight(.semibold))
                     Text(verbatim: " ").font(.footnote)
                 }
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(verbatim: " ").font(.subheadline.weight(.semibold))
-                Text(verbatim: " ").font(.footnote)
-                    .alignmentGuide(.lastRowBaseline) { $0[.lastTextBaseline] }
             }
         }
         .hidden()
@@ -136,6 +135,8 @@ public struct LauncherWidgetView: View {
 
     /// A fixed pad, not a scaled frame, since widgets stop growing text before Dynamic Type does.
     private let newGistPad: CGFloat = 10
+    /// Raises the pencil's square from the bottom of its frame to the last row's text, growing with it.
+    @ScaledMetric(relativeTo: .title3) private var newGistLift: CGFloat = 1.33
 
     @ViewBuilder
     private var newGist: some View {
@@ -145,8 +146,6 @@ public struct LauncherWidgetView: View {
                     .font(.title3)
                     .foregroundStyle(accent)
                     .widgetAccentable()
-                    // The square's bottom edge hangs just under halfway from the symbol's baseline to its bounds.
-                    .alignmentGuide(.lastRowBaseline) { $0[.lastTextBaseline] + ($0[.bottom] - $0[.lastTextBaseline]) * 0.45 }
                     .padding(newGistPad)
                     .contentShape(Rectangle())
             }
@@ -204,13 +203,5 @@ public struct LauncherWidgetView: View {
         return updatedAt.formatted(
             calendar.isDate(updatedAt, equalTo: date, toGranularity: .year) ? day : day.year())
     }
-}
-
-private extension VerticalAlignment {
-    private enum LastRowBaseline: AlignmentID {
-        static func defaultValue(in context: ViewDimensions) -> CGFloat { context[.bottom] }
-    }
-
-    static let lastRowBaseline = VerticalAlignment(LastRowBaseline.self)
 }
 #endif

@@ -125,7 +125,6 @@ extension LibrarySnapshot {
         guard let container = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: "group.dev.gistpad.GistPad")
         else { throw CocoaError(.fileNoSuchFile) }
-        // The file keeps its first name, so an update never leaves the old one behind.
-        return container.appending(path: "Library/Application Support/GistPad/notebook.snapshot")
+        return container.appending(path: "Library/Application Support/GistPad/library.snapshot")
     }
 }
