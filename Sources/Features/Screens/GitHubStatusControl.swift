@@ -1,18 +1,6 @@
 import Foundation
 import Store
 
-/// Where the list or the open note stands with reading GitHub.
-public enum GitHubStatus: Equatable, Sendable {
-    case idle
-    case checking
-    case failed(Failure)
-
-    /// The failure, when there is one.
-    public var failure: Failure? {
-        if case .failed(let failure) = self { failure } else { nil }
-    }
-}
-
 extension Failure.Action {
     /// The button that offers this fix.
     public var title: String {
@@ -26,57 +14,31 @@ extension Failure.Action {
 #if os(iOS)
 import SwiftUI
 
+/// The `!` that says the list or the open note couldn't read GitHub, and explains why.
 public struct GitHubStatusControl: View {
-    private let status: GitHubStatus
+    private let failure: Failure
     private let recover: @MainActor () -> Void
-    @State private var showsSpinner = false
     @State private var showingDetails = false
 
-    public init(status: GitHubStatus, recover: @escaping @MainActor () -> Void) {
-        self.status = status
+    public init(failure: Failure, recover: @escaping @MainActor () -> Void) {
+        self.failure = failure
         self.recover = recover
     }
 
     public var body: some View {
-        ZStack {
-            switch status {
-            case .idle:
-                EmptyView()
-            case .checking:
-                if showsSpinner {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel(Text("Checking GitHub for changes", bundle: .module))
-                        .accessibilityIdentifier("github-status-checking")
-                }
-            case .failed(let failure):
-                Button(
-                    String(localized: "GitHub needs attention", bundle: .module),
-                    systemImage: "exclamationmark"
-                ) {
-                    showingDetails = true
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityValue(failure.message)
-                .accessibilityHint(Text("Shows details and recovery actions", bundle: .module))
-                .accessibilityIdentifier("github-status-attention")
-                .popover(isPresented: $showingDetails) {
-                    explanation(failure)
-                }
-            }
+        Button(String(localized: "GitHub needs attention", bundle: .module), systemImage: "exclamationmark") {
+            showingDetails = true
         }
-        .task(id: status == .checking) {
-            showsSpinner = false
-            guard status == .checking else { return }
-            try? await Task.sleep(for: .milliseconds(350))
-            showsSpinner = !Task.isCancelled
-        }
-        .onChange(of: status) { _, status in
-            if case .idle = status { showingDetails = false }
+        .labelStyle(.iconOnly)
+        .accessibilityValue(failure.message)
+        .accessibilityHint(Text("Shows details and recovery actions", bundle: .module))
+        .accessibilityIdentifier("github-status-attention")
+        .popover(isPresented: $showingDetails) {
+            explanation
         }
     }
 
-    private func explanation(_ failure: Failure) -> some View {
+    private var explanation: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Couldn’t Check for Changes", bundle: .module)

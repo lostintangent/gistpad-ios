@@ -55,18 +55,16 @@ struct GitHubStatusHostTests {
         let canUndo = editor.undoManager?.canUndo
         capture("scrolled")
         let generation = session.generation
-        let states: [(String, GitHubStatus)] = [
+        let states: [(String, Failure?)] = [
             ("attention", problem()),
-            ("checking", .checking),
-            ("unresolved", problem()),
-            ("idle", .idle),
+            ("idle", nil),
         ]
         for (stage, state) in states {
             host.model.state = state
             await until { host.model.renderedState == state }
             host.window.layoutIfNeeded()
             capture(stage)
-            #expect(host.showsStatus == (state != .idle))
+            #expect(host.showsStatus == (state != nil))
             #expect(session.id == identity)
             #expect(editor.selectedRange == selection)
             #expect(session.generation == generation)
@@ -81,16 +79,16 @@ struct GitHubStatusHostTests {
         #expect(host.model.recoveries == 0)
     }
 
-    private func problem() -> GitHubStatus {
-        .failed(Failure("GitHub couldn’t be reached.", action: .tryAgain))
+    private func problem() -> Failure {
+        Failure("GitHub couldn’t be reached.", action: .tryAgain)
     }
 }
 
 @Observable
 private final class StatusModel {
-    var state: GitHubStatus = .idle
+    var state: Failure?
     var recoveries = 0
-    var renderedState: GitHubStatus = .idle
+    var renderedState: Failure?
 
     func recover() { recoveries += 1 }
 }
@@ -110,10 +108,10 @@ private struct StatusFixture: View {
             }
                 .navigationTitle("A note")
                 .toolbar {
-                    if model.state != .idle {
+                    if let failure = model.state {
                         ToolbarSpacer(.flexible, placement: .bottomBar)
                         ToolbarItem(placement: .bottomBar) {
-                            GitHubStatusControl(status: model.state, recover: model.recover)
+                            GitHubStatusControl(failure: failure, recover: model.recover)
                         }
                     }
                 }

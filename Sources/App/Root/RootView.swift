@@ -142,7 +142,7 @@ struct RootView: View {
     private var library: some View {
         LibraryView(
             state: model.state, actions: libraryActions, isSidebar: horizontalSizeClass == .regular,
-            isSignedOut: isSignedOut, isLoading: isLoadingLibrary, status: model.refreshStatus,
+            isSignedOut: isSignedOut, isLoading: isLoadingLibrary, failure: model.refreshFailure,
             expandedSections: librarySections, isPinnedExpanded: pinnedExpanded
         )
         .id(model.account?.id)
@@ -334,12 +334,12 @@ struct RootView: View {
         let identifier = entityIdentifier(for: fileEditor)
         return Color.clear
             .toolbar {
-                if fileEditor.refreshStatus != .idle {
+                if let failure = fileEditor.visibleRefreshFailure {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
                     ToolbarItem(placement: .bottomBar) {
-                        GitHubStatusControl(status: fileEditor.refreshStatus) {
+                        GitHubStatusControl(failure: failure) {
                             Task {
-                                if fileEditor.refreshFailure?.action == .reconnect { await model.reconnect() }
+                                if failure.action == .reconnect { await model.reconnect() }
                                 await fileEditor.refresh()
                             }
                         }

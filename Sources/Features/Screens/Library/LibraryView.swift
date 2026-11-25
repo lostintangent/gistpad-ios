@@ -61,7 +61,7 @@ public struct LibraryView: View {
     private let isSidebar: Bool
     private let isSignedOut: Bool
     private let isLoading: Bool
-    private let status: GitHubStatus
+    private let failure: Failure?
     @Binding private var expandedSections: Set<LibrarySection>
     @Binding private var isPinnedExpanded: Bool
     @State private var collapsedDateGroups: Set<DateGroup> = []
@@ -78,7 +78,7 @@ public struct LibraryView: View {
     /// `isSidebar` comes from the split view's owner, because a sidebar column always reads as compact.
     public init(
         state: LibraryState, actions: LibraryActions, isSidebar: Bool,
-        isSignedOut: Bool = false, isLoading: Bool = false, status: GitHubStatus = .idle,
+        isSignedOut: Bool = false, isLoading: Bool = false, failure: Failure? = nil,
         expandedSections: Binding<Set<LibrarySection>>, isPinnedExpanded: Binding<Bool>
     ) {
         self.state = state
@@ -86,7 +86,7 @@ public struct LibraryView: View {
         self.isSidebar = isSidebar
         self.isSignedOut = isSignedOut
         self.isLoading = isLoading
-        self.status = status
+        self.failure = failure
         _expandedSections = expandedSections
         _isPinnedExpanded = isPinnedExpanded
     }
@@ -366,7 +366,7 @@ public struct LibraryView: View {
     /// With no gists to show, the empty state is also where a failed first load explains itself.
     private var emptyState: some View {
         Section {
-            switch status.failure {
+            switch failure {
             case _ where state.hasFilters:
                 ContentUnavailableView.search(text: state.query)
             case let failure?:
@@ -478,10 +478,10 @@ public struct LibraryView: View {
             ToolbarItem(placement: .topBarLeading) { EditButton().disabled(!hasVisibleGists) }
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             if !isSearchPresented {
-                if status.failure != nil, !explainsFailure {
+                if let failure, !explainsFailure {
                     ToolbarSpacer(.flexible, placement: .bottomBar)
                     ToolbarItem(placement: .bottomBar) {
-                        GitHubStatusControl(status: status, recover: actions.recoverStatus)
+                        GitHubStatusControl(failure: failure, recover: actions.recoverStatus)
                     }
                     .axisBehavior(.verticalPreferred)
                 }

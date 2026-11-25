@@ -8,11 +8,6 @@ import Store
 // web's edits show up without a pull.
 
 extension GistPadModel {
-    public var refreshStatus: GitHubStatus {
-        if let refreshFailure { return .failed(refreshFailure) }
-        return phase == .refreshing ? .checking : .idle
-    }
-
     // Supabase only supplies preferences, so GitHub reads keep going when its refresh fails. A missing GitHub token still needs reconnecting.
     private func refreshedAccount() async throws -> GistPadAccount {
         do {
@@ -92,13 +87,11 @@ extension GistPadModel {
 }
 
 extension GistFileEditor {
-    public var refreshStatus: GitHubStatus {
-        guard let refreshFailure else { return .idle }
+    /// Why this note couldn't read GitHub, unless its publish status already shows what needs you.
+    public var visibleRefreshFailure: Failure? {
         switch status {
-        case .failed, .conflict:
-            return .idle
-        default:
-            return .failed(refreshFailure)
+        case .failed, .conflict: nil
+        default: refreshFailure
         }
     }
 

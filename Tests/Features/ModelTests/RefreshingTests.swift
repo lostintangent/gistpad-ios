@@ -49,7 +49,8 @@ struct RefreshingTests {
         let list = phone.fixture.hold("GET /gists/starred")
         let returning = Task { await phone.returnToApp() }
         try await list.arrival()
-        #expect(phone.status == "Checking")
+        #expect(phone.model.phase == .refreshing)
+        #expect(phone.status == nil)
         #expect(!list.hasReachedGitHub)
         list.open()
         await returning.value

@@ -169,14 +169,8 @@ final class Phone {
     /// The daily note rows in the list.
     var days: Set<String> { Set(model.state.gists.filter(\.isDailyNote).map(\.id)) }
 
-    /// The list's GitHub status: why it couldn't read GitHub, "Checking" while it refreshes, or nil.
-    var status: String? {
-        switch model.refreshStatus {
-        case .idle: nil
-        case .checking: "Checking"
-        case .failed(let failure): failure.message
-        }
-    }
+    /// Why the list couldn't read GitHub, or nil.
+    var status: String? { model.refreshFailure?.message }
 
     func onGitHub(_ gistID: String, _ filename: String = "README.md") -> String? {
         fixture.onGitHub(gistID, filename)
