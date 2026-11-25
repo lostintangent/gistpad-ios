@@ -95,7 +95,7 @@ When one of these explains a problem, **GitHub needs attention** stays out of th
 
 **Mode.** In your own gist, a segmented, icon-only picker: Edit `square.and.pencil`, Split `rectangle.split.2x1` (only when it fits) and Preview `eye`. Someone else's gist shows only Preview, with no picker. Switching to Preview with the keyboard up shows the page at rest while the keyboard drops.
 
-**Status.** Healthy editing shows nothing, and there's no Publish button. A conflict or a lapsed sign-in puts **GitHub needs attention** (`exclamationmark`) in the bar, and it opens Review Changes or reconnects. When a check for changes fails, the same control sits at the bottom and opens a popover headed **Couldn’t Check for Changes**, with the reason and its button. The popover opens from the control, with the system's arrow pointing at it. No spinner, toast or save pill. [sync.md](sync.md#what-you-see) says what each means.
+**Status.** Healthy editing shows nothing, and there's no Publish button. A conflict or a lapsed sign-in puts **GitHub needs attention** (`exclamationmark`) in the bar, and it opens Review Changes or reconnects. When a check for changes fails, the same control sits at the bottom and opens a popover headed **Couldn’t Check for Changes**, with the reason and its button. The popover grows out of the control, as the system presents a popover from a toolbar button, with no arrow. No spinner, toast or save pill. [sync.md](sync.md#what-you-see) says what each means.
 
 **More**, in native sections:
 
