@@ -258,6 +258,11 @@
             editor?.completeFocusRequestIfAttached()
         }
 
+        // A hidden pane keeps its frame, so showing it doesn't lay it out again.
+        override var isHidden: Bool {
+            didSet { if !isHidden { editor?.commentAnnotator.revealPendingThread() } }
+        }
+
         // Platform gap: TextKit 2's own reveal scrolls to estimated geometry, so long notes stop short
         // of the caret. Remove this override and reveal(_:) when UITextView reveals laid-out text.
         override func scrollRangeToVisible(_ range: NSRange) {

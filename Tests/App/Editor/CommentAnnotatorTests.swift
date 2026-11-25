@@ -145,7 +145,7 @@ struct CommentAnnotatorTests {
         #expect(editor.textView.selectedRange == selection)
     }
 
-    @Test func aRevealWaitsForItsPassageAndCanReturnToItWithoutChangingSource() async throws {
+    @Test func aRevealWaitsUntilItsPassageShowsAndCanReturnToItWithoutChangingSource() async throws {
         let text =
             "# Start\n\n" + String(repeating: "Room for another thought.\n\n", count: 60)
             + "A late native passage."
@@ -169,6 +169,13 @@ struct CommentAnnotatorTests {
         #expect(editor.commentAnnotator.scrollTask == nil)
         #expect(abs(editor.textView.contentOffset.y - top.y) < 1)
         editor.revealThread(60)
+        await editor.commentAnnotator.scrollTask?.value
+        #expect(editor.textView.contentOffset.y > 100)
+        editor.textView.setContentOffset(top, animated: false)
+        editor.textView.isHidden = true
+        editor.revealThread(60)
+        #expect(editor.commentAnnotator.scrollTask == nil)
+        editor.textView.isHidden = false
         await editor.commentAnnotator.scrollTask?.value
         #expect(editor.textView.contentOffset.y > 100)
         #expect(editor.document.text == text)
