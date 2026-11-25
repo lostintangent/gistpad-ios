@@ -46,11 +46,10 @@
             .ignoresSafeArea([.container, .keyboard], edges: .vertical)
             .sheet(item: $linkRequest, onDismiss: editor.focus) { request in
                 LinkEditor(label: request.label) { label, destination in
-                    if let edit = try Format.link(label: label, destination: destination).edit(
-                        in: request.source, selection: request.selection)
-                    {
-                        try editor.apply(edit, generation: request.generation)
-                    }
+                    try editor.apply(
+                        MarkdownDocument(request.source).edit(
+                            linking: request.selection, to: destination, label: label),
+                        generation: request.generation)
                 }
             }
             .alert(
@@ -62,9 +61,9 @@
             }
         }
 
-        private func format(_ command: Format) {
+        private func format(_ command: (MarkdownDocument, NSRange) -> MarkdownEdit?) {
             do {
-                if let edit = try command.edit(in: editor.text, selection: editor.textView.selectedRange) {
+                if let edit = command(MarkdownDocument(editor.text), editor.textView.selectedRange) {
                     try editor.apply(edit, generation: editor.generation)
                 }
             } catch {

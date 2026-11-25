@@ -48,6 +48,7 @@ let package = Package(
         .testTarget(
             name: "CommentsTests", dependencies: ["Comments"], path: "Tests/Shared/CommentsTests",
             resources: [.copy("Fixtures")]),
+        .testTarget(name: "MarkdownTests", dependencies: ["Markdown"], path: "Tests/Shared/MarkdownTests"),
         .testTarget(
             name: "StoreTests", dependencies: ["Store", "Comments"], path: "Tests/Shared/StoreTests"),
 
@@ -64,7 +65,7 @@ let package = Package(
             name: "ModelTests", dependencies: ["Model", "Editor", "Markdown", "Screens", "Store"],
             path: "Tests/Features/ModelTests", swiftSettings: mainActor),
         .testTarget(
-            name: "PlatformTests", dependencies: ["Platform", "Store", "Editor"],
+            name: "PlatformTests", dependencies: ["Platform", "Store", "Markdown"],
             path: "Tests/Features/PlatformTests"),
         .testTarget(
             name: "PreviewTests", dependencies: ["Preview", "Appearance", "Comments"],

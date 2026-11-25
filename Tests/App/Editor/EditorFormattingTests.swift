@@ -19,8 +19,7 @@ struct EditorFormattingTests {
             savedSelection = editor.textView.selectedRange
             changes += 1
         }
-        let edit = try #require(
-            try Format.bold.edit(in: editor.text, selection: originalSelection))
+        let edit = MarkdownDocument(editor.text).edit(bolding: originalSelection)
         try editor.apply(edit, generation: 0)
         #expect(editor.text == "A **日本語** note")
         #expect(editor.textView.selectedRange == edit.selection)
@@ -39,9 +38,8 @@ struct EditorFormattingTests {
 
     @Test func staleLinkNeverChangesSource() throws {
         let editor = MarkdownEditor(text: "note")
-        let edit = try #require(
-            try Format.link(label: "note", destination: "https://example.com").edit(
-                in: editor.text, selection: NSRange(location: 0, length: 4)))
+        let edit = try MarkdownDocument(editor.text).edit(
+            linking: NSRange(location: 0, length: 4), to: "https://example.com", label: "note")
         #expect(throws: MarkdownEdit.Failure.changed) {
             try editor.apply(edit, generation: 1)
         }
@@ -53,9 +51,7 @@ struct EditorFormattingTests {
         let editor = MarkdownEditor(text: "note")
         let window = try hostEditor(editor)
         defer { window.isHidden = true }
-        let edit = try #require(
-            try Format.bold.edit(
-                in: editor.text, selection: NSRange(location: 0, length: 4)))
+        let edit = MarkdownDocument(editor.text).edit(bolding: NSRange(location: 0, length: 4))
         editor.textViewWritingToolsWillBegin(editor.textView)
         editor.find()
         #expect(editor.inputError != nil)

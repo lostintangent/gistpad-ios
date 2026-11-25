@@ -1,5 +1,5 @@
 import Foundation
-import Editor
+import Markdown
 
 extension OnDeviceModel {
     /// A numbered passage the model cites by ID instead of quoting.
@@ -9,7 +9,7 @@ extension OnDeviceModel {
 
         static func blocks(in source: String) -> [Self] {
             let text = source as NSString
-            let offsets = [0] + Syntax.outline(in: source).blocks
+            let offsets = [0] + MarkdownDocument(source).blocks
                 .filter { $0.kind == .heading && $0.range.location > 0 }
                 .map(\.range.location) + [text.length]
             return zip(offsets, offsets.dropFirst()).enumerated().compactMap { index, pair in

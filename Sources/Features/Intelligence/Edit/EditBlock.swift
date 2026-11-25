@@ -1,9 +1,9 @@
 import Foundation
-import Editor
+import Markdown
 
 struct EditBlock {
     let id: Int
-    let kind: Syntax.Block.Kind
+    let kind: MarkdownDocument.Block.Kind
     let range: NSRange
     let text: String
     let heading: String
@@ -27,7 +27,7 @@ struct EditBlock {
     static func indexed(in source: String) -> [Self] {
         let text = source as NSString
         var heading = ""
-        return Syntax.outline(in: source).blocks.enumerated().map { index, block in
+        return MarkdownDocument(source).blocks.enumerated().map { index, block in
             let value = text.substring(with: block.range)
             if block.kind == .heading { heading = value }
             return Self(

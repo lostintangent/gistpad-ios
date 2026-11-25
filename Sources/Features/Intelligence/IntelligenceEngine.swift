@@ -1,5 +1,5 @@
 import Foundation
-import Editor
+import Markdown
 import OSLog
 
 let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
@@ -259,7 +259,7 @@ package final class IntelligenceEngine {
             generated.prose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? [] : [.prose(generated.prose)]
         guard !prose.isEmpty || !generated.quotes.isEmpty else { throw IntelligenceError.emptyAnswer }
-        let bodyStart = Syntax.contentStart(in: request.snapshot.source)
+        let bodyStart = MarkdownDocument(request.snapshot.source).contentStart
         return try prose
             + generated.quotes.map { quote in
                 let ranges = request.snapshot.source.exactRanges(of: quote).filter {
@@ -331,7 +331,7 @@ package final class IntelligenceEngine {
 
     /// The note after its front matter.
     private func body(of request: IntelligenceRequest) -> NSRange {
-        let start = Syntax.contentStart(in: request.snapshot.source)
+        let start = MarkdownDocument(request.snapshot.source).contentStart
         return NSRange(location: start, length: request.snapshot.source.utf16.count - start)
     }
 
@@ -404,7 +404,7 @@ package final class IntelligenceEngine {
         evidenceBlocks: [String]? = nil
     ) -> ModelPass {
         let bodyLength =
-            request.snapshot.source.utf16.count - Syntax.contentStart(in: request.snapshot.source)
+            request.snapshot.source.utf16.count - MarkdownDocument(request.snapshot.source).contentStart
         return ModelPass(
             purpose: purpose, instruction: request.instruction, source: source,
             responseTokens: min(purpose == .answer ? answerTokens : 1_536, model.contextSize / 3),

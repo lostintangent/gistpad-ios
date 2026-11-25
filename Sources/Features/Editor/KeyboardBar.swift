@@ -1,11 +1,13 @@
 #if canImport(UIKit)
+    import Markdown
     import UIKit
 
     /// What the bar's buttons do. Formatting is off while `canFormat` is false, and a missing
     /// image or Intelligence action disables its button.
     struct KeyboardBarActions {
         let canFormat: Bool
-        let format: @MainActor (Format) -> Void
+        /// Applies the edit a formatting verb makes from the note and its selection.
+        let format: @MainActor ((MarkdownDocument, NSRange) -> MarkdownEdit?) -> Void
         let link: @MainActor () -> Void
         let indent: @MainActor (Bool) -> Void
         let image: (@MainActor () -> Void)?
@@ -97,23 +99,22 @@
             self.actions = actions
             guard enabled != actions.enabled else { return }
             enabled = actions.enabled
-            var headings = [
-                action(String(localized: "Body", bundle: .module)) { $0.actions.format(.heading(0)) }
-            ]
-            headings += (1...6).map { level in
-                action(String(localized: "Heading \(level)", bundle: .module)) {
-                    $0.actions.format(.heading(level))
-                }
+            let headings = (0...6).map { level in
+                let title =
+                    level == 0
+                    ? String(localized: "Body", bundle: .module)
+                    : String(localized: "Heading \(level)", bundle: .module)
+                return action(title) { $0.actions.format { $0.edit(heading: level, over: $1) } }
             }
             let lists = [
                 action(String(localized: "Bulleted List", bundle: .module), image: "list.bullet") {
-                    $0.actions.format(.bulletList)
+                    $0.actions.format { $0.edit(bulleting: $1) }
                 },
                 action(String(localized: "Numbered List", bundle: .module), image: "list.number") {
-                    $0.actions.format(.numberedList)
+                    $0.actions.format { $0.edit(numbering: $1) }
                 },
                 action(String(localized: "Checklist", bundle: .module), image: "checklist") {
-                    $0.actions.format(.checklist)
+                    $0.actions.format { $0.edit(checklisting: $1) }
                 },
                 action(String(localized: "Increase Indent", bundle: .module), image: "increase.indent") {
                     $0.actions.indent(false)
@@ -128,13 +129,13 @@
                     String(localized: "Inline Code", bundle: .module),
                     image: "chevron.left.forwardslash.chevron.right"
                 ) {
-                    $0.actions.format(.inlineCode)
+                    $0.actions.format { $0.edit(coding: $1) }
                 },
                 action(String(localized: "Code Block", bundle: .module), image: "curlybraces.square") {
-                    $0.actions.format(.codeBlock)
+                    $0.actions.format { $0.edit(fencing: $1) }
                 },
                 action(String(localized: "Quote", bundle: .module), image: "text.quote") {
-                    $0.actions.format(.quote)
+                    $0.actions.format { $0.edit(quoting: $1) }
                 },
             ]
             let image = action(String(localized: "Image", bundle: .module), image: "photo") {
@@ -144,10 +145,10 @@
             insert.append(UIMenu(options: .displayInline, children: [image]))
             let emphasis = [
                 action(String(localized: "Bold", bundle: .module), image: "bold") {
-                    $0.actions.format(.bold)
+                    $0.actions.format { $0.edit(bolding: $1) }
                 },
                 action(String(localized: "Italic", bundle: .module), image: "italic") {
-                    $0.actions.format(.italic)
+                    $0.actions.format { $0.edit(italicizing: $1) }
                 },
             ]
             let style = item(

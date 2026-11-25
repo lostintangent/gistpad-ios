@@ -199,8 +199,10 @@
         func indent(outdent: Bool) {
             do {
                 guard canFormat else { throw MarkdownEdit.Failure.unsettled }
-                if let edit = try Typing.indent(
-                    in: text, selection: textView.selectedRange, outdent: outdent)
+                let document = MarkdownDocument(text)
+                let selection = textView.selectedRange
+                if let edit =
+                    outdent ? document.edit(outdenting: selection) : document.edit(indenting: selection)
                 {
                     try apply(edit, generation: generation)
                 }
@@ -214,12 +216,15 @@
                 let position = textView.closestPosition(to: point)
             else { return false }
             let offset = textView.offset(from: textView.beginningOfDocument, to: position)
-            guard Typing.isListItem(in: text, at: offset) else { return false }
+            let document = MarkdownDocument(text)
+            guard document.isListItem(at: offset) else { return false }
+            let line = NSRange(location: offset, length: 0)
             do {
                 guard
-                    let edit = try Typing.indent(
-                        in: text, selection: NSRange(location: offset, length: 0), outdent: outdent,
-                        keeping: textView.selectedRange)
+                    let edit =
+                        outdent
+                        ? document.edit(outdenting: line, keeping: textView.selectedRange)
+                        : document.edit(indenting: line, keeping: textView.selectedRange)
                 else { return false }
                 try apply(edit, generation: generation)
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -243,12 +248,12 @@
             guard isSettled, !isHighlighting else { return }
             isHighlighting = true
             defer { isHighlighting = false }
-            let ink = SyntaxInk(traits: textView.traitCollection)
+            let style = MarkdownStyle(traits: textView.traitCollection)
             textView.updateAttributes { storage in
-                ink.paint(in: storage)
+                style.paint(MarkdownDocument(storage.string), in: storage)
                 commentHighlights.paint(in: storage)
             }
-            textView.typingAttributes = ink.typingAttributes
+            textView.typingAttributes = style.typingAttributes
         }
 
         private func synchronizeText() {
@@ -287,7 +292,7 @@
 
         private func updateHiddenFrontMatter() {
             let source: String = textView.text
-            let start = showsFrontMatter ? 0 : Syntax.contentStart(in: source)
+            let start = showsFrontMatter ? 0 : MarkdownDocument(source).contentStart
             textView.accessibilityValue = start > 0 ? (source as NSString).substring(from: start) : nil
             guard start != contentStart else { return }
             contentStart = start
@@ -330,10 +335,10 @@
                 textView.findInteraction?.isFindNavigatorVisible != true
             else { return true }
             if !text.utf8.elementsEqual(textView.text.utf8) { synchronizeText() }
+            guard let edit = MarkdownDocument(text).edit(typing: replacement, over: ranges[0]) else {
+                return true
+            }
             do {
-                guard
-                    let edit = try Typing.edit(in: text, selection: ranges[0], replacement: replacement)
-                else { return true }
                 try apply(edit, generation: generation)
                 return false
             } catch {
@@ -369,8 +374,7 @@
         public func textView(
             _ textView: UITextView, writingToolsIgnoredRangesInEnclosingRange enclosingRange: NSRange
         ) -> [NSValue] {
-            var ranges = Syntax.ignoredWritingToolsRanges(
-                in: textView.text, enclosing: enclosingRange)
+            var ranges = MarkdownDocument(textView.text).protectedRanges(in: enclosingRange)
             var hidden = NSIntersectionRange(NSRange(location: 0, length: contentStart), enclosingRange)
             if hidden.length > 0 {
                 while let first = ranges.first, first.location <= NSMaxRange(hidden) {

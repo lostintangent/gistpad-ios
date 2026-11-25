@@ -1,5 +1,6 @@
 import Foundation
 @testable import Editor
+import Markdown
 import Screens
 import Platform
 import SwiftUI
@@ -81,7 +82,7 @@ struct RootViewTests {
                     #expect(editor.text.utf8.elementsEqual(text.utf8))
                     #expect(
                         editor.selectedRange
-                            == NSRange(location: Syntax.contentStart(in: text), length: 0))
+                            == NSRange(location: MarkdownDocument(text).contentStart, length: 0))
                     #expect(caret.minY >= top - 1 && caret.minY < top + 40)
                 }
             }

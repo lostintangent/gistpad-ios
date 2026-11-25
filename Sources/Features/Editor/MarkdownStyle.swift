@@ -1,8 +1,9 @@
 #if canImport(UIKit)
+    import Markdown
     import UIKit
 
     /// How Markdown source looks: native fonts for the view's traits, in gistpad.dev's GitHub palette.
-    struct SyntaxInk {
+    struct MarkdownStyle {
         private let body: UIFont
         private let heading: UIFont
         private let code: UIFont
@@ -19,10 +20,10 @@
             [.font: body, .foregroundColor: UIColor.label]
         }
 
-        /// Styles all of `storage` from its Markdown syntax.
-        func paint(in storage: NSTextStorage) {
+        /// Styles all of `storage`, which holds `document`.
+        func paint(_ document: MarkdownDocument, in storage: NSTextStorage) {
             storage.setAttributes(typingAttributes, range: NSRange(location: 0, length: storage.length))
-            for span in Syntax.spans(in: storage.string) {
+            for span in document.spans {
                 storage.addAttributes(attributes(for: span.kind), range: span.range)
                 if span.kind == .strong || span.kind == .emphasis {
                     let addedTrait: UIFontDescriptor.SymbolicTraits =
@@ -39,7 +40,7 @@
             }
         }
 
-        private func attributes(for kind: Syntax.Span.Kind) -> [NSAttributedString.Key: Any] {
+        private func attributes(for kind: MarkdownDocument.Span.Kind) -> [NSAttributedString.Key: Any] {
             switch kind {
             case .heading:
                 [.foregroundColor: Self.headingInk, .font: heading]
@@ -55,7 +56,7 @@
                 [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
             case .code:
                 [.foregroundColor: UIColor.label, .font: code, .underlineStyle: 0, .strikethroughStyle: 0]
-            case .frontmatter:
+            case .frontMatter:
                 [.foregroundColor: UIColor.label, .font: code]
             case .link, .linkDestination:
                 [

@@ -1,6 +1,7 @@
 import AppIntents
 import Editor
 import Foundation
+import Markdown
 import Model
 import OSLog
 import Platform
@@ -83,7 +84,8 @@ final class PlatformBridge: PlatformActions {
         let account = try await model.localAccount()
         try Task.checkCancellation()
         let snapshot = LibrarySnapshot(
-            account: account, cache: model.gistCache, drafts: model.drafts, visibleText: Self.noteBody)
+            account: account, cache: model.gistCache, drafts: model.drafts,
+            visibleText: { MarkdownDocument($0).body })
         try snapshot.write()
         WidgetCenter.shared.reloadTimelines(ofKind: LauncherWidgetView.kind)
         spotlightSnapshots.yield(snapshot)
@@ -100,15 +102,11 @@ final class PlatformBridge: PlatformActions {
         }
     }
 
-    private static func noteBody(_ source: String) -> String {
-        (source as NSString).substring(from: Syntax.contentStart(in: source))
-    }
-
     func noteEntities(for identifiers: [String]) async throws -> [GistFileEntity] {
         guard let account = try await model.localAccount() else { throw PlatformError.accountChanged }
         let snapshot = LibrarySnapshot(
             account: account, cache: model.gistCache, drafts: model.drafts,
-            visibleText: Self.noteBody)
+            visibleText: { MarkdownDocument($0).body })
         return snapshot.files.filter { identifiers.contains($0.id) }.map {
             $0.withBody(visibleBody(for: $0, accountID: account.id))
         }
@@ -121,7 +119,7 @@ final class PlatformBridge: PlatformActions {
             model.isForeground, model.state.selectedID != nil,
             fileEditor.file.accountID == accountID
         else { return nil }
-        return Self.noteBody(fileEditor.editor.text)
+        return MarkdownDocument(fileEditor.editor.text).body
     }
 
     /// Spotlight catches up with the newest snapshot in the background, so nothing waits on it.
