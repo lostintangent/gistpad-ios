@@ -1,7 +1,7 @@
 import Foundation
 
 /// One change to a note's source, with UTF-16 offsets.
-public struct Edit: Sendable {
+public struct MarkdownEdit: Sendable {
     public let range: NSRange
     public let expected: String
     public let replacement: String
@@ -16,7 +16,7 @@ public struct Edit: Sendable {
     }
 
     /// Replacements are ordered, nonoverlapping UTF-16 ranges in the original source.
-    init(
+    package init(
         range: NSRange, expected: String, replacements: [(range: NSRange, replacement: String)],
         selection: NSRange
     ) {
@@ -51,7 +51,7 @@ public struct Edit: Sendable {
     }
 
     /// The source at `range`, which must be in bounds and must not split a surrogate pair.
-    static func text(in source: String, at range: NSRange) throws -> String {
+    package static func text(in source: String, at range: NSRange) throws -> String {
         let utf16 = source as NSString
         guard range.location >= 0, range.length >= 0, range.location <= utf16.length,
             range.length <= utf16.length - range.location
@@ -80,7 +80,7 @@ public struct Edit: Sendable {
     }
 }
 
-extension Edit.Failure: LocalizedError {
+extension MarkdownEdit.Failure: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .unsettled:

@@ -1,5 +1,6 @@
 import Comments
 import Editor
+import Markdown
 import Preview
 import SwiftUI
 
@@ -23,7 +24,7 @@ struct FilePreview: View {
         case .taskToggle(let range, let expected, let replacement, let generation):
             // A refused toggle (typing in progress, or a newer generation) needs no message: the
             // checkbox is controlled, so it springs back and the preview keeps showing the file.
-            try? editor.apply(Edit(range: range, expected: expected, replacement: replacement), generation: generation)
+            try? editor.apply(MarkdownEdit(range: range, expected: expected, replacement: replacement), generation: generation)
         case .openWikilink(let name):
             openWikilink?(name)
         }

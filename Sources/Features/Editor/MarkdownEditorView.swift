@@ -1,6 +1,7 @@
 #if canImport(UIKit)
     import Appearance
     import Comments
+    import Markdown
     import SwiftUI
     import UIKit
 
@@ -74,10 +75,10 @@
         private func beginLink() {
             let selection = editor.textView.selectedRange
             do {
-                guard editor.canFormat else { throw Edit.Failure.unsettled }
+                guard editor.canFormat else { throw MarkdownEdit.Failure.unsettled }
                 linkRequest = LinkRequest(
                     source: editor.text, generation: editor.generation, selection: selection,
-                    label: try Edit.text(in: editor.text, at: selection))
+                    label: try MarkdownEdit.text(in: editor.text, at: selection))
             } catch {
                 editor.inputError = error.localizedDescription
             }

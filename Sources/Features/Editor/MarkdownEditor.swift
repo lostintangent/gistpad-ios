@@ -1,6 +1,7 @@
 #if canImport(UIKit)
     import Appearance
     import AppIntents
+    import Markdown
     import Observation
     import UIKit
 
@@ -67,9 +68,9 @@
         }
 
         /// Applies one change as an undoable step. A nil selection keeps the caret where it was.
-        public func apply(_ edit: Edit, generation: UInt64) throws {
-            guard isSettled else { throw Edit.Failure.unsettled }
-            guard self.generation == generation else { throw Edit.Failure.changed }
+        public func apply(_ edit: MarkdownEdit, generation: UInt64) throws {
+            guard isSettled else { throw MarkdownEdit.Failure.unsettled }
+            guard self.generation == generation else { throw MarkdownEdit.Failure.changed }
             _ = try edit.applying(to: text)
             // An edit that changes nothing, like stepping over a closer, only moves the caret.
             if edit.range.length == 0, edit.replacement.isEmpty {
@@ -77,7 +78,7 @@
                 return
             }
             let previousSelection = textView.selectedRange
-            let inverse = Edit(
+            let inverse = MarkdownEdit(
                 range: NSRange(location: edit.range.location, length: edit.replacement.utf16.count),
                 expected: edit.replacement,
                 replacement: (text as NSString).substring(with: edit.range),
@@ -180,7 +181,7 @@
         /// Puts the caret at the end, ready to write, as a new gist or today's note opens.
         public func requestFocusAtEnd() {
             guard canFormat else {
-                inputError = Edit.Failure.unsettled.localizedDescription
+                inputError = MarkdownEdit.Failure.unsettled.localizedDescription
                 return
             }
             textView.selectedRange = NSRange(location: text.utf16.count, length: 0)
@@ -197,7 +198,7 @@
 
         func indent(outdent: Bool) {
             do {
-                guard canFormat else { throw Edit.Failure.unsettled }
+                guard canFormat else { throw MarkdownEdit.Failure.unsettled }
                 if let edit = try Typing.indent(
                     in: text, selection: textView.selectedRange, outdent: outdent)
                 {
@@ -231,7 +232,7 @@
 
         public func find(replacing: Bool = false) {
             guard isSettled else {
-                inputError = Edit.Failure.unsettled.localizedDescription
+                inputError = MarkdownEdit.Failure.unsettled.localizedDescription
                 return
             }
             commentHighlights.suspendForFind()
@@ -401,6 +402,7 @@
 
 #if !canImport(UIKit)
     import Foundation
+    import Markdown
     import Observation
 
     /// Off iOS the editor is just the note's text, so the library's sync runs in Mac tests. Typing
@@ -423,8 +425,8 @@
             self.generation = generation
         }
 
-        public func apply(_ edit: Edit, generation: UInt64) throws {
-            guard self.generation == generation else { throw Edit.Failure.changed }
+        public func apply(_ edit: MarkdownEdit, generation: UInt64) throws {
+            guard self.generation == generation else { throw MarkdownEdit.Failure.changed }
             let result = try edit.applying(to: text)
             guard !result.utf8.elementsEqual(text.utf8) else { return }
             text = result

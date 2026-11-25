@@ -1,5 +1,6 @@
 import Editor
 import Foundation
+import Markdown
 import Store
 
 // Every keystroke is saved on this iPhone first, so nothing you write waits on GitHub.
@@ -73,7 +74,7 @@ extension GistFileEditor {
         }
         guard sourceEqual(draft.text, editor.text) else { throw DraftError.changed }
         try await commitMutation(
-            Edit(
+            MarkdownEdit(
                 range: NSRange(location: editor.text.utf16.count, length: 0), expected: "",
                 replacement: text),
             expectedGeneration: editor.generation, commit: commit)
@@ -82,10 +83,10 @@ extension GistFileEditor {
     /// Commits a change you didn't type, such as GitHub's newer text, then shows it in the editor.
     /// Typing since `expectedGeneration` refuses it.
     func commitMutation(
-        _ edit: Edit, expectedGeneration: UInt64,
+        _ edit: MarkdownEdit, expectedGeneration: UInt64,
         commit: @MainActor () async throws -> GistFileDraft
     ) async throws {
-        guard canEdit else { throw Edit.Failure.unsettled }
+        guard canEdit else { throw MarkdownEdit.Failure.unsettled }
         guard editor.generation == expectedGeneration else { throw DraftError.changed }
         let result = try edit.applying(to: editor.text)
         let changed = !result.utf8.elementsEqual(editor.text.utf8)

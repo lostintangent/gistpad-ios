@@ -1,3 +1,4 @@
+import Markdown
 import Testing
 import UIKit
 
@@ -63,7 +64,7 @@ struct FrontMatterLayoutTests {
         #expect(view.accessibilityValue == body)
 
         try editor.apply(
-            Edit(
+            MarkdownEdit(
                 range: (source as NSString).range(of: "[ ]"), expected: "[ ]", replacement: "[x]"),
             generation: 0)
         #expect(editor.text == prefix + body.replacingOccurrences(of: "[ ]", with: "[x]"))
@@ -105,7 +106,7 @@ struct FrontMatterLayoutTests {
         try #require(view.isFirstResponder)
         let range = (source as NSString).range(of: "A longer value 👩🏽‍💻")
         try editor.apply(
-            Edit(range: range, expected: "A longer value 👩🏽‍💻", replacement: "Short"),
+            MarkdownEdit(range: range, expected: "A longer value 👩🏽‍💻", replacement: "Short"),
             generation: editor.generation)
         let nextPrefix = "---\nkey: Short\n---\n\n"
         #expect(editor.text.utf8.elementsEqual((nextPrefix + body).utf8))
@@ -152,7 +153,7 @@ struct FrontMatterLayoutTests {
         defer { window.isHidden = true }
         try #require(view.isFirstResponder)
         try editor.apply(
-            Edit(
+            MarkdownEdit(
                 range: NSRange(location: 0, length: source.utf16.count), expected: source,
                 replacement: replacement),
             generation: editor.generation)

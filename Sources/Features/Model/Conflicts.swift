@@ -1,5 +1,6 @@
 import Editor
 import Foundation
+import Markdown
 import Store
 
 // When GitHub changed a note you also edited, you see both versions and choose what to keep.
@@ -12,7 +13,7 @@ extension GistFileEditor {
         guard reviewed.conflict != nil, file.draft == reviewed, sourceEqual(reviewed.text, editor.text)
         else { throw ChangeError.staleReview }
         try await commitMutation(
-            Edit(
+            MarkdownEdit(
                 range: NSRange(location: 0, length: editor.text.utf16.count),
                 expected: editor.text, replacement: text),
             expectedGeneration: editor.generation

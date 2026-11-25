@@ -1,5 +1,6 @@
 import Editor
 import Foundation
+import Markdown
 import Screens
 import Store
 import Testing
@@ -76,7 +77,7 @@ final class Phone {
         for text in texts {
             let whole = NSRange(location: 0, length: editor.text.utf16.count)
             try editor.apply(
-                Edit(range: whole, expected: editor.text, replacement: text), generation: editor.generation)
+                MarkdownEdit(range: whole, expected: editor.text, replacement: text), generation: editor.generation)
         }
         try #require(await fileEditor.waitForLocalSave())
     }

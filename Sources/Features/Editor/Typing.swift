@@ -1,11 +1,12 @@
 import Foundation
+import Markdown
 
 enum Typing {
     /// Returns nil for ordinary input or protected syntax so the caller can use native input.
     static func edit(
         in source: String, selection: NSRange, replacement: String
-    ) throws -> Edit? {
-        let selected = try Edit.text(in: source, at: selection)
+    ) throws -> MarkdownEdit? {
+        let selected = try MarkdownEdit.text(in: source, at: selection)
         if ["\n", "\r", "\r\n"].contains(replacement) {
             let protected = protectedRanges(in: source)
             guard !isProtected(selection, ranges: protected) else { return nil }
@@ -29,7 +30,7 @@ enum Typing {
             .replacingOccurrences(of: "(", with: "%28").replacingOccurrences(of: ")", with: "%29")
             .replacingOccurrences(of: "<", with: "%3C").replacingOccurrences(of: ">", with: "%3E")
         let markdown = "[\(label)](\(destination))"
-        return Edit(
+        return MarkdownEdit(
             range: selection, expected: selected, replacement: markdown,
             selection: NSRange(location: selection.location + markdown.utf16.count, length: 0))
     }
@@ -43,7 +44,7 @@ enum Typing {
     /// An opener closes before a space, a line end or a closer, so one typed before a word stays
     /// single. Its closer steps over a waiting one, and backspace in an empty pair deletes both.
     private static func pairBracket(in source: String, selection: NSRange, replacement: String)
-        -> Edit?
+        -> MarkdownEdit?
     {
         let text = source as NSString
         let caret = NSMaxRange(selection)
@@ -52,7 +53,7 @@ enum Typing {
             let pair = brackets.first(where: { $0.open == text.substring(with: selection) }),
             next == pair.close
         {
-            return Edit(
+            return MarkdownEdit(
                 range: NSRange(location: selection.location, length: 2), expected: pair.open + pair.close,
                 replacement: "", selection: NSRange(location: selection.location, length: 0))
         }
@@ -60,7 +61,7 @@ enum Typing {
         if let pair = brackets.first(where: { $0.open == replacement }),
             next.isEmpty || next.rangeOfCharacter(from: closesBefore) != nil
         {
-            return Edit(
+            return MarkdownEdit(
                 range: selection, expected: "", replacement: pair.open + pair.close,
                 selection: NSRange(location: caret + 1, length: 0))
         }
@@ -70,7 +71,7 @@ enum Typing {
             guard line.count(where: { String($0) == pair.open })
                 <= line.count(where: { String($0) == pair.close })
             else { return nil }
-            return Edit(
+            return MarkdownEdit(
                 range: selection, expected: "", replacement: "",
                 selection: NSRange(location: caret + 1, length: 0))
         }
@@ -87,8 +88,8 @@ enum Typing {
     /// Call only outside composition and Writing Tools. Offsets and returned selection are UTF-16.
     static func indent(
         in source: String, selection: NSRange, outdent: Bool, keeping result: NSRange? = nil
-    ) throws -> Edit? {
-        _ = try Edit.text(in: source, at: selection)
+    ) throws -> MarkdownEdit? {
+        _ = try MarkdownEdit.text(in: source, at: selection)
         let text = source as NSString
         let block = text.lineRange(covering: selection)
         let protected = protectedRanges(in: source)
@@ -117,13 +118,13 @@ enum Typing {
             offset = NSMaxRange(line)
         } while offset < NSMaxRange(block)
         guard !changes.isEmpty else { return nil }
-        return Edit(
+        return MarkdownEdit(
             range: block, expected: text.substring(with: block), replacements: changes, selection: kept)
     }
 
     private static func continueList(
         in source: String, selection: NSRange, protected: [NSRange]
-    ) -> Edit? {
+    ) -> MarkdownEdit? {
         let text = source as NSString
         var lineStart = 0
         var lineEnd = 0
@@ -141,7 +142,7 @@ enum Typing {
         let content = value.substring(from: match.range.length)
         if content.allSatisfy(\.isWhitespace) {
             let range = NSRange(location: lineStart, length: contentsEnd - lineStart)
-            return Edit(
+            return MarkdownEdit(
                 range: range, expected: line, replacement: "",
                 selection: NSRange(location: lineStart, length: 0))
         }
@@ -173,7 +174,7 @@ enum Typing {
                 start: number + 2, protected: protected)
             return edit(in: source, selection: selection, changes: changes)
         }
-        return Edit(
+        return MarkdownEdit(
             range: selection, expected: text.substring(with: selection), replacement: replacement,
             selection: NSRange(location: selection.location + replacement.utf16.count, length: 0))
     }
@@ -189,7 +190,7 @@ enum Typing {
 
     private static func nestList(
         in source: String, block: NSRange, selection: NSRange, outdent: Bool, protected: [NSRange]
-    ) -> Edit? {
+    ) -> MarkdownEdit? {
         let text = source as NSString
         guard let current = listLine(in: text, at: block.location),
             !isProtected(current.range, ranges: protected)
@@ -230,7 +231,7 @@ enum Typing {
 
     private static func outdentList(
         in source: String, current: ListLine, block: NSRange, selection: NSRange, protected: [NSRange]
-    ) -> Edit? {
+    ) -> MarkdownEdit? {
         let text = source as NSString
         guard let parent = listItem(above: current, shallower: true, in: text, protected: protected)
         else { return nil }
@@ -378,12 +379,12 @@ enum Typing {
 
     private static func edit(
         in source: String, selection: NSRange, changes: [(range: NSRange, replacement: String)]
-    ) -> Edit? {
+    ) -> MarkdownEdit? {
         guard !changes.isEmpty else { return nil }
         let start = changes.map(\.range.location).min()!
         let end = changes.map { NSMaxRange($0.range) }.max()!
         let range = NSRange(location: start, length: end - start)
-        return Edit(
+        return MarkdownEdit(
             range: range, expected: (source as NSString).substring(with: range),
             replacements: changes, selection: selection)
     }

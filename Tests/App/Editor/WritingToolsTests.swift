@@ -1,4 +1,5 @@
 @testable import Editor
+import Markdown
 import Testing
 import UIKit
 
@@ -28,9 +29,9 @@ extension EditorContinuityTests {
             #expect(session.generation == 7)
             #expect(changes.isEmpty)
         }
-        #expect(throws: Edit.Failure.unsettled) {
+        #expect(throws: MarkdownEdit.Failure.unsettled) {
             try session.apply(
-                Edit(
+                MarkdownEdit(
                     range: NSRange(location: 0, length: 8), expected: "Original", replacement: "External"),
                 generation: 7)
         }

@@ -3,7 +3,7 @@ import PackageDescription
 
 // GistPad.xcodeproj builds the app and its extensions from Sources/App and Sources/Extensions,
 // and links these modules. Shared is the core that features build on.
-let shared = ["Appearance", "Comments", "Store"]
+let shared = ["Appearance", "Comments", "Markdown", "Store"]
 let features = ["Editor", "Intelligence", "Model", "Platform", "Preview", "Screens"]
 // The UI modules and their tests run on the main actor by default, like Xcode's app template.
 let mainActor: [SwiftSetting] = [.defaultIsolation(MainActor.self)]
@@ -18,22 +18,23 @@ let package = Package(
     targets: [
         .target(name: "Appearance", path: "Sources/Shared/Appearance"),
         .target(name: "Comments", path: "Sources/Shared/Comments", exclude: ["README.md"]),
+        .target(name: "Markdown", path: "Sources/Shared/Markdown", resources: [.process("Resources")]),
         .target(
             name: "Store", dependencies: ["Comments", .product(name: "Auth", package: "supabase-swift")],
             path: "Sources/Shared/Store", exclude: ["README.md"]),
 
         .target(
-            name: "Editor", dependencies: ["Appearance", "Comments"], path: "Sources/Features/Editor",
+            name: "Editor", dependencies: ["Appearance", "Comments", "Markdown"], path: "Sources/Features/Editor",
             resources: [.process("Resources")], swiftSettings: mainActor),
         .target(
-            name: "Intelligence", dependencies: ["Editor"], path: "Sources/Features/Intelligence",
+            name: "Intelligence", dependencies: ["Editor", "Markdown"], path: "Sources/Features/Intelligence",
             resources: [.process("Resources")], swiftSettings: mainActor),
         .target(
             name: "Screens", dependencies: ["Appearance", "Store"],
             path: "Sources/Features/Screens", exclude: ["README.md"], resources: [.process("Resources")],
             swiftSettings: mainActor),
         .target(
-            name: "Model", dependencies: ["Comments", "Editor", "Screens", "Store"],
+            name: "Model", dependencies: ["Comments", "Editor", "Markdown", "Screens", "Store"],
             path: "Sources/Features/Model", exclude: ["README.md"], swiftSettings: mainActor),
         .target(
             name: "Platform", dependencies: ["Store", "Appearance"], path: "Sources/Features/Platform",
@@ -51,7 +52,7 @@ let package = Package(
             name: "StoreTests", dependencies: ["Store", "Comments"], path: "Tests/Shared/StoreTests"),
 
         .testTarget(
-            name: "EditorTests", dependencies: ["Editor", "Comments"], path: "Tests/Features/EditorTests",
+            name: "EditorTests", dependencies: ["Editor", "Comments", "Markdown"], path: "Tests/Features/EditorTests",
             swiftSettings: mainActor),
         .testTarget(
             name: "IntelligenceTests", dependencies: ["Intelligence"],
@@ -60,7 +61,7 @@ let package = Package(
             name: "ScreensTests", dependencies: ["Screens"], path: "Tests/Features/ScreensTests",
             swiftSettings: mainActor),
         .testTarget(
-            name: "ModelTests", dependencies: ["Model", "Editor", "Screens", "Store"],
+            name: "ModelTests", dependencies: ["Model", "Editor", "Markdown", "Screens", "Store"],
             path: "Tests/Features/ModelTests", swiftSettings: mainActor),
         .testTarget(
             name: "PlatformTests", dependencies: ["Platform", "Store", "Editor"],

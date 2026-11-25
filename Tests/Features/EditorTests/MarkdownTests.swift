@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 import Testing
 
 @testable import Editor
@@ -17,7 +18,7 @@ import Testing
 @Test func duplicateTasksTargetOnlyTheSpecifiedOccurrence() throws {
     let source = "👩🏽‍💻\n- [ ] Duplicate\n- [ ] Duplicate\n"
     let range = (source as NSString).range(of: "[ ]", options: .backwards)
-    let mutation = Edit(range: range, expected: "[ ]", replacement: "[x]")
+    let mutation = MarkdownEdit(range: range, expected: "[ ]", replacement: "[x]")
     #expect(try mutation.applying(to: source) == "👩🏽‍💻\n- [ ] Duplicate\n- [x] Duplicate\n")
 }
 
@@ -74,20 +75,20 @@ import Testing
 
 @Test func invalidOrStaleSourceIsRejected() {
     let source = "📝 - [ ] task"
-    #expect(throws: Edit.Failure.changed) {
-        try Edit(range: NSRange(location: 1, length: 1), expected: "", replacement: "x")
+    #expect(throws: MarkdownEdit.Failure.changed) {
+        try MarkdownEdit(range: NSRange(location: 1, length: 1), expected: "", replacement: "x")
             .applying(to: source)
     }
-    #expect(throws: Edit.Failure.changed) {
-        try Edit(range: NSRange(location: 0, length: 2), expected: "[ ]", replacement: "[x]")
+    #expect(throws: MarkdownEdit.Failure.changed) {
+        try MarkdownEdit(range: NSRange(location: 0, length: 2), expected: "[ ]", replacement: "[x]")
             .applying(to: source)
     }
 }
 
 @Test func canonicallyEquivalentButDifferentSourceIsNotAnExactMatch() {
     let source = "cafe\u{301}"
-    #expect(throws: Edit.Failure.changed) {
-        try Edit(
+    #expect(throws: MarkdownEdit.Failure.changed) {
+        try MarkdownEdit(
             range: NSRange(location: 0, length: source.utf16.count),
             expected: "caf\u{e9}", replacement: "coffee"
         ).applying(to: source)

@@ -1,5 +1,6 @@
 import Accessibility
 import Comments
+import Markdown
 import Testing
 import UIKit
 @testable import Editor
@@ -37,7 +38,7 @@ struct CommentHighlightTests {
         let undo = try #require(editor.textView.undoManager)
         undo.removeAllActions()
         try editor.apply(
-            Edit(range: NSRange(location: 0, length: 1), expected: "A", replacement: "The"),
+            MarkdownEdit(range: NSRange(location: 0, length: 1), expected: "A", replacement: "The"),
             generation: 7)
         editor.textView.selectedRange = NSRange(location: 4, length: 6)
         let selection = editor.textView.selectedRange

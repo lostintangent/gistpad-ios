@@ -1,5 +1,6 @@
 import Editor
 import Intelligence
+import Markdown
 import Model
 import Observation
 import Store
@@ -18,7 +19,7 @@ final class IntelligencePresentation {
     ) {
         let editor = fileEditor.editor
         guard editor.isSettled else {
-            model.failure = Failure(Edit.Failure.unsettled)
+            model.failure = Failure(MarkdownEdit.Failure.unsettled)
             return
         }
         present(editor: editor, title: fileEditor.details.title) { range in

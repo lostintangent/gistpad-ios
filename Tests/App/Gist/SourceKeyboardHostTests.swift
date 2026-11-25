@@ -1,4 +1,5 @@
 @testable import Editor
+import Markdown
 import Screens
 import SwiftUI
 import Testing
@@ -29,7 +30,7 @@ struct SourceKeyboardHostTests {
                 in: range, with: change.1
             )
             try session.apply(
-                Edit(range: range, expected: change.0, replacement: change.1),
+                MarkdownEdit(range: range, expected: change.0, replacement: change.1),
                 generation: session.generation
             )
             session.highlight()

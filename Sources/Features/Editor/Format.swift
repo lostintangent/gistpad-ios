@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 
 /// A Markdown format from the keyboard bar.
 enum Format: Sendable {
@@ -8,9 +9,9 @@ enum Format: Sendable {
     case link(label: String, destination: String)
 
     /// Formats the selection, or unformats it when it's already formatted. Nil when nothing changes.
-    func edit(in source: String, selection: NSRange) throws -> Edit? {
+    func edit(in source: String, selection: NSRange) throws -> MarkdownEdit? {
         let text = source as NSString
-        let selected = try Edit.text(in: source, at: selection)
+        let selected = try MarkdownEdit.text(in: source, at: selection)
         switch self {
         case .bold:
             return Self.wrapped("**", source: source, selection: selection, selected: selected)
@@ -27,7 +28,7 @@ enum Format: Sendable {
                     && !selected.allSatisfy(\.isWhitespace))
             let padding = padded ? " " : ""
             let replacement = delimiter + padding + selected + padding + delimiter
-            return Edit(
+            return MarkdownEdit(
                 range: selection, expected: selected, replacement: replacement,
                 selection: NSRange(
                     location: selection.location + delimiter.utf16.count + padding.utf16.count,
@@ -41,7 +42,7 @@ enum Format: Sendable {
                 !label.contains("\n"), !label.contains("\r"),
                 (scheme != "http" && scheme != "https") || !(url.host ?? "").isEmpty,
                 (scheme != "mailto" && scheme != "tel") || !url.path.isEmpty
-            else { throw Edit.Failure.invalidLink }
+            else { throw MarkdownEdit.Failure.invalidLink }
             let target = url.absoluteString
             let escaped = target.contains("(") || target.contains(")") ? "<\(target)>" : target
             let title = (label.isEmpty ? target : label)
@@ -49,7 +50,7 @@ enum Format: Sendable {
                 .replacingOccurrences(of: "[", with: "\\[")
                 .replacingOccurrences(of: "]", with: "\\]")
             let replacement = "[\(title)](\(escaped))"
-            return Edit(
+            return MarkdownEdit(
                 range: selection, expected: selected, replacement: replacement,
                 selection: NSRange(location: selection.location + replacement.utf16.count, length: 0))
         case .codeBlock:
@@ -61,7 +62,7 @@ enum Format: Sendable {
             let terminator = endsLine ? "" : newline
             let trailing = endsLine ? newline : ""
             let opening = fence + newline
-            return Edit(
+            return MarkdownEdit(
                 range: block, expected: content,
                 replacement: opening + content + terminator + fence + trailing,
                 selection: NSRange(
@@ -73,7 +74,7 @@ enum Format: Sendable {
 
     private static func unwrappedCode(
         in source: String, selection: NSRange, selected: String
-    ) -> Edit? {
+    ) -> MarkdownEdit? {
         let text = source as NSString
         var opening = selection.location
         var closing = NSMaxRange(selection)
@@ -91,7 +92,7 @@ enum Format: Sendable {
         let before = selection.location - opening - padding
         if before > Self.longestBacktickRun(selected), closing - NSMaxRange(selection) - padding == before {
             let enclosing = NSRange(location: opening, length: closing - opening)
-            return Edit(
+            return MarkdownEdit(
                 range: enclosing, expected: text.substring(with: enclosing), replacement: selected,
                 selection: NSRange(location: opening, length: selected.utf16.count))
         }
@@ -104,14 +105,14 @@ enum Format: Sendable {
         if content.hasPrefix(" "), content.hasSuffix(" "), !content.allSatisfy(\.isWhitespace) {
             content = String(content.dropFirst().dropLast())
         }
-        return Edit(
+        return MarkdownEdit(
             range: selection, expected: selected, replacement: content,
             selection: NSRange(location: selection.location, length: content.utf16.count))
     }
 
     private static func wrapped(
         _ marker: String, source: String, selection: NSRange, selected: String
-    ) -> Edit {
+    ) -> MarkdownEdit {
         let text = source as NSString
         let count = marker.utf16.count
         let italicSelection =
@@ -123,7 +124,7 @@ enum Format: Sendable {
         {
             let content = (selected as NSString).substring(
                 with: NSRange(location: count, length: selected.utf16.count - count * 2))
-            return Edit(
+            return MarkdownEdit(
                 range: selection, expected: selected, replacement: content,
                 selection: NSRange(location: selection.location, length: content.utf16.count))
         }
@@ -139,16 +140,16 @@ enum Format: Sendable {
         {
             let enclosing = NSRange(
                 location: selection.location - count, length: selection.length + count * 2)
-            return Edit(
+            return MarkdownEdit(
                 range: enclosing, expected: text.substring(with: enclosing), replacement: selected,
                 selection: NSRange(location: enclosing.location, length: selected.utf16.count))
         }
-        return Edit(
+        return MarkdownEdit(
             range: selection, expected: selected, replacement: marker + selected + marker,
             selection: NSRange(location: selection.location + count, length: selection.length))
     }
 
-    private func lines(in source: String, selection: NSRange) -> Edit? {
+    private func lines(in source: String, selection: NSRange) -> MarkdownEdit? {
         let text = source as NSString
         let block = text.lineRange(covering: selection)
         let content = text.substring(with: block)
@@ -210,7 +211,7 @@ enum Format: Sendable {
             (prefixes.map { (range: $0.range, replacement: remove ? "" : $0.marker) }
             + suffixes.map { (range: $0, replacement: "") })
             .sorted { $0.range.location < $1.range.location }
-        let edit = Edit(
+        let edit = MarkdownEdit(
             range: block, expected: content, replacements: changes, selection: selection)
         return edit.replacement.utf8.elementsEqual(content.utf8) ? nil : edit
     }

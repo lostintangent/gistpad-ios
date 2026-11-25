@@ -1,4 +1,5 @@
 @testable import Editor
+import Markdown
 import SwiftUI
 import Testing
 import UIKit
@@ -52,18 +53,18 @@ struct EditorContinuityTests {
         let session = MarkdownEditor(text: source)
         let window = try host(session)
         defer { window.isHidden = true }
-        let edit = Edit(
+        let edit = MarkdownEdit(
             range: (source as NSString).range(of: "[ ]", options: .backwards), expected: "[ ]",
             replacement: "[x]")
         try session.apply(edit, generation: 0)
         #expect(session.text == "- [ ] Duplicate\n- [x] Duplicate")
-        #expect(throws: Edit.Failure.changed) {
+        #expect(throws: MarkdownEdit.Failure.changed) {
             try session.apply(edit, generation: 0)
         }
         session.textView.undoManager?.undo()
         #expect(session.textView.text == source)
         session.textView.setMarkedText("に", selectedRange: NSRange(location: 1, length: 0))
-        #expect(throws: Edit.Failure.unsettled) {
+        #expect(throws: MarkdownEdit.Failure.unsettled) {
             try session.apply(edit, generation: session.generation)
         }
     }
@@ -75,7 +76,7 @@ struct EditorContinuityTests {
         defer { window.isHidden = true }
         session.textView.selectedRange = NSRange(location: 0, length: 0)
         try session.apply(
-            Edit(
+            MarkdownEdit(
                 range: (source as NSString).range(of: "[ ]", options: .backwards),
                 expected: "[ ]", replacement: "[x]"),
             generation: 0)

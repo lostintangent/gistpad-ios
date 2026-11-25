@@ -1,5 +1,6 @@
 import Foundation
 import Editor
+import Markdown
 
 extension FileSnapshot {
     package init(parsing source: String, sessionID: UUID, generation: UInt64) {
@@ -26,7 +27,7 @@ extension FileSnapshot {
         func apply(_ proposal: Proposal, changeID: UUID? = nil) throws -> Proposal {
             let snapshot = snapshot()
             let application = try proposal.application(to: snapshot, changeID: changeID)
-            let edit = Edit(
+            let edit = MarkdownEdit(
                 range: NSRange(location: 0, length: snapshot.source.utf16.count),
                 expected: snapshot.source, replacement: application.source,
                 selection: application.mappedSelection(selection))

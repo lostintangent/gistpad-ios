@@ -1,3 +1,4 @@
+import Markdown
 import Testing
 import UIKit
 
@@ -82,7 +83,7 @@ struct EditorFocusTests {
         let undo = try #require(editor.textView.undoManager)
         undo.removeAllActions()
         try editor.apply(
-            Edit(range: NSRange(location: 4, length: 0), expected: "", replacement: "!"),
+            MarkdownEdit(range: NSRange(location: 4, length: 0), expected: "", replacement: "!"),
             generation: 0)
         editor.textView.selectedRange = NSRange(location: 0, length: 0)
         editor.requestFocusAtEnd()

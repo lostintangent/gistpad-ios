@@ -1,3 +1,4 @@
+import Markdown
 import Testing
 import UIKit
 
@@ -41,7 +42,7 @@ struct EditorFormattingTests {
         let edit = try #require(
             try Format.link(label: "note", destination: "https://example.com").edit(
                 in: editor.text, selection: NSRange(location: 0, length: 4)))
-        #expect(throws: Edit.Failure.changed) {
+        #expect(throws: MarkdownEdit.Failure.changed) {
             try editor.apply(edit, generation: 1)
         }
         #expect(editor.text == "note")
@@ -60,7 +61,7 @@ struct EditorFormattingTests {
         #expect(editor.inputError != nil)
         #expect(editor.textView.findInteraction?.isFindNavigatorVisible == false)
         editor.inputError = nil
-        #expect(throws: Edit.Failure.unsettled) {
+        #expect(throws: MarkdownEdit.Failure.unsettled) {
             try editor.apply(edit, generation: 0)
         }
         editor.textViewWritingToolsDidEnd(editor.textView)
@@ -69,7 +70,7 @@ struct EditorFormattingTests {
         editor.find()
         #expect(editor.inputError != nil)
         #expect(editor.textView.findInteraction?.isFindNavigatorVisible == false)
-        #expect(throws: Edit.Failure.unsettled) {
+        #expect(throws: MarkdownEdit.Failure.unsettled) {
             try editor.apply(edit, generation: 0)
         }
         editor.textView.unmarkText()

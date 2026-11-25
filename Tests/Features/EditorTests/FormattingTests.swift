@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 import Testing
 
 @testable import Editor
@@ -9,7 +10,7 @@ struct FormattingTests {
         let boundaries = [0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 11, 11, 11, 11, 12, 13, 14, 15, 16, 17]
         for start in boundaries.indices {
             for end in start..<boundaries.count {
-                let edit = Edit(
+                let edit = MarkdownEdit(
                     range: NSRange(location: 7, length: 6), expected: "a123bc",
                     replacements: [
                         (NSRange(location: 7, length: 0), "# "),
@@ -57,7 +58,7 @@ struct FormattingTests {
             NSRange(location: -1, length: 0), NSRange(location: 0, length: 9),
             NSRange(location: 1, length: 0), NSRange(location: 0, length: 1),
         ] {
-            #expect(throws: Edit.Failure.changed) {
+            #expect(throws: MarkdownEdit.Failure.changed) {
                 try Format.bold.edit(in: "📝", selection: selection)
             }
         }
@@ -152,7 +153,7 @@ struct FormattingTests {
             "", "example.com", "javascript:alert(1)", "https://", "mailto:", "tel:",
             "https://a.test/\nnext",
         ] {
-            #expect(throws: Edit.Failure.invalidLink) {
+            #expect(throws: MarkdownEdit.Failure.invalidLink) {
                 try Format.link(label: "note", destination: destination).edit(
                     in: "note", selection: NSRange(location: 0, length: 4))
             }

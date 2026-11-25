@@ -2,6 +2,7 @@
     import Accessibility
     import Appearance
     import Comments
+    import Markdown
     import UIKit
 
     final class CommentHighlights: NSObject, UIGestureRecognizerDelegate {
@@ -228,7 +229,7 @@
         private func addAction(ranges: [NSRange]) -> UIAction? {
             guard actions != nil, !isSuspended,
                 ranges.count == 1, let range = ranges.first, editor.isSettled,
-                let quote = try? Edit.text(in: editor.text, at: range),
+                let quote = try? MarkdownEdit.text(in: editor.text, at: range),
                 CommentQuote.isQuotable(quote)
             else { return nil }
             return UIAction(

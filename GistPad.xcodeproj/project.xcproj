@@ -121,6 +121,10 @@
           "build-phase": { "build-phase": "frameworks" },
         }, {
           "package": ".",
+          "product-name": "Markdown",
+          "build-phase": { "build-phase": "frameworks" },
+        }, {
+          "package": ".",
           "product-name": "Model",
           "build-phase": { "build-phase": "frameworks" },
         }, {

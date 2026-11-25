@@ -1,5 +1,6 @@
 import Editor
 import Foundation
+import Markdown
 import Screens
 import Store
 
@@ -138,7 +139,7 @@ extension GistFileEditor {
             } else if let content = latest.content, !sourceEqual(content, read.text) {
                 // Every text change bumps the generation, so this is refused if you typed after the fetch.
                 try await commitMutation(
-                    Edit(
+                    MarkdownEdit(
                         range: NSRange(location: 0, length: editor.text.utf16.count),
                         expected: editor.text, replacement: content),
                     expectedGeneration: generation
