@@ -1,5 +1,6 @@
 import AppIntents
 import Foundation
+import Markdown
 
 @AppEntity(schema: .notes.note)
 public struct GistFileEntity: Codable {
@@ -36,16 +37,16 @@ public struct GistFileEntity: Codable {
             image: .init(systemName: "doc.text"))
     }
 
-    /// A copy showing `body`, or no body when the open note's text isn't known.
-    public func withBody(_ body: String?) -> Self {
+    /// A copy showing `document`'s body, or no body when the open note's text isn't known.
+    public func withBody(of document: MarkdownDocument?) -> Self {
         var entity = self
-        entity.body = body
-        if let body { entity.excerpt = LibrarySnapshot.excerpt(body) }
+        entity.body = document?.body
+        if let document { entity.excerpt = document.excerpt }
         return entity
     }
 
     public func withMetadata(name: String?, isPinned: Bool?) -> Self {
-        var entity = withBody(nil)
+        var entity = withBody(of: nil)
         entity.title = name ?? title
         entity.folderName = name ?? folderName
         entity.pinned = isPinned ?? pinned

@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 import Store
 
 /// What widgets, Shortcuts and Spotlight know about the library, shared through the app group.
@@ -13,10 +14,7 @@ public struct LibrarySnapshot: Codable, Sendable {
 
 extension LibrarySnapshot {
     /// The library as `account` has it on this iPhone, or a signed-out library without one.
-    public init(
-        account: GistPadAccount?, cache: GistCache?, drafts: [GistFileDraft],
-        visibleText: (String) -> String = { $0 }
-    ) {
+    public init(account: GistPadAccount?, cache: GistCache?, drafts: [GistFileDraft]) {
         accountID = account?.id
         accentHex = account?.preferences.accentColor
         guard let account else {
@@ -28,7 +26,7 @@ extension LibrarySnapshot {
             _ title: String, text: String?, updatedAt: Date, link: GistPadLink, in gist: Gist?
         ) -> GistFileEntity {
             GistFileEntity(
-                title: title, excerpt: Self.excerpt(text.map(visibleText)),
+                title: title, excerpt: text.flatMap { MarkdownDocument($0).excerpt },
                 tags: gist.map { account.preferences.tagNames(gistID: $0.id) } ?? [],
                 updatedAt: updatedAt, link: link, accountID: account.id,
                 folderName: gist?.displayName,
@@ -88,15 +86,6 @@ extension LibrarySnapshot {
                 link: .gist(id: "preview\(index)", filename: nil), accountID: nil)
         }
         return Self(accountID: UUID(), accentHex: nil, files: recents, recents: recents)
-    }
-
-    static func excerpt(_ source: String?) -> String? {
-        guard let source else { return nil }
-        let text = source.split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && !$0.hasPrefix("#") && !$0.hasPrefix("- [") }
-            .joined(separator: " ")
-        return text.isEmpty ? nil : String(text.prefix(160))
     }
 }
 

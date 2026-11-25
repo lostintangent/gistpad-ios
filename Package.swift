@@ -39,7 +39,7 @@ let package = Package(
             name: "Model", dependencies: ["Comments", "Editor", "Markdown", "Screens", "Store"],
             path: "Sources/Features/Model", exclude: ["README.md"], swiftSettings: mainActor),
         .target(
-            name: "Platform", dependencies: ["Store", "Appearance"], path: "Sources/Features/Platform",
+            name: "Platform", dependencies: ["Appearance", "Markdown", "Store"], path: "Sources/Features/Platform",
             exclude: ["README.md"]),
         .target(
             name: "Preview", dependencies: ["Appearance", "Comments"], path: "Sources/Features/Preview",
@@ -67,7 +67,7 @@ let package = Package(
             name: "ModelTests", dependencies: ["Model", "Editor", "Markdown", "Screens", "Store"],
             path: "Tests/Features/ModelTests", swiftSettings: mainActor),
         .testTarget(
-            name: "PlatformTests", dependencies: ["Platform", "Store", "Markdown"],
+            name: "PlatformTests", dependencies: ["Platform", "Store"],
             path: "Tests/Features/PlatformTests"),
         .testTarget(
             name: "PreviewTests", dependencies: ["Preview", "Appearance", "Comments"],

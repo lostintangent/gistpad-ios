@@ -11,12 +11,12 @@ needs the web's `apple-app-site-association` file deployed first.
 
 ## System surfaces
 
-`GistFileEntity` is an `IndexedEntity`, one per Markdown file, with its title, tags
-and a snippet, indexed with complete file protection. Each one names its file,
-the gist's default file included, and opens that file. `GistFileQuery`
-resolves identifiers and strings for the signed-in account and answers the
-system's reindex requests. The entity keeps its first identifier, `GistEntity`,
-so saved Shortcuts and Spotlight items still resolve.
+`GistFileEntity` is an `IndexedEntity`, one per Markdown file, with its title,
+tags and its document's `excerpt`, indexed with complete file protection. Each
+one names its file, the gist's default file included, and opens that file.
+`GistFileQuery` resolves identifiers and strings for the signed-in account and
+answers the system's reindex requests. The entity keeps its first identifier,
+`GistEntity`, so saved Shortcuts and Spotlight items still resolve.
 The app updates the index in the background after each snapshot, so nothing
 waits on Spotlight, and deletes just the files that went away since the last
 one, including while the app wasn't running.
@@ -25,8 +25,8 @@ one, including while the app wasn't running.
 note in its gist's `GistFolderEntity`, under the active `GistAccountEntity`.
 RootView names the displayed file as the entity of the editor, the preview and
 a foreground `NSUserActivity`. Only a query for that note while GistPad is
-active gets its live body, which the bridge reads from the editor with front
-matter stripped, as `MarkdownDocument.body`. Spotlight and the shared
+active gets its live body, the editor's `MarkdownDocument.body`, which leaves
+out front matter. Spotlight and the shared
 snapshot keep titles and snippets but **never full bodies**. Siri answering
 questions from the displayed body remains unproven until a phone test.
 

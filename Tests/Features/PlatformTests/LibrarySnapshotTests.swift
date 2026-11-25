@@ -1,5 +1,4 @@
 import Foundation
-import Markdown
 import Store
 import Testing
 @testable import Platform
@@ -66,8 +65,7 @@ struct LibrarySnapshotTests {
         let snapshot = LibrarySnapshot(
             account: GistPadAccount(id: account, github: FixtureServer.you, preferences: GistPadPreferences(metadata: [:])),
             cache: GistCache(accountID: account, owned: [manga], starred: []),
-            drafts: [edited, unpublishedFile],
-            visibleText: { MarkdownDocument($0).body })
+            drafts: [edited, unpublishedFile])
 
         #expect(snapshot.files.count == 3)
         #expect(snapshot.recents.map(\.title) == ["Manga reading list"])

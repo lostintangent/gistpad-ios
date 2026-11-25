@@ -83,9 +83,7 @@ final class PlatformBridge: PlatformActions {
     func refresh() async throws {
         let account = try await model.localAccount()
         try Task.checkCancellation()
-        let snapshot = LibrarySnapshot(
-            account: account, cache: model.gistCache, drafts: model.drafts,
-            visibleText: { MarkdownDocument($0).body })
+        let snapshot = LibrarySnapshot(account: account, cache: model.gistCache, drafts: model.drafts)
         try snapshot.write()
         WidgetCenter.shared.reloadTimelines(ofKind: LauncherWidgetView.kind)
         spotlightSnapshots.yield(snapshot)
@@ -104,22 +102,20 @@ final class PlatformBridge: PlatformActions {
 
     func noteEntities(for identifiers: [String]) async throws -> [GistFileEntity] {
         guard let account = try await model.localAccount() else { throw PlatformError.accountChanged }
-        let snapshot = LibrarySnapshot(
-            account: account, cache: model.gistCache, drafts: model.drafts,
-            visibleText: { MarkdownDocument($0).body })
+        let snapshot = LibrarySnapshot(account: account, cache: model.gistCache, drafts: model.drafts)
         return snapshot.files.filter { identifiers.contains($0.id) }.map {
-            $0.withBody(visibleBody(for: $0, accountID: account.id))
+            $0.withBody(of: visibleDocument(for: $0, accountID: account.id))
         }
     }
 
-    /// The live body of the note on screen, which RootView names as the editor's entity.
-    private func visibleBody(for note: GistFileEntity, accountID: UUID) -> String? {
+    /// The live document of the note on screen, which RootView names as the editor's entity.
+    private func visibleDocument(for note: GistFileEntity, accountID: UUID) -> MarkdownDocument? {
         guard let fileEditor = model.activeEditor,
             fileEditor.editor.entityIdentifier?.identifier == note.id,
             model.isForeground, model.state.selectedID != nil,
             fileEditor.file.accountID == accountID
         else { return nil }
-        return fileEditor.editor.document.body
+        return fileEditor.editor.document
     }
 
     /// Spotlight catches up with the newest snapshot in the background, so nothing waits on it.
@@ -180,7 +176,7 @@ final class PlatformBridge: PlatformActions {
             let addition = (draft.text.isEmpty || draft.text.last?.isNewline == true ? "" : newline)
                 + text + (text.last?.isNewline == true ? "" : newline)
             try await self.append(addition, to: draft)
-            return note.withBody(self.visibleBody(for: note, accountID: draft.accountID))
+            return note.withBody(of: self.visibleDocument(for: note, accountID: draft.accountID))
         }
     }
 
