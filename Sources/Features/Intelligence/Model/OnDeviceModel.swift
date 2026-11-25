@@ -158,7 +158,7 @@ package final class OnDeviceModel: IntelligenceModel {
                 named: "BlockSelection", description: "IDs of relevant blocks. Empty if none are relevant.",
                 count: count, maximum: 4)
         case .edit: return nil
-        case .review: return AppleChanges.generationSchema
+        case .review: return Suggestions.generationSchema
         }
     }
 
