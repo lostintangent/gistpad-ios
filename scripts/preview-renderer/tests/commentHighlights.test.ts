@@ -19,7 +19,7 @@ describe("comment highlights", () => {
         { segment: 0, start: 8, end: 13, threadIDs: [10, 20] },
       ],
       selectedThreadID: 10, revealRevision: 0,
-      showsInlineComments: true, allowsInteraction: true, accent: "#FACC15",
+      showsInlineComments: true, accent: "#FACC15",
     });
     const html = renderToStaticMarkup(createElement(CommentText, {
       controller, segment: 0, text: request.markdown,

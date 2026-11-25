@@ -357,21 +357,19 @@ struct RootView: View {
     }
 
     private func source(_ fileEditor: GistFileEditor) -> some View {
-        let highlights = comments.highlights(for: fileEditor, origin: .edit)
-        return MarkdownEditorView(
+        MarkdownEditorView(
             editor: fileEditor.editor, title: fileEditor.details.title,
             insertImage: images.canChooseImage(for: fileEditor)
                 ? { @MainActor in comments.performAfterClosing { images.chooseImage(for: fileEditor) } }
                 : nil,
             intelligence: { comments.performAfterClosing { presentIntelligence(fileEditor) } },
-            comments: highlights.configuration, commentActions: highlights.actions)
+            comments: comments.highlights(for: fileEditor, origin: .edit))
     }
 
     private func preview(_ fileEditor: GistFileEditor) -> some View {
-        let highlights = comments.highlights(for: fileEditor, origin: .preview)
-        return FilePreview(
+        FilePreview(
             editor: fileEditor.editor, allowsMutations: fileEditor.details.isOwned,
-            comments: highlights.configuration, commentActions: highlights.actions,
+            comments: comments.highlights(for: fileEditor, origin: .preview),
             openWikilink: { target in
                 if let gist = model.state.gists.first(where: {
                     $0.title.localizedStandardCompare(target) == .orderedSame

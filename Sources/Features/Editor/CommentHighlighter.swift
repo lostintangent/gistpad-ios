@@ -9,8 +9,7 @@
         static let annotationKey = NSAttributedString.Key("dev.gistpad.comment.highlight")
         private unowned let editor: MarkdownEditor
         let backgroundLayer = CALayer()
-        private var configuration = CommentHighlightConfiguration()
-        private var actions: CommentHighlightActions?
+        private var comments: CommentHighlights?
         private var linkedIDs: Set<Int64>?
         private var passages: [(highlight: CommentQuoteHighlight, fill: UIColor, selected: Bool)] = []
         private var verifiedHighlights: [CommentQuoteHighlight] = []
@@ -46,22 +45,22 @@
             editor.textView.addGestureRecognizer(tap)
         }
 
-        func configure(
-            _ configuration: CommentHighlightConfiguration, actions: CommentHighlightActions? = nil
-        ) {
-            let needsInitialReport = self.actions == nil && actions != nil
-            if self.configuration.selectedThreadID != configuration.selectedThreadID
-                || self.configuration.revealRevision != configuration.revealRevision
+        private var quotes: [CommentQuote] { comments?.quotes ?? [] }
+
+        func configure(_ comments: CommentHighlights?) {
+            let needsInitialReport = self.comments == nil && comments != nil
+            if self.comments?.selectedThreadID != comments?.selectedThreadID
+                || self.comments?.revealRevision != comments?.revealRevision
             {
-                needsSelectedScroll = configuration.selectedThreadID != nil
+                needsSelectedScroll = comments?.selectedThreadID != nil
                 scrollTask?.cancel()
                 scrollTask = nil
             }
-            self.actions = actions
-            if self.configuration != configuration {
-                self.configuration = configuration
-                editor.highlight()
-            }
+            let changed = self.comments != comments
+            let wasQuoting = !quotes.isEmpty
+            self.comments = comments
+            // A note without quoted passages looks the same with or without comments.
+            if changed, wasQuoting || !quotes.isEmpty { editor.highlight() }
             if needsInitialReport { publish(linkedIDs ?? [], force: true) }
             scrollSelectedCommentIfNeeded()
         }
@@ -71,12 +70,12 @@
             originalInk = []
             paintedGeneration = editor.generation
             editor.textView.setNeedsLayout()
-            let highlights = configuration.quotes.highlights(in: [editor.document.text])
+            let highlights = quotes.highlights(in: [editor.document.text])
                 .filter { $0.start >= editor.contentStart }
             verifiedHighlights = highlights
             publish(Set(highlights.flatMap(\.threadIDs)))
             updateAccessibility()
-            guard !highlights.isEmpty, !isSuspended else {
+            guard let comments, !highlights.isEmpty, !isSuspended else {
                 backgroundLayer.sublayers = nil
                 return
             }
@@ -86,8 +85,8 @@
             onSelected = roles.onFill.uiColor
             let page = RGBColor(uiColor: UIColor.systemBackground.resolvedColor(with: traits))
             for highlight in highlights {
-                let selected = configuration.selectedThreadID.map(highlight.threadIDs.contains) ?? false
-                guard configuration.showsInlineComments || selected else { continue }
+                let selected = comments.selectedThreadID.map(highlight.threadIDs.contains) ?? false
+                guard comments.showsInlineComments || selected else { continue }
                 let fill: UIColor
                 if selected {
                     fill = roles.fill.uiColor
@@ -227,7 +226,7 @@
         }
 
         private func addAction(ranges: [NSRange]) -> UIAction? {
-            guard actions != nil, !isSuspended,
+            guard comments != nil, !isSuspended,
                 ranges.count == 1, let range = ranges.first, editor.isSettled,
                 case let quote = (editor.document.text as NSString).substring(with: range),
                 CommentQuote.isQuotable(quote)
@@ -236,17 +235,17 @@
                 title: String(localized: "Add Comment", bundle: .module),
                 image: UIImage(systemName: "text.bubble")
             ) { [weak self] _ in
-                self?.actions?.add(quote)
+                self?.comments?.add(quote)
             }
         }
 
         private func openAction(ids: [Int64]) -> UIAction? {
-            guard !ids.isEmpty, actions != nil else { return nil }
+            guard !ids.isEmpty, comments != nil else { return nil }
             return UIAction(
                 title: String(localized: "View Comment", bundle: .module),
                 image: UIImage(systemName: "text.bubble")
             ) { [weak self] _ in
-                self?.actions?.open(ids)
+                self?.comments?.open(ids)
             }
         }
 
@@ -265,7 +264,7 @@
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch)
             -> Bool
         {
-            guard !editor.textView.isFirstResponder, actions != nil, !isSuspended, editor.isSettled
+            guard !editor.textView.isFirstResponder, comments != nil, !isSuspended, editor.isSettled
             else { return false }
             let ids = threadIDs(at: touch.location(in: editor.textView))
             pendingTap = ids.isEmpty ? nil : ids
@@ -320,7 +319,7 @@
         @objc private func openTappedPassage() {
             guard let pendingTap else { return }
             self.pendingTap = nil
-            actions?.open(pendingTap)
+            comments?.open(pendingTap)
         }
 
         @objc private func selectTappedWord() {
@@ -345,7 +344,7 @@
                 guard !Task.isCancelled, let self else { return }
                 defer { if !Task.isCancelled { self.scrollTask = nil } }
                 guard self.needsSelectedScroll, !self.isSuspended, self.editor.isSettled,
-                    let selectedID = self.configuration.selectedThreadID,
+                    let selectedID = self.comments?.selectedThreadID,
                     let highlight = self.verifiedHighlights.first(where: {
                         $0.threadIDs.contains(selectedID)
                     }),
@@ -362,7 +361,7 @@
         }
 
         func frontMatterVisibilityDidChange() {
-            if !configuration.quotes.isEmpty { editor.highlight() }
+            if !quotes.isEmpty { editor.highlight() }
         }
 
         // Platform gap: UITextView is its own find interaction's delegate and tells ours nothing when
@@ -437,9 +436,9 @@
         private func updateAccessibility() {
             let view = editor.textView
             guard !isSuspended,
-                let selectedID = configuration.selectedThreadID,
+                let selectedID = comments?.selectedThreadID,
                 verifiedHighlights.contains(where: { $0.threadIDs.contains(selectedID) }),
-                let quote = configuration.quotes.first(where: { $0.threadID == selectedID })?.quote
+                let quote = quotes.first(where: { $0.threadID == selectedID })?.quote
             else {
                 view.accessibilityCustomContent = []
                 return
@@ -458,7 +457,7 @@
             publication = Task { [weak self] in
                 guard !Task.isCancelled, let self else { return }
                 self.publication = nil
-                self.actions?.linked(ids)
+                self.comments?.linked(ids)
             }
         }
     }

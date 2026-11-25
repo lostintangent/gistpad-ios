@@ -1,24 +1,13 @@
 import Foundation
 
-public struct CommentHighlightConfiguration: Equatable, Sendable {
+/// The passages a note's comments quote, and what tapping, linking and adding one does. A surface
+/// without highlights has no comments.
+public struct CommentHighlights: Sendable {
     public var quotes: [CommentQuote]
     public var selectedThreadID: Int64?
+    /// Changes when the selected thread should scroll into view again.
     public var revealRevision: UInt64
     public var showsInlineComments: Bool
-
-    public init(
-        quotes: [CommentQuote] = [], selectedThreadID: Int64? = nil, revealRevision: UInt64 = 0,
-        showsInlineComments: Bool = true
-    ) {
-        self.quotes = quotes
-        self.selectedThreadID = selectedThreadID
-        self.revealRevision = revealRevision
-        self.showsInlineComments = showsInlineComments
-    }
-}
-
-/// What a highlighted passage does when you interact with it. A surface without actions has no comments.
-public struct CommentHighlightActions: Sendable {
     /// Opens the threads under a tapped passage.
     public var open: @MainActor ([Int64]) -> Void
     /// Reports which threads still find their passage in the text.
@@ -27,12 +16,26 @@ public struct CommentHighlightActions: Sendable {
     public var add: @MainActor (String) -> Void
 
     public init(
-        open: @escaping @MainActor ([Int64]) -> Void, linked: @escaping @MainActor (Set<Int64>) -> Void,
-        add: @escaping @MainActor (String) -> Void
+        quotes: [CommentQuote] = [], selectedThreadID: Int64? = nil, revealRevision: UInt64 = 0,
+        showsInlineComments: Bool = true, open: @escaping @MainActor ([Int64]) -> Void,
+        linked: @escaping @MainActor (Set<Int64>) -> Void, add: @escaping @MainActor (String) -> Void
     ) {
+        self.quotes = quotes
+        self.selectedThreadID = selectedThreadID
+        self.revealRevision = revealRevision
+        self.showsInlineComments = showsInlineComments
         self.open = open
         self.linked = linked
         self.add = add
+    }
+}
+
+extension CommentHighlights: Equatable {
+    /// Two values are equal when they show the same highlights. Every view update makes new
+    /// closures, so they never count.
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.quotes == rhs.quotes && lhs.selectedThreadID == rhs.selectedThreadID
+            && lhs.revealRevision == rhs.revealRevision && lhs.showsInlineComments == rhs.showsInlineComments
     }
 }
 

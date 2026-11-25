@@ -12,7 +12,7 @@ struct CommentHighlightTests {
         let window = try host(editor)
         defer { window.isHidden = true }
         editor.commentHighlighter.configure(
-            .init(quotes: [CommentQuote(threadID: 10, quote: "native")]))
+            highlights([CommentQuote(threadID: 10, quote: "native")]))
         editor.textView.layoutIfNeeded()
         #expect(editor.commentHighlighter.backgroundLayer.sublayers?.isEmpty == false)
         editor.textView.selectedRange = NSRange(location: editor.document.text.utf16.count, length: 0)
@@ -43,8 +43,8 @@ struct CommentHighlightTests {
         var changes = 0
         editor.onEdit = { _, _ in changes += 1 }
         editor.commentHighlighter.configure(
-            .init(
-                quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
+            highlights(
+                [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
         editor.highlight()
         #expect(editor.document.text == "The native note")
         #expect(editor.generation == 8)
@@ -66,10 +66,10 @@ struct CommentHighlightTests {
         let editor = MarkdownEditor(text: "one two three")
         var opened: [[Int64]] = []
         editor.commentHighlighter.configure(
-            .init(quotes: [
+            highlights([
                 CommentQuote(threadID: 10, quote: "one two"),
                 CommentQuote(threadID: 20, quote: "two three"),
-            ]), actions: actions(open: { opened.append($0) }))
+            ], open: { opened.append($0) }))
         #expect(
             editor.textView.textStorage.attribute(
                 CommentHighlighter.annotationKey, at: 5, effectiveRange: nil) != nil)
@@ -107,10 +107,10 @@ struct CommentHighlightTests {
         defer { window.isHidden = true }
         var quotes: [String] = []
         editor.commentHighlighter.configure(
-            .init(quotes: [
+            highlights([
                 CommentQuote(threadID: 10, quote: "quiet native"),
                 CommentQuote(threadID: 20, quote: "native note"),
-            ]), actions: actions(add: { quotes.append($0) }))
+            ], add: { quotes.append($0) }))
         editor.textView.layoutIfNeeded()
         let range = (source as NSString).range(of: "native")
         let start = try #require(
@@ -155,20 +155,19 @@ struct CommentHighlightTests {
         let window = try host(editor)
         defer { window.isHidden = true }
         editor.textView.resignFirstResponder()
-        var configuration = CommentHighlightConfiguration(
-            quotes: [CommentQuote(threadID: 60, quote: "late native passage")], selectedThreadID: 60
-        )
-        editor.commentHighlighter.configure(configuration)
+        var comments = highlights(
+            [CommentQuote(threadID: 60, quote: "late native passage")], selectedThreadID: 60)
+        editor.commentHighlighter.configure(comments)
         await editor.commentHighlighter.scrollTask?.value
         #expect(editor.textView.contentOffset.y > 100)
         let top = CGPoint(x: 0, y: -editor.textView.adjustedContentInset.top)
         editor.textView.setContentOffset(top, animated: false)
-        editor.commentHighlighter.configure(configuration)
+        editor.commentHighlighter.configure(comments)
         editor.textView.layoutIfNeeded()
         #expect(editor.commentHighlighter.scrollTask == nil)
         #expect(abs(editor.textView.contentOffset.y - top.y) < 1)
-        configuration.revealRevision += 1
-        editor.commentHighlighter.configure(configuration)
+        comments.revealRevision += 1
+        editor.commentHighlighter.configure(comments)
         await editor.commentHighlighter.scrollTask?.value
         #expect(editor.textView.contentOffset.y > 100)
         #expect(editor.document.text == text)
@@ -181,7 +180,7 @@ struct CommentHighlightTests {
         #expect(
             editor.textView(
                 editor.textView, editMenuForTextInRanges: [range], suggestedActions: []) == nil)
-        editor.commentHighlighter.configure(.init(), actions: actions())
+        editor.commentHighlighter.configure(highlights([]))
         #expect(
             editor.textView(
                 editor.textView,
@@ -203,12 +202,11 @@ struct CommentHighlightTests {
     @Test func hidingIdleAnnotationsKeepsSelectionAndContextualDiscovery() throws {
         let editor = MarkdownEditor(text: "one two three")
         editor.commentHighlighter.configure(
-            .init(
-                quotes: [
+            highlights(
+                [
                     CommentQuote(threadID: 10, quote: "one two"),
                     CommentQuote(threadID: 20, quote: "two three"),
-                ], selectedThreadID: 20, showsInlineComments: false),
-            actions: actions())
+                ], selectedThreadID: 20, showsInlineComments: false))
         #expect(
             editor.textView.textStorage.attribute(
                 CommentHighlighter.annotationKey, at: 1, effectiveRange: nil) == nil)
@@ -226,12 +224,12 @@ struct CommentHighlightTests {
         let editor = MarkdownEditor(text: "---\ntitle: native\n---\n\nA native note")
         var linked: Set<Int64> = []
         editor.commentHighlighter.configure(
-            .init(quotes: [
+            highlights([
                 CommentQuote(threadID: 10, quote: "native"),
                 CommentQuote(threadID: 20, quote: "title: native"),
                 CommentQuote(threadID: 30, quote: "missing"),
                 CommentQuote(threadID: 40, quote: "native note"),
-            ]), actions: actions(linked: { linked = $0 }))
+            ], linked: { linked = $0 }))
         await editor.commentHighlighter.publication?.value
         #expect(linked == [40])
         #expect(
@@ -255,7 +253,7 @@ struct CommentHighlightTests {
                 != nil
         }
         editor.commentHighlighter.configure(
-            .init(quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
+            highlights([CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
         #expect(annotated())
         editor.textViewWritingToolsWillBegin(view)
         #expect(editor.isWritingToolsActive)
@@ -285,21 +283,24 @@ struct CommentHighlightTests {
         let editor = MarkdownEditor(text: "A native note")
         let provider: any AXCustomContentProvider = editor.textView
         editor.commentHighlighter.configure(
-            .init(
-                quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
+            highlights(
+                [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
         let content = try #require(provider.accessibilityCustomContent.first)
         #expect(content.label == "Selected Comment")
         #expect(content.value == "native")
         #expect(content.importance == .high)
-        editor.commentHighlighter.configure(.init())
+        editor.commentHighlighter.configure(nil)
         #expect(provider.accessibilityCustomContent.isEmpty)
     }
 
-    private func actions(
+    private func highlights(
+        _ quotes: [CommentQuote], selectedThreadID: Int64? = nil, showsInlineComments: Bool = true,
         open: @escaping @MainActor ([Int64]) -> Void = { _ in },
         linked: @escaping @MainActor (Set<Int64>) -> Void = { _ in },
         add: @escaping @MainActor (String) -> Void = { _ in }
-    ) -> CommentHighlightActions {
-        CommentHighlightActions(open: open, linked: linked, add: add)
+    ) -> CommentHighlights {
+        CommentHighlights(
+            quotes: quotes, selectedThreadID: selectedThreadID, showsInlineComments: showsInlineComments,
+            open: open, linked: linked, add: add)
     }
 }

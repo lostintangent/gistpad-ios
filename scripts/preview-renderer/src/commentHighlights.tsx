@@ -15,7 +15,6 @@ export interface HighlightState {
   selectedThreadID: number | null;
   revealRevision: number;
   showsInlineComments: boolean;
-  allowsInteraction: boolean;
   accent: string;
 }
 
@@ -28,7 +27,7 @@ export class CommentHighlightController {
   constructor(private readonly request: RenderRequest) {
     this.state = {
       highlights: [], selectedThreadID: null, revealRevision: 0,
-      showsInlineComments: true, allowsInteraction: false, accent: "#0EA5E9",
+      showsInlineComments: true, accent: "#0EA5E9",
     };
   }
 
@@ -93,7 +92,7 @@ export class CommentHighlightController {
   }
 
   open(highlight: Highlight) {
-    if (!this.state.allowsInteraction || !this.state.highlights.includes(highlight)) return;
+    if (!this.state.highlights.includes(highlight)) return;
     send({
       ...identity(this.request), type: "commentActivate",
       segment: highlight.segment, start: highlight.start, end: highlight.end,
@@ -215,24 +214,21 @@ function CommentFragment({ controller, highlight, state, selected, children }: {
   }, [selected, state.selectedThreadID, state.revealRevision]);
   return <span ref={ref} className={`comment-highlight${selected ? " comment-selected" : ""}`}
     data-comment-ids={highlight.threadIDs.join(" ")}
-    role={state.allowsInteraction ? "button" : undefined} tabIndex={state.allowsInteraction ? 0 : undefined}
-    aria-label={state.allowsInteraction ? children : undefined}
-    aria-description={state.allowsInteraction
-      ? `${selected ? "Selected comment. " : ""}${highlight.threadIDs.length > 1 ? "Choose comment thread" : "View comment"}`
-      : undefined}
-    aria-haspopup={state.allowsInteraction && highlight.threadIDs.length > 1 ? "dialog" : undefined}
+    role="button" tabIndex={0} aria-label={children}
+    aria-description={`${selected ? "Selected comment. " : ""}${highlight.threadIDs.length > 1 ? "Choose comment thread" : "View comment"}`}
+    aria-haspopup={highlight.threadIDs.length > 1 ? "dialog" : undefined}
     aria-current={selected ? "true" : undefined}
-    onClick={state.allowsInteraction ? (event) => {
+    onClick={(event) => {
       event.preventDefault();
       event.stopPropagation();
       controller.open(highlight);
-    } : undefined}
-    onKeyDown={state.allowsInteraction ? (event) => {
+    }}
+    onKeyDown={(event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       event.stopPropagation();
       controller.open(highlight);
-    } : undefined}>{children}</span>;
+    }}>{children}</span>;
 }
 
 interface RGBA { rgb: RGB; alpha: number }

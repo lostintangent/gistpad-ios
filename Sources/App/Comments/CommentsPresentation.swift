@@ -96,19 +96,11 @@ final class CommentsPresentation {
         await prepare()?.refresh()
     }
 
-    /// The file's passage highlights in one mode, and what tapping, linking and adding one does.
-    func highlights(
-        for fileEditor: GistFileEditor, origin: FileMode
-    ) -> (configuration: CommentHighlightConfiguration, actions: CommentHighlightActions?) {
-        guard Self.supports(fileEditor.file) else { return (.init(), nil) }
-        var configuration = CommentHighlightConfiguration()
-        if matches(fileEditor.file), let model {
-            configuration = .init(
-                quotes: model.threads.compactMap(\.quotedPassage), selectedThreadID: selectedThreadID,
-                revealRevision: revealRevision, showsInlineComments: showsInlineComments)
-        }
+    /// The file's comment highlights in one mode, or nil when the file has no comments.
+    func highlights(for fileEditor: GistFileEditor, origin: FileMode) -> CommentHighlights? {
+        guard Self.supports(fileEditor.file) else { return nil }
         let isCurrent = { self.fileEditor === fileEditor }
-        let actions = CommentHighlightActions(
+        var highlights = CommentHighlights(
             open: { ids in
                 guard isCurrent() else { return }
                 if ids.count == 1, let id = ids.first {
@@ -126,7 +118,13 @@ final class CommentsPresentation {
                 guard isCurrent() else { return }
                 self.open(for: fileEditor, origin: origin, quote: selection)
             })
-        return (configuration, actions)
+        if matches(fileEditor.file), let model {
+            highlights.quotes = model.threads.compactMap(\.quotedPassage)
+            highlights.selectedThreadID = selectedThreadID
+            highlights.revealRevision = revealRevision
+            highlights.showsInlineComments = showsInlineComments
+        }
+        return highlights
     }
 
     func open(
