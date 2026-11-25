@@ -60,7 +60,7 @@
             revealPendingThread()
         }
 
-        func annotate(_ storage: NSTextStorage) {
+        func annotate(_ storage: NSMutableAttributedString) {
             passages = []
             originalInk = []
             annotatedGeneration = editor.generation
@@ -135,7 +135,7 @@
             editor.textView.setNeedsDisplay()
         }
 
-        private func applySelectedInk(in storage: NSTextStorage) {
+        private func applySelectedInk(in storage: NSMutableAttributedString) {
             for passage in passages where passage.selected {
                 for range in unselectedRanges(passage.annotation.range) {
                     storage.addAttribute(.foregroundColor, value: onSelected, range: range)

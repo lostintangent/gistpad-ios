@@ -157,19 +157,25 @@
 
         /// Updates the attributes of `range` in `update` without touching its characters, selection
         /// or Undo, and keeps the caret or the passage being read where it was.
-        func updateAttributes(in range: NSRange, _ update: (NSTextStorage) -> Void) {
+        func updateAttributes(in range: NSRange, _ update: (NSMutableAttributedString) -> Void) {
             let anchor = beginAttributeUpdate()
             defer { endAttributeUpdate(anchor) }
             // While the caret is on screen, the style lands on a copy and only the runs that change
-            // reach the text view, so TextKit lays out only what changed.
-            let storage = if case .caret? = anchor { NSTextStorage(string: text) } else { textStorage }
+            // reach the text view, so TextKit keeps the exact layout of everything else. A plain
+            // copy is cheap, where a new text storage owes a fix of its whole text.
+            let storage: NSMutableAttributedString =
+                if case .caret? = anchor { NSMutableAttributedString(string: text) } else { textStorage }
             let selection = selectedRange
             let undo = undoManager
             undo?.disableUndoRegistration()
             storage.beginEditing()
             update(storage)
             storage.endEditing()
-            if storage !== textStorage { applyChangedAttributes(of: storage, in: range) }
+            if storage !== textStorage {
+                // Matches the text view's fonts for emoji and other scripts the body font lacks.
+                storage.fixAttributes(in: range)
+                applyChangedAttributes(of: storage, in: range)
+            }
             undo?.enableUndoRegistration()
             if selectedRange != selection { selectedRange = selection }
         }

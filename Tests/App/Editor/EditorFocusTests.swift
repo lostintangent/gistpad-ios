@@ -74,6 +74,24 @@ struct EditorFocusTests {
         #expect(view.bounds.inset(by: view.adjustedContentInset).contains(caret))
     }
 
+    @Test func aKeystrokeOnScreenRestylesOnlyItsLine() throws {
+        let items = String(repeating: "- 🌅 Morning 日本語 with **bold**\n- 👩🏽‍💻 Code with `ticks`\n", count: 20)
+        let editor = MarkdownEditor(text: "# Today\n\n" + items)
+        let window = try host(editor)
+        defer { window.isHidden = true }
+        let view = editor.textView
+        view.selectedRange = NSRange(location: 13, length: 0)
+        // The first highlight on screen can fix the fonts of emoji and Japanese the opening painted.
+        view.insertText("x")
+        let passes = AttributePasses(of: view.textStorage)
+        view.insertText("y")
+        #expect(editor.document.text.hasPrefix("# Today\n\n- 🌅xy Morning"))
+        // Restyling the list in place, or with other fonts for its emoji, would change all 40 of
+        // its lines.
+        let line = (editor.document.text as NSString).lineRange(for: view.selectedRange)
+        #expect(passes.ranges.allSatisfy { NSIntersectionRange($0, line) == $0 })
+    }
+
     @Test func focusRequestIsConsumedOnceAndKeepsSourceAndNativeUndo() throws {
         let editor = MarkdownEditor(text: "note")
         editor.requestFocusAtEnd()
@@ -128,5 +146,23 @@ struct EditorFocusTests {
 
         view.isLandingTap = false
         #expect(answers() == [true, false])
+    }
+}
+
+/// The ranges of the passes that change `storage`'s attributes without changing its characters.
+private final class AttributePasses: NSObject {
+    private(set) var ranges: [NSRange] = []
+
+    init(of storage: NSTextStorage) {
+        super.init()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(didProcessEditing(_:)),
+            name: NSTextStorage.didProcessEditingNotification, object: storage)
+    }
+
+    @objc private func didProcessEditing(_ notification: Notification) {
+        guard let storage = notification.object as? NSTextStorage, storage.editedMask == .editedAttributes
+        else { return }
+        ranges.append(storage.editedRange)
     }
 }

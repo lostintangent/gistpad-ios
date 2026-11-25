@@ -22,7 +22,7 @@
 
         /// Makes `range` of `storage` plain text, then styles each span in it. The range is whole
         /// blocks, such as `MarkdownDocument.spanRange(for:from:)` gives.
-        func apply(_ spans: [MarkdownDocument.Span], to storage: NSTextStorage, in range: NSRange) {
+        func apply(_ spans: [MarkdownDocument.Span], to storage: NSMutableAttributedString, in range: NSRange) {
             storage.setAttributes(typingAttributes, range: range)
             for span in spans {
                 storage.addAttributes(attributes(for: span.kind), range: span.range)
