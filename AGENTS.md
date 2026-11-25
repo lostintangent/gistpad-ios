@@ -163,4 +163,4 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 | `scripts` | Developer tools: `capture-matrix.sh`, `evaluate-intelligence.sh`, which runs the on-device Intelligence eval, the root package's `IntelligenceEval` target in `intelligence-eval`, and `preview-renderer`, which builds Preview's web bundle from the sibling `gistpad.dev` checkout into `Sources/Features/Preview`. |
 | `Configuration` | `Public.xcconfig`. |
 
-Comments, Markdown, Model, Platform, Screens and Store document their APIs in a README beside their sources.
+Comments, Intelligence, Markdown, Model, Platform, Screens and Store document their APIs in a README beside their sources.

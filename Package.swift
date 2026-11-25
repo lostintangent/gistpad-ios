@@ -28,7 +28,7 @@ let package = Package(
             resources: [.process("Resources")], swiftSettings: mainActor),
         .target(
             name: "Intelligence", dependencies: ["Editor", "Markdown"], path: "Sources/Features/Intelligence",
-            resources: [.process("Resources")], swiftSettings: mainActor),
+            exclude: ["README.md"], resources: [.process("Resources")], swiftSettings: mainActor),
         .target(
             name: "Screens", dependencies: ["Appearance", "Store"],
             path: "Sources/Features/Screens", exclude: ["README.md"], resources: [.process("Resources")],
