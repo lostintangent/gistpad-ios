@@ -17,7 +17,7 @@ struct RootView: View {
     @State private var allowsSplit = false
     @State private var layout: LayoutPreferences
     @State private var intelligence = IntelligencePresentation()
-    @State private var comments: CommentsPresentation
+    @State private var comments: CommentsState
     @State private var images: ImageUpload
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.undoManager) private var undoManager
@@ -30,7 +30,7 @@ struct RootView: View {
         self.model = model
         self.pending = pending
         _layout = State(initialValue: layout)
-        _comments = State(initialValue: CommentsPresentation(app: model))
+        _comments = State(initialValue: CommentsState(app: model))
         _images = State(initialValue: ImageUpload(model: model))
     }
 
@@ -67,10 +67,11 @@ struct RootView: View {
                 if phase == .active { Task { await model.returnToApp() } }
             }
             .onChange(of: settledAccountID) {
-                comments.reset()
                 intelligence.target = nil
             }
+            // Reconnecting keeps Comments open, so its draft goes out once GitHub lets you back in.
             .onChange(of: model.account?.id) {
+                comments.reset()
                 columnVisibility = .all
                 sheet = nil
             }

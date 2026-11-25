@@ -3,7 +3,7 @@ import Model
 import SwiftUI
 
 struct CommentsInspector: View {
-    let comments: CommentsPresentation
+    let comments: CommentsState
     @State private var linkFailure: String?
 
     var body: some View {
@@ -45,7 +45,7 @@ struct CommentsInspector: View {
 extension View {
     /// Comments for the open gist: an inspector beside the file on a wide display, a sheet on iPhone.
     func commentsInspector(
-        _ comments: CommentsPresentation, active: GistFileEditor?,
+        _ comments: CommentsState, active: GistFileEditor?,
         columnVisibility: Binding<NavigationSplitViewVisibility>
     ) -> some View {
         modifier(CommentsInspectorHost(
@@ -54,7 +54,7 @@ extension View {
 }
 
 private struct CommentsInspectorHost: ViewModifier {
-    @Bindable var comments: CommentsPresentation
+    @Bindable var comments: CommentsState
     let active: GistFileEditor?
     @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var sidebarBeforeOpening: NavigationSplitViewVisibility?
@@ -62,7 +62,7 @@ private struct CommentsInspectorHost: ViewModifier {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private struct CommentCount: Equatable {
-        let scope: CommentsPresentation.Scope
+        let scope: CommentsState.Scope
         let total: Int
     }
 

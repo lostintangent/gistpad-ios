@@ -6,12 +6,12 @@ extension GistActions {
     /// The open file's verbs, run by the model. The root view passes how to present a sheet or
     /// Intelligence, and anything that opens over the file closes Comments first.
     init(
-        _ fileEditor: GistFileEditor, model: GistPadModel, comments: CommentsPresentation,
+        _ fileEditor: GistFileEditor, model: GistPadModel, comments: CommentsState,
         undoManager: UndoManager?, present: @escaping (RootView.Sheet) -> Void,
         intelligence: @escaping () -> Void
     ) {
         var actions = GistActions()
-        if CommentsPresentation.supports(fileEditor.file) {
+        if CommentsState.supports(fileEditor.file) {
             actions.comments = {
                 if comments.isPresented {
                     comments.hide()
@@ -89,7 +89,7 @@ extension GistActions {
 
 extension GistActions {
     /// A gist on its way has its Comments button from the start, which opens them once it arrives.
-    init(opening: Opening?, comments: CommentsPresentation) {
+    init(opening: Opening?, comments: CommentsState) {
         self.init()
         guard let opening, opening.isPublished, !opening.details.isDailyNote else { return }
         self.comments = { comments.requestedRowID = opening.rowID }

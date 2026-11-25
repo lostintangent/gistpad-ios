@@ -1,13 +1,14 @@
 import Comments
 import Editor
-import Screens
 import Model
 import Observation
+import Screens
+import Store
 import SwiftUI
 
 /// Comments for the open gist: one in-memory `CommentsModel`, dropped when another gist opens.
 @Observable
-final class CommentsPresentation {
+final class CommentsState {
     struct Scope: Hashable {
         let accountID: UUID
         let gistID: String
@@ -146,15 +147,12 @@ final class CommentsPresentation {
         selectedThreadID = threadID
         if threadID != nil { revealRevision &+= 1 }
         isPresented = true
-        let filename = next.file.filename
-        Task {
-            guard let model = await prepare() else { return }
-            if let quote {
-                model.beginQuote(quote, filename: filename)
-                isComposerFocused = true
-            }
-            if opening || model.comments == nil { await model.refresh() }
+        guard let model = prepare() else { return }
+        if let quote {
+            model.beginQuote(quote, filename: next.file.filename)
+            isComposerFocused = true
         }
+        if opening || model.comments == nil { Task { await model.refresh() } }
     }
 
     func hide() {
@@ -162,6 +160,12 @@ final class CommentsPresentation {
         selectedThreadID = nil
         overlappingThreadIDs = []
         isComposerFocused = false
+    }
+
+    /// Follows a failure's one fix: signs in to GitHub again when it asks to, then tries again.
+    func recover(from failure: Failure, retry: () async -> Void) async {
+        if failure.action == .reconnect { await app.reconnect() }
+        await retry()
     }
 
     func focusComposer() {
@@ -211,13 +215,10 @@ final class CommentsPresentation {
         app.account?.id == file.accountID && !app.phase.isChangingAccount
     }
 
-    private func prepare() async -> CommentsModel? {
-        if let model { return model }
-        // Only an account change stops the client, and that resets Comments.
-        guard let scope, let gist = fileEditor?.file.gist,
-            let created = try? await app.comments(for: gist), self.scope == scope
-        else { return nil }
-        if model == nil { model = created }
+    private func prepare() -> CommentsModel? {
+        if model == nil, scope != nil, let gist = fileEditor?.file.gist {
+            model = app.comments(for: gist)
+        }
         return model
     }
 }

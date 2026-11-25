@@ -13,7 +13,7 @@ public struct GistCommentThread: Equatable, Identifiable, Sendable {
     }
 
     /// Threads sort newest first, and a reply whose parent is gone becomes a thread of its own.
-    static func build(from comments: [GistComment]) -> [GistCommentThread] {
+    public static func build(from comments: [GistComment]) -> [GistCommentThread] {
         let ids = Set(comments.map(\.id))
         var roots: [GistComment] = []
         var replies: [Int64: [GistComment]] = [:]

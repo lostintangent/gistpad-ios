@@ -114,14 +114,6 @@ extension GistPadModel {
         return try await storage.upload(image, gistID: gistID)
     }
 
-    /// A gist's conversation, which you take part in as the signed-in account.
-    public func comments(for gist: Gist) async throws -> CommentsModel {
-        guard let account else { throw AccountError.accountChanged }
-        let github = client(accountID: account.id)
-        return CommentsModel(
-            gistID: gist.id, userID: account.github.id, gistOwnerID: gist.owner?.id, github: github)
-    }
-
     /// Drops everything shown for the current account and switches to `account`, or signs out.
     func reset(to account: GistPadAccount?) {
         libraryRequest = UUID()

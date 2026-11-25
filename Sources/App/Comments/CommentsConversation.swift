@@ -1,18 +1,17 @@
 import Appearance
 import Comments
+import Model
+import Screens
+import Store
 import SwiftUI
 
 struct CommentsConversation: View {
-    let comments: CommentsPresentation
+    let comments: CommentsState
     let model: CommentsModel
     @State private var deletionTarget: GistComment?
     @State private var position = ScrollPosition(idType: Int64.self, edge: .top)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var threadSpacing = 16
-
-    private var failure: String? {
-        model.failure == .load ? model.failure?.interfaceDescription : nil
-    }
 
     /// A new selection, or its thread arriving, scrolls the thread to the top once.
     private func reveal(in threads: [GistCommentThread]) -> Reveal {
@@ -25,7 +24,7 @@ struct CommentsConversation: View {
         let threads = model.threads
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if model.comments != nil, let failure {
+                if model.comments != nil, let failure = model.refreshFailure {
                     refreshFailure(failure)
                 }
                 ForEach(threads) { thread in
@@ -80,12 +79,12 @@ struct CommentsConversation: View {
     @ViewBuilder
     private var emptyState: some View {
         if model.comments == nil {
-            if let failure {
+            if let failure = model.refreshFailure {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Comments couldn’t be loaded").font(.headline)
-                        Text(verbatim: failure)
-                        retry
+                        Text(verbatim: failure.message)
+                        recovery(from: failure)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(20)
@@ -97,23 +96,26 @@ struct CommentsConversation: View {
         }
     }
 
-    private func refreshFailure(_ failure: String) -> some View {
+    private func refreshFailure(_ failure: Failure) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(verbatim: failure)
-            retry
+            Text(verbatim: failure.message)
+            recovery(from: failure)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
         .accessibilityIdentifier("comments-load-error")
     }
 
-    private var retry: some View {
-        Button("Try Again") {
-            Task { await model.refresh() }
+    @ViewBuilder
+    private func recovery(from failure: Failure) -> some View {
+        if let action = failure.action {
+            Button(action.title) {
+                Task { await comments.recover(from: failure, retry: model.refresh) }
+            }
+            .buttonStyle(.glass)
+            .disabled(model.isRefreshing)
+            .accessibilityIdentifier("comments-retry")
         }
-        .buttonStyle(.glass)
-        .disabled(model.isRefreshing)
-        .accessibilityIdentifier("comments-retry")
     }
 
     private struct Reveal: Equatable {
@@ -124,7 +126,7 @@ struct CommentsConversation: View {
 }
 
 private struct CommentThreadContent: View {
-    let comments: CommentsPresentation
+    let comments: CommentsState
     let model: CommentsModel
     let thread: GistCommentThread
     let parentLogin: String?

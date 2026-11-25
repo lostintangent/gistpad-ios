@@ -287,5 +287,3 @@ extension GitHubClient {
         }
     }
 }
-
-extension GitHubClient: GitHubComments {}

@@ -1,25 +1,20 @@
 import Comments
+import Model
+import Screens
+import Store
 import SwiftUI
 
 struct CommentsComposer: View {
-    let comments: CommentsPresentation
+    let comments: CommentsState
     @Bindable var model: CommentsModel
     @FocusState private var focus: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    private var failure: String? {
-        model.failure == .load ? nil : model.failure?.interfaceDescription
-    }
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             // Like an attachment in the Messages field, the context lives inside the field's glass.
             VStack(alignment: .leading, spacing: 4) {
-                if let failure {
-                    Text(verbatim: failure)
-                        .font(.footnote)
-                        .accessibilityIdentifier("comment-post-error")
-                }
+                failureLine
                 if model.target != .root {
                     contextLine
                 }
@@ -68,7 +63,7 @@ struct CommentsComposer: View {
     }
 
     private var maximumLines: Int {
-        if failure != nil { return 1 }
+        if model.failure != nil { return 1 }
         return dynamicTypeSize.isAccessibilitySize ? 2 : 5
     }
 
@@ -77,6 +72,33 @@ struct CommentsComposer: View {
         case .reply: "Write a reply"
         case .edit: "Edit your comment"
         case .root, .quote: "Write a comment"
+        }
+    }
+
+    @ViewBuilder
+    private var failureLine: some View {
+        if let failure = model.failure {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Group {
+                    switch failure.request {
+                    case .post: Text("Your comment couldn’t be posted. \(failure.reason.message)")
+                    case .delete: Text("This comment couldn’t be deleted. \(failure.reason.message)")
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("comment-post-error")
+                if failure.reason.action == .reconnect {
+                    Button(Failure.Action.reconnect.title) {
+                        Task { await comments.recover(from: failure.reason, retry: model.retry) }
+                    }
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .buttonStyle(.borderless)
+                    .disabled(model.isPosting)
+                    .accessibilityIdentifier("comment-reconnect")
+                }
+            }
+            .font(.footnote)
         }
     }
 
@@ -128,19 +150,6 @@ struct CommentsComposer: View {
         case .reply: "Cancel Reply"
         case .edit: "Cancel Editing"
         case .root, .quote: "Remove Quote"
-        }
-    }
-}
-
-extension CommentsModel.Failure {
-    var interfaceDescription: String {
-        switch self {
-        case .load:
-            String(localized: "Couldn’t reach GitHub. Check your connection and try again.")
-        case .post:
-            String(localized: "Your comment couldn’t be posted. Check your connection and try again.")
-        case .delete:
-            String(localized: "This comment couldn’t be deleted. Check your connection and try again.")
         }
     }
 }

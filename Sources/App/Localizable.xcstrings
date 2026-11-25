@@ -55,9 +55,8 @@
     "Cancel Editing" : {},
     "Remove Quote" : {},
     "Post" : {},
-    "Couldn’t reach GitHub. Check your connection and try again." : {},
-    "Your comment couldn’t be posted. Check your connection and try again." : {},
-    "This comment couldn’t be deleted. Check your connection and try again." : {},
+    "Your comment couldn’t be posted. %@" : {},
+    "This comment couldn’t be deleted. %@" : {},
     "Cancel" : {},
     "Try Again" : {}
   },

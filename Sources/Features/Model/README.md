@@ -24,6 +24,9 @@ GistFile                          a file as it is on this iPhone
 
 GistFileEditor                    a file you've opened
   file: GistFile  editor: MarkdownEditor  mode  status
+
+CommentsModel                     a gist's conversation
+  comments?  threads  target  draft  refreshFailure: Failure?  failure: (request, reason)?
 ```
 
 ## Three kinds of file
@@ -43,7 +46,8 @@ GistFileEditor                    a file you've opened
 
 | File | What it does |
 |---|---|
-| `Accounts.swift` | `start`, `signIn` and `reconnect`, images and comments for the account. Signing in as someone else saves your open files and signs you out first. |
+| `Accounts.swift` | `start`, `signIn` and `reconnect`, and images for the account. Signing in as someone else saves your open files and signs you out first. |
+| `Comments.swift` | `comments(for:)`, a gist's `CommentsModel` as the signed-in account, with one in-memory draft. Editing a comment borrows the composer and gives back the unsent draft, and posting an edit is a post. A failed load sets `refreshFailure`. A failed post or delete sets `failure` with its request and keeps the draft, and `retry()` sends it again. |
 | `Opening.swift` | `open(rowID:)` and `open(_:)`, the file in the detail column, and the last opened file. |
 | `Saving.swift` | Each keystroke saved on this iPhone, and `apply` for edits from outside the editor. |
 | `Publishing.swift` | Autosave, `publish`, `returnToApp` and `leaveApp`. |

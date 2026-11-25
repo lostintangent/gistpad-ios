@@ -62,7 +62,7 @@ let package = Package(
             name: "ScreensTests", dependencies: ["Screens"], path: "Tests/Features/ScreensTests",
             swiftSettings: mainActor),
         .testTarget(
-            name: "ModelTests", dependencies: ["Model", "Editor", "Markdown", "Screens", "Store"],
+            name: "ModelTests", dependencies: ["Model", "Comments", "Editor", "Markdown", "Screens", "Store"],
             path: "Tests/Features/ModelTests", swiftSettings: mainActor),
         .testTarget(
             name: "PlatformTests", dependencies: ["Platform", "Store"],

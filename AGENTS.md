@@ -141,7 +141,7 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 | `Sources/App/Root` | `GistPadApp` and `RootView`, which starts the `GistPadModel` and shows the library and the open file, with the layout preferences and the background time that lets a publish finish. |
 | `Sources/App/Gist` | Preview hosting, the opening spinner and conflict review. |
 | `Sources/App/DailyNotes` | The Add to Today sheet. |
-| `Sources/App/Comments` | `CommentsPresentation`, the comments inspector with its conversation and composer, and the services behind `CommentsModel`. |
+| `Sources/App/Comments` | `CommentsState`, the comments inspector with its conversation and composer. |
 | `Sources/App/Tags` | Presents the tag editor for the open gist. |
 | `Sources/App/Intelligence` | Presents the Intelligence sheet. |
 | `Sources/App/Images` | The image picker and upload. |
@@ -150,13 +150,13 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 | `Sources/Extensions/Widgets` | The GistPad widgets and the Add to Today, Open Today and New Gist controls. |
 | `Sources/Features/Editor` | `MarkdownEditor` and its TextKit 2 text view, `MarkdownEditorView`, `KeyboardBar`, highlighting, hidden front matter and the `CommentAnnotator`. |
 | `Sources/Features/Intelligence` | The Ask, Edit and Review sheet and the on-device model, foldered as `Ask`, `Edit` and `Review`, the `Model` they share and the `Sheet`. |
-| `Sources/Features/Model` | `GistPadModel`, `GistFile` and `GistFileEditor`: the account, the list, the files you've opened and every verb, one file per scenario. |
+| `Sources/Features/Model` | `GistPadModel`, `GistFile`, `GistFileEditor` and `CommentsModel`: the account, the list, the files you've opened, a gist's conversation and every verb, one file per scenario. |
 | `Sources/Features/Screens` | The views, foldered by capability: `Library` with the Today button, `Gist` with renaming, `Tags`, and `Settings` with the account. The GitHub status control and toolbar toggles both screens use stay at the root. |
 | `Sources/Features/Platform` | App Intents and Siri's notes schema, Spotlight, the widget view and `gistpad://` links, a file for each system surface. |
 | `Sources/Features/Preview` | The offline WebKit Markdown preview and its bridge. |
 | `Sources/Shared/Appearance` | The personal accent color, its trait and `.accent(savedHex:)` modifier, and the `isPaneVisible` environment value. |
 | `Sources/Shared/Markdown` | `MarkdownDocument`, a note's Markdown read once, and `MarkdownEdit`, every change to it: typing, formatting, tasks and replacements. |
-| `Sources/Shared/Comments` | Comment bodies, threads, quotes and their annotations, and `CommentsModel`. |
+| `Sources/Shared/Comments` | Comment bodies, threads, quotes and their annotations. |
 | `Sources/Shared/Store` | The nouns and where they're kept: gists, the GitHub client, drafts, the cache, the account and its preferences, photo storage and the DEBUG fixture GitHub. |
 | `Tests/App` | App-hosted tests, foldered by the capability they cover, and every test that needs a window, such as Editor's focus, formatting and layout tests in `Editor`. |
 | `Tests/UI` | UI tests for the Library, a gist, daily notes and comments. |

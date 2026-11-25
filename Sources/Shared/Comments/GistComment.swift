@@ -87,5 +87,6 @@ public struct GistCommentBody: Equatable, Sendable {
         self.init("> [comment:\(parentID)]\n\n\(text)")
     }
 
-    func replacingText(with text: String) -> String { prefix + text }
+    /// The body after an edit to its text, keeping the hidden prefix.
+    public func replacingText(with text: String) -> String { prefix + text }
 }

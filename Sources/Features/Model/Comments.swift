@@ -1,15 +1,20 @@
+import Comments
 import Foundation
 import Observation
+import Store
 
-public protocol GitHubComments: Sendable {
-    func listComments(gistID: String) async throws -> [GistComment]
-    func createComment(gistID: String, body: String) async throws -> GistComment
-    func updateComment(gistID: String, commentID: Int64, body: String) async throws -> GistComment
-    func deleteComment(gistID: String, commentID: Int64) async throws
+extension GistPadModel {
+    /// A gist's conversation, which you take part in as the signed-in account.
+    public func comments(for gist: Gist) -> CommentsModel? {
+        guard let account else { return nil }
+        return CommentsModel(
+            gistID: gist.id, userID: account.github.id, gistOwnerID: gist.owner?.id,
+            github: client(accountID: account.id))
+    }
 }
 
 /// The open gist's comments and its one in-memory draft, shaped like the web's comments panel.
-@MainActor @Observable
+@Observable
 public final class CommentsModel {
     public enum Target: Equatable, Sendable {
         case root
@@ -18,8 +23,10 @@ public final class CommentsModel {
         case edit(GistComment)
     }
 
-    public enum Failure: Equatable, Sendable {
-        case load, post, delete
+    /// A request the composer sends. Posting an edit is a post.
+    public enum Request: Equatable, Sendable {
+        case post
+        case delete(Int64)
     }
 
     private let gistID: String
@@ -28,14 +35,17 @@ public final class CommentsModel {
     public private(set) var comments: [GistComment]?
     public private(set) var isRefreshing = false
     public private(set) var isPosting = false
-    public private(set) var failure: Failure?
+    /// Why the last load didn't go through, until one does.
+    public private(set) var refreshFailure: Failure?
+    /// The last post or delete that didn't go through, and why, until one does.
+    public private(set) var failure: (request: Request, reason: Failure)?
     public private(set) var target = Target.root
     public var draft = ""
 
-    @ObservationIgnored private let github: any GitHubComments
+    @ObservationIgnored private let github: GitHubClient
     @ObservationIgnored private var stashed = (target: Target.root, draft: "")
 
-    public init(gistID: String, userID: Int64, gistOwnerID: Int64?, github: any GitHubComments) {
+    init(gistID: String, userID: Int64, gistOwnerID: Int64?, github: GitHubClient) {
         self.gistID = gistID
         self.userID = userID
         self.gistOwnerID = gistOwnerID
@@ -54,9 +64,9 @@ public final class CommentsModel {
         defer { isRefreshing = false }
         do {
             comments = try await github.listComments(gistID: gistID)
-            if failure == .load { failure = nil }
+            refreshFailure = nil
         } catch {
-            if !Task.isCancelled { failure = .load }
+            if !Task.isCancelled { refreshFailure = Failure(error) }
         }
     }
 
@@ -104,7 +114,7 @@ public final class CommentsModel {
             failure = nil
             if case .edit = posting { finishEditing() } else { (target, draft) = (.root, "") }
         } catch {
-            failure = .post
+            failure = (.post, Failure(error))
         }
     }
 
@@ -116,7 +126,16 @@ public final class CommentsModel {
             comments?.removeAll { $0.id == commentID }
             failure = nil
         } catch {
-            failure = .delete
+            failure = (.delete(commentID), Failure(error))
+        }
+    }
+
+    /// Sends the post or delete that didn't go through again.
+    public func retry() async {
+        switch failure?.request {
+        case .post: await post()
+        case .delete(let commentID): await delete(commentID)
+        case nil: return
         }
     }
 
