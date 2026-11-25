@@ -88,7 +88,7 @@ extension OnDeviceModel {
         struct Heading: Encodable {
             let id: Int
             let title: String
-            let level: Int
+            let level: Int?
             let preview: [String]
         }
 
@@ -97,9 +97,12 @@ extension OnDeviceModel {
     }
 
     func sectionEdits(for pass: ModelPass) async throws -> [EditOperation] {
-        let sections = EditBlock.sections(in: pass.source)
+        let note = MarkdownDocument(pass.source)
+        let sections = note.sections.compactMap { section in
+            section.heading.map { (heading: $0, range: section.range) }
+        }
         guard !sections.isEmpty else { return try await blockEdits(for: pass) }
-        let blocks = EditBlock.indexed(in: pass.source)
+        let blocks = note.blocks
         let payload = OutlineSelection(
             request: pass.instruction,
             headings: sections.enumerated().map { index, section in
@@ -110,9 +113,9 @@ extension OnDeviceModel {
                 let samples =
                     direct.count > 6 ? Array(direct.prefix(4)) + Array(direct.suffix(2)) : direct
                 return .init(
-                    id: index + 1, title: section.heading.text, level: section.heading.level,
+                    id: index + 1, title: note.text(in: section.heading.range), level: section.heading.level,
                     preview: samples.map {
-                        String($0.text.replacingOccurrences(of: "\n", with: " ").prefix(80))
+                        String(note.text(in: $0.range).replacingOccurrences(of: "\n", with: " ").prefix(80))
                     })
             })
         let prompt = try Self.json(payload)
@@ -143,24 +146,25 @@ extension OnDeviceModel {
         for id in ids {
             try Task.checkCancellation()
             let section = sections[id - 1]
-            let direct = (pass.source as NSString).substring(with: section.range)
+            let direct = note.text(in: section.range)
             func inNote(_ range: NSRange) -> NSRange {
                 NSRange(location: section.range.location + range.location, length: range.length)
             }
             let local = ModelPass(
                 purpose: .edit, instruction: pass.instruction, source: direct,
                 responseTokens: pass.responseTokens, requestID: pass.requestID, isPart: true)
-            let sectionBlocks = EditBlock.indexed(in: direct)
+            let document = MarkdownDocument(direct)
+            let sectionBlocks = document.blocks
             let addingTableRow = request.contains("add") && request.contains("row") && request.contains("table")
             let positionalBlock =
                 atEnd ? sectionBlocks.last
                 : addingTableRow ? sectionBlocks.last(where: { $0.kind == .tableRow }) : nil
             let selected =
                 if let positionalBlock { [positionalBlock] } else {
-                    try await selectedBlocks(for: local, from: sectionBlocks)
+                    try await selectedBlocks(for: local, in: document)
                 }
             if try await tokenCount(for: local) >= local.responseTokens {
-                edits += try await blockEdits(for: local, blocks: sectionBlocks, selected: selected)
+                edits += try await blockEdits(for: local, in: document, selected: selected)
                 .map { operation in
                     switch operation {
                     case .rewriteRegion(let range, let revised):
@@ -181,17 +185,18 @@ extension OnDeviceModel {
                     }) else { continue }
                     let goal = Self.focusedGoal(for: block, instruction: pass.instruction)
                     if goal == .makeList {
-                        let kinds = EditBlock.indexed(in: candidate.replacement ?? "").map(\.kind)
+                        let kinds = MarkdownDocument(candidate.replacement ?? "").blocks.map(\.kind)
                         guard range == block.range, kinds.count >= 2, kinds.allSatisfy({ $0 == .listItem })
                         else { continue }
                     }
                     if block.kind == .heading {
-                        try verifyHeadingEdit(block, revised: candidate.replacement ?? "", request: pass.instruction)
+                        try verifyHeadingEdit(
+                            block, in: document, revised: candidate.replacement ?? "", request: pass.instruction)
                     }
                     var accepted = (candidate, range)
                     if goal == .insertRow || goal == .insertParagraph {
                         guard let insertion = Self.relocatedInsertion(
-                            from: [(candidate, range)], for: block, instruction: pass.instruction, section: direct)
+                            from: [(candidate, range)], for: block, in: document, instruction: pass.instruction)
                         else { continue }
                         accepted = (insertion, block.range)
                     }
@@ -202,11 +207,11 @@ extension OnDeviceModel {
                     let block = selected[0]
                     let focused =
                         if let insertion = Self.relocatedInsertion(
-                            from: candidates, for: block, instruction: pass.instruction, section: direct)
+                            from: candidates, for: block, in: document, instruction: pass.instruction)
                         {
                             insertion
                         } else {
-                            try await focusedReplacement(for: local, in: direct, block: block)
+                            try await focusedReplacement(for: local, in: document, block: block)
                         }
                     if let focused { edits.append(.replaceRegion(inNote(block.range), focused)) }
                 }
@@ -216,17 +221,18 @@ extension OnDeviceModel {
     }
 
     private func blockEdits(for pass: ModelPass) async throws -> [EditOperation] {
-        let blocks = EditBlock.indexed(in: pass.source)
-        let selected = try await selectedBlocks(for: pass, from: blocks)
-        return try await blockEdits(for: pass, blocks: blocks, selected: selected)
+        let document = MarkdownDocument(pass.source)
+        let selected = try await selectedBlocks(for: pass, in: document)
+        return try await blockEdits(for: pass, in: document, selected: selected)
     }
 
+    /// The blocks of `document`, the pass's source, that the model picks for the request.
     private func selectedBlocks(
-        for pass: ModelPass, from blocks: [EditBlock]
-    ) async throws -> [EditBlock] {
+        for pass: ModelPass, in document: MarkdownDocument
+    ) async throws -> [MarkdownDocument.Block] {
         let eligible =
             pass.instruction.localizedCaseInsensitiveContains("paragraph")
-            ? blocks.filter { $0.kind == .paragraph } : blocks
+            ? document.blocks.filter { $0.kind == .paragraph } : document.blocks
         guard !eligible.isEmpty else { throw IntelligenceError.invalidEdit }
         let relocating = isRelocating(pass.instruction, in: pass.source)
         let selectionInstructions = """
@@ -247,7 +253,8 @@ extension OnDeviceModel {
         let selection = EditSelection(
             request: pass.instruction,
             blocks: eligible.enumerated().map {
-                EditSelection.Block(id: $0.offset + 1, kind: $0.element.kind.rawValue, text: $0.element.text)
+                EditSelection.Block(
+                    id: $0.offset + 1, kind: $0.element.kind.rawValue, text: document.text(in: $0.element.range))
             })
         let prompt = try Self.json(selection)
         let ids = try await selectedIDs(
@@ -256,21 +263,24 @@ extension OnDeviceModel {
         return ids.map { eligible[$0 - 1] }
     }
 
+    /// Revises each selected block of `document`, the pass's source, on its own.
     private func blockEdits(
-        for pass: ModelPass, blocks: [EditBlock], selected: [EditBlock]
+        for pass: ModelPass, in document: MarkdownDocument, selected: [MarkdownDocument.Block]
     ) async throws -> [EditOperation] {
         let relocating = isRelocating(pass.instruction, in: pass.source)
+        let blocks = document.blocks
         var edits: [EditOperation] = []
         for block in selected {
             try Task.checkCancellation()
-            let previous = block.id > 1 ? blocks[block.id - 2] : nil
-            let next = block.id < blocks.count ? blocks[block.id] : nil
+            let previous = blocks.last { $0.range.location < block.range.location }
+            let next = blocks.first { $0.range.location > block.range.location }
+            let text = document.text(in: block.range)
             let localPass = ModelPass(
-                purpose: .edit, instruction: pass.instruction, source: block.text,
+                purpose: .edit, instruction: pass.instruction, source: text,
                 responseTokens: pass.responseTokens, requestID: pass.requestID, isPart: true)
             let revised = try await revisedText(for: localPass)
             if block.kind == .heading {
-                try verifyHeadingEdit(block, revised: revised, request: pass.instruction)
+                try verifyHeadingEdit(block, in: document, revised: revised, request: pass.instruction)
             }
             if revised.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let deleting =
@@ -292,28 +302,28 @@ extension OnDeviceModel {
                         Proposal.Change(
                             quote: (pass.source as NSString).substring(with: range),
                             replacement: next == nil ? trailing : "", reason: "")))
-            } else if !revised.utf8.elementsEqual(block.text.utf8) {
+            } else if !revised.utf8.elementsEqual(text.utf8) {
                 edits.append(.rewriteRegion(block.range, revised: revised))
             }
         }
         return edits
     }
 
-    private func verifyHeadingEdit(_ block: EditBlock, revised: String, request: String) throws {
-        guard !EditBlock.indexed(in: revised).contains(where: {
-            $0.kind == .heading && $0.text.utf8.elementsEqual(block.text.utf8)
+    private func verifyHeadingEdit(
+        _ heading: MarkdownDocument.Block, in document: MarkdownDocument, revised: String, request: String
+    ) throws {
+        let text = document.text(in: heading.range)
+        let result = MarkdownDocument(revised)
+        guard !result.blocks.contains(where: {
+            $0.kind == .heading && result.text(in: $0.range).utf8.elementsEqual(text.utf8)
         }) else { return }
-        let title = EditBlock.headingName(block.text, level: block.level)
-        guard request.localizedCaseInsensitiveContains(title) else {
+        guard let title = heading.title, request.localizedCaseInsensitiveContains(document.text(in: title)) else {
             throw IntelligenceError.invalidEdit
         }
     }
 
     private func isRelocating(_ instruction: String, in source: String) -> Bool {
-        guard let target = EditBlock.moveTarget(in: instruction) else { return false }
-        return EditBlock.indexed(in: source).contains {
-            $0.kind == .listItem && $0.text.localizedCaseInsensitiveContains(target)
-        }
+        !MarkdownDocument(source).listItems(movedBy: instruction).isEmpty
     }
 
     private enum FocusedGoal {
@@ -322,7 +332,7 @@ extension OnDeviceModel {
 
     // Platform gap: AFM Core leaves these English requests unproposed when it rewrites a whole
     // section. Remove when an on-device model passes the Edit eval without the focused revision.
-    private static func focusedGoal(for block: EditBlock, instruction: String) -> FocusedGoal? {
+    private static func focusedGoal(for block: MarkdownDocument.Block, instruction: String) -> FocusedGoal? {
         let request = instruction.lowercased()
         func has(_ words: String...) -> Bool { words.allSatisfy(request.contains) }
         switch block.kind {
@@ -336,45 +346,47 @@ extension OnDeviceModel {
 
     /// Moves text the model added elsewhere in the section to just after the selected block.
     static func relocatedInsertion(
-        from candidates: [(Proposal.Change, NSRange)], for block: EditBlock,
-        instruction: String, section: String
+        from candidates: [(Proposal.Change, NSRange)], for block: MarkdownDocument.Block,
+        in section: MarkdownDocument, instruction: String
     ) -> Proposal.Change? {
         guard candidates.count == 1,
             let goal = focusedGoal(for: block, instruction: instruction),
             let inserted = candidates[0].0.insertedText
         else { return nil }
-        return insertion(inserted, goal: goal, after: block, section: section)
+        return insertion(inserted, goal: goal, after: block, in: section)
     }
 
     private static func insertion(
-        _ text: String, goal: FocusedGoal, after block: EditBlock, section: String
+        _ text: String, goal: FocusedGoal, after block: MarkdownDocument.Block, in section: MarkdownDocument
     ) -> Proposal.Change? {
-        let kinds = EditBlock.indexed(in: text).map(\.kind)
-        let newline = section.contains("\r\n") ? "\r\n" : "\n"
+        let kinds = MarkdownDocument(text).blocks.map(\.kind)
+        let quote = section.text(in: block.range)
+        let newline = section.text.contains("\r\n") ? "\r\n" : "\n"
         switch goal {
         case .insertParagraph:
             guard kinds == [.paragraph] else { return nil }
-            return Proposal.Change(quote: block.text, replacement: block.text + newline + newline + text, reason: "")
+            return Proposal.Change(quote: quote, replacement: quote + newline + newline + text, reason: "")
         case .insertRow:
             guard kinds == [.tableRow],
-                text.count(where: { $0 == "|" }) == block.text.count(where: { $0 == "|" })
+                text.count(where: { $0 == "|" }) == quote.count(where: { $0 == "|" })
             else { return nil }
-            return Proposal.Change(quote: block.text, replacement: block.text + newline + text, reason: "")
+            return Proposal.Change(quote: quote, replacement: quote + newline + text, reason: "")
         case .makeList, .replaceParagraph:
             return nil
         }
     }
 
     private func focusedReplacement(
-        for pass: ModelPass, in section: String, block: EditBlock
+        for pass: ModelPass, in section: MarkdownDocument, block: MarkdownDocument.Block
     ) async throws -> Proposal.Change? {
         guard let goal = Self.focusedGoal(for: block, instruction: pass.instruction) else { return nil }
+        let text = section.text(in: block.range)
         let shortening = pass.instruction.lowercased().contains("shorten")
         let format =
             switch goal {
             case .replaceParagraph:
                 shortening
-                    ? "Return only a condensed paragraph under \(max(40, block.text.count / 2)) characters. Remove repetition, keep the main facts. Do not copy the original verbatim."
+                    ? "Return only a condensed paragraph under \(max(40, text.count / 2)) characters. Remove repetition, keep the main facts. Do not copy the original verbatim."
                     : "Return only the revised paragraph, not a heading or its neighbors."
             case .makeList: "Return only the bullet list replacing this paragraph, without checkboxes."
             case .insertParagraph:
@@ -386,7 +398,7 @@ extension OnDeviceModel {
                 estimate/price column, not in the item name.
                 """
             }
-        let delimiter = Self.delimiter(for: section)
+        let delimiter = Self.delimiter(for: section.text)
         let response = try await LanguageModelSession(
             model: model,
             instructions: Instructions("""
@@ -402,33 +414,33 @@ extension OnDeviceModel {
 
                 Section:
                 \(delimiter)
-                \(section)
+                \(section.text)
                 \(delimiter)
 
                 Selected block:
                 \(delimiter)
-                \(block.text)
+                \(text)
                 \(delimiter)
                 """,
             options: GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 512))
         guard response.usage.output.totalTokenCount < 512 else { throw IntelligenceError.responseTooLarge }
         let revised = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\r\n", with: "\n")
-        guard !revised.isEmpty, revised != block.text, !revised.contains("```"),
+        guard !revised.isEmpty, revised != text, !revised.contains("```"),
             revised != pass.instruction
         else { return nil }
-        let kinds = EditBlock.indexed(in: revised).map(\.kind)
+        let kinds = MarkdownDocument(revised).blocks.map(\.kind)
         switch goal {
         case .replaceParagraph:
-            guard kinds == [.paragraph], !shortening || revised.count < block.text.count else { return nil }
+            guard kinds == [.paragraph], !shortening || revised.count < text.count else { return nil }
         case .makeList:
             guard kinds.count >= 2, kinds.allSatisfy({ $0 == .listItem }) else { return nil }
         case .insertParagraph, .insertRow:
-            return Self.insertion(revised, goal: goal, after: block, section: section)
+            return Self.insertion(revised, goal: goal, after: block, in: section)
         }
-        let newline = section.contains("\r\n") ? "\r\n" : "\n"
+        let newline = section.text.contains("\r\n") ? "\r\n" : "\n"
         return Proposal.Change(
-            quote: block.text, replacement: revised.replacingOccurrences(of: "\n", with: newline), reason: "")
+            quote: text, replacement: revised.replacingOccurrences(of: "\n", with: newline), reason: "")
     }
 
     private func selectedIDs(

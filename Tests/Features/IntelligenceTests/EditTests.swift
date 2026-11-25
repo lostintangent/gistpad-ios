@@ -209,13 +209,13 @@ struct EditTests {
             let candidates = try Proposal.Change.lineChanges(
                 in: source, visible: NSRange(location: 0, length: source.utf16.count),
                 revised: revised)
-            let blocks = EditBlock.indexed(in: source)
+            let document = MarkdownDocument(source)
             let anchor = try #require(
                 instruction.contains("summary")
-                    ? blocks.first { $0.kind == .heading }
-                    : blocks.last { $0.kind == .tableRow })
+                    ? document.blocks.first { $0.kind == .heading }
+                    : document.blocks.last { $0.kind == .tableRow })
             let insertion = try #require(OnDeviceModel.relocatedInsertion(
-                from: candidates, for: anchor, instruction: instruction, section: source))
+                from: candidates, for: anchor, in: document, instruction: instruction))
             let snapshot = note(source)
             let proposal = Proposal(
                 snapshot: snapshot, scopedCandidates: [(insertion, anchor.range)])
@@ -226,49 +226,15 @@ struct EditTests {
         }
     }
 
-    @Test func editSectionsHoldOnlyTheTextDirectlyUnderEachHeading() {
-        let source = """
-            # Project
-
-            Intro.
-
-            ## Setup
-
-            Setup notes.
-
-            ### Install
-
-            Install steps.
-
-            ### Options
-
-            | Flag | Meaning |
-            | -i | Ignore case |
-
-            ## Next check
-
-            Retest in November.
-            """
-        let sections = EditBlock.sections(in: source)
-        #expect(sections.map { $0.heading.text } == [
-            "# Project", "## Setup", "### Install", "### Options", "## Next check",
-        ])
-        #expect(sections.map { $0.heading.level } == [1, 2, 3, 3, 2])
-        #expect(sections.map { (source as NSString).substring(with: $0.range) } == [
-            "# Project\n\nIntro.", "## Setup\n\nSetup notes.", "### Install\n\nInstall steps.",
-            "### Options\n\n| Flag | Meaning |\n| -i | Ignore case |", "## Next check\n\nRetest in November.",
-        ])
-    }
-
     @Test func scopedEditsSpliceOnlyVerifiedBodyRanges() async throws {
         let prefix = "---\r\nsecret: 👩🏽‍💻\r\n---\r\n"
         let body = "# Reading\r\n\r\n- Paper Observatory\r\n- River Engine\r\n\r\n## Notes\r\n\r\nKeep this.\r\n"
         let input = request(prefix + body, "Move Paper Observatory after River Engine")
         let fixture = FixtureLanguageModel()
         fixture.operations = { pass in
-            let blocks = EditBlock.indexed(in: pass.source)
-            let source = blocks.first { $0.text == "- Paper Observatory" }!
-            let destination = blocks.first { $0.text == "- River Engine" }!
+            let document = MarkdownDocument(pass.source)
+            let source = document.blocks.first { document.text(in: $0.range) == "- Paper Observatory" }!
+            let destination = document.blocks.first { document.text(in: $0.range) == "- River Engine" }!
             let removed = NSRange(
                 location: source.range.location, length: destination.range.location - source.range.location)
             return [
@@ -286,7 +252,8 @@ struct EditTests {
                 == prefix + "# Reading\r\n\r\n- River Engine\r\n- Paper Observatory\r\n\r\n## Notes\r\n\r\nKeep this.\r\n")
 
         fixture.operations = { pass in
-            let heading = EditBlock.indexed(in: pass.source).first { $0.text == "## Notes" }!
+            let document = MarkdownDocument(pass.source)
+            let heading = document.blocks.first { document.text(in: $0.range) == "## Notes" }!
             return [
                 .rewriteRegion(
                     heading.range, revised: "## Notes\n\nA new introduction for the section.")

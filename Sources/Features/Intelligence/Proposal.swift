@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 
 package struct Proposal: Sendable {
     let snapshot: FileSnapshot
@@ -82,26 +83,21 @@ package struct Proposal: Sendable {
     private func validateApplication(_ replacement: String, changes: [Change]) throws {
         let source = snapshot.source
         guard let safetyInstruction, !source.isEmpty else { return }
-        if let target = EditBlock.moveTarget(in: safetyInstruction) {
-            let original = EditBlock.indexed(in: source).filter {
-                $0.kind == .listItem && $0.text.localizedCaseInsensitiveContains(target)
-            }
-            if !original.isEmpty {
-                guard original.count == 1 else { throw IntelligenceError.invalidEdit }
-                let result = EditBlock.indexed(in: replacement)
-                let matching = result.filter {
-                    $0.kind == .listItem && $0.text.localizedCaseInsensitiveContains(target)
-                }
-                guard matching.count == 1 else { throw IntelligenceError.invalidEdit }
-                let originalBody = try Self.listItemBody(original[0])
-                let revisedBody = try Self.listItemBody(matching[0])
-                guard revisedBody.utf8.elementsEqual(originalBody.utf8),
-                    !matching[0].heading.utf8.elementsEqual(original[0].heading.utf8),
-                    result.contains(where: {
-                        $0.kind == .heading && $0.text.utf8.elementsEqual(original[0].heading.utf8)
-                    })
-                else { throw IntelligenceError.invalidEdit }
-            }
+        let document = MarkdownDocument(source)
+        let original = document.listItems(movedBy: safetyInstruction)
+        if !original.isEmpty {
+            guard original.count == 1 else { throw IntelligenceError.invalidEdit }
+            let result = MarkdownDocument(replacement)
+            let matching = result.listItems(movedBy: safetyInstruction)
+            guard matching.count == 1 else { throw IntelligenceError.invalidEdit }
+            let heading = original[0].heading
+            guard try Self.body(of: matching[0].item, in: result).utf8
+                .elementsEqual(Self.body(of: original[0].item, in: document).utf8),
+                !matching[0].heading.utf8.elementsEqual(heading.utf8),
+                result.blocks.contains(where: {
+                    $0.kind == .heading && result.text(in: $0.range).utf8.elementsEqual(heading.utf8)
+                })
+            else { throw IntelligenceError.invalidEdit }
         }
         let request = Self.normalized(safetyInstruction)
         for change in changes {
@@ -129,10 +125,11 @@ package struct Proposal: Sendable {
             .trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines))
     }
 
-    private static func listItemBody(_ item: EditBlock) throws -> String {
-        guard let marker = item.marker else { throw IntelligenceError.invalidEdit }
-        let start = (item.taskMarker?.location ?? NSMaxRange(marker)) - item.range.location
-        return (item.text as NSString).substring(from: start)
+    /// A list item's text from its box, or after its marker when it has none.
+    private static func body(of item: MarkdownDocument.Block, in document: MarkdownDocument) throws -> String {
+        guard let prefix = item.prefix else { throw IntelligenceError.invalidEdit }
+        let start = item.box?.location ?? NSMaxRange(prefix)
+        return document.text(in: NSRange(start..<NSMaxRange(item.range)))
     }
 }
 
