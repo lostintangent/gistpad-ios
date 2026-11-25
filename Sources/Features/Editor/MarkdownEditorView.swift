@@ -4,8 +4,8 @@
     import SwiftUI
     import UIKit
 
-    public struct EditorView: View {
-        let editor: Editor
+    public struct MarkdownEditorView: View {
+        let editor: MarkdownEditor
         /// What VoiceOver calls the text view: the title the screen shows.
         private let title: String?
         private let insertImage: (@MainActor () -> Void)?
@@ -15,7 +15,7 @@
         @State private var linkRequest: LinkRequest?
 
         public init(
-            editor: Editor,
+            editor: MarkdownEditor,
             title: String? = nil,
             insertImage: (@MainActor () -> Void)? = nil,
             intelligence: (@MainActor () -> Void)? = nil,
@@ -86,7 +86,7 @@
     }
 
     private struct TextViewRepresentable: UIViewRepresentable {
-        let editor: Editor
+        let editor: MarkdownEditor
         let title: String?
         let comments: CommentHighlightConfiguration
         let commentActions: CommentHighlightActions?
@@ -133,14 +133,14 @@
             weak var host: TextViewHost?
         }
 
-        private let editor: Editor
+        private let editor: MarkdownEditor
         private var configuration: ((UITextView) -> Void)?
         private var isDismantled = false
         var isPaneVisible = true {
             didSet { if isPaneVisible, !oldValue { handBarSource() } }
         }
 
-        init(editor: Editor) {
+        init(editor: MarkdownEditor) {
             self.editor = editor
             super.init(frame: .zero)
             editor.hosts.append(Reference(host: self))

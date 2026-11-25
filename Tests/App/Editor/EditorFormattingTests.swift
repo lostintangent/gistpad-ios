@@ -6,7 +6,7 @@ import UIKit
 @Suite(.serialized, .timeLimit(.minutes(1)))
 struct EditorFormattingTests {
     @Test func formattingIsOneNativeUndoWithFinalSelection() throws {
-        let editor = Editor(text: "A 日本語 note")
+        let editor = MarkdownEditor(text: "A 日本語 note")
         let window = try hostEditor(editor)
         defer { window.isHidden = true }
         let originalSelection = (editor.text as NSString).range(of: "日本語")
@@ -37,7 +37,7 @@ struct EditorFormattingTests {
     }
 
     @Test func staleLinkNeverChangesSource() throws {
-        let editor = Editor(text: "note")
+        let editor = MarkdownEditor(text: "note")
         let edit = try #require(
             try Format.link(label: "note", destination: "https://example.com").edit(
                 in: editor.text, selection: NSRange(location: 0, length: 4)))
@@ -49,7 +49,7 @@ struct EditorFormattingTests {
     }
 
     @Test func compositionWritingToolsAndReadOnlyBlockFormatting() throws {
-        let editor = Editor(text: "note")
+        let editor = MarkdownEditor(text: "note")
         let window = try hostEditor(editor)
         defer { window.isHidden = true }
         let edit = try #require(
@@ -80,7 +80,7 @@ struct EditorFormattingTests {
 
     @Test func smartTypingYieldsToCompositionWritingToolsAndProtectedSyntax() throws {
         for source in ["```\n- code", "---\n- metadata", "Ordinary prose"] {
-            let editor = Editor(text: source)
+            let editor = MarkdownEditor(text: source)
             let caret = NSRange(location: source.utf16.count, length: 0)
             #expect(
                 editor.textView(
@@ -88,7 +88,7 @@ struct EditorFormattingTests {
                     replacementText: "\n"))
             #expect(editor.text == source)
         }
-        let editor = Editor(text: "- note")
+        let editor = MarkdownEditor(text: "- note")
         let window = try hostEditor(editor)
         defer { window.isHidden = true }
         editor.textViewWritingToolsWillBegin(editor.textView)
@@ -110,7 +110,7 @@ struct EditorFormattingTests {
     }
 
     @Test func aBracketPairUndoesInOneStepAndSteppingOverAddsNone() throws {
-        let editor = Editor(text: "Vagabond ")
+        let editor = MarkdownEditor(text: "Vagabond ")
         let window = try host(editor)
         defer { window.isHidden = true }
         let view = editor.textView
@@ -137,7 +137,7 @@ struct EditorFormattingTests {
     }
 
     @Test func aURLTypedOverDiscontiguousSelectionsKeepsTheWordsBetween() throws {
-        let editor = Editor(text: "one keep two")
+        let editor = MarkdownEditor(text: "one keep two")
         let window = try host(editor)
         defer { window.isHidden = true }
         let view = editor.textView
@@ -147,7 +147,7 @@ struct EditorFormattingTests {
     }
 
     @Test func indentAndOutdentRetainSelectionAndNativeUndo() throws {
-        let editor = Editor(text: "- 日本語\n- next")
+        let editor = MarkdownEditor(text: "- 日本語\n- next")
         let window = try hostEditor(editor)
         defer { window.isHidden = true }
         let original = editor.text
@@ -164,7 +164,7 @@ struct EditorFormattingTests {
     }
 
     @Test func swipeIndentsAListLineAndIgnoresProse() throws {
-        let editor = Editor(text: "- item\nplain")
+        let editor = MarkdownEditor(text: "- item\nplain")
         let window = try host(editor)
         defer { window.isHidden = true }
         let caret = NSRange(location: editor.text.utf16.count, length: 0)
@@ -192,7 +192,7 @@ struct EditorFormattingTests {
     }
 
     @Test func keyboardBarBoldEditsTheSessionAndImageNeedsAnAction() throws {
-        let editor = Editor(text: "A note")
+        let editor = MarkdownEditor(text: "A note")
         let window = try hostEditor(editor)
         defer { window.isHidden = true }
         let toolbar = try #require(editor.textView.inputAccessoryView as? KeyboardBar)
@@ -218,14 +218,14 @@ struct EditorFormattingTests {
     }
 
     @Test func voiceOverNamesTheTextViewByTheScreensTitle() throws {
-        let editor = Editor(text: "A note")
+        let editor = MarkdownEditor(text: "A note")
         let window = try hostEditor(editor, title: "Saturday walk")
         defer { window.isHidden = true }
         #expect(editor.textView.accessibilityLabel == "Saturday walk")
     }
 
     @Test func intelligenceAccessoryInvokesItsCallbackWithoutChangingSource() throws {
-        let editor = Editor(text: "A note")
+        let editor = MarkdownEditor(text: "A note")
         var requests = 0
         let window = try hostEditor(editor, intelligence: { requests += 1 })
         defer { window.isHidden = true }
@@ -244,7 +244,7 @@ struct EditorFormattingTests {
     }
 
     @Test func nativeFindAndReplaceKeepsURLReplacementsLiteral() throws {
-        let editor = Editor(text: "A note and another note")
+        let editor = MarkdownEditor(text: "A note and another note")
         let window = try hostEditor(editor)
         defer { window.isHidden = true }
         let interaction = try #require(editor.textView.findInteraction)

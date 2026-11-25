@@ -217,7 +217,7 @@ struct PlatformTests {
             UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
         window.rootViewController = UIHostingController(
-            rootView: EditorView(editor: fileEditor.editor))
+            rootView: MarkdownEditorView(editor: fileEditor.editor))
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
         window.layoutIfNeeded()

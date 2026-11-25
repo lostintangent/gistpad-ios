@@ -6,7 +6,7 @@
 
     @Observable
     final class IntelligenceState {
-        let editor: Editor
+        let editor: MarkdownEditor
         var action = IntelligenceAction.ask
         var askPrompt = ""
         var editPrompt = ""
@@ -22,7 +22,7 @@
         private let engine: IntelligenceEngine
         private(set) var task: Task<Void, Never>?
 
-        init(editor: Editor, backend: any IntelligenceModel = OnDeviceModel()) {
+        init(editor: MarkdownEditor, backend: any IntelligenceModel = OnDeviceModel()) {
             self.editor = editor
             engine = IntelligenceEngine(backend: backend)
         }

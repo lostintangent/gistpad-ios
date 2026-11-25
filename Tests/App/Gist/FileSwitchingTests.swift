@@ -14,7 +14,7 @@ struct FileSwitchingTests {
     @Test(arguments: [false, true])
     func supersededContainersCannotReconfigureDetachOrReclaimTheEditor(composing: Bool) throws {
         let source = "# A retained source\nAn editable thought."
-        let editor = Editor(text: source)
+        let editor = MarkdownEditor(text: source)
         let fixture = try SourceHostWindow()
         defer { fixture.close() }
         let outgoing = TextViewHost(editor: editor)
@@ -75,7 +75,7 @@ struct FileSwitchingTests {
 
     @Test(arguments: [false, true])
     func aReturningStaleHostCannotOrphanTheVisibleHost(dismantled: Bool) throws {
-        let editor = Editor(text: "# Still visible")
+        let editor = MarkdownEditor(text: "# Still visible")
         let fixture = try SourceHostWindow()
         defer { fixture.close() }
         let stale = TextViewHost(editor: editor)
@@ -120,7 +120,7 @@ struct FileSwitchingTests {
     func anOwnerLeavingOrDismantlingImmediatelyReturnsTheEditorToThePreviousLiveHost(
         dismantled: Bool
     ) throws {
-        let editor = Editor(text: "# Still attached")
+        let editor = MarkdownEditor(text: "# Still attached")
         let fixture = try SourceHostWindow()
         defer { fixture.close() }
         let previous = TextViewHost(editor: editor)
@@ -145,7 +145,7 @@ struct FileSwitchingTests {
 
     @Test(arguments: OwnerState.allCases)
     func anInWindowContainerRepairsMissingDetachedAndCurrentOwnership(owner: OwnerState) throws {
-        let editor = Editor(text: "# Still here")
+        let editor = MarkdownEditor(text: "# Still here")
         let fixture = try SourceHostWindow()
         defer { fixture.close() }
         let host = TextViewHost(editor: editor)
@@ -173,7 +173,7 @@ struct FileSwitchingTests {
 
     @Test(arguments: [false, true])
     func animatedIdentityAndModeChangesKeepTheEditorMounted(splitNavigation: Bool) async throws {
-        let editor = Editor(text: "# A visible source\nAn editable thought.")
+        let editor = MarkdownEditor(text: "# A visible source\nAn editable thought.")
         let state = ReidentifiedSourceState()
         let fixture = try SourceHostWindow()
         defer { fixture.close() }
@@ -221,8 +221,8 @@ struct FileSwitchingTests {
     }
 
     @Test func anOutgoingHostCannotDetachTheRetainedEditorFromItsNewHost() throws {
-        let editor = Editor(text: "# Still visible\nA retained source.")
-        let other = Editor(text: "# A different source")
+        let editor = MarkdownEditor(text: "# Still visible\nA retained source.")
+        let other = MarkdownEditor(text: "# A different source")
         let scene = try #require(
             UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.keyWindow
@@ -230,7 +230,7 @@ struct FileSwitchingTests {
         let root = UIViewController()
         window.rootViewController = root
         let outgoing = UIHostingController(
-            rootView: EditorView(editor: editor).environment(\.isPaneVisible, true))
+            rootView: MarkdownEditorView(editor: editor).environment(\.isPaneVisible, true))
         root.addChild(outgoing)
         outgoing.view.frame = root.view.bounds
         outgoing.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -247,7 +247,7 @@ struct FileSwitchingTests {
         window.layoutIfNeeded()
         try #require(editor.textView.isDescendant(of: outgoing.view))
 
-        let incoming = UIHostingController(rootView: EditorView(editor: editor))
+        let incoming = UIHostingController(rootView: MarkdownEditorView(editor: editor))
         root.addChild(incoming)
         incoming.view.frame = root.view.bounds
         incoming.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -257,14 +257,14 @@ struct FileSwitchingTests {
         try #require(editor.textView.isDescendant(of: incoming.view))
         let incomingAccessory = editor.textView.inputAccessoryView
 
-        outgoing.rootView = EditorView(editor: editor)
+        outgoing.rootView = MarkdownEditorView(editor: editor)
             .environment(\.isPaneVisible, false)
         outgoing.view.layoutIfNeeded()
         #expect(!editor.textView.isHidden)
         #expect(editor.textView.isAccessibilityElement)
         #expect(editor.textView.inputAccessoryView === incomingAccessory)
 
-        outgoing.rootView = EditorView(editor: other)
+        outgoing.rootView = MarkdownEditorView(editor: other)
             .environment(\.isPaneVisible, false)
         outgoing.view.layoutIfNeeded()
         outgoing.willMove(toParent: nil)
@@ -284,12 +284,12 @@ struct FileSwitchingTests {
     }
 
     @Test func changingFilesMountsTheCorrectRetainedTextViewAndIsolatesUndo() throws {
-        let daily = Editor(text: "# Today's note\nDaily source")
-        let note = Editor(text: "# Another gist\nIts raw source")
+        let daily = MarkdownEditor(text: "# Today's note\nDaily source")
+        let note = MarkdownEditor(text: "# Another gist\nIts raw source")
         let scene = try #require(
             UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
-        let host = UIHostingController(rootView: EditorView(editor: daily))
+        let host = UIHostingController(rootView: MarkdownEditorView(editor: daily))
         window.rootViewController = host
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
@@ -304,7 +304,7 @@ struct FileSwitchingTests {
         let dailyText = dailyView.text
         let dailySelection = dailyView.selectedRange
 
-        host.rootView = EditorView(editor: note)
+        host.rootView = MarkdownEditorView(editor: note)
         host.view.layoutIfNeeded()
         #expect(noteView.window === window)
         #expect(dailyView.window == nil)
@@ -318,7 +318,7 @@ struct FileSwitchingTests {
         let noteSelection = noteView.selectedRange
 
         for editor in [daily, note, daily, note] {
-            host.rootView = EditorView(editor: editor)
+            host.rootView = MarkdownEditorView(editor: editor)
             host.view.layoutIfNeeded()
             #expect(editor.textView.window === window)
             #expect(daily.textView === dailyView)
@@ -331,7 +331,7 @@ struct FileSwitchingTests {
         noteView.undoManager?.undo()
         #expect(noteView.text == "# Another gist\nIts raw source")
         #expect(dailyView.text == dailyText)
-        host.rootView = EditorView(editor: daily)
+        host.rootView = MarkdownEditorView(editor: daily)
         host.view.layoutIfNeeded()
         dailyView.undoManager?.undo()
         #expect(dailyView.text == "# Today's note\nDaily source")
@@ -368,7 +368,7 @@ private final class ReidentifiedSourceState {
 }
 
 private struct ReidentifiedSourceFixture: View {
-    let editor: Editor
+    let editor: MarkdownEditor
     @Bindable var state: ReidentifiedSourceState
     let splitNavigation: Bool
 
@@ -391,7 +391,7 @@ private struct ReidentifiedSourceFixture: View {
                 filenames: ["README.md"], filename: "README.md"),
             mode: $state.mode, status: .published
         ) {
-            EditorView(editor: editor)
+            MarkdownEditorView(editor: editor)
                 .id(state.identity)
                 .transition(.opacity)
         } preview: {

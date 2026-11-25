@@ -6,7 +6,7 @@
 
     final class CommentHighlights: NSObject, UIGestureRecognizerDelegate {
         static let annotationKey = NSAttributedString.Key("dev.gistpad.comment.highlight")
-        private unowned let editor: Editor
+        private unowned let editor: MarkdownEditor
         let backgroundLayer = CALayer()
         private var configuration = CommentHighlightConfiguration()
         private var actions: CommentHighlightActions?
@@ -30,7 +30,7 @@
         private lazy var selectionTap = UITapGestureRecognizer(
             target: self, action: #selector(selectTappedWord))
 
-        init(editor: Editor) {
+        init(editor: MarkdownEditor) {
             self.editor = editor
             super.init()
             editor.textView.layer.insertSublayer(backgroundLayer, at: 0)

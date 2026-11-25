@@ -33,7 +33,7 @@
             for size in [UIContentSizeCategory.large, .accessibilityExtraLarge] {
                 for appearance in [UIUserInterfaceStyle.light, .dark] {
                     for contrast in [UIAccessibilityContrast.normal, .high] {
-                        let editor = Editor(text: source)
+                        let editor = MarkdownEditor(text: source)
                         editor.setShowsFrontMatter(true)
                         let view = editor.textView
                         view.traitOverrides.preferredContentSizeCategory = size
@@ -147,7 +147,7 @@
         }
 
         @Test func aKeystrokePaintsTheNoteOnce() {
-            let editor = Editor(text: "# Heading\n\nProse")
+            let editor = MarkdownEditor(text: "# Heading\n\nProse")
             let view = editor.textView
             view.selectedRange = NSRange(location: view.textStorage.length, length: 0)
             let paints = AttributePasses(of: view.textStorage)

@@ -14,7 +14,7 @@ struct FrontMatterLayoutTests {
     ) throws {
         let body = "# Visible content\n\n- [ ] A thought 日本語"
         let source = prefix + body
-        let editor = Editor(text: source)
+        let editor = MarkdownEditor(text: source)
         let view = editor.textView
         let window = try host(editor, focused: false)
         defer { window.isHidden = true }
@@ -98,7 +98,7 @@ struct FrontMatterLayoutTests {
         let prefix = "---\nkey: A longer value 👩🏽‍💻\n---\n\n"
         let body = "A retained thought"
         let source = prefix + body
-        let editor = Editor(text: source)
+        let editor = MarkdownEditor(text: source)
         let view = editor.textView
         let window = try host(editor)
         defer { window.isHidden = true }
@@ -120,7 +120,7 @@ struct FrontMatterLayoutTests {
 
     @Test func showingMetadataKeepsCompositionAndDoesNotChangeSourceGeneration() throws {
         let prefix = "---\nkey: value\n---\n\n"
-        let editor = Editor(text: prefix + "Body")
+        let editor = MarkdownEditor(text: prefix + "Body")
         let view = editor.textView
         view.selectedRange = NSRange(location: prefix.utf16.count, length: 0)
         view.setMarkedText("日本", selectedRange: NSRange(location: 2, length: 0))
@@ -146,7 +146,7 @@ struct FrontMatterLayoutTests {
     func replacingTheWholeSourceCanRemoveThePrefixAndUndoRestoresIt(replacement: String) throws {
         let prefix = "---\nkey: A longer metadata prefix\n---\n\n"
         let source = prefix + "A retained thought"
-        let editor = Editor(text: source)
+        let editor = MarkdownEditor(text: source)
         let view = editor.textView
         let window = try host(editor)
         defer { window.isHidden = true }
@@ -168,7 +168,7 @@ struct FrontMatterLayoutTests {
 
     @Test func visibilityChangesDoNotAddAnUndoStep() {
         let source = "---\nkey: value\n---\n\nBody"
-        let editor = Editor(text: source)
+        let editor = MarkdownEditor(text: source)
         let view = editor.textView
         editor.setShowsFrontMatter(true)
         #expect(editor.showsFrontMatter)

@@ -7,7 +7,7 @@ import UIKit
 struct EditorFocusTests {
     @Test func focusRequestPlacesCaretNowAndFocusesOnWindowAttachment() throws {
         let source = "# Today\n\n日本語 👩🏽‍💻"
-        let editor = Editor(text: source)
+        let editor = MarkdownEditor(text: source)
         let end = NSRange(location: source.utf16.count, length: 0)
         editor.requestFocusAtEnd()
         #expect(editor.textView.selectedRange == end)
@@ -24,7 +24,7 @@ struct EditorFocusTests {
 
     @Test func beginningToEditLeavesTheReadingPositionForTheTappedCaret() throws {
         let source = (1...200).map { "Line \($0)" }.joined(separator: "\n")
-        let editor = Editor(text: source)
+        let editor = MarkdownEditor(text: source)
         let window = try host(editor, focused: false)
         defer { window.isHidden = true }
         let view = editor.textView
@@ -55,7 +55,7 @@ struct EditorFocusTests {
             ```
             """
         }.joined(separator: "\n\n")
-        let editor = Editor(text: source)
+        let editor = MarkdownEditor(text: source)
         let window = try host(editor)
         defer { window.isHidden = true }
         let view = editor.textView
@@ -74,7 +74,7 @@ struct EditorFocusTests {
     }
 
     @Test func focusRequestIsConsumedOnceAndKeepsSourceAndNativeUndo() throws {
-        let editor = Editor(text: "note")
+        let editor = MarkdownEditor(text: "note")
         editor.requestFocusAtEnd()
         let window = try host(editor, focused: false)
         defer { window.isHidden = true }
@@ -109,7 +109,7 @@ struct EditorFocusTests {
     }
 
     @Test func aLandingTapTreatsEveryPositionAsAWordEdge() throws {
-        let view = Editor(text: "Uncharacteristically").textView
+        let view = MarkdownEditor(text: "Uncharacteristically").textView
         let middle = try #require(view.position(from: view.beginningOfDocument, offset: 6))
         // Whether the position is inside a word, and whether it's a word's edge.
         func answers() -> [Bool] {

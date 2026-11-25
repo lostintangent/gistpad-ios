@@ -13,7 +13,7 @@
             let source =
                 "# Saturday walk\n\nTake teh river path.\n"
                 + (1...120).map { "Stop \($0) on the river path." }.joined(separator: "\n")
-            let session = Editor(text: source)
+            let session = MarkdownEditor(text: source)
             let editor = session.textView
             let selection = (source as NSString).range(of: "Stop 60 ")
             var changes = 0
@@ -25,7 +25,7 @@
             let window = UIWindow(windowScene: scene)
             let host = UIHostingController(
                 rootView: NavigationStack {
-                    EditorView(editor: session).navigationTitle("Saturday walk")
+                    MarkdownEditorView(editor: session).navigationTitle("Saturday walk")
                 }
                 .intelligenceSheet(presentation))
             window.rootViewController = host
@@ -86,7 +86,7 @@
 
         @Test func applyIsOneUndoThatKeepsTheTypingBeforeIt() async throws {
             let source = "Take teh river path.\nLeave at 9am, before the cafe opens at 8am."
-            let editor = Editor(text: source)
+            let editor = MarkdownEditor(text: source)
             let window = try host(editor)
             defer {
                 window.endEditing(true)

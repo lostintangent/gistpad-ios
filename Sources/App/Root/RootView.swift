@@ -358,7 +358,7 @@ struct RootView: View {
 
     private func source(_ fileEditor: GistFileEditor) -> some View {
         let highlights = comments.highlights(for: fileEditor, origin: .edit)
-        return EditorView(
+        return MarkdownEditorView(
             editor: fileEditor.editor, title: fileEditor.details.title,
             insertImage: images.canChooseImage(for: fileEditor)
                 ? { @MainActor in comments.performAfterClosing { images.chooseImage(for: fileEditor) } }

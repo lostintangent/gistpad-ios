@@ -18,7 +18,7 @@ extension FileSnapshot {
 #if canImport(UIKit)
     import UIKit
 
-    extension Editor {
+    extension MarkdownEditor {
         func snapshot() -> FileSnapshot {
             FileSnapshot(parsing: text, sessionID: id, generation: generation)
         }

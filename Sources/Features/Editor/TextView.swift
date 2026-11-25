@@ -11,7 +11,7 @@
             case caret
         }
 
-        weak var editor: Editor?
+        weak var editor: MarkdownEditor?
         /// Writing Tools owns inline animations and scrolling until its session finishes.
         private var writingToolsOwnsScrolling: Bool { editor?.isWritingToolsActive == true }
         private var contentStart: Int { editor?.contentStart ?? 0 }

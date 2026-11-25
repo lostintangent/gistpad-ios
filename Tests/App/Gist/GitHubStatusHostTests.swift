@@ -97,13 +97,13 @@ private final class StatusModel {
 
 private struct StatusFixture: View {
     @Bindable var model: StatusModel
-    var session: Editor?
+    var session: MarkdownEditor?
 
     var body: some View {
         NavigationStack {
             Group {
                 if let session {
-                    EditorView(editor: session)
+                    MarkdownEditorView(editor: session)
                 } else {
                     Text("A real page remains in place.")
                 }
@@ -127,14 +127,14 @@ private final class StatusHost {
     let model = StatusModel()
     let window: UIWindow
     let view: UIView
-    let session: Editor?
+    let session: MarkdownEditor?
     private let previous: UIWindow?
 
     init(source: String) throws {
         let scene = try #require(
             UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         previous = scene.windows.first(where: \.isKeyWindow)
-        session = Editor(text: source)
+        session = MarkdownEditor(text: source)
         window = UIWindow(windowScene: scene)
         let controller = UIHostingController(
             rootView: StatusFixture(model: model, session: session).accent(savedHex: "#FACC15"))

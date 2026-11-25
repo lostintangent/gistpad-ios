@@ -13,7 +13,7 @@
         @FocusState private var promptFocused: Bool
 
         public init(
-            editor: Editor, title: String, revealSource: @escaping @MainActor (NSRange) -> Void
+            editor: MarkdownEditor, title: String, revealSource: @escaping @MainActor (NSRange) -> Void
         ) {
             self.title = title
             self.revealSource = revealSource

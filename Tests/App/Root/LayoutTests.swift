@@ -81,7 +81,7 @@ struct LayoutTests {
         let original = (1...80).map { "Paragraph \($0): a retained native notebook." }.joined(
             separator: "\n\n")
         let draft = GistFileDraft(accountID: accountID, text: original)
-        let session = Editor(text: draft.text)
+        let session = MarkdownEditor(text: draft.text)
         var persistence: Task<GistFileDraft, any Error>?
         session.onEdit = { text, _ in
             persistence = Task { try await store.save(draft, text: text, github: nil) }
@@ -192,7 +192,7 @@ struct LayoutTests {
 }
 
 private struct LayoutFixture: View {
-    let session: Editor
+    let session: MarkdownEditor
     let layout: LayoutPreferences
     let width: CGFloat
 
@@ -212,7 +212,7 @@ private struct LayoutFixture: View {
                     status: .unpublished,
                     allowsSplit: LayoutPreferences.allowsSplit(availableWidth: width)
                 ) {
-                    EditorView(editor: session)
+                    MarkdownEditorView(editor: session)
                 } preview: {
                     FilePreview(editor: session)
                 }

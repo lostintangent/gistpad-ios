@@ -4,7 +4,7 @@ import Preview
 import SwiftUI
 
 struct FilePreview: View {
-    let editor: Editor
+    let editor: MarkdownEditor
     var allowsMutations = true
     var comments = CommentHighlightConfiguration()
     var commentActions: CommentHighlightActions?

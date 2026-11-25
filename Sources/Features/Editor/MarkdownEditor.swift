@@ -7,7 +7,7 @@
     /// A note's Markdown source and the text view that edits it. Typing and every applied edit
     /// change the text here, and each change reaches `onEdit` with its generation.
     @Observable
-    public final class Editor: NSObject, Identifiable {
+    public final class MarkdownEditor: NSObject, Identifiable {
         public let id = UUID()
         public private(set) var text: String
         public private(set) var generation: UInt64
@@ -265,7 +265,7 @@
         }
     }
 
-    extension Editor: NSTextContentStorageDelegate {
+    extension MarkdownEditor: NSTextContentStorageDelegate {
         /// Shows or hides the note's front matter, keeping what the keyboard is composing.
         public func setShowsFrontMatter(_ value: Bool) {
             guard value != showsFrontMatter else { return }
@@ -302,7 +302,7 @@
         }
     }
 
-    extension Editor: UITextViewDelegate {
+    extension MarkdownEditor: UITextViewDelegate {
         /// A tap places its caret after this returns, so revealing the old caret would scroll away.
         public func textViewDidBeginEditing(_ textView: UITextView) {
             isEditing = true
@@ -406,7 +406,7 @@
     /// Off iOS the editor is just the note's text, so the library's sync runs in Mac tests. Typing
     /// there is `apply`, which counts a generation and reports the edit as a keystroke does on iOS.
     @Observable
-    public final class Editor: Identifiable {
+    public final class MarkdownEditor: Identifiable {
         public let id = UUID()
         public private(set) var text: String
         public private(set) var generation: UInt64

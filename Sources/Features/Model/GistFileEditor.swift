@@ -8,7 +8,7 @@ import Store
 @Observable
 public final class GistFileEditor {
     public internal(set) var file: GistFile
-    public let editor: Editor
+    public let editor: MarkdownEditor
     var publishing: Task<Void, Never>?
     /// Why the last publish didn't land, until you type, publish again or reconnect GitHub.
     var failure: Failure?
@@ -32,7 +32,7 @@ public final class GistFileEditor {
     init(file: GistFile, model: GistPadModel) {
         self.file = file
         self.model = model
-        editor = Editor(
+        editor = MarkdownEditor(
             text: file.text,
             showsFrontMatter: model.account?.preferences.booleanValue(.showFrontmatter, default: false) ?? false)
         if file.isNew { mode = .edit }

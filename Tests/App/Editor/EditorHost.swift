@@ -5,7 +5,7 @@ import UIKit
 
 /// Shows `editor`'s text view in a key window in the app's scene. The test hides the window when
 /// it ends.
-func host(_ editor: Editor, focused: Bool = true) throws -> UIWindow {
+func host(_ editor: MarkdownEditor, focused: Bool = true) throws -> UIWindow {
     let controller = UIViewController()
     editor.textView.frame = controller.view.bounds
     editor.textView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -15,15 +15,15 @@ func host(_ editor: Editor, focused: Bool = true) throws -> UIWindow {
     return window
 }
 
-/// Shows `editor` in its `EditorView`, with the keyboard bar, focused in a key window in the app's
+/// Shows `editor` in its `MarkdownEditorView`, with the keyboard bar, focused in a key window in the app's
 /// scene.
 func hostEditor(
-    _ editor: Editor, title: String? = nil, intelligence: (@MainActor () -> Void)? = nil,
+    _ editor: MarkdownEditor, title: String? = nil, intelligence: (@MainActor () -> Void)? = nil,
     insertImage: (@MainActor () -> Void)? = nil
 ) throws -> UIWindow {
     let window = try present(
         UIHostingController(
-            rootView: EditorView(
+            rootView: MarkdownEditorView(
                 editor: editor, title: title, insertImage: insertImage,
                 intelligence: intelligence)))
     editor.textView.becomeFirstResponder()

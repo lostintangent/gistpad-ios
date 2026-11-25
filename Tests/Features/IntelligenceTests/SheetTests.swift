@@ -10,7 +10,7 @@
         private let source = FixtureLanguageModel.source
 
         @Test func nothingChangesUntilApply() async {
-            let editor = Editor(text: source)
+            let editor = MarkdownEditor(text: source)
             var changes = 0
             editor.onEdit = { _, _ in changes += 1 }
             let state = IntelligenceState(editor: editor, backend: FixtureLanguageModel())
@@ -41,7 +41,7 @@
             AskFailure.unavailable, .error(.refused), .answer(ModelAnswer(prose: " \r\n\t")),
         ])
         func everyFailedAskShowsAReasonAndKeepsTheRequestAndFile(failure: AskFailure) async {
-            let editor = Editor(text: source)
+            let editor = MarkdownEditor(text: source)
             var changes = 0
             editor.onEdit = { _, _ in changes += 1 }
             let fixture = FixtureLanguageModel()
@@ -65,7 +65,7 @@
         }
 
         @Test func cancelKeepsTheRequestAndTheFile() async {
-            let editor = Editor(text: source)
+            let editor = MarkdownEditor(text: source)
             let fixture = FixtureLanguageModel()
             fixture.isHeld = true
             let state = IntelligenceState(editor: editor, backend: fixture)
@@ -85,7 +85,7 @@
         }
 
         @Test func aReadOnlyFileAllowsAskAndReviewButNotEditOrApply() async {
-            let editor = Editor(text: source)
+            let editor = MarkdownEditor(text: source)
             editor.isEditable = false
             let state = IntelligenceState(editor: editor, backend: FixtureLanguageModel())
             state.askPrompt = "When do I leave?"
@@ -108,7 +108,7 @@
         func citationsOnlyLinkToVisibleBodyEvenWhenMetadataRepeatsTheQuote(shown: Bool) async throws {
             let prefix = "---\nkey: e\u{301} 👩🏽‍💻\n---\n\n"
             let text = prefix + "# Content\n\nA retained thought about e\u{301} 👩🏽‍💻."
-            let editor = Editor(text: text, generation: 8, showsFrontMatter: shown)
+            let editor = MarkdownEditor(text: text, generation: 8, showsFrontMatter: shown)
             let fixture = FixtureLanguageModel()
             fixture.answer = ModelAnswer(
                 prose: "You retained this thought.", quotes: ["e\u{301} 👩🏽‍💻"])

@@ -41,7 +41,7 @@ final class IntelligencePresentation {
     }
 
     func present(
-        editor: Editor, title: String,
+        editor: MarkdownEditor, title: String,
         revealSource: @escaping @MainActor (NSRange) -> Void
     ) {
         let target = Target(editor: editor, title: title, revealSource: revealSource)
@@ -61,14 +61,14 @@ final class IntelligencePresentation {
     }
 
     final class Target: Identifiable {
-        let editor: Editor
+        let editor: MarkdownEditor
         let title: String
         let revealSource: @MainActor (NSRange) -> Void
         let wasEditing: Bool
         var passage: NSRange?
 
         init(
-            editor: Editor, title: String,
+            editor: MarkdownEditor, title: String,
             revealSource: @escaping @MainActor (NSRange) -> Void
         ) {
             self.editor = editor
