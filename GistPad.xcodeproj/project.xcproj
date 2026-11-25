@@ -242,7 +242,7 @@
     "ALWAYS_SEARCH_USER_PATHS": "NO",
     "CLANG_ENABLE_MODULES": "YES",
     "CODE_SIGN_STYLE": "Automatic",
-    "CURRENT_PROJECT_VERSION": "64",
+    "CURRENT_PROJECT_VERSION": "65",
     "DEBUG_INFORMATION_FORMAT[config=Debug]": "dwarf",
     "DEBUG_INFORMATION_FORMAT[config=Release]": "dwarf-with-dsym",
     "DEVELOPMENT_TEAM": "RHFNBL7EG4",
