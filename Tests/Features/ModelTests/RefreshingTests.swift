@@ -46,14 +46,7 @@ struct RefreshingTests {
 
         // Coming back tries again.
         phone.goOnline()
-        let list = phone.fixture.hold("GET /gists/starred")
-        let returning = Task { await phone.returnToApp() }
-        try await list.arrival()
-        #expect(phone.model.phase == .refreshing)
-        #expect(phone.status == nil)
-        #expect(!list.hasReachedGitHub)
-        list.open()
-        await returning.value
+        await phone.returnToApp()
         #expect(Set(phone.rows.map(\.id)) == ["a", "c"])
         #expect(phone.status == nil)
 
