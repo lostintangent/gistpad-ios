@@ -162,7 +162,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
                 return
             }
             do {
-                switch try PreviewBridge.decode(message.body, file: file) {
+                switch try PreviewMessage(message.body, file: file) {
                 case .ready:
                     ready = true
                     update(file)

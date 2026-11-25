@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import Preview
 
-@Suite("Preview bridge")
-struct PreviewBridgeTests {
+@Suite("Preview messages")
+struct PreviewMessageTests {
     private let text = "👩🏽‍💻\r\n- [ ] Same\r\n- [x] Same\r\n"
 
     private func file(allowsTaskEdits: Bool = true) -> PreviewFile {
@@ -20,7 +20,7 @@ struct PreviewBridgeTests {
     @Test("Task toggles flip one UTF-16 marker range, and untrusted ranges are rejected")
     func taskToggles() throws {
         let range = (text as NSString).range(of: "[x]")
-        let message = try PreviewBridge.decode(toggle(at: range.location, expected: "[x]", replacement: "[ ]"), file: file())
+        let message = try PreviewMessage(toggle(at: range.location, expected: "[x]", replacement: "[ ]"), file: file())
         guard case .event(.taskToggle(let edited, _, let replacement, let generation)) = message else {
             Issue.record("Expected a task edit")
             return
@@ -33,10 +33,10 @@ struct PreviewBridgeTests {
         let unchecked = (text as NSString).range(of: "[ ]").location
         for location in [-1, 0, Int.max - 1, Int.max, unchecked] {
             #expect(throws: PreviewError.self) {
-                try PreviewBridge.decode(toggle(at: location, expected: "[ ]", replacement: "bad"), file: file())
+                try PreviewMessage(toggle(at: location, expected: "[ ]", replacement: "bad"), file: file())
             }
         }
-        #expect(try PreviewBridge.decode(
+        #expect(try PreviewMessage(
             toggle(at: range.location, expected: "[x]", replacement: "[ ]"), file: file(allowsTaskEdits: false)) == nil)
     }
 
@@ -46,9 +46,9 @@ struct PreviewBridgeTests {
             ["type": "link", "fileID": "fixture", "generation": 7, "kind": "external", "target": target]
         }
         for target in ["javascript:alert(1)", "file:///private/a", "https://user:secret@example.com", "data:text/html,hello", ""] {
-            #expect(throws: PreviewError.self) { try PreviewBridge.decode(link(target), file: file()) }
+            #expect(throws: PreviewError.self) { try PreviewMessage(link(target), file: file()) }
         }
-        #expect(try PreviewBridge.decode(link("https://example.com"), file: file())
+        #expect(try PreviewMessage(link("https://example.com"), file: file())
             == .event(.openURL(URL(string: "https://example.com")!)))
     }
 
@@ -57,7 +57,7 @@ struct PreviewBridgeTests {
         let tap: [String: Any] = [
             "type": "commentActivate", "fileID": "fixture", "generation": 7, "segment": 2, "start": 4, "end": 9
         ]
-        #expect(try PreviewBridge.decode(tap, file: file()) == .commentActivate(segment: 2, start: 4, end: 9))
-        #expect(throws: PreviewError.self) { try PreviewBridge.decode(tap.filter { $0.key != "end" }, file: file()) }
+        #expect(try PreviewMessage(tap, file: file()) == .commentActivate(segment: 2, start: 4, end: 9))
+        #expect(throws: PreviewError.self) { try PreviewMessage(tap.filter { $0.key != "end" }, file: file()) }
     }
 }

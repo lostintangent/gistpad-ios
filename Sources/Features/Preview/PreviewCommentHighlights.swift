@@ -45,7 +45,7 @@ final class PreviewCommentHighlights {
         guard let file, renderedFile == file else { return }
         guard let highlight = highlights.first(where: {
             $0.segment == segment && $0.start == start && $0.end == end
-        }) else { throw PreviewBridge.invalidMessage }
+        }) else { throw PreviewError.invalidMessage }
         actions?.open(highlight.threadIDs)
     }
 
@@ -102,7 +102,7 @@ final class PreviewCommentHighlights {
                     let value = try await webView.callAsyncJavaScript(
                         "return window.gistpadPreview.commentSegments();",
                         arguments: [:], in: nil, contentWorld: .page)
-                    guard let segments = value as? [String] else { throw PreviewBridge.invalidMessage }
+                    guard let segments = value as? [String] else { throw PreviewError.invalidMessage }
                     guard !Task.isCancelled else { return }
                     self.segments = segments
                 }

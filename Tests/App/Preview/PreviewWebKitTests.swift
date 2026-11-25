@@ -74,7 +74,7 @@ struct PreviewWebKitTests {
         #expect(enabled == 7)
         _ = try await evaluate("document.querySelectorAll('input[type=checkbox]')[1].click();")
         let toggle = try #require(receiver.bodies.last { $0["type"] as? String == "taskToggle" })
-        guard case .event(.taskToggle(let range, _, let replacement, _)) = try PreviewBridge.decode(toggle, file: editable) else {
+        guard case .event(.taskToggle(let range, _, let replacement, _)) = try PreviewMessage(toggle, file: editable) else {
             Issue.record("Expected a validated source edit")
             return
         }
@@ -85,7 +85,7 @@ struct PreviewWebKitTests {
 
         _ = try await evaluate("document.querySelector('button.wikilink').click();")
         let wikilink = try #require(receiver.bodies.last { $0["kind"] as? String == "wikilink" })
-        #expect(try PreviewBridge.decode(wikilink, file: editable) == .event(.openWikilink("Ideas")))
+        #expect(try PreviewMessage(wikilink, file: editable) == .event(.openWikilink("Ideas")))
         #expect(receiver.bodies.filter { ["diagnostic", "failure"].contains($0["type"] as? String) }.isEmpty)
     }
 
