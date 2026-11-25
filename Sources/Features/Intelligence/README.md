@@ -19,8 +19,7 @@ let proposal = try await OnDeviceModel().review(request)
 | Type | What it is |
 |---|---|
 | `IntelligenceAction` | Ask, Edit or Review. |
-| `IntelligenceRequest` | What you asked, about which note. `Progress` says how far a long one has run. |
-| `FileSnapshot` | The note at one moment, with its headings and tasks. |
+| `IntelligenceRequest` | What you asked, about the note's `MarkdownDocument`. `Progress` says how far a long one has run. |
 | `IntelligenceModel` | The language model the actions run on. `ask`, `edit` and `review` are built on its requirements. |
 | `OnDeviceModel` | `SystemLanguageModel` with GistPad's prompts and generation schemas. |
 | `ModelPass` | One call to the model, over the note or one part of it. `tokenCount(for:)` counts it exactly as it runs. |
@@ -41,7 +40,11 @@ let proposal = try await OnDeviceModel().review(request)
 | `EditOperation` | An edit as the model describes it, in task IDs and ranges within its pass. `changes(in:pass:scope:)` turns it into changes to the note. |
 | `Proposal`, `Proposal.Change`, `Proposal.Applied` | The changes you review, one change, and the note after applying some. |
 | `TextDiff` | The word diff the sheet shows and the unsafe-edit check reads. |
-| `EditBlock`, `ModelTask` | The note's blocks, sections and tasks, numbered for the model. |
+
+Edit reads the note's blocks, sections, headings, fences and tasks from its
+`MarkdownDocument`. `MarkdownDocument+Edit` adds the two readings only Edit
+needs: task lists, numbered for the model, and the list item a "move" request
+names.
 
 ### Review
 
@@ -72,8 +75,9 @@ without a replacement is advice, which you dismiss.
 - **Review** splits the body into parts that fit, and asks each for up to 12
   suggestions anchored to exact quotes.
 - A `Proposal` places every change in the note before you see it. Applying is
-  one undoable editor edit, and it refuses a note that changed since the
-  request, or a result that repeats the instruction or removes almost everything.
+  one undoable edit made from the proposal's document, so the editor refuses it
+  once the note has changed. It also refuses a result that repeats the
+  instruction or removes almost everything.
 
 ## Testing
 
