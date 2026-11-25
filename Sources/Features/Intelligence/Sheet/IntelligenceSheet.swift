@@ -257,7 +257,11 @@
 
         @ViewBuilder
         private func change(_ change: Proposal.Change) -> some View {
-            let comparison = change.replacement.map { TextDiff(before: change.quote, after: $0) }
+            // A whole line's change carries its line break, which shows as a blank line.
+            let quote = change.quote.trimmingCharacters(in: .newlines)
+            let comparison = change.replacement.map {
+                TextDiff(before: quote, after: $0.trimmingCharacters(in: .newlines))
+            }
             // A rewrite's Before and After say what changes, so only task changes carry a headline.
             if !change.reason.isEmpty { Text(change.reason).font(.headline) }
             VStack(alignment: .leading, spacing: 6) {
@@ -272,7 +276,7 @@
                 } else if let comparison {
                     Text(Self.attributed(comparison.before)).textSelection(.enabled)
                 } else {
-                    Text(change.quote).textSelection(.enabled)
+                    Text(quote).textSelection(.enabled)
                 }
             }
             if let replacement = change.replacement, let comparison {

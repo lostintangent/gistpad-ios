@@ -1,6 +1,7 @@
 import Foundation
 import FoundationModels
 import Intelligence
+import Markdown
 
 struct EvalCase: Codable, Sendable {
     let id: String
@@ -196,8 +197,9 @@ enum Evaluator {
             return false
         }
         let source = application.source as NSString
-        let tasks = snapshot(application.source).tasks
-        guard tasks.count == original.tasks.count + 1 else { return false }
+        let document = MarkdownDocument(application.source)
+        let tasks = document.tasks
+        guard tasks.count == MarkdownDocument(original.source).tasks.count + 1 else { return false }
         // The added task is the line whose removal, with one of its line breaks, restores every byte.
         let added = tasks.first { task in
             let line = source.lineRange(for: task.range)
@@ -213,10 +215,12 @@ enum Evaluator {
                 source.replacingCharacters(in: $0, with: "").utf8.elementsEqual(original.source.utf8)
             }
         }
-        guard let task = added, !task.isComplete,
-            task.text.localizedCaseInsensitiveContains(expectedText)
+        guard let task = added, !task.isChecked,
+            source.substring(with: task.range).localizedCaseInsensitiveContains(expectedText)
         else { return false }
-        return expectedList.map { task.listTitle.localizedCaseInsensitiveContains($0) } ?? true
+        let heading = document.blocks.last { $0.kind == .heading && $0.range.location < task.range.location }
+        let title = heading.map { source.substring(with: $0.range) } ?? ""
+        return expectedList.map { title.localizedCaseInsensitiveContains($0) } ?? true
     }
 
     private static func gradeFavorite(answer: String, expected: String) async throws -> Bool {

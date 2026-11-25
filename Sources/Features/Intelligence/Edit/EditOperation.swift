@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 
 /// An edit as the model describes it, in task IDs and ranges within its pass.
 package enum EditOperation: Sendable {
@@ -15,77 +16,55 @@ package enum EditOperation: Sendable {
     func changes(
         in snapshot: FileSnapshot, pass: ModelPass, scope: NSRange
     ) throws -> [(Proposal.Change, NSRange)] {
-        let source = snapshot.source as NSString
         switch self {
         case .setTaskStates(let ids, let isComplete):
             guard ids.map({ !$0.isEmpty && Set($0).count == $0.count }) ?? true
             else { throw IntelligenceError.invalidResponse }
-            let selected =
-                ids.map { identifiers in
-                    pass.tasks.filter { identifiers.contains($0.id) }
-                } ?? pass.tasks
+            let document = MarkdownDocument(pass.source)
+            let tasks = document.taskLists.flatMap(\.self)
+            let selected = ids.map { ids in tasks.indices.filter { ids.contains($0 + 1) }.map { tasks[$0] } } ?? tasks
             guard ids == nil || selected.count == ids?.count else {
                 throw IntelligenceError.invalidResponse
             }
-            return selected.filter { $0.isComplete != isComplete }.map { task in
-                (
-                    Proposal.Change(
-                        quote: source.substring(with: task.range),
-                        replacement: isComplete ? "[x]" : "[ ]",
-                        reason: isComplete
-                            ? String(localized: "Mark this task complete.", bundle: .module)
-                            : String(localized: "Mark this task incomplete.", bundle: .module)),
-                    task.range
-                )
+            let reason =
+                isComplete
+                ? String(localized: "Mark this task complete.", bundle: .module)
+                : String(localized: "Mark this task incomplete.", bundle: .module)
+            return selected.filter { $0.isChecked != isComplete }.compactMap { task in
+                task.box.flatMap { document.edit(togglingTaskAt: $0.location) }?
+                    .change(at: scope.location, reason: reason)
             }
         case .deleteTasks(let ids):
-            guard !ids.isEmpty, Set(ids).count == ids.count,
-                ids.allSatisfy({ id in pass.tasks.contains { $0.id == id } })
+            let tasks = MarkdownDocument(pass.source).taskLists.flatMap(\.self)
+            guard !ids.isEmpty, Set(ids).count == ids.count, ids.allSatisfy({ tasks.indices.contains($0 - 1) })
             else { throw IntelligenceError.invalidEdit }
-            return pass.tasks.filter { ids.contains($0.id) }.map { task in
-                let line = source.lineRange(for: task.range)
+            let source = pass.source as NSString
+            return tasks.indices.filter { ids.contains($0 + 1) }.map { index in
+                let line = source.lineRange(for: tasks[index].range)
                 return (
                     Proposal.Change(
                         quote: source.substring(with: line), replacement: "",
-                        reason: String(localized: "Remove this task.", bundle: .module)), line
+                        reason: String(localized: "Remove this task.", bundle: .module)),
+                    NSRange(location: scope.location + line.location, length: line.length)
                 )
             }
         case .insertTask(let listID, let text):
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 !text.contains(where: \.isNewline)
             else { throw IntelligenceError.invalidEdit }
-            let last = pass.tasks.last { $0.listID == listID }
-            guard last != nil || (listID == 0 && snapshot.tasks.isEmpty) else {
-                throw IntelligenceError.invalidEdit
+            let reason = String(localized: "Add this task.", bundle: .module)
+            let note = MarkdownDocument(snapshot.source)
+            if listID == 0, note.tasks.isEmpty {
+                return [note.edit(appendingTasks: text).change(at: 0, reason: reason)]
             }
-            let newline = snapshot.source.contains("\r\n") ? "\r\n" : "\n"
-            let offset: Int
-            let insertion: String
-            if let last {
-                let line = source.lineRange(for: last.range)
-                offset = NSMaxRange(line)
-                let prefix = source.substring(
-                    with: NSRange(location: line.location, length: last.range.location - line.location))
-                let lineText = source.substring(with: line)
-                let ending = lineText.last.flatMap { $0.isNewline ? String($0) : nil }
-                let taskNewline = ending ?? newline
-                insertion =
-                    (ending == nil ? taskNewline : "") + prefix + "[ ] " + text
-                    + (ending == nil ? "" : taskNewline)
-            } else {
-                offset = source.length
-                insertion =
-                    (source.length == 0 || snapshot.source.last?.isNewline == true ? "" : newline)
-                    + "- [ ] " + text + newline
-            }
-            return [
-                (
-                    Proposal.Change(
-                        quote: "", replacement: insertion,
-                        reason: String(localized: "Add this task.", bundle: .module)),
-                    NSRange(location: offset, length: 0)
-                )
-            ]
+            let document = MarkdownDocument(pass.source)
+            let lists = document.taskLists
+            // A quoted list can't continue, because the document leaves quoted items alone.
+            guard lists.indices.contains(listID - 1), let last = lists[listID - 1].last,
+                let edit = document.edit(
+                    continuingListAt: NSRange(location: NSMaxRange(last.range), length: 0), with: text)
+            else { throw IntelligenceError.invalidEdit }
+            return [edit.change(at: scope.location, reason: reason)]
         case .rewriteRegion(let relative, let revised):
             guard relative.location >= 0, NSMaxRange(relative) <= scope.length
             else { throw IntelligenceError.invalidResponse }

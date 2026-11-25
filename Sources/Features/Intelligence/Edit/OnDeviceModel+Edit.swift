@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import Markdown
 import OSLog
 
 extension OnDeviceModel {
@@ -14,7 +15,7 @@ extension OnDeviceModel {
                 return edits
             }
             // A whole note without tasks can't need a task edit, so it goes straight to the rewrite.
-            if !pass.isPart, pass.tasks.isEmpty { return try await operations(.text, for: pass) }
+            if !pass.isPart, MarkdownDocument(pass.source).tasks.isEmpty { return try await operations(.text, for: pass) }
             // Platform gap: AFM Core classifies these English additions as task edits despite the
             // intent guidance. Remove when an on-device model passes the Edit eval without this route.
             if pass.instruction.range(
@@ -55,8 +56,7 @@ extension OnDeviceModel {
                     stepIntent.changesOtherText || stepIntent.kind == .text ? .text : intent.kind,
                     for: ModelPass(
                         purpose: pass.purpose, instruction: step, source: pass.source,
-                        responseTokens: pass.responseTokens, requestID: pass.requestID, tasks: pass.tasks,
-                        isPart: pass.isPart))
+                        responseTokens: pass.responseTokens, requestID: pass.requestID, isPart: pass.isPart))
             }
             return edits
         }

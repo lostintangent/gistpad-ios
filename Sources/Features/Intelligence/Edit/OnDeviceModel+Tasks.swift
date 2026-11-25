@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import Markdown
 
 extension OnDeviceModel {
     func editIntent(_ request: String) async throws -> EditIntent {
@@ -90,21 +91,42 @@ extension OnDeviceModel {
         return [.rewriteRegion(whole, revised: try await revisedText(for: pass))]
     }
 
+    /// The pass's tasks and lists, numbered from 1. A list's title is the line of the heading above it.
     private static func taskPrompt(for pass: ModelPass) throws -> String {
         struct List: Encodable {
             let id: Int
             let title: String
         }
+        struct Item: Encodable {
+            let id: Int
+            let text: String
+            let isComplete: Bool
+            let listID: Int
+            let listTitle: String
+        }
         struct Catalog: Encodable {
             let request: String
             let availableLists: [List]
-            let tasks: [ModelTask]
+            let tasks: [Item]
         }
-        var seen = Set<Int>()
-        let lists = pass.tasks.filter { seen.insert($0.listID).inserted }.map {
-            List(id: $0.listID, title: $0.listTitle)
+        let document = MarkdownDocument(pass.source)
+        let source = pass.source as NSString
+        let headings = document.blocks.filter { $0.kind == .heading }
+        var lists: [List] = []
+        var tasks: [Item] = []
+        for (index, items) in document.taskLists.enumerated() {
+            let heading = headings.last { $0.range.location < items[0].range.location }
+            let list = List(
+                id: index + 1, title: heading.map { source.substring(with: source.lineRange(for: $0.range)) } ?? "")
+            lists.append(list)
+            for item in items {
+                tasks.append(
+                    Item(
+                        id: tasks.count + 1, text: source.substring(with: item.range), isComplete: item.isChecked,
+                        listID: list.id, listTitle: list.title))
+            }
         }
-        return try json(Catalog(request: pass.instruction, availableLists: lists, tasks: pass.tasks))
+        return try json(Catalog(request: pass.instruction, availableLists: lists, tasks: tasks))
     }
 }
 

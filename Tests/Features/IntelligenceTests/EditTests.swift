@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 import Testing
 
 @testable import Intelligence
@@ -101,7 +102,7 @@ struct EditTests {
         let all = request(list, "Check off everything")
         let checked = try await checker.edit(all)
         #expect(checker.passes.count > 1)
-        #expect(checker.passes.dropFirst().flatMap(\.tasks).map(\.id) == Array(1...80))
+        #expect(checker.passes.dropFirst().map { MarkdownDocument($0.source).tasks.count }.reduce(0, +) == 80)
         #expect(
             try checked.application(to: all.snapshot).source.utf8.elementsEqual(
                 list.replacingOccurrences(of: "[ ]", with: "[x]").utf8))
@@ -326,7 +327,7 @@ struct EditTests {
             + ["# Morning", "", "- [ ] Read café", "", "# Housework", "", "- [x] Wash 👩🏽‍💻",
                 "- [ ] Recycle", "", "Keep  spacing.", ""].joined(separator: newline)
         let input = request(source, "Add a household task")
-        #expect(input.snapshot.tasks.map(\.listID) == [1, 2, 2])
+        #expect(MarkdownDocument(input.snapshot.source).taskLists.map(\.count) == [1, 2])
         let fixture = FixtureLanguageModel()
         fixture.operations = { _ in [.insertTask(listID: 2, text: "Clean the kitchen")] }
         let recycle = "- [ ] Recycle" + newline
@@ -347,6 +348,13 @@ struct EditTests {
                 try await fixture.edit(input)
             }
         }
+
+        let numbered = ["1. [ ] Pack", "2. [x] Book", "", "Notes"].joined(separator: newline)
+        let trip = request(numbered, "Add a task to lock up")
+        fixture.operations = { _ in [.insertTask(listID: 1, text: "Lock up")] }
+        #expect(
+            try await fixture.edit(trip).application(to: trip.snapshot).source.utf8.elementsEqual(
+                ["1. [ ] Pack", "2. [x] Book", "3. [ ] Lock up", "", "Notes"].joined(separator: newline).utf8))
     }
 
     @Test func editChecksUnchecksAndCompletesTheRightTasks() async throws {
@@ -361,7 +369,7 @@ struct EditTests {
             + "- [X] Already done\r\n> - [ ] A quoted task\r\n  - [ ]\r\n\r\n"
             + "```markdown\r\n- [ ] Not a real task\r\n```\r\nA sentence with `[ ]`.  \r\n"
         let everything = request(protected, "すべてのタスクを完了にして")
-        #expect(everything.snapshot.tasks.map(\.isComplete) == [false, true, false, false])
+        #expect(MarkdownDocument(everything.snapshot.source).tasks.map(\.isChecked) == [false, true, false, false])
         #expect(
             try await fixture.edit(everything).application(to: everything.snapshot).source
                 .utf8.elementsEqual(

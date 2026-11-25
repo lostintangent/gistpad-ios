@@ -229,7 +229,7 @@ extension IntelligenceModel {
             $0 > chunk.location && $0 < NSMaxRange(chunk)
         }
         let heading = headings.min { abs($0 - midpoint) < abs($1 - midpoint) }
-        var offset: Int
+        let offset: Int
         if let heading {
             offset = heading - chunk.location
         } else {
@@ -242,14 +242,6 @@ extension IntelligenceModel {
             let boundary = newline.map { source.index(after: $0.element) } ?? middle
             let safeBoundary = boundary == source.endIndex ? middle : boundary
             offset = source[..<safeBoundary].utf16.count
-        }
-        let boundary = chunk.location + offset
-        if let task = request.snapshot.tasks.first(where: {
-            $0.range.location < boundary && boundary < NSMaxRange($0.range)
-        }) {
-            offset =
-                task.range.location > chunk.location
-                ? task.range.location - chunk.location : NSMaxRange(task.range) - chunk.location
         }
         guard offset > 0, offset < chunk.length else {
             throw IntelligenceError.insufficientContext
@@ -280,13 +272,7 @@ extension IntelligenceModel {
         return ModelPass(
             purpose: purpose, instruction: request.instruction, source: source,
             responseTokens: min(purpose == .answer ? ModelPass.answerTokens : 1_536, contextSize / 3),
-            requestID: request.id,
-            tasks: purpose == .edit
-                ? request.snapshot.tasks.filter { task in
-                    guard let scope else { return true }
-                    return task.range.location >= scope.location
-                        && NSMaxRange(task.range) <= NSMaxRange(scope)
-                } : [], evidenceBlocks: evidenceBlocks,
+            requestID: request.id, evidenceBlocks: evidenceBlocks,
             isPart: scope.map { $0.length < bodyLength } ?? false)
     }
 

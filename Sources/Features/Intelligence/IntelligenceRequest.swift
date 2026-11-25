@@ -5,7 +5,6 @@ package struct FileSnapshot: Sendable, Equatable {
     let generation: UInt64
     package let source: String
     var headingOffsets: [Int] = []
-    package var tasks: [ModelTask] = []
 
     package static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.sessionID == rhs.sessionID && lhs.generation == rhs.generation

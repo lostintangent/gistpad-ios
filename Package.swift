@@ -56,7 +56,7 @@ let package = Package(
             name: "EditorTests", dependencies: ["Editor", "Comments", "Markdown"], path: "Tests/Features/EditorTests",
             swiftSettings: mainActor),
         .testTarget(
-            name: "IntelligenceTests", dependencies: ["Intelligence"],
+            name: "IntelligenceTests", dependencies: ["Intelligence", "Markdown"],
             path: "Tests/Features/IntelligenceTests", swiftSettings: mainActor),
         .testTarget(
             name: "ScreensTests", dependencies: ["Screens"], path: "Tests/Features/ScreensTests",
@@ -73,7 +73,7 @@ let package = Package(
 
         // The on-device Intelligence eval, which reaches the pipeline through `package` access.
         .executableTarget(
-            name: "IntelligenceEval", dependencies: ["Intelligence"],
+            name: "IntelligenceEval", dependencies: ["Intelligence", "Markdown"],
             path: "scripts/intelligence-eval/Sources/IntelligenceEval"),
         .testTarget(
             name: "IntelligenceEvalTests", dependencies: ["IntelligenceEval"],

@@ -5,14 +5,9 @@ import Markdown
 extension FileSnapshot {
     package init(parsing source: String, sessionID: UUID, generation: UInt64) {
         let document = MarkdownDocument(source)
-        let text = source as NSString
-        let headings = document.blocks.filter { $0.kind == .heading }
-            .map { text.lineRange(for: $0.range) }
         self.init(
             sessionID: sessionID, generation: generation, source: source,
-            headingOffsets: headings.map(\.location),
-            tasks: ModelTask.indexed(
-                in: source, markers: document.tasks.compactMap(\.box), headings: headings))
+            headingOffsets: document.blocks.filter { $0.kind == .heading }.map(\.range.location))
     }
 }
 
