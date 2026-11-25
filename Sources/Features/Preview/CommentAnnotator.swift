@@ -1,30 +1,48 @@
 #if os(iOS)
 import Comments
 import OSLog
+import SwiftUI
 import UIKit
 import WebKit
 
 final class CommentAnnotator {
+    /// What the page annotates, and who hears about taps, quotes and matches.
+    struct Input {
+        var comments: DocumentComments?
+        var scrollPosition: ScrollPosition
+        var openThreads: @MainActor ([Int64]) -> Void
+        var addComment: @MainActor (String) -> Void
+        var matched: @MainActor (Set<Int64>) -> Void
+    }
+
     weak var webView: WKWebView?
     private var file: PreviewFile?
     private var renderedFile: PreviewFile?
-    private var comments: CommentAnnotations?
+    private var input: Input?
+    private var comments: DocumentComments? { input?.comments }
     private var accent = ""
+    /// The thread the position last scrolled to, counted so the page reveals each scroll once.
+    private var reveal: (threadID: Int64, revision: Int)?
     private var segments: [String]?
     private var annotations: [CommentQuote.Match] = []
-    private var linkedIDs: Set<Int64>?
+    private var matchedIDs: Set<Int64>?
     private var task: Task<Void, Never>?
 
-    func update(file: PreviewFile, comments: CommentAnnotations?, accent: String) {
-        let needsInitialReport = self.comments == nil && comments != nil
-        let changed = self.file != file || self.comments != comments || self.accent != accent
+    func update(file: PreviewFile, input: Input, accent: String) {
+        let needsInitialReport = comments == nil && input.comments != nil
+        // The first position is where the page starts, so only a later scroll reveals.
+        let scrolled = self.input.map { $0.scrollPosition != input.scrollPosition } ?? false
+        let changed = self.file != file || comments != input.comments || self.accent != accent || scrolled
         if self.file != file {
             reset()
             self.file = file
         }
-        self.comments = comments
+        if scrolled, let threadID = input.scrollPosition.viewID(type: Int64.self) {
+            reveal = (threadID, (reveal?.revision ?? 0) + 1)
+        }
+        self.input = input
         self.accent = accent
-        if needsInitialReport, let linkedIDs { publish(linkedIDs, force: true) }
+        if needsInitialReport, let matchedIDs { publish(matchedIDs, force: true) }
         if changed, renderedFile == file { refresh() }
     }
 
@@ -39,7 +57,7 @@ final class CommentAnnotator {
         guard let annotation = annotations.first(where: {
             $0.segment == segment && $0.start == start && $0.end == end
         }) else { throw PreviewError.invalidMessage }
-        comments?.open(annotation.threadIDs)
+        input?.openThreads(annotation.threadIDs)
     }
 
     func addCommentMenu() -> UIDeferredMenuElement? {
@@ -58,7 +76,7 @@ final class CommentAnnotator {
                         image: UIImage(systemName: "text.bubble")
                     ) { [weak self] _ in
                         guard let self, self.renderedFile == file else { return }
-                        self.comments?.add(quote)
+                        self.input?.addComment(quote)
                     }
                     completion([action])
                 } catch {
@@ -75,7 +93,8 @@ final class CommentAnnotator {
         renderedFile = nil
         segments = nil
         annotations = []
-        linkedIDs = nil
+        matchedIDs = nil
+        reveal = nil
     }
 
     private func refresh() {
@@ -83,6 +102,7 @@ final class CommentAnnotator {
         guard let file, renderedFile == file, let webView else { return }
         let comments = comments
         let quotes = comments?.quotes ?? []
+        let reveal = reveal
         let accent = accent
         if quotes.isEmpty, annotations.isEmpty {
             publish([])
@@ -105,11 +125,11 @@ final class CommentAnnotator {
                         ["segment": $0.segment, "start": $0.start, "end": $0.end, "threadIDs": $0.threadIDs]
                     },
                     "selectedThreadID": comments?.selectedThreadID.map { $0 as Any } ?? NSNull(),
-                    "revealRevision": comments?.revealRevision ?? 0,
-                    "showsInlineComments": comments?.showsInlineComments ?? true,
+                    "showsAll": comments?.showsAll ?? true,
+                    "reveal": reveal.map { ["threadID": $0.threadID, "revision": $0.revision] as Any } ?? NSNull(),
                     "accent": accent
                 ]
-                // The page reveals the selected passage itself, and WebKit centers it between the bars.
+                // The page reveals the passage itself, and WebKit centers it between the bars.
                 _ = try await webView.callAsyncJavaScript(
                     "window.gistpadPreview.setCommentAnnotations(payload);",
                     arguments: ["payload": payload], in: nil, contentWorld: .page)
@@ -125,12 +145,12 @@ final class CommentAnnotator {
     }
 
     private func publish(_ ids: Set<Int64>, force: Bool = false) {
-        guard force || linkedIDs != ids else { return }
-        linkedIDs = ids
+        guard force || matchedIDs != ids else { return }
+        matchedIDs = ids
         let file = file
         Task { [weak self] in
-            guard let self, self.file == file, self.linkedIDs == ids else { return }
-            self.comments?.linked(ids)
+            guard let self, self.file == file, self.matchedIDs == ids else { return }
+            self.input?.matched(ids)
         }
     }
 }

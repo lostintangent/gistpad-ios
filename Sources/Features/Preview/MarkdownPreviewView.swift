@@ -10,20 +10,30 @@ import Markdown
 /// A rendered Markdown document. Give each file its own identity, so a new file starts at its top.
 public struct MarkdownPreviewView: View {
     private let file: PreviewFile
-    private let comments: CommentAnnotations?
+    private let comments: CommentAnnotator.Input
     private let edit: (@MainActor (MarkdownEdit) -> Void)?
     private let openWikilink: (@MainActor (String) -> Void)?
     @State private var failed = false
 
     /// Tapping a task box makes its edit and hands it to `edit`. Without `edit`, the boxes are read-only.
+    ///
+    /// Tapping a quoted passage hands its threads to `openThreads`, and Add Comment hands the selected
+    /// text to `addComment`. `matched` hears which threads find their passage on the page. Scrolling
+    /// `scrollPosition` to a thread's ID brings its passage into view.
     public init(
         document: MarkdownDocument,
-        comments: CommentAnnotations? = nil,
+        comments: DocumentComments? = nil,
+        scrollPosition: ScrollPosition = ScrollPosition(idType: Int64.self),
+        openThreads: @escaping @MainActor ([Int64]) -> Void = { _ in },
+        addComment: @escaping @MainActor (String) -> Void = { _ in },
+        matched: @escaping @MainActor (Set<Int64>) -> Void = { _ in },
         edit: (@MainActor (MarkdownEdit) -> Void)? = nil,
         openWikilink: (@MainActor (String) -> Void)? = nil
     ) {
         file = PreviewFile(document: document, allowsTaskEdits: edit != nil)
-        self.comments = comments
+        self.comments = CommentAnnotator.Input(
+            comments: comments, scrollPosition: scrollPosition,
+            openThreads: openThreads, addComment: addComment, matched: matched)
         self.edit = edit
         self.openWikilink = openWikilink
     }
@@ -53,7 +63,7 @@ public struct MarkdownPreviewView: View {
 // wrapper when webViewContextMenu, webViewObscuredContentInsets and a termination event ship for iOS.
 private struct NativeMarkdownPreview: UIViewRepresentable {
     let file: PreviewFile
-    let comments: CommentAnnotations?
+    let comments: CommentAnnotator.Input
     let edit: (@MainActor (MarkdownEdit) -> Void)?
     let openWikilink: (@MainActor (String) -> Void)?
     let onFailure: @MainActor () -> Void
@@ -105,7 +115,7 @@ private struct NativeMarkdownPreview: UIViewRepresentable {
             $0[AccentTrait.self] = accent
         }
         context.coordinator.appearance = PreviewAppearance(traits: traits, boldText: legibilityWeight == .bold)
-        context.coordinator.commentAnnotator.update(file: file, comments: comments, accent: accent.color.hex)
+        context.coordinator.commentAnnotator.update(file: file, input: comments, accent: accent.color.hex)
         context.coordinator.update()
     }
 

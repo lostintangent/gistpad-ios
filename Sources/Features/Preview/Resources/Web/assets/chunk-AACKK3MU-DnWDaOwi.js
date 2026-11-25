@@ -1,1 +1,0 @@
-import{i as e}from"./d3-selection-z6Hi5H6Q.js";var t=class{constructor(e){this.init=e,this.records=this.init()}static{e(this,`ImperativeState`)}reset(){this.records=this.init()}};export{t};

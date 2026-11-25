@@ -13,8 +13,9 @@ interface Annotation {
 export interface AnnotationState {
   annotations: Annotation[];
   selectedThreadID: number | null;
-  revealRevision: number;
-  showsInlineComments: boolean;
+  showsAll: boolean;
+  /** The thread to bring into view, counted so each scroll reveals once. */
+  reveal: { threadID: number; revision: number } | null;
   accent: string;
 }
 
@@ -23,11 +24,11 @@ export class CommentAnnotationController {
   private nodes = new WeakMap<HASTElement, number>();
   private listeners = new Set<() => void>();
   private state: AnnotationState;
+  private revealed = 0;
 
   constructor(private readonly request: RenderRequest) {
     this.state = {
-      annotations: [], selectedThreadID: null, revealRevision: 0,
-      showsInlineComments: true, accent: "#0EA5E9",
+      annotations: [], selectedThreadID: null, showsAll: true, reveal: null, accent: "#0EA5E9",
     };
   }
 
@@ -91,6 +92,15 @@ export class CommentAnnotationController {
     restoreSelection?.();
   }
 
+  /** True once per reveal, for the first passage of the thread it names. */
+  claimReveal(annotation: Annotation) {
+    const reveal = this.state.reveal;
+    if (!reveal || reveal.revision === this.revealed) return false;
+    if (this.state.annotations.find((span) => span.threadIDs.includes(reveal.threadID)) !== annotation) return false;
+    this.revealed = reveal.revision;
+    return true;
+  }
+
   open(annotation: Annotation) {
     if (!this.state.annotations.includes(annotation)) return;
     send({
@@ -115,7 +125,7 @@ export function CommentText({ controller, segment, text }: {
     const selected = state.selectedThreadID !== null && annotation.threadIDs.includes(state.selectedThreadID);
     if (before || !selected) selectedRun = undefined;
     children.push(before);
-    const fragment = state.showsInlineComments || selected
+    const fragment = state.showsAll || selected
       ? <CommentFragment key={annotation.start} controller={controller} annotation={annotation}
         state={state} selected={selected}>{quote}</CommentFragment>
       : quote;
@@ -197,9 +207,7 @@ function CommentFragment({ controller, annotation, state, selected, children }: 
     return () => window.removeEventListener("gistpad-preview-appearance", update);
   }, [state.accent]);
   useEffect(() => {
-    if (!selected) return;
-    const first = state.annotations.find((span) => span.threadIDs.includes(state.selectedThreadID!));
-    if (first !== annotation) return;
+    if (!controller.claimReveal(annotation)) return;
     for (let ancestor = ref.current?.parentElement; ancestor; ancestor = ancestor.parentElement) {
       if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
       if (ancestor.classList.contains("spoiler")) ancestor.dispatchEvent(new Event("gistpad-reveal-comment"));
@@ -211,7 +219,7 @@ function CommentFragment({ controller, annotation, state, selected, children }: 
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [selected, state.selectedThreadID, state.revealRevision]);
+  }, [controller, annotation, state.reveal]);
   return <span ref={ref} className={`comment-annotation${selected ? " comment-selected" : ""}`}
     data-comment-ids={annotation.threadIDs.join(" ")}
     role="button" tabIndex={0} aria-label={children}

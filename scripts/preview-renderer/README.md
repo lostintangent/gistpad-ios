@@ -31,7 +31,7 @@ Each render carries a generation that every message repeats, and native accepts 
 
 ## Comments
 
-Quote matching in Shared Comments is authoritative. The page catalogs each sanitized text node outside `pre`, `code` and `svg`, native matches quotes against that catalog, and the page annotates the returned ranges. A tapped annotation sends only its segment and range, and native resolves its threads. Add Comment joins the system selection menu and reads the rendered selection only when the menu opens. A selected passage opens its enclosing disclosures and scrolls into view.
+Quote matching in Shared Comments is authoritative. The page catalogs each sanitized text node outside `pre`, `code` and `svg`, native matches quotes against that catalog, and the page annotates the returned ranges. A tapped annotation sends only its segment and range, and native resolves its threads. Add Comment joins the system selection menu and reads the rendered selection only when the menu opens. Selecting a thread only marks its passages. Each reveal native sends names a thread, and that thread's first passage opens its enclosing disclosures and scrolls into view once.
 
 ## Scrolling and appearance
 

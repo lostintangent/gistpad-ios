@@ -276,7 +276,7 @@ private struct CommentThreadContent: View {
                             guard let layout = layouts.first?.layout else { return }
                             quoteIsLong = showsFullQuote ? layout.count > 3 : layout.isTruncated
                         }
-                    if comments.linkedThreadIDs?.contains(comment.id) == true {
+                    if comments.matchedThreadIDs?.contains(comment.id) == true {
                         Button {
                             comments.revealPassage(comment.id)
                         } label: {
@@ -312,7 +312,7 @@ private struct CommentThreadContent: View {
                     .buttonStyle(.borderless)
                     .padding(.vertical, -8)
                 }
-                if comments.linkedThreadIDs?.contains(comment.id) == false {
+                if comments.matchedThreadIDs?.contains(comment.id) == false {
                     Text("Not found in this file")
                         .font(.footnote)
                 }

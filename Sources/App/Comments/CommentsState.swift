@@ -26,10 +26,12 @@ final class CommentsState {
     var isPresented = false
     private(set) var model: CommentsModel?
     var selectedThreadID: Int64?
-    /// Asks the conversation and the file to show the selected thread again.
+    /// Asks the conversation and the editor to show the selected thread again.
     private(set) var revealRevision: UInt64 = 0
+    /// Where the preview scrolls to show a thread's passage.
+    private(set) var previewPosition = ScrollPosition(idType: Int64.self)
     /// The threads each mode's surface finds a passage for.
-    private var linkedThreadIDsByMode: [FileMode: Set<Int64>] = [:]
+    private var matchedThreadIDsByMode: [FileMode: Set<Int64>] = [:]
     var fileMode: FileMode = .preview
     var detent = PresentationDetent.medium
     var isComposerFocused = false
@@ -48,8 +50,8 @@ final class CommentsState {
     /// The editor of the file Comments follows, once it's activated.
     var editorID: UUID? { fileEditor?.editor.id }
 
-    /// The threads whose passages the current file mode links.
-    var linkedThreadIDs: Set<Int64>? { linkedThreadIDsByMode[fileMode] }
+    /// The threads whose passages the current file mode finds.
+    var matchedThreadIDs: Set<Int64>? { matchedThreadIDsByMode[fileMode] }
 
     private var showsInlineComments: Bool {
         app.account?.preferences.booleanValue(.showInlineComments, default: true) ?? true
@@ -79,7 +81,7 @@ final class CommentsState {
         }
         scope = nextScope
         fileEditor = next
-        linkedThreadIDsByMode = [:]
+        matchedThreadIDsByMode = [:]
     }
 
     func tracking(_ fileEditor: GistFileEditor) -> Tracking {
@@ -97,35 +99,47 @@ final class CommentsState {
         await prepare()?.refresh()
     }
 
-    /// The file's comment annotations in one mode, or nil when the file has no comments.
-    func annotations(for fileEditor: GistFileEditor, origin: FileMode) -> CommentAnnotations? {
+    /// The file's comments, or nil when it can't have any.
+    func documentComments(for fileEditor: GistFileEditor) -> DocumentComments? {
         guard Self.supports(fileEditor.file) else { return nil }
-        let isCurrent = { self.fileEditor === fileEditor }
-        var annotations = CommentAnnotations(
-            open: { ids in
-                guard isCurrent() else { return }
-                if ids.count == 1, let id = ids.first {
-                    self.open(for: fileEditor, origin: origin, threadID: id)
-                } else {
-                    self.fileMode = origin
-                    self.overlappingThreadIDs = ids
-                }
-            },
-            linked: { ids in
-                guard isCurrent() else { return }
-                self.linkedThreadIDsByMode[origin] = ids
-            },
-            add: { selection in
-                guard isCurrent() else { return }
-                self.open(for: fileEditor, origin: origin, quote: selection)
-            })
-        if matches(fileEditor.file), let model {
-            annotations.quotes = model.threads.compactMap(\.quotedPassage)
-            annotations.selectedThreadID = selectedThreadID
-            annotations.revealRevision = revealRevision
-            annotations.showsInlineComments = showsInlineComments
+        guard matches(fileEditor.file), let model else { return DocumentComments() }
+        return DocumentComments(
+            quotes: model.threads.compactMap(\.quotedPassage), selectedThreadID: selectedThreadID,
+            showsAll: showsInlineComments)
+    }
+
+    /// Opens the threads under a passage tapped in one mode, or lets you choose when they overlap.
+    func openThreads(_ ids: [Int64], in fileEditor: GistFileEditor, origin: FileMode) {
+        guard self.fileEditor === fileEditor else { return }
+        if ids.count == 1, let id = ids.first {
+            open(for: fileEditor, origin: origin, threadID: id)
+        } else {
+            fileMode = origin
+            overlappingThreadIDs = ids
         }
-        return annotations
+    }
+
+    /// Starts a thread quoting text selected in one mode.
+    func addComment(quoting quote: String, in fileEditor: GistFileEditor, origin: FileMode) {
+        guard self.fileEditor === fileEditor else { return }
+        open(for: fileEditor, origin: origin, quote: quote)
+    }
+
+    /// Records which threads one mode's surface finds a passage for.
+    func matched(_ ids: Set<Int64>, in fileEditor: GistFileEditor, origin: FileMode) {
+        guard self.fileEditor === fileEditor else { return }
+        matchedThreadIDsByMode[origin] = ids
+    }
+
+    /// The editor's comments, until it takes `DocumentComments` itself.
+    func annotations(for fileEditor: GistFileEditor) -> CommentAnnotations? {
+        guard let comments = documentComments(for: fileEditor) else { return nil }
+        return CommentAnnotations(
+            quotes: comments.quotes, selectedThreadID: comments.selectedThreadID, revealRevision: revealRevision,
+            showsInlineComments: comments.showsAll,
+            open: { self.openThreads($0, in: fileEditor, origin: .edit) },
+            linked: { self.matched($0, in: fileEditor, origin: .edit) },
+            add: { self.addComment(quoting: $0, in: fileEditor, origin: .edit) })
     }
 
     func open(
@@ -145,7 +159,7 @@ final class CommentsState {
         if !next.details.isOwned { fileMode = .preview }
         detent = quote == nil ? .medium : .large
         selectedThreadID = threadID
-        if threadID != nil { revealRevision &+= 1 }
+        if let threadID { reveal(threadID) }
         isPresented = true
         guard let model = prepare() else { return }
         if let quote {
@@ -178,7 +192,13 @@ final class CommentsState {
         selectedThreadID = id
         isComposerFocused = false
         detent = .medium
+        reveal(id)
+    }
+
+    /// Brings a thread into view in the conversation and in the file's current mode.
+    private func reveal(_ threadID: Int64) {
         revealRevision &+= 1
+        if fileMode == .preview { previewPosition.scrollTo(id: threadID) }
     }
 
     func didDismiss() {
@@ -208,7 +228,7 @@ final class CommentsState {
         fileEditor = nil
         scope = nil
         requestedRowID = nil
-        linkedThreadIDsByMode = [:]
+        matchedThreadIDsByMode = [:]
     }
 
     private func isReady(for file: GistFile) -> Bool {
