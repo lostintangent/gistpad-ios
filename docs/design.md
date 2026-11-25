@@ -46,7 +46,7 @@ Opening a file:
 
 - **Cached:** the real words at once, offline too. No skeleton, flash or previous file.
 - **Uncached:** its whole bar at once, title capsule, Mode, Comments and More, sliding in with the push, then one plain `ProgressView` after 350 ms. The words arrive under a bar that doesn't change.
-- **Failed:** the same bar over **Couldn’t Open This File**, the reason and its button. Preview's own failure says **Preview Unavailable**.
+- **Failed:** the same bar over **Couldn’t Open This File**, the reason and its button. Preview's own failure is **Preview Unavailable** and Try Again, with no reason, because it only has one.
 
 ## Library
 
