@@ -62,6 +62,29 @@ struct MarkdownDocumentTests {
         #expect(headings.first?.level == 2)
     }
 
+    @Test func anExcerptIsTheProseOnOneLineWithoutHeadingsTasksTablesOrCode() {
+        let source = """
+            ---
+            title: Hidden
+            ---
+            # Groceries
+            Buy these
+            before Friday.
+            - milk
+            - [ ] eggs
+            1. [x] bread
+            | aisle | 4 |
+            ```sh
+            # not a heading
+            ```
+            * butter
+              and jam
+            """
+        #expect(MarkdownDocument(source).excerpt == "Buy these before Friday. milk butter and jam")
+        #expect(MarkdownDocument("# Only a heading\n- [ ] A task\n").excerpt == nil)
+        #expect(MarkdownDocument(String(repeating: "word ", count: 50)).excerpt?.count == 160)
+    }
+
     @Test(arguments: [
         ("---\nkey: value\n---\n\n\n# Body", "---\nkey: value\n---\n\n\n"),
         (

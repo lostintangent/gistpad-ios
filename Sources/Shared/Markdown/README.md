@@ -9,6 +9,7 @@ MarkdownDocument                  a note's source, read once
   range                           the whole text
   spans  spans(in:)               the constructs to style, for the note or some lines
   blocks                          headings, paragraphs, list items, table rows and code
+  excerpt                         the prose on one line, for a snippet
   taskMarkers                     every task box
   protectedRanges(in:)            front matter, fenced and inline code
   edit(…) -> MarkdownEdit         every change, made from this document
