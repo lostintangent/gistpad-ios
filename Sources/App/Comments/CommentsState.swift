@@ -32,7 +32,7 @@ final class CommentsState {
     private(set) var previewPosition = ScrollPosition(idType: Int64.self)
     /// The threads the preview finds a passage for.
     private var previewMatchedThreadIDs: Set<Int64>?
-    var fileMode: FileMode = .preview
+    private(set) var fileMode: FileMode = .preview
     var detent = PresentationDetent.medium
     var isComposerFocused = false
     var overlappingThreadIDs: [Int64] = []
@@ -186,9 +186,20 @@ final class CommentsState {
         reveal(id)
     }
 
+    /// Shows the file in another mode, with the selected thread's passage in view.
+    func select(_ mode: FileMode) {
+        guard fileMode != mode else { return }
+        fileMode = mode
+        if let selectedThreadID { revealInFile(selectedThreadID) }
+    }
+
     /// Brings a thread into view in the conversation and in the file's current mode.
     private func reveal(_ threadID: Int64) {
         revealRevision &+= 1
+        revealInFile(threadID)
+    }
+
+    private func revealInFile(_ threadID: Int64) {
         if fileMode == .edit {
             fileEditor?.editor.revealThread(threadID)
         } else {

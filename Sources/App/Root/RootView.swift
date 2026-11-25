@@ -301,7 +301,7 @@ struct RootView: View {
                 // The keyboard starts down first, so the page appears at rest instead of inside its animation.
                 if $0 == .preview { active?.editor.endEditing() }
                 if showsComments {
-                    comments.fileMode = $0
+                    comments.select($0)
                 } else {
                     layout.select($0)
                     if $0 != .split { active?.mode = $0 }
