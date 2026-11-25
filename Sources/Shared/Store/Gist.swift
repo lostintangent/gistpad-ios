@@ -142,15 +142,31 @@ enum FilenameDateFormat: CaseIterable {
 }
 
 extension Gist.File {
-    /// What GitHub stores for an empty file, since a gist can't hold one.
-    public static let emptyContent = "\u{2064}"
+    /// What GitHub stores for an empty file, since a gist can't hold one. The web saves an invisible
+    /// plus, and only GitHub's boundary sees it: files and raw text decode it, and sent text encodes it.
+    static let emptyContent = "\u{2064}"
 
-    public static func decodeContent(_ content: String) -> String {
+    static func decodeContent(_ content: String) -> String {
         content == emptyContent ? "" : content
     }
 
-    public static func encodeContent(_ content: String) -> String {
+    static func encodeContent(_ content: String) -> String {
         content.isEmpty ? emptyContent : content
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let file = try decoder.container(keyedBy: CodingKeys.self)
+        filename = try file.decode(String.self, forKey: .filename)
+        language = try file.decodeIfPresent(String.self, forKey: .language)
+        content = try file.decodeIfPresent(String.self, forKey: .content).map(Self.decodeContent)
+        truncated = try file.decodeIfPresent(Bool.self, forKey: .truncated)
+        rawURL = try file.decodeIfPresent(URL.self, forKey: .rawURL)
+        size = try file.decodeIfPresent(Int.self, forKey: .size)
+    }
+
+    /// Whether GitHub's size for this file is the size of `text`, which is cheaper than reading it.
+    public func hasSize(of text: String) -> Bool {
+        size == Self.encodeContent(text).utf8.count
     }
 
     public static func displayName(_ filename: String) -> String {

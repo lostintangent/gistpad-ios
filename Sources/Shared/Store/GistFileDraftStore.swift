@@ -84,7 +84,7 @@ extension GistFileDraft {
         let heading = name.isEmpty ? "" : "# \(name)\n\n"
         self.init(
             accountID: accountID, newGistName: name,
-            text: content.flatMap { $0.isEmpty ? nil : Gist.File.decodeContent($0) } ?? heading)
+            text: content.flatMap { $0.isEmpty ? nil : $0 } ?? heading)
     }
 }
 

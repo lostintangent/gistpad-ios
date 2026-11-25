@@ -260,7 +260,7 @@ public final class GistPadModel {
                     let filename = day?.filename ?? DailyNote.filename()
                     let inline = gist.files[filename].flatMap {
                         $0.truncated == true ? nil : $0.content
-                    }.map(Gist.File.decodeContent)
+                    }
                     updateLibraryContent(
                         &item,
                         text: gistDrafts.first { $0.filename == filename }?.text

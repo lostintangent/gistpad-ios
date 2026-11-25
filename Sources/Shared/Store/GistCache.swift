@@ -75,7 +75,7 @@ public struct GistCache: Codable, Equatable, Sendable {
         owned = owned.map(replace)
         starred = starred.map(replace)
         for (filename, file) in gist.files where file.truncated != true {
-            if let content = file.content { store(Gist.File.decodeContent(content), of: filename, in: gist) }
+            if let content = file.content { store(content, of: filename, in: gist) }
         }
     }
 

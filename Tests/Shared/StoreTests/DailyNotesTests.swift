@@ -48,8 +48,6 @@ private func dailyData() throws -> Data {
         #expect(DailyNote(day: day, cache: nil, drafts: []).progress == nil)
         #expect(DailyNote.content(template: nil, filename: "2026-10-24.md")
             == "# 2026-10-24\n\n")
-        #expect(DailyNote.content(
-            template: Gist.File.emptyContent, filename: "2026-10-24.md"
-        ) == "")
+        #expect(DailyNote.content(template: "", filename: "2026-10-24.md") == "")
     }
 }

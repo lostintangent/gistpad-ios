@@ -69,10 +69,8 @@ extension DailyNote {
 
     /// A new day's Markdown: the template with `{{date}}` filled in, or a heading for the day.
     public static func content(template: String?, filename: String) -> String {
-        guard let template, !template.isEmpty else { return "# \(Gist.File.displayName(filename))\n\n" }
-        return Gist.File.decodeContent(template).replacingOccurrences(
-            of: "{{date}}", with: Gist.File.displayName(filename)
-        )
+        guard let template else { return "# \(Gist.File.displayName(filename))\n\n" }
+        return template.replacingOccurrences(of: "{{date}}", with: Gist.File.displayName(filename))
     }
 }
 

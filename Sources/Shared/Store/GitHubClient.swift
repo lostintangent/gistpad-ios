@@ -86,9 +86,7 @@ public actor GitHubClient {
     public func content(gist: Gist, filename: String) async throws -> String {
         guard gist.truncated != true else { throw GitHubError.incompleteGist }
         guard let file = gist.files[filename] else { throw GitHubError.missingFile }
-        if file.truncated != true, let content = file.content {
-            return Gist.File.decodeContent(content)
-        }
+        if file.truncated != true, let content = file.content { return content }
         guard let url = file.rawURL, url.scheme == "https",
               url.host == "gist.githubusercontent.com", url.user == nil, url.password == nil,
               url.port == nil else { throw GitHubError.invalidResponse }

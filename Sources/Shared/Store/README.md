@@ -56,8 +56,10 @@ can still race.
 reads files, creates secret gists, and sends targeted file changes: content,
 rename and delete. Stars use GitHub's star API, and archiving adds the web's
 ` [Archived]` suffix to the description. It also reads and writes gist comments.
-Source bytes stay exact, including the U+2064 marker the web uses for an empty
-file (`Gist.File.emptyContent`). Its session has no URL cache or cookies and
+Source bytes stay exact. GitHub can't store an empty file, so the web saves an
+invisible plus (U+2064) instead, and only this boundary knows it: decoding a
+`Gist.File` or a raw download drops it, sending text adds it, and `hasSize(of:)`
+compares text with GitHub's size. Its session has no URL cache or cookies and
 refuses redirects. `GitHubProblem(error)` sorts a failure: a 401 or an account
 error is `.reconnect`, a file that isn't yours or is too large is `.rejected`,
 and anything else is `.offline`.

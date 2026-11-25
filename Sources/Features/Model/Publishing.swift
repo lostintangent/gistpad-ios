@@ -155,9 +155,8 @@ extension GistPadModel {
     private func findCreatedGist(
         _ sent: String, for draft: GistFileDraft, on github: GitHubClient
     ) async throws -> GistFileDraft {
-        let size = Gist.File.encodeContent(sent).utf8.count
         for gist in try await github.listGists()
-        where (gist.description ?? "") == (draft.newGistName ?? "") && gist.files[draft.filename]?.size == size {
+        where (gist.description ?? "") == (draft.newGistName ?? "") && gist.files[draft.filename]?.hasSize(of: sent) == true {
             let found = try await github.file(gistID: gist.id, ownerID: try ownerID, filename: draft.filename)
             if sourceEqual(found.content, sent) {
                 try updateCache(draft.accountID) {
