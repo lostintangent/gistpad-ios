@@ -62,8 +62,10 @@ final class GistUITests: XCTestCase {
         today.tap()
         let editor = app.textViews["source-editor"]
         try waitUntil("today's note") { editor.isTappable && app.keyboards.firstMatch.exists }
-        // Below the date heading and a blank line, lines 2 to 7 each hold one long word.
-        editor.typeText(String(repeating: "Uncharacteristically\n", count: 6))
+        // Below the date heading and a blank line, lines 2 to 6 each hold one long word. The caret
+        // stays on line 6, because on the Duo's cover UIKit scrolls a caret on line 7 up from the
+        // keyboard, and the taps below assume the note hasn't scrolled.
+        editor.typeText(Array(repeating: "Uncharacteristically", count: 5).joined(separator: "\n"))
 
         let frame = editor.frame
         let top = max(frame.minY, app.navigationBars.firstMatch.frame.maxY) + 24
