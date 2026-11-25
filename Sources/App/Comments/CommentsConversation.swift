@@ -48,6 +48,8 @@ struct CommentsConversation: View {
                 }
             }
             .scrollTargetLayout()
+            // Without threads the scroll view would hug its empty content and leave the empty state no room.
+            .frame(maxWidth: .infinity)
         }
         .scrollPosition($position)
         .onChange(of: reveal(in: threads), initial: true) { previous, reveal in
@@ -59,8 +61,8 @@ struct CommentsConversation: View {
         .scrollDismissesKeyboard(.interactively)
         .scrollEdgeEffectStyle(.soft, for: .bottom)
         .refreshable { await model.refresh() }
-        .overlay { emptyState }
         .tint(.primary)
+        .overlay { emptyState }
         .accessibilityIdentifier("comments-conversation")
         .confirmationDialog(
             "Delete \(deletionTarget?.user?.login ?? String(localized: "this author"))’s comment from GitHub?",
@@ -80,14 +82,12 @@ struct CommentsConversation: View {
     private var emptyState: some View {
         if model.comments == nil {
             if let failure = model.refreshFailure {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Comments couldn’t be loaded").font(.headline)
-                        Text(verbatim: failure.message)
-                        recovery(from: failure)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
+                ContentUnavailableView {
+                    Label("Couldn’t Load Comments", systemImage: "exclamationmark.circle")
+                } description: {
+                    Text(verbatim: failure.message)
+                } actions: {
+                    recovery(from: failure)
                 }
             } else {
                 ProgressView("Loading comments")
@@ -112,7 +112,6 @@ struct CommentsConversation: View {
             Button(action.title) {
                 Task { await comments.recover(from: failure, retry: model.refresh) }
             }
-            .buttonStyle(.glass)
             .disabled(model.isRefreshing)
             .accessibilityIdentifier("comments-retry")
         }
