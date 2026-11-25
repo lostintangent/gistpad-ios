@@ -5,12 +5,12 @@
     import Platform
     import Store
 
-    /// The one launch contract for UI tests and captures. `--fixture standard|empty|signed-out|offline|showcase` runs the
+    /// The one launch contract for UI tests and captures. `--fixture standard|empty|signed-out|offline|unreachable|showcase` runs the
     /// real app against the fixture GitHub. `--open <gist>[/<file>]` (or `today`), `--mode edit|preview|split`,
     /// `--query <text>`, `--sheet tags|settings|today|intelligence|comments` and `--accent <#RRGGBB>` start it
     /// where a test or capture needs it.
     struct FixtureLaunch {
-        enum Fixture: String { case standard, empty, signedOut = "signed-out", offline, showcase }
+        enum Fixture: String { case standard, empty, signedOut = "signed-out", offline, unreachable, showcase }
         enum Sheet: String { case tags, settings, today, intelligence, comments }
 
         let fixture: Fixture
@@ -68,6 +68,8 @@
                 try await GistCache(
                     accountID: account.id, owned: github.listGists(), starred: github.listStarredGists()
                 ).save(to: store.modelContainer)
+            }
+            if fixture == .offline || fixture == .unreachable {
                 server.intercept { _ in throw URLError(.notConnectedToInternet) }
             }
             if let link = sheet == .today ? .addToToday : link { PendingLink.shared.link = link }

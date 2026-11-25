@@ -16,13 +16,13 @@ Debug builds accept these arguments. Every fixture is in memory and never touche
 
 | Argument | Values |
 | --- | --- |
-| `--fixture` | `standard`, `empty`, `signed-out`, `offline`, `showcase` |
+| `--fixture` | `standard`, `empty`, `signed-out`, `offline`, `unreachable`, `showcase` |
 | `--open` | `<gist>`, `<gist>/<file>` or `today` |
 | `--mode` | `edit`, `preview`, `split` |
 | `--query` | Library search text |
 | `--sheet` | `tags`, `settings`, `today`, `intelligence`, `comments` |
 | `--accent` | `#RRGGBB` |
 
-`standard` seeds `Sources/App/Captures/FixtureLibrary.swift`: pinned, tagged, daily, starred and archived gists, multi-file gists (`shape` with a comment, `longtitle` without, and the untagged `guide`) and a gist with comment threads (`comments`). `offline` caches the same library and then fails every request. `showcase` seeds a notebook that reads like a real person's, led by Thanksgiving menu, for the README hero and other public images. UI tests use the same flags through `Tests/UI/UITestSupport.swift`.
+`standard` seeds `Sources/App/Captures/FixtureLibrary.swift`: pinned, tagged, daily, starred and archived gists, multi-file gists (`shape` with a comment, `longtitle` without, and the untagged `guide`) and a gist with comment threads (`comments`). `offline` caches the same library and then fails every request. `unreachable` fails every request with nothing cached, so the Library explains the failure. `showcase` seeds a notebook that reads like a real person's, led by Thanksgiving menu, for the README hero and other public images. UI tests use the same flags through `Tests/UI/UITestSupport.swift`.
 
 Inspect each image for the right posture, screen and keyboard before asking for Designer sign-off. Captures don't certify accessibility, physical fold behavior or design approval.
