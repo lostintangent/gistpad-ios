@@ -118,7 +118,7 @@ A daily note leaves out everything that acts on the gist: Pin, Star, Rename Gist
 - **Insert:** Link, Inline Code, Code Block, Quote, Image.
 - **Intelligence** and **Hide Keyboard**.
 
-**Images.** Insert → Image opens the system picker, with no notice first. A toolbar `ProgressView` labeled "Uploading Image" shows during upload. Failure is **Couldn’t Add Image** with Try Again and Cancel.
+**Images.** Insert → Image opens the system picker, with no notice first. A toolbar `ProgressView` labeled "Uploading Image" shows during upload. Failure is **Couldn’t Add Image** with the reason, then its button and Cancel, or OK alone when nothing would fix it.
 
 ## Tags and Settings
 
