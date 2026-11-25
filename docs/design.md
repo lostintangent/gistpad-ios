@@ -15,7 +15,7 @@ The web app sets what GistPad can do and how fast. It doesn't set the look.
 - A **gist** is the whole thing on GitHub. A **file** is one file in it. A **daily note** is one day's file, and **today’s note** is today's. Never call a gist a "note" or "source" on screen. Siri's notes actions are the one exception, because "note" is the word you said to Siri.
 - A **draft** is your unpublished text on this iPhone. **Publish** means sending to GitHub. Saving on the phone is never announced. **Autosave** is the web's name for publishing as you write, and it's the only place "save" means GitHub.
 - GitHub reads are a **check for changes**, never "update" or "sync".
-- **Show in File** (`text.viewfinder`) is the one name for jumping to a passage, from a comment or an Intelligence citation.
+- **Show in File** (`text.viewfinder`) is the one name for jumping to a passage, from a comment or an Intelligence citation. The passage lands in the part of the note you can see, above a sheet that's open, never behind it.
 - **Comments** are GitHub's. **Intelligence** is GistPad's own AI, and it only asks and edits. Proofreading is Writing Tools'.
 - Something that waits for GitHub says when it can happen, like **You can add images after this gist publishes.**
 - A busy editor says **Finish typing or wait for Writing Tools, then try again.** Text that moved under a selection says **This file changed. Select the text again.**
@@ -201,7 +201,7 @@ Comments belong to published gists, so daily notes and unpublished gists have no
 
 In compact width, Comments is a sheet at medium and large (large at accessibility sizes), and you can keep using the gist behind it at medium. In regular width it's a trailing inspector, 320 pt ideal, and the Library sidebar steps aside until it closes. The inline title is **Comments**.
 
-Threads show newest first. Each comment has an avatar, a semibold author, a relative date and a selectable Markdown body with system links. Replies are disclosures indented 12 pt. The selected thread gets a 12-pt rounded tertiary surface and scrolls into view. **Reply**, **Show in File**, **Show Full Quote** and **Show Less** are borderless secondary buttons with 44-pt targets. A quote that can't be found says "Not found in this file". The composer's clear button reads **Cancel Reply**, **Remove Quote** or **Cancel Editing**. Your comments offer Edit and Delete, which confirms with **Delete [author]’s comment from GitHub?** / **Delete Comment**.
+Threads show newest first. Each comment has an avatar, a semibold author, a relative date and a selectable Markdown body with system links. Replies are disclosures indented 12 pt. The selected thread gets a 12-pt rounded tertiary surface and scrolls up to sit just under the **Comments** title, which never scrolls away. **Reply**, **Show in File**, **Show Full Quote** and **Show Less** are borderless secondary buttons with 44-pt targets. A quote that can't be found says "Not found in this file". The composer's clear button reads **Cancel Reply**, **Remove Quote** or **Cancel Editing**. Your comments offer Edit and Delete, which confirms with **Delete [author]’s comment from GitHub?** / **Delete Comment**.
 
 The composer sits in the bottom safe-area bar, like Messages: a growing interactive glass field with 22-pt corners and the reply or quote context inside it, beside a circular **Post** button. Post is `arrow.up`, `.glassProminent` in system blue, large, with Command-Return. The thread's bottom scroll edge is soft, so the field and Post float over it with no band or divider.
 
