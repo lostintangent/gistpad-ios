@@ -9,8 +9,8 @@ import Store
 import UIKit
 import WidgetKit
 
-extension PlatformBridge {
-    private(set) static var shared: PlatformBridge?
+extension GistPadActions {
+    private(set) static var shared: GistPadActions?
 
     static func install() {
         AppDependencyManager.shared.add { () async throws -> any PlatformActions in
@@ -21,6 +21,7 @@ extension PlatformBridge {
         }
     }
 
+    /// The app's model, made by whichever asks first: the app's window or an intent.
     static func model() throws -> GistPadModel {
         if let shared { return shared.model }
         guard let key = Bundle.main.object(forInfoDictionaryKey: "SupabasePublishableKey") as? String,
@@ -33,12 +34,14 @@ extension PlatformBridge {
 
     /// Connects the model to App Intents, widgets and Spotlight.
     static func connect(_ model: GistPadModel) -> GistPadModel {
-        shared = PlatformBridge(model: model)
+        shared = GistPadActions(model: model)
         return model
     }
 }
 
-final class PlatformBridge: PlatformActions {
+/// GistPad's actions for Siri, Shortcuts and controls, made one at a time, with widgets and
+/// Spotlight following the library.
+final class GistPadActions: PlatformActions {
     private let model: GistPadModel
     private var refreshTask: Task<Void, Never>?
     private var operation: Task<Void, Never>?

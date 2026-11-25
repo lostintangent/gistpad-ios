@@ -10,7 +10,7 @@ struct GistPadApp: App {
     @State private var cannotOpenLink = false
 
     init() {
-        PlatformBridge.install()
+        GistPadActions.install()
     }
 
     /// Host tests run inside the app, so it stays out of their way.
@@ -26,7 +26,7 @@ struct GistPadApp: App {
                     return
                 }
             #endif
-            model = try PlatformBridge.model()
+            model = try GistPadActions.model()
         } catch {
             loadError = error.localizedDescription
         }

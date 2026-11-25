@@ -43,8 +43,9 @@ sheet, and shortcut-provided text skips it. Captures start today the way the
 app does, append Store's `DailyNote.addition` through the same durable edit
 as Siri's append, and leave publishing to autosave.
 
-Intents run in the main app (`allowedExecutionTargets = .main`), which provides
-`PlatformActions` through `AppDependencyManager`. An edit from an intent reaches
+Intents run in the main app (`allowedExecutionTargets = .main`), whose
+`GistPadActions` provides `PlatformActions` through `AppDependencyManager` and
+makes one change at a time. An edit from an intent reaches
 an open editor as one Undo step.
 
 Both targets read `LibrarySnapshot`, one JSON file in the

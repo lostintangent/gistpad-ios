@@ -82,7 +82,7 @@ struct AddToTodaySheet: View {
         errorMessage = nil
         Task {
             do {
-                if let destination = try await PlatformBridge.shared?.addToToday(
+                if let destination = try await GistPadActions.shared?.addToToday(
                     text: text, asTask: asTask, target: DailyNote.Day(date: day))
                 {
                     PendingLink.shared.link = destination

@@ -145,7 +145,7 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 | `Sources/App/Tags` | Presents the tag editor for the open gist. |
 | `Sources/App/Intelligence` | Presents the Intelligence sheet. |
 | `Sources/App/Images` | The image picker and upload. |
-| `Sources/App/Platform` | `PlatformBridge` and App Shortcuts, which connect the model to intents, widgets and Spotlight. |
+| `Sources/App/Platform` | `GistPadActions`, the app's `PlatformActions`, which makes the changes intents ask for and keeps widgets and Spotlight in step with the library, and the App Shortcuts. |
 | `Sources/App/Captures` | DEBUG fixture launch arguments and the fixture library. |
 | `Sources/Extensions/Widgets` | The GistPad widgets and the Add to Today, Open Today and New Gist controls. |
 | `Sources/Features/Editor` | `MarkdownEditor` and its TextKit 2 text view, `MarkdownEditorView`, `KeyboardBar`, highlighting, hidden front matter and the `CommentHighlighter`. |

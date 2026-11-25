@@ -71,7 +71,7 @@
                 server.intercept { _ in throw URLError(.notConnectedToInternet) }
             }
             if let link = sheet == .today ? .addToToday : link { PendingLink.shared.link = link }
-            let model = PlatformBridge.connect(
+            let model = GistPadActions.connect(
                 GistPadModel(accounts: accounts, drafts: store, defaults: Self.defaults))
             if let query { model.state.query = query }
             return model

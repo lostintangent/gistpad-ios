@@ -19,7 +19,7 @@ struct PlatformTests {
         let fileEditor = try await fixture.fileEditor()
         let previousLink = PendingLink.shared.link
         let intent = AddToTodayIntent()
-        intent.app = fixture.bridge
+        intent.app = fixture.actions
         intent.text = "A thought\nSecond task"
         intent.asTask = true
         _ = try await intent.perform()
@@ -43,7 +43,7 @@ struct PlatformTests {
         #expect(try await fixture.store.current(fileEditor.file.nextDraft)?.sent == typed)
         fixture.fixture.restore()
 
-        try await fixture.bridge.addToToday(text: "A thought", asTask: true, target: DailyNote.Day())
+        try await fixture.actions.addToToday(text: "A thought", asTask: true, target: DailyNote.Day())
         #expect(fileEditor.editor.document.text == typed + "- [ ] A thought\n")
         #expect(fileEditor.status == .unpublished)
         #expect(fixture.publishes.isEmpty)
@@ -60,7 +60,7 @@ struct PlatformTests {
         let previousLink = PendingLink.shared.link
         defer { PendingLink.shared.link = previousLink }
         let intent = CreateGistNoteIntent()
-        intent.app = fixture.bridge
+        intent.app = fixture.actions
         intent.name = AttributedString("Test Reading List")
         intent.content = AttributedString("# Ranked\n1. Vagabond\n")
         intent.attachments = []
@@ -100,7 +100,7 @@ struct PlatformTests {
         })
         let original = fileEditor.editor.document.text
         let intent = AppendToGistIntent()
-        intent.app = fixture.bridge
+        intent.app = fixture.actions
         intent.target = note
         intent.content = AttributedString("Pick up the dry cleaning")
 
@@ -122,7 +122,7 @@ struct PlatformTests {
         // Opening Today read the whole gist, so its sibling's excerpt is known, without front matter.
         #expect(note.excerpt == "Another note")
 
-        let updated = try await fixture.bridge.appendToNote(note, text: "A new line")
+        let updated = try await fixture.actions.appendToNote(note, text: "A new line")
 
         #expect(updated.content == nil)
         let draft = try #require(fixture.model.drafts.first { $0.filename == "another.md" })
@@ -143,20 +143,20 @@ struct PlatformTests {
         fileEditor.editor.entityIdentifier = EntityIdentifier(for: GistFileEntity.self, identifier: note.id)
         defer { fileEditor.editor.entityIdentifier = nil }
 
-        let open = try #require(try await fixture.bridge.noteEntities(for: [note.id]).first)
+        let open = try #require(try await fixture.actions.noteEntities(for: [note.id]).first)
         #expect(String(try #require(open.content).characters) == "Another note\n")
         #expect(open.attributeSet.textContent == nil)
         fileEditor.editor.textView.text += "Vagabond is first.\n"
         fileEditor.editor.textViewDidChange(fileEditor.editor.textView)
-        let typing = try #require(try await fixture.bridge.noteEntities(for: [note.id]).first)
+        let typing = try #require(try await fixture.actions.noteEntities(for: [note.id]).first)
         #expect(String(try #require(typing.content).characters)
             == "Another note\nVagabond is first.\n")
 
         fixture.model.isForeground = false
-        #expect(try await fixture.bridge.noteEntities(for: [note.id]).first?.content == nil)
+        #expect(try await fixture.actions.noteEntities(for: [note.id]).first?.content == nil)
         fixture.model.isForeground = true
         fileEditor.editor.entityIdentifier = nil
-        #expect(try await fixture.bridge.noteEntities(for: [note.id]).first?.content == nil)
+        #expect(try await fixture.actions.noteEntities(for: [note.id]).first?.content == nil)
     }
 
     @Test func returningToLibraryClearsTheEditorsOnscreenEntity() async throws {
@@ -186,7 +186,7 @@ struct PlatformTests {
         fixture.model.showLibrary()
         window.layoutIfNeeded()
         #expect(fileEditor.editor.textView.appEntityIdentifier == nil)
-        #expect(try await fixture.bridge.noteEntities(for: [note.id]).first?.content == nil)
+        #expect(try await fixture.actions.noteEntities(for: [note.id]).first?.content == nil)
     }
 
     @Test func siriUpdateRenamesTheOwnedGistThroughTheLibrary() async throws {
@@ -197,7 +197,7 @@ struct PlatformTests {
             $0.link == GistPadLink.gist(id: "manga", filename: "README.md")
         })
         let intent = UpdateGistNoteIntent()
-        intent.app = fixture.bridge
+        intent.app = fixture.actions
         intent.target = note
         intent.name = AttributedString("Reading Library")
 
@@ -247,7 +247,7 @@ struct PlatformTests {
 private struct PlatformFixture {
     let fixture: ModelFixture
     let model: GistPadModel
-    let bridge: PlatformBridge
+    let actions: GistPadActions
 
     static func make() async throws -> Self {
         let fixture = try await ModelFixture { server in
@@ -261,13 +261,13 @@ private struct PlatformFixture {
                 id: "manga", description: "Manga reading list",
                 files: ["README.md": "# Ranked\n1. Vagabond\n"])
         }
-        // Connected the way the app launches, so every file the library opens reaches the bridge.
-        let model = PlatformBridge.connect(fixture.model)
+        // Connected the way the app launches, so every file the library opens reaches its actions.
+        let model = GistPadActions.connect(fixture.model)
         await model.start()
         await model.open(.today())
-        let bridge = try #require(PlatformBridge.shared)
-        try await bridge.refresh()
-        return Self(fixture: fixture, model: model, bridge: bridge)
+        let actions = try #require(GistPadActions.shared)
+        try await actions.refresh()
+        return Self(fixture: fixture, model: model, actions: actions)
     }
 
     var account: GistPadAccount { fixture.account }
