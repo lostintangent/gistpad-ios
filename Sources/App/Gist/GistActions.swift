@@ -25,6 +25,8 @@ extension GistActions {
             present(.review(.init(fileEditor: fileEditor, review: review)))
         }
         actions.reconnect = { Task { await model.reconnect() } }
+        // Read at the tap, so an alert names the file as its row does, even after a rename.
+        let name = { fileEditor.details.displayTitle(now: .now, locale: .current, calendar: .current) }
         let rename = { (kind: RenameTarget.Kind) in
             present(.rename(
                 RenameTarget(draft: fileEditor.file.nextDraft, title: fileEditor.details.title, kind: kind)))
@@ -40,18 +42,25 @@ extension GistActions {
             if !fileEditor.file.isDeletedOnGitHub {
                 actions.togglePin = {
                     let pinned = !fileEditor.details.isPinned
-                    model.run {
+                    let title = pinned
+                        ? String(localized: "Couldn’t Pin “\(name())”")
+                        : String(localized: "Couldn’t Unpin “\(name())”")
+                    model.run(titled: title) {
                         try await model.updatePreferences([.setPinned(gistID: gistID, pinned: pinned)])
                     }
                 }
                 actions.toggleStar = {
                     let starred = !fileEditor.details.isStarred
-                    model.run { try await model.setStarred(starred, gistID: gistID) }
+                    let title = starred
+                        ? String(localized: "Couldn’t Star “\(name())”")
+                        : String(localized: "Couldn’t Unstar “\(name())”")
+                    model.run(titled: title) { try await model.setStarred(starred, gistID: gistID) }
                 }
                 if fileEditor.details.isOwned {
                     actions.toggleArchive = {
                         model.setArchived(
-                            !fileEditor.details.isArchived, gistID: gistID, undoManager: undoManager)
+                            !fileEditor.details.isArchived, gistID: gistID, name: name(),
+                            undoManager: undoManager)
                     }
                     actions.addFile = { rename(.addFile) }
                     actions.renameFile = { rename(.filename) }
@@ -65,7 +74,9 @@ extension GistActions {
             actions.delete = {
                 // Read at confirmation, so a file that published meanwhile deletes from GitHub.
                 guard let deletion = fileEditor.deletion else { return }
-                model.run { try await model.delete(deletion) }
+                model.run(titled: String(localized: "Couldn’t Delete “\(name())”")) {
+                    try await model.delete(deletion)
+                }
             }
         }
         actions.find = {

@@ -78,11 +78,13 @@ struct RootView: View {
             .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
                 model.updateCalendar()
             }
-            .alert(error: $model.failure) {
-                if model.failure?.action == .reconnect {
+            .alert(error: $model.failure) { failure in
+                if failure.action == .reconnect {
                     Button(role: .cancel) {}
                     Button(Failure.Action.reconnect.title) { Task { await model.reconnect() } }
                 }
+            } message: { failure in
+                Text(failure.message)
             }
             .sheet(item: $sheet) { sheet in
                 switch sheet {
@@ -382,7 +384,9 @@ struct RootView: View {
                 }) {
                     Task { await model.open(.gist(id: gist.id)) }
                 } else {
-                    model.failure = Failure(String(localized: "No gist has that title."))
+                    model.failure = Failure(
+                        String(localized: "No gist has that title."),
+                        title: String(localized: "Couldn’t Open “\(target)”"))
                 }
             })
             .id(fileEditor.editor.id)
@@ -410,7 +414,7 @@ struct RootView: View {
         do {
             intelligence = try IntelligenceTarget(fileEditor, model: model) { layout.select(.edit) }
         } catch {
-            model.failure = Failure(error)
+            model.failure = Failure(error, title: String(localized: "Couldn’t Open Intelligence"))
         }
     }
 
@@ -465,7 +469,8 @@ struct RootView: View {
         case .unpublishedGist(let accountID, let draftID):
             guard accountID == account.id else {
                 model.failure = Failure(
-                    String(localized: "This draft belongs to another GitHub account. Sign out, then sign in with that account to open it."))
+                    String(localized: "This draft belongs to another GitHub account. Sign out, then sign in with that account to open it."),
+                    title: String(localized: "Couldn’t Open This Gist"))
                 pending.link = nil
                 return
             }

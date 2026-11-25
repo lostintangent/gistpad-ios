@@ -44,7 +44,7 @@ public struct GistDetails: Equatable, Sendable {
     public var shareURL: URL?
 
     /// A daily note reads as its day, exactly like its Library row.
-    func displayTitle(now: Date, locale: Locale, calendar: Calendar) -> String {
+    public func displayTitle(now: Date, locale: Locale, calendar: Calendar) -> String {
         guard isDailyNote, let day = DailyNote.date(filename: filename) else { return title }
         return DailyNote.title(for: day, relativeTo: now, locale: locale, calendar: calendar)
     }

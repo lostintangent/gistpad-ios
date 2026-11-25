@@ -222,10 +222,11 @@ extension GistPadModel {
         }
     }
 
-    /// Runs a change from a tap. One that doesn't go through is an alert.
-    public func run(_ change: @escaping @MainActor () async throws -> Void) {
+    /// Runs a change from a tap. One that doesn't go through is an alert with `title`, which says
+    /// what didn't happen.
+    public func run(titled title: String, _ change: @escaping @MainActor () async throws -> Void) {
         Task {
-            do { try await change() } catch { failure = Failure(error) }
+            do { try await change() } catch { failure = Failure(error, title: title) }
         }
     }
 

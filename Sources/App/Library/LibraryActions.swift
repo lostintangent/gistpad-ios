@@ -28,26 +28,44 @@ extension LibraryActions {
                 }
             }
         }
+        // An alert names the row as the Library shows it.
+        let rowName = { (rowID: String) in
+            model.state.gists.first { $0.id == rowID }?
+                .displayTitle(now: .now, locale: .current, calendar: .current) ?? ""
+        }
         actions.togglePin = { rowID in
+            let name = rowName(rowID)
             guard let account = model.account, let id = model.gistID(forRow: rowID) else {
-                model.failure = Failure(String(localized: "You can pin this gist after it publishes."))
+                model.failure = Failure(
+                    String(localized: "You can pin this gist after it publishes."),
+                    title: String(localized: "Couldn’t Pin “\(name)”"))
                 return
             }
             let pinned = !account.preferences.pinnedGists.contains(id)
-            model.run { try await model.updatePreferences([.setPinned(gistID: id, pinned: pinned)]) }
+            let title = pinned
+                ? String(localized: "Couldn’t Pin “\(name)”")
+                : String(localized: "Couldn’t Unpin “\(name)”")
+            model.run(titled: title) {
+                try await model.updatePreferences([.setPinned(gistID: id, pinned: pinned)])
+            }
         }
         actions.toggleArchive = { rowID in
+            let name = rowName(rowID)
             guard let id = model.gistID(forRow: rowID),
                 let gist = model.gistCache?.gists.first(where: { $0.id == id })
             else {
-                model.failure = Failure(String(localized: "You can archive this gist after it publishes."))
+                model.failure = Failure(
+                    String(localized: "You can archive this gist after it publishes."),
+                    title: String(localized: "Couldn’t Archive “\(name)”"))
                 return
             }
-            model.setArchived(!gist.isArchived, gistID: id, undoManager: undoManager)
+            model.setArchived(!gist.isArchived, gistID: id, name: name, undoManager: undoManager)
         }
         actions.delete = { rowID in
             guard let deletion = model.deletion(forRow: rowID) else { return }
-            model.run { try await model.delete(deletion) }
+            model.run(titled: String(localized: "Couldn’t Delete “\(rowName(rowID))”")) {
+                try await model.delete(deletion)
+            }
         }
         self = actions
     }

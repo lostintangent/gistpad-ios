@@ -13,7 +13,7 @@ GistPadModel
   account: GistPadAccount?        who's signed in
   phase                           loading, signing in, refreshing, signing out, ready
   refreshFailure: Failure?        why the list couldn't read GitHub
-  failure: Failure?               the one the app shows in an alert
+  failure: Failure?               the one the app shows in an alert, titled with what didn't happen
   state: LibraryState             the list, built from the cache and drafts
   editors: [UUID: GistFileEditor] every file opened since launch
   opening: Opening?               the file on its way to the detail column

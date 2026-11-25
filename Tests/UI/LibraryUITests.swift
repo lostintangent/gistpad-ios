@@ -111,6 +111,19 @@ final class LibraryUITests: XCTestCase {
         try waitUntil("mixed to leave the Library") { !mixed.exists }
     }
 
+    func testADeleteThatDoesntGoThroughSaysWhatDidntHappen() throws {
+        let app = launchGistPad("offline")
+        let weekend = app.element("library-note-weekend")
+        try waitUntil("the Library") { weekend.isTappable }
+
+        weekend.swipeLeft()
+        try tap(app.buttons["Delete"].firstMatch, "Delete")
+        let alert = app.alerts["Couldn’t Delete “A slower weekend”"]
+        try waitUntil("the alert") { alert.exists }
+        XCTAssertTrue(alert.staticTexts["GitHub couldn’t be reached."].exists)
+        try tap(alert.buttons["OK"], "OK")
+    }
+
     func testEditDeletesGistsFromTheirMinus() throws {
         let app = launchGistPad()
         let weekend = app.element("library-note-weekend")

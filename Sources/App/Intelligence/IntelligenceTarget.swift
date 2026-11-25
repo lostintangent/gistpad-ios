@@ -24,7 +24,9 @@ final class IntelligenceTarget: Identifiable {
             editor: editor, title: fileEditor.details.title, canEdit: fileEditor.details.isOwned
         ) { range in
             guard fileEditor.details.isOwned else {
-                model.failure = Failure(String(localized: "This gist is read-only, so this passage can’t open in Edit."))
+                model.failure = Failure(
+                    String(localized: "This gist is read-only, so this passage can’t open in Edit."),
+                    title: String(localized: "Couldn’t Show in File"))
                 return
             }
             let generation = editor.generation
@@ -33,7 +35,9 @@ final class IntelligenceTarget: Identifiable {
             Task {
                 await Task.yield()
                 guard editor.generation == generation else {
-                    model.failure = Failure(String(localized: "This passage is no longer in the file."))
+                    model.failure = Failure(
+                        String(localized: "This passage is no longer in the file."),
+                        title: String(localized: "Couldn’t Show in File"))
                     return
                 }
                 editor.select(range)

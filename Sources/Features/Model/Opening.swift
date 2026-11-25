@@ -38,10 +38,7 @@ extension GistPadModel {
 
     /// Opens a library row, at once when its file is already on this iPhone.
     public func open(rowID id: String) {
-        guard account != nil else {
-            failure = Failure(AccountError.signedOut)
-            return
-        }
+        guard account != nil else { return }
         fileRequest = UUID()
         failure = nil
         if let file = cachedFile(rowID: id) { return present(file) }
@@ -166,10 +163,7 @@ extension GistPadModel {
     /// Opens a file in the detail column. A newer open supersedes this one, but keeps any file this
     /// one created.
     public func open(_ request: Opening.Request) async {
-        guard let account else {
-            failure = Failure(AccountError.signedOut)
-            return
-        }
+        guard let account else { return }
         let focusesEditor = request.focusesEditor
         if focusesEditor {
             guard !isCreating else { return }
@@ -193,7 +187,7 @@ extension GistPadModel {
             guard token == fileRequest else { return }
             report(error, operation: "open")
             if case .new = request {
-                failure = Failure(error)
+                failure = Failure(error, title: String(localized: "Couldn’t Create Gist"))
             } else {
                 opening?.failure = Failure(error)
                 state.selectedID = opening?.rowID

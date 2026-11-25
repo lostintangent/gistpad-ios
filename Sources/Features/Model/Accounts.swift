@@ -43,7 +43,7 @@ extension GistPadModel {
             phase = account == nil ? .signedOut : .ready
             guard !(error is CancellationError) else { return }
             report(error, operation: "restore")
-            failure = Failure(error)
+            failure = Failure(error, title: String(localized: "Couldn’t Load Your Gists"))
         }
     }
 
@@ -76,7 +76,7 @@ extension GistPadModel {
             }
             libraryRequest = UUID()
             report(error, operation: "sign-in")
-            failure = Failure(error)
+            failure = Failure(error, title: String(localized: "Couldn’t Sign In"))
         }
     }
 
