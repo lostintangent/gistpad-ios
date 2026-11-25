@@ -11,7 +11,7 @@ final class CommentAnnotator {
     private var comments: CommentAnnotations?
     private var accent = ""
     private var segments: [String]?
-    private var annotations: [CommentAnnotation] = []
+    private var annotations: [CommentQuote.Match] = []
     private var linkedIDs: Set<Int64>?
     private var task: Task<Void, Never>?
 
@@ -99,7 +99,7 @@ final class CommentAnnotator {
                     guard !Task.isCancelled else { return }
                     self.segments = segments
                 }
-                self.annotations = quotes.annotations(in: self.segments ?? [])
+                self.annotations = quotes.matches(in: self.segments ?? [])
                 let payload: [String: Any] = [
                     "annotations": self.annotations.map {
                         ["segment": $0.segment, "start": $0.start, "end": $0.end, "threadIDs": $0.threadIDs]

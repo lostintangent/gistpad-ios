@@ -11,8 +11,8 @@
         let backgroundLayer = CALayer()
         private var comments: CommentAnnotations?
         private var linkedIDs: Set<Int64>?
-        private var passages: [(annotation: CommentAnnotation, fill: UIColor, selected: Bool)] = []
-        private var verifiedAnnotations: [CommentAnnotation] = []
+        private var passages: [(annotation: CommentQuote.Match, fill: UIColor, selected: Bool)] = []
+        private var verifiedAnnotations: [CommentQuote.Match] = []
         private var originalInk: [(range: NSRange, color: Any)] = []
         private var annotatedGeneration: UInt64?
         private var suspendsForFind = false
@@ -70,7 +70,7 @@
             originalInk = []
             annotatedGeneration = editor.generation
             editor.textView.setNeedsLayout()
-            let annotations = quotes.annotations(in: [editor.document.text])
+            let annotations = quotes.matches(in: [editor.document.text])
                 .filter { $0.start >= editor.contentStart }
             verifiedAnnotations = annotations
             publish(Set(annotations.flatMap(\.threadIDs)))
