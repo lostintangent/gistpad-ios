@@ -344,7 +344,6 @@ struct RootView: View {
                             }
                         }
                     }
-                    .sharedBackgroundVisibility(.hidden)
                 }
             }
             .userActivity("dev.gistpad.GistPad.note", isActive: identifier != nil) { activity in

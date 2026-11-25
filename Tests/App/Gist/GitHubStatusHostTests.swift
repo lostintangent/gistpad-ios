@@ -115,7 +115,6 @@ private struct StatusFixture: View {
                         ToolbarItem(placement: .bottomBar) {
                             GitHubStatusControl(status: model.state, recover: model.recover)
                         }
-                        .sharedBackgroundVisibility(.hidden)
                     }
                 }
                 .onChange(of: model.state) { _, state in model.renderedState = state }

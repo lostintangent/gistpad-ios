@@ -57,8 +57,6 @@ public struct GitHubStatusControl: View {
                     showingDetails = true
                 }
                 .labelStyle(.iconOnly)
-                .buttonStyle(.glass)
-                .controlSize(.large)
                 .accessibilityValue(failure.message)
                 .accessibilityHint(Text("Shows details and recovery actions", bundle: .module))
                 .accessibilityIdentifier("github-status-attention")

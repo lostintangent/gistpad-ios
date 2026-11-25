@@ -484,7 +484,6 @@ public struct LibraryView: View {
                         GitHubStatusControl(status: status, recover: actions.recoverStatus)
                     }
                     .axisBehavior(.verticalPreferred)
-                    .sharedBackgroundVisibility(.hidden)
                 }
                 ToolbarSpacer(.flexible, placement: .bottomBar)
                 ToolbarItem(placement: .bottomBar) {
