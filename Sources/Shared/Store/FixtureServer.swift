@@ -203,6 +203,14 @@ private extension FixtureServer.State {
                 createdAt: Date.now.wholeSeconds)
             comments[id, default: []].append(created)
             return try json(created, status: 201)
+        case "PATCH /gists/:id/comments/:comment":
+            guard let old = comments[id]?.first(where: { String($0.id) == comment }) else {
+                return .init(status: 404)
+            }
+            let posted = try JSONDecoder().decode([String: String].self, from: body)
+            let edited = GistComment(id: old.id, body: posted["body"] ?? "", user: old.user, createdAt: old.createdAt)
+            comments[id] = comments[id]?.map { $0.id == old.id ? edited : $0 }
+            return try json(edited)
         case "DELETE /gists/:id/comments/:comment":
             comments[id]?.removeAll { String($0.id) == comment }
             return .init(status: 204)
