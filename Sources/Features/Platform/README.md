@@ -1,5 +1,35 @@
 # Platform
 
+How GistPad shows up across iOS: Siri and Shortcuts, widgets and controls,
+Spotlight and `gistpad://` links. The widget extension imports this module too,
+so it builds only on Store, Markdown and Appearance, never on Model. The app's
+`GistPadActions` makes the changes intents ask for.
+
+```text
+GistPadLink                       a gistpad:// link: Today, Add to Today, a new gist,
+                                  a gist's file, or a gist that's only on the phone
+PendingLink                       the link the app opens next
+LibrarySnapshot                   what the widget, intents and Spotlight know about the library
+  accountID  files  recents       the account, every Markdown file, the widget's three gists
+  read()  write()                 one JSON file in the app group
+GistFileEntity                    a Markdown file to Siri, Shortcuts and Spotlight, and a note
+  link  name  excerpt  content    where it opens, its title, its snippet, the open note's body
+GistFileQuery                     finds files by identifier or text, and reindexes Spotlight
+GistFolderEntity                  a gist, as the folder its files are notes in
+GistAccountEntity                 the signed-in account the notes belong to
+SpotlightIndex                    brings Spotlight to the newest snapshot
+PlatformActions                   what intents ask of the app, through AppDependencyManager
+PlatformError                     why an intent was refused, as what to do instead
+LauncherWidgetView                the GistPad widget, small and medium
+OpenGistIntent  OpenTodayIntent   open a file, or Today
+NewGistIntent  AddToTodayIntent   start a gist, or add text or tasks to Today
+ShowAddToTodayIntent              the Add to Today control, which opens the capture sheet
+CreateGistNoteIntent  AppendToGistIntent  UpdateGistNoteIntent
+                                  the notes schema's create, append, and rename or pin
+```
+
+## Links
+
 Widgets, controls, Shortcuts and Spotlight open the app with `gistpad://` links
 for Today, Add to Today, a new gist, a gist's file and a gist that's only on the phone.
 `GistPadLink` reads and writes them, and `PendingLink` hands one to the app,
@@ -31,7 +61,8 @@ snapshot keep titles and snippets but **never full bodies**. Siri answering
 questions from the displayed body remains unproven until a phone test.
 
 The schema creates a note, with optional content, through the same local draft
-as New Gist and opens it. Append uses the editor's durable edit path, and
+as New Gist and opens it. Append adds its text with `MarkdownDocument`'s
+`edit(appendingLines:)` through the editor's durable edit path, and
 renaming or pinning a gist uses the library's metadata actions. Attachments,
 pinning on create, choosing a gist, moving a note and a combined
 rename-plus-pin are refused rather than silently ignored. There's no body
@@ -40,8 +71,9 @@ rewrite or Q&A.
 Open Gist, Open Today, Add to Today and New Gist are App Shortcuts, and the
 last three are also controls. The Add to Today control opens the capture
 sheet, and shortcut-provided text skips it. Captures start today the way the
-app does, append `MarkdownDocument`'s `edit(appendingParagraph:)` or
-`edit(appendingTasks:)` through the same durable edit as Siri's append, and leave publishing to autosave.
+app does, append `edit(appendingParagraph:)` or `edit(appendingTasks:)`
+through the same durable edit as Siri's append, and leave publishing to
+autosave.
 
 Intents run in the main app (`allowedExecutionTargets = .main`), whose
 `GistPadActions` provides `PlatformActions` through `AppDependencyManager` and
