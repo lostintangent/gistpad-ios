@@ -282,13 +282,11 @@ struct PreviewWebKitTests {
         defer { tearDown(window) }
         controller.view.layoutIfNeeded()
         let webView = try #require(findWebView(in: controller.view))
-        await until(webView, \.isLoading) { !$0 }
         #expect(try await text(of: "h1", in: webView) == "Still here")
 
         try killWebContent(of: webView)
         // The preview loads its page again once WebKit reports the crash.
         await until(webView, \.isLoading) { $0 }
-        await until(webView, \.isLoading) { !$0 }
         #expect(try await text(of: "h1", in: webView) == "Still here")
     }
 
@@ -321,7 +319,9 @@ struct PreviewWebKitTests {
 
     /// Returns the text of the first element matching `selector`, once the page has one.
     private func text(of selector: String, in webView: WKWebView) async throws -> String? {
-        try await webView.callAsyncJavaScript(
+        // Until the page commits, a call runs in the blank document the load replaces, and fails with it.
+        await until(webView, \.isLoading) { !$0 }
+        return try await webView.callAsyncJavaScript(
             """
             while (!document.querySelector(selector)) {
                 await new Promise(changed => new MutationObserver((_, observer) => {
