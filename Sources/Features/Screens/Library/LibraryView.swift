@@ -475,7 +475,7 @@ public struct LibraryView: View {
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
         if !isSignedOut {
-            ToolbarItem(placement: .topBarLeading) { EditButton() }
+            ToolbarItem(placement: .topBarLeading) { EditButton().disabled(!hasVisibleGists) }
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             if !isSearchPresented {
                 if status.failure != nil, !explainsFailure {
