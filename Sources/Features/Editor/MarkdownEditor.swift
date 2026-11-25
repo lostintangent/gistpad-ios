@@ -17,7 +17,7 @@
         private(set) var isWritingToolsActive = false
         private(set) var showsFrontMatter = false
         private(set) var contentStart = 0
-        var inputError: MarkdownEdit.Failure?
+        var inputError: Failure?
         let textView = TextView(usingTextLayoutManager: true)
         @ObservationIgnored weak var host: TextViewHost?
         @ObservationIgnored var hosts: [TextViewHost.Reference] = []
@@ -73,7 +73,7 @@
         }
 
         /// Applies one change as an undoable step, while the editor shows the edit's document.
-        public func apply(_ edit: MarkdownEdit) throws(MarkdownEdit.Failure) {
+        public func apply(_ edit: MarkdownEdit) throws(Failure) {
             guard isSettled else { throw .unsettled }
             guard edit.document == document else { throw .changed }
             let source = document.text as NSString
@@ -456,7 +456,7 @@
             self.generation = generation
         }
 
-        public func apply(_ edit: MarkdownEdit) throws(MarkdownEdit.Failure) {
+        public func apply(_ edit: MarkdownEdit) throws(Failure) {
             guard edit.document == document else { throw .changed }
             let result = MarkdownDocument(edit.result)
             guard result != document else { return }
@@ -476,3 +476,27 @@
         public func setShowsFrontMatter(_ value: Bool) {}
     }
 #endif
+
+extension MarkdownEditor {
+    /// Why an edit can't land in the editor, in one sentence.
+    public enum Failure: Error, Equatable {
+        /// The keyboard is composing or Writing Tools is working, so the editor isn't settled.
+        case unsettled
+        /// The text changed since the edit was made, so it no longer fits.
+        case changed
+        case invalidLink
+    }
+}
+
+extension MarkdownEditor.Failure: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .unsettled:
+            String(localized: "Finish typing or wait for Writing Tools, then try again.", bundle: .module)
+        case .changed:
+            String(localized: "This file changed. Select the text again.", bundle: .module)
+        case .invalidLink:
+            String(localized: "Enter a complete web, email or phone link.", bundle: .module)
+        }
+    }
+}

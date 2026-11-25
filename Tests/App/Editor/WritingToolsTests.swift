@@ -29,7 +29,7 @@ extension EditorContinuityTests {
             #expect(session.generation == 7)
             #expect(changes.isEmpty)
         }
-        #expect(throws: MarkdownEdit.Failure.unsettled) {
+        #expect(throws: MarkdownEditor.Failure.unsettled) {
             try session.apply(session.document.edit(replacing: NSRange(location: 0, length: 8), with: "External"))
         }
         session.textViewWritingToolsDidEnd(session.textView)

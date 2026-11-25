@@ -19,7 +19,6 @@ MarkdownEdit                      one change to that document
   document  range  replacement    what it changes and to what
   selection                       the selection after it, or nil to keep the caret
   result                          the document's text with the change made
-  Failure                         unsettled, changed or invalidLink, each a sentence
 ```
 
 - Front matter and fenced code are **literal**. Markdown inside them never counts, so no span,
@@ -38,7 +37,7 @@ Every change is a `MarkdownEdit` made by a method on the document it changes:
 | Group | Methods |
 |---|---|
 | Typing | `edit(typing:over:)` continues lists on Return, pairs `()`, `[]` and `{}`, and links a URL pasted over a selection. It returns nil for ordinary input, so the editor types natively. `edit(indenting:)` and `edit(outdenting:)` move list items. |
-| Formatting | `edit(bolding:)`, `italicizing`, `coding`, `fencing`, `heading:over:`, `bulleting`, `numbering`, `checklisting`, `quoting` and `edit(linking:to:label:)`, which throws `invalidLink`. Each toggles, so running it again removes it. |
+| Formatting | `edit(bolding:)`, `italicizing`, `coding`, `fencing`, `heading:over:`, `bulleting`, `numbering`, `checklisting`, `quoting` and `edit(linking:to:label:)`, which returns nil unless the destination is a complete web, email or phone link. Each toggles, so running it again removes it. |
 | Tasks | `edit(togglingTaskAt:)` checks or unchecks the box that starts exactly there, and returns nil anywhere else. |
 | Any change | `edit(replacing:with:selection:)`, for text that comes from elsewhere, like GitHub, an image upload or Intelligence. |
 

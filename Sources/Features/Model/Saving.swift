@@ -84,7 +84,7 @@ extension GistFileEditor {
     func commitMutation(
         _ edit: MarkdownEdit, commit: @MainActor () async throws -> GistFileDraft
     ) async throws {
-        guard canEdit else { throw MarkdownEdit.Failure.unsettled }
+        guard canEdit else { throw MarkdownEditor.Failure.unsettled }
         guard edit.document == editor.document else { throw DraftError.changed }
         let wasEditing = editor.isEditing
         isLocked = true

@@ -38,10 +38,10 @@ struct EditorFormattingTests {
 
     @Test func staleLinkNeverChangesSource() throws {
         let editor = MarkdownEditor(text: "note")
-        let link = try editor.document.edit(
-            linking: NSRange(location: 0, length: 4), to: "https://example.com", label: "note")
+        let link = try #require(
+            editor.document.edit(linking: NSRange(location: 0, length: 4), to: "https://example.com", label: "note"))
         try editor.apply(editor.document.edit(replacing: NSRange(location: 4, length: 0), with: "!"))
-        #expect(throws: MarkdownEdit.Failure.changed) {
+        #expect(throws: MarkdownEditor.Failure.changed) {
             try editor.apply(link)
         }
         #expect(editor.document.text == "note!")
@@ -58,7 +58,7 @@ struct EditorFormattingTests {
         #expect(editor.inputError != nil)
         #expect(editor.textView.findInteraction?.isFindNavigatorVisible == false)
         editor.inputError = nil
-        #expect(throws: MarkdownEdit.Failure.unsettled) {
+        #expect(throws: MarkdownEditor.Failure.unsettled) {
             try editor.apply(edit)
         }
         editor.textViewWritingToolsDidEnd(editor.textView)
@@ -67,7 +67,7 @@ struct EditorFormattingTests {
         editor.find()
         #expect(editor.inputError != nil)
         #expect(editor.textView.findInteraction?.isFindNavigatorVisible == false)
-        #expect(throws: MarkdownEdit.Failure.unsettled) {
+        #expect(throws: MarkdownEditor.Failure.unsettled) {
             try editor.apply(edit)
         }
         editor.textView.unmarkText()

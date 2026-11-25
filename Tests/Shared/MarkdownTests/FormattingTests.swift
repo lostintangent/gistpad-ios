@@ -92,8 +92,9 @@ struct FormattingTests {
     }
 
     @Test func linkEscapesLabelsAndParenthesizedDestinations() throws {
-        let edit = try MarkdownDocument("note").edit(
-            linking: NSRange(location: 0, length: 4), to: "https://example.com/a(b)", label: "A [draft]")
+        let edit = try #require(
+            MarkdownDocument("note").edit(
+                linking: NSRange(location: 0, length: 4), to: "https://example.com/a(b)", label: "A [draft]"))
         #expect(edit.result == "[A \\[draft\\]](<https://example.com/a(b)>)")
     }
 
@@ -102,10 +103,9 @@ struct FormattingTests {
             "", "example.com", "javascript:alert(1)", "https://", "mailto:", "tel:",
             "https://a.test/\nnext",
         ] {
-            #expect(throws: MarkdownEdit.Failure.invalidLink) {
-                try MarkdownDocument("note").edit(
-                    linking: NSRange(location: 0, length: 4), to: destination, label: "note")
-            }
+            #expect(
+                MarkdownDocument("note").edit(
+                    linking: NSRange(location: 0, length: 4), to: destination, label: "note") == nil)
         }
     }
 

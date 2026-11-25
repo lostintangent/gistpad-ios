@@ -57,13 +57,13 @@ struct EditorContinuityTests {
             replacing: (source as NSString).range(of: "[ ]", options: .backwards), with: "[x]")
         try session.apply(edit)
         #expect(session.document.text == "- [ ] Duplicate\n- [x] Duplicate")
-        #expect(throws: MarkdownEdit.Failure.changed) {
+        #expect(throws: MarkdownEditor.Failure.changed) {
             try session.apply(edit)
         }
         session.textView.undoManager?.undo()
         #expect(session.textView.text == source)
         session.textView.setMarkedText("に", selectedRange: NSRange(location: 1, length: 0))
-        #expect(throws: MarkdownEdit.Failure.unsettled) {
+        #expect(throws: MarkdownEditor.Failure.unsettled) {
             try session.apply(edit)
         }
     }

@@ -16,7 +16,7 @@ extension MarkdownDocument {
             ["http", "https"].contains(URL(string: replacement)?.scheme?.lowercased()),
             !isProtected(selection)
         else { return nil }
-        return try? edit(linking: selection, to: replacement, label: selected)
+        return edit(linking: selection, to: replacement, label: selected)
     }
 
     /// Indents the selected lines, nesting a list item under the one above it.

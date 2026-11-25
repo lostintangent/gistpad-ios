@@ -40,11 +40,9 @@ extension MarkdownDocument {
             selection: NSRange(location: block.location + opening.utf16.count, length: block.length))
     }
 
-    /// Links the selection, labeled with `label` or else the destination. Throws `invalidLink`
-    /// unless the destination is a complete web, email or phone link.
-    public func edit(
-        linking selection: NSRange, to destination: String, label: String
-    ) throws(MarkdownEdit.Failure) -> MarkdownEdit {
+    /// Links the selection, labeled with `label` or else the destination. Nil unless the
+    /// destination is a complete web, email or phone link.
+    public func edit(linking selection: NSRange, to destination: String, label: String) -> MarkdownEdit? {
         let destination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: destination), let scheme = url.scheme?.lowercased(),
             ["http", "https", "mailto", "tel"].contains(scheme),
@@ -52,7 +50,7 @@ extension MarkdownDocument {
             label.rangeOfCharacter(from: .newlines) == nil,
             !["http", "https"].contains(scheme) || !(url.host ?? "").isEmpty,
             !["mailto", "tel"].contains(scheme) || !url.path.isEmpty
-        else { throw MarkdownEdit.Failure.invalidLink }
+        else { return nil }
         let target = url.absoluteString
         let escaped = target.contains("(") || target.contains(")") ? "<\(target)>" : target
         let title = (label.isEmpty ? target : label)

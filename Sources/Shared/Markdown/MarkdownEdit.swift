@@ -54,25 +54,4 @@ public struct MarkdownEdit: Sendable {
         if offset >= NSMaxRange(range) { return offset + replacementLength - range.length }
         return range.location + min(offset - range.location, replacementLength)
     }
-
-    public enum Failure: Error, Equatable {
-        /// The keyboard is composing or Writing Tools is working, so the editor isn't settled.
-        case unsettled
-        /// The text changed since the edit was made, so it no longer fits.
-        case changed
-        case invalidLink
-    }
-}
-
-extension MarkdownEdit.Failure: LocalizedError {
-    public var errorDescription: String? {
-        switch self {
-        case .unsettled:
-            String(localized: "Finish typing or wait for Writing Tools, then try again.", bundle: .module)
-        case .changed:
-            String(localized: "This file changed. Select the text again.", bundle: .module)
-        case .invalidLink:
-            String(localized: "Enter a complete web, email or phone link.", bundle: .module)
-        }
-    }
 }

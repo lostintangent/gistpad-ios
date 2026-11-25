@@ -42,8 +42,10 @@
             .id(editor.id)
             .ignoresSafeArea([.container, .keyboard], edges: .vertical)
             .sheet(item: $linkRequest, onDismiss: editor.focus) { request in
-                LinkEditor(label: request.label) { label, destination throws(MarkdownEdit.Failure) in
-                    try editor.apply(request.document.edit(linking: request.selection, to: destination, label: label))
+                LinkEditor(label: request.label) { label, destination throws(MarkdownEditor.Failure) in
+                    guard let edit = request.document.edit(linking: request.selection, to: destination, label: label)
+                    else { throw .invalidLink }
+                    try editor.apply(edit)
                 }
             }
             .alert(error: Bindable(editor).inputError) {}
@@ -230,7 +232,7 @@
         @State private var destination = ""
         @State private var error: String?
         @FocusState private var urlFocused: Bool
-        let save: @MainActor (String, String) throws(MarkdownEdit.Failure) -> Void
+        let save: @MainActor (String, String) throws(MarkdownEditor.Failure) -> Void
         @Environment(\.dismiss) private var dismiss
 
         var body: some View {
