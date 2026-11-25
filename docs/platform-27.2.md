@@ -11,10 +11,10 @@ Nothing in 27.2 changes a visible GistPad surface that the Designer needs to app
 
 | # | Opportunity | 27.2 API or tool | User benefit | Effort | Decision |
 |---|---|---|---|---|---|
-| 1 | Test the Duo editor and Ask/Edit/Review under memory pressure | Xcode 27.2 Device Hub memory-pressure simulation, Standby on Duo | Catches editor and model memory regressions before the installed-device pass | Small, no code | Adopt now for QA |
+| 1 | Test the Duo editor and Ask/Edit under memory pressure | Xcode 27.2 Device Hub memory-pressure simulation, Standby on Duo | Catches editor and model memory regressions before the installed-device pass | Small, no code | Adopt now for QA |
 | 2 | Leading inline titles on sheets | `View.toolbarTitleAlignment(_:)` with `ToolbarTitleAlignment` (`iOS 27.2`, iOS only) | Only if the Designer wants a leading title. Notes uses the system default, so no change by default | Tiny | Later, Designer call |
 | 3 | Shortcuts can pipe note text into GistPad intents | `IntentParameter` inits with `inputConnectionBehavior:` for `_IntentValueRepresentable` values, and the collection `size:` variant (`anyAppleOS 27.2`). Entity-typed parameters such as `NoteEntity` stay on the iOS 18 inits | Shortcuts chains such as "Add to Today" from other apps' output | Small to medium, plus a phone check | Later, for text and bool parameters only |
-| 4 | Pass structured note content to on-device Ask/Edit/Review | FoundationModels `DataAttachmentRepresentable`, `supportsDataAttachmentType(_:)`, `supportsDataEntryType(_:)`, `Transcript.DataEntry`, `LanguageModelExecutorGenerationChannel` data actions (27.2) | Could carry photos or other typed content without inflating the text prompt | Medium, needs a spike and a context-budget check on Duo | Later, spike only if photo-aware Ask is wanted |
+| 4 | Pass structured note content to on-device Ask/Edit | FoundationModels `DataAttachmentRepresentable`, `supportsDataAttachmentType(_:)`, `supportsDataEntryType(_:)`, `Transcript.DataEntry`, `LanguageModelExecutorGenerationChannel` data actions (27.2) | Could carry photos or other typed content without inflating the text prompt | Medium, needs a spike and a context-budget check on Duo | Later, spike only if photo-aware Ask is wanted |
 
 ## Skip
 

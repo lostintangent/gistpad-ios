@@ -150,7 +150,7 @@ Features and Shared are modules of the root `Package.swift`, named by domain, so
 | `Sources/App/Captures` | DEBUG fixture launch arguments and the fixture library. |
 | `Sources/Extensions/Widgets` | The GistPad widgets and the Add to Today, Open Today and New Gist controls. |
 | `Sources/Features/Editor` | `MarkdownEditor` and its TextKit 2 text view, `MarkdownEditorView`, `KeyboardBar`, highlighting, hidden front matter and the `CommentAnnotator`. |
-| `Sources/Features/Intelligence` | The Ask, Edit and Review sheet and the on-device model, foldered as `Ask`, `Edit` and `Review`, the `Model` they share and the `Sheet`. |
+| `Sources/Features/Intelligence` | The Ask and Edit sheet and the on-device model, foldered as `Ask` and `Edit`, the `Model` they share and the `Sheet`. |
 | `Sources/Features/Model` | `GistPadModel`, `GistFile`, `GistFileEditor` and `CommentsModel`: the account, the list, the files you've opened, a gist's conversation and every verb, one file per scenario. |
 | `Sources/Features/Screens` | The views, foldered by capability: `Library` with the Today button, `Gist` with renaming, `Tags`, and `Settings` with the account. The GitHub status control and toolbar toggles both screens use stay at the root. |
 | `Sources/Features/Platform` | App Intents and Siri's notes schema, Spotlight, the widget view and `gistpad://` links, a file for each system surface. |

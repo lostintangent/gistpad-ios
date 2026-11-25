@@ -4,8 +4,8 @@ From the repository root, run `bash scripts/evaluate-intelligence.sh 10`.
 The Mac must have Apple Intelligence enabled and the local model available.
 This uses `SystemLanguageModel.default`, never a fake backend or cloud service.
 Honor the shared `/tmp/gistpad-slot.lock` before running builds or inference.
-The evaluation uses the same `Intelligence.ask`, `.edit`, and `.review` paths
-as the app. It's the root package's `IntelligenceEval` target, so it reaches
+The evaluation uses the same `Intelligence.ask` and `.edit` paths as the
+app. It's the root package's `IntelligenceEval` target, so it reaches
 them through `package` access, and `swift test` runs its tests. A baseline can exit unsuccessfully when it misses the acceptance
 floor; its result files still contain the measured cases.
 
@@ -68,11 +68,6 @@ exact expected insertion position, even when the request names only the
 destination heading. Task operations still work without rewriting
 the note. If even one selected block cannot fit, report the error rather than
 silently truncating the source.
-
-Review cases seed one misspelling or doubled word in a short note and in each
-full-size note, and one short note has nothing to fix. A case passes when a
-suggestion anchors over every seeded passage and every suggestion anchors in
-the note. Review samples at temperature 0.2, so compare it across 10 repetitions.
 
 Favorite answers are graded on generated prose, not cited text or exact sentence
 equality. Deterministic checks require the expected work's name, a preference
