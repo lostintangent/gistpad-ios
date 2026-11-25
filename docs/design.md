@@ -140,7 +140,7 @@ Settings is a small Form:
 | Overdue | System orange |
 | Accent | The user's saved web accent, sky `#0EA5E9` by default |
 
-The accent appears only in the widget's weekday and New Gist, a few Preview details, comment highlights, the rule beside a comment's quote and its own Settings swatch. Text targets 4.5:1, and 7:1 with Increased Contrast.
+The accent appears only in the widget's weekday and New Gist, a few Preview details, commented passages, the rule beside a comment's quote and its own Settings swatch. Text targets 4.5:1, and 7:1 with Increased Contrast.
 
 **Tag labels** fill with the exact saved color at full opacity, with black or white ink, whichever contrasts more. `.footnote` medium, 8 by 4 pt padding, 8-pt corners. No dot or opacity. Near-white and near-black fills get a hairline `separator` edge, and so do their swatches. A missing color uses the neutral system fill. Increased Contrast adds a primary outline.
 
@@ -204,7 +204,7 @@ The composer sits in the bottom safe-area bar, like Messages: a growing interact
 
 States: "Loading comments" shows only on a first load with nothing cached. Reopening Comments shows the loaded thread straight away and refreshes quietly. Failures say "Comments couldn’t be loaded" or "Couldn’t reach GitHub. Check your connection and try again." with Try Again. A post or edit that doesn't go through says "Your comment couldn’t be posted." A delete says "This comment couldn’t be deleted.", because it can be someone else's on your gist. Both go on "Check your connection and try again." An empty conversation is just the composer, with no message.
 
-In the gist, a commented passage gets a 50% accent highlight and no underline. The highlight stays put while you type. Selected text offers **Add Comment** in the edit menu. Tapping a highlight, or **View Comment**, opens its thread.
+In the gist, a commented passage sits on an accent tint, at most half strength and fainter where its text needs the contrast, with no underline. The selected thread's passage fills with the accent, and its text takes the on-accent ink. The tint stays put while you type. Selected text offers **Add Comment** in the edit menu. Tapping a commented passage, or **View Comment**, opens its thread.
 
 ## Widgets and shortcuts
 
