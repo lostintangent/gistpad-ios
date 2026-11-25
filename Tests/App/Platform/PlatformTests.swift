@@ -24,7 +24,7 @@ struct PlatformTests {
         intent.asTask = true
         _ = try await intent.perform()
         #expect(
-            fileEditor.editor.text.hasSuffix("- [ ] A real task\n- [ ] A thought\n- [ ] Second task\n"))
+            fileEditor.editor.document.text.hasSuffix("- [ ] A real task\n- [ ] A thought\n- [ ] Second task\n"))
         #expect(PendingLink.shared.link == previousLink)
         #expect(fixture.publishes.isEmpty)
     }
@@ -33,7 +33,7 @@ struct PlatformTests {
         let fixture = try await PlatformFixture.make()
         defer { fixture.cleanUp() }
         let fileEditor = try await fixture.fileEditor()
-        let typed = fileEditor.editor.text + "- [ ] Written offline\n"
+        let typed = fileEditor.editor.document.text + "- [ ] Written offline\n"
         fileEditor.editor.textView.text = typed
         fileEditor.editor.textViewDidChange(fileEditor.editor.textView)
         try #require(await fileEditor.waitForLocalSave())
@@ -44,13 +44,13 @@ struct PlatformTests {
         fixture.fixture.restore()
 
         try await fixture.bridge.addToToday(text: "A thought", asTask: true, target: DailyNote.Day())
-        #expect(fileEditor.editor.text == typed + "- [ ] A thought\n")
+        #expect(fileEditor.editor.document.text == typed + "- [ ] A thought\n")
         #expect(fileEditor.status == .unpublished)
         #expect(fixture.publishes.isEmpty)
 
         await fixture.model.publishDrafts()
         #expect(fixture.publishes == ["PATCH /gists/daily123"])
-        #expect(fixture.fixture.onGitHub("daily123", DailyNote.Day().filename) == fileEditor.editor.text)
+        #expect(fixture.fixture.onGitHub("daily123", DailyNote.Day().filename) == fileEditor.editor.document.text)
         #expect(fileEditor.status == .published)
     }
 
@@ -98,7 +98,7 @@ struct PlatformTests {
         let note = try #require(try LibrarySnapshot.read()?.files.first {
             $0.link == GistPadLink.gist(id: "daily123", filename: DailyNote.Day().filename)
         })
-        let original = fileEditor.editor.text
+        let original = fileEditor.editor.document.text
         let intent = AppendToGistIntent()
         intent.app = fixture.bridge
         intent.target = note
@@ -106,10 +106,10 @@ struct PlatformTests {
 
         _ = try await intent.perform()
 
-        #expect(fileEditor.editor.text == original + "Pick up the dry cleaning\n")
+        #expect(fileEditor.editor.document.text == original + "Pick up the dry cleaning\n")
         #expect(await fileEditor.waitForLocalSave())
         #expect(fixture.publishes.isEmpty)
-        #expect(try await fixture.store.current(fileEditor.file.nextDraft)?.text == fileEditor.editor.text)
+        #expect(try await fixture.store.current(fileEditor.file.nextDraft)?.text == fileEditor.editor.document.text)
     }
 
     @Test func siriAppendToAClosedFileKeepsItsFrontMatterAndDoesNotExposeTheBody() async throws {
@@ -221,7 +221,7 @@ struct PlatformTests {
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
         window.layoutIfNeeded()
-        let original = fileEditor.editor.text
+        let original = fileEditor.editor.document.text
         fixture.fixture.server.intercept { request in
             request.url?.path.hasPrefix("/storage/v1/object/assets/daily123/") == true ? .init() : nil
         }
@@ -232,11 +232,11 @@ struct PlatformTests {
             location: (original as NSString).length, length: 0)
         await images.add(image: UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).pngData { _ in })
         #expect(images.failure == nil && !images.isUploading)
-        #expect(fileEditor.editor.text.hasPrefix(
+        #expect(fileEditor.editor.document.text.hasPrefix(
             original + "![Image](\(GistPadAccountStore.projectURL)/storage/v1/object/public/assets/daily123/"))
-        #expect(fileEditor.editor.text.hasSuffix(".png)"))
+        #expect(fileEditor.editor.document.text.hasSuffix(".png)"))
         fileEditor.editor.textView.undoManager?.undo()
-        #expect(fileEditor.editor.text == original)
+        #expect(fileEditor.editor.document.text == original)
         #expect(await fileEditor.waitForLocalSave())
         #expect(fixture.publishes.isEmpty)
     }

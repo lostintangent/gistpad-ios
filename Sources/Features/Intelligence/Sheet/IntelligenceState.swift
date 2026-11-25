@@ -39,7 +39,7 @@
         var isStale: Bool {
             guard let snapshot else { return false }
             return editor.id != snapshot.sessionID || editor.generation != snapshot.generation
-                || !editor.text.utf8.elementsEqual(snapshot.source.utf8)
+                || !editor.document.text.utf8.elementsEqual(snapshot.source.utf8)
         }
 
         var availabilityReason: String? { engine.backend.unavailableReason }
@@ -76,7 +76,7 @@
             let instruction = selectedAction == .review ? "" : prompt
             let requestID = UUID()
             logger.notice(
-                "request=\(requestID.uuidString, privacy: .public) action=\(selectedAction.rawValue, privacy: .public) state=started sourceUTF16=\(self.editor.text.utf16.count)"
+                "request=\(requestID.uuidString, privacy: .public) action=\(selectedAction.rawValue, privacy: .public) state=started sourceUTF16=\(self.editor.document.text.utf16.count)"
             )
             task = Task {
                 defer {

@@ -70,7 +70,7 @@ struct GitHubStatusHostTests {
             #expect(session.id == identity)
             #expect(editor.selectedRange == selection)
             #expect(session.generation == generation)
-            #expect(session.text.utf8.elementsEqual(source.utf8))
+            #expect(session.document.text.utf8.elementsEqual(source.utf8))
             #expect(editor.text.utf8.elementsEqual(source.utf8))
             #expect(editor.undoManager?.canUndo == canUndo)
             #expect(editor.isFirstResponder)

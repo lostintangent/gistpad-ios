@@ -62,10 +62,8 @@ final class ImageUpload {
             let markdown = ImageStorage.markdown(try await model.uploadImage(image, for: fileEditor.file))
             let editor = fileEditor.editor
             try editor.apply(
-                MarkdownEdit(
-                    range: NSRange(location: NSMaxRange(editor.selection), length: 0), expected: "",
-                    replacement: markdown),
-                generation: editor.generation)
+                editor.document.edit(
+                    replacing: NSRange(location: NSMaxRange(editor.selection), length: 0), with: markdown))
         } catch {
             failure = Failure(error)
             failedImage = image

@@ -71,7 +71,7 @@
             originalInk = []
             paintedGeneration = editor.generation
             editor.textView.setNeedsLayout()
-            let highlights = configuration.quotes.highlights(in: [editor.text])
+            let highlights = configuration.quotes.highlights(in: [editor.document.text])
                 .filter { $0.start >= editor.contentStart }
             verifiedHighlights = highlights
             publish(Set(highlights.flatMap(\.threadIDs)))
@@ -124,7 +124,7 @@
         func selectionDidChange() {
             editor.textView.setNeedsLayout()
             guard !updatingSelection, !originalInk.isEmpty, paintedGeneration == editor.generation,
-                editor.isSettled, editor.textView.textStorage.length == editor.text.utf16.count
+                editor.isSettled, editor.textView.textStorage.length == editor.document.text.utf16.count
             else { return }
             updatingSelection = true
             defer { updatingSelection = false }
@@ -229,7 +229,7 @@
         private func addAction(ranges: [NSRange]) -> UIAction? {
             guard actions != nil, !isSuspended,
                 ranges.count == 1, let range = ranges.first, editor.isSettled,
-                let quote = try? MarkdownEdit.text(in: editor.text, at: range),
+                case let quote = (editor.document.text as NSString).substring(with: range),
                 CommentQuote.isQuotable(quote)
             else { return nil }
             return UIAction(

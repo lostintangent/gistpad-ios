@@ -138,12 +138,9 @@ extension GistFileEditor {
                 try await model.reloadLocalState(accountID: read.accountID)
             } else if let content = latest.content, !sourceEqual(content, read.text) {
                 // Every text change bumps the generation, so this is refused if you typed after the fetch.
-                try await commitMutation(
-                    MarkdownEdit(
-                        range: NSRange(location: 0, length: editor.text.utf16.count),
-                        expected: editor.text, replacement: content),
-                    expectedGeneration: generation
-                ) { read.adopting(GitHubVersion(text: content, revision: latest.gist.revision)) }
+                try await commitMutation(editor.document.edit(replacing: editor.document.range, with: content)) {
+                    read.adopting(GitHubVersion(text: content, revision: latest.gist.revision))
+                }
             }
             refreshFailure = nil
             refreshedAt = .now
@@ -163,7 +160,7 @@ extension GistFileEditor {
             else { throw GitHubError.missingFile }
             try await model.reloadLocalState(accountID: file.accountID)
             file.update(text, in: gist)
-            if !sourceEqual(text, editor.text) {
+            if !sourceEqual(text, editor.document.text) {
                 editor.reload(text)
                 savedGeneration = editor.generation
             }

@@ -25,15 +25,12 @@ extension EditorContinuityTests {
             session.textView.text = preview
             session.textViewDidChange(session.textView)
             session.highlight()
-            #expect(session.text.utf8.elementsEqual(source.utf8))
+            #expect(session.document.text.utf8.elementsEqual(source.utf8))
             #expect(session.generation == 7)
             #expect(changes.isEmpty)
         }
         #expect(throws: MarkdownEdit.Failure.unsettled) {
-            try session.apply(
-                MarkdownEdit(
-                    range: NSRange(location: 0, length: 8), expected: "Original", replacement: "External"),
-                generation: 7)
+            try session.apply(session.document.edit(replacing: NSRange(location: 0, length: 8), with: "External"))
         }
         session.textViewWritingToolsDidEnd(session.textView)
         #expect(!session.isWritingToolsActive)
@@ -65,7 +62,7 @@ extension EditorContinuityTests {
             session.highlight()
             #expect(session.textView.selectedRange == finalSelection)
             #expect(session.textView.text.utf8.elementsEqual(finalText.utf8))
-            #expect(session.text.utf8.elementsEqual(source.utf8))
+            #expect(session.document.text.utf8.elementsEqual(source.utf8))
         }
         session.textViewWritingToolsDidEnd(session.textView)
         #expect(changes == [finalText])
@@ -76,14 +73,14 @@ extension EditorContinuityTests {
             session.textView.layoutIfNeeded()
             session.highlight()
             #expect(session.textView.selectedRange == finalSelection)
-            #expect(session.text.utf8.elementsEqual(finalText.utf8))
+            #expect(session.document.text.utf8.elementsEqual(finalText.utf8))
         }
         #expect(session.textView.undoManager?.canUndo == true)
         session.textView.undoManager?.undo()
         #expect(session.textView.text.utf8.elementsEqual(source.utf8))
-        #expect(session.text.utf8.elementsEqual(source.utf8))
+        #expect(session.document.text.utf8.elementsEqual(source.utf8))
         #expect(changes == [finalText, source])
         session.textView.undoManager?.redo()
-        #expect(session.text.utf8.elementsEqual(finalText.utf8))
+        #expect(session.document.text.utf8.elementsEqual(finalText.utf8))
     }
 }

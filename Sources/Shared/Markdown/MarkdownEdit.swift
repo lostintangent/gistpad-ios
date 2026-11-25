@@ -1,23 +1,24 @@
 import Foundation
 
-/// One change to a note's source, with UTF-16 offsets.
+/// One change to a note's source, with UTF-16 offsets. It applies only to the exact text of the
+/// document it was made from.
 public struct MarkdownEdit: Sendable {
+    public let document: MarkdownDocument
     public let range: NSRange
-    public let expected: String
     public let replacement: String
     /// The selection after the edit, or nil to keep the caret where it was.
     public let selection: NSRange?
 
-    public init(range: NSRange, expected: String, replacement: String, selection: NSRange? = nil) {
+    init(document: MarkdownDocument, range: NSRange, replacement: String, selection: NSRange?) {
+        self.document = document
         self.range = range
-        self.expected = expected
         self.replacement = replacement
         self.selection = selection
     }
 
-    /// Replacements are ordered, nonoverlapping UTF-16 ranges in the original source.
-    package init(
-        range: NSRange, expected: String, replacements: [(range: NSRange, replacement: String)],
+    /// Replacements are ordered, nonoverlapping UTF-16 ranges in the document, inside `range`.
+    init(
+        document: MarkdownDocument, range: NSRange, replacements: [(range: NSRange, replacement: String)],
         selection: NSRange
     ) {
         var start = selection.location
@@ -31,7 +32,7 @@ public struct MarkdownEdit: Sendable {
             end = Self.remap(end, through: current, replacementLength: length)
             delta += length - replacement.range.length
         }
-        let result = NSMutableString(string: expected)
+        let result = NSMutableString(string: document.source.substring(with: range))
         for replacement in replacements.reversed() {
             result.replaceCharacters(
                 in: NSRange(
@@ -39,30 +40,13 @@ public struct MarkdownEdit: Sendable {
                 with: replacement.replacement)
         }
         self.init(
-            range: range, expected: expected, replacement: result as String,
+            document: document, range: range, replacement: result as String,
             selection: NSRange(location: start, length: end - start))
     }
 
-    public func applying(to source: String) throws -> String {
-        guard try Self.text(in: source, at: range).utf8.elementsEqual(expected.utf8) else {
-            throw Failure.changed
-        }
-        return (source as NSString).replacingCharacters(in: range, with: replacement)
-    }
-
-    /// The source at `range`, which must be in bounds and must not split a surrogate pair.
-    package static func text(in source: String, at range: NSRange) throws -> String {
-        let utf16 = source as NSString
-        guard range.location >= 0, range.length >= 0, range.location <= utf16.length,
-            range.length <= utf16.length - range.location
-        else { throw Failure.changed }
-        for boundary in [range.location, NSMaxRange(range)]
-        where boundary > 0 && boundary < utf16.length {
-            guard !(0xD800...0xDBFF).contains(utf16.character(at: boundary - 1))
-                || !(0xDC00...0xDFFF).contains(utf16.character(at: boundary))
-            else { throw Failure.changed }
-        }
-        return utf16.substring(with: range)
+    /// The document's text with the change made.
+    public var result: String {
+        document.source.replacingCharacters(in: range, with: replacement)
     }
 
     private static func remap(_ offset: Int, through range: NSRange, replacementLength: Int) -> Int {

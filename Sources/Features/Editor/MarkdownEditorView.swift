@@ -45,42 +45,20 @@
             .id(editor.id)
             .ignoresSafeArea([.container, .keyboard], edges: .vertical)
             .sheet(item: $linkRequest, onDismiss: editor.focus) { request in
-                LinkEditor(label: request.label) { label, destination in
-                    try editor.apply(
-                        MarkdownDocument(request.source).edit(
-                            linking: request.selection, to: destination, label: label),
-                        generation: request.generation)
+                LinkEditor(label: request.label) { label, destination throws(MarkdownEdit.Failure) in
+                    try editor.apply(request.document.edit(linking: request.selection, to: destination, label: label))
                 }
             }
-            .alert(
-                String(localized: "Couldn’t Complete Action", bundle: .module),
-                item: Bindable(editor).inputError
-            ) { _ in
-            } message: { message in
-                Text(message)
-            }
+            .alert(error: Bindable(editor).inputError) {}
         }
 
         private func format(_ command: (MarkdownDocument, NSRange) -> MarkdownEdit?) {
-            do {
-                if let edit = command(MarkdownDocument(editor.text), editor.textView.selectedRange) {
-                    try editor.apply(edit, generation: editor.generation)
-                }
-            } catch {
-                editor.inputError = error.localizedDescription
-            }
+            editor.perform(command(editor.document, editor.textView.selectedRange))
         }
 
         private func beginLink() {
-            let selection = editor.textView.selectedRange
-            do {
-                guard editor.canFormat else { throw MarkdownEdit.Failure.unsettled }
-                linkRequest = LinkRequest(
-                    source: editor.text, generation: editor.generation, selection: selection,
-                    label: try MarkdownEdit.text(in: editor.text, at: selection))
-            } catch {
-                editor.inputError = error.localizedDescription
-            }
+            guard editor.canFormat else { return editor.inputError = .unsettled }
+            linkRequest = LinkRequest(document: editor.document, selection: editor.textView.selectedRange)
         }
 
     }
@@ -243,12 +221,12 @@
         }
     }
 
+    /// The selection a link is being added to, in the document it was chosen from.
     private struct LinkRequest: Identifiable {
         let id = UUID()
-        let source: String
-        let generation: UInt64
+        let document: MarkdownDocument
         let selection: NSRange
-        let label: String
+        var label: String { (document.text as NSString).substring(with: selection) }
     }
 
     private struct LinkEditor: View {
@@ -256,7 +234,7 @@
         @State private var destination = ""
         @State private var error: String?
         @FocusState private var urlFocused: Bool
-        let save: @MainActor (String, String) throws -> Void
+        let save: @MainActor (String, String) throws(MarkdownEdit.Failure) -> Void
         @Environment(\.dismiss) private var dismiss
 
         var body: some View {

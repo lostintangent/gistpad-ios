@@ -10,14 +10,9 @@ extension GistFileEditor {
     /// newer version, and publishes it if you asked. It lands only while the draft is as you
     /// reviewed it.
     public func resolveConflict(_ reviewed: GistFileDraft, text: String, publishes: Bool) async throws {
-        guard reviewed.conflict != nil, file.draft == reviewed, sourceEqual(reviewed.text, editor.text)
+        guard reviewed.conflict != nil, file.draft == reviewed, sourceEqual(reviewed.text, editor.document.text)
         else { throw ChangeError.staleReview }
-        try await commitMutation(
-            MarkdownEdit(
-                range: NSRange(location: 0, length: editor.text.utf16.count),
-                expected: editor.text, replacement: text),
-            expectedGeneration: editor.generation
-        ) {
+        try await commitMutation(editor.document.edit(replacing: editor.document.range, with: text)) {
             let store = model.draftStore
             let resolved = try await model.serially {
                 do { return try await store.resolveConflict(reviewed, text: text) }

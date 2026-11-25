@@ -24,7 +24,7 @@ import Testing
         let (source, expected) = example
         let edit = try #require(
             MarkdownDocument(source).edit(typing: "\n", over: NSRange(location: source.utf16.count, length: 0)))
-        #expect(try edit.applying(to: source) == expected)
+        #expect(edit.result == expected)
         #expect(edit.selection == NSRange(location: expected.utf16.count, length: 0))
     }
 
@@ -32,7 +32,7 @@ import Testing
     func returnOnAnEmptyItemExitsWithoutAnExtraBlankLine(_ source: String) throws {
         let edit = try #require(
             MarkdownDocument(source).edit(typing: "\n", over: NSRange(location: source.utf16.count, length: 0)))
-        #expect(try edit.applying(to: source) == "")
+        #expect(edit.result == "")
         #expect(edit.selection == NSRange(location: 0, length: 0))
     }
 
@@ -41,7 +41,7 @@ import Testing
         let range = (source as NSString).range(of: "👩🏽‍💻 ")
         let edit = try #require(
             MarkdownDocument(source).edit(typing: "\n", over: range))
-        let changed = try edit.applying(to: source)
+        let changed = edit.result
         #expect(changed == "- 日本語 \n- after")
         #expect(edit.selection == NSRange(location: "- 日本語 \n- ".utf16.count, length: 0))
     }
@@ -50,12 +50,12 @@ import Testing
         let source = "8. First\r\n9. Next\r\n"
         let edit = try #require(
             MarkdownDocument(source).edit(typing: "\n", over: NSRange(location: 8, length: 0)))
-        #expect(try edit.applying(to: source) == "8. First\r\n9. \r\n10. Next\r\n")
+        #expect(edit.result == "8. First\r\n9. \r\n10. Next\r\n")
         let empty = "1. First\r\n2. \r\nAfter"
         let range = (empty as NSString).range(of: "2. ")
         let exit = try #require(
             MarkdownDocument(empty).edit(typing: "\n", over: NSRange(location: NSMaxRange(range), length: 0)))
-        #expect(try exit.applying(to: empty) == "1. First\r\n\r\nAfter")
+        #expect(exit.result == "1. First\r\n\r\nAfter")
     }
 
     @Test(arguments: ["Plain paragraph", "1.not a list", "-not a list", "999999999. item"])
@@ -69,7 +69,7 @@ import Testing
         let edit = try #require(
             MarkdownDocument(source).edit(typing: "\n", over: NSRange(location: 8, length: 0)))
         #expect(
-            try edit.applying(to: source)
+            edit.result
                 == "1. First\n2. \n3. Second\n   1. Nested\n4. Third\n- Other\n1. Independent")
         #expect(edit.selection == NSRange(location: "1. First\n2. ".utf16.count, length: 0))
     }
@@ -78,7 +78,7 @@ import Testing
         let source = "1. First\n2. Run `make`\n3. Last"
         let edit = try #require(
             MarkdownDocument(source).edit(typing: "\n", over: NSRange(location: 8, length: 0)))
-        #expect(try edit.applying(to: source) == "1. First\n2. \n3. Run `make`\n4. Last")
+        #expect(edit.result == "1. First\n2. \n3. Run `make`\n4. Last")
     }
 
     @Test func renumberingStopsAtProtectedContentAndAnIndependentParagraph() throws {
@@ -90,7 +90,7 @@ import Testing
             let source = "1. First" + tail
             let edit = try #require(
                 MarkdownDocument(source).edit(typing: "\n", over: NSRange(location: 8, length: 0)))
-            #expect(try edit.applying(to: source) == "1. First\n2. " + tail)
+            #expect(edit.result == "1. First\n2. " + tail)
         }
     }
 
@@ -99,13 +99,10 @@ import Testing
         let insertion = (source as NSString).range(of: "\n").location
         let edit = try #require(
             MarkdownDocument(source).edit(typing: "\n", over: NSRange(location: insertion, length: 0)))
-        let result = try edit.applying(to: source)
+        let result = edit.result
         #expect(result.hasPrefix("1. Item 👩🏽‍💻\n2. \n3. Item 👩🏽‍💻"))
         #expect(result.hasSuffix("201. Item 👩🏽‍💻"))
         #expect(edit.selection == NSRange(location: insertion + "\n2. ".utf16.count, length: 0))
-        #expect(throws: MarkdownEdit.Failure.changed) {
-            try edit.applying(to: source.replacingOccurrences(of: "200.", with: "201."))
-        }
     }
 
     @Test func selectionAcrossLinesUsesOrdinaryReturnInsteadOfGuessingAList() throws {
@@ -149,35 +146,35 @@ import Testing
         let source = "1. a\n2. b"
         let selection = NSRange(location: (source as NSString).range(of: "2. b").location, length: 0)
         let edit = try #require(MarkdownDocument(source).edit(indenting: selection))
-        #expect(try edit.applying(to: source) == "1. a\n   1. b")
+        #expect(edit.result == "1. a\n   1. b")
     }
 
     @Test func indentNestsUnderTwoDigitNumbersAtFourSpaces() throws {
         let source = "10. a\n11. b"
         let selection = NSRange(location: (source as NSString).range(of: "11. b").location, length: 0)
         let edit = try #require(MarkdownDocument(source).edit(indenting: selection))
-        #expect(try edit.applying(to: source) == "10. a\n    1. b")
+        #expect(edit.result == "10. a\n    1. b")
     }
 
     @Test func indentRenumbersTheListItLeaves() throws {
         let source = "1. a\n2. b\n3. c"
         let selection = NSRange(location: (source as NSString).range(of: "2. b").location, length: 0)
         let edit = try #require(MarkdownDocument(source).edit(indenting: selection))
-        #expect(try edit.applying(to: source) == "1. a\n   1. b\n2. c")
+        #expect(edit.result == "1. a\n   1. b\n2. c")
     }
 
     @Test func outdentRenumbersBothLists() throws {
         let source = "1. a\n   1. b\n2. c"
         let selection = NSRange(location: (source as NSString).range(of: "1. b").location, length: 0)
         let edit = try #require(MarkdownDocument(source).edit(outdenting: selection))
-        #expect(try edit.applying(to: source) == "1. a\n2. b\n3. c")
+        #expect(edit.result == "1. a\n2. b\n3. c")
     }
 
     @Test func indentNestsBulletsAtTwoSpaces() throws {
         let source = "- a\n- b"
         let selection = NSRange(location: (source as NSString).range(of: "- b").location, length: 0)
         let edit = try #require(MarkdownDocument(source).edit(indenting: selection))
-        #expect(try edit.applying(to: source) == "- a\n  - b")
+        #expect(edit.result == "- a\n  - b")
     }
 
     @Test func indentKeepsRelativeStructureInAMultilineSelection() throws {
@@ -186,14 +183,14 @@ import Testing
         let end = NSMaxRange((source as NSString).range(of: "3. c"))
         let edit = try #require(
             MarkdownDocument(source).edit(indenting: NSRange(location: start, length: end - start)))
-        #expect(try edit.applying(to: source) == "1. a\n   1. b\n   2. c\n2. d")
+        #expect(edit.result == "1. a\n   1. b\n   2. c\n2. d")
     }
 
     @Test func indentTakesNestedChildrenAlong() throws {
         let source = "1. a\n2. b\n   1. nested\n3. c"
         let selection = NSRange(location: (source as NSString).range(of: "2. b").location, length: 0)
         let edit = try #require(MarkdownDocument(source).edit(indenting: selection))
-        #expect(try edit.applying(to: source) == "1. a\n   1. b\n      1. nested\n2. c")
+        #expect(edit.result == "1. a\n   1. b\n      1. nested\n2. c")
     }
 
     @Test func indentOutdentPreserveTheLogicalUTF16SelectionAndLineEndings() throws {
@@ -201,13 +198,13 @@ import Testing
         let selection = NSRange(location: 2, length: "- 日本語\r\n  - 👩🏽‍💻".utf16.count - 2)
         let edit = try #require(
             MarkdownDocument(source).edit(indenting: selection))
-        let changed = try edit.applying(to: source)
+        let changed = edit.result
         #expect(changed == "  - 日本語\r\n    - 👩🏽‍💻\r\nAfter")
         #expect(edit.selection?.location == selection.location + 2)
         #expect(edit.selection?.length == selection.length + 2)
         let undo = try #require(
             MarkdownDocument(changed).edit(outdenting: edit.selection!))
-        #expect(try undo.applying(to: changed) == source)
+        #expect(undo.result == source)
         #expect(undo.selection == selection)
     }
 
@@ -216,7 +213,7 @@ import Testing
         let selection = NSRange(location: 0, length: "First\nSecond\n".utf16.count)
         let edit = try #require(
             MarkdownDocument(source).edit(indenting: selection))
-        #expect(try edit.applying(to: source) == "  First\n  Second\nThird")
+        #expect(edit.result == "  First\n  Second\nThird")
         #expect(NSMaxRange(edit.selection!) == "  First\n  Second\n".utf16.count)
     }
 
@@ -224,14 +221,14 @@ import Testing
         for (source, expected) in [("\t- Item", "\t\t- Item"), ("", "  ")] {
             let edit = try #require(
                 MarkdownDocument(source).edit(indenting: NSRange(location: source.utf16.count, length: 0)))
-            #expect(try edit.applying(to: source) == expected)
+            #expect(edit.result == expected)
         }
         for (source, expected) in [
             ("\t- Item", "- Item"), (" - Item", "- Item"), ("   - Item", " - Item"),
         ] {
             let edit = try #require(
                 MarkdownDocument(source).edit(outdenting: NSRange(location: source.utf16.count, length: 0)))
-            #expect(try edit.applying(to: source) == expected)
+            #expect(edit.result == expected)
         }
         #expect(
             MarkdownDocument("Plain").edit(outdenting: NSRange(location: 2, length: 0)) == nil)
@@ -242,7 +239,7 @@ import Testing
         let selection = (source as NSString).range(of: "日本語 [a]\\b")
         let edit = try #require(
             MarkdownDocument(source).edit(typing: "https://example.test/a_(b)?q=c", over: selection))
-        let changed = try edit.applying(to: source)
+        let changed = edit.result
         #expect(changed == "Before [日本語 \\[a\\]\\\\b](<https://example.test/a_(b)?q=c>) after")
         #expect(
             edit.selection == NSRange(location: changed.utf16.count - " after".utf16.count, length: 0))
@@ -276,7 +273,7 @@ import Testing
         for key in keys.map(String.init) {
             let selection = NSRange(location: caret, length: 0)
             if let edit = MarkdownDocument(text).edit(typing: key, over: selection) {
-                text = try edit.applying(to: text)
+                text = edit.result
                 caret = try #require(edit.selection).location
             } else {
                 text = (text as NSString).replacingCharacters(in: selection, with: key)
@@ -316,7 +313,7 @@ import Testing
         let source = "a \(pair) b"
         let edit = try #require(
             MarkdownDocument(source).edit(typing: "", over: NSRange(location: 2, length: 1)))
-        #expect(try edit.applying(to: source) == "a  b")
+        #expect(edit.result == "a  b")
         #expect(edit.selection == NSRange(location: 2, length: 0))
         let filled = NSRange(location: 0, length: 1)
         #expect(MarkdownDocument("(x)").edit(typing: "", over: filled) == nil)

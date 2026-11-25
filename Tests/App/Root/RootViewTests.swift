@@ -289,7 +289,7 @@ struct RootViewTests {
         }
         try await refresh.arrival()
         await until { pending.link == nil && host.model.activeEditor?.file.filename == today }
-        #expect(host.model.activeEditor?.editor.text == "Started on the web")
+        #expect(host.model.activeEditor?.editor.document.text == "Started on the web")
         await host.settle()
         #expect(host.editor(text: "Started on the web") != nil)
         #expect(!refresh.hasReachedGitHub)

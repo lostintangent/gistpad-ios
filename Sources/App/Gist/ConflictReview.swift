@@ -28,7 +28,7 @@ struct ConflictReview: View {
     }
 
     private var isStale: Bool {
-        fileEditor.file.draft != review || !sourceEqual(fileEditor.editor.text, review.text)
+        fileEditor.file.draft != review || !sourceEqual(fileEditor.editor.document.text, review.text)
     }
 
     private var github: String { review.conflict?.text ?? "" }

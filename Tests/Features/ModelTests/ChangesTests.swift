@@ -100,7 +100,7 @@ struct ChangesTests {
         let fileEditor = try await phone.open(.gist(id: "a"))
         try await phone.type("Mine", in: fileEditor)
         try await phone.rename("a", "README.md", to: "Notes.md")
-        #expect(fileEditor.editor.text == "Mine")
+        #expect(fileEditor.editor.document.text == "Mine")
         await phone.leave(fileEditor)
         #expect(phone.onGitHub("a", "Notes.md") == "Mine")
         #expect(phone.onGitHub("a", "README.md") == nil)

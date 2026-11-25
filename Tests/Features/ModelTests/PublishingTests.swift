@@ -83,7 +83,7 @@ struct PublishingTests {
         #expect(phone.publishes == ["POST /gists"])
         #expect(today.status == .published)
         let daily = try #require(phone.github.gists.first { $0.isDailyNote })
-        #expect(daily.files[DailyNote.Day().filename]?.content == today.editor.text)
+        #expect(daily.files[DailyNote.Day().filename]?.content == today.editor.document.text)
         #expect(daily.isPublic == false)
     }
 

@@ -5,19 +5,19 @@
     import Observation
     import UIKit
 
-    /// A note's Markdown source and the text view that edits it. Typing and every applied edit
-    /// change the text here, and each change reaches `onEdit` with its generation.
+    /// A note's Markdown document and the text view that edits it. Typing and every applied edit
+    /// change the document here, and each change reaches `onEdit` with its generation.
     @Observable
     public final class MarkdownEditor: NSObject, Identifiable {
         public let id = UUID()
-        public private(set) var text: String
+        public private(set) var document: MarkdownDocument
         public private(set) var generation: UInt64
         private(set) var isComposing = false
         public private(set) var isEditing = false
         private(set) var isWritingToolsActive = false
         private(set) var showsFrontMatter = false
         private(set) var contentStart = 0
-        var inputError: String?
+        var inputError: MarkdownEdit.Failure?
         let textView = TextView(usingTextLayoutManager: true)
         @ObservationIgnored weak var host: TextViewHost?
         @ObservationIgnored var hosts: [TextViewHost.Reference] = []
@@ -30,7 +30,7 @@
         public init(
             text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
         ) {
-            self.text = text
+            document = MarkdownDocument(text)
             self.generation = generation
             self.showsFrontMatter = showsFrontMatter
             super.init()
@@ -67,29 +67,27 @@
             highlight()
         }
 
-        /// Applies one change as an undoable step. A nil selection keeps the caret where it was.
-        public func apply(_ edit: MarkdownEdit, generation: UInt64) throws {
-            guard isSettled else { throw MarkdownEdit.Failure.unsettled }
-            guard self.generation == generation else { throw MarkdownEdit.Failure.changed }
-            _ = try edit.applying(to: text)
+        /// Applies one change as an undoable step, while the editor shows the edit's document.
+        public func apply(_ edit: MarkdownEdit) throws(MarkdownEdit.Failure) {
+            guard isSettled else { throw .unsettled }
+            guard edit.document == document else { throw .changed }
+            let source = document.text as NSString
             // An edit that changes nothing, like stepping over a closer, only moves the caret.
-            if edit.range.length == 0, edit.replacement.isEmpty {
+            guard source.compare(edit.replacement, options: .literal, range: edit.range) != .orderedSame else {
                 if let selection = edit.selection { textView.selectedRange = selection }
                 return
             }
             let previousSelection = textView.selectedRange
-            let inverse = MarkdownEdit(
-                range: NSRange(location: edit.range.location, length: edit.replacement.utf16.count),
-                expected: edit.replacement,
-                replacement: (text as NSString).substring(with: edit.range),
-                selection: previousSelection)
+            let replaced = source.substring(with: edit.range)
+            let replacement = edit.replacement
+            let changed = NSRange(location: edit.range.location, length: replacement.utf16.count)
             let undo = textView.undoManager
             undo?.beginUndoGrouping()
             // Source transactions bypass input substitutions and restore the exact source and selection.
             undo?.disableUndoRegistration()
-            textView.textStorage.replaceCharacters(in: edit.range, with: edit.replacement)
-            updateHiddenFrontMatter()
-            let delta = edit.replacement.utf16.count - edit.range.length
+            textView.textStorage.replaceCharacters(in: edit.range, with: replacement)
+            adoptText()
+            let delta = replacement.utf16.count - edit.range.length
             if let selection = edit.selection {
                 textView.selectedRange = selection
             } else if NSMaxRange(previousSelection) <= edit.range.location {
@@ -100,20 +98,34 @@
             }
             undo?.enableUndoRegistration()
             undo?.registerUndo(withTarget: self) { editor in
-                do {
-                    try editor.apply(inverse, generation: editor.generation)
-                } catch {
-                    editor.inputError = error.localizedDescription
-                }
+                // Undo puts back what the edit replaced, while the edit's own text is still there.
+                let source = editor.document.text as NSString
+                guard NSMaxRange(changed) <= source.length,
+                    source.compare(replacement, options: .literal, range: changed) == .orderedSame
+                else { return editor.inputError = .changed }
+                editor.perform(editor.document.edit(replacing: changed, with: replaced, selection: previousSelection))
             }
             undo?.endUndoGrouping()
             synchronizeText()
             if let selection = edit.selection { textView.scrollRangeToVisible(selection) }
         }
 
+        /// Applies an edit made from the current document, or shows why it can't land.
+        @discardableResult
+        func perform(_ edit: MarkdownEdit?) -> Bool {
+            guard let edit else { return false }
+            do {
+                try apply(edit)
+                return true
+            } catch {
+                inputError = error
+                return false
+            }
+        }
+
         /// Shows newer text read from GitHub in a note you can only read, outside Undo and `onEdit`.
         public func reload(_ text: String) {
-            self.text = text
+            document = MarkdownDocument(text)
             generation += 1
             textView.text = text
             updateHiddenFrontMatter()
@@ -166,9 +178,7 @@
         }
 
         private func becomeFirstResponder() {
-            if !textView.becomeFirstResponder() {
-                inputError = String(localized: "Tap the file to resume writing.", bundle: .module)
-            }
+            textView.becomeFirstResponder()
         }
 
         /// Keeps what the keyboard is composing as typed text, as leaving a note does in Notes.
@@ -180,11 +190,8 @@
 
         /// Puts the caret at the end, ready to write, as a new gist or today's note opens.
         public func requestFocusAtEnd() {
-            guard canFormat else {
-                inputError = MarkdownEdit.Failure.unsettled.localizedDescription
-                return
-            }
-            textView.selectedRange = NSRange(location: text.utf16.count, length: 0)
+            guard canFormat else { return inputError = .unsettled }
+            textView.selectedRange = NSRange(location: document.text.utf16.count, length: 0)
             isFocusPending = true
             completeFocusRequestIfAttached()
         }
@@ -197,18 +204,9 @@
         }
 
         func indent(outdent: Bool) {
-            do {
-                guard canFormat else { throw MarkdownEdit.Failure.unsettled }
-                let document = MarkdownDocument(text)
-                let selection = textView.selectedRange
-                if let edit =
-                    outdent ? document.edit(outdenting: selection) : document.edit(indenting: selection)
-                {
-                    try apply(edit, generation: generation)
-                }
-            } catch {
-                inputError = error.localizedDescription
-            }
+            guard canFormat else { return inputError = .unsettled }
+            let selection = textView.selectedRange
+            perform(outdent ? document.edit(outdenting: selection) : document.edit(indenting: selection))
         }
 
         func indentSwipedLine(at point: CGPoint, outdent: Bool) -> Bool {
@@ -216,30 +214,19 @@
                 let position = textView.closestPosition(to: point)
             else { return false }
             let offset = textView.offset(from: textView.beginningOfDocument, to: position)
-            let document = MarkdownDocument(text)
             guard document.isListItem(at: offset) else { return false }
             let line = NSRange(location: offset, length: 0)
-            do {
-                guard
-                    let edit =
-                        outdent
-                        ? document.edit(outdenting: line, keeping: textView.selectedRange)
-                        : document.edit(indenting: line, keeping: textView.selectedRange)
-                else { return false }
-                try apply(edit, generation: generation)
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                return true
-            } catch {
-                inputError = error.localizedDescription
-                return false
-            }
+            let kept = textView.selectedRange
+            let edit =
+                outdent
+                ? document.edit(outdenting: line, keeping: kept) : document.edit(indenting: line, keeping: kept)
+            guard perform(edit) else { return false }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            return true
         }
 
         public func find(replacing: Bool = false) {
-            guard isSettled else {
-                inputError = MarkdownEdit.Failure.unsettled.localizedDescription
-                return
-            }
+            guard isSettled else { return inputError = .unsettled }
             commentHighlights.suspendForFind()
             textView.findInteraction?.presentFindNavigator(showingReplace: replacing)
         }
@@ -249,8 +236,9 @@
             isHighlighting = true
             defer { isHighlighting = false }
             let style = MarkdownStyle(traits: textView.traitCollection)
+            let document = shownDocument
             textView.updateAttributes { storage in
-                style.paint(MarkdownDocument(storage.string), in: storage)
+                style.paint(document, in: storage)
                 commentHighlights.paint(in: storage)
             }
             textView.typingAttributes = style.typingAttributes
@@ -260,14 +248,28 @@
             // Inline previews are transient. UIKit owns their selection and native undo history.
             guard !isWritingToolsActive else { return }
             isComposing = textView.markedTextRange != nil
-            if !text.utf8.elementsEqual(textView.text.utf8) {
-                text = textView.text
-                updateHiddenFrontMatter()
-                generation += 1
-                textView.requestEditingCaretReveal()
-                onEdit?(text, generation)
-            }
+            adoptText()
             highlight()
+        }
+
+        /// Makes the text view's text the document, counting each change once.
+        @discardableResult
+        private func adoptText() -> Bool {
+            let text: String = textView.text
+            guard !(document.text as NSString).isEqual(to: text) else { return false }
+            document = MarkdownDocument(text)
+            updateHiddenFrontMatter()
+            generation += 1
+            textView.requestEditingCaretReveal()
+            onEdit?(document.text, generation)
+            return true
+        }
+
+        /// The document for the text on screen. UIKit changes the text before it reports the change,
+        /// and Writing Tools previews text the document takes only when it ends.
+        private var shownDocument: MarkdownDocument {
+            let text: String = textView.text
+            return (document.text as NSString).isEqual(to: text) ? document : MarkdownDocument(text)
         }
     }
 
@@ -291,9 +293,8 @@
         }
 
         private func updateHiddenFrontMatter() {
-            let source: String = textView.text
-            let start = showsFrontMatter ? 0 : MarkdownDocument(source).contentStart
-            textView.accessibilityValue = start > 0 ? (source as NSString).substring(from: start) : nil
+            let start = showsFrontMatter ? 0 : document.contentStart
+            textView.accessibilityValue = start > 0 ? document.body : nil
             guard start != contentStart else { return }
             contentStart = start
             if let manager = textView.textLayoutManager,
@@ -334,17 +335,10 @@
             guard ranges.count == 1, canFormat,
                 textView.findInteraction?.isFindNavigatorVisible != true
             else { return true }
-            if !text.utf8.elementsEqual(textView.text.utf8) { synchronizeText() }
-            guard let edit = MarkdownDocument(text).edit(typing: replacement, over: ranges[0]) else {
-                return true
-            }
-            do {
-                try apply(edit, generation: generation)
-                return false
-            } catch {
-                inputError = error.localizedDescription
-                return false
-            }
+            if adoptText() { highlight() }
+            guard let edit = document.edit(typing: replacement, over: ranges[0]) else { return true }
+            perform(edit)
+            return false
         }
 
         public func textViewDidChangeSelection(_: UITextView) {
@@ -374,7 +368,7 @@
         public func textView(
             _ textView: UITextView, writingToolsIgnoredRangesInEnclosingRange enclosingRange: NSRange
         ) -> [NSValue] {
-            var ranges = MarkdownDocument(textView.text).protectedRanges(in: enclosingRange)
+            var ranges = shownDocument.protectedRanges(in: enclosingRange)
             var hidden = NSIntersectionRange(NSRange(location: 0, length: contentStart), enclosingRange)
             if hidden.length > 0 {
                 while let first = ranges.first, first.location <= NSMaxRange(hidden) {
@@ -409,12 +403,12 @@
     import Markdown
     import Observation
 
-    /// Off iOS the editor is just the note's text, so the library's sync runs in Mac tests. Typing
+    /// Off iOS the editor is just the note's document, so the library's sync runs in Mac tests. Typing
     /// there is `apply`, which counts a generation and reports the edit as a keystroke does on iOS.
     @Observable
     public final class MarkdownEditor: Identifiable {
         public let id = UUID()
-        public private(set) var text: String
+        public private(set) var document: MarkdownDocument
         public private(set) var generation: UInt64
         public var isEditable = true
         public var isSpellCheckingEnabled = true
@@ -425,21 +419,21 @@
         public init(
             text: String, generation: UInt64 = 0, showsFrontMatter: Bool = false
         ) {
-            self.text = text
+            document = MarkdownDocument(text)
             self.generation = generation
         }
 
-        public func apply(_ edit: MarkdownEdit, generation: UInt64) throws {
-            guard self.generation == generation else { throw MarkdownEdit.Failure.changed }
-            let result = try edit.applying(to: text)
-            guard !result.utf8.elementsEqual(text.utf8) else { return }
-            text = result
-            self.generation += 1
-            onEdit?(text, self.generation)
+        public func apply(_ edit: MarkdownEdit) throws(MarkdownEdit.Failure) {
+            guard edit.document == document else { throw .changed }
+            let result = MarkdownDocument(edit.result)
+            guard result != document else { return }
+            document = result
+            generation += 1
+            onEdit?(document.text, generation)
         }
 
         public func reload(_ text: String) {
-            self.text = text
+            document = MarkdownDocument(text)
             generation += 1
         }
 

@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Front matter and fenced code are literal, so Markdown inside them never counts. The rest is
 /// prose, in runs of nonblank lines. Offsets are UTF-16, like `NSString` and TextKit.
-public struct MarkdownDocument: Sendable {
+public struct MarkdownDocument: Sendable, Equatable {
     public let text: String
     /// Where the body starts, after closed front matter and the blank lines below it.
     public let contentStart: Int
@@ -32,8 +32,16 @@ public struct MarkdownDocument: Sendable {
         proseRuns = Self.proseRuns(in: source, around: literals)
     }
 
+    /// Two documents are equal when their text is the same, code unit for code unit.
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        (lhs.text as NSString).isEqual(to: rhs.text)
+    }
+
     /// The text after the front matter.
     public var body: String { source.substring(from: contentStart) }
+
+    /// The whole text, in UTF-16 like every range here.
+    public var range: NSRange { NSRange(location: 0, length: source.length) }
 
     /// Literals and inline code inside `range`, clipped to it, in order and merged.
     public func protectedRanges(in range: NSRange) -> [NSRange] {
@@ -56,21 +64,22 @@ public struct MarkdownDocument: Sendable {
 
     var source: NSString { text as NSString }
 
-    typealias Change = (range: NSRange, replacement: String)
-
-    func edit(replacing range: NSRange, with replacement: String, selection: NSRange?) -> MarkdownEdit {
-        MarkdownEdit(
-            range: range, expected: source.substring(with: range), replacement: replacement, selection: selection)
+    /// An edit that replaces `range` with `replacement`. A nil selection keeps the caret where it was.
+    public func edit(
+        replacing range: NSRange, with replacement: String, selection: NSRange? = nil
+    ) -> MarkdownEdit {
+        MarkdownEdit(document: self, range: range, replacement: replacement, selection: selection)
     }
+
+    typealias Change = (range: NSRange, replacement: String)
 
     /// One edit for ordered, nonoverlapping changes, with `selection` carried through them.
     func edit(changes: [Change], selection: NSRange) -> MarkdownEdit? {
         guard let first = changes.first?.range.location,
             let end = changes.map({ NSMaxRange($0.range) }).max()
         else { return nil }
-        let range = NSRange(location: first, length: end - first)
         return MarkdownEdit(
-            range: range, expected: source.substring(with: range), replacements: changes, selection: selection)
+            document: self, range: NSRange(first..<end), replacements: changes, selection: selection)
     }
 
     /// The note's own line break, for lines an edit adds.

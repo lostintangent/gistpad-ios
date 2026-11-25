@@ -24,15 +24,12 @@ struct SourceKeyboardHostTests {
             ("# A heading", "A heading"),
         ]
         for (index, change) in changes.enumerated() {
-            let range = (session.text as NSString).range(of: change.0)
+            let range = (session.document.text as NSString).range(of: change.0)
             try #require(range.location != NSNotFound)
-            let expectedText = (session.text as NSString).replacingCharacters(
+            let expectedText = (session.document.text as NSString).replacingCharacters(
                 in: range, with: change.1
             )
-            try session.apply(
-                MarkdownEdit(range: range, expected: change.0, replacement: change.1),
-                generation: session.generation
-            )
+            try session.apply(session.document.edit(replacing: range, with: change.1))
             session.highlight()
             let expected = MarkdownEditor(text: expectedText)
             expected.textView.traitOverrides.preferredContentSizeCategory =
@@ -42,7 +39,7 @@ struct SourceKeyboardHostTests {
                 session.textView.textStorage.isEqual(to: expected.textView.textStorage),
                 "Styling must match a fresh document after changing \(change.0) to \(change.1)."
             )
-            #expect(session.text.utf8.elementsEqual(expectedText.utf8))
+            #expect(session.document.text.utf8.elementsEqual(expectedText.utf8))
             #expect(session.generation == UInt64(index + 1))
         }
     }
@@ -62,7 +59,7 @@ struct SourceKeyboardHostTests {
             fixture.editor.insertText(input)
             expected += input
             await fixture.layOutUnderKeyboard()
-            #expect(fixture.session.text.utf8.elementsEqual(expected.utf8))
+            #expect(fixture.session.document.text.utf8.elementsEqual(expected.utf8))
             #expect(fixture.editor.selectedRange == NSRange(location: expected.utf16.count, length: 0))
             try fixture.expectKeyboardViewport()
             try fixture.expectVisibleCaret()
@@ -104,7 +101,7 @@ struct SourceKeyboardHostTests {
             + fixture.editor.adjustedContentInset.bottom
         #expect(abs(fixture.editor.contentOffset.y - settledMaximum) <= 1)
         #expect(fixture.editor.selectedRange == NSRange(location: 0, length: 0))
-        #expect(fixture.session.text.utf8.elementsEqual(Self.source.utf8))
+        #expect(fixture.session.document.text.utf8.elementsEqual(Self.source.utf8))
         #expect(fixture.session.generation == 0)
 
         let lastLine = (Self.source as NSString).range(of: Self.lastLine, options: .backwards)
@@ -161,7 +158,7 @@ struct SourceKeyboardHostTests {
             let viewport = fixture.editor.bounds.inset(by: fixture.editor.adjustedContentInset)
             #expect(!viewport.intersects(caret))
         }
-        #expect(fixture.session.text.utf8.elementsEqual(Self.source.utf8))
+        #expect(fixture.session.document.text.utf8.elementsEqual(Self.source.utf8))
         #expect(fixture.session.generation == 0)
     }
 

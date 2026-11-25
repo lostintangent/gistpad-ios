@@ -152,7 +152,7 @@
             view.selectedRange = NSRange(location: view.textStorage.length, length: 0)
             let paints = AttributePasses(of: view.textStorage)
             view.insertText("!")
-            #expect(editor.text == "# Heading\n\nProse!")
+            #expect(editor.document.text == "# Heading\n\nProse!")
             #expect(paints.count == 1)
         }
     }

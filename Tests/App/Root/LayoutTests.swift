@@ -109,7 +109,7 @@ struct LayoutTests {
         editor.undoManager?.beginUndoGrouping()
         editor.insertText("Unsynced 日本語 👩🏽‍💻 ")
         editor.undoManager?.endUndoGrouping()
-        let text = session.text
+        let text = session.document.text
         let selection = editor.selectedRange
         await keyboard(visible: true, over: host.view)
         if let manager = editor.textLayoutManager, let range = manager.textContentManager?.documentRange
@@ -133,7 +133,7 @@ struct LayoutTests {
             #expect(editor.window === window)
             #expect(editor.isFirstResponder)
             #expect(editor.selectedRange == selection)
-            #expect(session.text.utf8.elementsEqual(text.utf8))
+            #expect(session.document.text.utf8.elementsEqual(text.utf8))
             #expect(descendants(of: host.view).compactMap { $0 as? WKWebView }.first === preview)
             #expect(layout.preferredMode == .split)
             let (caret, viewport) = try recordCaretGeometry(
@@ -147,7 +147,7 @@ struct LayoutTests {
         #expect(saved.gistID == nil)
         #expect(try await store.drafts(accountID: accountID).count == 1)
         editor.undoManager?.undo()
-        #expect(session.text.utf8.elementsEqual(original.utf8))
+        #expect(session.document.text.utf8.elementsEqual(original.utf8))
         if let persistence { _ = try await persistence.value }
     }
 

@@ -119,7 +119,7 @@ final class PlatformBridge: PlatformActions {
             model.isForeground, model.state.selectedID != nil,
             fileEditor.file.accountID == accountID
         else { return nil }
-        return MarkdownDocument(fileEditor.editor.text).body
+        return fileEditor.editor.document.body
     }
 
     /// Spotlight catches up with the newest snapshot in the background, so nothing waits on it.

@@ -42,7 +42,9 @@ extension MarkdownDocument {
 
     /// Links the selection, labeled with `label` or else the destination. Throws `invalidLink`
     /// unless the destination is a complete web, email or phone link.
-    public func edit(linking selection: NSRange, to destination: String, label: String) throws -> MarkdownEdit {
+    public func edit(
+        linking selection: NSRange, to destination: String, label: String
+    ) throws(MarkdownEdit.Failure) -> MarkdownEdit {
         let destination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: destination), let scheme = url.scheme?.lowercased(),
             ["http", "https", "mailto", "tel"].contains(scheme),
@@ -123,7 +125,7 @@ extension MarkdownDocument {
             let box = listItem(at: location, includingQuoted: true)?.box, box.location == location,
             !isProtected(box)
         else { return nil }
-        return edit(replacing: box, with: source.substring(with: box) == "[ ]" ? "[x]" : "[ ]", selection: nil)
+        return edit(replacing: box, with: source.substring(with: box) == "[ ]" ? "[x]" : "[ ]")
     }
 
     /// One line's toggle: where its marker ends, if it has one, the marker it should have, whether

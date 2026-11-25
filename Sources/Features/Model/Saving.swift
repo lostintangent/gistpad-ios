@@ -72,24 +72,20 @@ extension GistFileEditor {
         guard draft.accountID == file.accountID, draft.id == file.nextDraft.id else {
             throw AccountError.accountChanged
         }
-        guard sourceEqual(draft.text, editor.text) else { throw DraftError.changed }
+        let document = editor.document
+        guard sourceEqual(draft.text, document.text) else { throw DraftError.changed }
         try await commitMutation(
-            MarkdownEdit(
-                range: NSRange(location: editor.text.utf16.count, length: 0), expected: "",
-                replacement: text),
-            expectedGeneration: editor.generation, commit: commit)
+            document.edit(replacing: NSRange(location: NSMaxRange(document.range), length: 0), with: text),
+            commit: commit)
     }
 
     /// Commits a change you didn't type, such as GitHub's newer text, then shows it in the editor.
-    /// Typing since `expectedGeneration` refuses it.
+    /// Typing since the edit was made refuses it.
     func commitMutation(
-        _ edit: MarkdownEdit, expectedGeneration: UInt64,
-        commit: @MainActor () async throws -> GistFileDraft
+        _ edit: MarkdownEdit, commit: @MainActor () async throws -> GistFileDraft
     ) async throws {
         guard canEdit else { throw MarkdownEdit.Failure.unsettled }
-        guard editor.generation == expectedGeneration else { throw DraftError.changed }
-        let result = try edit.applying(to: editor.text)
-        let changed = !result.utf8.elementsEqual(editor.text.utf8)
+        guard edit.document == editor.document else { throw DraftError.changed }
         let wasEditing = editor.isEditing
         isLocked = true
         updateEditable()
@@ -99,9 +95,9 @@ extension GistFileEditor {
             if wasEditing { editor.focus() }
         }
         guard await waitForLocalSave() else { throw ChangeError.notSaved }
-        guard editor.generation == expectedGeneration, editor.isSettled else { throw DraftError.changed }
+        guard editor.isSettled, edit.document == editor.document else { throw DraftError.changed }
         file.update(try await commit())
-        if changed { try editor.apply(edit, generation: expectedGeneration) }
+        try editor.apply(edit)
         guard await waitForLocalSave() else { throw ChangeError.notSaved }
     }
 

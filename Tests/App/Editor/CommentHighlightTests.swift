@@ -15,11 +15,11 @@ struct CommentHighlightTests {
             .init(quotes: [CommentQuote(threadID: 10, quote: "native")]))
         editor.textView.layoutIfNeeded()
         #expect(editor.commentHighlights.backgroundLayer.sublayers?.isEmpty == false)
-        editor.textView.selectedRange = NSRange(location: editor.text.utf16.count, length: 0)
+        editor.textView.selectedRange = NSRange(location: editor.document.text.utf16.count, length: 0)
         editor.textView.insertText("- ")
         editor.textView.layoutIfNeeded()
         let storage = editor.textView.textStorage
-        let marker = (editor.text as NSString).range(of: "-")
+        let marker = (editor.document.text as NSString).range(of: "-")
         let ink = try #require(
             storage.attribute(.foregroundColor, at: marker.location, effectiveRange: nil) as? UIColor)
         let traits = editor.textView.traitCollection
@@ -37,9 +37,7 @@ struct CommentHighlightTests {
         defer { window.isHidden = true }
         let undo = try #require(editor.textView.undoManager)
         undo.removeAllActions()
-        try editor.apply(
-            MarkdownEdit(range: NSRange(location: 0, length: 1), expected: "A", replacement: "The"),
-            generation: 7)
+        try editor.apply(editor.document.edit(replacing: NSRange(location: 0, length: 1), with: "The"))
         editor.textView.selectedRange = NSRange(location: 4, length: 6)
         let selection = editor.textView.selectedRange
         var changes = 0
@@ -48,7 +46,7 @@ struct CommentHighlightTests {
             .init(
                 quotes: [CommentQuote(threadID: 10, quote: "native")], selectedThreadID: 10))
         editor.highlight()
-        #expect(editor.text == "The native note")
+        #expect(editor.document.text == "The native note")
         #expect(editor.generation == 8)
         #expect(editor.textView.selectedRange == selection)
         #expect(changes == 0)
@@ -57,11 +55,11 @@ struct CommentHighlightTests {
         #expect(editor.textView.typingAttributes[.textItemTag] == nil)
         undo.undo()
         editor.textViewDidChange(editor.textView)
-        #expect(editor.text == "A native note")
+        #expect(editor.document.text == "A native note")
         #expect(!undo.canUndo)
         undo.redo()
         editor.textViewDidChange(editor.textView)
-        #expect(editor.text == "The native note")
+        #expect(editor.document.text == "The native note")
     }
 
     @Test func overlapMenuKeepsSystemActionsAndOpensEveryThread() throws {
@@ -96,7 +94,7 @@ struct CommentHighlightTests {
         button.addAction(action, for: .touchUpInside)
         button.sendActions(for: .touchUpInside)
         #expect(opened == [[10, 20]])
-        #expect(editor.text == "one two three")
+        #expect(editor.document.text == "one two three")
         #expect(editor.generation == 0)
     }
 
@@ -144,7 +142,7 @@ struct CommentHighlightTests {
         button.sendActions(for: .touchUpInside)
         #expect(quotes.count == 1)
         #expect(try #require(quotes.first).utf8.elementsEqual(added.utf8))
-        #expect(editor.text.utf8.elementsEqual(source.utf8))
+        #expect(editor.document.text.utf8.elementsEqual(source.utf8))
         #expect(editor.generation == 0)
         #expect(editor.textView.selectedRange == selection)
     }
@@ -173,7 +171,7 @@ struct CommentHighlightTests {
         editor.commentHighlights.configure(configuration)
         await editor.commentHighlights.scrollTask?.value
         #expect(editor.textView.contentOffset.y > 100)
-        #expect(editor.text == text)
+        #expect(editor.document.text == text)
         #expect(editor.generation == 0)
     }
 
@@ -279,7 +277,7 @@ struct CommentHighlightTests {
         await editor.commentHighlights.pendingFindUpdate?.value
         #expect(!interaction.isFindNavigatorVisible)
         #expect(annotated())
-        #expect(editor.text == "A native note")
+        #expect(editor.document.text == "A native note")
         #expect(editor.generation == 0)
     }
 

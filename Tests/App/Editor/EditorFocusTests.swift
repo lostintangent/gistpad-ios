@@ -18,7 +18,7 @@ struct EditorFocusTests {
         #expect(editor.textView.isFirstResponder)
         #expect(editor.isEditing)
         #expect(editor.textView.selectedRange == end)
-        #expect(editor.text == source)
+        #expect(editor.document.text == source)
         #expect(editor.generation == 0)
         #expect(editor.inputError == nil)
     }
@@ -82,19 +82,17 @@ struct EditorFocusTests {
         #expect(editor.textView.isFirstResponder)
         let undo = try #require(editor.textView.undoManager)
         undo.removeAllActions()
-        try editor.apply(
-            MarkdownEdit(range: NSRange(location: 4, length: 0), expected: "", replacement: "!"),
-            generation: 0)
+        try editor.apply(editor.document.edit(replacing: NSRange(location: 4, length: 0), with: "!"))
         editor.textView.selectedRange = NSRange(location: 0, length: 0)
         editor.requestFocusAtEnd()
         #expect(editor.textView.isFirstResponder)
         #expect(editor.textView.selectedRange == NSRange(location: 5, length: 0))
-        #expect(editor.text == "note!")
+        #expect(editor.document.text == "note!")
         #expect(editor.generation == 1)
         #expect(undo.canUndo)
         undo.undo()
         editor.textViewDidChange(editor.textView)
-        #expect(editor.text == "note")
+        #expect(editor.document.text == "note")
         #expect(!undo.canUndo)
 
         editor.textView.resignFirstResponder()
@@ -106,7 +104,7 @@ struct EditorFocusTests {
         window.layoutIfNeeded()
         #expect(!editor.textView.isFirstResponder)
         #expect(editor.textView.selectedRange == beginning)
-        #expect(editor.text == "note")
+        #expect(editor.document.text == "note")
     }
 
     @Test func aLandingTapTreatsEveryPositionAsAWordEdge() throws {

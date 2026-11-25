@@ -75,9 +75,7 @@ final class Phone {
     func type(_ texts: String..., in fileEditor: GistFileEditor) async throws {
         let editor = fileEditor.editor
         for text in texts {
-            let whole = NSRange(location: 0, length: editor.text.utf16.count)
-            try editor.apply(
-                MarkdownEdit(range: whole, expected: editor.text, replacement: text), generation: editor.generation)
+            try editor.apply(editor.document.edit(replacing: editor.document.range, with: text))
         }
         try #require(await fileEditor.waitForLocalSave())
     }
@@ -161,7 +159,7 @@ final class Phone {
     // MARK: What you see
 
     /// The text in the editor, or nil with nothing open.
-    var onScreen: String? { model.activeEditor?.editor.text }
+    var onScreen: String? { model.activeEditor?.editor.document.text }
 
     /// The gist rows in the list, without daily notes.
     var rows: [GistItem] { model.state.gists.filter { !$0.isDailyNote } }

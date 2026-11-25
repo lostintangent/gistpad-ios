@@ -10,7 +10,7 @@ struct EditorFormattingTests {
         let editor = MarkdownEditor(text: "A 日本語 note")
         let window = try hostEditor(editor)
         defer { window.isHidden = true }
-        let originalSelection = (editor.text as NSString).range(of: "日本語")
+        let originalSelection = (editor.document.text as NSString).range(of: "日本語")
         editor.textView.selectedRange = originalSelection
         editor.textView.undoManager?.removeAllActions()
         var savedSelection: NSRange?
@@ -19,46 +19,47 @@ struct EditorFormattingTests {
             savedSelection = editor.textView.selectedRange
             changes += 1
         }
-        let edit = MarkdownDocument(editor.text).edit(bolding: originalSelection)
-        try editor.apply(edit, generation: 0)
-        #expect(editor.text == "A **日本語** note")
+        let edit = editor.document.edit(bolding: originalSelection)
+        try editor.apply(edit)
+        #expect(editor.document.text == "A **日本語** note")
         #expect(editor.textView.selectedRange == edit.selection)
         #expect(savedSelection == edit.selection)
         #expect(changes == 1)
         #expect(editor.generation == 1)
         editor.textView.undoManager?.undo()
         editor.textViewDidChange(editor.textView)
-        #expect(editor.text == "A 日本語 note")
+        #expect(editor.document.text == "A 日本語 note")
         #expect(editor.textView.selectedRange == originalSelection)
         #expect(editor.textView.undoManager?.canUndo == false)
         editor.textView.undoManager?.redo()
         editor.textViewDidChange(editor.textView)
-        #expect(editor.text == "A **日本語** note")
+        #expect(editor.document.text == "A **日本語** note")
     }
 
     @Test func staleLinkNeverChangesSource() throws {
         let editor = MarkdownEditor(text: "note")
-        let edit = try MarkdownDocument(editor.text).edit(
+        let link = try editor.document.edit(
             linking: NSRange(location: 0, length: 4), to: "https://example.com", label: "note")
+        try editor.apply(editor.document.edit(replacing: NSRange(location: 4, length: 0), with: "!"))
         #expect(throws: MarkdownEdit.Failure.changed) {
-            try editor.apply(edit, generation: 1)
+            try editor.apply(link)
         }
-        #expect(editor.text == "note")
-        #expect(editor.generation == 0)
+        #expect(editor.document.text == "note!")
+        #expect(editor.generation == 1)
     }
 
     @Test func compositionWritingToolsAndReadOnlyBlockFormatting() throws {
         let editor = MarkdownEditor(text: "note")
         let window = try hostEditor(editor)
         defer { window.isHidden = true }
-        let edit = MarkdownDocument(editor.text).edit(bolding: NSRange(location: 0, length: 4))
+        let edit = editor.document.edit(bolding: NSRange(location: 0, length: 4))
         editor.textViewWritingToolsWillBegin(editor.textView)
         editor.find()
         #expect(editor.inputError != nil)
         #expect(editor.textView.findInteraction?.isFindNavigatorVisible == false)
         editor.inputError = nil
         #expect(throws: MarkdownEdit.Failure.unsettled) {
-            try editor.apply(edit, generation: 0)
+            try editor.apply(edit)
         }
         editor.textViewWritingToolsDidEnd(editor.textView)
         editor.textView.setMarkedText("日本", selectedRange: NSRange(location: 2, length: 0))
@@ -67,7 +68,7 @@ struct EditorFormattingTests {
         #expect(editor.inputError != nil)
         #expect(editor.textView.findInteraction?.isFindNavigatorVisible == false)
         #expect(throws: MarkdownEdit.Failure.unsettled) {
-            try editor.apply(edit, generation: 0)
+            try editor.apply(edit)
         }
         editor.textView.unmarkText()
         editor.textViewDidChange(editor.textView)
@@ -83,7 +84,7 @@ struct EditorFormattingTests {
                 editor.textView(
                     editor.textView, shouldChangeTextInRanges: [NSValue(range: caret)],
                     replacementText: "\n"))
-            #expect(editor.text == source)
+            #expect(editor.document.text == source)
         }
         let editor = MarkdownEditor(text: "- note")
         let window = try hostEditor(editor)
@@ -117,19 +118,19 @@ struct EditorFormattingTests {
             !editor.textView(
                 view, shouldChangeTextInRanges: [NSValue(range: view.selectedRange)],
                 replacementText: "("))
-        #expect(editor.text == "Vagabond ()")
+        #expect(editor.document.text == "Vagabond ()")
         #expect(view.selectedRange == NSRange(location: 10, length: 0))
         let generation = editor.generation
         #expect(
             !editor.textView(
                 view, shouldChangeTextInRanges: [NSValue(range: view.selectedRange)],
                 replacementText: ")"))
-        #expect(editor.text == "Vagabond ()")
+        #expect(editor.document.text == "Vagabond ()")
         #expect(editor.generation == generation)
         #expect(view.selectedRange == NSRange(location: 11, length: 0))
         view.undoManager?.undo()
         editor.textViewDidChange(view)
-        #expect(editor.text == "Vagabond ")
+        #expect(editor.document.text == "Vagabond ")
         #expect(view.undoManager?.canUndo == false)
     }
 
@@ -140,23 +141,23 @@ struct EditorFormattingTests {
         let view = editor.textView
         view.selectedRanges = [NSRange(location: 0, length: 3), NSRange(location: 9, length: 3)]
         view.insertText("https://example.test")
-        #expect(["https://example.test keep ", " keep https://example.test"].contains(editor.text))
+        #expect(["https://example.test keep ", " keep https://example.test"].contains(editor.document.text))
     }
 
     @Test func indentAndOutdentRetainSelectionAndNativeUndo() throws {
         let editor = MarkdownEditor(text: "- 日本語\n- next")
         let window = try hostEditor(editor)
         defer { window.isHidden = true }
-        let original = editor.text
+        let original = editor.document.text
         editor.textView.selectedRange = NSRange(location: 0, length: original.utf16.count)
         editor.textView.undoManager?.removeAllActions()
         editor.indent(outdent: false)
-        #expect(editor.text == "  - 日本語\n  - next")
+        #expect(editor.document.text == "  - 日本語\n  - next")
         #expect(
             editor.textView.selectedRange == NSRange(location: 2, length: original.utf16.count + 2))
         editor.textView.undoManager?.undo()
         editor.textViewDidChange(editor.textView)
-        #expect(editor.text == original)
+        #expect(editor.document.text == original)
         #expect(editor.textView.undoManager?.canUndo == false)
     }
 
@@ -164,11 +165,11 @@ struct EditorFormattingTests {
         let editor = MarkdownEditor(text: "- item\nplain")
         let window = try host(editor)
         defer { window.isHidden = true }
-        let caret = NSRange(location: editor.text.utf16.count, length: 0)
+        let caret = NSRange(location: editor.document.text.utf16.count, length: 0)
         editor.textView.selectedRange = caret
         editor.textView.layoutIfNeeded()
         func point(at needle: String) throws -> CGPoint {
-            let range = (editor.text as NSString).range(of: needle)
+            let range = (editor.document.text as NSString).range(of: needle)
             let position = try #require(
                 editor.textView.position(
                     from: editor.textView.beginningOfDocument, offset: range.location))
@@ -176,11 +177,11 @@ struct EditorFormattingTests {
             return CGPoint(x: caret.midX, y: caret.midY)
         }
         #expect(editor.indentSwipedLine(at: try point(at: "item"), outdent: false))
-        #expect(editor.text == "  - item\nplain")
+        #expect(editor.document.text == "  - item\nplain")
         #expect(editor.textView.selectedRange == NSRange(location: caret.location + 2, length: 0))
-        let after = editor.text
+        let after = editor.document.text
         #expect(!editor.indentSwipedLine(at: try point(at: "plain"), outdent: false))
-        #expect(editor.text == after)
+        #expect(editor.document.text == after)
         let swipe = try #require(
             editor.textView.gestureRecognizers?.compactMap { $0 as? UISwipeGestureRecognizer }.first)
         #expect(
@@ -201,11 +202,11 @@ struct EditorFormattingTests {
         let dispatch = UIButton(type: .system)
         dispatch.addAction(bold, for: .primaryActionTriggered)
         dispatch.sendActions(for: .primaryActionTriggered)
-        #expect(editor.text == "A **note**")
+        #expect(editor.document.text == "A **note**")
         #expect(editor.generation == 1)
         editor.textView.undoManager?.undo()
         editor.textViewDidChange(editor.textView)
-        #expect(editor.text == "A note")
+        #expect(editor.document.text == "A note")
         #expect(editor.textView.undoManager?.canUndo == false)
         let insert = try #require(
             items.first { $0.accessibilityIdentifier == "editor-insert-menu" }?.menu)
@@ -235,7 +236,7 @@ struct EditorFormattingTests {
         #expect(button.isEnabled)
         button.sendActions(for: .primaryActionTriggered)
         #expect(requests == 1)
-        #expect(editor.text == "A note")
+        #expect(editor.document.text == "A note")
         #expect(editor.generation == 0)
         #expect(editor.textView.undoManager?.canUndo == false)
     }
@@ -254,7 +255,7 @@ struct EditorFormattingTests {
         #expect(find.resultCount == 2)
         find.replaceAll(searchQuery: "note", replacementString: "https://example.com", options: nil)
         editor.textViewDidChange(editor.textView)
-        #expect(editor.text == "A https://example.com and another https://example.com")
+        #expect(editor.document.text == "A https://example.com and another https://example.com")
     }
 
     private func menuActions(_ elements: [UIMenuElement]) -> [UIAction] {

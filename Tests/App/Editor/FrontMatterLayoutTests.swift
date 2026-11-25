@@ -46,7 +46,7 @@ struct FrontMatterLayoutTests {
             from: view.beginningOfDocument, to: view.beginningOfDocument)
         #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
         view.deleteBackward()
-        #expect(editor.text.utf8.elementsEqual(source.utf8))
+        #expect(editor.document.text.utf8.elementsEqual(source.utf8))
         #expect(editor.generation == 0)
         editor.setShowsFrontMatter(true)
         manager.ensureLayout(for: try #require(manager.textContentManager?.documentRange))
@@ -58,31 +58,28 @@ struct FrontMatterLayoutTests {
         view.layoutIfNeeded()
         #expect(abs(view.caretRect(for: position).minY - caret.minY) < 2)
         #expect(view.text.utf8.elementsEqual(source.utf8))
-        #expect(editor.text.utf8.elementsEqual(source.utf8))
+        #expect(editor.document.text.utf8.elementsEqual(source.utf8))
         #expect(editor.generation == 0)
         #expect(view.undoManager?.canUndo != true)
         #expect(view.accessibilityValue == body)
 
-        try editor.apply(
-            MarkdownEdit(
-                range: (source as NSString).range(of: "[ ]"), expected: "[ ]", replacement: "[x]"),
-            generation: 0)
-        #expect(editor.text == prefix + body.replacingOccurrences(of: "[ ]", with: "[x]"))
+        try editor.apply(editor.document.edit(replacing: (source as NSString).range(of: "[ ]"), with: "[x]"))
+        #expect(editor.document.text == prefix + body.replacingOccurrences(of: "[ ]", with: "[x]"))
         let edited = editor.generation
         editor.setShowsFrontMatter(true)
         editor.setShowsFrontMatter(false)
         #expect(editor.generation == edited)
         try #require(view.undoManager?.canUndo == true)
         view.undoManager?.undo()
-        #expect(editor.text.utf8.elementsEqual(source.utf8))
+        #expect(editor.document.text.utf8.elementsEqual(source.utf8))
         view.selectAll(nil)
         view.undoManager?.beginUndoGrouping()
         view.insertText("A replacement body")
         view.undoManager?.endUndoGrouping()
-        #expect(editor.text.utf8.elementsEqual((prefix + "A replacement body").utf8))
+        #expect(editor.document.text.utf8.elementsEqual((prefix + "A replacement body").utf8))
         #expect(view.accessibilityValue == "A replacement body")
         view.undoManager?.undo()
-        #expect(editor.text.utf8.elementsEqual(source.utf8))
+        #expect(editor.document.text.utf8.elementsEqual(source.utf8))
         #expect(view.selectedRange.location >= prefix.utf16.count)
         let ignored = editor.textView(
             view,
@@ -105,16 +102,14 @@ struct FrontMatterLayoutTests {
         defer { window.isHidden = true }
         try #require(view.isFirstResponder)
         let range = (source as NSString).range(of: "A longer value 👩🏽‍💻")
-        try editor.apply(
-            MarkdownEdit(range: range, expected: "A longer value 👩🏽‍💻", replacement: "Short"),
-            generation: editor.generation)
+        try editor.apply(editor.document.edit(replacing: range, with: "Short"))
         let nextPrefix = "---\nkey: Short\n---\n\n"
-        #expect(editor.text.utf8.elementsEqual((nextPrefix + body).utf8))
+        #expect(editor.document.text.utf8.elementsEqual((nextPrefix + body).utf8))
         #expect(editor.contentStart == nextPrefix.utf16.count)
         #expect(view.selectedRange == NSRange(location: nextPrefix.utf16.count, length: 0))
         try #require(view.undoManager?.canUndo == true)
         view.undoManager?.undo()
-        #expect(editor.text.utf8.elementsEqual(source.utf8))
+        #expect(editor.document.text.utf8.elementsEqual(source.utf8))
         #expect(editor.contentStart == prefix.utf16.count)
         #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
     }
@@ -137,7 +132,7 @@ struct FrontMatterLayoutTests {
         #expect(view.markedTextRange == nil)
         #expect(editor.showsFrontMatter)
         #expect(editor.contentStart == 0)
-        #expect(editor.text == prefix + "日本Body")
+        #expect(editor.document.text == prefix + "日本Body")
         editor.setShowsFrontMatter(false)
         #expect(editor.generation == generation)
         #expect(editor.contentStart == prefix.utf16.count)
@@ -152,17 +147,13 @@ struct FrontMatterLayoutTests {
         let window = try host(editor)
         defer { window.isHidden = true }
         try #require(view.isFirstResponder)
-        try editor.apply(
-            MarkdownEdit(
-                range: NSRange(location: 0, length: source.utf16.count), expected: source,
-                replacement: replacement),
-            generation: editor.generation)
-        #expect(editor.text.utf8.elementsEqual(replacement.utf8))
+        try editor.apply(editor.document.edit(replacing: editor.document.range, with: replacement))
+        #expect(editor.document.text.utf8.elementsEqual(replacement.utf8))
         #expect(editor.contentStart == 0)
         #expect(view.selectedRange.location <= replacement.utf16.count)
         try #require(view.undoManager?.canUndo == true)
         view.undoManager?.undo()
-        #expect(editor.text.utf8.elementsEqual(source.utf8))
+        #expect(editor.document.text.utf8.elementsEqual(source.utf8))
         #expect(editor.contentStart == prefix.utf16.count)
         #expect(view.selectedRange == NSRange(location: prefix.utf16.count, length: 0))
     }
@@ -174,7 +165,7 @@ struct FrontMatterLayoutTests {
         editor.setShowsFrontMatter(true)
         #expect(editor.showsFrontMatter)
         #expect(editor.contentStart == 0)
-        #expect(editor.text.utf8.elementsEqual(source.utf8))
+        #expect(editor.document.text.utf8.elementsEqual(source.utf8))
         #expect(editor.generation == 0)
         #expect(view.undoManager?.canUndo != true)
     }

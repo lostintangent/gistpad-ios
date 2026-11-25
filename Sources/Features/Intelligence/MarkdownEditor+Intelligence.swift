@@ -21,17 +21,15 @@ extension FileSnapshot {
 
     extension MarkdownEditor {
         func snapshot() -> FileSnapshot {
-            FileSnapshot(parsing: text, sessionID: id, generation: generation)
+            FileSnapshot(parsing: document.text, sessionID: id, generation: generation)
         }
 
         func apply(_ proposal: Proposal, changeID: UUID? = nil) throws -> Proposal {
-            let snapshot = snapshot()
-            let application = try proposal.application(to: snapshot, changeID: changeID)
-            let edit = MarkdownEdit(
-                range: NSRange(location: 0, length: snapshot.source.utf16.count),
-                expected: snapshot.source, replacement: application.source,
-                selection: application.mappedSelection(selection))
-            try apply(edit, generation: snapshot.generation)
+            let application = try proposal.application(to: snapshot(), changeID: changeID)
+            try apply(
+                document.edit(
+                    replacing: document.range, with: application.source,
+                    selection: application.mappedSelection(selection)))
             return application.remaining(on: self.snapshot())
         }
     }

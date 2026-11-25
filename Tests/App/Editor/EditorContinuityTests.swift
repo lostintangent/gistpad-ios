@@ -53,19 +53,18 @@ struct EditorContinuityTests {
         let session = MarkdownEditor(text: source)
         let window = try host(session)
         defer { window.isHidden = true }
-        let edit = MarkdownEdit(
-            range: (source as NSString).range(of: "[ ]", options: .backwards), expected: "[ ]",
-            replacement: "[x]")
-        try session.apply(edit, generation: 0)
-        #expect(session.text == "- [ ] Duplicate\n- [x] Duplicate")
+        let edit = session.document.edit(
+            replacing: (source as NSString).range(of: "[ ]", options: .backwards), with: "[x]")
+        try session.apply(edit)
+        #expect(session.document.text == "- [ ] Duplicate\n- [x] Duplicate")
         #expect(throws: MarkdownEdit.Failure.changed) {
-            try session.apply(edit, generation: 0)
+            try session.apply(edit)
         }
         session.textView.undoManager?.undo()
         #expect(session.textView.text == source)
         session.textView.setMarkedText("に", selectedRange: NSRange(location: 1, length: 0))
         #expect(throws: MarkdownEdit.Failure.unsettled) {
-            try session.apply(edit, generation: session.generation)
+            try session.apply(edit)
         }
     }
 
@@ -76,10 +75,7 @@ struct EditorContinuityTests {
         defer { window.isHidden = true }
         session.textView.selectedRange = NSRange(location: 0, length: 0)
         try session.apply(
-            MarkdownEdit(
-                range: (source as NSString).range(of: "[ ]", options: .backwards),
-                expected: "[ ]", replacement: "[x]"),
-            generation: 0)
+            session.document.edit(replacing: (source as NSString).range(of: "[ ]", options: .backwards), with: "[x]"))
         #expect(!session.textView.isFirstResponder)
         #expect(session.textView.selectedRange == NSRange(location: 0, length: 0))
         #expect(session.textView.undoManager?.canUndo == true)
@@ -137,7 +133,7 @@ struct EditorContinuityTests {
                 "Width \(width), anchor \(offset), original Y \(originalY), current Y \(currentY)")
             #expect(view.selectedRange == selection)
             #expect(session.generation == 0)
-            #expect(session.text.utf8.elementsEqual(source.utf8))
+            #expect(session.document.text.utf8.elementsEqual(source.utf8))
         }
     }
 }

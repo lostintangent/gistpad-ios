@@ -20,12 +20,12 @@
             await state.task?.value
             #expect(state.canApply)
             #expect(changes == 0)
-            #expect(editor.text == source)
+            #expect(editor.document.text == source)
 
             state.apply()
             #expect(state.errorMessage == nil)
             #expect(
-                editor.text
+                editor.document.text
                     == source.replacingOccurrences(of: "teh", with: "the")
                     .replacingOccurrences(of: "before the cafe", with: "after the cafe"))
             #expect(editor.generation == 1)
@@ -59,7 +59,7 @@
             #expect(!state.isRunning)
             #expect(state.answerParts.isEmpty)
             #expect(state.askPrompt == "When do I leave?")
-            #expect(editor.text == source)
+            #expect(editor.document.text == source)
             #expect(editor.generation == 0)
             #expect(changes == 0)
         }
@@ -80,7 +80,7 @@
             #expect(state.notice != nil)
             #expect(state.errorMessage == nil)
             #expect(state.askPrompt == "When do I leave?")
-            #expect(editor.text == source)
+            #expect(editor.document.text == source)
             #expect(editor.generation == 0)
         }
 
@@ -100,7 +100,7 @@
             #expect(state.proposal?.changes.count == 2)
             #expect(!state.canApply)
             state.apply()
-            #expect(editor.text == source)
+            #expect(editor.document.text == source)
             #expect(editor.generation == 0)
         }
 
@@ -127,7 +127,7 @@
             editor.setShowsFrontMatter(!shown)
             #expect(!state.isStale)
             editor.setShowsFrontMatter(shown)
-            #expect(editor.text.utf8.elementsEqual(text.utf8))
+            #expect(editor.document.text.utf8.elementsEqual(text.utf8))
             #expect(editor.generation == 8)
         }
     }

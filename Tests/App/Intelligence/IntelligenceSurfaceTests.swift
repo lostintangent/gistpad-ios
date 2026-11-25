@@ -73,15 +73,15 @@
             #expect(session.textView === editor)
             #expect(editor.selectedRange == selection)
             #expect(abs(editor.contentOffset.y - offset) < 1)
-            #expect(session.text.utf8.elementsEqual(source.utf8))
+            #expect(session.document.text.utf8.elementsEqual(source.utf8))
             #expect(session.generation == 0)
             #expect(changes == 0)
 
             editor.selectedRange = NSRange(location: source.utf16.count, length: 0)
             editor.insertText("\nStill editable.")
-            #expect(session.text.utf8.elementsEqual((source + "\nStill editable.").utf8))
+            #expect(session.document.text.utf8.elementsEqual((source + "\nStill editable.").utf8))
             editor.undoManager?.undo()
-            #expect(session.text.utf8.elementsEqual(source.utf8))
+            #expect(session.document.text.utf8.elementsEqual(source.utf8))
         }
 
         @Test func applyIsOneUndoThatKeepsTheTypingBeforeIt() async throws {
@@ -116,7 +116,7 @@
             let selection = editor.textView.selectedRange
             _ = try editor.apply(proposal)
             let edited = "Take the river path.\nLeave at 9am, after the cafe opens at 8am.!"
-            #expect(editor.text == edited)
+            #expect(editor.document.text == edited)
 
             field.resignFirstResponder()
             #expect(editor.textView.becomeFirstResponder())
@@ -124,13 +124,13 @@
             for expected in [typed, source] {
                 undo.undo()
                 editor.textViewDidChange(editor.textView)
-                #expect(editor.text == expected)
+                #expect(editor.document.text == expected)
                 if expected == typed { #expect(editor.textView.selectedRange == selection) }
             }
             for expected in [typed, edited] {
                 undo.redo()
                 editor.textViewDidChange(editor.textView)
-                #expect(editor.text == expected)
+                #expect(editor.document.text == expected)
             }
         }
 
