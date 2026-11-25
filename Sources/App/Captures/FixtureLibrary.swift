@@ -1,12 +1,11 @@
 #if DEBUG
     import Foundation
     import Model
-    import Preview
     import Store
 
     /// One deterministic account, served by Store's fixture GitHub, covering every row and screen Designer reviews.
     enum FixtureLibrary {
-        static func seed(_ server: FixtureServer, now: Date = .now) throws {
+        static func seed(_ server: FixtureServer, now: Date = .now) {
             let hour: TimeInterval = 3_600
             let day: TimeInterval = 86_400
 
@@ -30,7 +29,7 @@
                 updatedAt: now - 2 * day)
             server.addGist(
                 id: "words", description: "Words worth keeping",
-                files: ["words.md": try PreviewFixtures.listMarkers], updatedAt: now - day)
+                files: ["words.md": listMarkers], updatedAt: now - day)
             server.addGist(
                 id: "highlights", description: "A gist with comments",
                 files: ["comments.md": highlightMarkdown], updatedAt: now - 5 * hour,
@@ -42,7 +41,7 @@
                 ])
             server.addGist(
                 id: "guide", description: "An excellent Markdown field guide",
-                files: ["guide.md": try PreviewFixtures.allSyntax, "tips.md": "# Tips\n\nKeep headings short.\n"],
+                files: ["guide.md": allSyntax, "tips.md": "# Tips\n\nKeep headings short.\n"],
                 updatedAt: now - 3 * hour,
                 owner: FixtureServer.someoneElse, isStarred: true, comments: ["Bookmarking this for later."])
             server.addGist(
@@ -61,7 +60,7 @@
             server.addGist(
                 id: "shape", description: "The shape of a gist",
                 files: [
-                    "README.md": try PreviewFixtures.readingPolish,
+                    "README.md": readingPolish,
                     "Ideas.md": "# Ideas\n\n- A margin for second thoughts\n- Pages that remember where you were\n",
                 ],
                 updatedAt: now - 10 * 60, comments: ["Love where this is going."])
@@ -185,5 +184,214 @@
             "The margins of a notebook are where second thoughts live: the small corrections and asides "
             + "that make a page feel lived in. A comment should hold that whole thought without crowding "
             + "the conversation around it."
+
+        /// Every construct of the shared dialect, for the guide and the preview's WebKit test.
+        static let allSyntax =
+            """
+            ---
+            title: Offline preview fixture
+            tags: [preview, synthetic]
+            ---
+
+            # A quiet notebook
+
+            Every word in this note is synthetic. This fixture proves the shared GistPad dialect, without loading the web app.
+
+            ```toc
+            ```
+
+            ## A little progress
+
+            - [ ] Duplicate task
+            - [x] Duplicate task
+            - [X] Completed with an uppercase marker
+            - [ ] Read **carefully**, then follow [the link](https://gistpad.dev)
+              - [ ] A nested task
+
+            > - [ ] A quoted task
+
+            1. [ ] An ordered task
+
+            ## Connections
+
+            Open [[Ideas]], cite [[0123456789abcdef0123456789abcdef]], mention @octocat and celebrate :tada:.
+
+            A numbered bookmark {#} and a named bookmark {#meeting}. A spoiler: >!The notebook works offline.!<
+
+            ## Useful arithmetic
+
+            rate := $5
+
+            total: rate * 3 =
+
+            _ + 2 =
+
+            ## A small diagram
+
+            ```mermaid
+            flowchart LR
+              Capture --> Draft
+              Draft --> Review
+              Review --> Publish
+            ```
+
+            ## A few richer details
+
+            > [!NOTE]
+            > Native drafts remain the source of truth.
+
+            > [!WARNING]
+            > Secret gist links can be read by anyone who has the link.
+
+            > [!TIP]
+            > Capture a thought before polishing it.
+
+            > [!IMPORTANT]
+            > Saved on this iPhone and saved to GitHub are different states.
+
+            > [!CAUTION]
+            > Review a proposed edit before applying it.
+
+            | Feature | Status |
+            | --- | --- |
+            | Tables | Ready |
+            | Strikethrough | ~~Not ready~~ Ready |
+            | Inline code | `let note = "Hello"` |
+
+            <details>
+            <summary>More to read</summary>
+
+            Raw HTML can include <ins>insertions</ins>, <kbd>keys</kbd> and safe disclosure controls.
+
+            </details>
+
+            A footnote worth following.[^source]
+
+            ```swift
+            let message = "Hello, notebook"
+            ```
+
+            Emoji and combining marks: 👩🏽‍💻 café é.
+
+            日本語のメモ。中文笔记。한국어 메모.
+
+            مرحبا بالعالم. שלום עולם.
+
+            ![Synthetic image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6YxkAAAAASUVORK5CYII=)
+
+            ![Remote image](https://example.com/gistpad-fixture.png)
+
+            [^source]: The preview uses the web application's existing plugins.
+
+            """
+
+        /// Tables, diagrams, disclosures and alerts at reading length, for the shape gist.
+        private static let readingPolish =
+            """
+            # A considered page
+
+            Synthetic reading review. No account content or network is needed.
+
+            ```toc
+            ```
+
+            ## Small, useful numbers
+
+            rate := $5
+
+            total: rate * 3 =
+
+            _ + 2 =
+
+            ## Clear relationships
+
+            ```mermaid
+            flowchart TD
+              Thought --> Draft
+              Draft --> Review
+            ```
+
+            ### An authored distinction
+
+            The deliberate styling below must remain distinct from the neutral defaults.
+
+            ```mermaid
+            flowchart LR
+              A[Needs attention]:::attention --> B[Reviewed]
+              B --> C{Keep?}
+              classDef attention fill:#fff0cc,stroke:#765800,color:#231b08
+            ```
+
+            ## Room for detail
+
+            | Left | Center | Amount |
+            | :--- | :---: | ---: |
+            | Notebook | Ready | $15.00 |
+            | Draft | Local | $17.00 |
+            | Review | Pending | $32.00 |
+
+            | Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec |
+            | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+            | 15 | 17 | 32 | 15 | 17 | 32 | 15 | 17 | 32 | 15 | 17 | 32 |
+            | 17 | 32 | 15 | 17 | 32 | 15 | 17 | 32 | 15 | 17 | 32 | 15 |
+
+            <details>
+            <summary>More to read</summary>
+
+            This is a real disclosure. Its text remains selectable, and the keyboard and VoiceOver retain the original expand/collapse semantics.
+
+            </details>
+
+            <details open>
+            <summary>Already open</summary>
+
+            This authored disclosure starts open and must stay that way.
+
+            </details>
+
+            ## Meaning without color
+
+            > [!NOTE]
+            > A label and symbol identify this information.
+
+            > [!TIP]
+            > Keep the useful thought close.
+
+            > [!IMPORTANT]
+            > Local saving and GitHub publication are different.
+
+            > [!WARNING]
+            > Anyone with a secret gist link can read it.
+
+            > [!CAUTION]
+            > Review changes before applying them.
+
+            - [ ] A quiet unfinished task
+            - [x] A clear completed task
+
+            ## Lists at a glance
+
+            3. A numbered thought with the authored starting value.
+            4. Another line at the same reading rhythm.
+
+            - A bullet that remains distinct from the words.
+              - A nested thought keeps its own marker and indentation.
+
+            """
+
+        /// Nested, authored-number and task markers, for the words gist.
+        private static let listMarkers =
+            """
+            # Small things
+
+            - A thought to keep
+              - A small detail
+
+            3. An authored number
+
+            - [ ] Leave room for a surprise
+            - [x] Keep the good parts
+
+            """
     }
 #endif

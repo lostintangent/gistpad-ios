@@ -3,13 +3,14 @@ import SwiftUI
 import Testing
 import UIKit
 import WebKit
+@testable import GistPad
 @testable import Preview
 
 @Suite("Offline WebKit renderer", .serialized, .timeLimit(.minutes(1)))
 struct PreviewWebKitTests {
     @Test("The bundled page renders offline, keeps read-only tasks inert and addresses duplicate tasks")
     func offlineRendering() async throws {
-        let markdown = try PreviewFixtures.allSyntax
+        let markdown = FixtureLibrary.allSyntax
             .replacingOccurrences(of: "![Remote image](https://example.com/gistpad-fixture.png)", with: "")
         let readOnly = PreviewFile(text: markdown, id: "web-kit-fixture", generation: 1, allowsTaskEdits: false)
         let editable = PreviewFile(text: markdown, id: "web-kit-fixture", generation: 1, allowsTaskEdits: true)

@@ -40,7 +40,7 @@ let package = Package(
             exclude: ["README.md"]),
         .target(
             name: "Preview", dependencies: ["Appearance", "Comments"], path: "Sources/Features/Preview",
-            resources: [.copy("Resources/Web"), .copy("Resources/Fixtures")], swiftSettings: mainActor),
+            resources: [.copy("Resources/Web")], swiftSettings: mainActor),
 
         .testTarget(name: "AppearanceTests", dependencies: ["Appearance"], path: "Tests/Shared/AppearanceTests"),
         .testTarget(

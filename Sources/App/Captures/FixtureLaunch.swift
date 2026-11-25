@@ -49,7 +49,7 @@
 
         func model() async throws -> GistPadModel {
             let server = FixtureServer()
-            if fixture == .standard || fixture == .offline { try FixtureLibrary.seed(server) }
+            if fixture == .standard || fixture == .offline { FixtureLibrary.seed(server) }
             if fixture == .showcase { FixtureLibrary.seedShowcase(server) }
             let accounts = server.accounts()
             if fixture != .signedOut {

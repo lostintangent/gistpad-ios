@@ -43,6 +43,6 @@ Appearance travels apart from Markdown, as CSS variables that `PreviewAppearance
 
 - `npm test` covers task ranges with duplicate labels, CRLF and forged raw HTML, comment overlap runs and the text catalog, and the calculator against the web's.
 - `swift test --filter PreviewTests` runs the bridge tests on macOS.
-- On the simulator, `PreviewTests` also load the all-syntax fixture through the real resource scheme, keep the reading position across width and inset changes, and render again after the web process dies.
+- On the simulator, the app-hosted `PreviewWebKitTests` load the all-syntax fixture through the real resource scheme, keep the reading position across width and inset changes, and render again after the web process dies.
 
-`PreviewFixtures.allSyntax`, `readingPolish` and `listMarkers` seed the `guide`, `shape` and `words` gists in the `standard` fixture. `--fixture standard --open highlights` shows comment highlights in the app. WebKit test snapshots aren't visual evidence, so capture the app with `scripts/capture-matrix.sh`.
+`FixtureLibrary`'s `allSyntax`, `readingPolish` and `listMarkers` notes seed the `guide`, `shape` and `words` gists in the `standard` fixture, and only DEBUG builds carry them. `--fixture standard --open highlights` shows comment highlights in the app. WebKit test snapshots aren't visual evidence, so capture the app with `scripts/capture-matrix.sh`.
