@@ -243,10 +243,94 @@ struct MarkdownDocumentTests {
         #expect(strings(.emphasis).contains("___both___"))
     }
 
+    @Test func aKeystrokeRestylesOnlyItsParagraph() {
+        let paragraph = "Some **bold** prose.\n\n"
+        let length = paragraph.utf16.count
+        let old = MarkdownDocument(String(repeating: paragraph, count: 100))
+        let typed = NSRange(location: 50 * length + 5, length: 1)
+        let new = MarkdownDocument(
+            (old.text as NSString).replacingCharacters(in: NSRange(location: typed.location, length: 0), with: "x"))
+        #expect(new.restyledRange(from: old, edited: typed) == NSRange(location: 50 * length, length: length))
+    }
+
+    @Test func restylingWhatAnEditTouchedStylesTheNoteAsRestylingItAllWould() throws {
+        let note = """
+            ---
+            title: Note
+            ---
+
+            # Heading
+            Prose with `code
+            across` lines and **bold** and [a link](https://example.com).
+
+            ```swift
+            let a = 1
+
+            ```
+            - [ ] Task
+            > quote `tick`
+            ~~~
+            tilde
+            ~~~
+            Tail with ``double `ticks``.
+            """
+        let pieces = [
+            "```", "~~~", "`", "``", "\n", "\n\n", "---", "---\n", "# ", "> ", "- [ ] ", "1. ", "**", "_", "x", " ",
+        ]
+        var random = SplitMix64(seed: 411)
+        var document = MarkdownDocument(note)
+        for _ in 0..<3_000 {
+            let source = document.text as NSString
+            let location = Int.random(in: 0...source.length, using: &random)
+            let change = NSRange(
+                location: location, length: min(Int.random(in: 0...3, using: &random), source.length - location))
+            let typed = (0..<Int.random(in: 0...2, using: &random)).map { _ in pieces.randomElement(using: &random)! }
+                .joined()
+            // Pasting a note over itself replaces every character, even the ones that come back the same.
+            let (replaced, replacement) =
+                Int.random(in: 0..<50, using: &random) == 0
+                ? (document.range, source.replacingCharacters(in: change, with: typed)) : (change, typed)
+            let next = MarkdownDocument(source.replacingCharacters(in: replaced, with: replacement))
+            let edited = NSRange(location: replaced.location, length: replacement.utf16.count)
+            let restyled = next.restyledRange(from: document, edited: edited)
+            let spans = next.spans(in: restyled)
+            var styled = styles(document.spans, length: source.length)
+            styled.replaceSubrange(Range(replaced)!, with: repeatElement(nil, count: edited.length))
+            styled.replaceSubrange(Range(restyled)!, with: styles(spans, length: next.range.length)[Range(restyled)!])
+            try #require(
+                spans.allSatisfy { NSUnionRange($0.range, restyled) == restyled }
+                    && styled == styles(next.spans, length: next.range.length),
+                "\(document.text.debugDescription) became \(next.text.debugDescription)")
+            document = next.range.length > 1_500 ? MarkdownDocument(note) : next
+        }
+    }
+
+    /// Each code unit's span kinds in painting order. Nil is text no paint has reached.
+    private func styles(_ spans: [MarkdownDocument.Span], length: Int) -> [[MarkdownDocument.Span.Kind]?] {
+        var styles = [[MarkdownDocument.Span.Kind]?](repeating: [], count: length)
+        for span in spans {
+            for offset in Range(span.range)! { styles[offset]?.append(span.kind) }
+        }
+        return styles
+    }
+
     private func strings(of source: String) -> (MarkdownDocument.Span.Kind) -> [String] {
         let spans = MarkdownDocument(source).spans
         return { kind in
             spans.filter { $0.kind == kind }.map { (source as NSString).substring(with: $0.range) }
         }
+    }
+}
+
+/// A seeded generator, so a failing sequence of edits replays the same way.
+private struct SplitMix64: RandomNumberGenerator {
+    var seed: UInt64
+
+    mutating func next() -> UInt64 {
+        seed &+= 0x9E37_79B9_7F4A_7C15
+        var z = seed
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
     }
 }

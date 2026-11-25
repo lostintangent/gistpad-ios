@@ -45,7 +45,7 @@
             editor.textView.addGestureRecognizer(tap)
         }
 
-        private var quotes: [CommentQuote] { comments?.quotes ?? [] }
+        var quotes: [CommentQuote] { comments?.quotes ?? [] }
 
         func configure(_ comments: CommentHighlights?) {
             let needsInitialReport = self.comments == nil && comments != nil

@@ -20,10 +20,11 @@
             [.font: body, .foregroundColor: UIColor.label]
         }
 
-        /// Styles all of `storage`, which holds `document`.
-        func paint(_ document: MarkdownDocument, in storage: NSTextStorage) {
-            storage.setAttributes(typingAttributes, range: NSRange(location: 0, length: storage.length))
-            for span in document.spans {
+        /// Styles `range` of `storage`, which holds `document`, from whole blocks such as
+        /// `restyledRange(from:edited:)` gives.
+        func paint(_ document: MarkdownDocument, in storage: NSTextStorage, range: NSRange) {
+            storage.setAttributes(typingAttributes, range: range)
+            for span in document.spans(in: range) {
                 storage.addAttributes(attributes(for: span.kind), range: span.range)
                 if span.kind == .strong || span.kind == .emphasis {
                     let addedTrait: UIFontDescriptor.SymbolicTraits =

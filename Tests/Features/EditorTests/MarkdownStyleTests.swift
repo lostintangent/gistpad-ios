@@ -153,13 +153,39 @@
             let paints = AttributePasses(of: view.textStorage)
             view.insertText("!")
             #expect(editor.document.text == "# Heading\n\nProse!")
-            #expect(paints.count == 1)
+            #expect(paints.ranges.count == 1)
+        }
+
+        @Test func aKeystrokeRestylesOnlyItsParagraph() {
+            let paragraph = "Some **bold** prose.\n\n"
+            let editor = MarkdownEditor(text: String(repeating: paragraph, count: 100))
+            let view = editor.textView
+            let start = 50 * paragraph.utf16.count
+            view.selectedRange = NSRange(location: start + 5, length: 0)
+            let paints = AttributePasses(of: view.textStorage)
+            view.insertText("x")
+            #expect(paints.ranges == [(view.text as NSString).lineRange(for: NSRange(location: start, length: 0))])
+        }
+
+        @Test func restylingEditsLooksLikeOpeningTheNoteAfresh() {
+            let editor = MarkdownEditor(text: "# Notes\n\nProse with `code\n\n```\nfenced\n```\nTail **bold**\n")
+            let view = editor.textView
+            // Opening a fence above another turns the code below it into prose, and back.
+            view.selectedRange = NSRange(location: 9, length: 0)
+            view.insertText("```\n")
+            view.selectedRange = NSRange(location: 9, length: 4)
+            view.deleteBackward()
+            view.selectedRange = NSRange(location: 25, length: 0)
+            view.insertText("` and **more")
+            view.selectedRange = NSRange(location: 0, length: view.textStorage.length)
+            view.insertText(view.text.replacingOccurrences(of: "Tail", with: "> Tail"))
+            #expect(view.textStorage.isEqual(to: MarkdownEditor(text: view.text).textView.textStorage))
         }
     }
 
-    /// Counts the passes that restyle `storage` without changing its characters.
+    /// The ranges of the passes that restyle `storage` without changing its characters.
     private final class AttributePasses: NSObject {
-        private(set) var count = 0
+        private(set) var ranges: [NSRange] = []
 
         init(of storage: NSTextStorage) {
             super.init()
@@ -169,7 +195,9 @@
         }
 
         @objc private func didProcessEditing(_ notification: Notification) {
-            if (notification.object as? NSTextStorage)?.editedMask == .editedAttributes { count += 1 }
+            guard let storage = notification.object as? NSTextStorage, storage.editedMask == .editedAttributes
+            else { return }
+            ranges.append(storage.editedRange)
         }
     }
 #endif

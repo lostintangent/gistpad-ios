@@ -23,6 +23,10 @@
         @ObservationIgnored var hosts: [TextViewHost.Reference] = []
         @ObservationIgnored public var onEdit: ((String, UInt64) -> Void)?
         @ObservationIgnored private var isHighlighting = false
+        /// The document the text view last showed styled, and how much text at each end no edit has
+        /// touched since, so restyling a change paints only the blocks it touched.
+        @ObservationIgnored private var styled: MarkdownDocument?
+        @ObservationIgnored private var unedited: (prefix: Int, suffix: Int)?
         /// A caret placed by a focus request, waiting for the text view to reach a window.
         @ObservationIgnored public private(set) var isFocusPending = false
         @ObservationIgnored lazy var commentHighlighter = CommentHighlighter(editor: self)
@@ -37,6 +41,7 @@
             textView.editor = self
             textView.installGestures()
             textView.delegate = self
+            textView.textStorage.delegate = self
             textView.text = text
             textView.font = .preferredFont(forTextStyle: .body)
             textView.adjustsFontForContentSizeCategory = true
@@ -231,17 +236,33 @@
             textView.findInteraction?.presentFindNavigator(showingReplace: replacing)
         }
 
+        /// Restyles the whole note, as a change to its look or its comments needs.
         func highlight() {
+            styled = nil
+            restyle()
+        }
+
+        /// Restyles what changed since the last paint. A quoted passage can match anywhere after an
+        /// edit, so a note with quotes restyles whole.
+        private func restyle() {
             guard isSettled, !isHighlighting else { return }
+            let document = shownDocument
+            var range = document.range
+            if let styled, commentHighlighter.quotes.isEmpty {
+                guard let unedited else { return }
+                let edited = NSRange(unedited.prefix..<(range.length - unedited.suffix))
+                range = document.restyledRange(from: styled, edited: edited)
+            }
             isHighlighting = true
             defer { isHighlighting = false }
             let style = MarkdownStyle(traits: textView.traitCollection)
-            let document = shownDocument
-            textView.updateAttributes { storage in
-                style.paint(document, in: storage)
+            textView.updateAttributes(in: range) { storage in
+                style.paint(document, in: storage, range: range)
                 commentHighlighter.paint(in: storage)
             }
             textView.typingAttributes = style.typingAttributes
+            styled = document
+            unedited = nil
         }
 
         private func synchronizeText() {
@@ -249,7 +270,7 @@
             guard !isWritingToolsActive else { return }
             isComposing = textView.markedTextRange != nil
             adoptText()
-            highlight()
+            restyle()
         }
 
         /// Makes the text view's text the document, counting each change once.
@@ -309,6 +330,18 @@
         }
     }
 
+    extension MarkdownEditor: NSTextStorageDelegate {
+        public func textStorage(
+            _ storage: NSTextStorage, didProcessEditing actions: NSTextStorage.EditActions, range: NSRange,
+            changeInLength _: Int
+        ) {
+            guard actions.contains(.editedCharacters) else { return }
+            // Each edit leaves the text before and after its range alone, so the shortest of each holds.
+            let suffix = storage.length - NSMaxRange(range)
+            unedited = (min(unedited?.prefix ?? .max, range.location), min(unedited?.suffix ?? .max, suffix))
+        }
+    }
+
     extension MarkdownEditor: UITextViewDelegate {
         /// A tap places its caret after this returns, so revealing the old caret would scroll away.
         public func textViewDidBeginEditing(_ textView: UITextView) {
@@ -335,7 +368,7 @@
             guard ranges.count == 1, canFormat,
                 textView.findInteraction?.isFindNavigatorVisible != true
             else { return true }
-            if adoptText() { highlight() }
+            if adoptText() { restyle() }
             guard let edit = document.edit(typing: replacement, over: ranges[0]) else { return true }
             perform(edit)
             return false

@@ -118,6 +118,34 @@ extension MarkdownDocument {
         return spans
     }
 
+    /// The whole lines to restyle once `old` became this document by a change to `edited`, a range
+    /// of this text, so that `spans(in:)` over them leaves the note styled as `spans` would. That's
+    /// every prose run and literal the change touches in either document, grown until it splits
+    /// none. Past it the text is the same and no literal is open, so it parses the same way.
+    public func restyledRange(from old: MarkdownDocument, edited: NSRange) -> NSRange {
+        let delta = source.length - old.source.length
+        var restyled = edited
+        while true {
+            let grown = old.styledRange(
+                around: NSRange(location: restyled.location, length: restyled.length - delta))
+            let next = NSUnionRange(
+                styledRange(around: restyled), NSRange(location: grown.location, length: grown.length + delta))
+            if next == restyled { return restyled }
+            restyled = next
+        }
+    }
+
+    /// The whole lines of `range`, grown to every prose run and literal they touch.
+    private func styledRange(around range: NSRange) -> NSRange {
+        let lines = source.lineRange(for: range)
+        return (proseRuns(touching: lines) + literals.map(\.range).filter { touches($0, lines) })
+            .reduce(lines, NSUnionRange)
+    }
+
+    private func touches(_ literal: NSRange, _ range: NSRange) -> Bool {
+        literal.location < max(NSMaxRange(range), range.location + 1) && NSMaxRange(literal) > range.location
+    }
+
     /// The note's blocks in order. Each fenced code block is one block, and front matter is none.
     public var blocks: [Block] {
         var blocks = literals.filter { $0.kind == .code }.map { literal in
