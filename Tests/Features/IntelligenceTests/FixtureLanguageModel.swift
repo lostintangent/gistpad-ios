@@ -27,7 +27,6 @@ import Foundation
     var operations: (ModelPass) -> [EditOperation] = { pass in
         fixes.map { .replaceRegion((pass.source as NSString).range(of: $0.quote), $0) }
     }
-    var suggestions: (ModelPass) -> [Proposal.Change] = { _ in fixes }
     var excerpts: (ModelPass) -> [String] = { _ in [] }
     private(set) var passes: [ModelPass] = []
 
@@ -38,11 +37,6 @@ import Foundation
     func operations(for pass: ModelPass) async throws -> [EditOperation] {
         try await record(pass)
         return operations(pass)
-    }
-
-    func suggestions(for pass: ModelPass) async throws -> [Proposal.Change] {
-        try await record(pass)
-        return suggestions(pass)
     }
 
     func excerpts(for pass: ModelPass) async throws -> [String] {

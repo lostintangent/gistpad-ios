@@ -30,13 +30,16 @@
                     .replacingOccurrences(of: "before the cafe", with: "after the cafe"))
             #expect(editor.generation == 1)
             #expect(changes == 1)
-            #expect(state.appliedCount == 2)
+            #expect(state.isApplied)
+            #expect(!state.isStale)
+            #expect(!state.canApply)
         }
 
         @Test func aChangedFileRefusesTheApply() async throws {
             let editor = MarkdownEditor(text: source)
             let state = IntelligenceState(editor: editor, model: FixtureLanguageModel())
-            state.action = .review
+            state.action = .edit
+            state.editPrompt = "Fix the typo and the time"
             state.generate()
             await state.task?.value
             let proposal = try #require(state.proposal)
@@ -98,17 +101,12 @@
             #expect(editor.generation == 0)
         }
 
-        @Test func aReadOnlyFileAllowsAskAndReviewButNotEditOrApply() async {
+        @Test func aReadOnlyEditorShowsAnEditButNeverAppliesIt() async {
             let editor = MarkdownEditor(text: source)
             editor.isEditable = false
             let state = IntelligenceState(editor: editor, model: FixtureLanguageModel())
-            state.askPrompt = "When do I leave?"
-            #expect(state.canGenerate)
             state.action = .edit
             state.editPrompt = "Fix the typo"
-            #expect(!state.canGenerate)
-            state.action = .review
-            #expect(state.canGenerate)
             state.generate()
             await state.task?.value
             #expect(state.proposal?.changes.count == 2)

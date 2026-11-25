@@ -5,6 +5,7 @@
 
     public struct IntelligenceSheet: View {
         private let title: String
+        private let canEdit: Bool
         private let revealSource: @MainActor (NSRange) -> Void
         @State private var state: IntelligenceState
         @State private var detent = PresentationDetent.medium
@@ -12,10 +13,14 @@
         @Environment(\.dynamicTypeSize) private var dynamicTypeSize
         @FocusState private var promptFocused: Bool
 
+        /// `canEdit` offers Edit beside Ask. Pass whether the file is yours as the sheet opens, not
+        /// whether the editor is editable right now, which a committing change briefly turns off.
         public init(
-            editor: MarkdownEditor, title: String, revealSource: @escaping @MainActor (NSRange) -> Void
+            editor: MarkdownEditor, title: String, canEdit: Bool,
+            revealSource: @escaping @MainActor (NSRange) -> Void
         ) {
             self.title = title
+            self.canEdit = canEdit
             self.revealSource = revealSource
             _state = State(initialValue: IntelligenceState(editor: editor))
         }
@@ -24,19 +29,20 @@
             @Bindable var state = state
             NavigationStack {
                 Form {
-                    Section {
-                        Picker(String(localized: "Action", bundle: .module), selection: $state.action) {
-                            ForEach(IntelligenceAction.allCases, id: \.self) { action in
-                                Text(action.title).tag(action)
-                                    .disabled(action == .edit && !state.editor.isEditable)
+                    if canEdit {
+                        Section {
+                            Picker(String(localized: "Action", bundle: .module), selection: $state.action) {
+                                ForEach(IntelligenceAction.allCases, id: \.self) { action in
+                                    Text(action.title).tag(action)
+                                }
                             }
+                            .pickerStyle(.segmented)
+                            .disabled(state.isRunning)
+                            .accessibilityIdentifier("intelligence-actions")
                         }
-                        .pickerStyle(.segmented)
-                        .disabled(state.isRunning)
-                        .accessibilityIdentifier("intelligence-actions")
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
                     }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
                     request
                     if let reason = state.availabilityReason {
                         Section { Label(reason, systemImage: "apple.intelligence") }
@@ -58,11 +64,10 @@
                         }
                     }
                     answer
-                    if let proposal = state.appliedEdit ?? state.proposal { changes(proposal) }
+                    if let proposal = state.proposal { changes(proposal) }
                     if let notice = state.notice {
                         Section {
-                            Label(
-                                notice, systemImage: state.appliedCount > 0 ? "checkmark.circle" : "info.circle")
+                            Label(notice, systemImage: state.isApplied ? "checkmark.circle" : "info.circle")
                         }
                     }
                 }
@@ -97,7 +102,7 @@
             }
             .presentationDetents([.medium, .large], selection: $detent)
             .presentationDragIndicator(.visible)
-            .sensoryFeedback(.success, trigger: state.appliedCount) { old, new in new > old }
+            .sensoryFeedback(.success, trigger: state.isApplied) { _, isApplied in isApplied }
             .onChange(of: state.action) { state.clearResults() }
             .onChange(
                 of: state.isRunning || state.proposal != nil || dynamicTypeSize.isAccessibilitySize,
@@ -113,30 +118,16 @@
         private var request: some View {
             @Bindable var state = state
             Section {
-                switch state.action {
-                case .review:
-                    if !state.hasResults {
-                        Text("Find errors and unclear wording.", bundle: .module)
-                            .foregroundStyle(.secondary)
-                    }
-                case .ask, .edit:
-                    TextField(
-                        state.action == .ask
-                            ? String(localized: "Ask about this file", bundle: .module)
-                            : String(localized: "What would you like to change?", bundle: .module),
-                        text: $state.prompt, axis: .vertical
-                    )
-                    .lineLimit(1...5)
-                    .focused($promptFocused)
-                    .disabled(state.isRunning)
-                    .accessibilityIdentifier("intelligence-prompt")
-                }
-            } footer: {
-                if !state.editor.isEditable {
-                    Text(
-                        "This gist is read-only. You can ask and review, but not apply changes.",
-                        bundle: .module)
-                }
+                TextField(
+                    state.action == .ask
+                        ? String(localized: "Ask about this file", bundle: .module)
+                        : String(localized: "What would you like to change?", bundle: .module),
+                    text: $state.prompt, axis: .vertical
+                )
+                .lineLimit(1...5)
+                .focused($promptFocused)
+                .disabled(state.isRunning)
+                .accessibilityIdentifier("intelligence-prompt")
             }
         }
 
@@ -154,8 +145,6 @@
                 return String(localized: "Reading part \(current) of \(total)…", bundle: .module)
             case .editing(let current, let total):
                 return String(localized: "Editing part \(current) of \(total)…", bundle: .module)
-            case .reviewing(let current, let total):
-                return String(localized: "Reviewing part \(current) of \(total)…", bundle: .module)
             }
         }
 
@@ -202,29 +191,15 @@
                         systemImage: "exclamationmark.circle")
                 }
             }
-            if proposal.changes.isEmpty, state.appliedCount == 0 {
+            if proposal.changes.isEmpty {
                 Section {
-                    Text(
-                        state.action == .edit
-                            ? String(localized: "No changes needed.", bundle: .module)
-                            : String(localized: "No suggestions.", bundle: .module)
-                    )
-                    .foregroundStyle(.secondary)
+                    Text("No changes needed.", bundle: .module).foregroundStyle(.secondary)
                 }
             }
-            ForEach(proposal.changes.enumerated(), id: \.element.id) { index, change in
-                Section {
-                    self.change(change)
-                } header: {
-                    if index == 0, state.action == .review {
-                        Text(
-                            proposal.changes.count == 1
-                                ? String(localized: "1 suggestion", bundle: .module)
-                                : String(localized: "\(proposal.changes.count) suggestions", bundle: .module))
-                    }
-                }
+            ForEach(proposal.changes) { change in
+                Section { self.change(change) }
             }
-            if state.action == .edit, state.appliedEdit == nil, proposal.canApply {
+            if !state.isApplied, proposal.canApply {
                 Section {
                     Button(String(localized: "Apply Edit", bundle: .module), systemImage: "checkmark") {
                         state.apply()
@@ -259,9 +234,8 @@
         private func change(_ change: Proposal.Change) -> some View {
             // A whole line's change carries its line break, which shows as a blank line.
             let quote = change.quote.trimmingCharacters(in: .newlines)
-            let comparison = change.replacement.map {
-                TextDiff(before: quote, after: $0.trimmingCharacters(in: .newlines))
-            }
+            let comparison = TextDiff(
+                before: quote, after: change.replacement.trimmingCharacters(in: .newlines))
             // A rewrite's Before and After say what changes, so only task changes carry a headline.
             if !change.reason.isEmpty { Text(change.reason).font(.headline) }
             VStack(alignment: .leading, spacing: 6) {
@@ -273,37 +247,21 @@
                 .font(.caption).fontWeight(.semibold)
                 if change.quote.isEmpty {
                     Text("Empty file", bundle: .module).foregroundStyle(.secondary)
-                } else if let comparison {
-                    Text(Self.attributed(comparison.before)).textSelection(.enabled)
                 } else {
-                    Text(quote).textSelection(.enabled)
+                    Text(Self.attributed(comparison.before)).textSelection(.enabled)
                 }
             }
-            if let replacement = change.replacement, let comparison {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("After", bundle: .module).font(.caption).fontWeight(.semibold)
-                    if replacement.isEmpty {
-                        Text("Remove this text", bundle: .module).foregroundStyle(.secondary)
-                    } else {
-                        Text(Self.attributed(comparison.after)).textSelection(.enabled)
-                    }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("After", bundle: .module).font(.caption).fontWeight(.semibold)
+                if change.replacement.isEmpty {
+                    Text("Remove this text", bundle: .module).foregroundStyle(.secondary)
+                } else {
+                    Text(Self.attributed(comparison.after)).textSelection(.enabled)
                 }
             }
             if change.range == nil {
                 Label(String(localized: "Can’t Apply", bundle: .module), systemImage: "exclamationmark.circle")
                     .foregroundStyle(.secondary)
-            }
-            if state.action == .review {
-                if change.canApply {
-                    Button(String(localized: "Apply", bundle: .module)) {
-                        state.apply(changeID: change.id)
-                    }
-                    .disabled(!state.canApply)
-                }
-                Button(String(localized: "Dismiss", bundle: .module)) {
-                    state.dismiss(changeID: change.id)
-                }
-                .disabled(state.isRunning)
             }
         }
 

@@ -6,7 +6,6 @@ import Markdown
 extension Proposal.Change {
     /// The text this change only adds, when it leaves everything it quotes in place.
     var insertedText: String? {
-        guard let replacement else { return nil }
         let original = Array(quote)
         let revised = Array(replacement)
         let prefix = zip(original, revised).prefix { $0.0 == $0.1 }.count

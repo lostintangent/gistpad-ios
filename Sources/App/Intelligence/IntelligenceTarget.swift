@@ -8,6 +8,7 @@ import SwiftUI
 final class IntelligenceTarget: Identifiable {
     let editor: MarkdownEditor
     let title: String
+    let canEdit: Bool
     let wasEditing: Bool
     var passage: NSRange?
     private let revealSource: @MainActor (NSRange) -> Void
@@ -19,7 +20,9 @@ final class IntelligenceTarget: Identifiable {
     ) throws(MarkdownEditor.Failure) {
         let editor = fileEditor.editor
         guard editor.isSettled else { throw .unsettled }
-        self.init(editor: editor, title: fileEditor.details.title) { range in
+        self.init(
+            editor: editor, title: fileEditor.details.title, canEdit: fileEditor.details.isOwned
+        ) { range in
             guard fileEditor.details.isOwned else {
                 model.failure = Failure(String(localized: "This gist is read-only, so this passage can’t open in Edit."))
                 return
@@ -39,11 +42,12 @@ final class IntelligenceTarget: Identifiable {
     }
 
     init(
-        editor: MarkdownEditor, title: String,
+        editor: MarkdownEditor, title: String, canEdit: Bool,
         revealSource: @escaping @MainActor (NSRange) -> Void
     ) {
         self.editor = editor
         self.title = title
+        self.canEdit = canEdit
         self.revealSource = revealSource
         wasEditing = editor.isEditing
     }
@@ -78,7 +82,7 @@ private struct IntelligenceSheetModifier: ViewModifier {
             }
             .sheet(item: $target, onDismiss: dismissed) { target in
                 IntelligenceSheet(
-                    editor: target.editor, title: target.title,
+                    editor: target.editor, title: target.title, canEdit: target.canEdit,
                     revealSource: { target.passage = $0 }
                 )
             }

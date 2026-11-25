@@ -5,58 +5,29 @@ import OSLog
 let logger = Logger(subsystem: "dev.gistpad.GistPad", category: "Intelligence")
 
 extension IntelligenceModel {
+    /// Edits the whole body in one pass, and splits it into parts only when the context can't hold it.
     package func edit(
         _ request: IntelligenceRequest,
         progress: @MainActor (IntelligenceRequest.Progress) -> Void = { _ in }
     ) async throws -> Proposal {
-        try await generate(request, purpose: .edit, progress: progress)
-    }
-
-    package func review(
-        _ request: IntelligenceRequest,
-        progress: @MainActor (IntelligenceRequest.Progress) -> Void = { _ in }
-    ) async throws -> Proposal {
-        try await generate(request, purpose: .review, progress: progress)
-    }
-
-    /// Review starts chunked; Edit starts with the whole body and splits only on context failure.
-    private func generate(
-        _ request: IntelligenceRequest, purpose: ModelPass.Purpose,
-        progress: @MainActor (IntelligenceRequest.Progress) -> Void
-    ) async throws -> Proposal {
         try Task.checkCancellation()
         if let unavailableReason { throw IntelligenceError.unavailable(unavailableReason) }
-        let chunks =
-            purpose == .edit
-            ? [body(of: request)]
-            : try await split(body(of: request), request: request, purpose: purpose)
         var candidates: [(Proposal.Change, NSRange)] = []
-        var pending = Array(chunks.reversed())
+        var pending = [body(of: request)]
         var completed = 0
         while let chunk = pending.popLast() {
             try Task.checkCancellation()
-            let (current, total) = (completed + 1, completed + pending.count + 1)
-            progress(purpose == .edit ? .editing(current, of: total) : .reviewing(current, of: total))
+            progress(.editing(completed + 1, of: completed + pending.count + 1))
             do {
-                let input = pass(request, purpose: purpose, source: text(chunk, of: request), scope: chunk)
-                if purpose == .edit {
-                    let operations = try await self.operations(for: input)
-                    try Task.checkCancellation()
-                    candidates += try operations.flatMap {
-                        try $0.changes(in: request.document, pass: input, scope: chunk)
-                    }
-                } else {
-                    let suggestions = try await self.suggestions(for: input)
-                    try Task.checkCancellation()
-                    candidates += suggestions.map { ($0, chunk) }
+                let input = pass(request, purpose: .edit, source: text(chunk, of: request), scope: chunk)
+                let operations = try await self.operations(for: input)
+                try Task.checkCancellation()
+                candidates += try operations.flatMap {
+                    try $0.changes(in: request.document, pass: input, scope: chunk)
                 }
                 completed += 1
-                // Selection needs a smaller part when the response or context cannot fit.
-            } catch IntelligenceError.responseTooLarge where purpose == .review,
-                IntelligenceError.insufficientContext
-            {
-                let smaller = try await split(
-                    chunk, request: request, purpose: purpose, force: true)
+            } catch IntelligenceError.insufficientContext {
+                let smaller = try await split(chunk, request: request, purpose: .edit, force: true)
                 pending.append(contentsOf: smaller.reversed())
             }
         }

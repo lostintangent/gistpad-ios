@@ -7,7 +7,6 @@ package protocol IntelligenceModel {
     var contextSize: Int { get }
     func tokenCount(for pass: ModelPass) async throws -> Int
     func operations(for pass: ModelPass) async throws -> [EditOperation]
-    func suggestions(for pass: ModelPass) async throws -> [Proposal.Change]
     func excerpts(for pass: ModelPass) async throws -> [String]
     /// Ask's reply, streaming its visible prose to `onUpdate`.
     func reply(
@@ -16,7 +15,7 @@ package protocol IntelligenceModel {
 }
 
 package struct ModelPass: Sendable {
-    enum Purpose: String { case answer, extract, edit, review }
+    enum Purpose: String { case answer, extract, edit }
     // Platform gap: GenerationOptions has no repetition penalty or stop sequence, so a runaway answer
     // runs to this limit and is retried once. Remove the retry and raise the limit when it has one.
     /// Real answers use under 120 tokens.

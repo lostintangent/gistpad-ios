@@ -4,7 +4,7 @@ import Markdown
 package struct Proposal: Sendable {
     let document: MarkdownDocument
     package let changes: [Change]
-    fileprivate let safetyInstruction: String?
+    private let safetyInstruction: String?
 
     package var omittedCount: Int { changes.count(where: { $0.range == nil }) }
     var canApply: Bool { changes.contains { $0.canApply } }
@@ -21,8 +21,7 @@ package struct Proposal: Sendable {
             let matches =
                 change.quote.isEmpty
                 ? (scope.length == 0 && Range(scope, in: document.text) != nil ? [scope] : [])
-                : document.text.exactRanges(
-                    of: change.quote, within: scope, before: change.before, after: change.after)
+                : document.text.exactRanges(of: change.quote, within: scope)
             change.range = matches.count == 1 ? matches[0] : nil
             return change
         }
@@ -46,31 +45,16 @@ package struct Proposal: Sendable {
         changes = anchored
     }
 
-    init(
-        document: MarkdownDocument, changes: [Change], safetyInstruction: String? = nil
-    ) {
-        self.document = document
-        self.changes = changes
-        self.safetyInstruction = safetyInstruction
-    }
-
-    func dismissing(changeID: UUID) -> Proposal {
-        Proposal(
-            document: document, changes: changes.filter { $0.id != changeID },
-            safetyInstruction: safetyInstruction)
-    }
-
-    /// The note with the selected changes made, or every applicable change when `changeID` is nil.
-    package func application(changeID: UUID? = nil) throws -> Applied {
-        let selected = changes.filter { $0.canApply && (changeID == nil || $0.id == changeID) }
+    /// The note with every applicable change made.
+    package func application() throws -> Applied {
+        let selected = changes.filter(\.canApply)
         guard !selected.isEmpty else { throw IntelligenceError.noApplicableChanges }
         var source = document.text
         for change in selected.sorted(by: { ($0.range?.location ?? 0) > ($1.range?.location ?? 0) }) {
-            guard let range = change.range, let replacement = change.replacement,
-                let swiftRange = Range(range, in: source),
+            guard let range = change.range, let swiftRange = Range(range, in: source),
                 source[swiftRange].utf8.elementsEqual(change.quote.utf8)
             else { throw IntelligenceError.noteChanged }
-            source.replaceSubrange(swiftRange, with: replacement)
+            source.replaceSubrange(swiftRange, with: change.replacement)
         }
         try validateApplication(source, changes: selected)
         return Applied(
@@ -98,9 +82,7 @@ package struct Proposal: Sendable {
         }
         let request = Self.normalized(safetyInstruction)
         for change in changes {
-            if let replacement = change.replacement, !request.isEmpty,
-                Self.normalized(replacement) == request
-            {
+            if !request.isEmpty, Self.normalized(change.replacement) == request {
                 throw IntelligenceError.unsafeEdit
             }
         }
@@ -135,17 +117,11 @@ extension Proposal {
     package struct Change: Identifiable, Sendable {
         package let id = UUID()
         let quote: String
-        let replacement: String?
+        let replacement: String
         let reason: String
-        /// The model's context around the quote, to tell repeats apart.
-        var before = ""
-        var after = ""
         package internal(set) var range: NSRange?
 
-        var canApply: Bool {
-            range != nil
-                && replacement.map { !quote.utf8.elementsEqual($0.utf8) } == true
-        }
+        var canApply: Bool { range != nil && !quote.utf8.elementsEqual(replacement.utf8) }
     }
 }
 
@@ -161,37 +137,17 @@ extension Proposal {
             return NSRange(location: start, length: max(0, end - start))
         }
 
-        /// The changes left on the note this application produced, re-verified at their new ranges.
-        func remaining(on document: MarkdownDocument) -> Proposal {
-            let appliedIDs = Set(applied.map(\.id))
-            let remaining = proposal.changes.filter { !appliedIDs.contains($0.id) }.map { change in
-                var change = change
-                let range = change.range.map {
-                    NSRange(location: mappedOffset($0.location, trailing: false), length: $0.length)
-                }
-                let verified =
-                    range.flatMap { Range($0, in: source) }.map {
-                        source[$0].utf8.elementsEqual(change.quote.utf8)
-                    } ?? false
-                change.range = verified ? range : nil
-                return change
-            }
-            return Proposal(
-                document: document, changes: remaining,
-                safetyInstruction: proposal.safetyInstruction)
-        }
-
         private func mappedOffset(_ position: Int, trailing: Bool) -> Int {
             var shift = 0
             var mapped: Int?
             for change in applied {
-                guard let range = change.range, let replacement = change.replacement else { continue }
+                guard let range = change.range else { continue }
                 if position < range.location { break }
                 if position < NSMaxRange(range) {
-                    mapped = range.location + shift + (trailing ? replacement.utf16.count : 0)
+                    mapped = range.location + shift + (trailing ? change.replacement.utf16.count : 0)
                     break
                 }
-                shift += replacement.utf16.count - range.length
+                shift += change.replacement.utf16.count - range.length
             }
             let text = source as NSString
             let offset = min(max(0, mapped ?? position + shift), text.length)
@@ -204,10 +160,8 @@ extension Proposal {
 }
 
 extension String {
-    /// Where `quote` appears byte for byte, within `scope` and between `before` and `after`.
-    func exactRanges(
-        of quote: String, within scope: NSRange? = nil, before: String = "", after: String = ""
-    ) -> [NSRange] {
+    /// Where `quote` appears byte for byte within `scope`.
+    func exactRanges(of quote: String, within scope: NSRange? = nil) -> [NSRange] {
         let text = self as NSString
         let scope = scope ?? NSRange(location: 0, length: text.length)
         guard !quote.isEmpty, Range(scope, in: self) != nil else { return [] }
@@ -217,22 +171,8 @@ extension String {
             let search = NSRange(location: cursor, length: NSMaxRange(scope) - cursor)
             let match = text.range(of: quote, options: .literal, range: search)
             guard match.location != NSNotFound else { break }
-            if let swiftRange = Range(match, in: self),
-                self[swiftRange].utf8.elementsEqual(quote.utf8),
-                match.location >= before.utf16.count,
-                NSMaxRange(match) + after.utf16.count <= text.length
-            {
-                let prefix = Range(
-                    NSRange(location: match.location - before.utf16.count, length: before.utf16.count),
-                    in: self)
-                let suffix = Range(
-                    NSRange(location: NSMaxRange(match), length: after.utf16.count), in: self)
-                if let prefix, let suffix,
-                    self[prefix].utf8.elementsEqual(before.utf8),
-                    self[suffix].utf8.elementsEqual(after.utf8)
-                {
-                    result.append(match)
-                }
+            if let swiftRange = Range(match, in: self), self[swiftRange].utf8.elementsEqual(quote.utf8) {
+                result.append(match)
             }
             cursor = match.location + 1
         }

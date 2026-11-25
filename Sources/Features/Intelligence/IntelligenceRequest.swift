@@ -2,13 +2,12 @@ import Foundation
 import Markdown
 
 package enum IntelligenceAction: String, CaseIterable, Sendable {
-    case ask, edit, review
+    case ask, edit
 
     var title: String {
         switch self {
         case .ask: String(localized: "Ask", bundle: .module)
         case .edit: String(localized: "Edit", bundle: .module)
-        case .review: String(localized: "Review", bundle: .module)
         }
     }
 }
@@ -22,7 +21,6 @@ package struct IntelligenceRequest: Sendable {
     package enum Progress: Sendable {
         case reading(Int, of: Int)
         case editing(Int, of: Int)
-        case reviewing(Int, of: Int)
         case combining(Int, of: Int)
         case answering
     }

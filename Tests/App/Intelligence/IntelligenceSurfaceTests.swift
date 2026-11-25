@@ -58,7 +58,7 @@
             let offset = editor.contentOffset.y
             try #require(offset > 0)
             let target = IntelligenceTarget(
-                editor: session, title: "Saturday walk",
+                editor: session, title: "Saturday walk", canEdit: true,
                 revealSource: { _ in Issue.record("Closing must not navigate to a passage.") })
             try #require(target.wasEditing)
             presented.target = target
@@ -115,7 +115,7 @@
             window.rootViewController?.view.addSubview(field)
             #expect(field.becomeFirstResponder())
             let selection = editor.textView.selectedRange
-            _ = try editor.apply(proposal)
+            try editor.apply(proposal)
             let edited = "Take the river path.\nLeave at 9am, after the cafe opens at 8am.!"
             #expect(editor.document.text == edited)
 

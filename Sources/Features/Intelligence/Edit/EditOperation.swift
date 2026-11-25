@@ -74,7 +74,6 @@ package enum EditOperation: Sendable {
         case .replaceRegion(let relative, let change):
             guard relative.location >= 0, relative.length > 0,
                 NSMaxRange(relative) <= scope.length,
-                change.replacement != nil,
                 change.quote.utf8.elementsEqual((pass.source as NSString).substring(with: relative).utf8)
             else { throw IntelligenceError.invalidResponse }
             return [(change, NSRange(location: scope.location + relative.location, length: relative.length))]

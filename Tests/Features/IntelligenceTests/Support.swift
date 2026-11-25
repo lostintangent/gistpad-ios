@@ -14,7 +14,7 @@ func rewrite(_ revised: String) -> (ModelPass) -> [EditOperation] {
     { [.rewriteRegion(NSRange(location: 0, length: $0.source.utf16.count), revised: revised)] }
 }
 
-func change(_ quote: String, _ replacement: String?) -> Proposal.Change {
+func change(_ quote: String, _ replacement: String) -> Proposal.Change {
     Proposal.Change(quote: quote, replacement: replacement, reason: "Improve")
 }
 

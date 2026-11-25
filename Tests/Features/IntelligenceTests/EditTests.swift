@@ -13,21 +13,22 @@ struct EditTests {
         #expect(rejected.omittedCount == 3)
         #expect(!rejected.canApply)
 
-        let repeated = note("left same\nright same")
-        let disambiguated = Proposal(
-            document: repeated,
-            candidates: [
-                Proposal.Change(
-                    quote: "same", replacement: "different", reason: "Clarify", before: "right ")
-            ])
-        #expect(try disambiguated.application().source == "left same\nright different")
-
         let overlap = note("abcdef safe")
         let overlapping = Proposal(
             document: overlap,
             candidates: [change("abcd", "one"), change("cdef", "two"), change("safe", "kept")])
         #expect(overlapping.changes.prefix(2).allSatisfy { $0.range == nil })
         #expect(try overlapping.application().source == "abcdef kept")
+    }
+
+    @Test func anEditThatEchoesTheRequestIsRefused() async {
+        let fixture = FixtureLanguageModel()
+        fixture.operations = { pass in
+            [.replaceRegion((pass.source as NSString).range(of: "bad"), change("bad", "fix it."))]
+        }
+        await #expect(throws: IntelligenceError.unsafeEdit) {
+            try await fixture.edit(request("Clear text: first bad, second typo.", "Fix it"))
+        }
     }
 
     @Test func applyingKeepsEveryOtherByte() async throws {

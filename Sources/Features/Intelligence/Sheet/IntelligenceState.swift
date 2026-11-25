@@ -18,8 +18,7 @@
         var progress: IntelligenceRequest.Progress?
         var answer: Answer?
         var proposal: Proposal?
-        var appliedEdit: Proposal?
-        var appliedCount = 0
+        var isApplied = false
         private(set) var document: MarkdownDocument?
         private(set) var task: Task<Void, Never>?
 
@@ -43,16 +42,11 @@
 
         var canGenerate: Bool {
             availabilityReason == nil && !isRunning
-                && (action == .review || !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                && (action != .edit || editor.isEditable)
+                && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
         var canApply: Bool {
-            !isRunning && !isStale && editor.canFormat && proposal?.canApply == true
-        }
-
-        var hasResults: Bool {
-            answer != nil || proposal != nil || appliedEdit != nil
+            !isRunning && !isApplied && !isStale && editor.canFormat && proposal?.canApply == true
         }
 
         func clearResults() {
@@ -61,8 +55,7 @@
             progress = nil
             answer = nil
             proposal = nil
-            appliedEdit = nil
-            appliedCount = 0
+            isApplied = false
             document = nil
         }
 
@@ -70,7 +63,7 @@
             guard canGenerate else { return }
             clearResults()
             let selectedAction = action
-            let instruction = selectedAction == .review ? "" : prompt
+            let instruction = prompt
             let requestID = UUID()
             logger.notice(
                 "request=\(requestID.uuidString, privacy: .public) action=\(selectedAction.rawValue, privacy: .public) state=started sourceUTF16=\(self.editor.document.text.utf16.count)"
@@ -95,8 +88,6 @@
                             })
                     case .edit:
                         self.proposal = try await self.model.edit(request, progress: { self.progress = $0 })
-                    case .review:
-                        self.proposal = try await self.model.review(request, progress: { self.progress = $0 })
                     }
                 } catch is CancellationError {
                     if selectedAction == .ask { self.answer = nil }
@@ -119,25 +110,18 @@
             task?.cancel()
         }
 
-        func apply(changeID: UUID? = nil) {
+        func apply() {
             guard let proposal, canApply else { return }
             do {
-                let remaining = try editor.apply(proposal, changeID: changeID)
-                if action == .edit { appliedEdit = proposal }
-                self.proposal = remaining
-                document = remaining.document
-                appliedCount += proposal.changes.count - remaining.changes.count
+                try editor.apply(proposal)
+                isApplied = true
+                document = editor.document
                 errorMessage = nil
                 notice = String(
                     localized: "Applied. The editor’s Undo restores your text.", bundle: .module)
             } catch {
                 errorMessage = error.localizedDescription
             }
-        }
-
-        func dismiss(changeID: UUID) {
-            proposal = proposal?.dismissing(changeID: changeID)
-            errorMessage = nil
         }
     }
 #endif

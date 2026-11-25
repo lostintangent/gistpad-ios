@@ -185,13 +185,13 @@ extension OnDeviceModel {
                     }) else { continue }
                     let goal = Self.focusedGoal(for: block, instruction: pass.instruction)
                     if goal == .makeList {
-                        let kinds = MarkdownDocument(candidate.replacement ?? "").blocks.map(\.kind)
+                        let kinds = MarkdownDocument(candidate.replacement).blocks.map(\.kind)
                         guard range == block.range, kinds.count >= 2, kinds.allSatisfy({ $0 == .listItem })
                         else { continue }
                     }
                     if block.kind == .heading {
                         try verifyHeadingEdit(
-                            block, in: document, revised: candidate.replacement ?? "", request: pass.instruction)
+                            block, in: document, revised: candidate.replacement, request: pass.instruction)
                     }
                     var accepted = (candidate, range)
                     if goal == .insertRow || goal == .insertParagraph {
